@@ -31,8 +31,7 @@ function posed(position: ModelCadVector, rotation: ModelCadVector, body: string[
 
 function drilled(shape: ModelCadShape): boolean {
   return (
-    shape.holes.length > 0 ||
-    !!shape.boolean?.operands.some((operand) => drilled(operand.shape))
+    shape.holes.length > 0 || !!shape.boolean?.operands.some((operand) => drilled(operand.shape))
   );
 }
 
@@ -73,7 +72,7 @@ function solid(shape: ModelCadShape, name: string): string[] {
   return body;
 }
 
-/** OpenSCAD text for accepted Model CAD solids. OpenPE never reads or executes SCAD. */
+/** Export accepted Model CAD solids as OpenSCAD text, without SCAD import or execution. */
 export function exportModelCadScad(input: unknown): string {
   const model = validateModelCad(input);
   if (!model.objects.length) return fail('Create a CAD solid before exporting OpenSCAD.');

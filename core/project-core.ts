@@ -36,7 +36,6 @@ import {
   modelCadRequiresPreparation,
   modelCadShape,
   newModelCadBooleanObject,
-  nativeModelCadExtensions,
   validateModelCadObject,
   withModelCad,
   type ModelCadObject,
@@ -44,7 +43,8 @@ import {
 } from '../lib/model-cad';
 import {
   projectNativeFiles,
-  projectFromNativeFiles,
+  projectWithNativeFiles,
+  withNativeProjectName,
   validateKiCadProjectFiles,
   type KiCadProjectFiles,
 } from '../lib/kicad-project';
@@ -590,6 +590,12 @@ export class ProjectCore {
   /** Internal editor adapter. Externally use project.replace with canonical JSON. */
   commitProject(next: Project): boolean {
     this.requireAppliedSource();
+    next = ownProject(next, this.project);
+    if (
+      this.project &&
+      (next.name ?? next.schematic.title) !== (this.project.name ?? this.project.schematic.title)
+    )
+      next = withNativeProjectName(next);
     return this.commit(next);
   }
 
@@ -746,13 +752,7 @@ export class ProjectCore {
     const draft = JSON.parse(this.sourceDraft);
     const previous = this.requireProject();
     const native = draft && typeof draft.entry === 'string' && Array.isArray(draft.files);
-    const next = native ? projectFromNativeFiles(draft) : parseProject(this.sourceDraft);
-    if (native) {
-      next.id = previous.id;
-      next.name = previous.name ?? previous.schematic.title;
-      next.extensions = nativeModelCadExtensions(previous.extensions, next.extensions);
-    }
-    return next;
+    return native ? projectWithNativeFiles(previous, draft) : parseProject(this.sourceDraft);
   }
 
   applySource(): Project | null {

@@ -78,9 +78,9 @@ Classify changes by GUI, Context Management, Agent, Uniform API, Core, Plugin or
 
 ### Independent projects and files
 
-- Admit up to 12 projects, each with up to 12 independent schematics and one optional PCB linked to the primary sheet. New project creates Schematic 1; New file appends. No hierarchy/cross-file electrical joins.
+- Admit up to 12 projects, each with up to 12 independent schematics and one optional PCB linked to the primary sheet. New project creates Untitled project with Schematic 1, an empty PCB and empty Model CAD in native project settings; New file appends a schematic. No hierarchy/cross-file electrical joins.
 - Keep inactive Workbenches mounted in detached DOM. Only the active project handles global keys; retain per-project views, undo, Source, sessions and origin-bound proposals/streams. Use instance-specific SVG IDs.
-- Tab X closes a view, never schematic data. Reopen retains selection/viewport. Last-tab close protects pending/unsaved work and requests project close. After approval, block Core and suspend/cancel capabilities before awaiting recovery/grant release; failure resumes drafts/undo intact. Release only that project's grant and tolerate revocation.
+- Schematic-tab X closes a view, never schematic data. Reopen retains selection/viewport. Project-tab X and last-schematic-tab close protect pending/unsaved work and request project close. After approval, block Core and suspend/cancel capabilities before awaiting recovery/grant release; failure resumes drafts/undo intact. Release only that project's grant and tolerate revocation.
 - Native dirty compares bytes at the current destination against the open/save baseline plus pending native Source; tab dots use canonical per-file fingerprints. Pending ordinary-file drafts also count as unsaved work for Save/close. New/open/import/example starts clean; undo to baseline clears native indicators. Viewing, conversation and exports do not dirty content or change destinations.
 
 ### Recovery and quit
@@ -126,14 +126,18 @@ Classify changes by GUI, Context Management, Agent, Uniform API, Core, Plugin or
 
 ## Verification and delivery
 
-| Change or check                                                               | Required handling                                                                                       |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Documentation only                                                            | `npm run check:docs` plus content/format review against implementation                                  |
-| Runtime or circuits                                                           | `npm run check:architecture`, `npm run typecheck`, `npm test`, `npm run build` and relevant regressions |
-| Electron, `npm run test:e2e`, desktop visual/integration checks or benchmarks | Explicit user authorization before launching                                                            |
-| Real solvers/providers                                                        | Opt-in; isolated mocked checks are not native/provider/solver evidence                                  |
+| Change or check | Required handling |
+| --- | --- |
+| Documentation or rules only | `npm run check:docs` plus content/format review against implementation. |
+| Presentation only: spacing, colours, typography, labels or icons, with no state, interaction or contract changes | Review the affected UI and changed styles/copy; run `npm run typecheck` when TypeScript/JSX changes. Full tests/build are not required unless the change affects bundling or asset generation. |
+| Local renderer interaction: menus, dialogs, focus, keyboard or visibility, with no shared state, document, persistence, API or host changes | `npm run typecheck` plus relevant focused regressions or a focused browser check. Cover affected keyboard/IME behaviour; add tests only for meaningful new behaviour. Full tests/build are not required. |
+| Core/domain/circuits, shared state or lifecycle, Source/native formats, Save/recovery/history, APIs/security, service/Electron, dependencies or build configuration | `npm run typecheck`, full `npm test`, `npm run build` and relevant focused regressions. These commands include the required architecture checks. |
+| Electron, `npm run test:e2e`, desktop visual/integration checks or benchmarks | Explicit user authorization before launching. |
+| Real solvers/providers | Opt-in; isolated mocked checks are not native/provider/solver evidence. |
 
-- The architecture check runs before typecheck and after format generation in test/build; build/dev/package may prepare/download resources. [Architecture verification](docs/ARCHITECTURE.md#verification) indexes checks and feature contracts identify focused regressions. Report only checks actually passed on the reviewed tree.
+- Classify by affected behaviour and dependencies, not diff size or file location. Mixed changes use the highest applicable tier; project/session naming that changes native data or recovery requires the full tier. Run `npm run check:docs` whenever maintained docs/rules change, and review the scoped diff for formatting and unrelated edits.
+- Run focused checks while iterating, then run required full tests/build after the implementation stabilizes. Reuse passed checks from the current session for unchanged inputs; repeat affected checks only after relevant edits, failures or unresolved concerns. Focused Node regressions use `npm test -- <test paths>`. Keep format generation, tests and build sequential when they share generated outputs.
+- The architecture check runs before typecheck and after format generation in test/build; do not repeat it separately when an applicable command already ran it on the reviewed inputs. Build/dev/package may prepare/download resources. [Architecture verification](docs/ARCHITECTURE.md#verification) indexes checks and feature contracts identify focused regressions. Report the checks actually passed on the reviewed tree, distinguishing focused coverage from the full suite and identifying relevant unverified behaviour.
 - Run graphical checks one at a time; stop owned tests on overload without closing the user's app. `OPENPE_TEST_NGSPICE=1` and `OPENPE_TEST_THERMAL=1` enable five prepared-resource regressions (two Buck, slab, contours, thermal artifacts); `OPENPE_TEST_MODEL_CAD=1` enables native CAD-kernel regressions. Home sweeps/mesh refinement are separate; offline sweeps never fetch missing files.
 - Source checks read the selected actual native file through `scripts/source-editor-test-helpers.mjs`, never a private snapshot. Parse `.kicad_pro` as JSON and schematic/board text with native parsers. Use `scripts/async-browser-test-helpers.mjs` for asynchronous predicates. Desktop fixtures keep designs/profiles in sibling directories.
 - Remove dead code instead of suppressing unused errors. Keep generated artifacts, pinned evidence, notices and sources. Ignore dependencies/builds/releases/downloads/secrets in Git; ignored files are not disposable. `.openpe/` and `test-results/` may hold recovery/history, offline tools or generation inputs. Preserve current builds/evidence; resolve workspace-contained paths and reject links before recursive cleanup.

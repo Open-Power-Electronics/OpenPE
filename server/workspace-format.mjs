@@ -129,6 +129,15 @@ function validateAnnotations(value) {
   }
 }
 
+// lib/display-name.ts
+var MAX_DISPLAY_NAME_LENGTH = 120;
+function displayName(value) {
+  const name = value.trim();
+  if (!name || name.length > MAX_DISPLAY_NAME_LENGTH || /[\x00-\x1f\x7f]/.test(name))
+    throw new Error(`Use a name of 1\u2013${MAX_DISPLAY_NAME_LENGTH} characters on one line.`);
+  return name;
+}
+
 // lib/chat-sessions.ts
 function restoreSessions(state) {
   const sessions = state.sessions;
@@ -141,6 +150,8 @@ function restoreSessions(state) {
       throw new Error("Invalid saved sessions. The recovery file was preserved.");
     }
     ids.add(session.id);
+    if (session.name !== void 0 && (typeof session.name !== "string" || displayName(session.name) !== session.name))
+      throw new Error("Invalid saved conversation name. The recovery file was preserved.");
     validateAnnotations(session.annotations);
     for (const message of session.messages) validateAnnotations(message.annotations);
   }

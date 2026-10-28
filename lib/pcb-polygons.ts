@@ -100,6 +100,19 @@ export function graphicPolygons(g: BoardLine): Polygon[] {
   const interior = [{ outer: points.map((point) => ({ ...point })), holes: [] }];
   return g.width > 0 ? offset(interior, g.width / 2) : interior;
 }
+/** An empty Model canvas has no board surface; actual artwork still requires a valid outline. */
+export function modelBoardPolygons(board: PCB): Polygon[] {
+  if (
+    !board.footprints.length &&
+    !board.tracks.length &&
+    !board.vias.length &&
+    !board.graphics.length &&
+    !board.zones.length
+  )
+    return [];
+  return boardPolygons(board);
+}
+
 /** Closed Edge.Cuts loops, including footprint cutouts. Never invent a board rectangle. */
 export function boardPolygons(board: PCB): Polygon[] {
   const edges = [

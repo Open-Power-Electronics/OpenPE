@@ -193,14 +193,16 @@ try {
   await fillNativeProject(page, changed);
   await button('Apply').click();
   await projects().first().click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Duplicate project', exact: true }).click();
-  await expectProjects(3);
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Reference review');
+  await button('Rename').click();
+  await expectProjects(2);
   await button('Home').click();
   await button(firstExampleButton).click();
-  await expectProjects(3);
+  await expectProjects(2);
   assert.equal((await readNativeProject(page)).schematic.title, 'Renamed Reference schematic');
   await button('Open project').click();
-  await expectProjects(4);
+  await expectProjects(3);
   await button('Source').click();
   await fillSource(page, '{native draft');
   await button('Home').click();
@@ -231,9 +233,9 @@ try {
     '{native draft',
     'Revealing preserves invalid pending Source.',
   );
-  await expectProjects(4);
+  await expectProjects(3);
   await button('New project').click();
-  await expectProjects(5);
+  await expectProjects(4);
   const revealLastProject = async () => {
     await page
       .locator('.project-navigation:visible [data-project-id]')
@@ -266,8 +268,8 @@ try {
     'Saved projects reveal without saving again.',
   );
   await button('New project').click();
-  await expectProjects(6);
-  for (let count = 7; count <= 12; count++) {
+  await expectProjects(5);
+  for (let count = 6; count <= 12; count++) {
     await button('New project').click();
     await expectProjects(count);
   }
@@ -374,7 +376,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    'Project reopen: examples, concurrent opens, native files, Source and conversation preservation, independent duplicates and new projects passed.',
+    'Project reopen: examples, concurrent opens, native files, Source and conversation preservation, renaming and new projects passed.',
   );
 } finally {
   await browser.close();

@@ -17,6 +17,7 @@ import { buildSpiceDeck, defaultTransient } from '../lib/spice';
 import { child, children, parseSExpr, val, writeSExpr } from '../lib/sexpr';
 import { materializedPCBTree } from '../lib/pcb';
 import { ProjectCore } from '../core/project-core';
+import { nativeProjectDirty } from '../lib/native-project-dirty';
 import { toProjectDocument } from '../lib/project-document';
 import {
   projectFromNativeFiles,
@@ -49,6 +50,69 @@ function nativeFixture(): KiCadProjectFiles {
     ],
   };
 }
+
+test('renaming a project persists through native files, Source, Save as and undo', () => {
+  const bundle = nativeFixture();
+  const core = new ProjectCore(projectFromNativeFiles(bundle));
+  const initial = core.getSnapshot();
+  const initialFiles = projectNativeFiles(initial.project!);
+  core.commitProject({ ...initial.project!, name: 'Power stage review' });
+  const renamed = core.getSnapshot();
+  assert.equal(renamed.undoDepth, 1);
+  assert.equal(nativeProjectDirty(renamed.project, initial.source, bundle.entry), true);
+  const files = projectNativeFiles(renamed.project!);
+  assert.deepEqual(
+    files.files.map((file) => file.name),
+    initialFiles.files.map((file) => file.name),
+  );
+  for (const file of bundle.files.slice(1))
+    assert.equal(files.files.find((item) => item.name === file.name)!.source, file.source);
+  const settings = JSON.parse(files.files[0].source);
+  assert.equal(settings.text_variables.OPENPE_PROJECT_NAME, 'Power stage review');
+  assert.equal(settings.text_variables.REVISION, 'C');
+  assert.deepEqual(settings.board, { custom: true });
+  assert.equal(projectFromNativeFiles(files).name, 'Power stage review');
+  assert.equal(
+    projectFromNativeFiles(projectNativeFiles(renamed.project!, 'Personal.kicad_pro')).name,
+    'Power stage review',
+  );
+  settings.text_variables.OPENPE_PROJECT_NAME = 'Source name';
+  core.updateNativeSource(files.entry, JSON.stringify(settings));
+  assert.throws(
+    () => core.commitProject({ ...core.getSnapshot().project!, name: 'Blocked' }),
+    /Apply the Source/,
+  );
+  assert.equal(core.applySource()!.name, 'Source name');
+  delete settings.text_variables.OPENPE_PROJECT_NAME;
+  assert.equal(
+    replaceNativeProjectFile(core.getSnapshot().project!, files.entry, JSON.stringify(settings))
+      .name,
+    'Filter',
+  );
+  core.undo();
+  core.undo();
+  assert.equal(core.getSnapshot().project!.name, initial.project!.name);
+  assert.deepEqual(projectNativeFiles(core.getSnapshot().project!), initialFiles);
+  assert.equal(nativeProjectDirty(core.getSnapshot().project, initial.source, bundle.entry), false);
+  core.setEditingBlocked('This project is closing.');
+  assert.throws(
+    () => core.commitProject({ ...core.getSnapshot().project!, name: 'Blocked' }),
+    /closing/,
+  );
+  for (const value of [null, 42, '', 'a'.repeat(4097)]) {
+    settings.text_variables.OPENPE_PROJECT_NAME = value;
+    assert.throws(
+      () =>
+        projectFromNativeFiles({
+          ...files,
+          files: files.files.map((file) =>
+            file.name === files.entry ? { ...file, source: JSON.stringify(settings) } : file,
+          ),
+        }),
+      /project name/,
+    );
+  }
+});
 
 function schematicPreparationFixture(): KiCadProjectFiles {
   const bundle = nativeFixture();

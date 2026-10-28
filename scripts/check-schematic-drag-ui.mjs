@@ -375,8 +375,8 @@ try {
   assert.deepEqual(await currentCircuit(), nudged);
 
   const tabs = page.getByRole('tablist', { name: 'Schematic files' });
-  const firstSheet = await tabs.getByRole('tab', { selected: true }).innerText();
   await button('New file').click();
+  const firstSheet = await tabs.getByRole('tab').first().innerText();
   const secondSheet = await tabs.getByRole('tab', { selected: true }).innerText();
   await tabs
     .getByRole('tab')

@@ -15,7 +15,7 @@ test('native file and Core Source replacement retain the same independent projec
   project.name = 'Power stage';
   project.extensions = { 'example.org': { retained: true } };
 
-  for (const file of files.files) {
+  for (const file of projectNativeFiles(project).files) {
     const source = file.source + '\n';
     const next = replaceNativeProjectFile(project, file.name, source);
     const core = new ProjectCore(project);

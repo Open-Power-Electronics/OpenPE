@@ -63,6 +63,7 @@ const utf8Size = (source: string) =>
 // names, counts, associations and aggregate byte budget below.
 const ownedNativeFileSizes = new WeakMap<KiCadProjectFile, number>();
 const MODEL_VARIABLE = 'OPENPE_SIMULATION_MODELS';
+const PROJECT_NAME_VARIABLE = 'OPENPE_PROJECT_NAME';
 const ext = (name: string, suffix: string) => name.toLowerCase().endsWith(suffix);
 const stem = (name: string) => name.replace(/\.kicad_(?:pro|sch|pcb)$/i, '');
 const fail = (message: string): never => {
@@ -223,6 +224,18 @@ function referencedModels(
   return models.length ? models : undefined;
 }
 
+function nativeProjectName(settings: Record<string, unknown>): string | undefined {
+  const variables = settings.text_variables;
+  if (variables === undefined) return undefined;
+  if (!variables || typeof variables !== 'object' || Array.isArray(variables))
+    return fail('native text_variables must be an object.');
+  const value = (variables as Record<string, unknown>)[PROJECT_NAME_VARIABLE];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !value.length || value.length > 4096)
+    return fail('the project name must be a native text variable string of 1–4096 characters.');
+  return value;
+}
+
 function nativeModelCad(settings: Record<string, unknown>): ModelCAD | undefined {
   const variables = settings.text_variables;
   if (variables === undefined) return undefined;
@@ -334,6 +347,7 @@ function parseFiles(bundle: KiCadProjectFiles, owner?: Project): ParsedNative {
     )
       fail('unsupported retired enclosure data. Use current Model CAD objects.');
     nativeModelCad(settings);
+    nativeProjectName(settings);
   }
   const projectStem = stem(projectFile?.name ?? bundle.entry).toLowerCase();
   const schematics = bundle.files
@@ -376,9 +390,11 @@ export function projectFromNativeFiles(bundle: KiCadProjectFiles): Project {
   const project: Project = {
     ...createProject(schematic),
     id: nativeIdentity(schematic.id + ':project'),
-    name: stem(parsed.projectFile?.name ?? bundle.entry)
-      .split('/')
-      .at(-1),
+    name:
+      (parsed.projectFile && nativeProjectName(projectSettings(parsed.projectFile.source))) ??
+      stem(parsed.projectFile?.name ?? bundle.entry)
+        .split('/')
+        .at(-1),
     ...(parsed.schematics.length > 1
       ? { additionalSchematics: parsed.schematics.slice(1).map((item) => item.circuit) }
       : {}),
@@ -873,6 +889,21 @@ export function projectNativeFilesSnapshot(
   let settings = oldProject?.source ?? newSettings(entry.split('/').at(-1)!);
   const data = projectSettings(settings);
   let settingsChanged = false;
+  const existingName = nativeProjectName(data);
+  const name = project.name ?? project.schematic.title;
+  const filenameName = stem(oldProject?.name ?? entry)
+    .split('/')
+    .at(-1);
+  if (
+    existingName !== name &&
+    (existingName !== undefined || (!oldProject && name !== filenameName))
+  ) {
+    data.text_variables = {
+      ...(data.text_variables as Record<string, string> | undefined),
+      [PROJECT_NAME_VARIABLE]: name,
+    };
+    settingsChanged = true;
+  }
   if (oldProject && rename(oldProject.name) !== oldProject.name) {
     data.meta = {
       ...(data.meta && typeof data.meta === 'object' && !Array.isArray(data.meta) ? data.meta : {}),
@@ -1081,14 +1112,48 @@ export function replaceNativeProjectFile(project: Project, name: string, source:
   const file = bundle.files.find((item) => item.name === name);
   if (!file) return fail('the selected file is no longer in this project.');
   if (file.source === source) return project;
-  const next = projectFromNativeFiles({
+  return projectWithNativeFiles(project, {
     ...bundle,
     files: bundle.files.map((item) => (item === file ? { ...item, source } : item)),
   });
+}
+
+/** Explicit name edits persist in project settings without renaming any native file. */
+export function withNativeProjectName(project: Project): Project {
+  const bundle = projectNativeFiles(project);
+  const file = bundle.files.find((file) => ext(file.name, '.kicad_pro'))!;
+  const settings = projectSettings(file.source);
+  const name = project.name ?? project.schematic.title;
+  if (nativeProjectName(settings) === name) return project;
+  settings.text_variables = {
+    ...(settings.text_variables as Record<string, string> | undefined),
+    [PROJECT_NAME_VARIABLE]: name,
+  };
+  return {
+    ...project,
+    nativeFiles: {
+      ...bundle,
+      files: bundle.files.map((item) =>
+        item === file ? { ...item, source: JSON.stringify(settings, null, 2) + '\n' } : item,
+      ),
+    },
+  };
+}
+
+/** Native Source owns explicit names; ordinary file edits retain independent metadata. */
+export function projectWithNativeFiles(project: Project, bundle: KiCadProjectFiles): Project {
+  const next = projectFromNativeFiles(bundle);
+  const explicitName = (files: KiCadProjectFiles | undefined) => {
+    const file = files?.files.find((file) => ext(file.name, '.kicad_pro'));
+    return file ? nativeProjectName(projectSettings(file.source)) : undefined;
+  };
   return {
     ...next,
     id: project.id,
-    name: project.name ?? project.schematic.title,
+    name:
+      explicitName(bundle) !== undefined || explicitName(project.nativeFiles) !== undefined
+        ? next.name
+        : (project.name ?? project.schematic.title),
     extensions: nativeModelCadExtensions(project.extensions, next.extensions),
   };
 }

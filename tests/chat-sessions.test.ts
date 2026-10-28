@@ -1,6 +1,90 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, restoreSessions, sessionTitle, updateSession } from '../lib/chat-sessions';
+import {
+  createSession,
+  openNewSession,
+  renameSession,
+  restoreSessions,
+  sessionTitle,
+  updateSession,
+  type SessionState,
+} from '../lib/chat-sessions';
+
+test('conversation rename retains messages, draft, identity, flags and active selection', () => {
+  const session = { ...createSession('Unsent draft'), pinned: true as const };
+  const other = createSession();
+  const state = { sessions: [session, other], activeSessionId: other.id };
+  const renamed = renameSession(state, session.id, '  Power stage review  ');
+  assert.equal(sessionTitle(renamed.sessions[0]), 'Power stage review');
+  assert.equal(renamed.sessions[0].id, session.id);
+  assert.equal(renamed.sessions[0].draft, session.draft);
+  assert.equal(renamed.sessions[0].messages, session.messages);
+  assert.equal(renamed.sessions[0].pinned, true);
+  assert.equal(renamed.sessions[1], other);
+  assert.equal(renamed.activeSessionId, other.id);
+  assert.deepEqual(restoreSessions(JSON.parse(JSON.stringify(renamed))), renamed);
+  assert.equal(sessionTitle(session), 'New session');
+  for (const name of ['', '  ', 'a\nb', 'a'.repeat(121)])
+    assert.throws(() => renameSession(state, session.id, name), /Use a name/);
+  for (const name of [42, '', ' leading', 'a\nb', 'a'.repeat(121)])
+    assert.throws(() => restoreSessions({ ...state, sessions: [{ ...session, name }] } as never));
+});
+
+test('opening an unused conversation repeatedly preserves its identity, draft and pin', () => {
+  const idle = {
+    ...createSession('Keep this unsent draft'),
+    pinned: true as const,
+    annotations: [],
+  };
+  const initial = { sessions: [idle], activeSessionId: idle.id };
+  let state: SessionState = initial;
+  for (let index = 0; index < 20; index++) state = openNewSession(state, createSession());
+  assert.equal(state, initial);
+  assert.equal(state.sessions[0], idle);
+  assert.equal(state.sessions[0].draft, 'Keep this unsent draft');
+  assert.deepEqual(restoreSessions(state), initial);
+});
+
+test('project-folder navigation reuses its latest visible idle conversation and prefers the active one', () => {
+  const used = createSession();
+  used.messages.push({ id: 'message', role: 'user', text: 'Started conversation' });
+  const first = createSession('Earlier draft');
+  const latest = createSession('Latest draft');
+  const archived = { ...createSession('Archived draft'), archived: true as const };
+  const sessions = [used, first, latest, archived];
+  const result = openNewSession({ sessions, activeSessionId: used.id }, createSession());
+  assert.equal(result.sessions, sessions);
+  assert.equal(result.activeSessionId, latest.id);
+  const activeIdle = { sessions, activeSessionId: first.id };
+  assert.equal(openNewSession(activeIdle, createSession()), activeIdle);
+  const running = openNewSession({ sessions, activeSessionId: latest.id }, createSession(), {
+    [latest.id]: true,
+  });
+  assert.equal(running.activeSessionId, first.id);
+  assert.equal(running.sessions, sessions);
+});
+
+test('started, archived and running conversations retain their data when a new session is needed', () => {
+  const used = createSession();
+  used.messages.push({ id: 'message', role: 'assistant', text: 'Provider error' });
+  assert.equal(
+    sessionTitle(used),
+    'New session',
+    'The displayed title is not the reuse criterion.',
+  );
+  const archived = { ...createSession('Archived draft'), archived: true as const };
+  const running = createSession('Submission in progress');
+  const initial = { sessions: [used, archived, running], activeSessionId: used.id };
+  const candidate = createSession();
+  const result = openNewSession(initial, candidate, { [running.id]: true });
+  assert.equal(result.activeSessionId, candidate.id);
+  assert.deepEqual(result.sessions, [...initial.sessions, candidate]);
+  assert.equal(result.sessions[0], used);
+  assert.equal(result.sessions[1], archived);
+  assert.equal(result.sessions[2], running);
+  assert.equal(initial.sessions.length, 3);
+  assert.equal(openNewSession(result, createSession()), result);
+});
 
 test('sessions preserve identities, messages, drafts and active selection through recovery', () => {
   const first = createSession('draft one');

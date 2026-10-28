@@ -29,7 +29,7 @@ export async function assertEditorViewControls(page, selectedView) {
   const geometry = await views.evaluate((element) => {
     const editor = element.closest('.editor');
     const bar = element.closest('.document-bar');
-    const files = bar?.querySelector('.schematic-file-tabs');
+    const files = bar?.querySelector('.project-file-tabs');
     const selected = element.querySelector('[aria-pressed="true"]');
     const tab = selected.getBoundingClientRect();
     const bounds = element.getBoundingClientRect();

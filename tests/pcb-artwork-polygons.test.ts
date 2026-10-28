@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { BoardLine } from '../lib/pcb';
-import { graphicPolygons, intersectPolygons, type Polygon } from '../lib/pcb-polygons';
+import {
+  boardPolygons,
+  modelBoardPolygons,
+  graphicPolygons,
+  intersectPolygons,
+  type Polygon,
+} from '../lib/pcb-polygons';
 import { pcbSilkscreen } from '../lib/pcb-silkscreen';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import { solderMaskOpenings } from '../lib/pcb-solder-mask';
@@ -18,6 +24,36 @@ function bounds(polygons: Polygon[]) {
     maxY: Math.max(...points.map((p) => p.y)),
   };
 }
+
+test('Model permits an empty board surface without inventing or relaxing real outlines', () => {
+  const board = createEmptyPCB();
+  const original = structuredClone(board);
+  assert.deepEqual(modelBoardPolygons(board), []);
+  assert.deepEqual(board, original);
+  assert.throws(() => boardPolygons(board), /closed board outline/);
+  board.graphics.push({
+    id: crypto.randomUUID(),
+    layer: 'Edge.Cuts',
+    width: 0.05,
+    start: { x: 0, y: 0 },
+    end: { x: 20, y: 0 },
+  });
+  assert.throws(() => modelBoardPolygons(board), /outline/i);
+  const points = [
+    { x: 0, y: 0 },
+    { x: 20, y: 0 },
+    { x: 20, y: 10 },
+    { x: 0, y: 10 },
+  ];
+  board.graphics = points.map((start, index) => ({
+    id: crypto.randomUUID(),
+    layer: 'Edge.Cuts',
+    width: 0.05,
+    start,
+    end: points[(index + 1) % points.length],
+  }));
+  assert.deepEqual(modelBoardPolygons(board), boardPolygons(board));
+});
 function covers(polygons: Polygon[], x: number, y: number) {
   return (
     intersectPolygons(polygons, [

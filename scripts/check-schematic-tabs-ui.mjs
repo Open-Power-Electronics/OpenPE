@@ -100,8 +100,8 @@ try {
     await page.getByRole('option', { name, exact: true }).click();
   };
   await button('Open project').click();
-  const first = await tabs().getByRole('tab').innerText();
   await button('New file').click();
+  const first = await tabs().getByRole('tab').first().innerText();
   const second = await tabs().getByRole('tab', { selected: true }).innerText();
   await page.locator('.project-navigation [data-project-id]').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Save', exact: true }).click();

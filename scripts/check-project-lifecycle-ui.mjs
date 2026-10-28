@@ -8,10 +8,7 @@ import { fillSource, readSource } from './source-editor-test-helpers.mjs';
 
 // Isolated real React editors with in-memory native/service adapters only.
 // No Electron instance, provider, solver or native project files are touched.
-const { createProject, parseProject, serializeProject } = await tsImport(
-  '../lib/project.ts',
-  import.meta.url,
-);
+const { createProject, serializeProject } = await tsImport('../lib/project.ts', import.meta.url);
 const { projectNativeFiles, projectFromNativeFiles } = await tsImport(
   '../lib/kicad-project.ts',
   import.meta.url,
@@ -136,60 +133,40 @@ try {
   await mount(page, workspaceBundle);
   const button = (name) => page.getByRole('button', { name, exact: true });
   const navigation = () => page.locator('.project-navigation:visible [data-project-id]');
-  const duplicate = async (index, count) => {
-    const persisted = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === '/api/state' &&
-        response.request().method() === 'POST' &&
-        response.request().postDataJSON().documents.length === count,
+  const rename = async (name) => {
+    await navigation().first().click({ button: 'right' });
+    assert.equal(
+      await page.getByRole('menuitem', { name: 'Duplicate project', exact: true }).count(),
+      0,
     );
-    await navigation().nth(index).click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Duplicate project', exact: true }).click();
-    await persisted;
-    assert.equal(await navigation().count(), count);
-    return recovery.documents.at(-1);
+    await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(name);
+    await button('Rename').click();
   };
   await page.getByTestId('schematic-canvas').waitFor();
-  const cleanCopy = await duplicate(0, 2);
-  assert.equal(parseProject(cleanCopy.source).name, 'Power stage copy');
-  assert.equal(cleanCopy.sourceDraft, null);
-  assert.notEqual(cleanCopy.id, documentId, 'A duplicate owns a separate editor identity.');
-
-  await navigation().first().locator('button').click();
+  await rename('Power stage review');
+  await page.getByRole('tab', { name: /^Power stage review(?:,|$)/ }).waitFor();
+  assert.equal(await navigation().count(), 1);
   await button('Source').click();
   const originalText = await readSource(page);
   const settings = JSON.parse(originalText);
-  settings.text_variables = { REVISION: 'Draft edit' };
+  assert.equal(settings.text_variables.OPENPE_PROJECT_NAME, 'Power stage review');
+  settings.text_variables.REVISION = 'Draft edit';
   const draftText = JSON.stringify(settings, null, 2) + '\n';
   await fillSource(page, draftText);
-  const draftCopy = await duplicate(0, 3);
-  const duplicated = parseProject(draftCopy.source);
-  assert.equal(duplicated.name, 'Power stage copy');
-  assert.equal(duplicated.id, project.id, 'Native document UUIDs retain their existing links.');
-  assert.equal(duplicated.schematic.id, project.schematic.id);
-  assert.deepEqual(duplicated.extensions, project.extensions);
-  assert.equal(draftCopy.sourceDraft, null);
-  assert.deepEqual(
-    JSON.parse(
-      projectNativeFiles(duplicated).files.find((file) => file.name.endsWith('.kicad_pro')).source,
-    ),
-    { ...settings, meta: { ...settings.meta, filename: 'circuit-copy.kicad_pro' } },
+  await rename('Retryable name');
+  await page
+    .getByRole('alert')
+    .getByText('Apply the Source edits before changing the project.')
+    .waitFor();
+  assert.equal(
+    await page.getByRole('textbox', { name: 'Name', exact: true }).inputValue(),
+    'Retryable name',
   );
-  const original = recovery.documents.find((item) => item.id === documentId);
-  assert.equal(original.source, source, 'Duplicate never applies the original Source draft.');
-  assert.equal(JSON.parse(original.sourceDraft).files[0].source, draftText);
-  assert.equal(new Set(recovery.documents.map((item) => item.id)).size, 3);
-  assert.equal(new Set(await page.evaluate(() => window.lifecycleGrants)).size, 3);
-
-  await navigation().first().locator('button').click();
+  await button('Cancel').click();
   assert.equal(await readSource(page), draftText);
-  await fillSource(page, '{invalid native JSON');
-  await navigation().first().click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Duplicate project', exact: true }).click();
-  await page.getByText(/\.kicad_pro file must contain valid JSON/).waitFor();
-  assert.equal(await navigation().count(), 3);
-  assert.equal(await readSource(page), '{invalid native JSON');
-  assert.equal((await page.evaluate(() => window.lifecycleGrants)).length, 3);
+  assert.equal(await navigation().count(), 1);
+  assert.equal((await page.evaluate(() => window.lifecycleGrants)).length, 1);
 
   const simulation = await browser.newPage();
   await simulation.addInitScript(() => {
@@ -227,7 +204,7 @@ try {
   await simulation.waitForFunction(() => window.simulationLifecycle.read().status === 'idle');
   assert.deepEqual(errors, []);
   console.log(
-    'Project lifecycle passed: independent clean/draft copies, retained metadata and Source, invalid-draft protection, and hidden solver detection cancellation/retry.',
+    'Project lifecycle passed: project renaming, retained metadata and Source, pending-draft protection, and hidden solver detection cancellation/retry.',
   );
 } finally {
   await browser.close();

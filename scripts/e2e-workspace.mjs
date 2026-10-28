@@ -311,31 +311,28 @@ try {
     await page.locator('.project-navigation [aria-current="page"]').getAttribute('aria-label'),
     /^Project A,/,
   );
-  // Keyboard menu invocation and copying must preserve the original Source draft.
+  // Keyboard menu invocation and renaming preserve pending native Source.
   await selectSourceFile(page, 'Project A.kicad_pro');
-  const draftCopy = JSON.parse(await readSource(page));
-  draftCopy.text_variables.NOTE = 'Native settings draft retained during duplication';
-  const copyText = JSON.stringify(draftCopy, null, 2);
-  await fillSource(page, copyText);
+  const draftSettings = JSON.parse(await readSource(page));
+  draftSettings.text_variables.NOTE = 'Native settings draft retained during rename';
+  const draftText = JSON.stringify(draftSettings, null, 2);
+  await fillSource(page, draftText);
   const originalButton = projects().getByRole('button', { name: /^Project A,/ });
   await originalButton.focus();
   await originalButton.press('Shift+F10');
-  await fileMenu.getByRole('menuitem', { name: 'Duplicate project', exact: true }).click();
-  await projects()
-    .getByRole('button', { name: /^Project A copy,/ })
-    .waitFor();
-  await button('Source').click();
-  await selectSourceFile(page, 'Project A-copy.kicad_pro');
-  const copied = JSON.parse(await readSource(page));
-  assert.equal(copied.text_variables.NOTE, draftCopy.text_variables.NOTE);
   assert.equal(
-    (await readNativeProject(page)).schematic.parts.find((part) => part.ref === 'R1').value,
-    '2k',
+    await fileMenu.getByRole('menuitem', { name: 'Duplicate project', exact: true }).count(),
+    0,
   );
-  await fileMenuAction(page, 'Close project');
-  await projects().getByRole('button').nth(2).waitFor({ state: 'detached' });
-  await select('A');
-  assert.equal(await readSource(page), copyText);
+  await fileMenu.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Renamed project');
+  await button('Rename').click();
+  await page
+    .getByRole('alert')
+    .getByText('Apply the Source edits before changing the project.')
+    .waitFor();
+  await button('Cancel').click();
+  assert.equal(await readSource(page), draftText);
   const recoveryDraft = `{recover A ${Date.now()}`;
   const beforeDraftWrite = (await recoveryObserver.snapshot()).sequence;
   await fillSource(page, recoveryDraft);

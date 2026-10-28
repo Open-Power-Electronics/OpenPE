@@ -1,7 +1,8 @@
 # Layout and Model
 
 Layout and Model share the native PCB linked to the primary schematic. Opening a
-view does not create board data or dirty the project. Layout supports bounded
+view does not create board data or dirty the project. New projects already contain
+an empty PCB and empty Model CAD in their initial native file set. Layout supports bounded
 manual editing of two-/four-layer boards, embedded footprints, straight tracks,
 through vias, polygon zones and saved fills. Loaded supported artwork, holes,
 pads, keepouts, dimensions and model transforms survive round trips. There is no
@@ -54,6 +55,10 @@ Lazy Layout stays mounted with selection, camera and tool preferences. Hidden
 presentation defers rebuilding until reveal, while Core/query/synchronization
 state stays current. Leaving cancels gestures; modal input suspension retains
 them. Display/navigation state stays outside native content, undo and dirty state.
+
+Model opens a completely empty PCB as an empty editable CAD canvas without
+inventing a board outline or surface. Boards with artwork, packages or copper
+still require valid closed Edge.Cuts for physical preview.
 
 Equal X/Y millimetre scaling and the current SVG transform govern pointers,
 hit geometry, annotations and export. 100% uses CSS 96 px/in, not monitor

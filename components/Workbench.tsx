@@ -15,6 +15,7 @@ import {
 import { createPortal } from 'react-dom';
 import { ProjectCore } from '@/core/project-core';
 import { createNativeProjectDirtyChecker } from '@/lib/native-project-dirty';
+import { createBlankProject, DEFAULT_PROJECT_FILENAME } from '@/lib/create-blank-project';
 import { projectMetadataEqual } from '@/lib/project-metadata-equal';
 import { modelCadFromProject, MODEL_CAD_EXTENSION } from '@/lib/model-cad';
 import { prepareModelCadObjects } from './model-cad-preparation';
@@ -51,7 +52,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  emptyCircuit,
   serializeCircuit,
   circuitFingerprint,
   labelShapes,
@@ -63,7 +63,6 @@ import {
 import { api } from '@/lib/bridge';
 import { downloadText } from '@/lib/download';
 import {
-  createProject,
   importDocument,
   parseProject,
   serializeProject,
@@ -105,8 +104,12 @@ import type { Agent } from './Chat';
 import ConversationSession from './ConversationSession';
 import {
   createSession,
+  openNewSession,
+  renameSession,
+  sessionTitle,
   updateSession,
   type SessionAction,
+  type SessionState,
   type ChatSession,
 } from '@/lib/chat-sessions';
 import type { AgentCapabilities, ReasoningEffort } from '@/lib/chat-stream';
@@ -148,6 +151,7 @@ import SettingsMenu from './SettingsMenu';
 import PartsList from './PartsList';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import ConfirmationDialog, { type ConfirmationKind } from './ConfirmationDialog';
+import RenameDialog from './RenameDialog';
 import type { FootprintDetail } from './LibraryChooser';
 import PartProperties from './PartProperties';
 import FieldProperties from './FieldProperties';
@@ -176,6 +180,7 @@ import ProjectNavigation, {
 } from './ProjectNavigation';
 import { emptyWorkspaceProjects } from './WorkspacePresentation';
 import SchematicFileTabs from './SchematicFileTabs';
+import ProjectTab from './ProjectTab';
 import type { AgentPreferences, DocumentState } from '@/lib/workspace-state';
 import { useProjectDirectory } from './useProjectDirectory';
 import type { DocumentController, DocumentUpdate } from './DesktopWorkspace';
@@ -349,6 +354,9 @@ export default function Workbench({
     () => core.getSnapshot(),
   );
   const { project, sourceDraft, sourceError } = coreSnapshot;
+  const [renameTarget, setRenameTarget] = useState<
+    { kind: 'project'; name: string } | { kind: 'conversation'; id: string; name: string } | null
+  >(null);
   const modelCad = useMemo(
     () => (project ? modelCadFromProject(project) : null),
     [project?.extensions[MODEL_CAD_EXTENSION]],
@@ -789,12 +797,22 @@ export default function Workbench({
   const [agents, setAgents] = useState<Agent[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [agentError, setAgentError] = useState('');
-  const [sessions, setSessions] = useState<ChatSession[]>(
-    () => initialState?.sessions ?? [createSession()],
-  );
-  const [activeSessionId, setActiveSessionId] = useState(
-    initialState?.activeSessionId ?? sessions[0].id,
-  );
+  const [sessionState, setSessionState] = useState<SessionState>(() => {
+    const sessions = initialState?.sessions ?? [createSession()];
+    return { sessions, activeSessionId: initialState?.activeSessionId ?? sessions[0].id };
+  });
+  const { sessions, activeSessionId } = sessionState;
+  const setSessions = useCallback((update: React.SetStateAction<ChatSession[]>) => {
+    setSessionState((current) => {
+      const sessions = typeof update === 'function' ? update(current.sessions) : update;
+      return sessions === current.sessions ? current : { ...current, sessions };
+    });
+  }, []);
+  const setActiveSessionId = useCallback((id: string) => {
+    setSessionState((current) =>
+      current.activeSessionId === id ? current : { ...current, activeSessionId: id },
+    );
+  }, []);
   const [runningSessions, setRunningSessions] = useState<Record<string, boolean>>({});
   const onRunningChange = useCallback((id: string, running: boolean) => {
     setRunningSessions((current) => {
@@ -805,7 +823,7 @@ export default function Workbench({
       return next;
     });
   }, []);
-  const [filename, setFilename] = useState(initialState?.filename ?? 'untitled.kicad_pro');
+  const [filename, setFilename] = useState(initialState?.filename ?? DEFAULT_PROJECT_FILENAME);
   const [localExample, setLocalExample] = useState(initialState?.localExample);
   const [cleanSource, setCleanSource] = useState<string | null>(initiallyDirty ? null : source);
   const cleanSourceRef = useRef(cleanSource);
@@ -1292,7 +1310,7 @@ export default function Workbench({
     return true;
   }
   async function selectSchematic(id: string, signal?: AbortSignal) {
-    if (id === doc?.id) return;
+    if (id === doc?.id && view === 'canvas') return;
     const intent = cancelPendingNavigation();
     const latest = await applySource(signal);
     signal?.throwIfAborted();
@@ -1603,19 +1621,15 @@ export default function Workbench({
       requestProjectClose();
       return false;
     }
+    if (action === 'rename') {
+      const current = core.getSnapshot().project;
+      if (current)
+        setRenameTarget({ kind: 'project', name: current.name ?? current.schematic.title });
+      return false;
+    }
     fileActionBusy.current = true;
     try {
-      if (action === 'duplicate') {
-        // Validate a detached file set without changing the original draft/history.
-        const copy = structuredClone(core.previewSource()!);
-        copy.name = `${copy.name ?? copy.schematic.title} copy`;
-        const copyName = filename.replace(/\.(?:openpe\.json|kicad_pro)$/i, '') + '-copy.kicad_pro';
-        copy.nativeFiles = projectNativeFiles(copy, copyName);
-        await onAddProject(copy, copyName, false);
-        return true;
-      } else {
-        return (await save(action === 'save-as')) === 'saved';
-      }
+      return (await save(action === 'save-as')) === 'saved';
     } catch (error) {
       notify((error as Error).message);
       return false;
@@ -1739,16 +1753,14 @@ export default function Workbench({
         const createNext = async () => {
           const next = example
             ? (await import('@/lib/create-home-example')).createHomeExample(example)
-            : createProject(emptyCircuit());
-          if (!example) {
-            next.name = 'Untitled project';
-            next.schematic.title = 'Schematic 1';
-          }
+            : createBlankProject();
           return next;
         };
         await enterDocument(
           createNext,
-          example ? homeExampleCatalog.find((entry) => entry.id === example)!.title : 'untitled',
+          example
+            ? homeExampleCatalog.find((entry) => entry.id === example)!.title
+            : DEFAULT_PROJECT_FILENAME,
           false,
           brief,
           undefined,
@@ -2504,13 +2516,16 @@ export default function Workbench({
     [doc, project?.pcb, project?.schematic],
   );
   const applySessionAction = useEditorAction((id: string, action: SessionAction) => {
+    if (action === 'rename') {
+      const session = sessions.find((session) => session.id === id);
+      if (session) setRenameTarget({ kind: 'conversation', id, name: sessionTitle(session) });
+      return;
+    }
     if (runningSessions[id] && (action === 'archive' || action === 'delete')) {
       notify('Stop the conversation before archiving or deleting it.');
       return;
     }
-    const next = updateSession({ sessions, activeSessionId }, id, action);
-    setSessions(next.sessions);
-    setActiveSessionId(next.activeSessionId);
+    setSessionState((current) => updateSession(current, id, action));
   });
   const chatCapabilities = useMemo<AgentCapabilities>(
     () => ({
@@ -2525,11 +2540,10 @@ export default function Workbench({
   const readChatContext = useEditorAction(readWorkspaceContext);
   const applyChatProposal = useEditorAction(onApply);
   const openChatSettings = useCallback(() => setModal('settings'), []);
-  const newChatSession = useCallback(() => {
-    const next = createSession();
-    setSessions((items) => [...items, next]);
-    setActiveSessionId(next.id);
-  }, []);
+  const newChatSession = useEditorAction(() => {
+    const candidate = createSession();
+    setSessionState((current) => openNewSession(current, candidate, runningSessions));
+  });
   const setChatModel = useEditorAction((value: string) =>
     setModels((current) => ({ ...current, [provider]: value })),
   );
@@ -3194,6 +3208,28 @@ export default function Workbench({
             <WorkspaceDivider active={active && screen === 'workspace'} />
             <section className="editor" data-editor-view={view}>
               <div className="document-bar">
+                <ProjectTab
+                  name={project!.name ?? project!.schematic.title}
+                  modified={unsaved}
+                  panelId={`schematic-panel-${documentId}`}
+                  onClose={requestProjectClose}
+                />
+                <ToolButton
+                  label="New file"
+                  onClick={newSchematicFile}
+                  disabled={projectSchematics(project!).length >= MAX_SCHEMATIC_FILES}
+                >
+                  <Plus size={17} />
+                </ToolButton>
+                <div className="editor-view-switch-host">
+                  <EditorViewSwitch view={view} onChange={selectEditorView} />
+                </div>
+              </div>
+              <div
+                ref={schematicTabs}
+                className="schematic-sheet-bar"
+                hidden={schematicFiles.length < 2 || (view !== 'canvas' && view !== 'source')}
+              >
                 <SchematicFileTabs
                   files={openSchematicFiles.map((file) => ({
                     id: file.id,
@@ -3224,16 +3260,6 @@ export default function Workbench({
                     />
                   </span>
                 )}
-                <ToolButton
-                  label="New file"
-                  onClick={newSchematicFile}
-                  disabled={projectSchematics(project!).length >= MAX_SCHEMATIC_FILES}
-                >
-                  <Plus size={17} />
-                </ToolButton>
-                <div className="editor-view-switch-host">
-                  <EditorViewSwitch view={view} onChange={selectEditorView} />
-                </div>
               </div>
               <RetainedSchematicToolbar
                 visible={active && screen === 'workspace' && view === 'canvas'}
@@ -3362,7 +3388,7 @@ export default function Workbench({
                 data-view={view}
                 id={`schematic-panel-${documentId}`}
                 role="tabpanel"
-                aria-label={doc.title}
+                aria-label={project!.name ?? project!.schematic.title}
               >
                 <div className="file-editor-surface schematic-surface" hidden={view !== 'canvas'}>
                   <div className="schematic-drawing">
@@ -3950,6 +3976,27 @@ export default function Workbench({
               />
             </section>
           </div>
+        )}
+        {renameTarget && (
+          <RenameDialog
+            kind={renameTarget.kind}
+            initialName={renameTarget.name}
+            onClose={() => setRenameTarget(null)}
+            onRename={(name) => {
+              if (closingDocument.current) throw new Error('This project is closing.');
+              if (renameTarget.kind === 'project') {
+                const current = core.getSnapshot().project;
+                if (!current) throw new Error('The project is no longer open.');
+                core.commitProject({ ...current, name });
+              } else {
+                const id = renameTarget.id;
+                if (!sessions.some((session) => session.id === id))
+                  throw new Error('The conversation is no longer available.');
+                setSessionState((current) => renameSession(current, id, name));
+              }
+              setRenameTarget(null);
+            }}
+          />
         )}
         {toast && (
           <div className="toast" role="status">

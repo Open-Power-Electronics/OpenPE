@@ -3166,7 +3166,7 @@ try {
       // which also waits for preparation/history initialization of the full catalog.
       if (measuredOperations.has('project-reopen')) {
         await button('Schematic').click();
-        await page.locator('.schematic-file-tabs .file-tab-close').click();
+        await page.locator('.project-file-tabs .file-tab-close').click();
         await page.getByRole('textbox', { name: 'Describe your circuit', exact: true }).waitFor();
         await measure('project-reopen', async () => {
           await button('Open EMC Flyback example').click();

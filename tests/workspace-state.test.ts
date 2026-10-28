@@ -489,6 +489,7 @@ test('renderer and service recovery preserve conversation flags and reject an ar
   const doc = document('Conversation state');
   const archived = {
     ...createSession('Archived draft'),
+    name: 'Reviewed conversation',
     pinned: true as const,
     archived: true as const,
   };

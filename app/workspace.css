@@ -1012,7 +1012,8 @@ body[data-workspace-resizing='true'] * {
   background: var(--panel);
 }
 
-.schematic-file-tabs {
+.schematic-file-tabs,
+.project-file-tabs {
   display: flex;
   align-items: flex-end;
   min-width: 0;
@@ -1021,6 +1022,21 @@ body[data-workspace-resizing='true'] * {
   margin-bottom: -1px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.schematic-sheet-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  min-height: 44px;
+  padding: 4px 8px 0;
+  gap: 8px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+
+.schematic-sheet-bar[hidden] {
+  display: none;
 }
 
 .document-bar > .tool-button {
@@ -1216,9 +1232,27 @@ body[data-workspace-resizing='true'] * {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
+  isolation: isolate;
+}
+
+.file-tab-close::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  content: '';
+  z-index: -1;
 }
 
 .file-tab-close:hover:not(:disabled) {
+  background: transparent;
+}
+
+.file-tab-close:hover:not(:disabled)::before {
   background: var(--line);
 }
 
@@ -1726,6 +1760,23 @@ body[data-workspace-resizing='true'] * {
   gap: 8px;
   color: var(--text);
   font-size: var(--font-control);
+}
+
+.rename-input {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--font-control);
+}
+.rename-input input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: var(--field-surface);
+  color: var(--text);
+  font: inherit;
 }
 
 .annotation-input textarea {

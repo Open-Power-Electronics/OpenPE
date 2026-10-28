@@ -61,7 +61,7 @@ import { pcbBounds, footprintPoint, padDrillPosition, createEmptyPCB } from '@/l
 import { padCopperLayers } from '@/lib/pcb-connectivity';
 import { copperFillOpacity } from '@/lib/pcb-display';
 import {
-  boardPolygons,
+  modelBoardPolygons,
   circlePolygon,
   filledCopperPolygons,
   graphicPolygons,
@@ -712,7 +712,7 @@ function PCBModelPreview({
         board.tracks.length + board.vias.length > 12000
       )
         throw new Error('The board exceeds the 3D preview geometry limit.');
-      const boundary = boardPolygons(board);
+      const boundary = modelBoardPolygons(board);
       const holes: Polygon[] = board.footprints.flatMap((f) =>
         f.pads
           .filter((p) => p.drill)
@@ -721,13 +721,18 @@ function PCBModelPreview({
       holes.push(...board.vias.map((v) => ({ outer: circlePolygon(v, v.drill / 2), holes: [] })));
       const body = subtractPolygons(boundary, holes);
       await yieldBuild();
-      const laminate = new THREE.Mesh(
-        new THREE.ExtrudeGeometry(body.map(shape), { depth: board.thickness, bevelEnabled: false }),
-        new THREE.MeshStandardMaterial({ color: 0xb6ad7b, roughness: 0.8 }),
-      );
-      laminate.position.z = -board.thickness / 2;
-      laminate.userData.modelBoard = true;
-      group.add(laminate);
+      if (body.length) {
+        const laminate = new THREE.Mesh(
+          new THREE.ExtrudeGeometry(body.map(shape), {
+            depth: board.thickness,
+            bevelEnabled: false,
+          }),
+          new THREE.MeshStandardMaterial({ color: 0xb6ad7b, roughness: 0.8 }),
+        );
+        laminate.position.z = -board.thickness / 2;
+        laminate.userData.modelBoard = true;
+        group.add(laminate);
+      }
       await yieldBuild();
       const surface = async (polygons: Polygon[], z: number, color: number, pour = false) => {
         if (!polygons.length) return;
@@ -761,6 +766,7 @@ function PCBModelPreview({
       await yieldBuild();
       const silkGraphics = pcbSilkscreen(board, schematicRef.current);
       for (const side of ['front', 'back'] as const) {
+        if (!boundary.length) break;
         const layer = side === 'front' ? 'F.Cu' : 'B.Cu',
           z = (side === 'front' ? 1 : -1) * (board.thickness / 2 + 0.015);
         const copper = [
@@ -1211,7 +1217,9 @@ function PCBModelPreview({
         const center = b.getCenter(new THREE.Vector3()),
           dims = b.getSize(new THREE.Vector3());
         const aspect = (host.current?.clientWidth || 1) / (host.current?.clientHeight || 1);
-        extent = Math.max(dims.y, dims.x / aspect, dims.z, 5) * 1.8;
+        extent = b.isEmpty()
+          ? (host.current?.clientHeight || 1) / pixelsPerMM
+          : Math.max(dims.y, dims.x / aspect, dims.z, 5) * 1.8;
         const distance = extent * 1.5;
         camera.zoom =
           camera instanceof THREE.PerspectiveCamera ? (2 * distance * tanHalfFov) / extent : 1;

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import {
   Archive,
   ArchiveRestore,
-  Copy,
+  Pencil,
   Folder,
   FolderSearch,
   Pin,
@@ -27,12 +27,12 @@ export type ProjectNavigationItem = {
   pinned?: true;
   sessions?: readonly { id: string; title: string; pinned?: true; archived?: true }[];
 };
-export type ProjectFileAction = 'save' | 'save-as' | 'duplicate' | 'reveal' | 'close';
+export type ProjectFileAction = 'rename' | 'save' | 'save-as' | 'reveal' | 'close';
 export type ProjectAction = ProjectFileAction | 'pin' | 'unpin';
 const actions = [
+  { id: 'rename', label: 'Rename', icon: Pencil },
   { id: 'save', label: 'Save', icon: Save },
   { id: 'save-as', label: 'Save as', icon: SaveAll },
-  { id: 'duplicate', label: 'Duplicate project', icon: Copy },
   { id: 'reveal', label: 'Show in File Explorer', icon: FolderSearch },
   { id: 'close', label: 'Close project', icon: X },
 ] as const;
@@ -286,6 +286,7 @@ export default function ProjectNavigation({
           >
             {menuSession && onSessionAction
               ? [
+                  { id: 'rename', label: 'Rename', icon: Pencil },
                   {
                     id: menuSession.pinned ? 'unpin' : 'pin',
                     label: menuSession.pinned ? 'Unpin' : 'Pin',

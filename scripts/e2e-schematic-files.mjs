@@ -38,9 +38,40 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   const button = (name) => page.getByRole('button', { name, exact: true });
   const tabs = () => page.getByRole('tablist', { name: 'Schematic files', exact: true });
+  const projectTabs = () => page.getByRole('tablist', { name: 'Project', exact: true });
   const projects = () => page.getByRole('group', { name: 'Open projects', exact: true });
   await button('New project').click();
-  await tabs().getByRole('tab', { name: 'Schematic 1', exact: true }).waitFor();
+  await projectTabs().getByRole('tab', { name: 'Untitled project', exact: true }).waitFor();
+  await button('Source').click();
+  const blankNative = await readNativeFiles(page);
+  assert.deepEqual(blankNative.files.map((file) => file.name).sort(), [
+    'untitled.kicad_pcb',
+    'untitled.kicad_pro',
+    'untitled.kicad_sch',
+  ]);
+  const blankProject = projectFromNativeFiles(blankNative);
+  assert.ok(blankProject.pcb);
+  assert.deepEqual(blankProject.pcb.graphics, []);
+  assert.deepEqual(blankProject.extensions['org.openpe.model-cad'], { version: 1, objects: [] });
+  for (const [name, view] of [
+    ['Layout', 'layout'],
+    ['Model', '3d'],
+    ['Source', 'source'],
+  ]) {
+    await button(name).click();
+    await page.locator(`.editor[data-editor-view="${view}"]`).waitFor();
+    assert.equal(await projectTabs().getByRole('tab').innerText(), 'Untitled project');
+    if (view === '3d') {
+      await page.locator('.pcb-model-preview canvas').waitFor();
+      assert.equal(
+        await page.getByText('No PCB layout in this project.', { exact: true }).count(),
+        0,
+      );
+    }
+    await button('Schematic').click();
+    await page.getByTestId('schematic-canvas').waitFor();
+    assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'canvas');
+  }
   const originalProjectId = await projects()
     .locator('[data-project-id]')
     .getAttribute('data-project-id');
@@ -82,6 +113,11 @@ try {
   await button('Source').click();
   assert.equal(await readSource(page), canonical);
   await fillSource(page, '{unfinished');
+  await tabs()
+    .getByRole('tab', { name: /^Output stage/ })
+    .click();
+  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'source');
+  assert.equal(await readSource(page), '{unfinished');
   await tabs()
     .getByRole('tab', { name: /^Output stage/ })
     .hover();

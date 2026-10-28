@@ -1,5 +1,6 @@
 import type { ChatOutcome, ChatTimings } from './chat-stream';
 import { validateAnnotations, type AgentAnnotation } from './agent-annotations';
+import { displayName } from './display-name';
 
 export type Message = {
   id: string;
@@ -18,6 +19,7 @@ export type Message = {
 
 export type ChatSession = {
   id: string;
+  name?: string;
   messages: Message[];
   draft: string;
   annotations?: AgentAnnotation[];
@@ -25,13 +27,33 @@ export type ChatSession = {
   archived?: true;
 };
 
-export type SessionAction = 'pin' | 'unpin' | 'archive' | 'restore' | 'delete';
+export type SessionAction = 'rename' | 'pin' | 'unpin' | 'archive' | 'restore' | 'delete';
 export type SessionState = { sessions: ChatSession[]; activeSessionId: string };
+
+export function openNewSession(
+  state: SessionState,
+  candidate: ChatSession,
+  running: Readonly<Record<string, boolean>> = {},
+): SessionState {
+  const available = (session: ChatSession) =>
+    !session.archived && !session.messages.length && running[session.id] !== true;
+  const reusable =
+    state.sessions.find((session) => session.id === state.activeSessionId && available(session)) ??
+    state.sessions.findLast(available);
+  if (reusable)
+    return reusable.id === state.activeSessionId
+      ? state
+      : { ...state, activeSessionId: reusable.id };
+  return {
+    sessions: [...state.sessions, candidate],
+    activeSessionId: candidate.id,
+  };
+}
 
 export function updateSession(
   state: SessionState,
   id: string,
-  action: SessionAction,
+  action: Exclude<SessionAction, 'rename'>,
 ): SessionState {
   if (!state.sessions.some((session) => session.id === id)) return state;
   const sessions = state.sessions.flatMap((session) => {
@@ -59,7 +81,18 @@ export function createSession(draft = ''): ChatSession {
   return { id: crypto.randomUUID(), messages: [], draft };
 }
 
+export function renameSession(state: SessionState, id: string, value: string): SessionState {
+  const name = displayName(value);
+  return {
+    ...state,
+    sessions: state.sessions.map((session) =>
+      session.id === id && session.name !== name ? { ...session, name } : session,
+    ),
+  };
+}
+
 export function sessionTitle(session: ChatSession): string {
+  if (session.name !== undefined) return session.name;
   const message = session.messages.find((message) => message.role === 'user');
   const prompt = message?.text || message?.annotations?.[0]?.comment;
   return prompt?.trim().replace(/\s+/g, ' ').slice(0, 60) || 'New session';
@@ -93,6 +126,11 @@ export function restoreSessions(state: { sessions?: ChatSession[]; activeSession
       throw new Error('Invalid saved sessions. The recovery file was preserved.');
     }
     ids.add(session.id);
+    if (
+      session.name !== undefined &&
+      (typeof session.name !== 'string' || displayName(session.name) !== session.name)
+    )
+      throw new Error('Invalid saved conversation name. The recovery file was preserved.');
     validateAnnotations(session.annotations);
     for (const message of session.messages) validateAnnotations(message.annotations);
   }

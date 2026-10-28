@@ -21,6 +21,11 @@ project stem when available and owns the optional PCB; sheets have no cross-file
 electrical joins. Geometry determines connectivity. UUIDs, embedded libraries,
 fields, assignments, copper and model transforms survive round trips.
 
+New Untitled project starts with complete empty `untitled.kicad_pro`,
+`untitled.kicad_sch` and `untitled.kicad_pcb` native texts. Its empty Model CAD
+is stored in `OPENPE_MODEL_CAD` within the project settings, not a separate design
+format. These files are the initial clean Core baseline before any view opens.
+
 Local footprint checks may reuse an exact internally owned collection only with
 the same owned primary schematic, nets and copper stack. Every validation still
 checks its UUIDs against the complete project and includes its fill vertices in
@@ -44,11 +49,12 @@ Via locks and zone names remain metadata. The EMC generator uses the official
 KiCad upgrader and exact custom-pad/keepout decomposition; pinned inputs remain
 unchanged.
 
-Native `.kicad_pro` text variables store bounded CAD as JSON strings:
+Native `.kicad_pro` text variables retain application-owned project metadata:
 
-| Variable / private extension                | Content                                                                                                                                        |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPENPE_MODEL_CAD` / `org.openpe.model-cad` | Version 1; up to 64 identified box/cylinder/extrusion/Boolean bodies with XYZ pose, dimensions, material, opacity and bounded geometry recipes |
+| Variable / private extension                | Content                                                                                                                                                                                         |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENPE_PROJECT_NAME`                       | Project display name, a string of 1–4096 characters. Absent names use the native entry's filename stem. Rename retains filenames and unrelated settings; Save as controls the destination stem. |
+| `OPENPE_MODEL_CAD` / `org.openpe.model-cad` | Version 1; up to 64 identified box/cylinder/extrusion/Boolean bodies with XYZ pose, dimensions, material, opacity and bounded geometry recipes                                                  |
 
 Model CAD retains unchanged version-1 boxes/cylinders. Extrusions use local XY
 rectangle/circle profiles or 3–128-point simple implicitly closed polygons;
@@ -166,7 +172,7 @@ solids, the picker also offers an OpenSCAD model. Its millimetre text uses nativ
 X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, through holes, Boolean
 recipes, material colours and opacity; circles are faceted with `$fn = 96`.
 Fillets and chamfers have no OpenSCAD equivalent, so they reject the export without
-writing. OpenPE never reads, imports or executes SCAD files. Portable `.lib`, footprint and STEP
+writing. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it. Portable `.lib`, footprint and STEP
 sidecars travel beside native files. New example assets use `circuits/<component>.lib`,
 `models/*.step`, `footprints/<stem>.pretty/*.kicad_mod` and `symbols/*.kicad_sym`.
 Simulation model filenames must match the current pinned component registry.

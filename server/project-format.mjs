@@ -25586,6 +25586,7 @@ var encoder = new TextEncoder();
 var utf8Size = (source) => typeof source === "string" && !/[^\x00-\x7f]/.test(source) ? source.length : encoder.encode(source).length;
 var ownedNativeFileSizes = /* @__PURE__ */ new WeakMap();
 var MODEL_VARIABLE = "OPENPE_SIMULATION_MODELS";
+var PROJECT_NAME_VARIABLE = "OPENPE_PROJECT_NAME";
 var ext = (name, suffix) => name.toLowerCase().endsWith(suffix);
 var stem = (name) => name.replace(/\.kicad_(?:pro|sch|pcb)$/i, "");
 var fail3 = (message) => {
@@ -25698,6 +25699,17 @@ function referencedModels(settings) {
   validateSimulationModels(models3);
   return models3.length ? models3 : void 0;
 }
+function nativeProjectName(settings) {
+  const variables = settings.text_variables;
+  if (variables === void 0) return void 0;
+  if (!variables || typeof variables !== "object" || Array.isArray(variables))
+    return fail3("native text_variables must be an object.");
+  const value = variables[PROJECT_NAME_VARIABLE];
+  if (value === void 0) return void 0;
+  if (typeof value !== "string" || !value.length || value.length > 4096)
+    return fail3("the project name must be a native text variable string of 1\u20134096 characters.");
+  return value;
+}
 function nativeModelCad(settings) {
   const variables = settings.text_variables;
   if (variables === void 0) return void 0;
@@ -25783,6 +25795,7 @@ function parseFiles(bundle, owner) {
     if (settings.text_variables && typeof settings.text_variables === "object" && Object.hasOwn(settings.text_variables, "OPENPE_ENCLOSURE"))
       fail3("unsupported retired enclosure data. Use current Model CAD objects.");
     nativeModelCad(settings);
+    nativeProjectName(settings);
   }
   const projectStem = stem(projectFile?.name ?? bundle.entry).toLowerCase();
   const schematics = bundle.files.filter((file) => ext(file.name, ".kicad_sch")).map((file) => {
@@ -25814,7 +25827,7 @@ function projectFromNativeFiles(bundle) {
   const project = {
     ...createProject(schematic),
     id: nativeIdentity(schematic.id + ":project"),
-    name: stem(parsed.projectFile?.name ?? bundle.entry).split("/").at(-1),
+    name: (parsed.projectFile && nativeProjectName(projectSettings(parsed.projectFile.source))) ?? stem(parsed.projectFile?.name ?? bundle.entry).split("/").at(-1),
     ...parsed.schematics.length > 1 ? { additionalSchematics: parsed.schematics.slice(1).map((item) => item.circuit) } : {},
     pcb: parsed.board,
     extensions: {
@@ -26134,18 +26147,18 @@ function projectNativeFilesSnapshot(project, entryName) {
   if (sameDestination) return sameDestination;
   const targetStem = stem(entry);
   const projectRenamed = targetStem !== oldStem;
-  const rename = (name) => {
-    if (name.toLowerCase() === (oldStem + ".kicad_pro").toLowerCase()) return entry;
+  const rename = (name2) => {
+    if (name2.toLowerCase() === (oldStem + ".kicad_pro").toLowerCase()) return entry;
     for (const suffix of [".kicad_sch", ".kicad_pcb", ".kicad_dru", ".kicad_sym"])
-      if (name.toLowerCase() === (oldStem + suffix).toLowerCase()) return targetStem + suffix;
-    if (name.toLowerCase() === `symbols/${oldStem}.kicad_sym`.toLowerCase())
+      if (name2.toLowerCase() === (oldStem + suffix).toLowerCase()) return targetStem + suffix;
+    if (name2.toLowerCase() === `symbols/${oldStem}.kicad_sym`.toLowerCase())
       return `symbols/${targetStem}.kicad_sym`;
     for (const directory of ["", "footprints/"]) {
       const libraryPrefix = directory + oldStem + ".pretty/";
-      if (name.toLowerCase().startsWith(libraryPrefix.toLowerCase()))
-        return directory + targetStem + ".pretty/" + name.slice(libraryPrefix.length);
+      if (name2.toLowerCase().startsWith(libraryPrefix.toLowerCase()))
+        return directory + targetStem + ".pretty/" + name2.slice(libraryPrefix.length);
     }
-    return name;
+    return name2;
   };
   const renameLibraryTable = (file) => {
     if (!projectRenamed || !["fp-lib-table", "sym-lib-table"].includes(file.name))
@@ -26177,6 +26190,16 @@ function projectNativeFilesSnapshot(project, entryName) {
   let settings = oldProject?.source ?? newSettings(entry.split("/").at(-1));
   const data = projectSettings(settings);
   let settingsChanged = false;
+  const existingName = nativeProjectName(data);
+  const name = project.name ?? project.schematic.title;
+  const filenameName = stem(oldProject?.name ?? entry).split("/").at(-1);
+  if (existingName !== name && (existingName !== void 0 || !oldProject && name !== filenameName)) {
+    data.text_variables = {
+      ...data.text_variables,
+      [PROJECT_NAME_VARIABLE]: name
+    };
+    settingsChanged = true;
+  }
   if (oldProject && rename(oldProject.name) !== oldProject.name) {
     data.meta = {
       ...data.meta && typeof data.meta === "object" && !Array.isArray(data.meta) ? data.meta : {},
@@ -26207,17 +26230,17 @@ function projectNativeFilesSnapshot(project, entryName) {
   files2.unshift({ name: entry, source: settings });
   const used = new Set(files2.map((file) => file.name.toLowerCase()));
   const unique = (preferred) => {
-    let name = preferred, index = 2;
-    while (used.has(name.toLowerCase()))
-      name = preferred.replace(/\.kicad_sch$/i, `-${index++}.kicad_sch`);
-    used.add(name.toLowerCase());
-    return name;
+    let name2 = preferred, index = 2;
+    while (used.has(name2.toLowerCase()))
+      name2 = preferred.replace(/\.kicad_sch$/i, `-${index++}.kicad_sch`);
+    used.add(name2.toLowerCase());
+    return name2;
   };
   const renamedSchematics = [];
   const cleanSchematics = [];
   for (const [index, schematic] of projectSchematics(project).entries()) {
     const previous2 = parsed?.schematics.find((item) => item.circuit.id === schematic.id);
-    const name = unique(
+    const name2 = unique(
       previous2 ? rename(previous2.file.name) : index === 0 ? targetStem + ".kicad_sch" : baseName(schematic.title) + ".kicad_sch"
     );
     const unchanged = previous2 && (previous2.fingerprint ??= nativeSchematicFingerprint(
@@ -26256,7 +26279,7 @@ function projectNativeFilesSnapshot(project, entryName) {
           renamedSchematics.push({ schematic, projectName, original: previous2.file, source });
       }
     }
-    files2.push({ name, source });
+    files2.push({ name: name2, source });
   }
   let boardSource2;
   let encodeBoardSource;
@@ -26346,14 +26369,21 @@ function replaceNativeProjectFile(project, name, source) {
   const file = bundle.files.find((item) => item.name === name);
   if (!file) return fail3("the selected file is no longer in this project.");
   if (file.source === source) return project;
-  const next = projectFromNativeFiles({
+  return projectWithNativeFiles(project, {
     ...bundle,
     files: bundle.files.map((item) => item === file ? { ...item, source } : item)
   });
+}
+function projectWithNativeFiles(project, bundle) {
+  const next = projectFromNativeFiles(bundle);
+  const explicitName = (files2) => {
+    const file = files2?.files.find((file2) => ext(file2.name, ".kicad_pro"));
+    return file ? nativeProjectName(projectSettings(file.source)) : void 0;
+  };
   return {
     ...next,
     id: project.id,
-    name: project.name ?? project.schematic.title,
+    name: explicitName(bundle) !== void 0 || explicitName(project.nativeFiles) !== void 0 ? next.name : project.name ?? project.schematic.title,
     extensions: nativeModelCadExtensions(project.extensions, next.extensions)
   };
 }

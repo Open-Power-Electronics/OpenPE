@@ -69,6 +69,8 @@ try {
   const select = async (name) => {
     await page.locator('.project-navigation').getByRole('button', { name, exact: true }).click();
   };
+  const openConversation = () =>
+    page.locator('.project-navigation > span').first().locator('.project-folder > button').click();
   const send = async (prompt) => {
     await input().fill(prompt);
     await input().press('Enter');
@@ -83,6 +85,16 @@ try {
   };
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   const source = await readNativeFiles(page);
+  const initialSessionId = await page.locator('.project-session').getAttribute('data-session-id');
+  for (let index = 0; index < 4; index++) await openConversation();
+  assert.equal(await page.locator('.project-session').count(), 1);
+  assert.equal(
+    await page.locator('.project-session').getAttribute('data-session-id'),
+    initialSessionId,
+  );
+  await input().fill('Unsent initial draft');
+  await openConversation();
+  assert.equal(await input().inputValue(), 'Unsent initial draft');
   await send('First session prompt');
   await page
     .locator('.project-navigation > span')
@@ -101,7 +113,8 @@ try {
       .isVisible(),
   );
   await finish();
-  await select('New session');
+  await openConversation();
+  assert.equal(await page.locator('.project-session').count(), 2);
   assert.equal(await input().inputValue(), 'Second draft');
   await send('Second session prompt');
   await finish();
@@ -121,7 +134,8 @@ try {
     ['First session prompt', 'Answer for First session prompt'],
   );
   assert.deepEqual(await readNativeFiles(page), source);
-  await select('New session');
+  await openConversation();
+  assert.equal(await page.locator('.project-session').count(), 3);
   const deadline = Date.now() + 10000;
   while (true) {
     const persisted = await page.evaluate(async () => {

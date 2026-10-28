@@ -219,13 +219,13 @@ try {
   current = await snapshot();
   assert.equal(readPart(current).value, '47k');
   assert.equal(current.undoDepth, 1, 'A reviewed command commits one Core transaction.');
-  assert.equal(await page.locator('[aria-label="Schematic files"] .dirty-dot').count(), 1);
+  assert.equal(await page.locator('.project-file-tabs .dirty-dot').count(), 1);
   await button('Undo').click();
   current = await snapshot();
   assert.equal(readPart(current).value, target.value);
   assert.equal(current.undoDepth, 0);
   assert.equal(
-    await page.locator('[aria-label="Schematic files"] .dirty-dot').count(),
+    await page.locator('.project-file-tabs .dirty-dot').count(),
     0,
     'Undo to baseline clears dirty.',
   );
