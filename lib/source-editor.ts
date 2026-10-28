@@ -25,6 +25,7 @@ import {
   syntaxTree,
   StreamLanguage,
   matchBrackets,
+  type StringStream,
 } from '@codemirror/language';
 import { json } from '@codemirror/lang-json';
 import { defaultKeymap, history, historyKeymap, indentWithTab, redo } from '@codemirror/commands';
@@ -37,13 +38,20 @@ const sourceColors = HighlightStyle.define([
   { tag: tags.propertyName, class: 'source-token-key' },
   { tag: tags.string, class: 'source-token-string' },
   { tag: tags.number, class: 'source-token-number' },
-  { tag: [tags.bool, tags.null], class: 'source-token-literal' },
+  { tag: [tags.bool, tags.null, tags.special(tags.variableName)], class: 'source-token-literal' },
+  { tag: tags.keyword, class: 'source-token-keyword' },
+  { tag: tags.function(tags.variableName), class: 'source-token-function' },
+  { tag: tags.comment, class: 'source-token-comment' },
   { tag: tags.punctuation, class: 'source-token-punctuation' },
   { tag: tags.bracket, class: 'source-token-bracket' },
   ...parenthesisTags.map((tag, depth) => ({ tag, class: `source-bracket-${depth}` })),
 ]);
 
-export type SourceLanguage = 'json' | 'sexpr' | 'text';
+const parenthesisTokens = Object.fromEntries(
+  parenthesisTags.map((tag, depth) => [`parenthesis${depth}`, tag]),
+);
+
+export type SourceLanguage = 'json' | 'sexpr' | 'scad' | 'text';
 
 export function sourceLanguageForFile(name: string): SourceLanguage {
   if (/\.(?:kicad_pro|kicad_prl|kicad_jobset|json)$/i.test(name)) return 'json';
@@ -52,6 +60,7 @@ export function sourceLanguageForFile(name: string): SourceLanguage {
     /(?:^|\/)(?:sym|fp)-lib-table$/i.test(name)
   )
     return 'sexpr';
+  if (/\.scad$/i.test(name)) return 'scad';
   return 'text';
 }
 
@@ -105,19 +114,177 @@ const kicadLanguage = StreamLanguage.define({
     indentOnInput: /^\s*\)/,
     commentTokens: { line: '#' },
   },
-  tokenTable: Object.fromEntries(parenthesisTags.map((tag, depth) => [`parenthesis${depth}`, tag])),
+  tokenTable: parenthesisTokens,
 });
 
-const kicadFolding = foldService.of((state, lineStart, lineEnd) => {
+const scadKeywords = new Set([
+  'module',
+  'function',
+  'if',
+  'else',
+  'for',
+  'let',
+  'each',
+  'assert',
+  'echo',
+  'include',
+  'use',
+]);
+const scadNumber = /(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/iy;
+const scadWord = /\$?\w+/y;
+
+type ScadState = {
+  frames: { bracket: string; indent: number }[];
+  comment: boolean;
+  string: boolean;
+  path: boolean;
+  open: boolean;
+  lineCode: boolean;
+  lineIndent: number;
+};
+
+function scadSticky(pattern: RegExp, stream: StringStream) {
+  pattern.lastIndex = stream.pos;
+  return pattern.exec(stream.string)?.[0] ?? '';
+}
+
+function closeScadComment(stream: StringStream) {
+  while (!stream.eol()) {
+    if (stream.match('*/')) return true;
+    stream.next();
+  }
+  return false;
+}
+
+function closeScadString(stream: StringStream) {
+  while (!stream.eol()) {
+    const char = stream.next();
+    if (char === '\\') stream.next();
+    else if (char === '"') return true;
+  }
+  return false;
+}
+
+// Brackets indent from their opening line. Within a block, an unterminated
+// statement (a module call chain such as `for () translate () cube();`)
+// continues one unit past its previous line until `;` or a closed block.
+const scadLanguage = StreamLanguage.define<ScadState>({
+  name: 'OpenSCAD',
+  startState: () => ({
+    frames: [],
+    comment: false,
+    string: false,
+    path: false,
+    open: false,
+    lineCode: false,
+    lineIndent: 0,
+  }),
+  token(stream, state) {
+    if (stream.sol()) state.lineCode = false;
+    if (state.comment) {
+      state.comment = !closeScadComment(stream);
+      return 'comment';
+    }
+    if (state.string) {
+      state.string = !closeScadString(stream);
+      return 'string';
+    }
+    if (stream.eatSpace()) return null;
+    if (stream.match('//')) {
+      stream.skipToEnd();
+      return 'comment';
+    }
+    if (stream.match('/*')) {
+      state.comment = !closeScadComment(stream);
+      return 'comment';
+    }
+    const top = state.frames.at(-1);
+    const statement = !top || top.bracket === '{';
+    if (!state.lineCode) {
+      state.lineCode = true;
+      if (statement) state.lineIndent = stream.indentation();
+    }
+    const path = state.path;
+    state.path = false;
+    const char = stream.next()!;
+    if (char === ')' || char === ']' || char === '}') {
+      state.frames.pop();
+      if (char === '}') state.open = false;
+      return `parenthesis${state.frames.length % 3}`;
+    }
+    if (char === ';') {
+      if (statement) state.open = false;
+      return 'punctuation';
+    }
+    if (char === '{') {
+      state.frames.push({ bracket: char, indent: stream.indentation() });
+      state.open = false;
+      return `parenthesis${(state.frames.length - 1) % 3}`;
+    }
+    if (statement) state.open = true;
+    if (char === '(' || char === '[') {
+      state.frames.push({ bracket: char, indent: stream.indentation() });
+      return `parenthesis${(state.frames.length - 1) % 3}`;
+    }
+    if (char === '"') {
+      state.string = !closeScadString(stream);
+      return 'string';
+    }
+    if (char === '<' && path) {
+      stream.match(/^[^>]*>?/);
+      if (statement) state.open = false;
+      return 'string';
+    }
+    if (char === ',') return 'punctuation';
+    stream.backUp(1);
+    // OpenSCAD lexes the longest match, so `2d_part` is an identifier.
+    const number = scadSticky(scadNumber, stream);
+    const word = scadSticky(scadWord, stream);
+    if (!number && !word) {
+      stream.next();
+      return /[-+*/%^!<>=&|?:#.]/.test(char) ? 'operator' : null;
+    }
+    if (number.length >= word.length) {
+      stream.pos += number.length;
+      return 'number';
+    }
+    stream.pos += word.length;
+    if (scadKeywords.has(word)) {
+      state.path = word === 'include' || word === 'use';
+      return 'keyword';
+    }
+    if (word === 'true' || word === 'false') return 'bool';
+    if (word === 'undef') return 'null';
+    if (word.startsWith('$')) return 'variableName.special';
+    if (stream.match(/^\s*\(/, false)) return 'variableName.function';
+    if (stream.match(/^\s*=(?!=)/, false)) return 'propertyName';
+    return 'variableName';
+  },
+  indent(state, textAfter, context) {
+    if (state.comment || state.string) return null;
+    const top = state.frames.at(-1);
+    if (top && /^[)\]}]/.test(textAfter)) return top.indent;
+    if (top && top.bracket !== '{') return top.indent + context.unit;
+    if (state.open) return state.lineIndent + (textAfter.startsWith('{') ? 0 : context.unit);
+    return top ? top.indent + context.unit : 0;
+  },
+  languageData: {
+    closeBrackets: { brackets: ['(', '[', '{', '"'] },
+    indentOnInput: /^\s*[)\]}]/,
+    commentTokens: { line: '//', block: { open: '/*', close: '*/' } },
+  },
+  tokenTable: parenthesisTokens,
+});
+
+const bracketFolding = foldService.of((state, lineStart, lineEnd) => {
   const tree = syntaxTree(state);
   for (let pos = lineStart; pos < lineEnd; pos++) {
     if (
-      state.doc.sliceString(pos, pos + 1) !== '(' ||
+      !/[([{]/.test(state.doc.sliceString(pos, pos + 1)) ||
       !tree.resolveInner(pos, 1).name.startsWith('parenthesis')
     )
       continue;
     const match = matchBrackets(state, pos, 1, {
-      brackets: '()',
       maxScanDistance: state.doc.length,
     });
     if (match?.matched && match.end && match.end.from > lineEnd)
@@ -221,7 +388,13 @@ export function sourceExtensions(
 ) {
   const language = sourceLanguageForFile(fileName);
   return [
-    language === 'json' ? json() : language === 'sexpr' ? [kicadLanguage, kicadFolding] : [],
+    language === 'json'
+      ? json()
+      : language === 'sexpr'
+        ? [kicadLanguage, bracketFolding]
+        : language === 'scad'
+          ? [scadLanguage, bracketFolding]
+          : [],
     history(),
     presentation,
     codeFolding({

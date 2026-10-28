@@ -349,40 +349,6 @@ function selectionFills(
   return noCopperFills;
 }
 
-/** Visible zone boundaries are deliberate point targets; broad fill interiors are fallback targets.
- * Embedded zone IDs retain their footprint owner in the caller's selection candidates.
- */
-export function pcbPointZoneOutlineHits(
-  board: PCB,
-  layers: PCBDisplay,
-  at: Point,
-  tolerance: number,
-  filters?: PCBSelectionFilters,
-): Set<string> {
-  const hits = new Set<string>();
-  if (!layers.zoneOutlines || ![at.x, at.y, tolerance].every(Number.isFinite) || tolerance < 0)
-    return hits;
-  const inspect = (zone: BoardZone, transform: (point: Point) => Point) => {
-    if (!layers[zone.layer] || (filters && !pcbZoneSelectionEligible(zone, filters))) return;
-    if (
-      [zone.outline, ...(zone.holes ?? [])].some((contour) =>
-        contour.some(
-          (point, i) =>
-            pointDistance(at, transform(point), transform(contour[(i + 1) % contour.length])) <=
-            tolerance + 0.04 + epsilon,
-        ),
-      )
-    )
-      hits.add(zone.id);
-  };
-  for (const zone of board.zones) inspect(zone, (point) => point);
-  if (layers.footprints)
-    for (const footprint of board.footprints)
-      for (const zone of footprint.zones ?? [])
-        inspect(zone, (point) => footprintPoint(footprint, point));
-  return hits;
-}
-
 export type PCBPointCandidate = {
   selection?: PCBSelection;
   padId?: string;

@@ -35,7 +35,7 @@ test('all ten original examples retain their actual native filenames and parse a
       ),
     );
   }
-  assert.match(await readFile('examples/emc-flyback/emc-flyback.scad', 'utf8'), /cube|module/);
+  await assert.rejects(readFile('examples/emc-flyback/emc-flyback.scad'), { code: 'ENOENT' });
   const reference = homeExampleCatalog.find((entry) => entry.id !== 'emc-flyback-demo')!;
   const parameters = JSON.parse(
     await readFile(`examples/${reference.file}/datasheets/parameters.json`, 'utf8'),
@@ -65,7 +65,6 @@ test('packaging retains the original examples tree including documents and optio
     'emc-flyback/emc-flyback.kicad_sch',
     'emc-flyback/emc-flyback.kicad_pcb',
     'emc-flyback/emc-flyback.kicad_dru',
-    'emc-flyback/emc-flyback.scad',
     'emc-flyback/footprints/EMC_Demo.pretty/device.kicad_mod',
     'emc-flyback/models/device.step',
     'lm2596-to220-5-buck/datasheets/parameters.json',

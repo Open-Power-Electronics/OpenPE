@@ -1,4 +1,7 @@
-import ts from 'typescript';
+import { createRequire } from 'node:module';
+
+// CommonJS loading skips ESM named-export lexing of the multi-megabyte compiler bundle.
+const ts = createRequire(import.meta.url)('typescript');
 
 /** Add success reuse to static Ajv functions without changing their schemas or
  * errors. Reject unfamiliar/context-sensitive output instead of guessing. */

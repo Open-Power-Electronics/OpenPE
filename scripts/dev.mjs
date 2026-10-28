@@ -5,20 +5,20 @@ import { createDevLogger } from './dev-output.mjs';
 import { withDevPreparationCache } from './dev-preparation-cache.mjs';
 
 const rendererURL = 'http://127.0.0.1:3000';
-const preparations = [
-  ['Preparing project formats', [['scripts/build-format.mjs']]],
+/** Node argument lists shared by development startup and `scripts/build.mjs`. */
+export const formatPreparation = ['Preparing project formats', [['scripts/build-format.mjs']]];
+export const examplePreparation = [
+  'Preparing Home projects and models',
   [
-    'Preparing Home projects and models',
-    [
-      ['--import', 'tsx', 'scripts/download-example-models.ts'],
-      ['--import', 'tsx', 'scripts/prepare-default-examples.ts'],
-    ],
-  ],
-  [
-    'Verifying solver resources',
-    [['scripts/prepare-ngspice.mjs'], ['scripts/prepare-thermal.mjs']],
+    ['--import', 'tsx', 'scripts/download-example-models.ts'],
+    ['--import', 'tsx', 'scripts/prepare-default-examples.ts'],
   ],
 ];
+export const solverVerification = [
+  'Verifying solver resources',
+  [['scripts/prepare-ngspice.mjs'], ['scripts/prepare-thermal.mjs']],
+];
+const preparations = [formatPreparation, examplePreparation, solverVerification];
 
 function launch(spawnProcess, args, env, logger, label, outputOptions) {
   const child = spawnProcess(process.execPath, args, {

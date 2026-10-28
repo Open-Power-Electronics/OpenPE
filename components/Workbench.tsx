@@ -1538,7 +1538,7 @@ export default function Workbench({
       const schematic = findSchematic(snapshot, doc.id) ?? snapshot.schematic;
       const exportSource = serializeProject(snapshot);
       const exportName = schematic.id !== snapshot.schematic.id ? schematic.title : filename;
-      let kind: 'schematic' | 'pcb' = 'schematic';
+      let kind: 'schematic' | 'pcb' | 'scad' = 'schematic';
       if (window.openpe) {
         const result = await window.openpe.exportKiCad({
           source: exportSource,
@@ -1560,7 +1560,9 @@ export default function Workbench({
       notify(
         kind === 'pcb'
           ? 'Exported KiCad PCB. Refill zones and check connectivity in KiCad.'
-          : 'Exported KiCad schematic',
+          : kind === 'scad'
+            ? 'Exported OpenSCAD model'
+            : 'Exported KiCad schematic',
       );
       return 'exported';
     } catch (e) {

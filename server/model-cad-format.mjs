@@ -652,6 +652,11 @@ function pcbGraphicPoints(g) {
 // lib/model-cad.ts
 var MODEL_CAD_EXTENSION = "org.openpe.model-cad";
 var MODEL_CAD_NATIVE_VARIABLE = "OPENPE_MODEL_CAD";
+var modelCadMaterialColors = {
+  aluminium: 12567494,
+  pmma: 14478575,
+  plastic: 7830658
+};
 var object = (properties, optional = []) => ({
   type: "object",
   properties,
@@ -1148,6 +1153,7 @@ export {
   modelCadBoardBounds,
   modelCadFromProject,
   modelCadGeometryKey,
+  modelCadMaterialColors,
   modelCadObjectSchema,
   modelCadOperandBounds,
   modelCadRequiresPreparation,

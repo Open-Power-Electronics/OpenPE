@@ -7,7 +7,6 @@ import { copperFillContour, type Polygon } from '../lib/pcb-polygons';
 import {
   choosePCBPointCandidate,
   mergePCBSelection,
-  pcbPointZoneOutlineHits,
   selectPCBPoint,
   selectPCBRectangle,
   type PCBSelectionFilters,
@@ -667,51 +666,12 @@ const selectionZone = (): PCB['zones'][number] => ({
   thermalBridge: 0.3,
 });
 
-test('point zone boundaries include closing edges, holes and their stroke without targeting fill interiors', () => {
-  const zone = selectionZone(),
-    board = { ...createEmptyPCB(), zones: [zone] },
-    layers = defaultPCBDisplay();
-  zone.filledPolygons = [
-    { points: copperFillContour({ outer: zone.outline, holes: zone.holes! }) },
-  ];
-  const before = structuredClone(board);
-  for (const point of [
-    { x: 0, y: 5 },
-    { x: 4, y: 5 },
-    { x: -0.239, y: 5 },
-  ])
-    assert.deepEqual([...pcbPointZoneOutlineHits(board, layers, point, 0.2)], ['zone']);
-  for (const point of [
-    { x: 2, y: 2 },
-    { x: 5, y: 5 },
-    { x: -0.241, y: 5 },
-  ])
-    assert.deepEqual([...pcbPointZoneOutlineHits(board, layers, point, 0.2)], []);
-  assert.deepEqual(
-    [...pcbPointZoneOutlineHits(board, { ...layers, copper: false }, { x: 0, y: 5 }, 0)],
-    ['zone'],
-  );
-  for (const hidden of [
-    { ...layers, zoneOutlines: false },
-    { ...layers, 'F.Cu': false },
-  ])
-    assert.deepEqual([...pcbPointZoneOutlineHits(board, hidden, { x: 0, y: 5 }, 1)], []);
-  assert.deepEqual([...pcbPointZoneOutlineHits(board, layers, { x: 0, y: 5 }, -1)], []);
-  assert.deepEqual([...pcbPointZoneOutlineHits(board, layers, { x: NaN, y: 5 }, 1)], []);
-  assert.deepEqual(board, before);
-});
-
 test('embedded zone-only footprints have transformed outline and saved fill selection targets owned by the footprint', () => {
   const zone = selectionZone(),
     part = { ...footprint('owner', 20, 20), rotation: 90, pads: [], zones: [zone] },
     board = { ...createEmptyPCB(), footprints: [part] },
     layers = defaultPCBDisplay();
   // Rotation maps the local left edge to the horizontal world edge at y = 20.
-  assert.deepEqual([...pcbPointZoneOutlineHits(board, layers, { x: 25, y: 20 }, 0)], ['zone']);
-  assert.deepEqual(
-    [...pcbPointZoneOutlineHits(board, { ...layers, footprints: false }, { x: 25, y: 20 }, 1)],
-    [],
-  );
   assert.deepEqual(
     ids(selectPCBRectangle(board, layers, filters, { x: 25.2, y: 19.9 }, { x: 24.8, y: 20.1 })),
     ['owner'],

@@ -32,6 +32,8 @@ import {
 } from './immutable-project';
 import { validateNativeSourceFiles, projectNativeFilesSnapshot } from './kicad-project';
 import { MODEL_CAD_EXTENSION, modelCadFromProject } from './model-cad';
+export { modelCadFromProject };
+export { exportModelCadScad } from './model-cad-scad';
 
 export type Project = {
   format: 'openpe';

@@ -5,13 +5,17 @@ import { createRequire } from 'node:module';
 import {
   appendSchematic,
   exportKiCad,
+  exportModelCadScad,
+  modelCadFromProject,
   parseProject,
   projectFilename,
   serializeProject,
 } from '../lib/project';
+import { newModelCadObject, withModelCad, type ModelCadObject } from '../lib/model-cad';
 import { exampleProject } from '../lib/project-example';
 
 const { createNativeExport } = createRequire(import.meta.url)('../electron/native-export.cjs');
+const formats = { parseProject, exportKiCad, modelCadFromProject, exportModelCadScad, projectFilename };
 type PickerResult = { canceled: boolean; filePath?: string };
 type PickerOptions = {
   title: string;
@@ -23,9 +27,7 @@ function setup(result: PickerResult) {
   const writes: { file: string; content: string }[] = [];
   const dialogs: PickerOptions[] = [];
   const run = createNativeExport({
-    parseProject,
-    exportKiCad,
-    projectFilename,
+    ...formats,
     showSaveDialog: async (options: PickerOptions) => {
       dialogs.push(options);
       return result;
@@ -69,9 +71,7 @@ test('PCB export prepares its portable assets before writing and preserves the e
   const actions: string[] = [];
   let fail = false;
   const run = createNativeExport({
-    parseProject,
-    exportKiCad,
-    projectFilename,
+    ...formats,
     showSaveDialog: async () => ({ canceled: false, filePath: file }),
     preparePCBFiles: async (project: ReturnType<typeof parseProject>, destination: string) => {
       assert.equal(serializeProject(project), source);
@@ -100,7 +100,7 @@ test('native Export cancels without writes and rejects unsupported extensions an
   assert.deepEqual(cancelled.dialogs[0].filters, [
     { name: 'Schematic', extensions: ['kicad_sch'] },
   ]);
-  for (const extension of ['openpe.json', 'txt', 'kicad_pcb']) {
+  for (const extension of ['openpe.json', 'txt', 'kicad_pcb', 'scad']) {
     const { run, writes } = setup({
       canceled: false,
       filePath: path.resolve('export.' + extension),
@@ -123,6 +123,62 @@ test('native Export adds a default extension and retains explicitly requested fo
   assert.ok(writes[0].content.startsWith('(kicad_pcb'));
 });
 
+const modelSource = (edit: (box: ModelCadObject) => ModelCadObject = (box) => box) => {
+  const project = exampleProject();
+  const box = edit(newModelCadObject(project.pcb!, 'box'));
+  return serializeProject(withModelCad(project, { version: 1, objects: [box] }));
+};
+
+test('native Export offers Model CAD solids as OpenSCAD without preparing PCB assets', async () => {
+  const source = modelSource();
+  const file = path.resolve('enclosure.scad');
+  const dialogs: PickerOptions[] = [];
+  const writes: { file: string; content: string }[] = [];
+  const run = createNativeExport({
+    ...formats,
+    showSaveDialog: async (options: PickerOptions) => {
+      dialogs.push(options);
+      return { canceled: false, filePath: file };
+    },
+    preparePCBFiles: async () => {
+      throw new Error('OpenSCAD export prepared PCB assets');
+    },
+    atomicWrite: async (destination: string, content: string) => {
+      writes.push({ file: destination, content });
+    },
+  });
+  assert.deepEqual(await run({ source, name: 'Enclosure' }), {
+    name: 'enclosure.scad',
+    path: file,
+    kind: 'scad',
+  });
+  assert.deepEqual(dialogs[0].filters, [
+    { name: 'Schematic', extensions: ['kicad_sch'] },
+    { name: 'PCB', extensions: ['kicad_pcb'] },
+    { name: 'OpenSCAD model', extensions: ['scad'] },
+  ]);
+  assert.deepEqual(writes, [
+    { file, content: exportModelCadScad(modelCadFromProject(parseProject(source))) },
+  ]);
+  assert.match(writes[0].content, /\n {4}cube\(\[20, 20, 10\], center = true\);\n/);
+  const requested = setup({ canceled: true });
+  assert.equal(await requested.run({ source, kind: 'pcb' }), null);
+  assert.deepEqual(requested.dialogs[0].filters, [{ name: 'PCB', extensions: ['kicad_pcb'] }]);
+});
+
+test('native Export rejects OpenSCAD for edge-treated solids without writing', async () => {
+  const source = modelSource((box) => ({
+    ...box,
+    edgeTreatment: { kind: 'fillet', distanceMm: 1, edges: ['side:0'] },
+  }));
+  const { run, writes } = setup({ canceled: false, filePath: path.resolve('enclosure.scad') });
+  await assert.rejects(
+    run({ source }),
+    /OpenSCAD export: Box has chamfered or filleted edges, which OpenSCAD cannot represent\./,
+  );
+  assert.equal(writes.length, 0);
+});
+
 test('native Export rejects unsupported snapshot formats before opening a picker or writing', async () => {
   const document = JSON.parse(serializeProject(exampleProject()));
   document.format = 'unsupported-format';
@@ -143,9 +199,7 @@ test('native Export prevents overlapping pickers and releases its lock after fai
   let finish: (result: PickerResult) => void = () => {};
   let calls = 0;
   const run = createNativeExport({
-    parseProject,
-    exportKiCad,
-    projectFilename,
+    ...formats,
     showSaveDialog: () => {
       calls++;
       return new Promise<PickerResult>((resolve) => {

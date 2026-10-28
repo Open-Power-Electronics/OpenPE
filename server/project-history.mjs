@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { parseProject, serializeProject } from './project-format.mjs';
-import { validatedExampleTemplateSource } from './example-template.mjs';
 
 const ref = 'refs/heads/main';
 const objectId = /^[0-9a-f]{40}$/;
@@ -258,13 +257,11 @@ export class ProjectHistory {
   // Trusted example preparation only; this operation is never exposed over IPC.
   // Ordinary preparation preserves additional versions. The reset flag is for
   // explicitly authorized maintenance only and is never exposed over IPC.
-  /** @param {unknown} [templateReceipt] Private exact-source validation receipt. */
-  async ensureExampleInitial(fileId, source, reset = false, templateReceipt = undefined) {
+  async ensureExampleInitial(fileId, source, reset = false) {
     const file = this.grants.get(fileId);
     if (!file || !this.grants.isLocalExample(fileId))
       throw new Error('Only an example may initialize its initial history.');
-    const content =
-      validatedExampleTemplateSource(templateReceipt, source) ?? this.canonical(source);
+    const content = this.canonical(source);
     return this.withProject(fileId, async (repo) => {
       if (!(await this.exists(repo))) {
         await this.run(null, [

@@ -6,9 +6,9 @@ During Preview, EMC Flyback is the fixed entry in Home's Recent section. It is c
 
 The official KiCad 10 upgrader converts the schematic and board. The build adapter preserves original UUIDs and deterministically identifies newly explicit fields. Its single custom rectangular pad is represented by two same-number rectangles with the identical copper union. Multi-layer keepouts become individual layer records. No electrical geometry is moved.
 
-The Home annotation layout changes only instance Reference/Value placement and alignment. Actual rendered glyph checks report zero overlaps across 228 visible fields. Regression checks retain embedded libraries, part poses, wires, labels, PCB bytes and the complete compiled SPICE deck.
+The Home annotation layout changes only instance Reference/Value placement and alignment. Rendered glyph checks require the 228 visible fields not to overlap. Regression checks retain embedded libraries, part poses, wires, labels, PCB bytes and the complete compiled SPICE deck.
 
-`scripts/check-emc-flyback-kicad.py` independently uses KiCad 10.0.1 to compare original and converted connectivity, footprint positions/UUIDs, pad copper, all 359 tracks and 155 vias, including 124 locked tracks and 32 locked vias. These checks pass; they are native-conversion checks rather than ERC/DRC or manufacturing approval.
+`scripts/check-emc-flyback-kicad.py` independently uses KiCad 10.0.1 to compare original and converted connectivity, footprint positions/UUIDs, pad copper, all 359 tracks and 155 vias, including 124 locked tracks and 32 locked vias. These are native-conversion checks rather than ERC/DRC or manufacturing approval.
 
 ## Electrical comparison
 

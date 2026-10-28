@@ -196,6 +196,7 @@ export default function DesktopWorkspace() {
                 managed && !detached
                   ? await window.openpe?.openDefaultExample(exampleKey)
                   : undefined;
+              const restoredProject = importDocument(local ? local.source : state.source);
               const recoveredState: DocumentState = local
                 ? {
                     ...state,
@@ -205,7 +206,7 @@ export default function DesktopWorkspace() {
                     dirty: false,
                     localExample: true,
                     filename: local.filename,
-                    activeSchematicId: importDocument(local.source).schematic.id,
+                    activeSchematicId: restoredProject.schematic.id,
                     closedSchematicIds: [],
                   }
                 : detached
@@ -216,7 +217,6 @@ export default function DesktopWorkspace() {
                       exampleKey: null,
                     }
                   : state;
-              const restoredProject = importDocument(recoveredState.source);
               restoredIds.set(state.id, recoveredState.id);
               const item: OpenDocument = {
                 state: recoveredState,

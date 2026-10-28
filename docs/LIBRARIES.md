@@ -130,8 +130,8 @@ footprint under `resources/example-catalog/footprints/`. EMC separately pins 31 
 [manufacturer supplements](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md).
 T1/L2 retain original official bytes; L1 has a marked reproducible rigid
 assembly-frame alignment, retaining topology/colours. Preparation verifies
-fixed hashes/notices. Example previews never download. Startup/native save/PCB
-export copy required model files beside the destination using
+fixed hashes/notices. Example previews never download. Build preparation, native
+Save and PCB export copy required model files beside the destination using
 `${KIPRJMOD}/models/<model>.step`. LM25017 and EMC custom libraries/tables are
 native Source files under `footprints/<stem>.pretty/` and `symbols/<stem>.kicad_sym`,
 retained and renamed by Core on Save
@@ -139,15 +139,13 @@ as; asset preparation does not overwrite them or create duplicate libraries.
 Project preparation supplies missing pinned package/table sidecars. Native STEP references retain their documented KiCad paths.
 Project preparation creates no `NOTICE.txt`, `licenses/` or empty resource
 directories. Original license texts and provenance remain in pinned shared
-sources and packaged notices. New portable SPICE files use
-`circuits/<component>.lib`, with names fixed by pinned component/variant metadata
-and model IDs/hashes retained independently. Earlier hash-named project references are rejected. `footprints/` holds `.kicad_mod`
+sources and packaged notices. Portable SPICE files follow the
+[Simulation](SIMULATION.md) `circuits/<component>.lib` naming. `footprints/` holds `.kicad_mod`
 packages, `symbols/` holds `.kicad_sym` libraries and `models/` holds STEP files.
-Available CAD source files such as `.scad` stay in the project root as supporting
-source records. Flat STEP basename collisions use an eight-character content hash
+Flat STEP basename collisions use an eight-character content hash
 suffix. Stable registry IDs and model bytes are unchanged.
-Generation and closed managed-example refresh remove only verified duplicate copies
-after the complete new native set is published; changed/unknown files and solver
+Example generation (`npm run examples`) removes only verified duplicate copies
+after the complete native set is published; changed/unknown files and solver
 results remain. Reject links and
 preserve differing files. Missing manufacturer assets require repair without blocking unrelated usable examples. See [Examples](EXAMPLES.md).
 
@@ -192,15 +190,15 @@ unpacked to support replacement. Do not package missing notices/source.
 
 ## Verification
 
-| Check                                                                                     | Scope                                                                                                                      |
-| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `npm run libraries:verify`                                                                | Prepared catalogs, symbols, fields and starter models                                                                      |
-| `node scripts/download-kicad-models.mjs --verify`                                         | Complete archive/inventory, offline                                                                                        |
-| `npm run examples:check-models -- --render`                                               | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 85 assigned EMC models, five mounting-hole notices |
-| `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts` | Catalog/access boundaries, placement/assignment and atomic synchronization                                                 |
-| `tests/step-parser-pool.test.ts`, `node scripts/check-step-parser-reuse.mjs`              | Worker bounds/recovery and exact 31-file mesh parity                                                                       |
-| `node scripts/check-library-scroll-ui.mjs`, `node scripts/check-object-retention-ui.mjs`  | Mocked isolated chooser/state retention                                                                                    |
-| `node scripts/e2e-libraries.mjs`                                                          | Opt-in desktop interaction                                                                                                 |
+| Check                                                                                     | Scope                                                                                                                              |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run libraries:verify`                                                                | Prepared catalogs, symbols, fields and starter models                                                                              |
+| `node scripts/download-kicad-models.mjs --verify`                                         | Complete archive/inventory, offline                                                                                                |
+| `npm run examples:check-models -- --render`                                               | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 83 visible EMC model instances, five mounting-hole notices |
+| `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts` | Catalog/access boundaries, placement/assignment and atomic synchronization                                                         |
+| `tests/step-parser-pool.test.ts`, `node scripts/check-step-parser-reuse.mjs`              | Worker bounds/recovery and exact 31-file mesh parity                                                                               |
+| `node scripts/check-library-scroll-ui.mjs`, `node scripts/check-object-retention-ui.mjs`  | Mocked isolated chooser/state retention                                                                                            |
+| `node scripts/e2e-libraries.mjs`                                                          | Opt-in desktop interaction                                                                                                         |
 
 `KICAD_CLI` is test-only for `libraries:verify` and must report KiCad 10.x.
 Documentation changes need static checks, without downloads/previews; desktop

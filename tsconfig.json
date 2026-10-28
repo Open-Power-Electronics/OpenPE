@@ -31,5 +31,20 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "release", "release-*", "test-results", "tmp"]
+  "exclude": [
+    "node_modules",
+    "release",
+    "release-*",
+    "test-results",
+    "tmp",
+    "resources",
+    "examples",
+    "out",
+    "public",
+    "references",
+    "build",
+    "assets",
+    "docs",
+    "schemas"
+  ]
 }

@@ -84,7 +84,7 @@ Every submission captures bounded workspace context. Codex/Claude additionally r
 
 Codex uses dynamic app-server tools; Claude uses the application-owned stdio MCP helper. Provider shell/web/unrelated tools stay blocked. Plugin installation does not expand OpenPE permissions. Protocol fixtures establish adapter behaviour, not authentication or every CLI-version compatibility.
 
-Each bridge binds run/conversation/origin with per-turn and single-use response tokens. Renderer results require process authentication; the CLI helper gets only its scoped bridge token. Cancellation/disconnect/completion revoke the bridge. Limits are four pending calls and 256 calls per turn; input/result budgets are 32 MiB minus 4 KiB envelope headroom. Queries/observations have a 60-second delivery deadline. Commands retain subsystem deadlines; solver execution has no runtime timeout.
+Each bridge binds run/conversation/origin with per-turn and single-use response tokens. Renderer results require process authentication; the CLI helper gets only its scoped bridge token. Cancellation/disconnect/completion revoke the bridge. [Agent tools](API.md#agent-tools) define the envelope, per-turn call and delivery-deadline limits. Commands retain subsystem deadlines; solver execution has no runtime timeout.
 
 Live requests use the current permissions mode. Explicit expected revisions are preserved; omitted revisions use submission state or the latest `project.snapshot`, `core.state` or `workbench.state` observation. Review captures immutable arguments/revision after envelope validation. Apply performs full registered schema, availability, revision and domain checks; a pending card is not proof of validity. Auto invokes the same handler and never executes previously queued reviews.
 

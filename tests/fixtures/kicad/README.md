@@ -54,7 +54,7 @@ Preparation may download the pinned solver and allowlisted model files. Fixture-
 
 | Command                                        | Scope                                                                                                                      |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `npx tsx --test tests/examples.test.ts`        | Pinned provenance, embedded symbols, geometry, field/text layout and native-content preservation                           |
+| `npm test -- tests/examples.test.ts`           | Pinned provenance, embedded symbols, geometry, field/text layout and native-content preservation                           |
 | `node scripts/verify-kicad.mjs`                | Actual KiCad 10.x pin-net equality against all nine originals and SVG exports; also checks the RC/switching-stage fixtures |
 | `node scripts/check-example-simulation-ui.mjs` | Isolated headless Home/KiCad setup and source-mark rendering with mocked services                                          |
 | `npm run simulation:check-examples`            | Offline actual-file Home/KiCad/TI deck and finite-result checks after preparation                                          |

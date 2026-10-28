@@ -24,21 +24,48 @@ function trusted(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame)
     throw new Error('Unauthorized window.');
 }
+// Service modules load while Electron initializes. The ready handler awaits
+// this promise, so an import failure still fails desktop startup.
+const serviceModules = Promise.all([
+  import('../server/index.mjs'),
+  import('../server/atomic-write.mjs'),
+  import('../server/project-model-files.mjs'),
+  import('../server/example-models.mjs'),
+  import('../server/project-spice-files.mjs'),
+  import('../server/project-thermal-files.mjs'),
+  import('../server/project-history.mjs'),
+  import('../server/example-projects.mjs'),
+  import('../server/example-footprints.mjs'),
+  import('../server/project-format.mjs'),
+  import('../server/enclosure-step.mjs'),
+]);
 app.whenReady().then(async () => {
-  const { startServer } = await import('../server/index.mjs');
-  const { atomicWrite } = await import('../server/atomic-write.mjs');
-  const { readProjectModelFile, writeProjectModelFile, prepareProjectModelFiles } =
-    await import('../server/project-model-files.mjs');
-  const { createSimulationModelStore } = await import('../server/example-models.mjs');
-  const { createProjectSpiceStore } = await import('../server/project-spice-files.mjs');
-  const { createProjectThermalStore } = await import('../server/project-thermal-files.mjs');
+  const [
+    { startServer },
+    { atomicWrite },
+    { readProjectModelFile, writeProjectModelFile, prepareProjectModelFiles },
+    { createSimulationModelStore },
+    { createProjectSpiceStore },
+    { createProjectThermalStore },
+    { ProjectHistory },
+    { ExampleProjects },
+    { prepareExampleFootprints },
+    {
+      parseProject,
+      serializeProject,
+      exportKiCad,
+      modelCadFromProject,
+      exportModelCadScad,
+      projectFilename,
+      projectFromNativeFiles,
+      projectNativeFiles,
+    },
+    { createEnclosureStep },
+  ] = await serviceModules;
   const modelFetcher = (url, options) =>
     net.fetch(url, { ...options, credentials: 'omit', cache: 'no-store' });
   const modelStore = createSimulationModelStore(app.getPath('userData'), modelFetcher);
-  const { ProjectHistory } = await import('../server/project-history.mjs');
   history = new ProjectHistory(app.getPath('userData'), fileGrants);
-  const { ExampleProjects } = await import('../server/example-projects.mjs');
-  const { prepareExampleFootprints } = await import('../server/example-footprints.mjs');
   const exampleProjects = new ExampleProjects(
     app.isPackaged
       ? path.join(process.resourcesPath, 'examples-native')
@@ -53,14 +80,6 @@ app.whenReady().then(async () => {
     (examplePreparation ??= exampleProjects
       .prepare()
       .catch((error) => [`Could not prepare bundled examples. ${error.message}`]));
-  const {
-    parseProject,
-    serializeProject,
-    exportKiCad,
-    projectFilename,
-    projectFromNativeFiles,
-    projectNativeFiles,
-  } = await import('../server/project-format.mjs');
   service = await startServer({
     dataDir: app.getPath('userData'),
     staticDir: path.join(__dirname, '../out'),
@@ -260,6 +279,8 @@ app.whenReady().then(async () => {
   const nativeExport = createNativeExport({
     parseProject,
     exportKiCad,
+    modelCadFromProject,
+    exportModelCadScad,
     projectFilename,
     preparePCBFiles: prepareExampleFootprints,
     atomicWrite,
@@ -278,7 +299,6 @@ app.whenReady().then(async () => {
     trusted(event);
     return imageExport(options);
   });
-  const { createEnclosureStep } = await import('../server/enclosure-step.mjs');
   const enclosureExport = createEnclosureExport({
     parseProject,
     atomicWrite,

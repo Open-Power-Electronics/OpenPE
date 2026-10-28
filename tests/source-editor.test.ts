@@ -6,10 +6,12 @@ import {
   ensureSyntaxTree,
   foldable,
   getIndentation,
+  highlightingFor,
   matchBrackets,
   syntaxTree,
 } from '@codemirror/language';
 import { indentMore, indentLess, undo, redo } from '@codemirror/commands';
+import { highlightTree } from '@lezer/highlight';
 import {
   sourceDecorations,
   sourceExtensions,
@@ -174,4 +176,106 @@ test('native project files select JSON, KiCad S-expression or plain text without
   assert.equal(matchBrackets(state, 0, 1)?.end?.from, text.length - 1);
   assert.equal(getIndentation(state, state.doc.line(2).from), 2);
   assert.equal(getIndentation(state, state.doc.line(4).from), 0);
+});
+
+test('OpenSCAD sources receive semantic highlighting, bracket structure and statement indentation', () => {
+  assert.equal(sourceLanguageForFile('emc-flyback.scad'), 'scad');
+  assert.equal(sourceLanguageForFile('cad/Enclosure.SCAD'), 'scad');
+  const text = [
+    'include <lib/parts.scad>',
+    '/* Panel',
+    '   "not a string" { */',
+    '$fn = 96; // segments',
+    'label = "a // b";',
+    'module drilled_panel(size, holes) {',
+    '  difference() {',
+    '    cube(size, center = true);',
+    '    for (hole = holes)',
+    '      translate([hole[0], hole[1], 0])',
+    '        cylinder(h = 2e-1, d = hole[2], center = undef == false);',
+    '  }',
+    '}',
+  ].join('\n');
+  let state = EditorState.create({
+    doc: text,
+    extensions: sourceExtensions(undefined, 'enclosure.scad'),
+  });
+  assert.ok(ensureSyntaxTree(state, text.length, 1000));
+  state = state.update({}).state;
+  assert.equal(state.doc.toString(), text);
+
+  const spans: { from: number; text: string; className: string }[] = [];
+  highlightTree(
+    syntaxTree(state),
+    { style: (tags) => highlightingFor(state, tags) },
+    (from, to, className) => spans.push({ from, text: text.slice(from, to), className }),
+  );
+  const classOf = (token: string) => {
+    const classes = new Set(spans.filter((span) => span.text === token).map((span) => span.className));
+    assert.equal(classes.size, 1, `${token} has exactly one highlight class.`);
+    return [...classes][0];
+  };
+  for (const [token, className] of [
+    ['include', 'source-token-keyword'],
+    ['<lib/parts.scad>', 'source-token-string'],
+    ['/* Panel', 'source-token-comment'],
+    ['   "not a string" { */', 'source-token-comment'],
+    ['// segments', 'source-token-comment'],
+    ['$fn', 'source-token-literal'],
+    ['96', 'source-token-number'],
+    ['"a // b"', 'source-token-string'],
+    ['module', 'source-token-keyword'],
+    ['for', 'source-token-keyword'],
+    ['drilled_panel', 'source-token-function'],
+    ['difference', 'source-token-function'],
+    ['cube', 'source-token-function'],
+    ['translate', 'source-token-function'],
+    ['cylinder', 'source-token-function'],
+    ['label', 'source-token-key'],
+    ['center', 'source-token-key'],
+    ['hole', 'source-token-key'],
+    ['2e-1', 'source-token-number'],
+    ['true', 'source-token-literal'],
+    ['undef', 'source-token-literal'],
+    ['false', 'source-token-literal'],
+    [';', 'source-token-punctuation'],
+  ])
+    assert.equal(classOf(token), className, token);
+  assert.ok(
+    !spans.some((span) => ['size', 'holes'].includes(span.text)),
+    'Ordinary identifiers keep the body text colour.',
+  );
+
+  const translate = state.doc.line(10);
+  assert.deepEqual(
+    spans
+      .filter((span) => span.from >= translate.from && span.from < translate.to)
+      .filter((span) => /^[()[\]]$/.test(span.text))
+      .map((span) => `${span.text} ${span.className}`),
+    [
+      '( source-bracket-2',
+      '[ source-bracket-0',
+      '[ source-bracket-1',
+      '] source-bracket-1',
+      '[ source-bracket-1',
+      '] source-bracket-1',
+      '] source-bracket-0',
+      ') source-bracket-2',
+    ],
+  );
+
+  const definition = state.doc.line(6);
+  const block = definition.from + definition.text.indexOf('{');
+  assert.deepEqual(foldable(state, definition.from, definition.to), {
+    from: block + 1,
+    to: text.length - 1,
+  });
+  assert.equal(foldable(state, state.doc.line(3).from, state.doc.line(3).to), null);
+  assert.equal(matchBrackets(state, block, 1)?.end?.from, text.length - 1);
+  assert.deepEqual(
+    Array.from({ length: state.doc.lines }, (_, index) =>
+      getIndentation(state, state.doc.line(index + 1).from),
+    ),
+    [0, 0, null, 0, 0, 0, 2, 4, 4, 6, 8, 2, 0],
+  );
 });

@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { writeGeneratedFile } from './write-generated-file.mjs';
 
 const exec = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -91,8 +92,8 @@ if (!valid) {
 }
 for (const item of lock.sources) await artifact(item, path.join(sourceRoot, item.name));
 if (!verify) {
-  await writeFile(path.join(root, 'manifest.json'), JSON.stringify(lock, null, 2) + '\n');
-  await writeFile(
+  await writeGeneratedFile(path.join(root, 'manifest.json'), JSON.stringify(lock, null, 2) + '\n');
+  await writeGeneratedFile(
     path.join(root, 'SOURCE-NOTICE.txt'),
     'OpenPE bundles the unmodified official Windows x64 ngspice 47 console, code models and dependencies.\n' +
       'ngspice licensing and authors: Spice64/docs/COPYING and AUTHORS; combined dependency notices: About OpenPE > Third-party licenses > ngspice.\n' +

@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { ProjectHistory } from '../server/project-history.mjs';
-import { createExampleTemplate } from '../server/example-template.mjs';
 import { compareProjectVersions } from '../lib/project-history';
 import {
   appendSchematic,
@@ -24,41 +23,6 @@ async function setup() {
   const history = new ProjectHistory(dir, grants);
   return { dir, file, id, history, grants };
 }
-
-test('example template receipts avoid duplicate validation only for their exact private source', async (t) => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-history-receipt-'));
-  const grants = new FileGrants();
-  const id = grants.create(path.join(dir, 'examples', 'emc-flyback', 'emc-flyback.kicad_pro'));
-  grants.markLocalExample(id);
-  const history = new ProjectHistory(dir, grants);
-  t.after(async () => {
-    history.close();
-    await rm(dir, { recursive: true, force: true });
-  });
-  const template = createExampleTemplate(serializeProject(exampleProject()));
-  let validations = 0;
-  const canonical = history.canonical.bind(history);
-  history.canonical = (source: string) => {
-    validations++;
-    return canonical(source);
-  };
-  const personal = grants.create(path.join(dir, 'personal.kicad_pro'));
-  await assert.rejects(
-    history.ensureExampleInitial(personal, template.source, false, template.receipt),
-    /Only an example/,
-  );
-  await history.ensureExampleInitial(id, template.source, false, template.receipt);
-  assert.equal(validations, 0);
-  await history.ensureExampleInitial(id, template.source, false, Object.freeze({}));
-  assert.equal(validations, 1, 'Caller freezing cannot forge validation receipts.');
-  await history.ensureExampleInitial(id, template.source + '\n', false, template.receipt);
-  assert.equal(validations, 2, 'Different source text receives complete canonical validation.');
-  await assert.rejects(history.ensureExampleInitial(id, '{', false, template.receipt));
-  assert.equal(validations, 3);
-  const versions = await history.list(id);
-  assert.equal(versions.commits.length, 1);
-  assert.equal(await history.read(id, versions.commits[0].id), template.source);
-});
 
 test('unchanged example seeds verify in two Git processes while preserving private personal history', async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), 'openpe-history-seed-'));

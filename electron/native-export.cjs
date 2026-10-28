@@ -3,6 +3,8 @@ const path = require('node:path');
 function createNativeExport({
   parseProject,
   exportKiCad,
+  modelCadFromProject,
+  exportModelCadScad,
   projectFilename,
   showSaveDialog,
   atomicWrite,
@@ -24,9 +26,11 @@ function createNativeExport({
       const defaultKind = kind || 'schematic';
       const defaultContent = exportKiCad(project, defaultKind, schematicId);
       const extension = defaultKind === 'pcb' ? 'kicad_pcb' : 'kicad_sch';
+      const model = project.pcb ? modelCadFromProject(project) : null;
       const formats = [
         { name: 'Schematic', extensions: ['kicad_sch'] },
         ...(project.pcb ? [{ name: 'PCB', extensions: ['kicad_pcb'] }] : []),
+        ...(model?.objects.length ? [{ name: 'OpenSCAD model', extensions: ['scad'] }] : []),
       ].filter((format) => !kind || format.extensions[0] === extension);
       const result = await showSaveDialog({
         title: 'Export',
@@ -47,11 +51,18 @@ function createNativeExport({
             formats.map((format) => '.' + format.extensions[0]).join(' or ') +
             '.',
         );
-      const selectedKind = chosenExtension === 'kicad_pcb' ? 'pcb' : 'schematic';
+      const selectedKind =
+        chosenExtension === 'scad'
+          ? 'scad'
+          : chosenExtension === 'kicad_pcb'
+            ? 'pcb'
+            : 'schematic';
       const content =
-        selectedKind === defaultKind
-          ? defaultContent
-          : exportKiCad(project, selectedKind, schematicId);
+        selectedKind === 'scad'
+          ? exportModelCadScad(model)
+          : selectedKind === defaultKind
+            ? defaultContent
+            : exportKiCad(project, selectedKind, schematicId);
       if (selectedKind === 'pcb') await preparePCBFiles(project, file);
       await atomicWrite(file, content);
       return { name: path.basename(file), path: file, kind: selectedKind };

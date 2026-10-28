@@ -226,7 +226,9 @@ function SourceEditor({
       ? 'JSON'
       : language === 'sexpr'
         ? 'KiCad S-expression'
-        : 'Text';
+        : language === 'scad'
+          ? 'OpenSCAD'
+          : 'Text';
   const encoding =
     files?.find((file) => file.name === fileName)?.encoding === 'latin1' ? 'ISO-8859-1' : 'UTF-8';
   const errorId = useId();

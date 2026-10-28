@@ -30,7 +30,7 @@ From the OpenPE repository, with Python 3 and installed Node dependencies:
 
 ```sh
 python scripts/pebench-schematic.py
-npx tsx scripts/build-pebench-examples.ts
+node --import tsx scripts/build-pebench-examples.ts
 ```
 
 The Python converter reads the ten pinned local sources and writes `converted/*.kicad_sch` plus conversion audits under `tests/fixtures/pebench/`. `scripts/pebench-schematic.py --collect <PEBench-directory>` is a separate, explicit source-collection step; ordinary regeneration does not read another checkout or use the network. Canonical generation verifies original schematic/board/converted-board hashes and the schematic audit's source hash, then uses deterministic IDs and the current validated project serializer. It writes individual fixture JSON/native exports, [`conversion-audit.json`](conversion-audit.json), the manifest and local notices. It does not update the application catalog. `npm run fixtures:generate` regenerates RC/KiCad/TI fixtures only; PEBench uses these dedicated steps. Do not hand-edit generated snapshots or pinned inputs.
@@ -42,7 +42,7 @@ PCB conversion preserves physical placement, pad shapes/numbers/nets, copper lay
 ## Verification
 
 ```sh
-npx tsx --test tests/pebench-pcb.test.ts
+npm test -- tests/pebench-pcb.test.ts
 <KiCad-10-Python> scripts/check-pebench-kicad.py --cli <KiCad-10-CLI>
 ```
 

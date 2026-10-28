@@ -87,7 +87,8 @@ editing and geometry limits.
 Source lists regular project folders and files, including empty folders,
 `footprints/`, `symbols/`, `circuits/`, `models/`, native `3D/`, `spice/` and
 `thermal/`. Native files keep validated editing; fully loaded ordinary text files
-are editable through the project file editor. PDFs open in an inline viewer.
+are editable through the project file editor, with OpenSCAD highlighting for
+`.scad`. PDFs open in an inline viewer.
 Refresh project files, returning to Source and window focus reload the listing.
 Unsaved projects show native files until they have a granted location. Hidden,
 private Git/history/cache entries, credential-key files and links are excluded.
@@ -160,13 +161,18 @@ Valid Source may already have committed before a picker is cancelled; that edit
 remains undoable. Invalid Source blocks the picker/write.
 
 Export applies valid Source and writes a separate native schematic/board without
-changing the save destination/baseline. Portable `.lib`, footprint and STEP
+changing the save destination/baseline. When the project has a PCB and Model CAD
+solids, the picker also offers an OpenSCAD model. Its millimetre text uses native PCB
+X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, through holes, Boolean
+recipes, material colours and opacity; circles are faceted with `$fn = 96`.
+Fillets and chamfers have no OpenSCAD equivalent, so they reject the export without
+writing. OpenPE never reads, imports or executes SCAD files. Portable `.lib`, footprint and STEP
 sidecars travel beside native files. New example assets use `circuits/<component>.lib`,
 `models/*.step`, `footprints/<stem>.pretty/*.kicad_mod` and `symbols/*.kicad_sym`.
 Simulation model filenames must match the current pinned component registry.
 Native STEP references retain their documented KiCad paths;
-Save does not reorganize unrelated user files. Available root CAD sources such
-as `.scad` are ordinary editable text files, outside the native design set.
+Save does not reorganize unrelated user files; root `.scad` files are ordinary
+editable text outside the native design set.
 Home examples open the original `examples/<file>/<file>.kicad_pro` directly,
 retaining all disk filenames. History remains private outside the project;
 see [Version history](VERSION-HISTORY.md).

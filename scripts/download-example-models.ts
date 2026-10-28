@@ -13,7 +13,7 @@ import {
   prepareProjectModelFiles,
   verifyProjectModelBytes,
 } from '../server/project-model-files.mjs';
-import { atomicWrite } from '../server/atomic-write.mjs';
+import { writeGeneratedFile } from './write-generated-file.mjs';
 
 // Resource preparation is a build operation, separate from live desktop data.
 const dataDir = path.resolve('.openpe/example-model-preparation');
@@ -60,6 +60,6 @@ for (const file of files) {
     store,
     new AbortController().signal,
   );
-  await atomicWrite(file, serializeProject(project));
+  await writeGeneratedFile(file, serializeProject(project));
   console.log(`${file}: ${ids.size} verified separate model files.`);
 }

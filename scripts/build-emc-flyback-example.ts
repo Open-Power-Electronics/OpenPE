@@ -16,7 +16,6 @@ import { KICAD_SCHEMATIC_VERSION } from '../lib/kicad-version';
 import { MODEL_CAD_EXTENSION } from '../lib/model-cad';
 import { arrangeExampleText } from '../lib/example-layout';
 import { emcFlybackModelCad } from './emc-flyback-model-cad';
-import { serializeEmcFlybackScad } from './emc-flyback-scad';
 import { homeExampleNativePath } from '../lib/home-examples';
 import { writeHomeExampleNativeFiles, writeExampleFile as writeFile } from './example-native-files';
 
@@ -250,9 +249,7 @@ const pcbSource = preparePCB(
 );
 const parsed = parseKiCadPCB(pcbSource, project.schematic, 'emc-flyback-demo');
 project.pcb = parsed.board;
-const enclosureCad = emcFlybackModelCad(parsed.board, stable);
-const enclosureScad = serializeEmcFlybackScad(enclosureCad);
-project.extensions[MODEL_CAD_EXTENSION] = enclosureCad;
+project.extensions[MODEL_CAD_EXTENSION] = emcFlybackModelCad(parsed.board, stable);
 project.extensions['org.openpe.emc-flyback-example'] = {
   id: 'emc-flyback-demo',
   repository: 'https://github.com/ChengminLi/AI-PCB-layout',
@@ -311,9 +308,5 @@ project.nativeFiles = native;
 validateProject(project);
 projectFromNativeFiles(projectNativeFiles(project, filename));
 await writeHomeExampleNativeFiles(project, 'emc-flyback-demo');
-await writeFile(
-  path.join(path.dirname(homeExampleNativePath('emc-flyback-demo')), `${stem}.scad`),
-  enclosureScad,
-);
 await writeFile('lib/emc-flyback-example.json', serializeProject(project) + '\n');
 console.log(JSON.stringify({ parts: project.schematic.parts.length, ...parsed.audit }));

@@ -93,6 +93,9 @@
   --source-string: #a31515;
   --source-number: #098658;
   --source-literal: #0000ff;
+  --source-keyword: #af00db;
+  --source-function: #795e26;
+  --source-comment: #008000;
   --source-bracket-0: #795e26;
   --source-bracket-1: #6f42c1;
   --source-bracket-2: #007a7a;
@@ -155,6 +158,9 @@
   --source-string: #ce9178;
   --source-number: #b5cea8;
   --source-literal: #569cd6;
+  --source-keyword: #c586c0;
+  --source-function: #dcdcaa;
+  --source-comment: #6a9955;
   --source-bracket-0: #ffd700;
   --source-bracket-1: #da70d6;
   --source-bracket-2: #4fc1ff;

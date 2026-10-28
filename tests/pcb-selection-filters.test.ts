@@ -5,7 +5,6 @@ import { defaultPCBDisplay } from '../lib/pcb-display';
 import { createEmptyPCB, type PCBSelection } from '../lib/pcb-layout';
 import {
   defaultPCBSelectionFilters,
-  pcbPointZoneOutlineHits,
   pcbSelectionEligible,
   selectPCBPoint,
   selectPCBRectangle,
@@ -213,7 +212,6 @@ test('rule-area and copper filters gate saved fills and embedded outline hits wi
   };
   layers.zoneOutlines = true;
   const noRules = { ...filters, ruleArea: false };
-  assert.deepEqual([...pcbPointZoneOutlineHits(embedded, layers, { x: 20, y: 4 }, 0, noRules)], []);
   assert.deepEqual(ids(selectPCBPoint(embedded, layers, noRules, { x: 20, y: 4 }, 0)), []);
   assert.deepEqual(ids(selectPCBPoint(embedded, layers, noRules, { x: 0, y: 0 }, 0)), ['owner']);
   assert.deepEqual(board, before);

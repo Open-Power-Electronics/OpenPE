@@ -125,14 +125,20 @@ test('desktop preload forwards every operation to a registered main channel and 
   assert.equal(events.listenerCount(closeChannel), 0);
 });
 
-test('desktop bootstrap sets its OpenPE data directory before applying the application name', () => {
+test('desktop bootstrap sets its OpenPE data directory before applying the application name and loading services', () => {
   const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(packageJson.build.appId, 'ai.openpe.desktop');
   for (const override of [undefined, path.join('isolated-test-data', 'desktop')]) {
     const appData = path.resolve('isolated-test-data', 'app-data');
     const actions: Array<[string, string]> = [];
-    new vm.Script(mainSource, { filename: 'electron/main.cjs' }).runInNewContext({
+    new vm.Script(mainSource.replaceAll('import(', 'loadModule('), {
+      filename: 'electron/main.cjs',
+    }).runInNewContext({
       process: { platform: 'win32', env: { OPENPE_DATA_DIR: override } },
+      loadModule: async (specifier: string) => {
+        actions.push(['module', specifier]);
+        return {};
+      },
       require: (specifier: string) => {
         if (specifier === 'electron')
           return {
@@ -169,10 +175,16 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
         return {};
       },
     });
-    assert.deepEqual(actions, [
+    assert.deepEqual(actions.slice(0, 2), [
       ['data', override ?? path.join(appData, 'OpenPE')],
       ['name', packageJson.build.productName],
     ]);
+    const services = actions.slice(2);
+    assert.ok(services.length > 0, 'Service modules load before Electron readiness.');
+    for (const [kind, specifier] of services) {
+      assert.equal(kind, 'module');
+      assert.match(specifier, /^\.\.\/server\/[\w-]+\.mjs$/);
+    }
     assert.equal(packageJson.build.productName, 'OpenPE');
   }
 });

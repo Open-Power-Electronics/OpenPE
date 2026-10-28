@@ -158,7 +158,7 @@ export function registerWorkbenchCapabilities(
   );
   command(
     'project.export',
-    'Export the active file through the native KiCad format picker.',
+    'Export the active schematic, PCB or Model CAD solids (OpenSCAD) through the native export picker.',
     emptyCapabilityInput,
     async (_, signal) => {
       const status = await ports().export(signal);

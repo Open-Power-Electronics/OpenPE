@@ -57,6 +57,11 @@ export type ModelCadObject = {
   boolean?: ModelCadBoolean;
 };
 export type ModelCAD = { version: 1; objects: ModelCadObject[] };
+export const modelCadMaterialColors: Record<ModelCadObject['material'], number> = {
+  aluminium: 0xbfc3c6,
+  pmma: 0xdcecef,
+  plastic: 0x777c82,
+};
 
 const object = (properties: Record<string, unknown>, optional: string[] = []) => ({
   type: 'object',

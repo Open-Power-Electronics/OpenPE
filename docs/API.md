@@ -2,7 +2,7 @@
 
 OpenPE exposes a per-project Uniform API for Human and Agent adapters, three scoped Agent tools, an authenticated local HTTP service and a narrow Electron bridge. The Uniform API is the application automation interface: discover its live catalog before invoking a command. HTTP and Electron interfaces provide bounded transport, persistence and native services; a capability ID is not an HTTP route or a method on `window.openpe`.
 
-Registrations cover Core, host and bundled plugin capabilities. A mounted project's catalog depends on plugin and lazy-view lifecycle; runtime discovery is authoritative for its available queries and commands. This reference covers the implemented interfaces in [the architecture](ARCHITECTURE.md); task-level automatic layout, arbitrary FEM inputs, analytical-model execution, OpenSCAD and runtime Skill loading have no registered API.
+Registrations cover Core, host and bundled plugin capabilities. A mounted project's catalog depends on plugin and lazy-view lifecycle; runtime discovery is authoritative for its available queries and commands. This reference covers the implemented interfaces in [the architecture](ARCHITECTURE.md); task-level automatic layout, arbitrary FEM inputs, analytical-model execution, OpenSCAD import/execution and runtime Skill loading have no registered API.
 
 - [Uniform API contract](#uniform-api-contract)
 - [Project and Source capabilities](#project-and-source-capabilities)
@@ -344,12 +344,12 @@ simulation are exposed.
 
 ```ts
 type PCBDesignRuleConfig = {
-  clearance: number; // Default 0.25 mm.
-  minTrackWidth: number; // Default 0.2 mm.
-  minViaDrill: number; // Default 0.3 mm.
-  minAnnularRing: number; // Default 0.15 mm.
-  copperToEdge: number; // Default 0.25 mm.
-  copperToHole: number; // Default 0.25 mm.
+  clearance: number;
+  minTrackWidth: number;
+  minViaDrill: number;
+  minAnnularRing: number;
+  copperToEdge: number;
+  copperToHole: number;
 };
 
 type RuleCheckIssue = {
@@ -371,7 +371,7 @@ type RuleCheckResult = {
 };
 ```
 
-DRC settings are optional per-call overrides; each supplied threshold must be finite and within 0–1,000 mm. Omitted fields use the defaults above, and the result returns the full effective settings. They do not update board properties or native KiCad rule settings. ERC accepts no configuration fields. Issue IDs identify findings within the computed report; rule IDs identify the rule, and object IDs refer to the checked document's objects. A location, when present, uses millimetres. Reports are observations of the returned string `revision`, not saved document objects or persistent issue UUIDs; rerun after a revision or DRC-settings change.
+DRC settings are optional per-call overrides, in millimetres; each supplied threshold must be finite and within 0–1,000 mm. Omitted fields use the [Layout DRC defaults](DESIGN-RULES.md#layout-drc), and the result returns the full effective settings. They do not update board properties or native KiCad rule settings. ERC accepts no configuration fields. Issue IDs identify findings within the computed report; rule IDs identify the rule, and object IDs refer to the checked document's objects. A location, when present, uses millimetres. Reports are observations of the returned string `revision`, not saved document objects or persistent issue UUIDs; rerun after a revision or DRC-settings change.
 
 The two engines load by asynchronous import on demand. Core captures the immutable project and revision, then checks the cancellation signal, editing/close barrier, project identity, revision and pending Source again after loading, before running the synchronous bounded checks. Pending Source, a closing project, a missing target, cancellation or a superseded revision rejects the query instead of returning a report for older content. The host also aborts active requests on suspension, unregistration and disposal. These queries do not use a caller's `expectedRevision` as a command precondition; the returned revision identifies the checked state. CPU geometry work is bounded rather than interruptible mid-loop.
 
@@ -396,7 +396,7 @@ Owner is `host`, level is absent. All commands have optional review. Mutation is
 | `workbench.selection`  | command / session  | `{ids:string[]}`                                     | `{ids}`; selects visible schematic objects allowed by current selection filters. Unique IDs, at most 30,000.                                                                                                                                                      |
 | `workbench.panel`      | command / session  | `{panel:'parts'/'layers'/'history'/'settings'/null}` | `{panel}`; `layers` enters Schematic and expands its right-side Visualization drawer, applying valid pending Source if needed.                                                                                                                                    |
 | `project.save`         | command / external | `{saveAs?:boolean}`                                  | `{status:'saved'/'cancelled'}`; validates and uses the native dialog/live grant. Default `saveAs` is false.                                                                                                                                                       |
-| `project.export`       | command / external | `{}`                                                 | `{status:'exported'/'cancelled'}`; opens the native KiCad format picker.                                                                                                                                                                                          |
+| `project.export`       | command / external | `{}`                                                 | `{status:'exported'/'cancelled'}`; opens the native picker for KiCad schematic/PCB or OpenSCAD model output.                                                                                                                                                      |
 | `enclosure.exportStep` | command / external | `{}`                                                 | `{status:'exported',name:string}` or `{status:'cancelled'}`; requires the originating active Model view, applied Source, CAD bodies, and the native bridge. Exports the current validated CAD solids through the STEP destination picker; saving is not required. |
 | `versions.list`        | query / false      | `{offset?:integer}`                                  | `HistoryPage`; offset defaults to 0, range 0–100,000.                                                                                                                                                                                                             |
 | `versions.read`        | query / false      | `{id:string}`                                        | `{source:string}` for a validated reachable Git version. ID is 40–64 lowercase hexadecimal characters.                                                                                                                                                            |
@@ -442,7 +442,7 @@ Layout's transient connected-track drag observation includes the requested `delt
 
 Layout's `boardOutlineResize` observation is null when idle, or contains up to four `graphicIds`, the active `handle`, preview `bounds` and `blocked`. These describe a human preview; only an accepted Core transaction changes native geometry. `zoneResize` provides the same bounded handle/bounds/blocked observation with a single `zoneId` for a board-zone preview.
 
-`ProjectDatasheetContext` is `{version:1, projectId:string|null, exampleId:string|null, basis:'validated-project', status:'available'|'not-example'|'controller-mismatch', bindings:[{schematicId,partId,reference}], record:ICDatasheetRecord|null}`. The full `record` follows the [IC datasheet JSON contract](DATASHEETS.md), retaining key parameters, category/unit/min/typ/max, test conditions, one-based PDF page locators, official source URL, revision and SHA-256. Only current curated-example provenance and matching primary-sheet IC value, original symbol identity and assigned Footprint select a record; titles, filenames and other sheets do not. Missing provenance or mismatched controllers return no record. Binding references may differ from the curated baseline after renaming/copying a matching IC. Read queries use validated state while Source is pending; they do not interpret drafts or imply board operating points or model equivalence. The host rechecks revision/cancellation after lazy loading; submission capture additionally rechecks the active sheet. The service rejects forged or cross-project reference observations. `source.files` remains native-only; Source separately shows a read-only `ic-datasheet.json` reference under `Generations` with Copy and no Apply/native write.
+`ProjectDatasheetContext` is `{version:1, projectId:string|null, exampleId:string|null, basis:'validated-project', status:'available'|'not-example'|'controller-mismatch', bindings:[{schematicId,partId,reference}], record:ICDatasheetRecord|null}`. The full `record` follows the [IC datasheet JSON contract](DATASHEETS.md), which also owns record selection and controller binding. Read queries use validated state while Source is pending; they do not interpret drafts or imply board operating points or model equivalence. The host rechecks revision/cancellation after lazy loading; submission capture additionally rechecks the active sheet. The service rejects forged or cross-project reference observations. `source.files` remains native-only; Source shows the actual `datasheets/parameters.json` and local PDFs as ordinary project files, and their disk edits do not replace the reviewed record.
 
 Git operations require the desktop bridge and a live destination grant. `versions.read` only reads; restoration uses validated `project.replace` for one undo edit. Save/export cancellation is a successful result with status `cancelled`, not proof of a write. Save/export/history do not accept paths through these capabilities.
 
@@ -676,7 +676,7 @@ Workspace UI observations include `modelGridSpacing` alongside the other grid se
 
 Workspace recovery accepts only the current envelope and ten current Home example identities. Required dirty state, Source draft, filename, Agent preferences, sessions and active conversation must be present and valid. Recovery does not infer an example identity, restore retired examples, convert message-only conversations or fill missing required fields. Unsupported recovery is preserved and fails validation.
 
-JSON request limits are 8 MiB by default, with route-specific limits: state 96 MiB, simulation result/transient and thermal run/result 24 MiB, chat 32 MiB, chat/tool-result 40 MiB, agent-tools 32 MiB and model-cad/preview 512 KiB. These parser limits do not replace the narrower domain/tool bounds.
+JSON request limits are 8 MiB by default, with route-specific limits: state 96 MiB, simulation result/transient and thermal run/result/spice-sources 24 MiB, chat 32 MiB, chat/tool-result 40 MiB, agent-tools 32 MiB and model-cad/preview 512 KiB. These parser limits do not replace the narrower domain/tool bounds.
 
 CAD preview accepts only the `object` field, never script, path or executable
 input. It returns a canonical ordered geometry JSON key excluding top-level
@@ -691,7 +691,7 @@ SPICE saved-result lookup accepts current private project Source and an opaque f
 
 Completed manifests require the complete run configuration separately from native design data. Missing or invalid settings fail validation. Lookup never executes the stored deck, downloads models, writes or migrates saved records, or edits a document. Cancellation returns 409 with `Simulation result lookup cancelled.` while the response remains open; a disconnected response receives no further body. UI settings edits, explicit Run, Source/project/visibility changes and plugin removal cancel or supersede pending restores.
 
-SPICE manifests require complete transient settings, `identityVersion: 2` and the actual executable's `solverSha256`; installation paths and timestamps are excluded from that identity. Ordered vectors/units remain execution inputs, while returned labels and probe targets are rebound to the current compiled circuit. Both explicit Run and automatic lookup require the current complete identity. Historical identities, former installation paths and settings reconstructed from execution decks are unsupported.
+SPICE manifests require complete transient settings, `identityVersion: 2` and the actual executable's `solverSha256`; installation paths and timestamps are excluded from that identity. Ordered vectors/units remain execution inputs, while returned labels and probe targets are rebound to the current compiled circuit. Both explicit Run and automatic lookup require the current complete identity. Other identity versions, installation-path identities and settings reconstructed from execution decks are unsupported.
 
 Saved results use `openpe-spice-v2` / `openpe-thermal-v2` manifests, with `project` bound to the native basename and direct `spice/<stem>.*` / `thermal/<stem>.*` artifacts. SPICE `files` entries are `{name,file}`; Thermal entries also include `size` and `sha256`. Physical names prefix the logical artifact basename with the native stem; execution keys use logical input identities. Store instances share a per-directory queue, publish individual files with the manifest last and roll back failed writes through private sibling `*-backups` folders. Unknown sidecars and conflicting/damaged files remain protected; this is not filesystem-wide crash atomicity. Retired nested records are ignored without loading or migration. See [SPICE persistence](SIMULATION.md#execution-streaming-and-completed-results) and [Thermal records](THERMAL.md#completed-desktop-records).
 
@@ -778,7 +778,7 @@ type SimulationResult = {
 };
 ```
 
-The optional completed-result `dissipation` summary integrates signed V·I over every full-resolution solver output row before display reduction, over the final 20% of the requested duration. Its exact interval, original row count and ordered current vectors must match the current deck. Thermal import requires this verified summary and rejects negative dissipative averages; live, partial and older display-only results cannot supply heat. Heat-summary version and vector/node metadata participate in completed-run cache identity. See [SPICE Simulation](SIMULATION.md#full-resolution-dissipative-power) for excluded losses and the distinct approximate EMC Flyback model.
+The optional completed-result `dissipation` summary integrates signed V·I over every full-resolution solver output row before display reduction, over the final 20% of the requested duration. Its exact interval, original row count and ordered current vectors must match the current deck. Thermal import requires this verified summary and rejects negative dissipative averages; live, partial and display-only results without this summary cannot supply heat. Heat-summary version and vector/node metadata participate in completed-run cache identity. See [SPICE Simulation](SIMULATION.md#full-resolution-dissipative-power) for excluded losses and the distinct approximate EMC Flyback model.
 
 With `Accept: text/event-stream`, transient events are:
 
@@ -793,7 +793,7 @@ Native output is read every 200 ms. Display reduction retains actual trace extre
 
 ## Electron bridge
 
-[`electron/preload.cjs`](../electron/preload.cjs) exposes the required methods below on `window.openpe`, plus readonly `titleBarOverlay:boolean`. Renderer and Electron use the same current bridge contract without older-host feature flags or method fallbacks. Browser presentation has no native bridge. The renderer-facing types are in [`lib/bridge.ts`](../lib/bridge.ts). IPC handlers in [`electron/main.cjs`](../electron/main.cjs) and its adapters validate the originating main frame. Calls return promises except the event-subscription method.
+[`electron/preload.cjs`](../electron/preload.cjs) exposes the required methods below on `window.openpe`, plus readonly `titleBarOverlay:boolean`. Renderer and Electron use the same current bridge contract without host feature flags or method fallbacks. Browser presentation has no native bridge. The renderer-facing types are in [`lib/bridge.ts`](../lib/bridge.ts). IPC handlers in [`electron/main.cjs`](../electron/main.cjs) and its adapters validate the originating main frame. Calls return promises except the event-subscription method.
 
 | Method                            | Input                                                       | Result and behaviour                                                                                                                                      |
 | --------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -816,7 +816,7 @@ Native output is read every 200 ms. Display reduction retains actual trace extre
 | `historyList(options)`            | `{fileId,offset?:number}`                                   | `HistoryPage`.                                                                                                                                            |
 | `historyRead(options)`            | `{fileId,id}`                                               | Validated complete private snapshot string.                                                                                                               |
 | `historyCreate(options)`          | `{fileId,source,message}`                                   | `{id:string}`.                                                                                                                                            |
-| `exportKiCad(options)`            | `{source,name,kind?:'schematic'/'pcb',schematicId?:string}` | `{name,path,kind}` or cancellation `null`.                                                                                                                |
+| `exportKiCad(options)`            | `{source,name,kind?:'schematic'/'pcb',schematicId?:string}` | `{name,path,kind:'schematic'/'pcb'/'scad'}` or cancellation `null`.                                                                                       |
 | `exportImage(options)`            | `{dataUrl,width,height,name}`                               | `{name}` or cancellation `null`.                                                                                                                          |
 | `exportEnclosure(options)`        | `{source}` validated complete private snapshot              | `{name}` or cancellation `null`; native STEP picker.                                                                                                      |
 
@@ -853,7 +853,7 @@ later attempts retryable. DesktopWorkspace writes through the required native
 recovery bridge. IPC failures propagate to recovery/quit error
 handling, and close waits for the same write acknowledgement.
 
-Native Git history pages contain 50 entries; `offset` is an integer from 0 to 1,000,000, commit IDs are 40 lowercase hexadecimal characters, and creation messages are a single line of 1–240 characters. These checks are narrower than the host capability's envelope schema. Snapshot payloads are bounded to 8,000,000 bytes. Reachability/current validation still apply to reads.
+Native Git history pages contain 50 entries. The host accepts an integer `offset` from 0 to 1,000,000, 40-character lowercase hexadecimal commit IDs and single-line creation messages of 1–240 characters. Capability schemas apply first: `versions.list` narrows `offset` to 0–100,000, while `versions.create` admits messages up to 2,000 characters that the host then limits to 240. Snapshot payloads are bounded to 8,000,000 bytes. Reachability/current validation still apply to reads. [Version history](VERSION-HISTORY.md#git-execution-boundary) owns the Git execution bounds.
 
 Image export accepts a verified PNG data URL, at most 48,000,000 characters, with integer dimensions from 1 to 4,096 pixels. It opens a native picker and does not change project dirty state or destination grants.
 

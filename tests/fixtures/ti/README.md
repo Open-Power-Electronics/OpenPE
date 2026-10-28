@@ -39,12 +39,12 @@ Preparation may download hash-pinned official models. Model bytes stay in separa
 
 ## Verification
 
-| Command                                | Scope                                                                                                       |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `npx tsx --test tests/ti-dcdc.test.ts` | Allowlisted identities, pins, packages, archive integrity and download rejection using test fixtures        |
-| `node scripts/check-ti-ui.mjs`         | Isolated headless chooser/simulation UI with prepared bundled libraries                                     |
-| `npx tsx scripts/check-ti-kicad.ts`    | Actual KiCad 10.x exported connectivity and SVG checks; `KICAD_CLI` selects the CLI                         |
-| `npx tsx scripts/check-ti-models.ts`   | Dedicated real bundled-ngspice checks; may download TI models into `test-results/ti-validation/`            |
-| `npm run simulation:check-examples`    | Offline file-based Home/KiCad/TI sweep after preparation; reports under `test-results/example-simulations/` |
+| Command                                        | Scope                                                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `npm test -- tests/ti-dcdc.test.ts`            | Allowlisted identities, pins, packages, archive integrity and download rejection using test fixtures        |
+| `node scripts/check-ti-ui.mjs`                 | Isolated headless chooser/simulation UI with prepared bundled libraries                                     |
+| `node --import tsx scripts/check-ti-kicad.ts`  | Actual KiCad 10.x exported connectivity and SVG checks; `KICAD_CLI` selects the CLI                         |
+| `node --import tsx scripts/check-ti-models.ts` | Dedicated real bundled-ngspice checks; may download TI models into `test-results/ti-validation/`            |
+| `npm run simulation:check-examples`            | Offline file-based Home/KiCad/TI sweep after preparation; reports under `test-results/example-simulations/` |
 
 These checks have distinct scopes; native format/connectivity acceptance is not ERC/DRC. Real-solver checks are explicit verification steps. Desktop checks require an explicit user request. Documentation-only edits need static checks, not resource preparation or native/solver/desktop execution.

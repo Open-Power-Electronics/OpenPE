@@ -50,7 +50,7 @@ declare global {
         name: string;
         kind?: 'schematic' | 'pcb';
         schematicId?: string;
-      }): Promise<{ name: string; path: string; kind?: 'schematic' | 'pcb' } | null>;
+      }): Promise<{ name: string; path: string; kind?: 'schematic' | 'pcb' | 'scad' } | null>;
       exportImage(options: {
         dataUrl: string;
         width: number;

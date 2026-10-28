@@ -1,8 +1,10 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { isBuiltin } from 'node:module';
+import { createRequire, isBuiltin } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
+
+// CommonJS loading skips ESM named-export lexing of the multi-megabyte compiler bundle.
+const ts = createRequire(import.meta.url)('typescript');
 
 // Import boundaries implementing assets/architecture.drawio and docs/ARCHITECTURE.md.
 // This checks repository source dependencies, not the internals of npm packages,
@@ -60,7 +62,7 @@ const platform = (specifier) =>
 
 /** Parse syntax, including erased type dependencies, without matching comments or strings. */
 export function collectDependencies(source, file) {
-  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false);
   const dependencies = [];
   function add(node, argument, typeOnly, kind) {
     const point = parsed.getLineAndCharacterOfPosition(node.getStart(parsed));
@@ -165,8 +167,13 @@ export async function checkArchitecture(
   const config = ts.readConfigFile(configPath, ts.sys.readFile);
   if (config.error)
     throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'));
-  const { options, errors } = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-  // Empty fixture projects can report TS18003; source discovery is independent of tsconfig.include.
+  // Only compiler options are needed: source discovery is independent of
+  // tsconfig.include, so the host lists no files and TS18003 is expected.
+  const { options, errors } = ts.parseJsonConfigFileContent(
+    config.config,
+    { ...ts.sys, readDirectory: () => [] },
+    root,
+  );
   const configErrors = errors.filter((error) => error.code !== 18003);
   if (configErrors.length)
     throw new Error(
@@ -177,15 +184,16 @@ export async function checkArchitecture(
   const filenames = (
     await Promise.all(sourceAreas.map((area) => listSources(path.join(root, area))))
   ).flat();
+  const sources = await Promise.all(filenames.map((filename) => readFile(filename, 'utf8')));
   const modules = new Map();
-  for (const filename of filenames) {
+  filenames.forEach((filename, index) => {
     const file = slash(path.relative(root, filename));
     modules.set(canonical(file), {
       file,
       filename,
-      ...collectDependencies(await readFile(filename, 'utf8'), filename),
+      ...collectDependencies(sources[index], filename),
     });
-  }
+  });
   const issues = [];
   const issueKeys = new Set();
   function report(module, dependency, code, message) {

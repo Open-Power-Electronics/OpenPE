@@ -1,4 +1,7 @@
-import ts from 'typescript';
+import { createRequire } from 'node:module';
+
+// CommonJS loading skips ESM named-export lexing of the multi-megabyte compiler bundle.
+const ts = createRequire(import.meta.url)('typescript');
 
 /** Standalone Ajv validators retain schema literals for enum error parameters
  * and property membership. Keep their observed values/keys without embedding

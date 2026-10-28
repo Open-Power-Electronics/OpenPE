@@ -674,9 +674,11 @@ solids from active Model through a native picker. Applied Source is required;
 a saved destination is not. It uses fixed validated OpenCASCADE operations,
 retains rotated analytical profiles/holes/selected-edge treatments/Boolean results and
 keeps independent overlapping bodies separate unless explicitly combined.
-It accepts no renderer path. Appearance is not STEP material metadata. Arbitrary
-mesh imports, executable geometry programs and whole-assembly simulation are
-unsupported. CAD does not couple into board Thermal FEM.
+It accepts no renderer path. Appearance is not STEP material metadata. File Export's
+OpenSCAD model carries the same solids, poses, holes and Boolean recipes with faceted
+circles, material colours and opacity, and rejects fillets/chamfers without writing.
+Arbitrary mesh imports, executable geometry programs, SCAD import/execution and
+whole-assembly simulation are unsupported. CAD does not couple into board Thermal FEM.
 
 ### Model resolution and alignment
 
@@ -756,7 +758,7 @@ comparisons.
 | `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                      |
 | `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                   |
 | `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking |
-| `OPENPE_TEST_MODEL_CAD=1 npx tsx --test tests/model-cad-kernel-native.test.ts`                                                                                                                                             | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                          |
+| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                          |
 | `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                       |
 | `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                               |
 | `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                             |
@@ -786,8 +788,8 @@ independent API invocations for those 31 events. D and Enter each use separate
 `keyboard.down` and `keyboard.up` calls, so each key event has its own invocation
 clock. The key stays held during the 250 ms idle after down acknowledgement;
 CDP injection does not generate OS repeat, and repeated events fail pairing.
-Its keyup invocation bounds measure a different scope from v1 whole-press bounds;
-the original event and two-frame endpoints are unchanged. Each original event
+Keyup invocation bounds cover the release call alone rather than the whole key
+press; event and two-frame endpoints are measured from the input event. Each event
 and calibrated API-invocation upper bound through its second animation frame
 must be strictly below the target. Inputs use one
 acknowledged send followed by 250 ms idle pacing; pacing is outside each input's
@@ -843,8 +845,8 @@ lifecycle and feature checks use
 only available members of a fixed allowlist: timeline/user timing, top-level
 tasks, input/latency, three scheduler categories and `accessibility`. Verbose
 disabled categories are excluded. AX configuration stays unchanged; formal AX
-runs retain `OPENPE_EXPERIENCE_NATIVE_AX=1`. Existing `light` and `1` trace modes
-retain their previous categories; `0`/unset disables tracing and unsupported
+runs retain `OPENPE_EXPERIENCE_NATIVE_AX=1`. The `light` and `1` trace modes use
+their own fixed category sets; `0`/unset disables tracing and unsupported
 modes fail explicitly. For the same reviewed snapshot, operations and target:
 
 ```powershell
@@ -879,8 +881,8 @@ physical pixel right within that canvas. Focus loss or interference aborts; no
 window activation or cursor restoration is attempted by the worker.
 
 `nativeWheelDiagnostic` pairs five exact ordered events with QPC timestamps
-immediately before `SendInput` and the same second-RAF endpoint. Legacy wheel
-ticks must exactly match alternating ±120; DOM delta units are recorded and must
+immediately before `SendInput` and the same second-RAF endpoint. DOM
+`wheelDeltaY` ticks must exactly match alternating ±120; DOM delta units are recorded and must
 stay consistently proportional across all four wheels. This diagnostic remains
 separate from CDP acceptance and goal status; it excludes physical-device latency
 and a GPU/display fence. `node scripts/editor-experience-native-input.mjs --test`

@@ -452,12 +452,13 @@ for (const [file, contents] of [
   [path.join(root, 'manifest.json'), metadata],
   [path.join(root, 'thermal-lock.json'), metadata],
 ]) {
-  if (verify) {
-    if (!(await inspect(file)) || (await readFile(file, 'utf8')) !== contents)
-      throw new Error(
-        `Missing or changed thermal notice/manifest: ${path.relative(workspace, file)}. Run npm run thermal:prepare.`,
-      );
-  } else await atomic(file, contents);
+  // Unchanged notices and manifests retain their file identities and timestamps.
+  if ((await inspect(file)) && (await readFile(file, 'utf8')) === contents) continue;
+  if (verify)
+    throw new Error(
+      `Missing or changed thermal notice/manifest: ${path.relative(workspace, file)}. Run npm run thermal:prepare.`,
+    );
+  await atomic(file, contents);
 }
 console.log(
   `Bundled Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion}: runtime hashes, source archives, notices and manifests verified${verify ? ' offline' : ''}.`,

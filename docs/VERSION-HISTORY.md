@@ -68,8 +68,8 @@ closing releases only the owning project's grant. Reopening an open destination
 selects its editor; saving cannot overwrite another open project's source.
 Recovery stores no host destinations, grants or history records. Only clean current
 examples reconnect their original catalog destinations; dirty ones keep
-source/drafts/sessions without a destination. Removed identities detach only
-under validated bounded provenance. Recovery replacement waits for cancellation
+source/drafts/sessions without a destination. Retired or unknown example
+identities fail validation. Recovery replacement waits for cancellation
 to release grants, and malformed recovery is preserved; see
 [Architecture](ARCHITECTURE.md).
 

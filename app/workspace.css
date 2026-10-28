@@ -2520,6 +2520,15 @@ body[data-workspace-resizing='true'] * {
 .source-token-literal {
   color: var(--source-literal);
 }
+.source-token-keyword {
+  color: var(--source-keyword);
+}
+.source-token-function {
+  color: var(--source-function);
+}
+.source-token-comment {
+  color: var(--source-comment);
+}
 .source-token-punctuation {
   color: var(--muted);
 }

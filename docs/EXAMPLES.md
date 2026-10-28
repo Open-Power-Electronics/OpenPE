@@ -55,9 +55,7 @@ together and updates library-table URIs.
 `footprints/` contains `.kicad_mod` packages in their required `.pretty` libraries;
 `symbols/` contains `.kicad_sym` libraries, `circuits/` contains SPICE `.lib` files
 named for their fixed component or variant
-and `models/` contains STEP files. Available CAD source files such as `.scad` remain
-in the project root beside the native files. They are supporting source records,
-not an arbitrary CAD execution or import interface. STEP basenames are retained,
+and `models/` contains STEP files. STEP basenames are retained,
 with an eight-character content hash suffix only when different pinned files
 would collide. Projects have no generated `NOTICE.txt` or `licenses/` directory.
 Original terms, credits and provenance remain in the pinned shared sources and
@@ -65,11 +63,11 @@ packaged license notices.
 Create only directories with actual content. `spice/` and `thermal/` retain generated
 results locally, outside Git and native design. Retained artifacts sit directly in
 those directories as `<native-stem>.*`, including the project-bound manifest.
-New output has no project/run/mesh subdirectories; original solver working paths
-remain logical metadata. After publishing the complete current native set, generation
+Output has no project/run/mesh subdirectories; solver working paths remain
+logical metadata. After publishing the complete current native set, generation
 removes only byte-matching obsolete asset/library copies and their empty parent
 directories. Opening never cleans or rewrites the example directory. Changed or unknown files remain.
-Simulation references use only pinned `circuits/<component>.lib` paths; earlier hash-named project aliases are rejected. Native STEP references retain their supported KiCad paths.
+Simulation references use only pinned `circuits/<component>.lib` paths, as defined by [Simulation](SIMULATION.md#portable-models-and-bundled-solver). Native STEP references retain their supported KiCad paths.
 Shared pinned footprints remain in `resources/example-catalog/footprints/` and
 downloaded SPICE models in `resources/example-catalog/simulation/models/`;
 EMC original sources remain under `resources/example-catalog/sources/emc-flyback/`,
@@ -115,14 +113,8 @@ four PCB mounting positions and the cover's four fastener positions. The origina
 MECH1/MECH2 STEP instances are hidden in native PCB data; their references,
 transforms and bundled assets remain intact. Model's general construction tools
 edit these bodies, materials, opacity and holes without a dedicated enclosure mode.
-The build-only `scripts/emc-flyback-scad.ts` serializer writes the same four
-panels, eight through holes and PMMA opacity to
-[`emc-flyback.scad`](../examples/emc-flyback/emc-flyback.scad) in the project root.
-This supporting source reflects the generated example and is regenerated with
-`npm run examples` or `npm run examples:emc-flyback`. Source edits the actual
-`.scad` text and Save file writes it in place. Its local drafts participate in
-Save/close while remaining outside Core, native project undo/history, recovery
-and automatic Agent context. Editing SCAD does not execute CAD or update Model.
+The example ships no SCAD file; File > Export writes the current panels, holes and
+opacity as OpenSCAD on request ([Format](FORMAT.md)).
 The 31 STEP files include 28 unchanged upstream assets and three exact
 manufacturer models pinned in [the supplementary model manifest](../resources/example-catalog/footprints/emc-flyback/manifest.json).
 T1 and L2 retain official STEP bytes; L1 uses the exact Würth WE-CMB-S geometry
@@ -134,7 +126,7 @@ verifies every model and notice; runtime previews remain offline. The five mount
 holes intentionally have no separate component model.
 
 Set `KICAD_CLI` to a KiCad 10 CLI and run `npm run examples:emc-flyback` to regenerate
-the conversion, assets and root SCAD source. Regenerate behavioural signatures with
+the conversion and assets. Regenerate behavioural signatures with
 `npm run simulation:build-emc-flyback`. Run `npm run simulation:check-emc-flyback`,
 then `npm run thermal:check-emc-flyback` for explicit offline real-solver checks.
 The latter imports supported full-resolution final-20% signed terminal power into
@@ -150,7 +142,8 @@ curation clips only copper-zone outer boundaries to the board inset; the
 independent KiCad check derives this expected boundary change and compares all
 other copper geometry, zone holes and settings exactly. TPS61046's declared fill
 and minimum-clearance changes are checked separately against the actual saved
-geometry; the generated board also passes OpenPE's bounded Core DRC. The adapter omits
+geometry, and `tests/reference-drc.test.ts` requires the generated board to have
+no bounded Core DRC errors. The adapter omits
 printing settings and ancillary records such as sheet names, source paths, tags
 and pin descriptions from private generated snapshots; the pinned originals retain them.
 Package model references remain structured footprint data. Unsupported
@@ -214,9 +207,9 @@ tables. Preparation copies models without adding project notices or replacing na
 library edits or creating a second package library. Canonical/native model
 links use `${KIPRJMOD}/models/<model>.step`. Build preparation, native Save/Save as and PCB
 export copy the required subset beside the destination, rejecting linked folders
-and preserving differing existing files. The exact app-generated EMC notice from
-before manufacturer models were bundled can refresh to the current notice;
-edited notices, licenses and model files remain protected. Model resolves verified bundled example
+and preserving differing existing files. Example generation removes a project
+`NOTICE.txt` only when its bytes exactly match a retired application-generated
+notice; edited notices, licenses and model files remain protected. Model resolves verified bundled example
 assets offline. Keep the KiCad files, required `circuits/`, `models/`, `footprints/`,
 `symbols/` assets, available CAD source files and library tables together when
 moving a project. Preserve supported native asset references without application-version migration.
