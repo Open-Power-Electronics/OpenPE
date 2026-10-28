@@ -1,0 +1,174 @@
+.panel {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 24;
+  width: max-content;
+  min-width: min(360px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-floating);
+  font-size: var(--font-small);
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-control);
+  font-weight: 600;
+}
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px;
+}
+.fields > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 100px;
+  flex: 1;
+}
+.fields input {
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: var(--field-surface);
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-technical, 'Cascadia Code', Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.fields :global(.select-trigger) {
+  width: 100%;
+}
+.edgeSelection,
+.operandSelection {
+  padding: 0 12px 12px;
+}
+.edgeSelectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.edgeSelection button,
+.operandSelection button {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  background: var(--tint);
+  color: var(--text);
+  font: inherit;
+}
+.edgeHint {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+.edgeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 420px;
+  max-height: 150px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.edgeList button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.operandList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 420px;
+  margin: 0;
+}
+.operandList > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+}
+.operandList dt {
+  width: 48px;
+  flex: none;
+  font-weight: 600;
+}
+.operandList dd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+}
+.operandList dd > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.operandList dd > button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+}
+.operandActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.footer button {
+  min-height: 30px;
+  padding: 4px 12px;
+  border-radius: var(--radius-control);
+  background: var(--tint);
+  color: var(--text);
+}
+.footer :global(.primary) {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+.error {
+  margin: 0;
+  padding: 0 12px 12px;
+  color: var(--error-ink);
+}
+.readout {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

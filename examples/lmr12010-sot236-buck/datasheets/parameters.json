@@ -1,0 +1,269 @@
+{
+  "$schema": "../../../resources/example-catalog/ic-datasheet.schema.json",
+  "schema_version": "1.0.0",
+  "example": {
+    "id": "reference-lmr12010-sot236-buck",
+    "file": "lmr12010-sot236-buck",
+    "title": "LMR12010 Buck",
+    "topology": "Buck"
+  },
+  "ic": {
+    "manufacturer": "Texas Instruments",
+    "family": "LMR12010",
+    "reference": "U1",
+    "schematic_value": "LMR12010X",
+    "symbol_library_id": "Reference:lmr12010-sot236-buck",
+    "footprint": "Package_TO_SOT_SMD:SOT-23-6",
+    "package": "SOT-23-6",
+    "datasheet_variant": "LMR12010X, SOT-23-6"
+  },
+  "datasheet": {
+    "title": "LMR12010 3-V to 20-V, 1-A Step-Down DC/DC Switching Regulator in SOT-23",
+    "document_number": "SNVS731B",
+    "revision": "B",
+    "published_month": "2019-06",
+    "product_url": "https://www.ti.com/product/LMR12010",
+    "source_url": "https://www.ti.com/lit/ds/symlink/lmr12010.pdf",
+    "filename": "lmr12010.pdf",
+    "sha256": "3068c8a516c2257608fed9f0cfa04a741edfa132af50f03255b2b74ffc2356cb",
+    "bytes": 883441,
+    "page_count": 33,
+    "downloaded_on": "2026-10-22"
+  },
+  "extraction": {
+    "method": "pdf_text_with_visual_table_review",
+    "reviewed_on": "2026-10-22",
+    "scope": "main_controller",
+    "notes": [
+      "The example uses LMR12010X (1.6 MHz typical), not LMR12010Y (3 MHz typical).",
+      "Bold min/max limits in the electrical table apply over TJ = -40 to 125 degC; typical values are at TJ = 25 degC."
+    ]
+  },
+  "parameters": {
+    "input_voltage": {
+      "category": "recommended_operating_condition",
+      "unit": "V",
+      "values": {
+        "min": 3,
+        "typ": null,
+        "max": 20
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "6.2 Recommended Operating Ratings",
+        "row": "VIN"
+      }
+    },
+    "output_voltage": {
+      "category": "feature",
+      "unit": "V",
+      "values": {
+        "min": 0.8,
+        "typ": null,
+        "max": 17
+      },
+      "conditions": "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+      "source": {
+        "page": 1,
+        "section": "1 Features",
+        "row": "Output voltage range"
+      }
+    },
+    "output_current": {
+      "category": "feature",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": null,
+        "max": 1
+      },
+      "conditions": "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+      "source": {
+        "page": 1,
+        "section": "1 Features",
+        "row": "Output current capability"
+      }
+    },
+    "operating_junction_temperature": {
+      "category": "recommended_operating_condition",
+      "unit": "degC",
+      "values": {
+        "min": -40,
+        "typ": null,
+        "max": 125
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "6.2 Recommended Operating Ratings",
+        "row": "Junction temperature"
+      }
+    },
+    "input_voltage_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "V",
+      "values": {
+        "min": -0.5,
+        "typ": null,
+        "max": 24
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "VIN"
+      }
+    },
+    "switch_voltage_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "V",
+      "values": {
+        "min": -0.5,
+        "typ": null,
+        "max": 24
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "SW voltage"
+      }
+    },
+    "junction_temperature_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "degC",
+      "values": {
+        "min": null,
+        "typ": null,
+        "max": 150
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "Junction temperature"
+      }
+    },
+    "storage_temperature": {
+      "category": "absolute_maximum_rating",
+      "unit": "degC",
+      "values": {
+        "min": -65,
+        "typ": null,
+        "max": 150
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "Storage temperature"
+      }
+    },
+    "feedback_reference_voltage": {
+      "category": "electrical_characteristic",
+      "unit": "V",
+      "values": {
+        "min": 0.784,
+        "typ": 0.8,
+        "max": 0.816
+      },
+      "conditions": "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "VFB"
+      }
+    },
+    "switching_frequency": {
+      "category": "electrical_characteristic",
+      "unit": "Hz",
+      "values": {
+        "min": 1200000,
+        "typ": 1600000,
+        "max": 1900000
+      },
+      "conditions": "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "FSW, LMR12010X"
+      }
+    },
+    "switch_current_limit": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": 1.2,
+        "typ": 1.7,
+        "max": 2.5
+      },
+      "conditions": "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. VBOOST-VSW = 3 V instead of 5 V.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "ICL"
+      }
+    },
+    "quiescent_current": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": 0.0015,
+        "max": 0.0025
+      },
+      "conditions": "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. Switching enabled.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "IQ switching"
+      }
+    },
+    "shutdown_current": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": 3e-8,
+        "max": null
+      },
+      "conditions": "VIN = 5 V, VBOOST-VSW = 5 V, VEN = 0 V; typical at TJ = 25 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "IQ shutdown"
+      }
+    },
+    "switch_on_resistance": {
+      "category": "electrical_characteristic",
+      "unit": "Ohm",
+      "values": {
+        "min": null,
+        "typ": 0.3,
+        "max": 0.6
+      },
+      "conditions": "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. VBOOST-VSW = 3 V instead of 5 V.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "RDS(ON)"
+      }
+    },
+    "maximum_duty_cycle": {
+      "category": "electrical_characteristic",
+      "unit": "1",
+      "values": {
+        "min": 0.85,
+        "typ": 0.92,
+        "max": null
+      },
+      "conditions": "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.3 Electrical Characteristics",
+        "row": "DMAX, LMR12010X"
+      }
+    }
+  }
+}

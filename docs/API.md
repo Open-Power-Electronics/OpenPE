@@ -1,0 +1,944 @@
+# OpenPE API reference
+
+OpenPE exposes a per-project Uniform API for Human and Agent adapters, three scoped Agent tools, an authenticated local HTTP service and a narrow Electron bridge. The Uniform API is the application automation interface: discover its live catalog before invoking a command. HTTP and Electron interfaces provide bounded transport, persistence and native services; a capability ID is not an HTTP route or a method on `window.openpe`.
+
+Registrations cover Core, host and bundled plugin capabilities. A mounted project's catalog depends on plugin and lazy-view lifecycle; runtime discovery is authoritative for its available queries and commands. This reference covers the implemented interfaces in [the architecture](ARCHITECTURE.md); task-level automatic layout, arbitrary FEM inputs, analytical-model execution, OpenSCAD and runtime Skill loading have no registered API.
+
+- [Uniform API contract](#uniform-api-contract)
+- [Project and Source capabilities](#project-and-source-capabilities)
+- [Schematic and component capabilities](#schematic-and-component-capabilities)
+- [Layout capabilities](#layout-capabilities)
+- [Model CAD capabilities](#model-cad-capabilities)
+- [Rule-check queries](#rule-check-queries)
+- [Workbench and history capabilities](#workbench-and-history-capabilities)
+- [Library capabilities](#library-capabilities)
+- [Plugin lifecycle capabilities](#plugin-lifecycle-capabilities)
+- [SPICE capabilities](#spice-capabilities)
+- [Thermal FEM capabilities](#thermal-fem-capabilities)
+- [Agent tools](#agent-tools)
+- [Local HTTP service](#local-http-service)
+- [Electron bridge](#electron-bridge)
+- [Examples](#examples)
+- [Sources and maintenance](#sources-and-maintenance)
+
+## Uniform API contract
+
+[`api/capabilities.ts`](../api/capabilities.ts) exports `createCapabilityHost()` and the capability types. Workbench creates one host per project and supplies its Core revision getter. Callers receive JSON copies, not mutable Core objects or reusable native file handles/grants. Native model references can still contain path-like design metadata.
+
+### Host methods
+
+| Method                          | Result and behaviour                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `register(definition)`          | Returns an unregister function. Rejects duplicate/invalid IDs, invalid owner/level combinations and unsupported schemas. Unregister aborts requests owned by that registration. |
+| `catalog()`                     | Returns `CapabilityDescription[]` with current availability. Equivalent discovery is `query('capabilities.list')`.                                                              |
+| `query(id, input?, options?)`   | Returns `Promise<unknown>` for a registered query after JSON, schema and availability checks. Omitted input becomes `{}`.                                                       |
+| `execute(id, input?, options?)` | Returns `Promise<unknown>` for a registered command after revision, JSON, schema and availability checks. The handler performs domain/native checks.                            |
+| `emit(type, data)`              | Publishes a bounded JSON event. Type starts with a letter and uses letters, digits, `.`, `_`, `:`, `-`, up to 128 characters.                                                   |
+| `subscribe(listener)`           | Returns an unsubscribe function. Receives ordered event copies; observer errors cannot interrupt other observers or committed edits.                                            |
+| `observe(after = 0)`            | Returns `{cursor, events, truncated}`. `after` must be a nonnegative safe integer. Truncation requires a fresh state query.                                                     |
+| `suspend(reason)`               | Makes commands unavailable and aborts active requests; query handlers retain their own availability gates. Used while closing a project.                                        |
+| `resume()`                      | Restores a suspended host after a failed/cancelled close.                                                                                                                       |
+| `dispose()`                     | Revokes registrations, aborts requests and clears observers/events.                                                                                                             |
+
+```ts
+type CapabilityOptions = {
+  signal?: AbortSignal;
+  actor?: 'human' | 'agent' | 'system'; // Defaults to human.
+  requestId?: string;
+  expectedRevision?: string;
+};
+
+type CapabilityDescription = {
+  id: string;
+  kind: 'query' | 'command';
+  description: string;
+  inputSchema: Record<string, unknown> | boolean;
+  mutation: false | 'document' | 'session' | 'external';
+  review: 'none' | 'optional' | 'required';
+  owner: 'core' | 'host' | 'plugin' | 'api';
+  level?: 'object' | 'operation' | 'task';
+  plugin?: string;
+  available: boolean;
+  reason?: string;
+};
+
+type CapabilityEvent = {
+  seq: number;
+  time: string; // ISO timestamp.
+  type: string;
+  data: JsonValue;
+};
+```
+
+Registration additionally supplies `handler(input, context)`, optional `available() => true | false | string`, and required owner and optional mutation/review/level/plugin metadata. Handler context contains `signal`, `actor`, `requestId`, optional `expectedRevision`, and `emit`. Omitted mutation/review default to `false`/`none`; every registration must declare its owner explicitly. Plugin ownership requires a nonblank plugin ID, and other owners cannot declare one. Queries cannot declare a truthy mutation.
+
+`owner` identifies the implementing layer; `level` identifies a domain abstraction. Neither grants permission. `mutation` describes possible effects rather than promising that every call changes a document. A no-op can leave the revision/undo unchanged. The tables below use `O` for object-level, `P` for operation-level and `—` for no level. There are no task-level registrations. Every current command has `review: 'optional'`; Agent Review/Auto behaviour is enforced by its adapter, not by `execute()` itself.
+
+### Validation and lifecycle
+
+Inputs/results must be finite JSON. Defaults are 32 MiB per input/result, nesting depth at most 128, 64 KiB per event and 256 retained events. Host options can change `maxDataBytes`, `maxEventBytes`, `eventLimit` (clamped to 1–2,000), `now` and `revision`. Inputs use the bounded interpreted JSON Schema subset in [`api/capability-schema.ts`](../api/capability-schema.ts); unsupported keywords fail registration. Results are checked as bounded JSON; there is no registered output-schema field.
+
+The mounted host rejects a command whose supplied `expectedRevision` differs from the current Core revision, checking again after synchronous availability and start observers before calling the handler. Core checks direct calls too; asynchronous library handlers recheck after loading. Revisions are **strings at this boundary**, including changes to Source drafts and editing barriers. A revision does not version all presentation/plugin state. Actor metadata does not bypass review, Source gates, plugin lifecycle or native grants.
+
+Successful invocation emits `capability.started` and then `capability.completed`; handler failure/cancellation emits `capability.failed`/`capability.cancelled`. These events contain `{id, requestId, actor}` and failure/cancellation adds a bounded `message`. Pre-handler validation failures can reject before `started`. Registration, unregistration, suspension and resumption emit their own events. Cancellation is cooperative: adapters must honour the supplied signal; it is not a rollback of completed external writes.
+
+Unknown IDs, wrong query/command kind, invalid input, stale revisions, unavailable handlers and domain failures reject the promise with an `Error`. Cancellation commonly uses `AbortError`. There is no uniform typed error-code enumeration across all capabilities.
+
+### Common notation and data
+
+In tables, `?` means optional, `{}` means no input fields, `string[]` means an array and unions use `/` to keep cells readable. Except where specified, schemas reject extra properties. Numbers are finite. Geometry uses millimetres, angles degrees and simulation time seconds. Callers should use the intended editor grid (1.27 mm in Schematic). Placement, Properties, wire and annotation handlers apply their shared domain snapping rules; do not assume every movement delta or explicit pivot is snapped by the API. The Layout host does not inject its displayed spacing into command arguments.
+
+```ts
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+type Point = { x: number; y: number };
+type RevisionResult = { revision: string };
+type EditResult = RevisionResult & { selection?: string[] };
+type NativeFiles = {
+  entry: string;
+  files: { name: string; source: string; encoding?: 'latin1' }[];
+};
+type CoreMetadata = {
+  revision: string;
+  editingBlocked: string | null;
+  sourceDraft: string | null;
+  sourceError: string;
+  canUndo: boolean;
+  canRedo: boolean;
+  undoDepth: number;
+  redoDepth: number;
+};
+type ProjectSnapshot = CoreMetadata & { project: CanonicalProject | null };
+```
+
+`CanonicalProject` means the validated private JSON query/snapshot representation defined by [Format](FORMAT.md) and [`lib/project-document.ts`](../lib/project-document.ts). A single-file query returns a canonical project containing that schematic. It is not a public on-disk design format. Native user projects remain KiCad file sets. `project.source` and `source.get().source` serialize this private representation; `source.files` supplies the actual native text files shown in Source.
+
+Core IDs are generally 1–200 characters; Core `Point` coordinates are bounded to ±100,000 mm. Specific operations can impose narrower bounds. Discover the full `inputSchema` for exact lengths, enums and nested limits.
+
+## Project and Source capabilities
+
+Owner is `core`, except `capabilities.list` (`api`). Queries have mutation `false`. Commands in this section have no abstraction level; Source update/updateFile/discard mutate `session`, and the remaining commands declare `document`.
+
+| ID                  | Kind    | Input                          | Result and behaviour                                                                                                                      |
+| ------------------- | ------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `capabilities.list` | query   | `{}`                           | `CapabilityDescription[]`, including this discovery query.                                                                                |
+| `project.snapshot`  | query   | `{}`                           | `ProjectSnapshot`.                                                                                                                        |
+| `project.get`       | query   | `{}`                           | `CanonicalProject` or `null`.                                                                                                             |
+| `project.source`    | query   | `{}`                           | Canonical private JSON string.                                                                                                            |
+| `core.state`        | query   | `{}`                           | `CoreMetadata & {hasProject:boolean, sourcePending:boolean}`.                                                                             |
+| `source.get`        | query   | `{}`                           | `{source:string, sourceDraft:string/null, sourceError:string}`.                                                                           |
+| `source.files`      | query   | `{}`                           | `NativeFiles`, including pending native file edits when present.                                                                          |
+| `history.get`       | query   | `{}`                           | `{canUndo, canRedo, undoDepth, redoDepth}`. This is document undo, not Git.                                                               |
+| `project.replace`   | command | `{source:string}`              | `ProjectSnapshot`; validates and replaces the whole project as one undo edit.                                                             |
+| `source.update`     | command | `{draft:string/null}`          | Same result as `source.get`; updates the private aggregate draft without applying it. Prefer `source.updateFile` for native text editing. |
+| `source.updateFile` | command | `{name:string, source:string}` | `NativeFiles`; changes one loaded native file's draft. `name` comes from `source.files`, not a filesystem path.                           |
+| `source.apply`      | command | `{}`                           | `ProjectSnapshot`; validates all pending files and commits once. Invalid drafts remain pending and the command rejects.                   |
+| `source.discard`    | command | `{}`                           | Same result as `source.get`; clears all pending drafts/errors.                                                                            |
+| `history.undo`      | command | `{}`                           | `boolean`; undo one complete project edit. Host availability rejects when no undo is available.                                           |
+| `history.redo`      | command | `{}`                           | `boolean`; redo one complete project edit.                                                                                                |
+
+Pending Source blocks non-Source document commands, undo/redo, sheet switching and version creation/restoration. Read queries remain usable except `schematic.erc` and `layout.drc`, which require applied Source. File drafts survive file selection; applying them is atomic at the project transaction level. Opaque aggregate `sourceDraft` can contain a native-file envelope; do not assume it equals the currently selected file's text. Per-file text comes from `source.files`.
+
+## Schematic and component capabilities
+
+Owner is `core`; editing commands declare mutation `document`. `schematic.place` and `part.footprint` are host-backed object commands documented under [Library capabilities](#library-capabilities).
+
+| ID                     | Kind / level | Input                                                                                                            | Result and behaviour                                                                                                                                          |
+| ---------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schematic.list`       | query / —    | `{}`                                                                                                             | `{id,name,primary}[]` for all project schematics.                                                                                                             |
+| `schematic.get`        | query / —    | `{schematicId:string}`                                                                                           | Single-file `CanonicalProject`.                                                                                                                               |
+| `schematic.erc`        | query / —    | `{schematicId:string}`                                                                                           | `RuleCheckResult & {revision:string, schematicId:string}`; checks one independent schematic. See [Rule-check queries](#rule-check-queries).                   |
+| `schematic.add`        | command / O  | `{}`                                                                                                             | `{schematicId,revision}`; appends an independent schematic, up to 12 per project.                                                                             |
+| `schematic.remove`     | command / O  | `{schematicId:string}`                                                                                           | `ProjectSnapshot`; validates primary-board ownership and remaining sheets.                                                                                    |
+| `schematic.operations` | command / P  | `{schematicId, operations:Operation[]}`                                                                          | `EditResult`; 1–100 operations applied atomically.                                                                                                            |
+| `schematic.move`       | command / O  | `{schematicId, ids:string[], delta:Point}`                                                                       | `EditResult`; leaves unselected wires in place.                                                                                                               |
+| `schematic.drag`       | command / P  | `{schematicId, ids:string[], delta:Point}`                                                                       | `EditResult`; repositions components with attached wire rerouting and original pin connections in one undo transaction. Use for connected component movement. |
+| `schematic.transform`  | command / O  | `{schematicId, ids:string[], operation:'rotate'/'rotateReverse'/'mirrorX'/'mirrorY', pivot?:Point}`              | `EditResult`; one transform transaction.                                                                                                                      |
+| `schematic.delete`     | command / P  | `{schematicId, ids:string[]}`                                                                                    | `EditResult`; shared deletion rules remove complete attached leads and orphan annotations while preserving surviving shared networks.                         |
+| `schematic.duplicate`  | command / O  | `{schematicId, ids:string[], delta?:Point}`                                                                      | `EditResult` with newly created selection IDs; copies receive fresh UUIDs/references. Default delta is `{x:10.16,y:10.16}` mm.                                |
+| `schematic.wire`       | command / P  | `{schematicId, points:Point[]}`                                                                                  | `EditResult`; commits all route legs and deliberate segment splits once. 2–30,000 points.                                                                     |
+| `schematic.annotation` | command / O  | `{schematicId, text:string, position:Point, id?:string}`                                                         | `EditResult`; creates/updates a schematic annotation. This is design text, not an Agent screenshot attachment.                                                |
+| `part.properties`      | command / O  | `{schematicId, partId, reference?:string, value?:string, fields?:FieldRow[], position?:Point, rotation?:number}` | `EditResult`; resolves stable ID, shares reference/value/fields across units and applies value-linked simulation rules.                                       |
+| `part.participation`   | command / O  | `{schematicId, partId, included:boolean}`                                                                        | `EditResult`; updates Include in simulation independently of plugin installation and physical connectivity.                                                   |
+
+```ts
+type Operation =
+  | { type: 'setValue'; ref: string; value: string }
+  | {
+      type: 'addPart';
+      kind: 'R' | 'C' | 'L' | 'D' | 'NMOS' | 'GND' | 'Port';
+      x: number;
+      y: number;
+      value?: string;
+    }
+  | { type: 'removePart'; ref: string };
+type FieldRow = { name: string; value: string; fresh?: boolean };
+```
+
+Selection-ID arrays are unique and bounded to 30,000. `Operation` component coordinates are bounded to ±1,000 mm and operation values to 200 characters. Properties accepts up to 200 field rows, with field names/values and text values bounded to 4,096 characters. Part participation does not add solver support. Geometry validates connectivity and preserves shared branches; an edit can fail even when it passes the input schema.
+
+## Layout capabilities
+
+Owner is `core`; every command declares mutation `document`. Every Layout input includes a current **`boardId`**. The table shows its remaining fields. Queries do not alter the document or regenerate source fills.
+
+```ts
+type Layer = 'F.Cu' | 'In1.Cu' | 'In2.Cu' | 'B.Cu';
+type BoardObject = {
+  kind: 'footprint' | 'track' | 'via' | 'graphic' | 'zone';
+  id: string;
+};
+type ViaSize = { diameter: number; drill: number };
+type RouteLeg = { layer: Layer; points: Point[]; via?: ViaSize };
+```
+
+| ID                        | Kind / level | Input in addition to `boardId`                                                                             | Result and behaviour                                                                                                                                           |
+| ------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout.get`              | query / —    | `{}`                                                                                                       | `{boardId,layers,thickness,counts:{packages,tracks,vias,zones,graphics,nets},project:CanonicalProject}`.                                                       |
+| `layout.drc`              | query / —    | `{settings?:Partial<PCBDesignRuleConfig>}`                                                                 | `RuleCheckResult & {revision:string, boardId:string, settings:PCBDesignRuleConfig}`; see [Rule-check queries](#rule-check-queries).                            |
+| `layout.route.preview`    | query / —    | `{netId, layer:Layer, width, clearance, start:Point, end:Point, mode?:'straight'/'45', posture?:boolean}`  | `{points:Point[],blocked:boolean,message:string}`; bounded Walk Around planning.                                                                               |
+| `layout.move`             | command / O  | `{selection:BoardObject[], delta:Point}`                                                                   | `RevisionResult`.                                                                                                                                              |
+| `layout.drag`             | command / P  | `{selection:BoardObject[], delta:Point, clearance, posture?:boolean, obstacleMode?:'shove'/'walk-around'}` | `{revision,changedIds:string[]}`; accepts unlocked tracks only; defaults to `shove`; IDs include removed zero-length simple neighbours.                        |
+| `layout.rotate`           | command / O  | `{selection:BoardObject[], degrees?:number, pivot?:Point}`                                                 | `RevisionResult`; `degrees` defaults to 90.                                                                                                                    |
+| `layout.flip`             | command / O  | `{selection:BoardObject[]}`                                                                                | `RevisionResult`; flips selected physical packages.                                                                                                            |
+| `layout.delete`           | command / O  | `{selection:BoardObject[]}`                                                                                | `RevisionResult`; linked package deletion clears its schematic assignment in the same edit.                                                                    |
+| `layout.duplicate`        | command / O  | `{selection:BoardObject[], delta:Point}`                                                                   | `{revision,selection:BoardObject[]}`; assigned packages cannot be duplicated.                                                                                  |
+| `layout.route`            | command / P  | `{netId, width, clearance, legs:RouteLeg[]}`                                                               | `{revision,trackIds:string[],viaIds:string[]}`.                                                                                                                |
+| `layout.via`              | command / O  | `{netId, position:Point, diameter, drill, clearance}`                                                      | `{revision,viaId}`; validates all-layer copper, holes and keepouts.                                                                                            |
+| `layout.zone`             | command / O  | `ZoneChanges`                                                                                              | `{revision,zoneId}`; creates or updates a typed zone.                                                                                                          |
+| `layout.fill`             | command / P  | `{clearance?:number}`                                                                                      | `RevisionResult`; fills with a minimum 0.0001–1,000 mm clearance (default 0.25), retaining larger zone rules; saves effective rules/contours in one undo edit. |
+| `layout.net`              | command / O  | `{name:string}`                                                                                            | `{revision,netId}`; trimmed name must be nonempty and unique. Does not join schematic networks.                                                                |
+| `layout.properties`       | command / O  | `{thickness?:number, layers?:['F.Cu','B.Cu']/['F.Cu','In1.Cu','In2.Cu','B.Cu']}`                           | `RevisionResult`; validates the complete board.                                                                                                                |
+| `layout.track.properties` | command / O  | `{trackId, netId?:string, layer?:Layer, width?:number, locked?:boolean}`                                   | `RevisionResult`; explicit `locked:false` unlocks before other copper edits. Canonical tracks store `locked:true` or omit it.                                  |
+
+```ts
+type ZoneChanges = {
+  zoneId?: string;
+  netId?: string | null;
+  layer?: Layer;
+  outline?: Point[];
+  holes?: Point[][];
+  clearance?: number;
+  minThickness?: number;
+  thermalGap?: number;
+  thermalBridge?: number;
+  priority?: number; // Integer, 0–100.
+  padConnection?: 'yes' | 'no' | 'thru_hole_only';
+  islandRemovalMode?: number; // Integer, 0–2.
+  fillEnabled?: boolean;
+  keepout?: {
+    tracks: boolean;
+    vias: boolean;
+    pads: boolean;
+    copperpour: boolean;
+    footprints: boolean;
+  };
+};
+```
+
+Widths, thickness and via/zone positive dimensions use `0 < value ≤ 1,000` mm in these schemas. The `via` nested inside a `RouteLeg` has the narrower `0 < diameter/drill ≤ 20` mm schema. Routing/via clearance is 0.05–20 mm; zone clearance is 0–1,000 mm. Actual board and drill relationships receive domain validation too. Selection arrays are unique and at most 30,000 entries. A new zone requires `outline`, `layer` and an explicit `netId` (`null` for a keepout); `zoneId` updates must resolve an existing zone. Outline/hole rings have at least three points, with schema and complete-board geometry limits.
+
+Routes contain 1–65 legs and at most 15,000 points in total. Each non-final leg must end at the next leg's start, change layer and supply a through via; the final leg cannot contain an unfinished via transition. Blocked routes/drags fail before committing. Route validation and the separate read-only `layout.drc` query have bounded coverage; neither provides automatic routing, complete KiCad rule parity or manufacturing qualification. Exported fills require KiCad refill and final checks. See [Layout](LAYOUT.md).
+
+Move, rotation and deletion reject a selection containing locked tracks before writes. Connected drag, corner drag and Shove keep locked neighbours fixed. Track lock changes are document edits with whole-project undo and native persistence; changing only a lock retains saved copper fills. Explicit unlocking may share one `layout.track.properties` transaction with a net, layer or width change. Other objects retain their existing bounded lock metadata support.
+
+## Model CAD capabilities
+
+`modelCad.get`, `modelCad.add`, `modelCad.update`, `modelCad.remove`,
+`modelCad.duplicate` and `modelCad.boolean` are Core-owned and require a current `boardId`. Commands
+have mutation `document`, review `optional` and the same revision, pending
+Source and close barriers as other document commands. The read query returns
+validated document state while Source is pending. These operations retain the
+PCB and schematic, and do not depend on simulation plugins.
+
+| ID                   | Kind / level | Input                                                                                      | Result                                                                                                                                  |
+| -------------------- | ------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelCad.get`       | query / —    | `{boardId}`                                                                                | `{boardId,modelCad:ModelCAD/null}`                                                                                                      |
+| `modelCad.add`       | command / O  | `{boardId,object:ModelCadObject}`                                                          | `{revision,boardId,modelCad,object}`; rejects reused UUIDs.                                                                             |
+| `modelCad.update`    | command / O  | `{boardId,object:ModelCadObject}`                                                          | Same shape as add; replaces an existing object, retaining its UUID.                                                                     |
+| `modelCad.remove`    | command / O  | `{boardId,ids:string[]}`                                                                   | `{revision,boardId,modelCad}`; all selected objects must exist.                                                                         |
+| `modelCad.duplicate` | command / P  | `{boardId,ids:string[],offset:{x,y,z}}`                                                    | `{revision,boardId,modelCad,objects:ModelCadObject[]}`; returns the new copies with fresh body and hole UUIDs.                          |
+| `modelCad.boolean`   | command / P  | `{boardId,operation:'union'/'difference'/'intersection',targetId,toolId,resultId?:string}` | `{revision,boardId,modelCad,object}`; removes both operands and inserts the prepared result at the target's position, as one undo edit. |
+
+GUI Boolean roles use ordered canvas body selection, without automatic operands.
+Face/edge/line picks remain typed presentation selection until explicit Use owning
+solids conversion. This command continues to accept two body IDs; it does not
+execute independent curve or surface Booleans.
+
+```ts
+type ModelCAD = { version: 1; objects: ModelCadObject[] }; // At most 64.
+type ModelCadVector = { x: number; y: number; z: number };
+type ModelCadProfile =
+  | { kind: 'rectangle' }
+  | { kind: 'circle' }
+  | { kind: 'polygon'; points: { x: number; y: number }[] };
+type ModelCadShape = {
+  kind: 'box' | 'cylinder' | 'extrusion' | 'boolean';
+  size: ModelCadVector; // 0.5–1,000 mm; Boolean uses a conservative envelope.
+  holes: { x: number; y: number; diameterMm: number }[];
+  profile?: ModelCadProfile; // Required only for extrusion.
+  edgeTreatment?: {
+    kind: 'chamfer' | 'fillet';
+    distanceMm: number; // 0.01–500 mm, with positive remaining height/area.
+    edges: string[]; // Exact semantic base-edge IDs.
+  };
+  boolean?: {
+    // Required only for Boolean.
+    operation: 'union' | 'difference' | 'intersection';
+    operands: [ModelCadOperand, ModelCadOperand];
+  };
+};
+type ModelCadOperand = { shape: ModelCadShape; position: ModelCadVector; rotation: ModelCadVector };
+type ModelCadObject = {
+  id: string; // UUID; globally unique across the project.
+  name: string; // 1–80 characters, nonblank, no ASCII controls.
+  kind: ModelCadShape['kind'];
+  position: ModelCadVector; // Native axes, ±100,000 mm.
+  rotation: ModelCadVector; // ±360°, intrinsic XYZ: Rx * Ry * Rz.
+  size: ModelCadVector;
+  material: 'aluminium' | 'pmma' | 'plastic';
+  opacity: number; // 0.05–1.
+  holes: { id: string; x: number; y: number; diameterMm: number }[];
+  profile?: ModelCadShape['profile'];
+  edgeTreatment?: ModelCadShape['edgeTreatment'];
+  boolean?: ModelCadShape['boolean'];
+};
+```
+
+Unmarked object fields remain required; extra keys are rejected. Boxes and
+cylinders use their current primitive fields. Rectangle profiles use X/Y dimensions; circle
+profiles and cylinders require equal X/Y diameters. Polygon profiles have 3–128
+vertices within ±500 mm, implicit closure, positive area, no self-crossing/touching
+and centred bounds matching X/Y dimensions. Extrusion depth is Z.
+
+Hole XY is local to the centred body and bounded to ±500 mm; diameter is
+0.5–500 mm. It cuts local Z before pose. Each shape permits 32 holes and the
+complete model permits 256 including nested operands, with at least 0.5 mm of
+material to profile edges and between cuts. Edge treatment accepts 1–448 unique IDs:
+`profile:top:N`, `profile:bottom:N`, `side:N`, `hole:top:N` or `hole:bottom:N`.
+Indices identify the current base profile vertices/segments or ordered holes;
+circle profiles have only profile index 0 and no vertical seam edge. The host
+requires exactly one matching base curve per ID before treatment. Changed or
+ambiguous topology fails without committing. Boolean bodies expose no explicit
+edge catalogue and have no local holes; subtract a body.
+Boolean operand trees omit IDs/material and contain at most 32 operations with
+Boolean nesting depth four below the root. Operands retain local XYZ poses; the
+declared centred envelope must conservatively contain the operation's result
+bound. The kernel constructs operands, not the envelope. The entire CAD JSON is
+at most 256,000 characters. Selection arrays contain 1–64 unique identities;
+duplicate offsets use ±100,000 mm per axis and final positions remain bounded.
+Emptying the model removes the native setting; an identical update adds no undo.
+
+The synchronous Core validates recipes but requires exact host preparation for
+new extrusion, Boolean or edge-treatment geometry. `registerProjectCapabilities`
+previews the candidate, prepares pending shapes through the fixed kernel, then
+rechecks revision/Source/close gates before one commit. Both human and Agent
+transports use this wrapper. Source apply and `project.replace` share preflight;
+direct Core commits cannot bypass the prepared-key gate. Unchanged top-level
+pose, name, material or opacity can reuse current geometry. Native admission is
+structural to preserve loaded records before lazy preview. No arbitrary CAD
+scripts, imported/Boolean edge-topology editing, mechanical-strength checks or whole-assembly
+simulation are exposed.
+
+## Rule-check queries
+
+`schematic.erc` and `layout.drc` are Core-owned queries with mutation `false`, review `none` and no abstraction level. The Schematic and Layout controls invoke the same capability handlers available to Agent `openpe_query`; they require no SPICE/Thermal plugin. Both schemas reject extra keys. `schematicId` and `boardId` are required current project identities, each 1–200 characters. The human ERC control passes the active schematic ID; the query can check any identified schematic in its originating project without changing the active sheet. Each schematic is independent, with no cross-file electrical joins. DRC targets the project's current PCB, associated with its primary schematic.
+
+```ts
+type PCBDesignRuleConfig = {
+  clearance: number; // Default 0.25 mm.
+  minTrackWidth: number; // Default 0.2 mm.
+  minViaDrill: number; // Default 0.3 mm.
+  minAnnularRing: number; // Default 0.15 mm.
+  copperToEdge: number; // Default 0.25 mm.
+  copperToHole: number; // Default 0.25 mm.
+};
+
+type RuleCheckIssue = {
+  id: string;
+  ruleId: string;
+  severity: 'error' | 'warning';
+  message: string;
+  objectIds: string[];
+  location?: Point;
+};
+
+type RuleCheckResult = {
+  kind: 'erc' | 'drc';
+  complete: boolean;
+  truncated: boolean;
+  checkedRules: string[];
+  issues: RuleCheckIssue[];
+  notes: string[];
+};
+```
+
+DRC settings are optional per-call overrides; each supplied threshold must be finite and within 0–1,000 mm. Omitted fields use the defaults above, and the result returns the full effective settings. They do not update board properties or native KiCad rule settings. ERC accepts no configuration fields. Issue IDs identify findings within the computed report; rule IDs identify the rule, and object IDs refer to the checked document's objects. A location, when present, uses millimetres. Reports are observations of the returned string `revision`, not saved document objects or persistent issue UUIDs; rerun after a revision or DRC-settings change.
+
+The two engines load by asynchronous import on demand. Core captures the immutable project and revision, then checks the cancellation signal, editing/close barrier, project identity, revision and pending Source again after loading, before running the synchronous bounded checks. Pending Source, a closing project, a missing target, cancellation or a superseded revision rejects the query instead of returning a report for older content. The host also aborts active requests on suspension, unregistration and disposal. These queries do not use a caller's `expectedRevision` as a command precondition; the returned revision identifies the checked state. CPU geometry work is bounded rather than interruptible mid-loop.
+
+Checks neither apply Source nor commit an edit, advance Core revision, create undo, change selection or modify native files. Results and settings stay outside canonical project content, Source, recovery and Git history; the human adapter retains report/presentation state separately and marks old reports stale. Standard capability lifecycle events can be emitted, but a successful check emits no Core document-change event.
+
+ERC uses physical pin/wire/label/power topology, transformed embedded-library pin geometry and shared multi-unit physical pins. Simulation exclusion does not remove connections; incidental crossings do not join. It checks unconnected pins (including passive/unspecified pins, except free/no-connect pins and power markers), dangling wires/labels, no-connect placement/connections, conflicting references/net names, incompatible outputs and missing declared signal/power drivers. Passive/external-interface supply findings are warnings, and conditional driver states are not simulated. Unknown pin types (`erc.pin-type-unsupported`) or inconsistent declarations for one physical pin (`erc.pin-type-inconsistent`) produce warning coverage findings with `complete:false`; ambiguous electrical types are not resolved by component order.
+
+DRC checks supported pads, tracks, through vias, copper graphics, holes, saved zone fills, closed Edge.Cuts, keepouts and assigned-pad connectivity using the requested thresholds. It does not refill zones or establish fill freshness. Copper text, unfilled/stale-unverified zone geometry, unsupported footprint keepout occupancy and ambiguous unassigned copper can make coverage partial. Solder mask, silkscreen, creepage, impedance, net classes, differential pairs and fabrication rules remain outside this check. Curves use bounded editor geometry approximations.
+
+Both reports cap issues at 1,000 and set `truncated:true` and `complete:false` when truncated. Unsupported geometry or work limits can return an explicitly incomplete report or reject with an actionable failure; an absent report is not a clean result. `checkedRules` lists the implemented rule families, while `notes` and coverage findings describe limitations. Even `complete:true` means completion of those bounded checks only. See [Design rules](DESIGN-RULES.md) for coverage and limits; native format validation and SPICE simulation remain separate.
+
+## Workbench and history capabilities
+
+Owner is `host`, level is absent. All commands have optional review. Mutation is `session` unless the table specifies `document` or `external`.
+
+| ID                     | Kind / mutation    | Input                                                | Result and behaviour                                                                                                                                                                                                                                              |
+| ---------------------- | ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workbench.state`      | query / false      | `{}`                                                 | Originating project's bounded `WorkspaceContext`; without a document returns `ProjectSnapshot`.                                                                                                                                                                   |
+| `project.datasheet`    | query / false      | `{}`                                                 | `ProjectDatasheetContext` for the current example controller, including reviewed parameter JSON and source locators. No paths, URLs or example selectors are accepted.                                                                                            |
+| `workbench.view`       | command / document | `{view:'canvas'/'source'/'layout'/'3d'}`             | `{view}`; validates/applies pending Source before switching. UI names are Schematic, Source, Layout and Model.                                                                                                                                                    |
+| `workbench.sheet`      | command / session  | `{id:string}`                                        | `{id}`; selects an existing schematic. Pending Source blocks it.                                                                                                                                                                                                  |
+| `workbench.selection`  | command / session  | `{ids:string[]}`                                     | `{ids}`; selects visible schematic objects allowed by current selection filters. Unique IDs, at most 30,000.                                                                                                                                                      |
+| `workbench.panel`      | command / session  | `{panel:'parts'/'layers'/'history'/'settings'/null}` | `{panel}`; `layers` enters Schematic and expands its right-side Visualization drawer, applying valid pending Source if needed.                                                                                                                                    |
+| `project.save`         | command / external | `{saveAs?:boolean}`                                  | `{status:'saved'/'cancelled'}`; validates and uses the native dialog/live grant. Default `saveAs` is false.                                                                                                                                                       |
+| `project.export`       | command / external | `{}`                                                 | `{status:'exported'/'cancelled'}`; opens the native KiCad format picker.                                                                                                                                                                                          |
+| `enclosure.exportStep` | command / external | `{}`                                                 | `{status:'exported',name:string}` or `{status:'cancelled'}`; requires the originating active Model view, applied Source, CAD bodies, and the native bridge. Exports the current validated CAD solids through the STEP destination picker; saving is not required. |
+| `versions.list`        | query / false      | `{offset?:integer}`                                  | `HistoryPage`; offset defaults to 0, range 0–100,000.                                                                                                                                                                                                             |
+| `versions.read`        | query / false      | `{id:string}`                                        | `{source:string}` for a validated reachable Git version. ID is 40–64 lowercase hexadecimal characters.                                                                                                                                                            |
+| `versions.create`      | command / external | `{message:string}`                                   | `{id:string}`; message length 1–2,000; pending Source and overlapping file operations block creation.                                                                                                                                                             |
+| `simulation.show`      | command / document | `{}`                                                 | `{visible:true}` after enabled plugin settings/capabilities mount; requires the originating project to be active.                                                                                                                                                 |
+| `simulation.hide`      | command / session  | `{}`                                                 | `{visible:false}`; cancels active work and retains completed/stopped state.                                                                                                                                                                                       |
+
+```ts
+type WorkspaceContext = {
+  version: 1;
+  capturedAt: string;
+  project: CanonicalProject;
+  source: { pending: boolean; draft: string | null; error: string };
+  ui: Record<string, unknown>; // Includes revision, view, activeSchematicId and selection.
+  icDatasheet?: ProjectDatasheetContext;
+  simulation: SimulationContext | { status: 'disabled' | 'not-opened' };
+};
+type HistoryPage = {
+  version: string;
+  commits: { id: string; date: string; message: string }[];
+  more: boolean;
+  needsSave?: boolean;
+};
+```
+
+`WorkspaceContext` includes bounded layer/grid/viewport, Layout/Model presentation, visible controls/errors and resident simulation observations, scoped to its project. It does not contain credentials, model bytes or solver logs. View/context capture is not a separate editable design model. Full context contracts are in [`context/`](../context/agent-workspace-context.ts).
+
+Layout's routing observation reports fixed `obstacleMode: "walk-around"`,
+`angle: "45"`, `clearance: 0.25` mm and `useExistingTrackWidth: false`, alongside
+the configured width and current head. `mouseDragTrackBehavior` reports the fixed
+`connected` mouse-track behavior; Layout exposes no corresponding selector.
+Interactive dragging uses Shove and the fixed 0.25 mm routing clearance. These
+observations grant no mutation capability.
+Layout's `priorityLayer` reports an explicitly selected board layer, including
+noncopper layers, or `null` for the default physical stack. Selected priority
+moves the complete visible layer pass to the top and restricts marquee targets;
+without it, point ties follow the physical stack and marquees include all visible
+layers. Clicking the selected row clears only this presentation priority.
+`layer` retains the copper layer used by copper tools, independently of display
+priority and eye visibility.
+
+Layout's transient connected-track drag observation includes the requested `delta`, whether it is `blocked` or `constrained`, and the constrained `appliedDelta` when present. Connected and corner gestures can stop at a revalidated boundary between their last displayed valid displacement and the current cursor. These describe the current human preview; the registered `layout.drag` command still requires its exact requested pose to succeed.
+
+Layout's `boardOutlineResize` observation is null when idle, or contains up to four `graphicIds`, the active `handle`, preview `bounds` and `blocked`. These describe a human preview; only an accepted Core transaction changes native geometry. `zoneResize` provides the same bounded handle/bounds/blocked observation with a single `zoneId` for a board-zone preview.
+
+`ProjectDatasheetContext` is `{version:1, projectId:string|null, exampleId:string|null, basis:'validated-project', status:'available'|'not-example'|'controller-mismatch', bindings:[{schematicId,partId,reference}], record:ICDatasheetRecord|null}`. The full `record` follows the [IC datasheet JSON contract](DATASHEETS.md), retaining key parameters, category/unit/min/typ/max, test conditions, one-based PDF page locators, official source URL, revision and SHA-256. Only current curated-example provenance and matching primary-sheet IC value, original symbol identity and assigned Footprint select a record; titles, filenames and other sheets do not. Missing provenance or mismatched controllers return no record. Binding references may differ from the curated baseline after renaming/copying a matching IC. Read queries use validated state while Source is pending; they do not interpret drafts or imply board operating points or model equivalence. The host rechecks revision/cancellation after lazy loading; submission capture additionally rechecks the active sheet. The service rejects forged or cross-project reference observations. `source.files` remains native-only; Source separately shows a read-only `ic-datasheet.json` reference under `Generations` with Copy and no Apply/native write.
+
+Git operations require the desktop bridge and a live destination grant. `versions.read` only reads; restoration uses validated `project.replace` for one undo edit. Save/export cancellation is a successful result with status `cancelled`, not proof of a write. Save/export/history do not accept paths through these capabilities.
+
+## Library capabilities
+
+Owner is `host`. Queries have mutation `false`; placement/assignment are object-level commands with mutation `document` and optional review.
+
+| ID                | Kind    | Input                                                                            | Result and behaviour                                                                                                                          |
+| ----------------- | ------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library.search`  | query   | `{kind:'symbols'/'footprints', query?:string, library?:string, offset?:integer}` | `{entries,total,libraries}`; up to 100 entries/page. Defaults: empty query/library, offset 0. Offset ≤999,999; query/library ≤200 characters. |
+| `library.detail`  | query   | `{kind:'symbols'/'footprints', id:string}`                                       | Resolved bundled symbol/footprint detail; symbol detail includes `symbol` S-expression and `units`. ID length 1–500.                          |
+| `schematic.place` | command | `{schematicId, libraryId, x, y, unit?:integer, rotation?:number}`                | `{id,reference,revision}`; unit defaults to 1, rotation to 0. Unit 1–100, coordinates ±100,000 mm, rotation ±360°.                            |
+| `part.footprint`  | command | `{schematicId, partId, libraryId:string}`                                        | `RevisionResult`; empty `libraryId` clears assignment and the linked package while retaining copper.                                          |
+
+Search entries include `id`, `name`, `library`, `description`, `keywords` and optional footprint information. Symbol detail is defined in [`lib/library.ts`](../lib/library.ts); footprint detail is produced by [`server/library-worker.mjs`](../server/library-worker.mjs) and the pinned example adapter [`server/example-footprints.mjs`](../server/example-footprints.mjs). Footprint detail includes `footprint` S-expression, `pads:string[]` and `models:[{path,offset,scale,rotate}]`. These are fixed bundled catalog identities, never filesystem paths. The `symbols` search with `library: 'ti-dcdc'` uses the bounded TI subset. Placement and assignment reject pending Source and stale asynchronous results; actual resolved symbol IDs, units and footprints must validate before Core commits.
+
+## Plugin lifecycle capabilities
+
+Owner is `host`; level is absent. List is a query with mutation `false`; change is a command with mutation `external` and optional review.
+
+| ID                         | Input                                                                                             | Result and behaviour                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `workbench.plugins.list`   | `{refresh?:boolean}`                                                                              | Confirmed `WorkbenchPluginCatalog`; shared cache lasts five minutes.                                                         |
+| `workbench.plugins.change` | `{action:PluginAction, id:'spice-simulation@openpe'/'pcb-thermal@openpe'/'ai-pcb-layout@openpe'}` | Updated `WorkbenchPluginCatalog`; reconciles lifecycle across mounted projects.                                              |
+| `provider.plugins.list`    | `{provider:'codex'/'claude', refresh?:boolean}`                                                   | Provider catalog with `plugins`, `controlsVersion`, `browse`, `marketplaces`, `actions`, `warning` and optional `updatedAt`. |
+| `provider.plugins.change`  | `{provider:'codex'/'claude', action:PluginAction, id:string}`                                     | `{ok:true}` after a supported provider action succeeds.                                                                      |
+
+```ts
+type PluginAction = 'install' | 'uninstall' | 'enable' | 'disable';
+type WorkbenchPluginCatalog = {
+  controlsVersion: 1;
+  plugins: {
+    id: string;
+    scope: string;
+    name: string;
+    marketplace: string;
+    description: string;
+    version: string;
+    installed: boolean;
+    origin: 'agent' | 'openpe' | 'unknown';
+    enabled: boolean | null;
+    managed: boolean;
+    icon?: string;
+    detail?: string;
+    category?: string;
+    author?: string;
+    capabilities?: string[];
+  }[];
+  browse: boolean;
+  actions: PluginAction[];
+  warning: string;
+  updatedAt: number;
+};
+```
+
+Bundled SPICE installation activates packaged resources. Provider management additionally checks CLI capabilities, qualified plugin identities and confirmed state; a syntactically valid capability input alone does not authorize an operation. These catalogs/lifecycles remain separate from project data and recovery. See [Plugins](PLUGINS.md).
+
+### PCB design guidance
+
+`pcbDesign.guide` is a read-only query owned by plugin `ai-pcb-layout@openpe`, with no Core level or mutation. Input is `{document?:string}` with no extra keys. The enum is `workflow` (default), `analysis-and-measurement`, `behavioral-evaluation`, `cad-and-tools`, `devices`, `electrical-layout`, `electrical-net-table`, `implementation-and-delivery`, `insulation-and-copper`, `regimes-and-standards`, `topologies`.
+
+The result is `{document,source,revision,license,attribution,documents:string[],integration,text}`. `text` is the unchanged pinned upstream document; `integration` bounds its use to currently advertised OpenPE tools and review gates. Each UTF-8 document is bounded to 64 KiB and SHA-256 verified. Availability follows confirmed plugin state, independently rechecked by the service. Disable/uninstall aborts outstanding reads and Agent turns containing injected guidance. No project, undo, native Source or recovery writes occur. See [Plugins](PLUGINS.md#ai-pcb-layout).
+
+## SPICE capabilities
+
+`simulation.show`/`simulation.hide` belong to the host. The following six resident capabilities belong to `plugin`, carry `plugin: 'spice-simulation@openpe'` and no abstraction level. They register as settings/waveform views mount; enabled lifecycle and current resident state gate use. Query the catalog again after `simulation.show`.
+
+| ID                        | Kind / mutation    | Input                                                         | Result and behaviour                                                                                                        |
+| ------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `simulation.status`       | query / false      | `{}`                                                          | `SimulationContext`.                                                                                                        |
+| `simulation.configure`    | command / session  | `{config?:SimulationConfigChanges, drafts?:SimulationDrafts}` | Updated `SimulationContext`; configuration keys depend on the supported circuit.                                            |
+| `simulation.probes`       | command / session  | `{target?:ProbeTarget/null, selected?:string[]}`              | Updated `SimulationContext`; `null` clears the probe. Selected vectors are unique, up to 256.                               |
+| `simulation.run`          | command / document | `{}`                                                          | `SimulationContext` after completion/explicit Stop; newly verified model references can enter the project in one undo edit. |
+| `simulation.cancel`       | command / session  | `{}`                                                          | `{cancelled:boolean}`; requests Stop and retains validated received samples as stopped partial results.                     |
+| `simulation.presentation` | command / session  | `SimulationPresentationChanges`                               | Current `WaveformPresentation`. Requires resident waveform controls and applicable traces/results.                          |
+
+```ts
+type SimulationConfigChanges = {
+  voltage?: number;
+  frequency?: number;
+  duty?: number;
+  stop?: number;
+  step?: number;
+  inputId?: string;
+  pwmId?: string;
+  outputId?: string;
+  switchId?: string;
+  currentId?: string;
+};
+type SimulationDrafts = {
+  voltage?: string;
+  frequency?: string;
+  duty?: string;
+  stop?: string;
+  step?: string;
+};
+type ProbeTarget = { kind: 'voltage' | 'current'; id: string; pin?: number };
+type Axis = { min: number; max: number; step?: number };
+type SimulationPresentationChanges = {
+  layout?: 'auto' | string; // String must match [1-3]x[1-4], e.g. 2x2.
+  linked?: boolean;
+  visibleCursors?: [boolean, boolean];
+  cursor?: { vector: string; which: 0 | 1; time: number };
+  view?: {
+    vector: string;
+    range?: 'full' | 'tail';
+    time?: Axis | null;
+    values?: Axis | null;
+    zoomMode?: boolean;
+  };
+  navigate?: { vector: string; direction: 'back' | 'forward' };
+};
+type WaveformPresentation = {
+  layout: string;
+  linked: boolean;
+  visibleCursors: [boolean, boolean];
+  traces: Record<
+    string,
+    {
+      time: Axis;
+      values: Axis;
+      cursors: [number, number | null];
+    }
+  >;
+};
+```
+
+Numeric config uses V, Hz, percent and seconds; `stop` and `step` accept any finite positive value. Text drafts use the UI card's displayed units and may be incomplete. Configure requires at least one nonempty config/drafts object, disallows the same numeric key in both, and is blocked while running. It preserves existing completed/stopped waveforms and their `resultConfig` until Run. Schema acceptance does not make an unsupported circuit parameter editable.
+
+Presentation requires at least one property. `view` must include `vector` and at least one setting. Axis bounds must be finite/increasing and meaningful for actual samples; optional axis step is positive. Cursor time uses seconds and must be valid for the current result. `view` and `navigate` cannot be combined in one command. Vector/target identities are validated against the active sheet and current result.
+
+`SimulationContext` contains `circuitId`, `basis`, settings/waveform visibility, status, displayed settings, `config`, optional `resultConfig`, errors, probe/selected vectors, presentation and optional result. Status is `idle`, `detecting`, `unavailable`, `blocked`, `running`, `completed`, `stopped` or `failed`. A result has status `live`, `completed` or `partial`, sample count, seconds-based time range and traces with units, native extrema/endpoints, reduced curves and optional visible-window/cursor/delta observations. These curves are not the full native waveform. Exact types and reduction are in [`context/agent-simulation-context.ts`](../context/agent-simulation-context.ts).
+
+Run requires active visible Schematic settings, applied Source, supported inputs,
+enabled SPICE, verified models/solver and a saved desktop destination. Stop
+retains validated partial samples; automatic cancellation discards live previews.
+There is no solver runtime timeout. Load-only restore/settings/waveform behavior
+follows [Simulation](SIMULATION.md#execution-streaming-and-completed-results).
+
+## Thermal FEM capabilities
+
+Host commands `thermal.show` and `thermal.hide` take `{}`. Show requires an enabled plugin, an active project with a PCB and applied Source, switches to Layout and waits for the resident capabilities. Hide cancels active work and retains a completed session result.
+
+Seven resident capabilities belong to `plugin: 'pcb-thermal@openpe'`. All measurements describe board temperatures, not package junction temperature. Inputs use finite numbers and reject extra properties; discover the mounted schemas before calling them.
+
+| Capability            | Input                              | Result / effect                                                                                                                                                                                                                                                             |
+| --------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thermal.status`      | `{}`                               | Bounded settings, visibility, solver availability, run state, extrema, statistics, assumptions and selected node; zero-based node indices share the result's 200,000-node limit. No full volume mesh.                                                                       |
+| `thermal.configure`   | `{config: Partial<ThermalConfig>}` | Session settings; `heatSources` replaces the complete list of `{footprintId,powerW}`. Required physical values are validated before Run.                                                                                                                                    |
+| `thermal.importSpice` | `{}`                               | Load supported signed average V·I heat inputs from full-resolution native SPICE output over the final 20% of a matching completed transient for the PCB-linked primary schematic. Both plugins must be enabled and the project saved. Session mutation; no solver/download. |
+| `thermal.run`         | `{}`                               | Gmsh/Elmer steady solve; requires active visible Layout, applied Source, verified resources and a saved desktop project. Archives the complete result; external mutation.                                                                                                   |
+| `thermal.cancel`      | `{}`                               | `{cancelled:boolean}`; aborts owned work and discards incomplete fields.                                                                                                                                                                                                    |
+| `thermal.probe`       | `{point:{x,y,z?}/null}`            | Nearest actual solver node; omitted z uses the displayed front/back surface. Null clears it.                                                                                                                                                                                |
+| `thermal.exportImage` | `{}`                               | Exports the displayed temperature map through the image bridge; external mutation with optional review.                                                                                                                                                                     |
+
+`ThermalConfig` is defined in [`lib/thermal.ts`](../lib/thermal.ts): ambient °C, front/back/edge convection W/(m²·K), each copper-layer thickness mm, dielectric/copper conductivity W/(m·K), plating and mesh size mm, and per-footprint W into the PCB. Optional `spiceSource:{config:TransientConfig,startS,endS,resultBasis}` records host-verified imported sample provenance. Run and lookup revalidate it; explicit `heatSources` edits without `spiceSource` select manual inputs and clear provenance. Materials, all imported heat into pads and equal dielectric gaps are explicit assumptions. `thermal.changed` events and optional workspace `thermal` context are bounded observations. The result's original settings remain available when current settings change. First opening a saved project's panel restores the latest matching verified field and its configuration through the load-only result route. Results and settings stay outside Core design state, undo, recovery and dirty state. See [Thermal](THERMAL.md) for geometry, persistence, lifecycle and numerical verification.
+
+## Agent tools
+
+Agent identities are shared by the renderer, recovery and generated service catalog from [`lib/agent-providers.ts`](../lib/agent-providers.ts). Local detection always returns all five entries; missing executables do not remove supported identities from Settings or the picker.
+
+| ID         | Display name     | CLI                    | Runtime boundary                                                            |
+| ---------- | ---------------- | ---------------------- | --------------------------------------------------------------------------- |
+| `codex`    | Codex            | `codex`                | Scoped live OpenPE tools through `app-server`.                              |
+| `claude`   | Claude Code      | `claude`               | Scoped live OpenPE tools through the fixed stdio MCP helper.                |
+| `deepseek` | DeepSeek Harness | `dsh`                  | Context/proposals over ACP with a required service-owned tool-denial guard. |
+| `pi`       | Pi               | `pi`                   | Restricted RPC context and proposals; no live capability tools.             |
+| `cursor`   | Cursor           | `agent`/`cursor-agent` | Detection only; chat/model discovery rejects the unavailable runtime.       |
+
+`installed` reports executable detection; `available` reports whether the detected integration can run under OpenPE's restrictions. Authentication remains `unknown`. Pi disables built-in tools, extensions, skills, prompt templates, context files and MCP in a private no-session process. DeepSeek ACP sessions disable client filesystem/terminal capabilities, reject every permission request and require the application-owned tool guard before submission. Protocol incompatibility fails closed. Cursor remains unavailable even when its CLI is detected because its tool-denial boundary is not established. Provider plugin routes and capabilities remain limited to `codex`/`claude`, independently of this Agent catalog.
+
+Codex dynamic tools and the Claude stdio MCP helper expose only these three OpenPE tools. They are per-turn, session/run/project-bound transports into the same host.
+
+| Tool             | Arguments                                                   | Result                                                                                                   |
+| ---------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `openpe_query`   | `{name:string, input?:JsonValue}`                           | Target query's result. Start with `name: 'capabilities.list'`, then `project.snapshot`.                  |
+| `openpe_execute` | `{name:string, input?:JsonValue, expectedRevision?:string}` | Command result in Auto, or a pending command review in Review. A pending review is not a completed edit. |
+| `openpe_observe` | `{after?:integer}`                                          | `{cursor,events,truncated}`; a bounded immediate read, not a background subscription.                    |
+
+Tool envelopes reject unknown keys, invalid names/cursors/revisions and nonfinite/oversized JSON before dispatch. Names match `^[a-zA-Z][a-zA-Z0-9_.:-]{0,127}$`; an explicit revision is a nonempty string up to 256 characters. Bridge input/result budgets are 32 MiB minus 4,096 bytes of envelope headroom, with depth at most 64 and one million JSON nodes. Each turn allows four pending calls and 256 total calls. Query/observe delivery has a 60-second deadline; command execution does not impose that deadline on solver work.
+
+Each request carries a single-use response token; completion, disconnect, cancellation or project close revokes its live bridge. Review captures immutable arguments and the explicit or observed/submission revision. Apply rechecks schema, revision, availability and domain constraints. Switching to Auto does not execute existing reviews. Omitted revisions do not silently upgrade stale Agent work to the latest document. Review limits and lifecycle details are in [Core](CORE.md#agent-transport-and-review).
+
+## Local HTTP service
+
+The service listens on `127.0.0.1` with a dynamic port. `window.openpe.connection()` supplies the base address and per-process token to the renderer; [`lib/bridge.ts`](../lib/bridge.ts) adds `Content-Type: application/json` and `X-OpenPE-Token`. The separate per-turn Agent bridge uses `X-OpenPE-Agent-Token` instead of the service token.
+
+Hosts are restricted to `127.0.0.1`/`localhost`. A supplied Origin must match the service base or configured development Origin. Preflight `OPTIONS` returns 204 before authentication. Except for the Agent bridge noted below, `/api/*` rejects an invalid/missing service token with 401. Native file access still requires its own live grant after HTTP authentication.
+
+### HTTP routes
+
+The registered method/path pairs are listed below. Inputs listed in braces are JSON bodies unless the row specifies URL/query parameters.
+
+| Method and path                   | Input                                                                                                   | Success response and conditions                                                                                                                                                                                                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/appearance`             | None                                                                                                    | Validated `Appearance`; defaults when absent. Malformed stored settings are preserved and reported.                                                                                                                                                                                                                |
+| `POST /api/appearance`            | `Appearance`                                                                                            | Validated/persisted `Appearance`; serial atomic settings write.                                                                                                                                                                                                                                                    |
+| `GET /api/agents`                 | None                                                                                                    | `{id,installed,available,version?,path?,error?,auth:'unknown',supportsEffort?,supportsCapabilities?}[]`; all five IDs, independent of installation.                                                                                                                                                                |
+| `GET /api/models`                 | Query `provider=codex/claude/deepseek/pi/cursor`                                                        | `{models:[{id,label,description?,...}],defaultModel?}`; discovery cancels on disconnect and rejects unavailable runtime adapters.                                                                                                                                                                                  |
+| `GET /api/plugins`                | Query `provider`, optional `refresh=true`                                                               | Provider plugin catalog and supported controls. Only these query keys are accepted.                                                                                                                                                                                                                                |
+| `POST /api/plugins`               | `{provider,action:PluginAction,id}`                                                                     | `{ok:true}`; qualified `plugin@marketplace` ID and CLI-supported operation required. One active plugin operation per provider.                                                                                                                                                                                     |
+| `GET /api/workbench-plugins`      | No query parameters                                                                                     | Bundled workbench catalog. Malformed lifecycle state fails closed.                                                                                                                                                                                                                                                 |
+| `POST /api/workbench-plugins`     | `{id,action:PluginAction}`                                                                              | `{ok:true}`; only bundled allowlisted SPICE Simulation, Thermal FEM and AI PCB Layout identities. The capability wrapper subsequently reloads the catalog.                                                                                                                                                         |
+| `GET /api/pcb-design/guide`       | Optional `document` query from the fixed guidance enum                                                  | Verified PCB guidance result above; authenticated, origin-checked and plugin-gated. Rejects unknown selectors or extra parameters before file access.                                                                                                                                                              |
+| `GET /api/libraries/:kind`        | Path `kind=symbols/footprints`; query `q?`, `library?`, `id?`, `offset?`                                | With a nonempty `id`, resolved detail; otherwise `{entries,total,libraries}`. Search returns at most 100 entries.                                                                                                                                                                                                  |
+| `GET /api/library-model`          | Query `id`, `index?`                                                                                    | `{meshes,model}` for an existing model reference in a bundled official or pinned example footprint. Index defaults to 0.                                                                                                                                                                                           |
+| `POST /api/model-cad/preview`     | `{object:ModelCadObject}`                                                                               | `{shapeKey:string,meshes}`; validates one local shape, constructs analytical STEP with fixed bundled Gmsh/OpenCASCADE operations and tessellates it with the bundled STEP parser. Disconnect cancels; independent of simulation plugins.                                                                           |
+| `GET /api/state`                  | None                                                                                                    | Stored recovery JSON or `null`; ordered with HTTP and Electron recovery writes. The workspace consumer validates current-format content.                                                                                                                                                                           |
+| `POST /api/state`                 | Validated `WorkspaceState` v2                                                                           | `{ok:true}` after the shared recovery queue atomically writes the validated JSON. Not a design-file Save API.                                                                                                                                                                                                      |
+| `DELETE /api/state`               | None                                                                                                    | `{ok:true}` after the shared recovery queue atomically writes JSON `null` to the current recovery file.                                                                                                                                                                                                            |
+| `POST /api/chat`                  | `ChatRequest`                                                                                           | Chat SSE stream. One request/session, at most four active sessions.                                                                                                                                                                                                                                                |
+| `POST /api/chat/tool-result`      | `{runId,sessionId,requestId,token,result}` or the same identity fields with `error` instead of `result` | `{ok:true}`; exactly one result/error, correct originating session/Origin and a single-use response token required.                                                                                                                                                                                                |
+| `POST /api/agent-tools/:bridgeId` | `{tool,arguments}`                                                                                      | `{result}`. Requires the active bridge's `X-OpenPE-Agent-Token`; the process token does not replace it.                                                                                                                                                                                                            |
+| `GET /api/thermal/status`         | No parameters                                                                                           | Verified bundled Gmsh/Elmer availability and versions; service-owned thermal plugin gate precedes detection.                                                                                                                                                                                                       |
+| `POST /api/thermal/run`           | `{source,config:ThermalConfig,fileId?:string}`                                                          | `{result:ThermalResult}`; one active run, disconnect cancels. Desktop requires a saved grant and publishes complete artifacts before success.                                                                                                                                                                      |
+| `POST /api/thermal/spice-sources` | `{source,fileId:string}`                                                                                | `{heatSources,spiceSource,losses,assumptions}` from the latest matching saved SPICE settings and verified full-resolution native power summary over the final 20%. Requires both plugins; load-only, no solve/download. Watt sources use stable footprint IDs; `losses` supplies reference, W and compiler method. |
+| `POST /api/thermal/result`        | `{source,fileId:string,config?:ThermalConfig}`                                                          | `{result:ThermalResult,config:ThermalConfig}` or `{result:null}`; load-only latest lookup matching complete PCB input, artifact hashes and verified runtime.                                                                                                                                                       |
+| `GET /api/simulation/status`      | None                                                                                                    | `{available:true,version}` or `{available:false,error}`; plugin installed/enabled gate precedes detection.                                                                                                                                                                                                         |
+| `POST /api/simulation/result`     | `{source,config?:TransientConfig,fileId?:string}`                                                       | `{result:SimulationResult,config:TransientConfig}` or `{result:null}`; omitted config discovers the latest saved configuration; explicit config requires an exact match. Load-only.                                                                                                                                |
+| `POST /api/simulation/transient`  | `{source,config:TransientConfig,fileId?:string}`; optional `Accept: text/event-stream`                  | JSON `SimulationResult` or simulation SSE; successful response can include `simulationModels` references. One active transient across the service.                                                                                                                                                                 |
+
+Library query lengths are `q/library ≤ 200`, `id ≤ 500`; offset is 1–6 decimal digits, default 0. Model index is 1–2 decimal digits. Model resolution accepts a catalog ID/index, never a URL; fixed official package/model resources can be downloaded according to [Libraries](LIBRARIES.md). Workspace and appearance structures are defined by [`lib/workspace-state.ts`](../lib/workspace-state.ts) and [`lib/appearance.ts`](../lib/appearance.ts).
+
+`Appearance.leftButtonDrag` is `drag-any`, `drag-selected` or `select`, shared by
+Schematic and Layout. Saved appearance settings require all current fields; incomplete records and retired values are rejected. It controls pointer selection only and grants no design mutation.
+
+`Appearance.modelGridSpacing` accepts 0.5, 1, 2, 5 or 10 mm, independently of
+`gridSpacing` and `layoutGridSpacing`; saved settings must include it. All three drawing views share `schematicLayers.grid` visibility.
+Model spacing controls sketch workplane lines only, not CAD snapping.
+Workspace UI observations include `modelGridSpacing` alongside the other grid settings.
+
+Workspace recovery accepts only the current envelope and ten current Home example identities. Required dirty state, Source draft, filename, Agent preferences, sessions and active conversation must be present and valid. Recovery does not infer an example identity, restore retired examples, convert message-only conversations or fill missing required fields. Unsupported recovery is preserved and fails validation.
+
+JSON request limits are 8 MiB by default, with route-specific limits: state 96 MiB, simulation result/transient and thermal run/result 24 MiB, chat 32 MiB, chat/tool-result 40 MiB, agent-tools 32 MiB and model-cad/preview 512 KiB. These parser limits do not replace the narrower domain/tool bounds.
+
+CAD preview accepts only the `object` field, never script, path or executable
+input. It returns a canonical ordered geometry JSON key excluding top-level
+identity/pose/material and local meshes; it has no document mutation authority.
+Geometry preparation uses a 60-second bound and verifies a complete regular STEP
+artifact at most 30,000,000 bytes. The service permits two active preparations,
+checks at most 64 returned meshes/six million numeric values and retains a
+retryable 16-entry/64 MiB cache. Core host adapters admit a matching key only for
+the exact validated candidate and recheck revision before publication.
+
+SPICE saved-result lookup accepts current private project Source and an opaque file ID, with an optional complete `TransientConfig`. Omitted config reads the latest record's validated settings, recompiles the current source and verifies the current bundled solver, offline model bytes and full execution/cache identity before returning `{result,config}`. An absent record or nonmatching identity returns `{result:null}` without a config; an absent record does not require solver detection. Explicit config uses the same exact matching path as Run and never adopts different saved settings. Without a granted saved destination, lookup has no desktop record.
+
+Completed manifests require the complete run configuration separately from native design data. Missing or invalid settings fail validation. Lookup never executes the stored deck, downloads models, writes or migrates saved records, or edits a document. Cancellation returns 409 with `Simulation result lookup cancelled.` while the response remains open; a disconnected response receives no further body. UI settings edits, explicit Run, Source/project/visibility changes and plugin removal cancel or supersede pending restores.
+
+SPICE manifests require complete transient settings, `identityVersion: 2` and the actual executable's `solverSha256`; installation paths and timestamps are excluded from that identity. Ordered vectors/units remain execution inputs, while returned labels and probe targets are rebound to the current compiled circuit. Both explicit Run and automatic lookup require the current complete identity. Historical identities, former installation paths and settings reconstructed from execution decks are unsupported.
+
+Saved results use `openpe-spice-v2` / `openpe-thermal-v2` manifests, with `project` bound to the native basename and direct `spice/<stem>.*` / `thermal/<stem>.*` artifacts. SPICE `files` entries are `{name,file}`; Thermal entries also include `size` and `sha256`. Physical names prefix the logical artifact basename with the native stem; execution keys use logical input identities. Store instances share a per-directory queue, publish individual files with the manifest last and roll back failed writes through private sibling `*-backups` folders. Unknown sidecars and conflicting/damaged files remain protected; this is not filesystem-wide crash atomicity. Retired nested records are ignored without loading or migration. See [SPICE persistence](SIMULATION.md#execution-streaming-and-completed-results) and [Thermal records](THERMAL.md#completed-desktop-records).
+
+Thermal requests accept private validated project Source, settings and an opaque file ID, never meshes, scripts, paths, executables or URLs. Thermal lookup revalidates saved configuration against the current PCB and compares the complete prepared model. SPICE-derived configurations also require matching verified electrical samples and watts through the shared read-only SPICE completed-result port. Only compiler-declared dissipative paths are averaged; reactive energy, sources and unmodelled losses are excluded. An optional caller configuration must also match. Lookup never solves, downloads or edits design data. Electron resolves the opaque file ID and rechecks it before publication/removal. Completed artifacts are direct `thermal/<stem>.*` files; no records enter native Source, undo or recovery. Thermal lookup cancellation returns 409 with `Thermal result lookup cancelled.` while the response remains open. The thermal plugin gate applies before lookup, compilation or resource verification. SPICE is independently gated; disabling it cancels coupled thermal work while manual thermal runs remain independent.
+
+Errors generally return `{error:string}`; some SPICE errors also include `code`, including `OPENPE_SPICE_CONVERGENCE`. Common statuses are 400 for rejected input, 401 for expired authentication, 403 for Origin/plugin restrictions, 409 for conflicts/stale tool replies, 429 for chat concurrency, 422 for library/simulation/Agent-tool failures, 502 for provider/model-discovery failures and 503 for unavailable plugin state/shutdown. Stored-data and unhandled errors can return 500. After SSE starts, failures use events rather than a new HTTP error body.
+
+### Chat requests and SSE
+
+```ts
+type ChatRequest = {
+  provider: 'codex' | 'claude' | 'deepseek' | 'pi' | 'cursor';
+  prompt: string; // Nonblank, at most 16,000 characters.
+  context: unknown; // Required; optional layout/workspace observations are validated.
+  history: unknown[]; // Required.
+  effort?: 'low' | 'medium' | 'high';
+  model?: string; // Validated provider model identifier, at most 200 characters.
+  sessionId: string; // Required; [a-zA-Z0-9-]{1,80}.
+  capabilities?: boolean;
+  annotations?: AgentAnnotation[];
+};
+```
+
+The client captures the current project, sheet fingerprint and optional `WorkspaceContext` at submission. `AgentAnnotation` is the bounded immutable screenshot/selection structure in [`lib/agent-annotations.ts`](../lib/agent-annotations.ts); up to four annotations are accepted per message. Codex/Claude capability support is advertised separately from the context-only DeepSeek/Pi transports. ACP images require the session's advertised image support; unsupported attachments fail visibly. DeepSeek model discovery reads ACP session metadata, with no effort selector. Cursor rejects execution/model discovery before a conversation starts. Provider credentials, arbitrary executable paths and shell commands are not request fields.
+
+Chat frames use `data: <JSON>\n\n`, with comment heartbeats every 15 seconds. The public event union in [`lib/chat-stream.ts`](../lib/chat-stream.ts) includes:
+
+| `type`               | Payload fields                                                  |
+| -------------------- | --------------------------------------------------------------- |
+| `status`             | `stage?`, `text`                                                |
+| `text`               | `text`                                                          |
+| `text-delta`         | `delta`                                                         |
+| `text-replace`       | `text`                                                          |
+| `error`              | `text`                                                          |
+| `timing`             | `timings`                                                       |
+| `agent-info`         | `model?`, `reasoningEffort?`                                    |
+| `capability-request` | `runId`, `sessionId`, `requestId`, `token`, `tool`, `arguments` |
+| `done`               | `outcome?: 'completed'/'failed'/'cancelled'`                    |
+
+The current runners primarily emit incremental/replacement text; decoders also support `text`. A capability-request response goes to `/api/chat/tool-result`, not to a new document host. Closing the request cancels its originating provider stream and scoped capability bridge.
+
+### Simulation requests and SSE
+
+HTTP simulation `source` is a validated private project snapshot string. It is not a renderer-supplied SPICE deck, executable, filename or filesystem path. `fileId` is an opaque desktop grant; desktop runs require a saved native destination.
+
+```ts
+type TransientConfig = {
+  inputId: string;
+  pwmId: string;
+  outputId: string;
+  switchId: string;
+  currentId: string;
+  voltage: number;
+  frequency: number;
+  duty: number;
+  stop: number;
+  step: number; // Seconds, finite and positive.
+};
+type ModelReference = { id: string; sha256: string; file: string };
+type SimulationResult = {
+  version: string;
+  time: number[];
+  traces: {
+    label: string;
+    unit: 'V' | 'A';
+    vector: string;
+    targets?: ProbeTarget[];
+    dissipation?: {
+      positivePin: string;
+      negativePin: string;
+      positiveNode: string;
+      negativeNode: string;
+      method: 'resistor' | 'diode' | 'switch' | 'mosfet';
+    }; // Compiler-owned dissipative path; never accepted as a request override.
+    values: number[];
+  }[];
+  log: string;
+  dissipation?: {
+    startS: number;
+    endS: number;
+    sampleCount: number;
+    powers: { vector: string; powerW: number }[];
+  };
+};
+```
+
+The optional completed-result `dissipation` summary integrates signed V·I over every full-resolution solver output row before display reduction, over the final 20% of the requested duration. Its exact interval, original row count and ordered current vectors must match the current deck. Thermal import requires this verified summary and rejects negative dissipative averages; live, partial and older display-only results cannot supply heat. Heat-summary version and vector/node metadata participate in completed-run cache identity. See [SPICE Simulation](SIMULATION.md#full-resolution-dissipative-power) for excluded losses and the distinct approximate EMC Flyback model.
+
+With `Accept: text/event-stream`, transient events are:
+
+| `type`    | Payload                                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `started` | No additional fields.                                                                                                   |
+| `samples` | `{offset:number,time:number[],values:number[][]}`; values are trace-major and offsets are contiguous.                   |
+| `result`  | `{result: SimulationResult & {simulationModels?: ModelReference[]}}`; references follow the allowlisted model contract. |
+| `error`   | `{message:string,code?:string}`.                                                                                        |
+
+Native output is read every 200 ms. Display reduction retains actual trace extrema/endpoints within 200,000 samples and 1.1 million values. Frames are bounded to 64 MiB and backpressure waits for drain up to five seconds. These are transport/display limits, not solver runtime deadlines. No HTTP cancel route exists: disconnect aborts the request. Explicit user Stop uses the Uniform API's `simulation.cancel`, whose adapter retains the validated partial display state.
+
+## Electron bridge
+
+[`electron/preload.cjs`](../electron/preload.cjs) exposes the required methods below on `window.openpe`, plus readonly `titleBarOverlay:boolean`. Renderer and Electron use the same current bridge contract without older-host feature flags or method fallbacks. Browser presentation has no native bridge. The renderer-facing types are in [`lib/bridge.ts`](../lib/bridge.ts). IPC handlers in [`electron/main.cjs`](../electron/main.cjs) and its adapters validate the originating main frame. Calls return promises except the event-subscription method.
+
+| Method                            | Input                                                       | Result and behaviour                                                                                                                                      |
+| --------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connection()`                    | None                                                        | `{base,token}`; authenticated service connection.                                                                                                         |
+| `writeWorkspaceRecovery(content)` | Serialized `WorkspaceState` v2 string, or `null` to clear   | `void` after validated, queued atomic recovery persistence.                                                                                               |
+| `open()`                          | None                                                        | Native file picker; `{source,name,native:true}`, an already-open `{fileId}`, or cancellation `null`.                                                      |
+| `acceptOpen()`                    | None                                                        | Creates an opaque grant for the verified pending open; returns `fileId:string`.                                                                           |
+| `newFile()`                       | None                                                        | `fileId:string` for a new project without a native destination.                                                                                           |
+| `openDefaultExample(key)`         | Fixed example catalog key                                   | `{id,source,fileId,filename,warning?}` from the original native example directory, retaining actual filenames.                                            |
+| `releaseFile(fileId)`             | Opaque grant ID                                             | `void`; releases only that grant.                                                                                                                         |
+| `revealFile(fileId)`              | Opaque grant ID                                             | `{status:'revealed'/'needs-save'}`.                                                                                                                       |
+| `projectDirectory(fileId)`        | Opaque live project grant ID                                | `{entries:[{name,kind:'directory'/'file',id?,bytes?}],truncated:boolean}`; relative names, empty folders and opaque file-observation IDs.                 |
+| `projectFilePreview(options)`     | `{fileId,id}` from that grant's latest directory listing    | `{source,bytes,binary,truncated,readOnly,encoding?:'latin1',pdf?:true}`; bounded text, PDF marker or binary metadata.                                     |
+| `projectFileWrite(options)`       | `{fileId,id,source,expectedSource,encoding?:'latin1'}`      | Updated `ProjectFilePreview` after an atomic ordinary-text write; checks original bytes, encoding, grant and frame. Native files use Core Source editing. |
+| `projectFilePdf(options)`         | `{fileId,id}`                                               | `{base64,bytes}` for a verified local PDF up to 32 MiB, read through the same current grant and opaque observation.                                       |
+| `setDirty(value)`                 | `boolean`                                                   | `void`; native close protection, not a design mutation.                                                                                                   |
+| `onCloseRequested(callback)`      | Callback                                                    | Unsubscribe function for native `openpe:close-requested` events.                                                                                          |
+| `resolveClose(allow)`             | `boolean`                                                   | `void`; answers an already-pending native close request.                                                                                                  |
+| `save(options)`                   | `{fileId,source,name,saveAs?:boolean}`                      | `{name,path,localExample?}` or cancellation `null`.                                                                                                       |
+| `historyList(options)`            | `{fileId,offset?:number}`                                   | `HistoryPage`.                                                                                                                                            |
+| `historyRead(options)`            | `{fileId,id}`                                               | Validated complete private snapshot string.                                                                                                               |
+| `historyCreate(options)`          | `{fileId,source,message}`                                   | `{id:string}`.                                                                                                                                            |
+| `exportKiCad(options)`            | `{source,name,kind?:'schematic'/'pcb',schematicId?:string}` | `{name,path,kind}` or cancellation `null`.                                                                                                                |
+| `exportImage(options)`            | `{dataUrl,width,height,name}`                               | `{name}` or cancellation `null`.                                                                                                                          |
+| `exportEnclosure(options)`        | `{source}` validated complete private snapshot              | `{name}` or cancellation `null`; native STEP picker.                                                                                                      |
+
+`openDefaultExample(key)` starts shared runtime preparation on its first request, including clean recovery, and rechecks the originating main frame before opening the selected example. Home does not request an example preflight.
+
+Inputs never let a renderer choose an arbitrary filesystem path. Returned save/export paths are display results, not reusable permissions. Grants live in Electron memory, remain out of documents/recovery and are revoked on main-document replacement. Save as protects other live project destinations. Native/project writes retain their existing validation, asset preparation and sibling-rollback requirements in [Format](FORMAT.md).
+
+Directory browsing uses `openpe:project-directory` and
+`openpe:project-file-preview`, `openpe:project-file-write` and
+`openpe:project-file-pdf` through `electron/project-directory.cjs`. They
+check the originating main frame and grant before/after asynchronous work.
+Listings include regular project folders/files, exclude hidden/private entries,
+keys and links, and are bounded to 4,096 entries and twelve nested levels. File
+reads accept only opaque IDs from the latest listing, recheck parent/file
+identity and read at most 1 MiB. Replaced/closed grants and main-frame navigation
+invalidate observations. Binary files return metadata; truncated text is explicit.
+Ordinary text saves compare the expected original bytes, retain encoding and
+replace atomically after rechecking the grant and main frame. PDFs are loaded
+only when selected and displayed through a local Blob URL, released on hide or
+selection change. Source keeps eight preview buffers. Directory files are not Uniform API
+capabilities, native Source files, recovery data or automatic Agent context;
+`source.files` continues to return Core's validated native set only.
+
+`writeWorkspaceRecovery` uses the fixed `openpe:workspace-recovery-write` channel
+and the host-owned recovery filename; it exposes no read or path selection.
+[`electron/workspace-recovery.cjs`](../electron/workspace-recovery.cjs) checks the
+trusted main frame before forwarding to the service's shared recovery store in
+[`server/workspace-storage.mjs`](../server/workspace-storage.mjs). Strings must
+contain a complete valid workspace within the 96 MiB UTF-8 envelope; encoded
+JSON `null` is invalid, while the argument `null` clears recovery. Full project
+Source, draft, session and workspace validation precedes compact JSON storage.
+HTTP GET/POST/DELETE and IPC writes use one ordered queue; a failed write leaves
+later attempts retryable. DesktopWorkspace writes through the required native
+recovery bridge. IPC failures propagate to recovery/quit error
+handling, and close waits for the same write acknowledgement.
+
+Native Git history pages contain 50 entries; `offset` is an integer from 0 to 1,000,000, commit IDs are 40 lowercase hexadecimal characters, and creation messages are a single line of 1–240 characters. These checks are narrower than the host capability's envelope schema. Snapshot payloads are bounded to 8,000,000 bytes. Reachability/current validation still apply to reads.
+
+Image export accepts a verified PNG data URL, at most 48,000,000 characters, with integer dimensions from 1 to 4,096 pixels. It opens a native picker and does not change project dirty state or destination grants.
+
+Model STEP export retains the `exportEnclosure` bridge method and `enclosure.exportStep` capability as current protocol identifiers. It accepts at most 8,000,000 bytes of validated source containing CAD bodies. The host reuses the preview kernel's fixed OpenCASCADE construction with verified packaged Gmsh, a 60-second geometry bound and completed-artifact validation, then opens the native STEP/STP picker and writes atomically to that selection. Renderer input supplies no path, executable or script. Overlapping independent bodies remain separate unless explicitly combined. STEP contains analytical profiles, holes, rim treatments and Boolean results with their XYZ poses, excluding PCB/package shapes and material/opacity properties. Export is independent of Thermal FEM plugin state and does not run a solve, edit the project or grant a native project destination.
+
+## Examples
+
+These examples run inside an adapter that already holds the originating project's `CapabilityHost`. They do not create a second document host or bypass Agent review.
+
+### Discover and edit a component
+
+```ts
+const catalog = await host.query('capabilities.list');
+const snapshot = (await host.query('project.snapshot')) as ProjectSnapshot;
+// schematicId and partId come from this project's current query results.
+const result = await host.execute(
+  'part.properties',
+  { schematicId, partId, value: '10k' },
+  { actor: 'human', expectedRevision: snapshot.revision },
+);
+```
+
+### Edit one native Source file
+
+```ts
+const files = (await host.query('source.files')) as NativeFiles;
+const selected = files.files.find((file) => file.name === selectedNativeName);
+if (!selected) throw new Error('Select a loaded native file.');
+const before = (await host.query('project.snapshot')) as ProjectSnapshot;
+await host.execute(
+  'source.updateFile',
+  {
+    name: selected.name,
+    source: editedNativeText,
+  },
+  { expectedRevision: before.revision },
+);
+
+// Draft changes also advance the revision. Read it again before Apply.
+const pending = (await host.query('project.snapshot')) as ProjectSnapshot;
+await host.execute('source.apply', {}, { expectedRevision: pending.revision });
+```
+
+### Submit an Agent command
+
+Invoke `openpe_execute` with a revision obtained from that turn's query. Use `schematic.drag` to reposition a component and retain its wired connections; `schematic.move` leaves unselected wires in place. Deltas are millimetres. Placeholder IDs below must be replaced with the queried project identities.
+
+```json
+{
+  "name": "schematic.drag",
+  "input": {
+    "schematicId": "<schematic-id>",
+    "ids": ["<part-id>"],
+    "delta": { "x": 1.27, "y": 0 }
+  },
+  "expectedRevision": "17"
+}
+```
+
+### Open and configure simulation
+
+```ts
+await host.execute('simulation.show');
+const catalogAfterMount = await host.query('capabilities.list');
+// Confirm simulation.configure/run are registered and currently available.
+await host.execute('simulation.configure', {
+  config: { stop: 0.01, step: 0.0000002 },
+});
+// Query project.snapshot again and pass its revision before invoking Run.
+```
+
+## Sources and maintenance
+
+| Interface                                            | Implementation source                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host, catalog, JSON bounds and schema interpreter    | [`api/capabilities.ts`](../api/capabilities.ts), [`api/capability-schema.ts`](../api/capability-schema.ts)                                                                                                                    |
+| Core registration, query/command schemas and results | [`core/register-project.ts`](../core/register-project.ts), [`core/project-core.ts`](../core/project-core.ts), [`core/layout-commands.ts`](../core/layout-commands.ts)                                                         |
+| Rule-check results, thresholds and engines           | [`lib/design-rule-checks.ts`](../lib/design-rule-checks.ts), [`lib/schematic-erc.ts`](../lib/schematic-erc.ts), [`lib/pcb-drc.ts`](../lib/pcb-drc.ts)                                                                         |
+| Workspace/native/history ports                       | [`lib/workbench-capabilities.ts`](../lib/workbench-capabilities.ts), [`components/Workbench.tsx`](../components/Workbench.tsx)                                                                                                |
+| Official libraries                                   | [`lib/library-capabilities.ts`](../lib/library-capabilities.ts), [`lib/library.ts`](../lib/library.ts)                                                                                                                        |
+| Bundled/provider lifecycle                           | [`lib/workbench-plugins.ts`](../lib/workbench-plugins.ts), [`lib/provider-plugin-capabilities.ts`](../lib/provider-plugin-capabilities.ts)                                                                                    |
+| Resident simulation and waveform handlers            | [`lib/simulation-capabilities.ts`](../lib/simulation-capabilities.ts), [`components/SimulationDialog.tsx`](../components/SimulationDialog.tsx), [`components/SimulationWaveforms.tsx`](../components/SimulationWaveforms.tsx) |
+| Resident Thermal FEM handlers                        | [`lib/thermal-capabilities.ts`](../lib/thermal-capabilities.ts), [`components/ThermalSimulation.tsx`](../components/ThermalSimulation.tsx), [`lib/thermal.ts`](../lib/thermal.ts)                                             |
+| Agent tool envelopes and review                      | [`server/agent-capabilities.mjs`](../server/agent-capabilities.mjs), [`lib/chat-stream.ts`](../lib/chat-stream.ts)                                                                                                            |
+| Agent identities and connection labels               | [`lib/agent-providers.ts`](../lib/agent-providers.ts); generated [`server/agent-provider-format.mjs`](../server/agent-provider-format.mjs)                                                                                    |
+| Local HTTP and native bridge                         | [`server/index.mjs`](../server/index.mjs), [`electron/preload.cjs`](../electron/preload.cjs), [`lib/bridge.ts`](../lib/bridge.ts)                                                                                             |
+
+Update this reference when registered IDs, schemas, metadata, results, routes, bridge methods or lifecycle gates change. Runtime `capabilities.list` remains authoritative for an individual mounted project's schema and availability. Diagram labels such as `set_module` and `route_pins` are conceptual names, not aliases. No `/api/capabilities` route is registered. Keep [Core](CORE.md), [Architecture](ARCHITECTURE.md) and the relevant subsystem contract aligned with the implementation.

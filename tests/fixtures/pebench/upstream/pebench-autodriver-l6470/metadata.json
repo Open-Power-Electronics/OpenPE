@@ -1,0 +1,66 @@
+{
+  "id": "019_SparkFun_AutoDriver_L6470",
+  "batch": 2,
+  "category_zh": "8–45V L6470 斩波步进电机驱动器",
+  "repository": "sparkfun/L6470-AutoDriver",
+  "source_url": "https://github.com/sparkfun/L6470-AutoDriver",
+  "commit_sha": "6e71cacf06aa1cfe9e1be81cd59270bbe5a98a66",
+  "commit_url": "https://github.com/sparkfun/L6470-AutoDriver/commit/6e71cacf06aa1cfe9e1be81cd59270bbe5a98a66",
+  "upstream_commit_date": "2025-06-27T13:29:11Z",
+  "retrieved_date": "2026-10-15",
+  "retrieved_timezone": "Asia/Shanghai",
+  "archive_url": "https://codeload.github.com/sparkfun/L6470-AutoDriver/zip/6e71cacf06aa1cfe9e1be81cd59270bbe5a98a66",
+  "archive_sha256": "cd423f500a86acd2a8839a97ba75769498cc205e83f13eea00c0b5e859034276",
+  "source_scope": [
+    "entire repository"
+  ],
+  "source_file_count": 29,
+  "pcb_candidates": [
+    "Hardware/L6470 AutoDriver.brd",
+    "Production/L6470AutoDriver-Panel_v13.brd"
+  ],
+  "schematic_candidates": [
+    "Hardware/L6470 AutoDriver.sch"
+  ],
+  "status": "converted_and_structurally_verified_drc_review_required",
+  "selected_source_pcb": "Hardware/L6470 AutoDriver.brd",
+  "selected_source_schematic": "Hardware/L6470 AutoDriver.sch",
+  "converted_pcb": "kicad10/board.kicad_pcb",
+  "kicad_version": "10.0.1",
+  "statistics": {
+    "footprints": 39,
+    "pads": 118,
+    "tracks": 336,
+    "vias": 52,
+    "zones": 6,
+    "copper_layers": 4,
+    "nets_used": 29,
+    "board_width_mm": 73.8632,
+    "board_height_mm": 49.7332
+  },
+  "validation_report": "validation/conversion.json",
+  "source_pcb_sha256": "6cb1702d80b5a96831f6a69525641280674280a8030075b852c1ad079ada042f",
+  "converted_pcb_sha256": "58f5bce26f67b196e5d51cdbf9bb09fd678e5a837d2c18731c0f83ea8efad925",
+  "schematic_status": "Original editable schematic preserved; not converted to KiCad 10",
+  "acceptance_review": {
+    "id": "019_SparkFun_AutoDriver_L6470",
+    "functional_footprints_estimate": 28,
+    "decision": "drc_revalidation_pending",
+    "drc_errors": 23,
+    "unconnected": 0,
+    "report": "boards\\019_SparkFun_AutoDriver_L6470\\validation\\drc.json",
+    "drc_types": {
+      "error:shorting_items": 4,
+      "error:clearance": 13,
+      "error:courtyards_overlap": 2,
+      "error:solder_mask_bridge": 4,
+      "warning:track_dangling": 4,
+      "warning:silk_edge_clearance": 3,
+      "warning:text_height": 76,
+      "warning:text_thickness": 25,
+      "warning:silk_overlap": 31,
+      "warning:silk_over_copper": 7
+    }
+  },
+  "qualified_under_2026_10_15_gate": false
+}

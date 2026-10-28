@@ -1,0 +1,103 @@
+{
+  "id": "007_Adafruit_PowerBoost_1000C",
+  "category_zh": "TPS61090 升压与锂电充电电源",
+  "repository": "adafruit/Adafruit-PowerBoost-1000C",
+  "source_url": "https://github.com/adafruit/Adafruit-PowerBoost-1000C",
+  "commit_sha": "683ff0cdcdb0c5389e83a829b78e04a77dc5cc65",
+  "commit_url": "https://github.com/adafruit/Adafruit-PowerBoost-1000C/commit/683ff0cdcdb0c5389e83a829b78e04a77dc5cc65",
+  "upstream_commit_date": "2019-05-21T18:06:00Z",
+  "retrieved_date": "2026-10-15",
+  "retrieved_timezone": "Asia/Shanghai",
+  "archive_url": "https://codeload.github.com/adafruit/Adafruit-PowerBoost-1000C/zip/683ff0cdcdb0c5389e83a829b78e04a77dc5cc65",
+  "archive_sha256": "62e6b77ea3e4a0d2e6594fac65dd9995abe3e8883c9e6c93623e2204d46a0bf0",
+  "source_file_count": 5,
+  "pcb_candidates": [
+    "Adafruit PowerBoost 1000C Rev B.brd"
+  ],
+  "schematic_candidates": [
+    "Adafruit PowerBoost 1000C Rev B.sch"
+  ],
+  "license_candidates": [
+    "license.txt"
+  ],
+  "status": "converted_and_structurally_verified_drc_review_required",
+  "selected_source_pcb": "Adafruit PowerBoost 1000C Rev B.brd",
+  "selected_source_schematic": "Adafruit PowerBoost 1000C Rev B.sch",
+  "converted_pcb": "kicad10/board.kicad_pcb",
+  "kicad_version": "10.0.1",
+  "statistics": {
+    "footprints": 47,
+    "pads": 142,
+    "tracks": 238,
+    "vias": 41,
+    "zones": 9,
+    "copper_layers": 2,
+    "nets_used": 23,
+    "board_width_mm": 36.15136,
+    "board_height_mm": 22.91
+  },
+  "validation_report": "validation/conversion.json",
+  "source_pcb_sha256": "a7cf8c4e0de0597d009340d0f4f226e90fb3a21f8a44586d50fb94d56a8ab352",
+  "converted_pcb_sha256": "eb75ca28d970bba5a49820897b642f9776b5f010a724d5c3fbbfa3fdd9064027",
+  "schematic_status": "Original editable schematic preserved; not converted to KiCad 10",
+  "title": "PowerBoost 1000C Rev B",
+  "design_attribution": "Limor Fried / Adafruit",
+  "hardware_license": "CC-BY-SA-3.0",
+  "license_evidence": "source/license.txt",
+  "product_or_author_url": "https://www.adafruit.com/product/2465",
+  "pcb_file_commit_authors": [
+    "ladyada"
+  ],
+  "latest_pcb_file_commit": "444e10c3a4164c8c4cba6e570bccfb28c10ad05e",
+  "latest_pcb_file_change": "2015-08-14T18:21:35Z",
+  "quality_evidence": "README 明确署名 Limor Fried/Ladyada；官方产品、实物照片、源板和原理图齐全。",
+  "human_design_assessment": "High-confidence professional human/team provenance; not proof that every trace was manually routed.",
+  "quality_status": "Source-vetted engineering reference; conversion verified; DRC review required before manufacturing or zero-violation benchmark use.",
+  "drc": {
+    "violations": 162,
+    "unconnected_items": 1,
+    "severity_counts": {
+      "error": 44,
+      "warning": 119
+    },
+    "type_counts": {
+      "shorting_items": 1,
+      "zones_intersect": 1,
+      "copper_edge_clearance": 20,
+      "unresolved_variable": 1,
+      "starved_thermal": 6,
+      "solder_mask_bridge": 14,
+      "silk_edge_clearance": 9,
+      "text_height": 34,
+      "silk_overlap": 26,
+      "silk_over_copper": 50,
+      "unconnected_items": 1
+    },
+    "basis": "Standalone-board KiCad defaults/imported board settings; zones refilled in memory; source project rule equivalence not established.",
+    "zero_drc": false
+  },
+  "source_file_hashes_verified": true,
+  "source_to_output_audit": "validation/source_to_output_audit.json",
+  "acceptance_review": {
+    "id": "007_Adafruit_PowerBoost_1000C",
+    "functional_footprints_estimate": 37,
+    "decision": "drc_revalidation_pending",
+    "drc_errors": 44,
+    "unconnected": 1,
+    "report": "boards\\007_Adafruit_PowerBoost_1000C\\validation\\drc.json",
+    "drc_types": {
+      "error:shorting_items": 1,
+      "error:zones_intersect": 1,
+      "error:copper_edge_clearance": 20,
+      "error:unresolved_variable": 1,
+      "error:starved_thermal": 6,
+      "error:solder_mask_bridge": 14,
+      "warning:silk_edge_clearance": 9,
+      "warning:text_height": 34,
+      "warning:silk_overlap": 26,
+      "warning:silk_over_copper": 50,
+      "error:unconnected_items": 1
+    }
+  },
+  "qualified_under_2026_10_15_gate": false
+}

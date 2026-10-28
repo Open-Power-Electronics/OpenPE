@@ -1,0 +1,42 @@
+{
+  "version": 47,
+  "platform": "win32-x64",
+  "archive": {
+    "name": "ngspice-47_64.7z",
+    "url": "https://downloads.sourceforge.net/project/ngspice/ng-spice-rework/47/ngspice-47_64.7z",
+    "sha256": "59225971bd68cdd1199443649aa4615a9e6d684933f205ab49006a3942518f5a"
+  },
+  "sources": [
+    {
+      "name": "ngspice-47.tar.gz",
+      "url": "https://downloads.sourceforge.net/project/ngspice/ng-spice-rework/47/ngspice-47.tar.gz",
+      "sha256": "894e649651f1838a14095e5a5439e7d3aa63e87ede14d283173fda4fcdef675f"
+    },
+    {
+      "name": "libsndfile-1.2.2.tar.gz",
+      "url": "https://codeload.github.com/libsndfile/libsndfile/tar.gz/refs/tags/1.2.2",
+      "sha256": "ffe12ef8add3eaca876f04087734e6e8e029350082f3251f565fa9da55b52121"
+    },
+    {
+      "name": "libsamplerate-0.2.2.tar.gz",
+      "url": "https://codeload.github.com/libsndfile/libsamplerate/tar.gz/refs/tags/0.2.2",
+      "sha256": "16e881487f184250deb4fcb60432d7556ab12cb58caea71ef23960aec6c0405a"
+    }
+  ],
+  "files": {
+    "Spice64/bin/ngspice_con.exe": "22d5cae2bd32b2e39157a8d27bf457122f68285b72a9ebefdf41551b628233ab",
+    "Spice64/bin/libomp140.x86_64.dll": "644c49149f8a5d9275a83e9331a0adbd14620f930190e985d30b842107123597",
+    "Spice64/bin/sndfile.dll": "4e3bd2de8e1485110eaebef8e1239471f73d608773831c323bf528e05645655e",
+    "Spice64/bin/samplerate.dll": "2e24802f94b584173de7358a5f26d3147226f417dcebeb69bee98994022483ce",
+    "Spice64/lib/ngspice/analog.cm": "ba754b0470e0962a9e14c3453cbe038e08d77937e87f8f80428ee6f2ff021a78",
+    "Spice64/lib/ngspice/digital.cm": "fb205d4c848f6616595f24cd0b8f2d9b6130694aac00798f51d6f597136d5549",
+    "Spice64/lib/ngspice/spice2poly.cm": "20c19a82c60921915f5423693def1c818d5973cd833234715c74007c5f25bb50",
+    "Spice64/lib/ngspice/table.cm": "ad6e5b6a30453d9e83692259e2f5898ae8f4cf9c35fba9209be705b6cf0ad77b",
+    "Spice64/lib/ngspice/tlines.cm": "c6acb748d815d1ebe16afd412440caaafba14f6d68bdf9a67d82b4d1255a2290",
+    "Spice64/lib/ngspice/xtradev.cm": "0c7cf30504d1bc8a3ff05ce5760fe4455d58de5d6eb1d5dd9c270f310c415087",
+    "Spice64/lib/ngspice/xtraevt.cm": "008da27af00bf5ea370ab145bedde5b4186504aca52dc51165088bfea509fe34",
+    "Spice64/docs/COPYING": "6d939001e899ede403277fb37124c2af6f1cf92926465cd8f4bf59859e06f579",
+    "Spice64/docs/AUTHORS": "06de548000b92bc878de318a5737ffcc24562ed56a1d628c97a9e7bccf9071f5",
+    "Spice64/share/ngspice/scripts/spinit": "8107a9b6a05e34da5865fe2fe467bfa11d0e3dbdabb705039de62cf19c5ff6f7"
+  }
+}

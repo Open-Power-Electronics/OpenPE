@@ -1,0 +1,2138 @@
+(kicad_sch
+  (version 20260306)
+  (generator "openpe")
+  (uuid "d1caa003-d193-4916-b614-d57c7db2d82b")
+  (sheet_instances
+    (path "/"
+      (page "1")))
+  (embedded_fonts no)
+  (title_block
+    (title "LM2596 Buck"))
+  (lib_symbols
+    (symbol "Connector_Generic:Conn_01x02"
+      (pin_names
+        (offset 1.016)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "J"
+        (at 0 2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "Conn_01x02"
+        (at 0 -5.08 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "connector"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_fp_filters" "Connector*:*_1x??_*"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "Conn_01x02_1_1"
+        (rectangle
+          (start -1.27 1.27)
+          (end 1.27 -3.81)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background)))
+        (rectangle
+          (start -1.27 0.127)
+          (end 0 -0.127)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none)))
+        (rectangle
+          (start -1.27 -2.413)
+          (end 0 -2.667)
+          (stroke
+            (width 0.1524)
+            (type default))
+          (fill
+            (type none)))
+        (pin passive line
+          (at -5.08 0 0)
+          (length 3.81)
+          (name "Pin_1"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at -5.08 -2.54 0)
+          (length 3.81)
+          (name "Pin_2"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Device:C_Polarized"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0.254))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "C"
+        (at 0.635 2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "C_Polarized"
+        (at 0.635 -2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" ""
+        (at 0.9652 -3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Polarized capacitor"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "cap capacitor"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_fp_filters" "CP_*"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "C_Polarized_0_1"
+        (rectangle
+          (start -2.286 0.508)
+          (end 2.286 1.016)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy -1.778 2.286)
+            (xy -0.762 2.286))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy -1.27 2.794)
+            (xy -1.27 1.778))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (rectangle
+          (start 2.286 -0.508)
+          (end -2.286 -1.016)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type outline))))
+      (symbol "C_Polarized_1_1"
+        (pin passive line
+          (at 0 3.81 270)
+          (length 2.794)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -3.81 90)
+          (length 2.794)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Device:D_Schottky"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 1.016)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "D"
+        (at 0 2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "D_Schottky"
+        (at 0 -2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Schottky diode"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "diode Schottky"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_fp_filters" "TO-???* *_Diode_* *SingleDiode* D_*"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "D_Schottky_0_1"
+        (polyline
+          (pts
+            (xy -1.905 0.635)
+            (xy -1.905 1.27)
+            (xy -1.27 1.27)
+            (xy -1.27 -1.27)
+            (xy -0.635 -1.27)
+            (xy -0.635 -0.635))
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.27 1.27)
+            (xy 1.27 -1.27)
+            (xy -1.27 0)
+            (xy 1.27 1.27))
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.27 0)
+            (xy -1.27 0))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "D_Schottky_1_1"
+        (pin passive line
+          (at -3.81 0 0)
+          (length 2.54)
+          (name "K"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 3.81 0 180)
+          (length 2.54)
+          (name "A"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Device:L_Iron"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 1.016)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "L"
+        (at -1.27 0 90)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "L_Iron"
+        (at 2.794 0 90)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Inductor with iron core"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "inductor choke coil reactor magnetic"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_fp_filters" "Choke_* *Coil* Inductor_* L_*"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "L_Iron_0_1"
+        (arc
+          (start 0 2.54)
+          (mid 0.6323 1.905)
+          (end 0 1.27)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (arc
+          (start 0 1.27)
+          (mid 0.6323 0.635)
+          (end 0 0)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (arc
+          (start 0 0)
+          (mid 0.6323 -0.635)
+          (end 0 -1.27)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (arc
+          (start 0 -1.27)
+          (mid 0.6323 -1.905)
+          (end 0 -2.54)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.016 2.54)
+            (xy 1.016 -2.54))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.524 -2.54)
+            (xy 1.524 2.54))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "L_Iron_1_1"
+        (pin passive line
+          (at 0 3.81 270)
+          (length 1.27)
+          (name "1"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -3.81 90)
+          (length 1.27)
+          (name "2"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Device:R"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "R"
+        (at 2.032 0 90)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "R"
+        (at 0 0 90)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at -1.778 0 90)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Resistor"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "R res resistor"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_fp_filters" "R_*"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "R_0_1"
+        (rectangle
+          (start -1.016 -2.54)
+          (end 1.016 2.54)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "R_1_1"
+        (pin passive line
+          (at 0 3.81 270)
+          (length 1.27)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -3.81 90)
+          (length 1.27)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:GND"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#PWR"
+        (at 0 -6.35 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "GND"
+        (at 0 -3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "global power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "GND_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 -1.27)
+            (xy 1.27 -1.27)
+            (xy 0 -2.54)
+            (xy -1.27 -1.27)
+            (xy 0 -1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "GND_1_1"
+        (pin power_in line
+          (at 0 0 270)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Reference_lm2596_to220_5_buck"
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "U1"
+        (at 0 12.7 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "LM2596T-ADJ"
+        (at 0 10.16 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical"
+        (at 0 11.43 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" "https://www.ti.com/lit/ds/symlink/lm2596.pdf"
+        (at 6.096 -24.892 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "3A Step-Down Switching Voltage Regulater, 4.5-42V Input, Adjustable Output, 500kHz Switching Frequency, SOIC-8"
+        (at 1.27 -11.684 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "DC/DC Buck Converter 3A"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_fp_filters" "TI*SO*PowerPAD*"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "Reference_lm2596_to220_5_buck_0_1"
+        (rectangle
+          (start -7.62 8.89)
+          (end 7.62 -6.35)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background))))
+      (symbol "Reference_lm2596_to220_5_buck_1_1"
+        (pin power_in line
+          (at -10.16 5.08 0)
+          (length 2.54)
+          (name "VIN"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin power_out line
+          (at 10.16 5.08 180)
+          (length 2.54)
+          (name "VOUT"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin power_in line
+          (at 2.54 -8.89 90)
+          (length 2.54)
+          (name "GND"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "3"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin input line
+          (at 10.16 0 180)
+          (length 2.54)
+          (name "FB"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "4"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin output line
+          (at -10.16 0 0)
+          (length 2.54)
+          (name "OFF"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "5"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Simulation_SPICE:VDC"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0.0254))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "V"
+        (at 2.54 2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "1"
+        (at 2.54 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Voltage source, DC"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Pins" "1=+ 2=-"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Type" "DC"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Device" "V"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "ki_keywords" "simulation"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "VDC_0_0"
+        (polyline
+          (pts
+            (xy -1.27 0.254)
+            (xy 1.27 0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy -0.762 -0.254)
+            (xy -1.27 -0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 0.254 -0.254)
+            (xy -0.254 -0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.27 -0.254)
+            (xy 0.762 -0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (text "+"
+          (at 0 1.905 0)
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (symbol "VDC_0_1"
+        (circle
+          (center 0 0)
+          (radius 2.54)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background))))
+      (symbol "VDC_1_1"
+        (pin passive line
+          (at 0 5.08 270)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -5.08 90)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no)))
+  (wire
+    (pts
+      (xy 120.65 62.23)
+      (xy 120.65 66.04))
+    (uuid "0a372d2d-c5c5-4c1c-989e-c9540d782847"))
+  (wire
+    (pts
+      (xy 105.41 50.8)
+      (xy 120.65 50.8))
+    (uuid "117170a1-4f75-4f30-a065-58e917c61ebd"))
+  (wire
+    (pts
+      (xy 74.93 55.88)
+      (xy 76.2 55.88))
+    (uuid "299816b4-832c-47b0-8977-7f34d8d14966"))
+  (wire
+    (pts
+      (xy 105.41 62.23)
+      (xy 105.41 64.77))
+    (uuid "2ce193bc-0746-4466-842e-22014d01d928"))
+  (wire
+    (pts
+      (xy 74.93 50.8)
+      (xy 83.82 50.8))
+    (uuid "35f2b847-f162-483c-80f6-08c1eadb4020"))
+  (wire
+    (pts
+      (xy 83.82 60.96)
+      (xy 83.82 63.5))
+    (uuid "399bc5d8-3def-4218-89b7-f231bb458b84"))
+  (wire
+    (pts
+      (xy 96.52 50.8)
+      (xy 105.41 50.8))
+    (uuid "3ba60151-ed7f-4ccc-8f10-15c5a611593b"))
+  (wire
+    (pts
+      (xy 88.9 50.8)
+      (xy 83.82 50.8))
+    (uuid "404f4e26-02f5-4866-a5a3-ad1ae0199c59"))
+  (wire
+    (pts
+      (xy 54.61 55.88)
+      (xy 46.99 55.88))
+    (uuid "5195e665-807b-4e65-9262-55cc68d082f9"))
+  (wire
+    (pts
+      (xy 105.41 64.77)
+      (xy 105.41 66.04))
+    (uuid "54b443eb-e5f2-4dd7-a2ee-f9c30de85332"))
+  (wire
+    (pts
+      (xy 105.41 50.8)
+      (xy 105.41 54.61))
+    (uuid "637f0e98-f9c9-44a0-bbad-3d53008b9294"))
+  (wire
+    (pts
+      (xy 83.82 50.8)
+      (xy 83.82 53.34))
+    (uuid "7167f76a-14d1-4386-9b01-eb4f556fd789"))
+  (wire
+    (pts
+      (xy 33.02 50.8)
+      (xy 54.61 50.8))
+    (uuid "7d3e83cf-0365-454b-b50f-5743f493932e"))
+  (wire
+    (pts
+      (xy 76.2 55.88)
+      (xy 76.2 77.47))
+    (uuid "87beeb40-fe88-42cc-a394-2ff59ec04d90"))
+  (wire
+    (pts
+      (xy 62.23 21.59)
+      (xy 68.58 21.59))
+    (uuid "8e8e722f-c534-4766-a55a-ab7029887cdf"))
+  (wire
+    (pts
+      (xy 46.99 55.88)
+      (xy 46.99 77.47))
+    (uuid "91c06fa4-5f72-4212-b783-81d361e17c41"))
+  (wire
+    (pts
+      (xy 97.79 64.77)
+      (xy 105.41 64.77))
+    (uuid "a74589d9-651f-492d-b3a3-425f6b72f5dd"))
+  (wire
+    (pts
+      (xy 25.4 50.8)
+      (xy 33.02 50.8))
+    (uuid "ae29ef73-3b34-4321-bfaf-43c564f16dda"))
+  (wire
+    (pts
+      (xy 97.79 77.47)
+      (xy 97.79 64.77))
+    (uuid "afb546e9-0cbf-4799-9c70-e204c542430a"))
+  (wire
+    (pts
+      (xy 67.31 64.77)
+      (xy 67.31 67.31))
+    (uuid "b889471a-912f-4222-8025-b00ffbe1aed3"))
+  (wire
+    (pts
+      (xy 105.41 73.66)
+      (xy 105.41 77.47))
+    (uuid "ba5a5a29-8917-4ab7-96ae-80f8bf3d1619"))
+  (wire
+    (pts
+      (xy 33.02 58.42)
+      (xy 33.02 50.8))
+    (uuid "c1328623-f1a5-450a-827a-f393047b4c1c"))
+  (wire
+    (pts
+      (xy 25.4 24.13)
+      (xy 29.21 24.13))
+    (uuid "d1695275-9490-4604-89d4-83902ca8df76"))
+  (wire
+    (pts
+      (xy 76.2 77.47)
+      (xy 97.79 77.47))
+    (uuid "d4c49353-3a4f-48ce-865d-1b62143e1c9d"))
+  (wire
+    (pts
+      (xy 120.65 54.61)
+      (xy 120.65 50.8))
+    (uuid "d84e03ef-b716-4427-9c03-2576dd7ffc85"))
+  (wire
+    (pts
+      (xy 64.77 24.13)
+      (xy 68.58 24.13))
+    (uuid "dcaf130f-84b2-4c00-b2cd-4dc5f5015207"))
+  (wire
+    (pts
+      (xy 120.65 50.8)
+      (xy 134.62 50.8))
+    (uuid "def0137a-5ae5-474f-b32c-7b17ad3d097b"))
+  (wire
+    (pts
+      (xy 25.4 21.59)
+      (xy 29.21 21.59))
+    (uuid "e73b9fb4-3a90-4f51-a7cc-3dd761113333"))
+  (wire
+    (pts
+      (xy 33.02 66.04)
+      (xy 33.02 77.47))
+    (uuid "f824b5fa-6f1b-47e9-be03-35aeda349003"))
+  (wire
+    (pts
+      (xy 104.14 17.78)
+      (xy 104.14 15.24))
+    (uuid "aa7c2d95-18b9-5129-a9b1-150bf9787c0d"))
+  (wire
+    (pts
+      (xy 104.14 27.94)
+      (xy 104.14 30.48))
+    (uuid "6295459f-3668-5b77-a810-75d8e5fb7b21"))
+  (wire
+    (pts
+      (xy 133.35 19.05)
+      (xy 133.35 15.24))
+    (uuid "2347ef2e-cc9f-5f8d-a650-30de0036d10b"))
+  (wire
+    (pts
+      (xy 133.35 26.67)
+      (xy 133.35 30.48))
+    (uuid "76d64824-a311-5a79-a986-7c13069ff1e9"))
+  (junction
+    (at 105.41 64.77)
+    (uuid "29e0a4d4-f776-4624-a580-0480537e02e0"))
+  (junction
+    (at 120.65 50.8)
+    (uuid "69f66109-07b3-4b3a-83b7-ef7fad4b3cf4"))
+  (junction
+    (at 83.82 50.8)
+    (uuid "6cbb559e-5d02-4929-9a49-a60b957673f0"))
+  (junction
+    (at 105.41 50.8)
+    (uuid "94d99bf7-c7c0-43ac-bafc-cf0c4d8c7fc4"))
+  (junction
+    (at 33.02 50.8)
+    (uuid "f13fdff4-005a-4e32-a487-380c200e2c22"))
+  (label "VIN"
+    (at 25.4 21.59 0)
+    (uuid "0ea5f3ee-1825-4518-a859-cffecdee0959")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VOUT"
+    (at 62.23 21.59 0)
+    (uuid "3d488a7b-b918-4861-afd9-627e875fab91")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VOUT"
+    (at 134.62 50.8 0)
+    (uuid "8fc1ad66-1f20-4574-92f7-df49214d4188")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VIN"
+    (at 25.4 50.8 0)
+    (uuid "bdc00a37-eeaf-4df9-b550-a9cbaf4dc724")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VIN"
+    (at 104.14 15.24 0)
+    (uuid "e150932b-82ab-5859-a5b8-61fb21ac1dcb")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VOUT"
+    (at 133.35 15.24 0)
+    (uuid "443c37ed-2f9d-533e-a983-f833a453b1c1")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (symbol
+    (lib_id "Device:C_Polarized")
+    (at 120.65 58.42 0)
+    (unit 1)
+    (uuid "01ffd356-2bd7-4e9a-a280-052047c674b3")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "cc695749-e400-4f07-b3a7-ca392237aa58"))
+    (pin "2"
+      (uuid "311d4d61-9802-42de-8723-40b6d4dcd28f"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "C2")
+          (unit 1))))
+    (property "Reference" "C2"
+      (at 124.46 56.2609 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "330uF"
+      (at 124.46 58.8009 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Capacitor_THT:CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal"
+      (at 121.6152 62.23 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Datasheet" ""
+      (at 120.65 58.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Polarized capacitor"
+      (at 120.65 58.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "OpenPE.SeriesResistance" "50m"
+      (at 120.65 58.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "OpenPE.InitialVoltage" "5"
+      (at 120.65 58.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 120.65 66.04 0)
+    (unit 1)
+    (uuid "171bcb3f-b4f8-4faf-b025-5226856a32aa")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "b20271b4-8338-4604-b4bc-57f246d7c43e"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR08")
+          (unit 1))))
+    (property "Reference" "#PWR08"
+      (at 120.65 72.39 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 120.65 71.12 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 120.65 66.04 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 120.65 66.04 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 120.65 66.04 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 83.82 63.5 0)
+    (unit 1)
+    (uuid "1c11bed0-942e-4293-a945-1b4cccae169b")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "fd531064-b0de-4699-8d6c-958b623b4f38"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR06")
+          (unit 1))))
+    (property "Reference" "#PWR06"
+      (at 83.82 69.85 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 83.82 68.58 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 83.82 63.5 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 83.82 63.5 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 83.82 63.5 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Device:R")
+    (at 105.41 58.42 0)
+    (unit 1)
+    (uuid "28121dda-4a6b-4392-bdd1-c7a0887c946c")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "ad61b7d3-1043-45f1-ae51-c0064512e311"))
+    (pin "2"
+      (uuid "c1cf86c2-cf14-492e-84d0-3839ffc3619b"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "R1")
+          (unit 1))))
+    (property "Reference" "R1"
+      (at 107.95 57.1499 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "3.09k"
+      (at 107.95 59.6899 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+      (at 103.632 58.42 90)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Datasheet" ""
+      (at 105.41 58.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Resistor"
+      (at 105.41 58.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Device:D_Schottky")
+    (at 83.82 57.15 270)
+    (unit 1)
+    (uuid "2e71c40c-1f66-43ef-8bf6-f2a70bcbdf81")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "e809c48e-ee89-4cc4-b3f7-95b40dd89145"))
+    (pin "2"
+      (uuid "edcd33e1-be2d-4fae-8b1a-2a8e07889cc5"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "D1")
+          (unit 1))))
+    (property "Reference" "D1"
+      (at 86.36 55.5624 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "D_Schottky"
+      (at 86.36 58.1024 90)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Diode_SMD:D_SMA"
+      (at 83.82 57.15 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 83.82 57.15 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Schottky diode"
+      (at 83.82 57.15 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 33.02 77.47 0)
+    (unit 1)
+    (uuid "40c5d16f-d079-46f5-b4cf-3646530dbdc5")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "aa05758a-b08c-4c2c-a50b-4530796c9124"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR02")
+          (unit 1))))
+    (property "Reference" "#PWR02"
+      (at 33.02 83.82 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 33.02 82.55 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 33.02 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 33.02 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 33.02 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Connector_Generic:Conn_01x02")
+    (at 34.29 21.59 0)
+    (unit 1)
+    (uuid "6f8993bc-e245-47a1-95b7-f013884753e3")
+    (exclude_from_sim yes)
+    (pin "2"
+      (uuid "98356cb5-ead7-4319-a1d0-55a8bc6f98c7"))
+    (pin "1"
+      (uuid "281d9e63-3a3c-42f2-aced-d86580506f6b"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "J1")
+          (unit 1))))
+    (property "Reference" "J1"
+      (at 36.83 21.5899 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "Conn_01x02"
+      (at 30.48 28.194 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal"
+      (at 34.29 21.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 34.29 21.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+      (at 34.29 21.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 105.41 77.47 0)
+    (unit 1)
+    (uuid "71db6b60-cbb0-40c4-98c9-6caee6875ddd")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "01651d27-eff7-4d57-91c5-befbe490b36d"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR07")
+          (unit 1))))
+    (property "Reference" "#PWR07"
+      (at 105.41 83.82 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 105.41 82.55 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 105.41 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 105.41 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 105.41 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Connector_Generic:Conn_01x02")
+    (at 73.66 21.59 0)
+    (unit 1)
+    (uuid "81b421da-aa98-4e46-ab21-46cb44e7cd69")
+    (exclude_from_sim yes)
+    (pin "2"
+      (uuid "f53086e6-7087-4ac3-a24a-22e8e1826f93"))
+    (pin "1"
+      (uuid "d58692d9-2527-4572-8a9c-11d50c18394a"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "J2")
+          (unit 1))))
+    (property "Reference" "J2"
+      (at 76.2 21.5899 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "Conn_01x02"
+      (at 69.85 28.194 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal"
+      (at 73.66 21.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 73.66 21.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+      (at 73.66 21.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 67.31 67.31 0)
+    (unit 1)
+    (uuid "934572ae-4096-4e47-8666-d877f3544ec9")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "3bd2ad2c-7ebf-4dd4-b734-6e5b48e09fbd"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR05")
+          (unit 1))))
+    (property "Reference" "#PWR05"
+      (at 67.31 73.66 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 67.31 72.39 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 67.31 67.31 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 67.31 67.31 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 67.31 67.31 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 46.99 77.47 0)
+    (unit 1)
+    (uuid "9972cf87-ccc5-4f2b-99d3-1765ad129ea1")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "65ce6bf0-39fd-48d7-bbab-cb95661172dc"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR04")
+          (unit 1))))
+    (property "Reference" "#PWR04"
+      (at 46.99 83.82 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 46.99 82.55 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 46.99 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 46.99 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 46.99 77.47 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Regulator_Switching:LM2596T-ADJ")
+    (lib_name "Reference_lm2596_to220_5_buck")
+    (at 64.77 55.88 0)
+    (unit 1)
+    (uuid "9b0f89c6-5d86-41c4-982a-5c8ac3493422")
+    (fields_autoplaced yes)
+    (pin "4"
+      (uuid "e58cb745-2553-4028-aedb-71879d09b30f"))
+    (pin "2"
+      (uuid "8a611ea7-217d-40f1-8d18-0ba52932964f"))
+    (pin "1"
+      (uuid "37c982fe-377b-4c40-b1cc-f3d805edcb2f"))
+    (pin "3"
+      (uuid "b5d2a2b6-56d7-47a7-b0c6-12c5b672cc90"))
+    (pin "5"
+      (uuid "a5cf4757-cba8-442a-99d3-5ff9dbed248e"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "U1")
+          (unit 1))))
+    (property "Reference" "U1"
+      (at 64.77 43.18 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "LM2596T-ADJ"
+      (at 64.77 45.72 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical"
+      (at 64.77 44.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Datasheet" "https://www.ti.com/lit/ds/symlink/lm2596.pdf"
+      (at 70.866 80.772 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "OpenPE-derived adjustable model based on the official TI LM2596 5 V model; internal feedback divider removed. Not a TI-issued ADJ model."
+      (at 66.04 67.564 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Sim.Device" "SUBCKT"
+      (at 64.77 55.88 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Name" "OPENPE_DERIVED_LM2596_ADJ_TRANS"
+      (at 64.77 55.88 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Library" "OpenPE:lm2596-adj-derived"
+      (at 64.77 55.88 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Pins" "1=1 4=2 2=3 3=4 5=5"
+      (at 64.77 55.88 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Device:C_Polarized")
+    (at 33.02 62.23 0)
+    (unit 1)
+    (uuid "d944341d-5881-4dd8-9d3c-7cc75735ff1d")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "e7ffbb1a-4754-496b-8051-588b104fb2dd"))
+    (pin "2"
+      (uuid "9b2c46e9-e08d-4bc8-b84e-5517255ccea4"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "C1")
+          (unit 1))))
+    (property "Reference" "C1"
+      (at 36.83 60.0709 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100uF"
+      (at 36.83 62.6109 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Capacitor_THT:CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal"
+      (at 33.9852 66.04 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Datasheet" ""
+      (at 33.02 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Polarized capacitor"
+      (at 33.02 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "OpenPE.SeriesResistance" "50m"
+      (at 33.02 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "OpenPE.InitialVoltage" "12"
+      (at 33.02 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Device:R")
+    (at 105.41 69.85 0)
+    (unit 1)
+    (uuid "e2ed6d02-e9b6-42ff-b01c-34d9246fd780")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "c627923f-5687-482e-a19d-78e64e9c8894"))
+    (pin "2"
+      (uuid "0d3df54b-8a5e-4f13-9cb2-61d9298dcc54"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "R2")
+          (unit 1))))
+    (property "Reference" "R2"
+      (at 107.95 68.5799 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "1.01k"
+      (at 107.95 71.1199 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" "Resistor_SMD:R_0805_2012Metric"
+      (at 103.632 69.85 90)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Datasheet" ""
+      (at 105.41 69.85 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Resistor"
+      (at 105.41 69.85 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 64.77 24.13 0)
+    (unit 1)
+    (uuid "f6ac8810-2fb1-4fba-a56e-88507a664d78")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "1831a5eb-049c-4eaa-b1c2-520a96e453a7"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR03")
+          (unit 1))))
+    (property "Reference" "#PWR03"
+      (at 64.77 30.48 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 64.77 29.21 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 64.77 24.13 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 64.77 24.13 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 64.77 24.13 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 25.4 24.13 0)
+    (unit 1)
+    (uuid "f782901d-2486-4ed2-a530-c020b5e27428")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "9e4e82e5-69bb-4fa1-b6c1-533c9fc8c6c8"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR01")
+          (unit 1))))
+    (property "Reference" "#PWR01"
+      (at 25.4 30.48 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "GND"
+      (at 25.4 29.21 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 25.4 24.13 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 25.4 24.13 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 25.4 24.13 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Device:L_Iron")
+    (at 92.71 50.8 90)
+    (unit 1)
+    (uuid "fd844e88-54f2-4ff8-b135-b2b655648a3d")
+    (fields_autoplaced yes)
+    (pin "1"
+      (uuid "332acc7b-9c80-4050-b2a6-d754d3cccb9c"))
+    (pin "2"
+      (uuid "f008552d-feb3-4af3-bc67-3770e497aa7d"))
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "L1")
+          (unit 1))))
+    (property "Reference" "L1"
+      (at 92.71 44.45 90)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "330uH"
+      (at 92.71 46.99 90)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" "Inductor_SMD:L_TDK_SLF7032"
+      (at 92.71 50.8 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" ""
+      (at 92.71 50.8 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Inductor with iron core"
+      (at 92.71 50.8 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "OpenPE.SeriesResistance" "50m"
+      (at 92.71 50.8 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Simulation_SPICE:VDC")
+    (at 104.14 22.86 0)
+    (unit 1)
+    (uuid "f2289c0e-e097-581a-a24d-610075c5da84")
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "V1")
+          (unit 1))))
+    (property "Reference" "V1"
+      (at 107.95 21.66 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "${SIM.PARAMS}"
+      (at 107.95 24.26 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Sim.Device" "V"
+      (at 104.14 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Type" "DC"
+      (at 104.14 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 104.14 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Params" "dc=12"
+      (at 104.14 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "Device:R")
+    (at 133.35 22.86 0)
+    (unit 1)
+    (uuid "da98cd80-587f-51a6-a32f-b7888704708a")
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "R3")
+          (unit 1))))
+    (property "Reference" "R3"
+      (at 135.636 21.66 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100"
+      (at 135.636 24.26 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Description" "Resistor"
+      (at 133.35 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Footprint" ""
+      (at 133.35 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 104.14 30.48 0)
+    (unit 1)
+    (uuid "98bd06e8-a874-58b5-a0f6-21b7ac57e8be")
+    (in_bom no)
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR1")
+          (unit 1))))
+    (property "Reference" "#PWR1"
+      (at 104.14 35.56 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "GND"
+      (at 104.14 35.56 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 104.14 30.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:GND")
+    (at 133.35 30.48 0)
+    (unit 1)
+    (uuid "9ae2ee54-1f6c-550f-a881-80e3a5c7f9e0")
+    (in_bom no)
+    (instances
+      (project "lm2596-to220-5-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#PWR2")
+          (unit 1))))
+    (property "Reference" "#PWR2"
+      (at 133.35 35.56 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "GND"
+      (at 133.35 35.56 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+      (at 133.35 30.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (generator_version "0.1"))

@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "filename": "lmr70503-bga8-buckboost.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_SIMULATION_MODELS": "[\"circuits/LMR70503.lib\"]"
+  }
+}

@@ -1,0 +1,22 @@
+.finishSketch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+.notice {
+  position: absolute;
+  z-index: 4;
+  left: 12px;
+  bottom: 54px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--font-small);
+  line-height: 1.5;
+  box-shadow: var(--shadow-panel);
+  overflow-wrap: anywhere;
+}

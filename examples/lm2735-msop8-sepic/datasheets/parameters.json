@@ -1,0 +1,286 @@
+{
+  "$schema": "../../../resources/example-catalog/ic-datasheet.schema.json",
+  "schema_version": "1.0.0",
+  "example": {
+    "id": "reference-lm2735-msop8-sepic",
+    "file": "lm2735-msop8-sepic",
+    "title": "LM2735 SEPIC",
+    "topology": "SEPIC"
+  },
+  "ic": {
+    "manufacturer": "Texas Instruments",
+    "family": "LM2735",
+    "reference": "U1",
+    "schematic_value": "LM2735Y",
+    "symbol_library_id": "Reference:lm2735-msop8-sepic",
+    "footprint": "Package_SO:MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm",
+    "package": "MSOP-8",
+    "datasheet_variant": "LM2735-Y, MSOP-PowerPAD (DGN), 8 pins"
+  },
+  "datasheet": {
+    "title": "LM2735 520-kHz and 1.6-MHz Space-Efficient Boost and SEPIC DC/DC Regulator",
+    "document_number": "SNVS485I",
+    "revision": "I",
+    "published_month": "2018-09",
+    "product_url": "https://www.ti.com/product/LM2735",
+    "source_url": "https://www.ti.com/lit/ds/symlink/lm2735.pdf",
+    "filename": "lm2735.pdf",
+    "sha256": "7564bb2f7164071f1c3971e935d19b47ae6a12891da12858004a9c48f907682e",
+    "bytes": 1571061,
+    "page_count": 61,
+    "downloaded_on": "2026-10-22"
+  },
+  "extraction": {
+    "method": "pdf_text_with_visual_table_review",
+    "reviewed_on": "2026-10-22",
+    "scope": "main_controller",
+    "notes": [
+      "The example uses LM2735Y (520 kHz typical), not LM2735X (1.6 MHz typical).",
+      "Feedback-voltage and switch-resistance entries use MSOP-PowerPAD specifications. Typical values are at TJ = 25 degC; specified limits are over the temperatures stated in each condition.",
+      "Peak switch-current limit is not an output-current rating; SEPIC output capability depends on input, output and external components."
+    ]
+  },
+  "parameters": {
+    "input_voltage": {
+      "category": "recommended_operating_condition",
+      "unit": "V",
+      "values": {
+        "min": 2.7,
+        "typ": null,
+        "max": 5.5
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "6.3 Recommended Operating Conditions",
+        "row": "VIN"
+      }
+    },
+    "output_voltage": {
+      "category": "feature",
+      "unit": "V",
+      "values": {
+        "min": 3,
+        "typ": null,
+        "max": 24
+      },
+      "conditions": "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+      "source": {
+        "page": 1,
+        "section": "1 Features",
+        "row": "Output voltage range"
+      },
+      "notes": "Feature range for the regulator family; the example is a SEPIC application. It is not a guaranteed output at every conversion ratio."
+    },
+    "operating_junction_temperature": {
+      "category": "recommended_operating_condition",
+      "unit": "degC",
+      "values": {
+        "min": -40,
+        "typ": null,
+        "max": 125
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "6.3 Recommended Operating Conditions",
+        "row": "Junction temperature"
+      }
+    },
+    "input_voltage_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "V",
+      "values": {
+        "min": -0.5,
+        "typ": null,
+        "max": 7
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "VIN"
+      }
+    },
+    "switch_voltage_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "V",
+      "values": {
+        "min": -0.5,
+        "typ": null,
+        "max": 26.5
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "SW voltage"
+      }
+    },
+    "junction_temperature_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "degC",
+      "values": {
+        "min": null,
+        "typ": null,
+        "max": 150
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "Junction temperature"
+      }
+    },
+    "storage_temperature": {
+      "category": "absolute_maximum_rating",
+      "unit": "degC",
+      "values": {
+        "min": -65,
+        "typ": null,
+        "max": 150
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "6.1 Absolute Maximum Ratings",
+        "row": "Storage temperature"
+      }
+    },
+    "feedback_reference_voltage": {
+      "category": "electrical_characteristic",
+      "unit": "V",
+      "values": {
+        "min": 1.22,
+        "typ": 1.255,
+        "max": 1.29
+      },
+      "conditions": "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. MSOP-PowerPAD package.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "VFB, MSOP-PowerPAD full-temperature row"
+      }
+    },
+    "switching_frequency": {
+      "category": "electrical_characteristic",
+      "unit": "Hz",
+      "values": {
+        "min": 360000,
+        "typ": 520000,
+        "max": 680000
+      },
+      "conditions": "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "FSW, LM2735-Y"
+      }
+    },
+    "switch_current_limit": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": 2.1,
+        "typ": 3,
+        "max": null
+      },
+      "conditions": "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "ICL"
+      }
+    },
+    "quiescent_current": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": 0.0034,
+        "max": 0.007
+      },
+      "conditions": "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Switching enabled.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "IQ switching, LM2735-Y"
+      }
+    },
+    "shutdown_current": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": 8e-8,
+        "max": null
+      },
+      "conditions": "VIN = 5 V, VEN = 0 V; typical at TJ = 25 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "IQ shutdown"
+      }
+    },
+    "switch_on_resistance": {
+      "category": "electrical_characteristic",
+      "unit": "Ohm",
+      "values": {
+        "min": null,
+        "typ": 0.17,
+        "max": 0.33
+      },
+      "conditions": "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. MSOP-PowerPAD package.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "RDS(ON), SOT-23 and MSOP-PowerPAD"
+      }
+    },
+    "maximum_duty_cycle": {
+      "category": "electrical_characteristic",
+      "unit": "1",
+      "values": {
+        "min": 0.91,
+        "typ": 0.99,
+        "max": null
+      },
+      "conditions": "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "DMAX, LM2735-Y"
+      }
+    },
+    "soft_start_time": {
+      "category": "electrical_characteristic",
+      "unit": "s",
+      "values": {
+        "min": null,
+        "typ": 0.004,
+        "max": null
+      },
+      "conditions": "VIN = 5 V; typical at TJ = 25 degC.",
+      "source": {
+        "page": 5,
+        "section": "6.5 Electrical Characteristics",
+        "row": "SS"
+      }
+    },
+    "thermal_shutdown_temperature": {
+      "category": "electrical_characteristic",
+      "unit": "degC",
+      "values": {
+        "min": null,
+        "typ": 160,
+        "max": null
+      },
+      "conditions": "VIN = 5 V; typical thermal shutdown threshold; it is not the permitted continuous operating temperature.",
+      "source": {
+        "page": 6,
+        "section": "6.5 Electrical Characteristics",
+        "row": "TSD"
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+.dialog {
+  width: 480px;
+}
+
+.dialog :global(.dialog-header) {
+  gap: 12px;
+  padding: 24px 24px 12px;
+  border-bottom: 0;
+  background: var(--surface);
+}
+
+.dialog :global(.dialog-icon) {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.dialog :global(.dialog-header h2) {
+  font-size: calc(var(--font-heading) + 10px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.dialog :global(.dialog-header .icon-button) {
+  align-self: flex-start;
+  margin: -8px -8px 0 0;
+}
+
+.dialog :global(.dialog-content) {
+  padding: 0 24px 24px;
+  scrollbar-gutter: auto;
+}
+
+.introduction {
+  margin: 4px 0 24px;
+}
+
+.descriptor {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--font-body);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.description {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--font-control);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

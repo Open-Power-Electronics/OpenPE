@@ -1,0 +1,322 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readdir, readFile, writeFile, rm, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { ProjectHistory } from '../server/project-history.mjs';
+import { createExampleTemplate } from '../server/example-template.mjs';
+import { compareProjectVersions } from '../lib/project-history';
+import {
+  appendSchematic,
+  serializeProject,
+  parseProject,
+  projectNativeFiles,
+} from '../lib/project';
+import { exampleProject } from '../lib/project-example';
+
+const { FileGrants } = createRequire(import.meta.url)('../electron/file-grants.cjs');
+async function setup() {
+  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-history-'));
+  const grants = new FileGrants();
+  const file = path.join(dir, 'design.kicad_pro');
+  const id = grants.create(file);
+  const history = new ProjectHistory(dir, grants);
+  return { dir, file, id, history, grants };
+}
+
+test('example template receipts avoid duplicate validation only for their exact private source', async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-history-receipt-'));
+  const grants = new FileGrants();
+  const id = grants.create(path.join(dir, 'examples', 'emc-flyback', 'emc-flyback.kicad_pro'));
+  grants.markLocalExample(id);
+  const history = new ProjectHistory(dir, grants);
+  t.after(async () => {
+    history.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const template = createExampleTemplate(serializeProject(exampleProject()));
+  let validations = 0;
+  const canonical = history.canonical.bind(history);
+  history.canonical = (source: string) => {
+    validations++;
+    return canonical(source);
+  };
+  const personal = grants.create(path.join(dir, 'personal.kicad_pro'));
+  await assert.rejects(
+    history.ensureExampleInitial(personal, template.source, false, template.receipt),
+    /Only an example/,
+  );
+  await history.ensureExampleInitial(id, template.source, false, template.receipt);
+  assert.equal(validations, 0);
+  await history.ensureExampleInitial(id, template.source, false, Object.freeze({}));
+  assert.equal(validations, 1, 'Caller freezing cannot forge validation receipts.');
+  await history.ensureExampleInitial(id, template.source + '\n', false, template.receipt);
+  assert.equal(validations, 2, 'Different source text receives complete canonical validation.');
+  await assert.rejects(history.ensureExampleInitial(id, '{', false, template.receipt));
+  assert.equal(validations, 3);
+  const versions = await history.list(id);
+  assert.equal(versions.commits.length, 1);
+  assert.equal(await history.read(id, versions.commits[0].id), template.source);
+});
+
+test('unchanged example seeds verify in two Git processes while preserving private personal history', async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'openpe-history-seed-'));
+  const grants = new FileGrants();
+  const id = grants.create(path.join(dir, 'examples', 'emc-flyback', 'emc-flyback.kicad_pro'));
+  grants.markLocalExample(id);
+  const history = new ProjectHistory(dir, grants);
+  t.after(async () => {
+    history.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const project = exampleProject();
+  const source = serializeProject(project);
+  await history.ensureExampleInitial(id, source);
+  const initial = (await history.list(id)).commits[0].id;
+  const commands: string[][] = [];
+  const run = history.run.bind(history);
+  history.run = async (...args: Parameters<typeof run>) => {
+    commands.push(args[1]);
+    return run(...args);
+  };
+  await history.ensureExampleInitial(id, source);
+  assert.deepEqual(
+    commands.map((command) => command[0]),
+    ['for-each-ref', 'ls-tree'],
+    'Unchanged seeds verify ref/commit metadata and the actual stored tree.',
+  );
+  assert.equal((await history.list(id)).commits[0].id, initial);
+  assert.equal(await history.read(id, initial), source);
+
+  const repo = await history.withProject(id, async (directory: string) => directory);
+  assert.equal(path.dirname(repo), path.join(dir, 'project-history-v1'));
+  const tree = (await run(repo, ['rev-parse', `${initial}^{tree}`])).text.trim();
+  assert.match(tree, /^[0-9a-f]{40}$/);
+  const treeFile = path.join(repo, 'objects', tree.slice(0, 2), tree.slice(2));
+  const storedTree = await readFile(treeFile);
+  await unlink(treeFile);
+  try {
+    await assert.rejects(history.ensureExampleInitial(id, source), /Git failed/);
+  } finally {
+    await writeFile(treeFile, storedTree, { flag: 'wx' });
+  }
+
+  project.schematic.parts[0].value = '4.7k';
+  const changed = serializeProject(project);
+  await run(repo, ['update-ref', 'refs/heads/keep', initial]);
+  await history.ensureExampleInitial(id, changed);
+  assert.equal(await history.head(repo), initial, 'Extra refs protect an existing history.');
+  await run(repo, ['update-ref', '-d', 'refs/heads/keep']);
+  await history.ensureExampleInitial(id, changed);
+  const refreshed = (await history.list(id)).commits;
+  assert.equal(refreshed.length, 1);
+  assert.notEqual(refreshed[0].id, initial);
+  assert.equal(await history.read(id, refreshed[0].id), changed);
+
+  await history.create(id, source, 'Personal version');
+  await history.ensureExampleInitial(id, changed);
+  assert.deepEqual(
+    (await history.list(id)).commits.map((entry: { message: string }) => entry.message),
+    ['Personal version', 'init'],
+  );
+});
+
+test('real Git snapshots preserve complete projects and restart history without writing design files', async () => {
+  const { dir, file, id, history, grants } = await setup();
+  const project = appendSchematic(exampleProject()).project;
+  project.extensions.historyTest = { note: 'Ω 中文', enabled: true };
+  const source = serializeProject(project);
+  const native = projectNativeFiles(project, path.basename(file));
+  const nativeSource = native.files.find((item) => item.name === native.entry)!.source;
+  await writeFile(file, nativeSource);
+  const first = await history.create(id, source, 'Initial design');
+  project.schematic.parts[0].value = '4.7k';
+  project.additionalSchematics![0].title = 'Control';
+  project.pcb!.thickness = 2;
+  project.extensions.historyTest = { note: 'Updated' };
+  const edited = serializeProject(project);
+  const second = await history.create(id, edited, 'Tune resistor');
+  assert.notEqual(first.id, second.id);
+  assert.equal(
+    await readFile(file, 'utf8'),
+    nativeSource,
+    'Version creation never writes the destination.',
+  );
+  history.close();
+  const reopened = new ProjectHistory(dir, grants);
+  const page = await reopened.list(id);
+  assert.match(page.version, /^git version/);
+  assert.deepEqual(
+    page.commits.map((entry: { message: string }) => entry.message),
+    ['Tune resistor', 'Initial design'],
+  );
+  assert.equal(await reopened.read(id, first.id), source);
+  assert.equal(await reopened.read(id, second.id), edited);
+  const restored = parseProject(await reopened.read(id, first.id));
+  assert.deepEqual(restored.pcb, parseProject(source).pcb);
+  assert.deepEqual(restored.extensions, JSON.parse(source).extensions);
+  assert.equal(restored.additionalSchematics?.length, 1);
+  await assert.rejects(reopened.create(id, edited, 'Duplicate'), /matches the latest/);
+  assert.equal((await reopened.list(id)).commits.length, 2);
+  assert.equal((await readdir(dir)).includes('.git'), false);
+  reopened.close();
+});
+
+test('native grants isolate histories and reject paths, revisions, invalid data and unavailable Git', async () => {
+  const { id, history, grants, dir } = await setup();
+  const source = serializeProject(exampleProject());
+  await assert.rejects(history.list('C:\\arbitrary.kicad_pro'), /grant/);
+  assert.equal((await history.list(grants.create())).needsSave, true);
+  await assert.rejects(history.create(id, '{', 'Bad source'));
+  await assert.rejects(history.create(id, source, 'bad\nname'), /one line/);
+  await assert.rejects(history.create(id, ' '.repeat(8_000_001), 'Too large'), /8 MB/);
+  await assert.rejects(history.read(id, '--exec=bad'), /Invalid version/);
+  const first = await history.create(id, source, 'First');
+  const other = grants.create(path.join(dir, 'other.kicad_pro'));
+  const project = exampleProject();
+  await history.create(other, serializeProject(project), 'Other');
+  await assert.rejects(history.read(other, first.id));
+  assert.equal((await history.list(other)).commits.length, 1);
+  grants.assign(id, path.join(dir, 'saved-as.kicad_pro'));
+  assert.equal(
+    (await history.list(id)).commits.length,
+    0,
+    'Save as has an independent destination history.',
+  );
+  grants.release(other);
+  await assert.rejects(history.list(other), /grant/);
+  const missing = new ProjectHistory(dir, grants, { executable: path.join(dir, 'missing-git') });
+  await assert.rejects(missing.list(id), /Install Git and restart OpenPE/);
+  missing.close();
+  history.close();
+  await assert.rejects(history.create(id, source, 'Shutdown'), /shutting down/);
+});
+
+test('history operations reject overlap, preserve prior commits on invalid snapshots and ignore inherited Git configuration', async () => {
+  const { history, id, dir } = await setup();
+  const oldConfig = process.env.GIT_CONFIG_COUNT;
+  process.env.GIT_CONFIG_COUNT = 'invalid';
+  try {
+    const source = serializeProject(exampleProject());
+    const creation = history.create(id, source, 'Initial');
+    await assert.rejects(history.create(id, source, 'Overlapping'), /already running/);
+    await creation;
+    const invalid = JSON.parse(source);
+    invalid.schematic.components[0].footprints[0].pads[0].netId =
+      '00000000-0000-4000-8000-000000000000';
+    await assert.rejects(history.create(id, JSON.stringify(invalid), 'Broken links'));
+    assert.equal((await history.list(id)).commits.length, 1);
+    const [repo] = (await readdir(path.join(dir, 'project-history-v1'))).filter((name) =>
+      name.endsWith('.git'),
+    );
+    const corrupt = JSON.stringify({ format: 'openpe', version: 99 });
+    const repository = path.join(dir, 'project-history-v1', repo);
+    const blob = (
+      await history.run(repository, ['hash-object', '-w', '--stdin'], corrupt)
+    ).text.trim();
+    const tree = (
+      await history.run(repository, ['mktree'], `100644 blob ${blob}\tproject.openpe.json\n`)
+    ).text.trim();
+    const parent = await history.head(repository);
+    const commit = (
+      await history.run(
+        repository,
+        ['commit-tree', tree, '-p', parent],
+        'Invalid historical format\n',
+      )
+    ).text.trim();
+    await history.run(repository, ['update-ref', 'refs/heads/main', commit, parent]);
+    await assert.rejects(history.read(id, commit), /version|format|project/i);
+  } finally {
+    if (oldConfig === undefined) delete process.env.GIT_CONFIG_COUNT;
+    else process.env.GIT_CONFIG_COUNT = oldConfig;
+    history.close();
+  }
+});
+
+test('native comparisons ignore derived net UUIDs and file-set order while retaining complete content', () => {
+  const before = {
+    nativeFiles: {
+      entry: 'circuit.kicad_pro',
+      files: [
+        { name: 'circuit.kicad_pro', source: '{"text_variables":{"NOTE":"Retain"}}' },
+        { name: 'circuit.kicad_sch', source: '(kicad_sch (title_block (title "Circuit")))' },
+        { name: 'notes.txt', source: 'Retained auxiliary text', encoding: 'latin1' },
+      ],
+    },
+    schematic: {
+      components: [
+        { id: 'r1', footprints: [{ id: 'f1', pads: [{ id: 'p1', netId: 'old-net' }] }] },
+      ],
+      nets: [{ id: 'old-net', name: 'OUT', pcb: { order: 0, tracks: [{ id: 't1', width: 0.5 }] } }],
+    },
+    extensions: { netId: 'old-net' },
+  };
+  const after = structuredClone(before);
+  after.nativeFiles.files.reverse();
+  after.schematic.nets[0].id = 'reopened-net';
+  after.schematic.components[0].footprints[0].pads[0].netId = 'reopened-net';
+  const compare = () => compareProjectVersions(JSON.stringify(before), JSON.stringify(after));
+  assert.deepEqual(compare(), { differences: [], truncated: false });
+  after.nativeFiles.files.find((file) => file.name === 'notes.txt')!.source =
+    'Edited auxiliary text';
+  assert.equal(compare().differences.length, 1, 'Native supporting file bytes remain comparable.');
+  after.nativeFiles.files = structuredClone(before.nativeFiles.files);
+  after.schematic.nets[0].pcb.tracks[0].width = 0.6;
+  assert.equal(compare().differences.length, 1, 'Copper geometry remains comparable.');
+  after.schematic.nets[0].pcb.tracks[0].width = 0.5;
+  after.schematic.nets[0].name = 'OUTPUT';
+  assert.ok(compare().differences.length > 0, 'Renaming a network remains a design difference.');
+  after.schematic.nets[0].name = 'OUT';
+  after.extensions.netId = 'reopened-net';
+  assert.equal(compare().differences.length, 1, 'Unrelated extension values are never remapped.');
+  const privateBefore = { ...before, nativeFiles: undefined };
+  const privateAfter = { ...after, nativeFiles: undefined, extensions: before.extensions };
+  assert.ok(
+    compareProjectVersions(JSON.stringify(privateBefore), JSON.stringify(privateAfter)).differences
+      .length > 0,
+    'Unbacked snapshot identities retain their exact comparison.',
+  );
+});
+
+test('project comparisons match stable IDs, cover PCB/extensions and bound large previews', () => {
+  const a = {
+    schematic: {
+      components: [
+        { id: 'a', reference: 'R1', value: '1k' },
+        { id: 'b', reference: 'R2', value: '2k' },
+      ],
+    },
+    pcb: { thickness: 1.6 },
+    extensions: { 'a/b~c': 1 },
+  };
+  const b = structuredClone(a);
+  b.schematic.components.unshift({ id: 'c', reference: 'R3', value: '3k' });
+  b.schematic.components[1].value = '4k';
+  b.pcb.thickness = 2;
+  b.extensions['a/b~c'] = 2;
+  const comparison = compareProjectVersions(JSON.stringify(a), JSON.stringify(b));
+  assert.equal(comparison.differences.length, 4);
+  assert.ok(
+    comparison.differences.some(
+      (d) => d.path.includes('R1 (a)/value') && d.before === '"1k"' && d.after === '"4k"',
+    ),
+  );
+  assert.ok(comparison.differences.some((d) => d.kind === 'added' && d.path.includes('R3 (c)')));
+  assert.ok(comparison.differences.some((d) => d.path === '/pcb/thickness'));
+  assert.ok(comparison.differences.some((d) => d.path === '/extensions/a~1b~0c'));
+  assert.equal(compareProjectVersions(JSON.stringify(a), JSON.stringify(b), 2).truncated, true);
+  assert.equal(compareProjectVersions(JSON.stringify(a), JSON.stringify(a)).differences.length, 0);
+  const reordered = structuredClone(a);
+  reordered.schematic.components.reverse();
+  assert.match(
+    compareProjectVersions(JSON.stringify(a), JSON.stringify(reordered)).differences[0].path,
+    /order$/,
+  );
+  assert.equal(
+    compareProjectVersions('{"extensions":{"__proto__":null}}', '{"extensions":{}}').differences[0]
+      .kind,
+    'removed',
+  );
+});

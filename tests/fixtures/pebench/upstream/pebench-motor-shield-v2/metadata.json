@@ -1,0 +1,107 @@
+{
+  "id": "008_Adafruit_Motor_Shield_V2",
+  "category_zh": "TB6612 多通道电机功率驱动器",
+  "repository": "adafruit/Adafruit-Motor-Shield-V2-PCB",
+  "source_url": "https://github.com/adafruit/Adafruit-Motor-Shield-V2-PCB",
+  "commit_sha": "ff0173e93d24c1c93d48a2427d4642259dd8ec45",
+  "commit_url": "https://github.com/adafruit/Adafruit-Motor-Shield-V2-PCB/commit/ff0173e93d24c1c93d48a2427d4642259dd8ec45",
+  "upstream_commit_date": "2019-06-14T20:27:51Z",
+  "retrieved_date": "2026-10-15",
+  "retrieved_timezone": "Asia/Shanghai",
+  "archive_url": "https://codeload.github.com/adafruit/Adafruit-Motor-Shield-V2-PCB/zip/ff0173e93d24c1c93d48a2427d4642259dd8ec45",
+  "archive_sha256": "17cf27df2021b2f4d9721e2bb52eee9f171fcd31d8136e310def3fa8cb6e7652",
+  "source_file_count": 7,
+  "pcb_candidates": [
+    "Adafruit Motor Shield v2.3.brd",
+    "Adafruit Motor Shield v2.brd"
+  ],
+  "schematic_candidates": [
+    "Adafruit Motor Shield v2.3.sch",
+    "Adafruit Motor Shield v2.sch"
+  ],
+  "license_candidates": [
+    "license.txt"
+  ],
+  "status": "converted_and_structurally_verified_drc_review_required",
+  "selected_source_pcb": "Adafruit Motor Shield v2.3.brd",
+  "selected_source_schematic": "Adafruit Motor Shield v2.3.sch",
+  "converted_pcb": "kicad10/board.kicad_pcb",
+  "kicad_version": "10.0.1",
+  "statistics": {
+    "footprints": 55,
+    "pads": 237,
+    "tracks": 464,
+    "vias": 152,
+    "zones": 3,
+    "copper_layers": 2,
+    "nets_used": 64,
+    "board_width_mm": 68.63,
+    "board_height_mm": 53.39
+  },
+  "validation_report": "validation/conversion.json",
+  "source_pcb_sha256": "f4857ea288f022d48d4b91baca10aa388cab2063eed16279fe70e7ac6c277534",
+  "converted_pcb_sha256": "7c71884fd4af86252cc364b60c199efaf0a6a587221e20ef48ceabda46cc4e40",
+  "schematic_status": "Original editable schematic preserved; not converted to KiCad 10",
+  "title": "Motor Shield v2.3",
+  "design_attribution": "Adafruit / ladyada",
+  "hardware_license": "CC-BY-SA-3.0",
+  "license_evidence": "source/license.txt",
+  "product_or_author_url": "https://www.adafruit.com/product/1438",
+  "pcb_file_commit_authors": [
+    "ladyada"
+  ],
+  "latest_pcb_file_commit": "4a95b19e91f4e1c257e675c3e7a80ccd7b568119",
+  "latest_pcb_file_change": "2016-10-26T20:06:35Z",
+  "quality_evidence": "官方产品；README 说明板卡由 Adafruit 组装并测试，选定板文件由 ladyada 提交。",
+  "human_design_assessment": "High-confidence professional human/team provenance; not proof that every trace was manually routed.",
+  "quality_status": "Source-vetted engineering reference; conversion verified; DRC review required before manufacturing or zero-violation benchmark use.",
+  "drc": {
+    "violations": 273,
+    "unconnected_items": 2,
+    "severity_counts": {
+      "error": 32,
+      "warning": 243
+    },
+    "type_counts": {
+      "tracks_crossing": 1,
+      "shorting_items": 1,
+      "copper_edge_clearance": 2,
+      "starved_thermal": 4,
+      "solder_mask_bridge": 22,
+      "via_dangling": 114,
+      "silk_edge_clearance": 6,
+      "text_height": 14,
+      "text_thickness": 15,
+      "silk_overlap": 69,
+      "silk_over_copper": 25,
+      "unconnected_items": 2
+    },
+    "basis": "Standalone-board KiCad defaults/imported board settings; zones refilled in memory; source project rule equivalence not established.",
+    "zero_drc": false
+  },
+  "source_file_hashes_verified": true,
+  "source_to_output_audit": "validation/source_to_output_audit.json",
+  "acceptance_review": {
+    "id": "008_Adafruit_Motor_Shield_V2",
+    "functional_footprints_estimate": 42,
+    "decision": "drc_revalidation_pending",
+    "drc_errors": 32,
+    "unconnected": 2,
+    "report": "boards\\008_Adafruit_Motor_Shield_V2\\validation\\drc.json",
+    "drc_types": {
+      "error:tracks_crossing": 1,
+      "error:shorting_items": 1,
+      "error:copper_edge_clearance": 2,
+      "error:starved_thermal": 4,
+      "error:solder_mask_bridge": 22,
+      "warning:via_dangling": 114,
+      "warning:silk_edge_clearance": 6,
+      "warning:text_height": 14,
+      "warning:text_thickness": 15,
+      "warning:silk_overlap": 69,
+      "warning:silk_over_copper": 25,
+      "error:unconnected_items": 2
+    }
+  },
+  "qualified_under_2026_10_15_gate": false
+}

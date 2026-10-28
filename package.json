@@ -1,0 +1,207 @@
+{
+  "name": "openpe",
+  "version": "0.1.0",
+  "description": "Local electrical engineering studio",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "postinstall": "install-electron",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "next dev --hostname 127.0.0.1 --port 3000",
+    "build": "npm run examples:prepare && npm run simulation:prepare && npm run thermal:prepare && next build",
+    "start": "electron .",
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
+    "pretypecheck": "npm run check:architecture",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "test:e2e": "node scripts/e2e.mjs && node scripts/e2e-project.mjs && node scripts/e2e-sessions.mjs && node scripts/e2e-permissions.mjs && node scripts/e2e-libraries.mjs && node scripts/e2e-workspace.mjs",
+    "package": "npm run build && electron-builder --win dir",
+    "examples": "node scripts/build-emc-flyback-assets.mjs && tsx scripts/build-reference-examples.ts && tsx scripts/build-emc-flyback-example.ts",
+    "examples:emc-flyback": "node scripts/build-emc-flyback-assets.mjs && tsx scripts/build-emc-flyback-example.ts",
+    "examples:prepare": "npm run build:format && npm run simulation:download-examples && tsx scripts/prepare-default-examples.ts",
+    "fixtures:generate": "tsx scripts/build-kicad-examples.ts && tsx scripts/examples.ts && tsx scripts/build-ti-examples.ts",
+    "examples:check-models": "node scripts/check-reference-models.mjs",
+    "datasheets:download": "node scripts/example-datasheets.mjs --download",
+    "datasheets:check": "node scripts/example-datasheets.mjs --verify",
+    "build:format": "node scripts/build-format.mjs",
+    "pretest": "npm run check:architecture && npm run build:format",
+    "prebuild": "npm run check:architecture",
+    "libraries:download": "node scripts/download-libraries.mjs && node scripts/download-parser-source.mjs",
+    "libraries:download-models": "node scripts/download-kicad-models.mjs",
+    "prepackage": "npm run libraries:download",
+    "libraries:verify": "node scripts/verify-libraries.mjs",
+    "simulation:prepare": "node scripts/prepare-ngspice.mjs",
+    "simulation:verify": "node scripts/prepare-ngspice.mjs --verify",
+    "simulation:build-models": "tsx scripts/build-buck-model.ts",
+    "simulation:build-examples": "node scripts/prepare-example-models.mjs && tsx scripts/build-example-simulation.ts && npm run build:format",
+    "simulation:check-examples": "tsx scripts/check-example-simulations.ts",
+    "simulation:build-emc-flyback": "tsx scripts/build-emc-flyback-simulation.ts && npm run build:format",
+    "simulation:check-emc-flyback": "tsx scripts/check-emc-flyback-simulation.ts",
+    "simulation:download-examples": "tsx scripts/download-example-models.ts",
+    "thermal:prepare": "node scripts/prepare-thermal.mjs",
+    "thermal:verify": "node scripts/prepare-thermal.mjs --verify",
+    "thermal:check-example": "tsx scripts/check-thermal-example.ts",
+    "thermal:check-emc-flyback": "tsx scripts/check-emc-flyback-thermal.ts",
+    "thermal:check-emc-flyback-ui": "node scripts/check-emc-flyback-thermal-ui.mjs",
+    "cad:check-model": "tsx scripts/check-model-cad.ts"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "occt-import-js": "0.0.23"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.14",
+    "@lezer/highlight": "^1.2.5",
+    "@types/clipper-lib": "6.4.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "ajv": "8.20.0",
+    "clipper-lib": "6.4.2",
+    "electron": "45.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "0.28.2",
+    "katex": "^0.16.47",
+    "lucide-react": "^0.468.0",
+    "next": "16.4.2",
+    "playwright": "^1.56.0",
+    "prettier": "^3.9.10",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "sharp": "^0.35.5",
+    "tar": "^7.5.22",
+    "three": "^0.186.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "unified": "^11.0.5",
+    "yauzl": "2.10.0"
+  },
+  "build": {
+    "appId": "ai.openpe.desktop",
+    "productName": "OpenPE",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "electron/**/*",
+      "resources/example-catalog/manifest.json",
+      "resources/example-catalog/home-manifest.json",
+      "resources/example-catalog/emc-flyback-assets.json",
+      "resources/example-catalog/sources/emc-flyback/LICENSE",
+      "resources/example-catalog/sources/emc-flyback/design/EMC_Demo.pretty/**/*",
+      "resources/example-catalog/sources/emc-flyback/design/EMC_Demo.3dshapes/**/*",
+      "resources/example-catalog/footprints/**/*",
+      "server/**/*",
+      "LICENSE",
+      "package.json"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "build/openpe.ico",
+      "signAndEditExecutable": true,
+      "signExecutable": false
+    },
+    "extraResources": [
+      {
+        "from": "examples",
+        "to": "examples-native",
+        "filter": [
+          "**/*",
+          "!**/spice/**",
+          "!**/thermal/**",
+          "!**/.*",
+          "!**/.*/**",
+          "!**/history.git/**",
+          "!**/node_modules/**",
+          "!**/cache/**",
+          "!**/simulation-cache/**",
+          "!**/*-backups/**",
+          "!**/*.kicad_prl",
+          "!**/*.pem",
+          "!**/*.key",
+          "!**/*.pfx",
+          "!**/*.p12"
+        ]
+      },
+      {
+        "from": "resources/thermal/1",
+        "to": "thermal/1",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/example-catalog/simulation/models",
+        "to": "simulation-examples/models",
+        "filter": [
+          "*.lib"
+        ]
+      },
+      {
+        "from": "public/licenses/ti-models.txt",
+        "to": "simulation-examples/NOTICE.txt"
+      },
+      {
+        "from": "resources/kicad/10.0.0",
+        "to": "kicad/10.0.0",
+        "filter": [
+          "**/*",
+          "!**/.git/**"
+        ]
+      },
+      {
+        "from": "resources/third-party-source",
+        "to": "third-party-source",
+        "filter": [
+          "occt-import-js-0.0.23.tar.gz",
+          "opencascade-d2abb6d-source.tar.gz",
+          "manifest.json",
+          "README.txt",
+          "ngspice-47.tar.gz",
+          "libsndfile-1.2.2.tar.gz",
+          "libsamplerate-0.2.2.tar.gz"
+        ]
+      },
+      {
+        "from": "resources/ngspice/47",
+        "to": "ngspice/47",
+        "filter": [
+          "Spice64/bin/ngspice_con.exe",
+          "Spice64/bin/libomp140.x86_64.dll",
+          "Spice64/bin/sndfile.dll",
+          "Spice64/bin/samplerate.dll",
+          "Spice64/lib/ngspice/analog.cm",
+          "Spice64/lib/ngspice/digital.cm",
+          "Spice64/lib/ngspice/spice2poly.cm",
+          "Spice64/lib/ngspice/table.cm",
+          "Spice64/lib/ngspice/tlines.cm",
+          "Spice64/lib/ngspice/xtradev.cm",
+          "Spice64/lib/ngspice/xtraevt.cm",
+          "Spice64/docs/COPYING",
+          "Spice64/docs/AUTHORS",
+          "Spice64/share/ngspice/scripts/spinit",
+          "manifest.json",
+          "SOURCE-NOTICE.txt"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/occt-import-js/**/*"
+    ]
+  }
+}

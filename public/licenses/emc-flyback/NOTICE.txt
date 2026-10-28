@@ -1,0 +1,8 @@
+EMC Flyback demonstration
+Source: https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo
+Authors: Chengmin Li and AI-PCB-layout contributors. Original design credits TU/e EPE and Claude.
+License: Creative Commons Attribution 4.0 International (LICENSE.txt).
+
+OpenPE converts the native project to KiCad 10, decomposes one rectangular custom pad into an exact same-number rectangle union, splits multi-layer keepouts by layer and stabilizes newly generated UUIDs. Original electrical geometry, copper and source UUIDs are retained. SPICE uses the upstream approximate behavioural controller and fitted device models; thermal analysis uses supported full-resolution average terminal power into PCB pads.
+
+Copied KiCad symbols, packages and STEP models retain CC BY-SA 4.0 with the KiCad library exception; see ../kicad-libraries.txt and the original model-source README. Three manufacturer STEP files are not redistributed by upstream and are not substituted.

@@ -1,0 +1,149 @@
+# OpenPE engineering contract
+
+Build **OpenPE · Electrical Engineering Studio**, a local desktop workbench with Agent conversation on the left and editable power-electronics design on the right. This file defines engineering obligations; [DESIGN.md](DESIGN.md) defines visible behaviour. Read the relevant contracts before editing, verify them against the current working tree, and replace obsolete rules rather than appending exceptions, history or plans. Maintained documentation and UI copy are English; preserve standard electrical symbols, references and units.
+
+## Read by responsibility
+
+| Work                                                          | Owning contract                                                                                       |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Setup, commands and product scope                             | [README](README.md)                                                                                   |
+| Visual style, controls, gestures, focus and panels            | [Design](DESIGN.md)                                                                                   |
+| Modules, trust boundaries, execution and storage              | [Architecture](docs/ARCHITECTURE.md), [source diagram](assets/architecture.drawio)                    |
+| Document ownership, transactions, revisions and caches        | [Core](docs/CORE.md)                                                                                  |
+| Capability IDs, schemas, results, routes and bridge lifecycle | [API](docs/API.md)                                                                                    |
+| Native files, preservation, Source and Save                   | [Format](docs/FORMAT.md)                                                                              |
+| PCB/Model geometry and bounded rule coverage                  | [Layout](docs/LAYOUT.md), [Design rules](docs/DESIGN-RULES.md)                                        |
+| Catalog, pinned resources and reference evidence              | [Examples](docs/EXAMPLES.md), [Libraries](docs/LIBRARIES.md), [Datasheets](docs/DATASHEETS.md)        |
+| Solver profiles, execution, artifacts and results             | [Simulation](docs/SIMULATION.md), [Thermal](docs/THERMAL.md), [EMC verification](docs/EMC-FLYBACK.md) |
+| Bundled features and provider management                      | [Plugins](docs/PLUGINS.md)                                                                            |
+| Destination-bound local Git history                           | [Version history](docs/VERSION-HISTORY.md)                                                            |
+
+Keep detailed behaviour in its owning contract and shared obligations here. Update the architecture diagram with affected contracts when ownership, execution paths or supported artifacts change. Document implemented modules and verified limits, not planned capabilities or earlier chat/test outcomes as current evidence.
+
+## Product and current contracts
+
+- Target bounded KiCad 10 schematics, manual PCB Layout, Model CAD/preview and documented simulation. Do not claim general import/model support, complete KiCad ERC/DRC parity, autorouting or production qualification. AI PCB Layout is fixed bundled guidance.
+- Support only current application formats, APIs and host contracts. Remove retired implementation, tests and documentation together; add no backward-compatibility branches, aliases, migrations, inferred missing fields or fallback readers. Reject unsupported data explicitly and preserve its files without importing or rewriting it. Stable current protocol identities and documented KiCad/vendor interoperability remain current contracts.
+- Use OpenPE / `openpe` for product copy and application-owned identities: `window.openpe`, `openpe:` IPC, `X-OpenPE-Token`, `OPENPE_*`, appearance keys, `ai.openpe.desktop`, native properties and plugin/model/example IDs. Establish data under `OpenPE`, or explicit `OPENPE_DATA_DIR`, before setting the native name. No former-brand aliases or directory fallback.
+- User designs are native `.kicad_pro`, `.kicad_sch`, `.kicad_pcb` and supporting files. Private snapshots are not design formats: never create `.openpe.json` designs or disguise JSON as KiCad. Example filenames use plain circuit names; attribution belongs in provenance/licenses.
+- Follow the neutral surfaces, charcoal actions, rounded controls and sparse green accents in Design. `public/brand/openpe-mark.svg` is the sole transparent Signal E geometry master; regenerate derivatives with `node scripts/brand-assets.mjs`.
+
+## Architecture and ownership
+
+Classify changes by GUI, Context Management, Agent, Uniform API, Core, Plugin or host infrastructure.
+
+| Location                  | Responsibility                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| `app/`, `components/`     | Renderer UI, gestures and retained presentation                                  |
+| `context/`                | Bounded observations/capture through browser-safe adapters; no mutations         |
+| `api/`                    | Independent query/command/event registry and interpreted schemas                 |
+| `core/`                   | Immutable accepted project, validation, Source drafts, revisions and undo        |
+| `lib/`                    | Pure domain/geometry/format code and explicitly named host/presentation adapters |
+| `server/`                 | Authenticated loopback service, persistence, providers and solvers               |
+| `electron/`               | Shell, native dialogs, preload and opaque file grants                            |
+| `examples/`, `resources/` | Native projects, pinned sources/assets, prepared resources and notices           |
+| `tests/`, `scripts/`      | Regressions, generators and isolated/opt-in checks                               |
+
+- Electron hosts packaged Express; Next.js/React/TypeScript renders the UI. Renderer imports no Node APIs; keep context isolation, sandboxing and CSP. Authenticate and bound loopback requests; reject foreign origins.
+- Uniform API imports no Core/domain/GUI/platform implementation. Core may import API contracts and pure domain functions, never framework/native/service I/O. Keep concrete reasons for bounded architecture exceptions.
+- `ProjectCore` alone owns validated documents, Source drafts and whole-project undo. Human and Agent mutations share it. Workbench owns presentation, adapters and the current dirty baseline; DesktopWorkspace owns project selection/recovery; host ports own grants, native writes and Git.
+- Capability metadata declares actual owner and Core command abstraction level, not permission. Runtime discovery defines mounted availability. Update API when IDs, schemas, results, routes, bridge methods or lifecycle gates change.
+- Interpret only the supported subset in `api/capability-schema.ts`; unsupported keywords fail explicitly. Generate canonical schemas, validators and service bundles atomically with `scripts/build-format.mjs` from TypeScript/generator sources. Never hand-edit generated validators or embed duplicate project validators in consumers.
+
+## Editing and validation invariants
+
+- Every design edit is one validated transaction. Previews commit their exact validated result once; blocked/cancelled poses cannot commit an older valid preview. Preserve original IDs; copies get fresh IDs/references. Apply current revision, native Source and close gates to human and Agent design edits alike.
+- Geometry owns connectivity. Schematic uses millimetres and 1.27 mm snapping; Layout uses its selected spacing while retaining exact native route anchors. Display grids, selection, cameras and annotations never alter design/export geometry.
+- Direct component/label/wire drag, nudges and `schematic.drag` preserve connections, stationary branches, labels/no-connects and collapsed leads. M/Move and `schematic.move` leave unselected wires. Deliberate joins split segments; crossings do not connect. Keyboard, Properties and Agent removal share `removeSelection`: remove attached leads/orphans up to surviving pins/shared branches, preserving trunks, unrelated crossings and metadata.
+- Use `preparePartProperties` for value-linked Properties/Agent edits. Retain hidden fields and pin mappings; simulation participation and native `exclude_from_sim` remain independent. Physical/virtual styling follows nonblank Footprint through `lib/symbol-role.ts`. Clearing assignment removes its linked package in the same undo edit while retaining copper.
+- Loaded PCB data stays authoritative while the primary schematic is unchanged. Assignment/network sync shares the originating undo and preserves placement/copper. Ordinary Value/simulation/caption edits retain PCB nets/fills/packages while refreshing captions; power-symbol Values remain electrical inputs. Viewing never refetches packages or refills zones.
+- Route/via/connected-drag/Shove preview and commit share bounded collision checks, including hidden geometry and fixed contacts. Pours do not obstruct routing. Pads/vias/locked tracks cannot move implicitly; retain surviving UUIDs/order, widths, angles and exact route heads. Copper/zone-rule edits invalidate fills once.
+- ERC/DRC are read-only lazy Core queries independent of simulation plugins. Source/close/revision changes block or stale reports. Settings/reports/markers are presentation; incomplete coverage cannot imply a clean result. Default DRC accepts the nine pinned reference boards without errors while retaining actual violations/unfilled-zone warnings.
+- Model CAD supports bounded rectangle/circle/polygon sketches, extrusion, boxes/cylinders, local-Z holes, semantic analytic-edge fillet/chamfer and immutable two-body Boolean recipes. Reject retired enclosure extensions and rim-group strings. Saved parameters, host preview and analytical STEP must agree; advanced geometry requires exact host-prepared keys through pure Core. Preserve PCB bytes/camera/caches. No arbitrary CAD programs, imported/Boolean topology editing or whole-assembly simulation.
+- Local Properties drafts survive hidden docks/view changes. Only accepted edits change participation/coordinates; invalid/stale inputs remain retryable. IME composition, including key code 229, cannot apply/discard inputs or trigger saves/tools. Unapplied Model solid drafts block drilling without expanding Core/Agent permissions.
+
+## Native files, Source and host access
+
+- Preserve unchanged native bytes, filenames, settings, UUIDs, ordering, embedded libraries/fields, assignments, copper and model transforms. Reject unsupported electrical/geometry content before editing/writing; preserve unknown user files.
+- Source edits actual loaded native text with independent file history/selection/scroll and invalid drafts. Apply, Save and leaving Source validate all pending files and commit once. Pending Source blocks conflicting edits, sheet changes, history creation/restoration and Model entry; sidebar visibility remains usable. Recovery stores drafts separately.
+- Native discovery excludes generated `spice/` and `thermal/`. Source lists the granted project directory with actual filenames, edits fully loaded ordinary text and displays local PDFs up to 32 MiB through bounded Blob URLs. Save file writes the selected text; local file drafts survive navigation/refresh and participate in project Save/close. Failed writes retain drafts. These disk files stay outside native design, Core drafts, undo, recovery and automatic Agent context. Other binary and truncated text previews remain read-only.
+- Reviewed Agent datasheets are separate read-only host references outside native design, drafts, undo and recovery. Bind parameters to the current example/controller/package and official PDF revision/hash/pages; explicit Send and scoped queries share that validated record. Source displays actual `datasheets/parameters.json` and local PDFs; disk edits do not replace the Agent's reviewed record.
+- Electron retains grants only in memory. Native dialogs select bounded file sets/destinations; example opening accepts only fixed catalog keys and returns host-validated identity/Source. Renderer requests cannot select arbitrary paths, executables, commands or URLs. Save requires a live grant; main-frame replacement clears grants, while same-document/subframe navigation preserves them.
+- Save carries the complete validated native set through the private snapshot. Save as renames the primary stem and matching project-bound rules/libraries/footprint directories/table URIs while retaining logical library/package IDs. Home custom libraries belong to the original native files and Source; asset preparation cannot overwrite their edits.
+- Preflight every target, reject traversal/links, protect all open-project sources and prepare verified portable assets. Replace files atomically and restore written siblings on failure; do not claim filesystem-wide crash atomicity. Reopening an open destination activates its editor; Save as cannot overwrite another open project's source.
+- Export validates/applies Source, then opens the native picker without changing destination/baseline. Explorer resolves a live saved/import grant, otherwise activates and Saves first. Cancellation/invalid Source stops and retains drafts.
+- Private destination-bound Git history stores complete validated snapshots outside native design, without host destinations/grants/results. Restore is one whole-project undo edit behind Source/close barriers.
+
+## Workspace and recovery
+
+### Independent projects and files
+
+- Admit up to 12 projects, each with up to 12 independent schematics and one optional PCB linked to the primary sheet. New project creates Schematic 1; New file appends. No hierarchy/cross-file electrical joins.
+- Keep inactive Workbenches mounted in detached DOM. Only the active project handles global keys; retain per-project views, undo, Source, sessions and origin-bound proposals/streams. Use instance-specific SVG IDs.
+- Tab X closes a view, never schematic data. Reopen retains selection/viewport. Last-tab close protects pending/unsaved work and requests project close. After approval, block Core and suspend/cancel capabilities before awaiting recovery/grant release; failure resumes drafts/undo intact. Release only that project's grant and tolerate revocation.
+- Native dirty compares bytes at the current destination against the open/save baseline plus pending native Source; tab dots use canonical per-file fingerprints. Pending ordinary-file drafts also count as unsaved work for Save/close. New/open/import/example starts clean; undo to baseline clears native indicators. Viewing, conversation and exports do not dirty content or change destinations.
+
+### Recovery and quit
+
+- Use validated `openpe-workspace-v2.json` from `lib/workspace-state.ts` and generated `server/workspace-format.mjs`. Retain stable project IDs, complete Source, required dirty flags, drafts, filenames/sessions, active IDs, closed tabs and shared Agent preferences. Exclude host destinations/grants, appearance and simulation state; native model references remain design data. Drafts are limited to 8 MB each; the authenticated envelope is 96 MiB.
+- Delete retired `workspace.json` without migration/backup. Preserve malformed current recovery and visible errors without idle overwrite; missing required dirty flags or other current fields fail validation. Replacement recovery waits for cancellation/grant release before reacquisition.
+- Clean examples reconnect to their original catalog directories and reread current native files. Dirty current examples recover without destinations. Require explicit current catalog identities; reject retired identities/incomplete records.
+- Quit reviews every unsaved project and pending Source, rechecks background changes and pauses normal recovery writes. Remove discarded revisions only after every decision succeeds. Cancelled/failed Save or cleanup keeps app/service/documents alive and permits retry/cancel. Await recovery writes before reload/quit.
+
+## Examples, resources and startup
+
+- `resources/example-catalog/home-manifest.json` defines nine curated Example projects and fixed EMC Flyback Recent. Home/File/preparation/open/clean recovery share those ten; Recent is not file-opening history. Retained KiCad/RC/TI/PEBench circuits are fixtures.
+- `examples/` contains only ten complete `<file>/<file>.kicad_*` projects with local library tables. Use `footprints/` (retaining required `.pretty` containers), `symbols/`, `models/`, `circuits/` and reviewed `datasheets/`; create only populated directories. Available `.scad` sources stay beside native files without arbitrary CAD execution/import support.
+- Shared metadata/footprints and unchanged `sources/<stem>/` originals live under `resources/example-catalog/`; EMC manufacturer sources/manifest/notices live in its `footprints/emc-flyback/`. Use neutral reference-circuit names for the nine Example projects and their application-owned identifiers, modules and records. Preserve source author, commit, original paths, hashes/licenses/notices, the pinned 46-model reference subset and separate 31-model EMC assets with exact packages/transforms. Keep manufacturer supplements separate from upstream bytes.
+- `npm run examples` regenerates snapshots/native exports; EMC requires official KiCad 10 via `KICAD_CLI`. Follow generated TypeScript changes with `npm run build:format`. Never hand-edit snapshots/pinned source; exclude `.kicad_prl`. Copy missing assets from pinned sources without substitutes or preview downloads. Project SPICE references use pinned `circuits/<component>.lib`, never shared cache hash aliases; preserve documented native STEP path meaning.
+- Verify original native sets, models and notices with `npm run examples:prepare` before renderer build/dev. Home opens the original `examples/<stem>/<stem>.kicad_pro` files with exact filenames; package those directories as `examples-native/<stem>/`, including existing PDFs and excluding generated solver/private files and `.kicad_prl`. Runtime never copies, regenerates, cleans or downloads Home content. Bundle official KiCad libraries/replaceable STEP parser resources and corresponding sources/licenses; no user-library discovery or runtime KiCad CLI. Fixed resource IDs are not file grants.
+- Create service/window independently of runtime example preparation. Home performs no example model/history preflight. The first example-opening request, including clean recovery, starts shared validation and private destination-bound Git initialization, with at most three concurrent operations. Opening awaits attempts across all ten examples/histories and rechecks its frame. Unrelated failures or missing Git cannot block a usable selected project. Home/new/ordinary recovery remain independent. Private history stays outside example directories; opening preserves all original files.
+
+## Plugins, simulation and Agents
+
+### Plugins and solver execution
+
+- Workbench plugins are bundled allowlisted modules sharing the app/process/source tree. Host lifecycle gates requests and cancels work on disable/uninstall. Provider management is separate; verify effective state/managed policies, retain uninstall confirmation and never edit unrelated global config. No general extension loader or added tool permissions.
+- Preserve exact official simulation variants/pin mappings/scoped derivatives; do not substitute models or claim unsupported circuits. Simulation design attributes remain Core data when the plugin is unavailable. Model bytes stay separate immutable `.lib` files with allowlisted IDs/hashes, copied through grants with link/changed-byte rejection and portable through Save/history/plugin removal. Finite completed runs alone add references as one undo edit.
+- Use verified bundled solver/resources, argument arrays and private temporary directories. Requests supply validated project/settings/opaque IDs, never decks/scripts/executables/paths/URLs. No system solver discovery or environment overrides.
+- Positive finite SPICE duration/step has no fixed timing range or runtime timeout. Bound logs/display data instead of altering settings or stopping for file/sample size. Explicit Stop retains validated partial samples; failure/automatic cancellation discards previews. Only completed matching results persist.
+- Thermal compiles supported PCB/copper read-only; missing enabled fills block Run. Distinguish PCB from junction temperature. SPICE heat import uses verified original full-resolution final-20% terminal power with explicit pad/thermal assumptions.
+- Desktop Run requires a saved destination. Completed records are direct `spice/<native-stem>.*` / `thermal/<native-stem>.*` files outside design/undo/recovery/dirty state. Follow the owning contracts for project-bound v2 manifests, per-directory queue, private `*-backups` staging, per-file atomic replacement and manifest-last publication/rollback. Preserve unknown/damaged files, other projects and prior success on failure/cancel; do not claim cross-file crash atomicity. Ignore retired nested records. Restore verifies current inputs/artifacts/resources/original settings without solving/downloading.
+
+### Agent boundaries
+
+- Keep all five catalog Agents, including missing CLIs; installation differs from authentication/runtime support. Codex/Claude receive scoped query/execute/observe only; DeepSeek/Pi use restricted context-only transports and reviewed proposals; Cursor is detection-only. Never read credentials, fabricate replies, switch providers silently or interpolate user input into shell commands.
+- Live reviews capture immutable arguments/observed revision; Apply rechecks schema, availability, domain and revision. Auto invokes the same host and never executes queued reviews. Fenced proposals require successful completion and the originating sheet/fingerprint/mode.
+- Bind streams/tools to run/session/project/origin with bounded one-time tokens revoked on cancellation/disconnect/completion. Stop retains partial text/drafts but blocks late proposals. Capture bounded context on explicit Send; scoped tools observe current state. Never expose another project's UI, credentials, logs, model bytes or disabled-plugin results.
+- Annotations are per-session immutable screenshots/comments outside design/undo/dirty state. Pending Source blocks capture; hidden geometry cannot be selected; stale captures remain previewable. Local Markdown/KaTeX is bounded/untrusted: no raw HTML, external images or trusted evaluation. Preserve raw response/user text.
+
+## Retained state and performance
+
+- Reuse validation, fingerprints, native bytes and presentation only for exact internally owned immutable inputs; caller `Object.freeze` establishes no ownership. Validate new/prepared data, global UUID/reference/pin associations and aggregate bounds. Return independent public containers, bound destination/indentation caches and keep failures retryable.
+- Preserve unchanged owned subtrees/PCB fills on unrelated edits. Caption/title/identity changes invalidate affected native bytes. Each Workbench retains only its current dirty baseline, invalidated by saved Source/destination changes.
+- Isolate pointer/camera readouts, conversations, recovery status and inactive projects from unrelated renders. Hidden Layout/Model/clean Source defer presentation until reveal while explicit observations stay current. Preserve revision guards, navigation and exact same-grid previews. Lazy-load Markdown/KaTeX with the first assistant reply, hiding proposal payloads during loading.
+- Renderer reload does not replace Electron/service modules. Distinguish disk builds from running instances, preserve unsaved work and never force-close the user's app.
+
+## Verification and delivery
+
+| Change or check                                                               | Required handling                                                                                       |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Documentation only                                                            | `npm run check:docs` plus content/format review against implementation                                  |
+| Runtime or circuits                                                           | `npm run check:architecture`, `npm run typecheck`, `npm test`, `npm run build` and relevant regressions    |
+| Electron, `npm run test:e2e`, desktop visual/integration checks or benchmarks | Explicit user authorization before launching                                                            |
+| Real solvers/providers                                                        | Opt-in; isolated mocked checks are not native/provider/solver evidence                                  |
+
+- Architecture runs in typecheck/test/build hooks; tests regenerate formats; build/dev/package may prepare/download resources. [Architecture verification](docs/ARCHITECTURE.md#verification) indexes checks and feature contracts identify focused regressions. Report only checks actually passed on the reviewed tree.
+- Run graphical checks one at a time; stop owned tests on overload without closing the user's app. `OPENPE_TEST_NGSPICE=1` and `OPENPE_TEST_THERMAL=1` enable five prepared-resource regressions (two Buck, slab, contours, thermal artifacts). Home sweeps/mesh refinement are separate; offline sweeps never fetch missing files.
+- Source checks read the selected actual native file through `scripts/source-editor-test-helpers.mjs`, never a private snapshot. Parse `.kicad_pro` as JSON and schematic/board text with native parsers. Use `scripts/async-browser-test-helpers.mjs` for asynchronous predicates. Desktop fixtures keep designs/profiles in sibling directories.
+- Remove dead code instead of suppressing unused errors. Keep generated artifacts, pinned evidence, notices and sources. Ignore dependencies/builds/releases/downloads/secrets in Git; ignored files are not disposable. `.openpe/` and `test-results/` may hold recovery/history, offline tools or generation inputs. Preserve current builds/evidence; resolve workspace-contained paths and reject links before recursive cleanup.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

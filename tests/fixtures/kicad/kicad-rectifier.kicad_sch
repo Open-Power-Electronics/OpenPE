@@ -1,0 +1,987 @@
+(kicad_sch
+  (version 20260306)
+  (generator "openpe")
+  (uuid "50e427f3-b7bc-421c-9c8f-6219f15239b3")
+  (sheet_instances
+    (path "/"
+      (page "1")))
+  (embedded_fonts no)
+  (title_block
+    (title "Rectifier"))
+  (text ".tran 1u 10m\n"
+    (at 118.618 113.03 0)
+    (uuid "c6c66b79-480b-40d9-b034-483ba7835887")
+    (effects
+      (font
+        (size 1.524 1.524))
+      (justify left bottom))
+    (exclude_from_sim no))
+  (text "*.ac dec 10 1 1Meg\n"
+    (at 118.618 115.57 0)
+    (uuid "511ab69d-2a55-4a62-9957-6cb556dff243")
+    (effects
+      (font
+        (size 1.524 1.524))
+      (justify left bottom))
+    (exclude_from_sim no))
+  (lib_symbols
+    (symbol "rectifier_schlib:C"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0.254))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "C"
+        (at 0.635 2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "C"
+        (at 0.635 -2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" ""
+        (at 0.9652 -3.81 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Datasheet" "~"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Description" "Unpolarized capacitor"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "ki_keywords" "cap capacitor"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "ki_fp_filters" "C_*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (symbol "C_0_1"
+        (polyline
+          (pts
+            (xy -2.032 0.762)
+            (xy 2.032 0.762))
+          (stroke
+            (width 0.508)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy -2.032 -0.762)
+            (xy 2.032 -0.762))
+          (stroke
+            (width 0.508)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "C_1_1"
+        (pin passive line
+          (at 0 3.81 270)
+          (length 2.794)
+          (name "~"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -3.81 90)
+          (length 2.794)
+          (name "~"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "rectifier_schlib:D"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 1.016)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "D"
+        (at 0 2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "D"
+        (at 0 -2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Datasheet" "~"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Description" "Diode"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Sim.Device" "D"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Sim.Pins" "1=K 2=A"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "ki_keywords" "diode"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "ki_fp_filters" "TO-???* *_Diode_* *SingleDiode* D_*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (symbol "D_0_1"
+        (polyline
+          (pts
+            (xy -1.27 1.27)
+            (xy -1.27 -1.27))
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.27 1.27)
+            (xy 1.27 -1.27)
+            (xy -1.27 0)
+            (xy 1.27 1.27))
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.27 0)
+            (xy -1.27 0))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "D_1_1"
+        (pin passive line
+          (at -3.81 0 0)
+          (length 2.54)
+          (name "K"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 3.81 0 180)
+          (length 2.54)
+          (name "A"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "rectifier_schlib:GND"
+      (power)
+      (pin_names
+        (offset 0))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "#PWR"
+        (at 0 -3.81 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Value" "GND"
+        (at 0 -3.1242 0)
+        (effects
+          (font
+            (size 0.762 0.762))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.524 1.524))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.524 1.524))))
+      (property "Description" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (symbol "GND_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 -1.27)
+            (xy 1.27 -1.27)
+            (xy 0 -2.54)
+            (xy -1.27 -1.27)
+            (xy 0 -1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "GND_1_1"
+        (pin power_in line
+          (at 0 0 270)
+          (length 0)
+          (hide yes)
+          (name "GND"
+            (effects
+              (font
+                (size 0.762 0.762))))
+          (number "1"
+            (effects
+              (font
+                (size 0.508 0.508))))))
+      (embedded_fonts no))
+    (symbol "rectifier_schlib:R"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "R"
+        (at 2.032 0 90)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "R"
+        (at 0 0 90)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at -1.778 0 90)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Datasheet" "~"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Description" "Resistor"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "ki_keywords" "R res resistor"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "ki_fp_filters" "R_*"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (symbol "R_0_1"
+        (rectangle
+          (start -1.016 -2.54)
+          (end 1.016 2.54)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "R_1_1"
+        (pin passive line
+          (at 0 3.81 270)
+          (length 1.27)
+          (name "~"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -3.81 90)
+          (length 1.27)
+          (name "~"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "rectifier_schlib:VSIN"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0.0254))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (property "Reference" "V"
+        (at 2.54 2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "VSIN"
+        (at 2.54 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Description" "Voltage source, sinusoidal"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Sim.Pins" "1=+ 2=-"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Sim.Params" "dc=0 ampl=1 f=1k ac=1"
+        (at 2.54 -2.54 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Sim.Type" "SIN"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (property "Sim.Device" "V"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left))
+        (hide yes))
+      (property "ki_keywords" "simulation ac vac"
+        (at 0 0 0)
+        (effects
+          (font
+            (size 1.27 1.27)))
+        (hide yes))
+      (symbol "VSIN_0_0"
+        (arc
+          (start -1.27 0)
+          (mid -0.635 0.6323)
+          (end 0 0)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (arc
+          (start 1.27 0)
+          (mid 0.635 -0.6323)
+          (end 0 0)
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (text "+"
+          (at 0 1.905 0)
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (symbol "VSIN_0_1"
+        (circle
+          (center 0 0)
+          (radius 2.54)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background))))
+      (symbol "VSIN_1_1"
+        (pin passive line
+          (at 0 5.08 270)
+          (length 2.54)
+          (name "~"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -5.08 90)
+          (length 2.54)
+          (name "~"
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no)))
+  (wire
+    (pts
+      (xy 124.46 93.98)
+      (xy 125.73 93.98))
+    (uuid "f84ea568-f1f4-4ee8-a7dd-08e1e3caf2cb")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 137.16 97.79)
+      (xy 137.16 93.98))
+    (uuid "b3f25818-c52f-4de2-be5e-c2d26eac46f9")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 102.87 109.22)
+      (xy 137.16 109.22))
+    (uuid "ca6d7470-c7f0-4412-9d69-1884a8866732")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 102.87 93.98)
+      (xy 116.84 93.98))
+    (uuid "9edee758-5de2-4e65-b773-23c7113b719b")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 102.87 96.52)
+      (xy 102.87 93.98))
+    (uuid "43b57d60-b033-4452-b1b0-4c386bb3324d")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 133.35 93.98)
+      (xy 137.16 93.98))
+    (uuid "2a5b1c4b-7001-4453-acbe-3f3cc5fa0c12")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 146.05 109.22)
+      (xy 146.05 105.41))
+    (uuid "59c18746-69b0-413b-b2b6-210df76c5020")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 102.87 109.22)
+      (xy 102.87 106.68))
+    (uuid "c98fbc71-1385-4671-9215-b5f39b4c055c")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 137.16 93.98)
+      (xy 146.05 93.98))
+    (uuid "3bd318c2-ba9a-4308-b096-8e049921bc60")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 137.16 109.22)
+      (xy 137.16 105.41))
+    (uuid "169248f6-8ae6-4888-9563-891f71673341")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 146.05 93.98)
+      (xy 146.05 97.79))
+    (uuid "45a4fdb3-83e4-48ba-9c9e-98903c8e8e17")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 102.87 110.49)
+      (xy 102.87 109.22))
+    (uuid "d8d3331c-e9d8-497f-837d-bd59396c49bd")
+    (stroke
+      (width 0)
+      (type solid)))
+  (wire
+    (pts
+      (xy 137.16 109.22)
+      (xy 146.05 109.22))
+    (uuid "01d7650b-05a9-419c-875c-c6426ef3c907")
+    (stroke
+      (width 0)
+      (type solid)))
+  (junction
+    (at 137.16 109.22)
+    (uuid "102bb8fc-89ee-498f-b67e-2b8bba577326")
+    (diameter 1.016))
+  (junction
+    (at 137.16 93.98)
+    (uuid "c5cae12e-5d14-4378-ab5b-b18375a59182")
+    (diameter 1.016))
+  (junction
+    (at 102.87 109.22)
+    (uuid "2007873d-88ec-4026-b7a5-5e769fa541dc")
+    (diameter 1.016))
+  (label "rect_out"
+    (at 146.05 93.98 0)
+    (uuid "dc04ba3c-6887-4bb5-b90b-59bafedd364b")
+    (effects
+      (font
+        (size 1.524 1.524))
+      (justify left bottom)))
+  (label "signal_in"
+    (at 102.87 93.98 0)
+    (uuid "a02041bb-27c2-4ae7-aa1b-915a8c4700f8")
+    (effects
+      (font
+        (size 1.524 1.524))
+      (justify left bottom)))
+  (symbol
+    (lib_id "rectifier_schlib:VSIN")
+    (at 102.87 101.6 0)
+    (unit 1)
+    (uuid "0f5b2d07-c314-4b0d-9357-9159e1e54fbf")
+    (pin "1"
+      (uuid "950b2511-461d-4a15-90dd-82a0956aeead"))
+    (pin "2"
+      (uuid "ba618e03-6a10-43ce-a8ac-3be76fcd5d98"))
+    (instances
+      (project "Rectifier"
+        (path "/50e427f3-b7bc-421c-9c8f-6219f15239b3"
+          (reference "V1")
+          (unit 1))))
+    (property "Reference" "V1"
+      (at 97.79 99.06 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify right)))
+    (property "Value" "${SIM.PARAMS}"
+      (at 97.79 102.87 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify right)))
+    (property "Footprint" ""
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Voltage source, sinusoidal"
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Fieldname" "Value"
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes))
+    (property "Sim.Device" "V"
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left))
+      (hide yes))
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Type" "SIN"
+      (at 102.87 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Params" "dc=0 ampl=1 f=1k ac=1"
+      (at 102.362 104.902 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify right))
+      (hide yes)))
+  (symbol
+    (lib_id "rectifier_schlib:GND")
+    (at 102.87 110.49 0)
+    (unit 1)
+    (uuid "2a49ba40-f58b-4a92-9cfe-8baec68a29ad")
+    (pin "1"
+      (uuid "fc412e27-99e9-4b48-9bd9-e511a3610333"))
+    (instances
+      (project "Rectifier"
+        (path "/50e427f3-b7bc-421c-9c8f-6219f15239b3"
+          (reference "#PWR01")
+          (unit 1))))
+    (property "Reference" "#PWR01"
+      (at 102.87 116.84 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "GND"
+      (at 102.997 114.8842 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 102.87 110.49 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Datasheet" ""
+      (at 102.87 110.49 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" ""
+      (at 102.87 110.49 0)
+      (effects
+        (font
+          (size 1.27 1.27)))))
+  (symbol
+    (lib_id "rectifier_schlib:R")
+    (at 120.65 93.98 90)
+    (unit 1)
+    (uuid "4f7f56af-e5b3-491f-a522-b814ae3e61c6")
+    (pin "1"
+      (uuid "028eba11-fc74-44ee-85e6-f2bf78cb576c"))
+    (pin "2"
+      (uuid "d16526d3-c2e4-41d5-86b2-9ea77ed6494f"))
+    (instances
+      (project "Rectifier"
+        (path "/50e427f3-b7bc-421c-9c8f-6219f15239b3"
+          (reference "R1")
+          (unit 1))))
+    (property "Reference" "R1"
+      (at 119.38 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "1k"
+      (at 119.38 91.44 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 120.65 95.758 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" "~"
+      (at 120.65 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Resistor"
+      (at 120.65 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Fieldname" "Value"
+      (at 120.65 93.98 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes))
+    (property "Sim.Pins" "1=1 2=2"
+      (at 120.65 93.98 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes)))
+  (symbol
+    (lib_id "rectifier_schlib:D")
+    (at 129.54 93.98 180)
+    (unit 1)
+    (uuid "47814f71-3c42-4603-bc6e-6951814aaba7")
+    (pin "1"
+      (uuid "a8fb5789-2d3e-4e40-bb18-e0019611909f"))
+    (pin "2"
+      (uuid "aaab6188-b7ad-425b-95d9-8896d274c5df"))
+    (instances
+      (project "Rectifier"
+        (path "/50e427f3-b7bc-421c-9c8f-6219f15239b3"
+          (reference "D1")
+          (unit 1))))
+    (property "Reference" "D1"
+      (at 129.54 88.9 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Value" "1N4148"
+      (at 129.54 91.44 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Footprint" ""
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" "~"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Diode"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Fieldname" "Value"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes))
+    (property "Sim.Library" "diode.mod"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Name" "1N4148"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Pins" "1=K 2=A"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Sim.Device" "D"
+      (at 129.54 93.98 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "rectifier_schlib:C")
+    (at 137.16 101.6 0)
+    (unit 1)
+    (uuid "1350394f-21ae-433b-8e6e-459037534319")
+    (pin "1"
+      (uuid "e42b7485-55b1-4a3f-a9ef-02c749ede568"))
+    (pin "2"
+      (uuid "f87ee047-7ff6-4d86-a50d-a99d3897fb87"))
+    (instances
+      (project "Rectifier"
+        (path "/50e427f3-b7bc-421c-9c8f-6219f15239b3"
+          (reference "C1")
+          (unit 1))))
+    (property "Reference" "C1"
+      (at 139.7 100.33 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100n"
+      (at 139.7 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 138.1252 105.41 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" "~"
+      (at 137.16 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Unpolarized capacitor"
+      (at 137.16 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Fieldname" "Value"
+      (at 137.16 101.6 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes))
+    (property "Sim.Pins" "1=1 2=2"
+      (at 137.16 101.6 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes)))
+  (symbol
+    (lib_id "rectifier_schlib:R")
+    (at 146.05 101.6 0)
+    (unit 1)
+    (uuid "cab4a6ad-3443-4fcb-9fb8-ba979d8fa49d")
+    (pin "1"
+      (uuid "4538d450-fd39-4517-a0b0-bd2bc3071561"))
+    (pin "2"
+      (uuid "7848bde4-2d62-4658-b8d7-6211c88b1c95"))
+    (instances
+      (project "Rectifier"
+        (path "/50e427f3-b7bc-421c-9c8f-6219f15239b3"
+          (reference "R2")
+          (unit 1))))
+    (property "Reference" "R2"
+      (at 149.86 100.33 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100k"
+      (at 149.86 104.14 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Footprint" ""
+      (at 144.272 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Datasheet" "~"
+      (at 146.05 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Description" "Resistor"
+      (at 146.05 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Fieldname" "Value"
+      (at 146.05 101.6 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes))
+    (property "Sim.Pins" "1=1 2=2"
+      (at 146.05 101.6 0)
+      (effects
+        (font
+          (size 1.524 1.524)))
+      (hide yes)))
+  (generator_version "0.1"))

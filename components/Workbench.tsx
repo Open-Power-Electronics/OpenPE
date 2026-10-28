@@ -1,0 +1,4191 @@
+'use client';
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
+import { ProjectCore } from '@/core/project-core';
+import { createNativeProjectDirtyChecker } from '@/lib/native-project-dirty';
+import { projectMetadataEqual } from '@/lib/project-metadata-equal';
+import { modelCadFromProject, MODEL_CAD_EXTENSION } from '@/lib/model-cad';
+import { prepareModelCadObjects } from './model-cad-preparation';
+import { createCapabilityHost } from '@/api/capabilities';
+import { registerProjectCapabilities } from '@/core/register-project';
+import {
+  registerWorkbenchCapabilities,
+  type WorkbenchCapabilityPorts,
+} from '@/lib/workbench-capabilities';
+import { registerProviderPluginCapabilities } from '@/lib/provider-plugin-capabilities';
+import { registerLibraryCapabilities } from '@/lib/library-capabilities';
+import type { AgentThermalContext } from '@/context/agent-thermal-context';
+import ThermalField from './ThermalField';
+import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalLayoutResults';
+import {
+  AlertCircle,
+  Blocks,
+  Cpu,
+  FolderPlus,
+  FolderOpen,
+  GitCommitHorizontal,
+  MessageSquareText,
+  Home as HomeIcon,
+  List,
+  MousePointer2,
+  Plus,
+  Redo2,
+  RotateCw,
+  SlidersHorizontal,
+  ShieldCheck,
+  Tag,
+  Trash2,
+  Undo2,
+  X,
+} from 'lucide-react';
+import {
+  emptyCircuit,
+  serializeCircuit,
+  circuitFingerprint,
+  labelShapes,
+  snap,
+  fmt,
+  type Circuit,
+  type Point,
+} from '@/lib/circuit';
+import { api } from '@/lib/bridge';
+import { downloadText } from '@/lib/download';
+import {
+  createProject,
+  importDocument,
+  parseProject,
+  serializeProject,
+  exportKiCad,
+  projectNativeFiles,
+  projectFilename,
+  projectFromNativeFiles,
+  projectSchematics,
+  findSchematic,
+  schematicSnapshot,
+  schematicFileFingerprint,
+  MAX_SCHEMATIC_FILES,
+  type Project,
+} from '@/lib/project';
+import { applyProposal, type Operation } from '@/lib/proposals';
+import {
+  selectedField,
+  objectPosition,
+  moveText,
+  duplicateSelection,
+  removeSelection,
+  transformSelection,
+  simplifyWires,
+  saveAnnotation,
+} from '@/lib/schematic-edit';
+import Select from './Select';
+import RightSidebarToggle from './RightSidebarToggle';
+import PluginLogo from './PluginLogo';
+import EditorDisplayDrawer from './EditorDisplayDrawer';
+import SchematicSelectionFilters from './SchematicSelectionFilters';
+import Canvas, {
+  type Tool,
+  type CanvasViewport,
+  type SchematicMoveRequest,
+  type SchematicNavigationRequest,
+} from './Canvas';
+import CanvasCoordinates, { createCanvasCoordinates } from './CanvasCoordinates';
+import type { Agent } from './Chat';
+import ConversationSession from './ConversationSession';
+import { createSession, sessionTitle, type ChatSession } from '@/lib/chat-sessions';
+import type { AgentCapabilities, ReasoningEffort } from '@/lib/chat-stream';
+import PartIdentity from './PartIdentity';
+import Logo from './Logo';
+import NavigationButton from './NavigationButton';
+import EditorViewSwitch, { type EditorView } from './EditorViewSwitch';
+import EditorStatusBar from './EditorStatusBar';
+const LayoutEditor = lazy(() => import('./LayoutEditor'));
+import type { PCB3DViewState } from './PCBModelPreview';
+const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
+import { type PCB } from '@/lib/pcb';
+import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
+import SchematicLayers from './SchematicLayers';
+import { visibleSchematicIds } from '@/lib/schematic-view';
+import {
+  defaultSchematicSelectionFilters,
+  selectableSchematicIds,
+} from '@/lib/schematic-selection-filters';
+import { gridSpacingOptions } from '@/lib/schematic-layers';
+import { layoutGridSpacingOptions } from '@/lib/layout-grid';
+import AgentPicker from './AgentPicker';
+import Home from './Home';
+import {
+  homeExampleCatalog,
+  homeExampleSections,
+  type HomeExampleId as ExampleId,
+} from '@/lib/home-examples';
+import { hasOpenOverlay } from './Dialog';
+import DeferredDialog from './DeferredDialog';
+import DesktopTitlebar, {
+  titlebarMenuOptions,
+  runTitlebarMenuAction,
+  type TitlebarMenu,
+} from './DesktopTitlebar';
+import WorkspaceDivider from './WorkspaceDivider';
+import type { useAppearance } from './AppearanceSettings';
+import SettingsMenu from './SettingsMenu';
+import PartsList from './PartsList';
+import ConfirmationDialog, { type ConfirmationKind } from './ConfirmationDialog';
+import type { FootprintDetail } from './LibraryChooser';
+import PartProperties from './PartProperties';
+import FieldProperties from './FieldProperties';
+import InspectorResize, { type InspectorSize } from './InspectorResize';
+import SimulationResize from './SimulationResize';
+import type { ProbeTarget } from '@/lib/spice';
+import AnnotationDialog from './AnnotationDialog';
+import { validateAnnotations, type AgentAnnotation } from '@/lib/agent-annotations';
+import { captureAgentPresentation } from '@/context/agent-presentation';
+import type { AgentWorkspaceContext } from '@/context/agent-workspace-context';
+import type { AgentSimulationContext } from '@/context/agent-simulation-context';
+import {
+  SPICE_PLUGIN_ID,
+  THERMAL_PLUGIN_ID,
+  useWorkbenchPlugins,
+  registerWorkbenchPluginCapabilities,
+} from '@/lib/workbench-plugins';
+import { schematicTexts } from '@/lib/schematic-text';
+import { displayPartValue, partFields } from '@/lib/library';
+import { preparePartProperties } from '@/lib/part-properties';
+import { child, children, parseSExpr, val, type SExpr } from '@/lib/sexpr';
+import ProjectNavigation, {
+  type ProjectNavigationItem,
+  type ProjectFileAction,
+} from './ProjectNavigation';
+import { emptyWorkspaceProjects } from './WorkspacePresentation';
+import SchematicFileTabs from './SchematicFileTabs';
+import type { AgentPreferences, DocumentState } from '@/lib/workspace-state';
+import { useProjectDirectory } from './useProjectDirectory';
+import type { DocumentController, DocumentUpdate } from './DesktopWorkspace';
+import {
+  defaultPCBDesignRules,
+  type PCBDesignRuleConfig,
+  type RuleCheckFocus,
+  type RuleCheckIssue,
+  type RuleCheckResult,
+} from '@/lib/design-rule-checks';
+
+const SourceEditor = lazy(() => import('./SourceEditor'));
+const SimulationDialog = lazy(() => import('./SimulationDialog'));
+const ThermalSimulation = lazy(() => import('./ThermalSimulation'));
+const RuleCheckPanel = lazy(() => import('./RuleCheckPanel'));
+const LibraryChooser = lazy(() => import('./LibraryChooser'));
+const ProjectHistoryDialog = lazy(() => import('./ProjectHistoryDialog'));
+const PluginsPage = lazy(() => import('./PluginsPage'));
+const SettingsDialog = lazy(() => import('./SettingsDialog'));
+const AboutDialog = lazy(() => import('./AboutDialog'));
+const SchematicCanvas = memo(Canvas);
+const RetainedLayoutEditor = memo(LayoutEditor);
+const RetainedModelPreview = memo(PCBModelPreview);
+const RetainedSourceEditor = memo(SourceEditor);
+const emptySelection: string[] = [];
+const emptyAnnotations: AgentAnnotation[] = [];
+
+type StoredRuleReport = {
+  result: RuleCheckResult;
+  revision: number;
+  schematicId?: string;
+  settings?: string;
+};
+
+// Synchronous editor actions read the latest committed workbench state without
+// changing their prop identity on unrelated conversation/status updates. Async
+// annotation/viewport callbacks remain explicitly bound to their origin below.
+function useEditorAction<Args extends unknown[], Result>(action: (...args: Args) => Result) {
+  const latest = useRef(action);
+  useLayoutEffect(() => {
+    latest.current = action;
+  });
+  return useCallback((...args: Args) => latest.current(...args), []);
+}
+
+const RetainedSchematicToolbar = memo(
+  function RetainedSchematicToolbar({ children }: { visible: boolean; children: () => ReactNode }) {
+    return children();
+  },
+  // The first hidden render deactivates menus. Later hidden design updates do
+  // not build toolbar JSX; revealing always receives current props/actions.
+  (previous, next) => !previous.visible && !next.visible,
+);
+type Modal = 'power' | 'library' | 'settings' | 'about' | 'parts' | 'history' | 'annotation' | null;
+type Confirmation = {
+  kind: ConfirmationKind;
+  action: (saveFirst?: boolean) => void | Promise<void>;
+};
+function ToolButton({
+  label,
+  hint = label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      className={`tool-button ${active ? 'active' : ''}`}
+      aria-label={label}
+      title={hint}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+export default function Workbench({
+  documentId,
+  active,
+  initialState: providedInitialState,
+  getInitialState,
+  getInitialProject,
+  fileId,
+  initiallyDirty,
+  recovered,
+  initialNotice,
+  projects = emptyWorkspaceProjects,
+  getProjects,
+  onSelectProject,
+  onSelectFile,
+  onSelectExample,
+  onAddProject,
+  onCloseProject,
+  onProjectAction,
+  onDocumentChange,
+  registerController,
+  preferences,
+  setPreferences,
+  appearanceSettings,
+  startupError,
+  draftStatus,
+}: {
+  documentId: string;
+  active: boolean;
+  initialState?: DocumentState;
+  getInitialState?: (id: string) => DocumentState | undefined;
+  getInitialProject?: (id: string, source: string) => Project | undefined;
+  fileId?: string;
+  initiallyDirty: boolean;
+  recovered: boolean;
+  initialNotice?: string;
+  projects?: readonly ProjectNavigationItem[];
+  getProjects?: () => ProjectNavigationItem[];
+  onSelectProject: (id: string) => void;
+  onSelectFile: (fileId: string) => void;
+  onSelectExample: (key: string) => boolean;
+  onAddProject: (
+    project: Project | (() => Promise<Project>),
+    name: string,
+    dirty: boolean,
+    brief?: string,
+    fileId?: string,
+    notice?: string,
+    openKey?: string,
+  ) => Promise<void>;
+  onCloseProject: (id: string) => Promise<boolean>;
+  onProjectAction: (id: string, action: ProjectFileAction) => void;
+  onDocumentChange: (id: string, state: DocumentUpdate) => void;
+  registerController: (id: string, controller: DocumentController | null) => void;
+  preferences: AgentPreferences;
+  setPreferences: React.Dispatch<React.SetStateAction<AgentPreferences>>;
+  appearanceSettings: ReturnType<typeof useAppearance>;
+  startupError: string;
+  draftStatus?: string;
+}) {
+  // Workspace supplies a stable accessor so recovery reports do not become
+  // render props or retain a second initial conversation/source snapshot.
+  const initialState = getInitialState?.(documentId) ?? providedInitialState;
+  const prepareProject = useRef<(next: Project) => Project>((next) => next);
+  const [core] = useState(
+    () =>
+      new ProjectCore(
+        initialState
+          ? (getInitialProject?.(documentId, initialState.source) ??
+              importDocument(initialState.source))
+          : null,
+        {
+          draft: initialState?.sourceDraft,
+          nativeEntryName: initialState ? projectFilename(initialState.filename) : undefined,
+          prepare: (next) => prepareProject.current(next),
+        },
+      ),
+  );
+  const coreSnapshot = useSyncExternalStore(
+    useCallback((listener) => core.subscribe(listener), [core]),
+    () => core.getSnapshot(),
+    () => core.getSnapshot(),
+  );
+  const { project, sourceDraft, sourceError } = coreSnapshot;
+  const modelCad = useMemo(
+    () => (project ? modelCadFromProject(project) : null),
+    [project?.extensions[MODEL_CAD_EXTENSION]],
+  );
+  const [capabilityHost] = useState(() =>
+    createCapabilityHost({ revision: () => String(core.getSnapshot().revision) }),
+  );
+  const [activeSchematicId, setActiveSchematicId] = useState(
+    initialState?.activeSchematicId ?? project?.schematic.id ?? '',
+  );
+  const [closedSchematics, setClosedSchematics] = useState<string[]>(
+    initialState?.closedSchematicIds ?? [],
+  );
+  const schematicFiles = useMemo(() => (project ? projectSchematics(project) : []), [project]);
+  const openSchematicFiles = useMemo(() => {
+    const visible = schematicFiles.filter((file) => !closedSchematics.includes(file.id));
+    return visible.length ? visible : schematicFiles.slice(0, 1);
+  }, [schematicFiles, closedSchematics]);
+  const doc =
+    openSchematicFiles.find((file) => file.id === activeSchematicId) ??
+    openSchematicFiles[0] ??
+    null;
+  const closedSchematicIds = useMemo(
+    () =>
+      schematicFiles.filter((file) => !openSchematicFiles.includes(file)).map((file) => file.id),
+    [schematicFiles, openSchematicFiles],
+  );
+  const closedSchematicIdsRef = useRef(closedSchematicIds);
+  closedSchematicIdsRef.current = closedSchematicIds;
+  const activeSchematicRef = useRef(doc?.id);
+  activeSchematicRef.current = doc?.id;
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const source = coreSnapshot.source;
+  const sourceDraftRef = useRef(sourceDraft);
+  sourceDraftRef.current = sourceDraft;
+  const sourcePending = sourceDraft !== null && sourceDraft !== source;
+  const [selectedSourceFile, setSelectedSourceFile] = useState('');
+  const [datasheetReader, setDatasheetReader] = useState<
+    typeof import('@/lib/example-datasheets') | null
+  >(null);
+  const [screen, setScreen] = useState<'home' | 'workspace' | 'plugins'>(
+    initialState ? 'workspace' : 'home',
+  );
+  const beforePlugins = useRef<'home' | 'workspace'>(initialState ? 'workspace' : 'home');
+  const [homeBrief, setHomeBrief] = useState('');
+  function openPlugins() {
+    cancelPendingNavigation();
+    if (screen !== 'plugins') beforePlugins.current = screen;
+    setModal(null);
+    setScreen('plugins');
+  }
+  const documentKey = documentId;
+  const contextActive = useRef(active);
+  contextActive.current = active;
+  const [fileSelections, setFileSelections] = useState<Record<string, string[]>>({});
+  const selection = fileSelections[doc?.id ?? ''] ?? emptySelection;
+  const setCanvasSelection = useCallback((next: string[] | ((current: string[]) => string[])) => {
+    const id = activeSchematicRef.current;
+    if (!id) return;
+    setFileSelections((previous) => {
+      const current = previous[id] ?? emptySelection;
+      const value = typeof next === 'function' ? next(current) : next;
+      return value === current ||
+        (value.length === current.length && value.every((item, index) => item === current[index]))
+        ? previous
+        : { ...previous, [id]: value };
+    });
+  }, []);
+  const [inspectedPartId, setInspectedPartId] = useState<string | null>(null);
+  const [explicitPropertiesId, setExplicitPropertiesId] = useState<string | null>(null);
+  const [propertiesDismissed, setPropertiesDismissed] = useState(false);
+  const [tool, setTool] = useState<Tool>('select');
+  const moveRequestSequence = useRef(0);
+  const [schematicMoveMode, setSchematicMoveMode] = useState<'move' | 'drag' | null>(null);
+  const [schematicMoveRequest, setSchematicMoveRequest] = useState<SchematicMoveRequest | null>(
+    null,
+  );
+  const navigationRequestSequence = useRef(0);
+  const [schematicNavigationRequest, setSchematicNavigationRequest] = useState<
+    (SchematicNavigationRequest & { revision: number }) | null
+  >(null);
+  useEffect(() => {
+    setSchematicMoveRequest((request) => (request?.schematicId === doc?.id ? request : null));
+  }, [doc?.id]);
+  const setSelection = useCallback(
+    (next: string[] | ((current: string[]) => string[])) => {
+      setPropertiesDismissed(false);
+      setInspectedPartId(null);
+      setExplicitPropertiesId(null);
+      setCanvasSelection(next);
+    },
+    [setCanvasSelection],
+  );
+  const activeSelection = selection.at(-1) || null;
+  const selected = inspectedPartId || selectedField(activeSelection)?.id || activeSelection;
+  const setSelected = useCallback(
+    (id: string | null) => setSelection(id ? [id] : emptySelection),
+    [setSelection],
+  );
+  const clipboard = useRef<{ doc: Circuit; ids: string[] } | null>(null);
+  const [probe, setProbe] = useState<ProbeTarget | null>(null);
+  const [simulationEnabled, setSimulationEnabled] = useState(false);
+  const workbenchPlugins = useWorkbenchPlugins();
+  const spiceAvailable = !!workbenchPlugins.catalog?.plugins.some(
+    (plugin) => plugin.id === SPICE_PLUGIN_ID && plugin.installed && plugin.enabled,
+  );
+  const thermalAvailable = !!workbenchPlugins.catalog?.plugins.some(
+    (plugin) => plugin.id === THERMAL_PLUGIN_ID && plugin.installed && plugin.enabled,
+  );
+  const [thermalEnabled, setThermalEnabled] = useState(false);
+  const [thermalOpened, setThermalOpened] = useState(false);
+  const [thermalPresentation, setThermalPresentation] = useState<ThermalLayoutPresentation | null>(
+    null,
+  );
+  const [layoutAnalysisPanelTarget, setLayoutAnalysisPanelTarget] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const layoutAnalysisPanelMount = useMemo(
+    () => <div style={{ display: 'contents' }} ref={setLayoutAnalysisPanelTarget} />,
+    [],
+  );
+  const thermalAgentContext = useRef<(() => AgentThermalContext) | null>(null);
+  useEffect(() => {
+    if (!thermalAvailable) setThermalEnabled(false);
+  }, [thermalAvailable]);
+  useEffect(() => {
+    if (spiceAvailable) return;
+    setSimulationEnabled(false);
+    setWaveformRequested(false);
+    setProbe(null);
+  }, [spiceAvailable]);
+  // Keep simulation state resident after first use without preparing a netlist on startup.
+  const [simulationOpened, setSimulationOpened] = useState(false);
+  const simulationAgentContext = useRef<(() => AgentSimulationContext) | null>(null);
+  const simulationSettingsHost = useRef<HTMLDivElement>(null);
+  const waveformHost = useRef<HTMLDivElement>(null);
+  const [waveformRequested, setWaveformRequested] = useState(false);
+  const simulationProject = useMemo(
+    () =>
+      spiceAvailable && simulationOpened && project && doc
+        ? schematicSnapshot(project, doc.id)
+        : null,
+    [spiceAvailable, simulationOpened, project, doc],
+  );
+  const [placement, setPlacement] = useState<{ symbol: SExpr; unit: number }>();
+  const [modal, setModal] = useState<Modal>(null);
+  const [annotationTarget, setAnnotationTarget] = useState<(Point & { id?: string }) | null>(null);
+  const propertiesInspector = useRef<HTMLElement>(null);
+  const propertiesDock = useRef<HTMLDivElement>(null);
+  const [propertiesFocusRequest, setPropertiesFocusRequest] = useState<{
+    schematicId: string;
+    objectId: string;
+  } | null>(null);
+  const [inspectorSize, setInspectorSize] = useState<InspectorSize>({});
+  const [propertiesExpanded, setPropertiesExpanded] = useState(true);
+  const [partsSize, setPartsSize] = useState<InspectorSize>({});
+  const [schematicVisualizationOpen, setSchematicVisualizationOpen] = useState(true);
+  const [selectionFilters, setSelectionFilters] = useState(defaultSchematicSelectionFilters);
+  const [historySize, setHistorySize] = useState<InspectorSize>({});
+  const [hasNativeTitlebar, setHasNativeTitlebar] = useState(true);
+  useEffect(() => {
+    setHasNativeTitlebar(window.openpe?.titleBarOverlay === true);
+  }, []);
+  const schematicPanelsAnchor = useRef<HTMLDivElement>(null);
+  const layoutPanelsAnchor = useRef<HTMLDivElement>(null);
+  const objectPanelsAnchor = useRef<HTMLDivElement>(null);
+  const schematicTabs = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (active && screen === 'workspace')
+      schematicTabs.current
+        ?.querySelector<HTMLElement>('[aria-selected="true"]')
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [active, screen, doc?.id]);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const confirmationRef = useRef(confirmation);
+  confirmationRef.current = confirmation;
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
+  const exportBusy = useRef(false);
+  const confirmBusyRef = useRef(false);
+  const [view, setView] = useState<EditorView>(sourceDraft !== null ? 'source' : 'canvas');
+  // Source stays mounted after first use, retaining its text history across views.
+  const [sourceOpened, setSourceOpened] = useState(sourceDraft !== null);
+  const sourceVisible = active && screen === 'workspace' && view === 'source';
+  const retainedNativeSource = useRef<ReturnType<ProjectCore['getNativeFiles']>>({
+    entry: '',
+    files: [],
+  });
+  const nativeSource = useMemo(() => {
+    if (!project) return { entry: '', files: [] };
+    if (sourceVisible || sourceDraft !== null) return core.getNativeFiles();
+    // Hidden editors keep their presentation snapshot. Reveal reads the current
+    // Core synchronously, before CodeMirror's layout-effect synchronization.
+    return retainedNativeSource.current;
+  }, [core, project, sourceDraft, sourceVisible]);
+  useLayoutEffect(() => {
+    // An abandoned render cannot publish an uncommitted Source baseline.
+    retainedNativeSource.current = nativeSource;
+  }, [nativeSource]);
+  const sourceFileFrom = (files: ReturnType<ProjectCore['getNativeFiles']>['files']) =>
+    files.find((file) => file.name === selectedSourceFile) ?? files[0];
+  const [layoutOpened, setLayoutOpened] = useState(false);
+  const [objectOpened, setObjectOpened] = useState(false);
+  const pcb3DView = useRef<PCB3DViewState | null>(null);
+  const layoutAgentContext = useRef<Record<string, unknown> | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
+  const showRightSidebar = useCallback(() => setRightSidebarVisible(true), []);
+  const toggleRightSidebar = useCallback(() => setRightSidebarVisible((value) => !value), []);
+  const schematicNavigationEligible = Boolean(
+    schematicNavigationRequest &&
+    active &&
+    screen === 'workspace' &&
+    view === 'canvas' &&
+    !modal &&
+    !confirmation &&
+    sourceDraft === null &&
+    !coreSnapshot.editingBlocked &&
+    schematicNavigationRequest.revision === coreSnapshot.revision &&
+    schematicNavigationRequest.basis === doc &&
+    schematicNavigationRequest.tool === tool,
+  );
+  useLayoutEffect(() => {
+    if (schematicNavigationRequest && !schematicNavigationEligible)
+      setSchematicNavigationRequest(null);
+  }, [schematicNavigationRequest, schematicNavigationEligible]);
+  function queueSchematicNavigation(nextTool: Tool, partId?: string, cancelPending = false) {
+    const snapshot = core.getSnapshot();
+    const basis = snapshot.project
+      ? findSchematic(snapshot.project, activeSchematicRef.current ?? '')
+      : null;
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      !basis ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked ||
+      (partId && !basis.parts.some((part) => part.id === partId))
+    )
+      return;
+    setPropertiesFocusRequest(null);
+    setSchematicNavigationRequest({
+      id: ++navigationRequestSequence.current,
+      basis,
+      revision: snapshot.revision,
+      tool: nextTool,
+      ...(partId ? { partId } : {}),
+      ...(cancelPending ? { cancelPending } : {}),
+    });
+  }
+  const rightSidebarAvailable =
+    screen === 'workspace' &&
+    Boolean(doc) &&
+    view !== 'source' &&
+    (view !== '3d' || Boolean(project?.pcb));
+  const simulationVisible = spiceAvailable && simulationEnabled && view === 'canvas';
+  const thermalVisible = thermalAvailable && thermalEnabled && view === 'layout';
+  const showLayoutSidebar = useCallback(() => {
+    setThermalEnabled(false);
+    showRightSidebar();
+  }, [showRightSidebar]);
+  const showSchematicSidebar = useCallback(() => {
+    setSimulationEnabled(false);
+    showRightSidebar();
+  }, [showRightSidebar]);
+  const ordinarySidebarVisible = rightSidebarVisible && !thermalVisible && !simulationVisible;
+  const toggleCurrentRightSidebar = thermalVisible
+    ? showLayoutSidebar
+    : simulationVisible
+      ? showSchematicSidebar
+      : toggleRightSidebar;
+  const [rulesOpen, setRulesOpen] = useState<'erc' | 'drc' | null>(null);
+  const [ruleReports, setRuleReports] = useState<Record<'erc' | 'drc', StoredRuleReport | null>>({
+    erc: null,
+    drc: null,
+  });
+  const [ruleBusy, setRuleBusy] = useState<'erc' | 'drc' | null>(null);
+  const [ruleErrors, setRuleErrors] = useState({ erc: '', drc: '' });
+  const [drcSettings, setDRCSettings] = useState<PCBDesignRuleConfig>(() => ({
+    ...defaultPCBDesignRules,
+  }));
+  const [ruleFocus, setRuleFocus] = useState<(RuleCheckFocus & { kind: 'erc' | 'drc' }) | null>(
+    null,
+  );
+  const [rulePanelSize, setRulePanelSize] = useState<InspectorSize>({});
+  const ruleFocusSequence = useRef(0);
+  const ruleWork = useRef<AbortController | null>(null);
+  const ruleLifetime = useRef({ active, screen, view, schematicId: doc?.id });
+  ruleLifetime.current = { active, screen, view, schematicId: doc?.id };
+  useEffect(() => {
+    ruleWork.current?.abort();
+    ruleWork.current = null;
+    setRuleBusy(null);
+    setRuleFocus(null);
+    if (!active || screen !== 'workspace' || !['canvas', 'layout'].includes(view))
+      setRulesOpen(null);
+    return () => ruleWork.current?.abort();
+  }, [active, screen, view, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
+  const currentRuleReport = rulesOpen ? ruleReports[rulesOpen] : null;
+  const ruleReportStale = Boolean(
+    currentRuleReport &&
+    (currentRuleReport.revision !== coreSnapshot.revision ||
+      (rulesOpen === 'erc' && currentRuleReport.schematicId !== doc?.id) ||
+      (rulesOpen === 'drc' && currentRuleReport.settings !== JSON.stringify(drcSettings))),
+  );
+  const closeRuleChecks = useCallback(() => {
+    ruleWork.current?.abort();
+    ruleWork.current = null;
+    setRuleBusy(null);
+    setRulesOpen(null);
+    setRuleFocus(null);
+  }, []);
+  const openRuleChecks = useEditorAction((kind: 'erc' | 'drc') => {
+    if (rulesOpen === kind) {
+      closeRuleChecks();
+      return;
+    }
+    setModal(null);
+    setPropertiesDismissed(true);
+    setRulesOpen(kind);
+    setRuleFocus(null);
+  });
+  async function runRuleChecks(settings?: PCBDesignRuleConfig) {
+    const kind = rulesOpen;
+    const snapshot = core.getSnapshot();
+    if (!kind || !snapshot.project || !doc || ruleWork.current) return;
+    if (snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
+    const config = settings ?? drcSettings;
+    if (kind === 'drc') setDRCSettings(config);
+    const controller = new AbortController();
+    ruleWork.current = controller;
+    setRuleBusy(kind);
+    setRuleErrors((current) => ({ ...current, [kind]: '' }));
+    setRuleFocus(null);
+    const schematicId = doc.id;
+    try {
+      if (kind === 'drc' && (layoutSyncStatus.pending || layoutSyncStatus.error))
+        throw new Error(
+          layoutSyncStatus.error || 'Wait for footprint synchronization before running DRC.',
+        );
+      const result = (await capabilityHost.query(
+        kind === 'erc' ? 'schematic.erc' : 'layout.drc',
+        kind === 'erc' ? { schematicId } : { boardId: snapshot.project.pcb?.id, settings: config },
+        { signal: controller.signal },
+      )) as RuleCheckResult;
+      const lifetime = ruleLifetime.current;
+      if (
+        controller.signal.aborted ||
+        !lifetime.active ||
+        lifetime.screen !== 'workspace' ||
+        lifetime.view !== (kind === 'erc' ? 'canvas' : 'layout') ||
+        lifetime.schematicId !== schematicId ||
+        core.getSnapshot().revision !== snapshot.revision
+      )
+        return;
+      setRuleReports((current) => ({
+        ...current,
+        [kind]: {
+          result,
+          revision: snapshot.revision,
+          ...(kind === 'erc' ? { schematicId } : { settings: JSON.stringify(config) }),
+        },
+      }));
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setRuleErrors((current) => ({ ...current, [kind]: (error as Error).message }));
+    } finally {
+      if (ruleWork.current === controller) {
+        ruleWork.current = null;
+        setRuleBusy(null);
+      }
+    }
+  }
+  function locateRuleIssue(issue: RuleCheckIssue) {
+    if (!rulesOpen || ruleReportStale || sourcePending || coreSnapshot.editingBlocked) return;
+    if (rulesOpen === 'erc') {
+      setTool('select');
+      const selectable = selectableSchematicIds(doc!, layers, selectionFilters);
+      setSelection(issue.objectIds.filter((id) => selectable.has(id)));
+      setPropertiesDismissed(true);
+    }
+    setRuleFocus({
+      kind: rulesOpen,
+      request: ++ruleFocusSequence.current,
+      objectIds: issue.objectIds,
+      ...(issue.location ? { location: issue.location } : {}),
+    });
+    setRulesOpen(null);
+  }
+
+  const [navigation, setNavigation] = useState<{
+    documentKey: string;
+    entries: { screen: 'home' | 'workspace' | 'plugins'; view: EditorView }[];
+    index: number;
+  }>({ documentKey, entries: [{ screen: 'home', view: 'canvas' }], index: 0 });
+  useEffect(() => {
+    setNavigation((current) => {
+      const next = { screen, view };
+      if (current.documentKey !== documentKey) return { documentKey, entries: [next], index: 0 };
+      const entry = current.entries[current.index];
+      if (entry.screen === screen && (screen !== 'workspace' || entry.view === view))
+        return current;
+      const entries = [...current.entries.slice(0, current.index + 1), next].slice(-40);
+      return { documentKey, entries, index: entries.length - 1 };
+    });
+  }, [screen, view, documentKey]);
+  async function navigateHistory(delta: number) {
+    const index = navigation.index + delta;
+    const target = navigation.entries[index];
+    if (!target || (target.screen === 'workspace' && (!doc || !(await changeView(target.view)))))
+      return;
+    if (target.screen !== 'workspace') cancelPendingNavigation();
+    setNavigation((current) => ({ ...current, index }));
+    setScreen(target.screen);
+  }
+
+  const { provider, effort, approvalMode, models } = preferences;
+  const setProvider = useCallback(
+    (provider: string) => setPreferences((p) => ({ ...p, provider })),
+    [setPreferences],
+  );
+  const setEffort = useCallback(
+    (effort: ReasoningEffort) => setPreferences((p) => ({ ...p, effort })),
+    [setPreferences],
+  );
+  const setApprovalMode = useCallback(
+    (approvalMode: 'review' | 'auto') => setPreferences((p) => ({ ...p, approvalMode })),
+    [setPreferences],
+  );
+  const setModels = useCallback(
+    (update: (models: Record<string, string>) => Record<string, string>) =>
+      setPreferences((p) => ({ ...p, models: update(p.models) })),
+    [setPreferences],
+  );
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const [agentError, setAgentError] = useState('');
+  const [sessions, setSessions] = useState<ChatSession[]>(
+    () => initialState?.sessions ?? [createSession()],
+  );
+  const [activeSessionId, setActiveSessionId] = useState(
+    initialState?.activeSessionId ?? sessions[0].id,
+  );
+  const [runningSessions, setRunningSessions] = useState<Record<string, boolean>>({});
+  const onRunningChange = useCallback((id: string, running: boolean) => {
+    setRunningSessions((current) => {
+      if (Boolean(current[id]) === running) return current;
+      const next = { ...current };
+      if (running) next[id] = true;
+      else delete next[id];
+      return next;
+    });
+  }, []);
+  const [filename, setFilename] = useState(initialState?.filename ?? 'untitled.kicad_pro');
+  const [localExample, setLocalExample] = useState(initialState?.localExample);
+  const [cleanSource, setCleanSource] = useState<string | null>(initiallyDirty ? null : source);
+  const cleanSourceRef = useRef(cleanSource);
+  cleanSourceRef.current = cleanSource;
+  const filenameRef = useRef(filename);
+  filenameRef.current = filename;
+  const directoryObservation = useProjectDirectory(
+    fileId,
+    filename,
+    sourceVisible,
+    nativeSource.files.some((file) => file.name === selectedSourceFile) ? '' : selectedSourceFile,
+  );
+  const sourceFiles = useMemo(() => {
+    const nativeNames = new Set(nativeSource.files.map((file) => file.name));
+    return [
+      ...nativeSource.files,
+      ...directoryObservation.files.filter((file) => !nativeNames.has(file.name)),
+    ];
+  }, [nativeSource.files, directoryObservation.files]);
+  const activeSourceFile = sourceFileFrom(sourceFiles);
+  const sourceReadOnly =
+    !!activeSourceFile && 'readOnly' in activeSourceFile && activeSourceFile.readOnly;
+  const diskObservationSelected =
+    directoryObservation.files.some((file) => file.name === selectedSourceFile) &&
+    !nativeSource.files.some((file) => file.name === selectedSourceFile);
+  const [nativeProjectDirty] = useState(createNativeProjectDirtyChecker);
+  const dirty = useMemo(
+    () => nativeProjectDirty(project, cleanSource, filename),
+    [project, cleanSource, filename],
+  );
+  const unsaved = dirty || sourcePending || directoryObservation.pending;
+  const savedProject = useMemo(() => {
+    if (!cleanSource) return null;
+    const current = core.getSnapshot();
+    // The same validated Core snapshot is already the exact saved baseline.
+    // Retain it until the baseline changes, independently of later live edits.
+    return current.source === cleanSource ? current.project : parseProject(cleanSource);
+  }, [core, cleanSource]);
+  const savedSchematics = useMemo(
+    () =>
+      savedProject
+        ? new Map(
+            projectSchematics(savedProject).map((file) => [
+              file.id,
+              schematicFileFingerprint(savedProject, file.id),
+            ]),
+          )
+        : new Map<string, string>(),
+    [savedProject],
+  );
+  const currentSchematics = useMemo(
+    () =>
+      new Map(schematicFiles.map((file) => [file.id, schematicFileFingerprint(project!, file.id)])),
+    [project, schematicFiles],
+  );
+  const projectMetadataDirty = useMemo(
+    () => !!project && !projectMetadataEqual(project, savedProject),
+    [project?.name, project?.pcb, project?.extensions, savedProject],
+  );
+  const [toast, setToast] = useState('');
+  const layers = useMemo(
+    () => ({
+      ...appearanceSettings.appearance.schematicLayers,
+      symbols: true,
+      wires: true,
+      labels: true,
+      noConnects: true,
+    }),
+    [appearanceSettings.appearance.schematicLayers],
+  );
+  const grid = layers.grid;
+  const gridSpacing = appearanceSettings.appearance.gridSpacing;
+  const layoutGridSpacing = appearanceSettings.appearance.layoutGridSpacing;
+  const modelGridSpacing = appearanceSettings.appearance.modelGridSpacing;
+  const selectableIds = useMemo(
+    () => (doc ? selectableSchematicIds(doc, layers, selectionFilters) : null),
+    [doc, layers, selectionFilters],
+  );
+  useEffect(() => {
+    if (!selectableIds) return;
+    setCanvasSelection((current) =>
+      current.some((id) => !selectableIds.has(id))
+        ? current.filter((id) => selectableIds.has(id))
+        : current,
+    );
+  }, [selectableIds, selection, setCanvasSelection]);
+  const [fitKey, setFitKey] = useState(1);
+  const [coordinates] = useState(createCanvasCoordinates);
+  const [pcbSynchronizer] = useState(() => new PCBProjectSync(project));
+  const pcbSync = useRef(pcbSynchronizer);
+  const [layoutRetry, setLayoutRetry] = useState(0);
+  const [layoutSyncStatus, updateLayoutSyncStatus] = useState<LayoutSyncStatus>({
+    pending: false,
+    error: '',
+    warnings: [],
+  });
+  const setLayoutSyncStatus = useCallback((update: React.SetStateAction<LayoutSyncStatus>) => {
+    updateLayoutSyncStatus((current) => {
+      const next = typeof update === 'function' ? update(current) : update;
+      return current.pending === next.pending &&
+        current.error === next.error &&
+        current.warnings.length === next.warnings.length &&
+        current.warnings.every((warning, index) => warning === next.warnings[index])
+        ? current
+        : next;
+    });
+  }, []);
+  prepareProject.current = (next) => {
+    try {
+      const synced = pcbSync.current.prepare(next);
+      if (synced) {
+        setLayoutSyncStatus({ pending: false, error: '', warnings: synced.warnings });
+        return synced.project;
+      }
+    } catch (error) {
+      setLayoutSyncStatus({
+        pending: false,
+        error: `Layout: ${(error as Error).message}`,
+        warnings: [],
+      });
+    }
+    return next;
+  };
+  const pcbSyncTask = useRef<{
+    basis: Project;
+    promise: Promise<SyncedProject>;
+    controller: AbortController;
+  } | null>(null);
+  const adoptedLayoutResults = useRef(new WeakMap<SyncedProject, Project>());
+  function acceptSyncedProject(basis: Project, result: SyncedProject) {
+    if (
+      projectRef.current !== basis ||
+      sourceDraftRef.current !== null ||
+      core.getSnapshot().editingBlocked !== null
+    )
+      return false;
+    const next = result.project;
+    if (next !== basis) {
+      // Library materialization is part of the originating edit, not a second
+      // undo action. Loading a clean document establishes its materialized baseline.
+      const wasClean = !nativeProjectDirty(basis, cleanSourceRef.current, filenameRef.current);
+      if (!core.materialize(basis, next)) return false;
+      if (wasClean) {
+        const clean = core.getSnapshot().source;
+        cleanSourceRef.current = clean;
+        setCleanSource(clean);
+      }
+      const owned = core.getSnapshot().project!;
+      projectRef.current = owned;
+      current.current = findSchematic(owned, activeSchematicRef.current ?? '') ?? owned.schematic;
+    }
+    adoptedLayoutResults.current.set(result, core.getSnapshot().project!);
+    setLayoutSyncStatus({ pending: false, error: '', warnings: result.warnings });
+    return true;
+  }
+  useEffect(() => {
+    if (!project || sourceDraft !== null) return;
+    const controller = new AbortController();
+    try {
+      const ready = pcbSync.current.prepare(project);
+      if (ready) {
+        const promise = Promise.resolve(ready);
+        pcbSyncTask.current = { basis: project, promise, controller };
+        acceptSyncedProject(project, ready);
+        return () => controller.abort();
+      }
+    } catch (error) {
+      pcbSyncTask.current = null;
+      setLayoutSyncStatus({
+        pending: false,
+        error: `Layout: ${(error as Error).message}`,
+        warnings: [],
+      });
+      return () => controller.abort();
+    }
+    const promise = pcbSync.current.resolve(
+      project,
+      async (id, signal) =>
+        (await api(`libraries/footprints?id=${encodeURIComponent(id)}`, { signal })).json(),
+      controller.signal,
+    );
+    pcbSyncTask.current = { basis: project, promise, controller };
+    setLayoutSyncStatus((s) => ({ ...s, pending: true, error: '' }));
+    void promise
+      .then((result) => {
+        if (!controller.signal.aborted) acceptSyncedProject(project, result);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted && projectRef.current === project) {
+          if (pcbSyncTask.current?.promise === promise) pcbSyncTask.current = null;
+          setLayoutSyncStatus({ pending: false, error: `Layout: ${error.message}`, warnings: [] });
+        }
+      });
+    return () => controller.abort();
+  }, [project, sourceDraft, layoutRetry]);
+  async function completeLayout(snapshot: Project) {
+    const task = pcbSyncTask.current;
+    const result =
+      task?.basis === snapshot && !task.controller.signal.aborted
+        ? await task.promise
+        : await pcbSync.current.resolve(
+            snapshot,
+            async (id, signal) =>
+              (await api(`libraries/footprints?id=${encodeURIComponent(id)}`, { signal })).json(),
+            new AbortController().signal,
+          );
+    if (core.getSnapshot().sourceDraft !== null)
+      throw new Error('Source changed while loading footprints. Apply it before saving.');
+    if (
+      projectRef.current !== result.project &&
+      adoptedLayoutResults.current.get(result) !== projectRef.current &&
+      !acceptSyncedProject(snapshot, result)
+    )
+      throw new Error('The project changed while loading footprints. Try again.');
+    return core.getSnapshot().project!;
+  }
+  const fileInput = useRef<HTMLInputElement>(null);
+  const closingDocument = useRef(false);
+  const current = useRef<Circuit | null>(doc);
+  current.current = doc;
+  const fileViewports = useRef(new Map<string, CanvasViewport>());
+  useLayoutEffect(
+    () =>
+      core.subscribe((event) => {
+        const snapshot = core.getSnapshot();
+        projectRef.current = snapshot.project;
+        sourceDraftRef.current = snapshot.sourceDraft;
+        current.current = snapshot.project
+          ? (findSchematic(snapshot.project, activeSchematicRef.current ?? '') ??
+            snapshot.project.schematic)
+          : null;
+        if (event.type === 'history.changed' || event.type === 'source.applied') {
+          setSelected(null);
+          setTool('select');
+        }
+      }),
+    [core],
+  );
+  useEffect(() => {
+    const disposeCore = registerProjectCapabilities(capabilityHost, core, {
+      prepareModelCad: (objects, signal) => prepareModelCadObjects(core, objects, signal),
+    });
+    const disposePlugins = registerWorkbenchPluginCapabilities(capabilityHost);
+    const disposeProviderPlugins = registerProviderPluginCapabilities(capabilityHost);
+    const disposeLibraries = registerLibraryCapabilities(capabilityHost, core);
+    return () => {
+      disposeLibraries();
+      disposeProviderPlugins();
+      disposePlugins();
+      disposeCore();
+    };
+  }, [core, capabilityHost]);
+  useEffect(() => {
+    setInspectedPartId(null);
+    setExplicitPropertiesId(null);
+    setPropertiesDismissed(false);
+    setTool('select');
+    setPlacement(undefined);
+    setModal(null);
+  }, [doc?.id]);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notify = useCallback((s: string) => {
+    setToast(s);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 5500);
+  }, []);
+  async function detect() {
+    setDetecting(true);
+    setAgentError('');
+    try {
+      setAgents(await (await api('agents')).json());
+    } catch (e) {
+      setAgentError((e as Error).message);
+      notify((e as Error).message);
+    } finally {
+      setDetecting(false);
+    }
+  }
+  const cancelAppClose = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (window.openpe && active && !agents.length && !detecting) void detect();
+  }, [active]);
+  useEffect(() => {
+    if (active) setScreen(projectRef.current ? 'workspace' : 'home');
+    if (!active) setModal(null);
+  }, [active]);
+  useEffect(() => {
+    if (doc)
+      onDocumentChange(documentId, {
+        source,
+        sourceDraft,
+        dirty,
+        sessions,
+        activeSessionId,
+        filename,
+        localExample,
+        title: project!.name ?? project!.schematic.title,
+        activeSchematicId: doc.id,
+        closedSchematicIds,
+        unsaved,
+      });
+  }, [
+    source,
+    sourceDraft,
+    sessions,
+    activeSessionId,
+    filename,
+    localExample,
+    unsaved,
+    dirty,
+    doc?.id,
+    closedSchematicIds,
+    documentId,
+    onDocumentChange,
+  ]);
+  const fileActionBusy = useRef(false);
+  const saveBusy = useRef(false);
+  const nativeVersionBusy = useRef(false);
+  const fileActionRef = useRef(handleFileAction);
+  fileActionRef.current = handleFileAction;
+  const directoryEditorRef = useRef(directoryObservation);
+  directoryEditorRef.current = directoryObservation;
+  useEffect(() => {
+    const snapshot = () => {
+      const source = projectRef.current ? serializeProject(projectRef.current) : '';
+      return {
+        source,
+        sourceDraft: sourceDraftRef.current,
+        dirty:
+          nativeProjectDirty(projectRef.current, cleanSourceRef.current, filenameRef.current) ||
+          directoryEditorRef.current.hasPending(),
+        closedSchematicIds: closedSchematicIdsRef.current,
+        activeSchematicId: projectRef.current
+          ? (
+              findSchematic(projectRef.current, activeSchematicRef.current ?? '') ??
+              projectRef.current.schematic
+            ).id
+          : undefined,
+      };
+    };
+    registerController(documentId, {
+      activate: () => setScreen('workspace'),
+      snapshot,
+      notify,
+      fileAction: (action) => fileActionRef.current(action),
+      requestClose: (done, cancel) => {
+        if (confirmBusyRef.current && confirmationRef.current?.kind !== 'close') {
+          cancel();
+          return;
+        }
+        cancelPendingNavigation();
+        cancelAppClose.current = cancel;
+        setModal(null);
+        setScreen('workspace');
+        setConfirmError('');
+        setConfirmation({
+          kind: 'close',
+          action: (saveFirst) => done(saveFirst ? 'save' : 'discard', snapshot()),
+        });
+      },
+    });
+    return () => registerController(documentId, null);
+  }, [documentId, registerController]);
+  useEffect(() => {
+    if (initialNotice) notify(initialNotice);
+    else if (recovered) notify('Recovered your previous project draft.');
+  }, [recovered, initialNotice]);
+  function commitProject(next: Project) {
+    try {
+      return core.commitProject(next);
+    } catch (error) {
+      notify((error as Error).message);
+      return false;
+    }
+  }
+  const commit = useCallback(
+    (next: Circuit) => {
+      try {
+        return core.replaceSchematic(next);
+      } catch (error) {
+        notify((error as Error).message);
+        return false;
+      }
+    },
+    [core, notify],
+  );
+  const commitBoard = useCallback(
+    (board: PCB) => {
+      try {
+        return core.replaceBoard(board);
+      } catch (error) {
+        notify((error as Error).message);
+        return false;
+      }
+    },
+    [core, notify],
+  );
+  const sourcePreparation = useRef<AbortController | null>(null);
+  const navigationIntent = useRef(0);
+  function cancelPendingNavigation() {
+    navigationIntent.current++;
+    sourcePreparation.current?.abort();
+    return navigationIntent.current;
+  }
+  useLayoutEffect(
+    () => () => sourcePreparation.current?.abort(),
+    [core, sourceDraft, coreSnapshot.revision, active],
+  );
+  async function applySource(signal?: AbortSignal): Promise<Project | null> {
+    signal?.throwIfAborted();
+    const pending = core.getSnapshot().sourceDraft !== null;
+    if (pending) {
+      sourcePreparation.current?.abort();
+      const control = new AbortController();
+      const abort = () => control.abort(signal?.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort();
+      sourcePreparation.current = control;
+      let parsed = false;
+      try {
+        const candidate = core.previewSource();
+        parsed = true;
+        if (!candidate) return null;
+        const objects = core.pendingModelCadGeometry(candidate);
+        if (objects.length) await prepareModelCadObjects(core, objects, control.signal);
+        control.signal.throwIfAborted();
+      } catch (error) {
+        if (control.signal.aborted) {
+          signal?.throwIfAborted();
+          return null;
+        }
+        if (!parsed) core.applySource();
+        // Applying below retains the normal native Source diagnostics. Kernel
+        // failures keep the same drafts and report the actionable host error.
+        notify((error as Error).message);
+        setSourceOpened(true);
+        setView('source');
+        setScreen('workspace');
+        return null;
+      } finally {
+        signal?.removeEventListener('abort', abort);
+        if (sourcePreparation.current === control) sourcePreparation.current = null;
+      }
+    }
+    const next = core.applySource();
+    if (!next) {
+      setSourceOpened(true);
+      setView('source');
+      setScreen('workspace');
+      return null;
+    }
+    if (pending) {
+      setSelected(null);
+      setTool('select');
+    }
+    return next;
+  }
+  async function changeView(next: typeof view, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    const intent = cancelPendingNavigation();
+    if (next !== 'source' && !(await applySource(signal))) return false;
+    signal?.throwIfAborted();
+    if (intent !== navigationIntent.current) return false;
+    if (next === 'source') setSourceOpened(true);
+    if (next === '3d') setObjectOpened(true);
+    if (next === 'layout') {
+      setLayoutOpened(true);
+      if (layoutSyncStatus.error) setLayoutRetry((value) => value + 1);
+    }
+    if (next !== view) setModal(null);
+    setView(next);
+    return true;
+  }
+  async function selectSchematic(id: string, signal?: AbortSignal) {
+    if (id === doc?.id) return;
+    const intent = cancelPendingNavigation();
+    const latest = await applySource(signal);
+    signal?.throwIfAborted();
+    if (!latest || intent !== navigationIntent.current || !findSchematic(latest, id)) return;
+    setClosedSchematics((ids) => ids.filter((closed) => closed !== id));
+    setActiveSchematicId(id);
+    setView('canvas');
+  }
+  async function newSchematicFile() {
+    const intent = cancelPendingNavigation();
+    if (!(await applySource())) return;
+    if (intent !== navigationIntent.current) return;
+    try {
+      core.execute('schematic.add');
+      const files = projectSchematics(core.getSnapshot().project!);
+      setActiveSchematicId(files[files.length - 1].id);
+      setView('canvas');
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }
+  async function closeSchematicFile(id: string) {
+    if (!openSchematicFiles.some((file) => file.id === id)) return false;
+    const intent = cancelPendingNavigation();
+    if (openSchematicFiles.length === 1) {
+      requestProjectClose();
+      return false;
+    }
+    if (id === doc?.id) {
+      const latest = await applySource();
+      if (!latest || intent !== navigationIntent.current) return false;
+      const remaining = openSchematicFiles.filter(
+        (file) => file.id !== id && findSchematic(latest, file.id),
+      );
+      if (!remaining.length) {
+        requestProjectClose();
+        return false;
+      }
+      const index = openSchematicFiles.findIndex((file) => file.id === id);
+      setActiveSchematicId(remaining[Math.min(index, remaining.length - 1)].id);
+      setView('canvas');
+    }
+    setClosedSchematics((ids) => [...ids.filter((closed) => closed !== id), id]);
+    return true;
+  }
+  async function restoreProjectVersion(restored: string) {
+    const basis = core.getSnapshot();
+    if (basis.sourceDraft !== null)
+      throw new Error('Apply the source edits before restoring a version.');
+    if (basis.editingBlocked) throw new Error(basis.editingBlocked);
+    const candidate = parseProject(restored);
+    const intent = cancelPendingNavigation(),
+      control = new AbortController();
+    sourcePreparation.current = control;
+    try {
+      const pending = core.pendingModelCadGeometry(candidate);
+      if (pending.length) await prepareModelCadObjects(core, pending, control.signal);
+      control.signal.throwIfAborted();
+      const current = core.getSnapshot();
+      if (
+        intent !== navigationIntent.current ||
+        current.revision !== basis.revision ||
+        current.sourceDraft !== basis.sourceDraft ||
+        current.project !== basis.project ||
+        current.editingBlocked
+      )
+        throw new Error('The project changed while the version was prepared. Try again.');
+      core.commitProject(candidate);
+      setSelection([]);
+      setSelected(null);
+      setTool('select');
+      setModal(null);
+      notify('Version restored. Save to write it to disk.');
+    } finally {
+      if (sourcePreparation.current === control) sourcePreparation.current = null;
+    }
+  }
+  function openAnnotation(position: Point, id?: string) {
+    if (sourceDraftRef.current !== null) {
+      notify('Apply the source edits before adding annotations.');
+      return;
+    }
+    if (!layers.notes) {
+      notify('Show Notes in Visible layers before adding annotations.');
+      return;
+    }
+    setAnnotationTarget({ ...position, id });
+    setModal('annotation');
+  }
+  const undoStep = useCallback(() => {
+    try {
+      if (core.undo()) setSelected(null);
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }, [core, setSelected, notify]);
+  const redoStep = useCallback(() => {
+    try {
+      if (core.redo()) setSelected(null);
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }, [core, setSelected, notify]);
+  function remove(targets: string[] = selection) {
+    if (!doc || sourcePending || !targets.length) return;
+    const ids = targets.filter((id) => !selectedField(id));
+    if (!ids.length) {
+      notify('Component text fields cannot be deleted.');
+      return;
+    }
+    try {
+      if (commit(removeSelection(doc, ids))) setSelected(null);
+    } catch (error) {
+      notify((error as Error).message);
+    }
+  }
+  function rotate() {
+    if (doc && selection.length) commit(transformSelection(doc, selection, 'rotate'));
+  }
+  function requestSchematicMove(connected: boolean) {
+    if (!doc || sourcePending || !selection.length) return;
+    setTool('select');
+    setSchematicMoveRequest({ id: ++moveRequestSequence.current, schematicId: doc.id, connected });
+  }
+  function duplicate() {
+    if (!doc) return;
+    const result = duplicateSelection(doc, selection);
+    if (result.selection.length && commit(result.circuit)) setSelection(result.selection);
+  }
+  function copySelection() {
+    if (!doc || !selection.some((id) => !selectedField(id))) return;
+    clipboard.current = {
+      doc: structuredClone(doc),
+      ids: selection.filter((id) => !selectedField(id)),
+    };
+    notify('Selection copied.');
+  }
+  function pasteSelection() {
+    if (!doc || !clipboard.current) return;
+    const clip = clipboard.current;
+    // Paste only within its source document so embedded symbol IDs cannot collide.
+    if (clip.doc.id !== doc.id) {
+      notify('Copy a selection from this document first.');
+      return;
+    }
+    for (const p of clip.doc.parts.filter((p) => clip.ids.includes(p.id))) {
+      if (
+        doc.libraries[p.libId] &&
+        JSON.stringify(doc.libraries[p.libId]) !== JSON.stringify(clip.doc.libraries[p.libId])
+      ) {
+        notify('The embedded symbol changed. Copy the selection again before pasting.');
+        return;
+      }
+    }
+    const source = structuredClone(doc),
+      picked = new Set(clip.ids);
+    // Duplicate a snapshot, retaining unrelated live objects and allocating new references.
+    const restored = structuredClone(clip.doc);
+    for (const key of ['parts', 'wires', 'labels', 'junctions', 'noConnects'] as const) {
+      const currentItems = source[key] || [],
+        copiedItems = restored[key] || [];
+      Object.assign(source, {
+        [key]: [
+          ...currentItems.filter((p) => !picked.has(p.id)),
+          ...copiedItems.filter((p) => picked.has(p.id)),
+        ],
+      });
+    }
+    source.libraries = { ...restored.libraries, ...source.libraries };
+    source.original = restored.original;
+    const result = duplicateSelection(
+      source,
+      clip.ids,
+      { x: 10.16, y: 10.16 },
+      doc.parts.map((p) => p.ref),
+    );
+    const copies = new Set(result.selection),
+      next = structuredClone(doc);
+    for (const key of ['parts', 'wires', 'labels', 'junctions', 'noConnects'] as const)
+      Object.assign(next, {
+        [key]: [
+          ...(next[key] || []),
+          ...(result.circuit[key] || []).filter((p) => copies.has(p.id)),
+        ],
+      });
+    next.libraries = source.libraries;
+    const texts = children(result.circuit.original || [], 'text').filter((n) =>
+      copies.has(val(child(n, 'uuid'))),
+    );
+    if (texts.length) {
+      next.original ||= parseSExpr(serializeCircuit(next));
+      next.original.push(...texts);
+    }
+    if (result.selection.length && commit(next)) setSelection(result.selection);
+  }
+  async function save(
+    saveAs = false,
+    signal?: AbortSignal,
+  ): Promise<'saved' | 'cancelled' | Error> {
+    if (!doc) return 'cancelled';
+    if (saveBusy.current || closingDocument.current)
+      return new Error('A project file operation is already in progress.');
+    saveBusy.current = true;
+    try {
+      await directoryObservation.save();
+      signal?.throwIfAborted();
+      const applied = await applySource(signal);
+      if (!applied) throw new Error('Fix the source errors before saving.');
+      const snapshot = await completeLayout(applied);
+      signal?.throwIfAborted();
+      // Carry the current native bytes through the private host adapter too.
+      // Defaults and native record order must agree with the visible Source.
+      const saveProject = {
+        ...snapshot,
+        nativeFiles: projectNativeFiles(snapshot, projectFilename(filename)),
+      };
+      let savedSource = serializeProject(saveProject);
+      let savedName = saveProject.nativeFiles.entry;
+      if (window.openpe) {
+        const result = await window.openpe.save({
+          fileId: fileId!,
+          source: savedSource,
+          name: filename,
+          saveAs,
+        });
+        if (!result) return 'cancelled';
+        savedName = result.name;
+        setFilename(result.name);
+        setLocalExample(result.localExample ?? (saveAs ? false : localExample));
+      } else {
+        for (const file of saveProject.nativeFiles.files) downloadText(file.source, file.name);
+      }
+      if (projectRef.current !== snapshot || sourceDraftRef.current !== null) {
+        throw new Error(
+          'The project changed while saving. Save again to include the latest edits.',
+        );
+      }
+      // Source follows the files actually written, including a Save as stem.
+      const nativeFiles = projectNativeFiles(saveProject, savedName);
+      if (!core.materialize(snapshot, { ...snapshot, nativeFiles }))
+        throw new Error(
+          'The project changed while saving. Save again to include the latest edits.',
+        );
+      core.setNativeEntryName(savedName);
+      savedSource = core.getSnapshot().source;
+      setCleanSource(savedSource);
+      cleanSourceRef.current = savedSource;
+      directoryObservation.refresh();
+      notify('Save project');
+      return 'saved';
+    } catch (e) {
+      notify((e as Error).message);
+      return e as Error;
+    } finally {
+      saveBusy.current = false;
+    }
+  }
+  async function exportFile(signal?: AbortSignal): Promise<'exported' | 'cancelled' | Error> {
+    if (!project || !doc || exportBusy.current)
+      return new Error('A project export is not available.');
+    exportBusy.current = true;
+    try {
+      signal?.throwIfAborted();
+      const applied = await applySource(signal);
+      if (!applied) throw new Error('Fix the source errors before exporting.');
+      const snapshot = await completeLayout(applied);
+      signal?.throwIfAborted();
+      const schematic = findSchematic(snapshot, doc.id) ?? snapshot.schematic;
+      const exportSource = serializeProject(snapshot);
+      const exportName = schematic.id !== snapshot.schematic.id ? schematic.title : filename;
+      let kind: 'schematic' | 'pcb' = 'schematic';
+      if (window.openpe) {
+        const result = await window.openpe.exportKiCad({
+          source: exportSource,
+          name: exportName,
+          schematicId: schematic.id,
+        });
+        if (!result) return 'cancelled';
+        kind =
+          result.kind ?? (result.name.toLowerCase().endsWith('.kicad_pcb') ? 'pcb' : 'schematic');
+      } else {
+        kind = view === 'layout' || view === '3d' ? 'pcb' : 'schematic';
+        const content = exportKiCad(snapshot, kind, schematic.id);
+        downloadText(
+          content,
+          exportName.replace(/\.(?:openpe\.json|kicad_pro)$/i, '') +
+            (kind === 'pcb' ? '.kicad_pcb' : '.kicad_sch'),
+        );
+      }
+      notify(
+        kind === 'pcb'
+          ? 'Exported KiCad PCB. Refill zones and check connectivity in KiCad.'
+          : 'Exported KiCad schematic',
+      );
+      return 'exported';
+    } catch (e) {
+      notify((e as Error).message);
+      return e as Error;
+    } finally {
+      exportBusy.current = false;
+    }
+  }
+  async function handleFileAction(action: Exclude<ProjectFileAction, 'reveal'>): Promise<boolean> {
+    if (fileActionBusy.current || closingDocument.current || confirmationRef.current) return false;
+    if (action === 'close') {
+      requestProjectClose();
+      return false;
+    }
+    fileActionBusy.current = true;
+    try {
+      if (action === 'duplicate') {
+        // Validate a detached file set without changing the original draft/history.
+        const copy = structuredClone(core.previewSource()!);
+        copy.name = `${copy.name ?? copy.schematic.title} copy`;
+        const copyName = filename.replace(/\.(?:openpe\.json|kicad_pro)$/i, '') + '-copy.kicad_pro';
+        copy.nativeFiles = projectNativeFiles(copy, copyName);
+        await onAddProject(copy, copyName, false);
+        return true;
+      } else {
+        return (await save(action === 'save-as')) === 'saved';
+      }
+    } catch (error) {
+      notify((error as Error).message);
+      return false;
+    } finally {
+      fileActionBusy.current = false;
+    }
+  }
+  function requestProjectClose() {
+    if (confirmation || closingDocument.current) return;
+    cancelPendingNavigation();
+    if (!doc || !unsaved) {
+      void Promise.resolve()
+        .then(closeProject)
+        .catch((e) => {
+          onSelectProject(documentId);
+          notify((e as Error).message);
+        });
+      return;
+    }
+    setModal(null);
+    setConfirmError('');
+    setConfirmation({ kind: 'close-project', action: closeProject });
+  }
+  async function closeProject() {
+    if (closingDocument.current) return;
+    if (
+      saveBusy.current ||
+      exportBusy.current ||
+      nativeVersionBusy.current ||
+      directoryObservation.saving
+    )
+      throw new Error('Wait for the project file operation to finish before closing.');
+    closingDocument.current = true;
+    core.setEditingBlocked('This project is closing.');
+    capabilityHost.suspend('This project is closing.');
+    try {
+      if (!(await onCloseProject(documentId)))
+        throw new Error('Another project is closing. Try again.');
+    } catch (error) {
+      closingDocument.current = false;
+      core.setEditingBlocked(null);
+      capabilityHost.resume();
+      throw error;
+    }
+  }
+  function cancelConfirmation() {
+    if (confirmBusyRef.current) return;
+    if (confirmation?.kind === 'close') cancelAppClose.current?.();
+    setConfirmation(null);
+    setConfirmError('');
+  }
+  async function finishConfirmation(saveFirst = false) {
+    if (!confirmation || confirmBusyRef.current) return;
+    confirmBusyRef.current = true;
+    setConfirmBusy(true);
+    setConfirmError('');
+    try {
+      if (saveFirst) {
+        const result = await save();
+        if (result !== 'saved') {
+          setConfirmError(
+            result === 'cancelled' ? 'Save cancelled. Your project is still open.' : result.message,
+          );
+          return;
+        }
+      }
+      await confirmation.action(saveFirst);
+      // A background edit may have queued a fresh review of this same project.
+      setConfirmation((current) => (current === confirmation ? null : current));
+    } catch (e) {
+      setConfirmError((e as Error).message);
+    } finally {
+      confirmBusyRef.current = false;
+      setConfirmBusy(false);
+    }
+  }
+  async function enterDocument(
+    loaded: Project | (() => Promise<Project>),
+    name: string,
+    unsaved: boolean,
+    brief = '',
+    grant?: string,
+    notice?: string,
+    openKey?: string,
+  ) {
+    await onAddProject(loaded, name, unsaved, brief, grant, notice, openKey);
+  }
+  function open() {
+    void openDocument();
+  }
+  async function openDocument() {
+    if (window.openpe) {
+      try {
+        const result = await window.openpe.open();
+        if (!result) return;
+        if ('fileId' in result) {
+          onSelectFile(result.fileId);
+          return;
+        }
+        const loaded = importDocument(result.source);
+        const grant = await window.openpe.acceptOpen();
+        await enterDocument(
+          loaded,
+          result.name,
+          false,
+          '',
+          grant,
+          result.native ? 'Project opened' : 'KiCad file opened. Save to create a project.',
+        );
+        setScreen('workspace');
+        notify(result.native ? 'Project opened' : 'KiCad file opened. Save to create a project.');
+      } catch (e) {
+        notify((e as Error).message);
+      }
+    } else fileInput.current?.click();
+  }
+  function newFile(example?: ExampleId, brief = '') {
+    void (async () => {
+      try {
+        if (example && onSelectExample(`example:${example}`)) return;
+        const createNext = async () => {
+          const next = example
+            ? (await import('@/lib/create-home-example')).createHomeExample(example)
+            : createProject(emptyCircuit());
+          if (!example) {
+            next.name = 'Untitled project';
+            next.schematic.title = 'Schematic 1';
+          }
+          return next;
+        };
+        await enterDocument(
+          createNext,
+          example ? homeExampleCatalog.find((entry) => entry.id === example)!.title : 'untitled',
+          false,
+          brief,
+          undefined,
+          undefined,
+          example ? `example:${example}` : undefined,
+        );
+      } catch (error) {
+        notify((error as Error).message);
+      }
+    })();
+  }
+  async function openProperties(id: string) {
+    if (simulationEnabled || !doc || !(await changeView('canvas'))) return;
+    showRightSidebar();
+    setPropertiesExpanded(true);
+    setSelection(visibleSchematicIds(doc, layers).has(id) ? [id] : []);
+    setInspectedPartId(id);
+    setTool('select');
+    setModal(null);
+    setPropertiesFocusRequest({ schematicId: doc.id, objectId: id });
+  }
+  function openObjectProperties(id: string) {
+    if (!doc || sourcePending || !selectableSchematicIds(doc, layers, selectionFilters).has(id))
+      return;
+    const field = selectedField(id);
+    if (simulationEnabled && field?.field !== 'Sim.Params') return;
+    if (simulationEnabled) setSimulationEnabled(false);
+    if (doc.parts.some((part) => part.id === id)) {
+      openProperties(id);
+      return;
+    }
+    const note = schematicTexts(doc.original).find((note) => note.id === id);
+    if (note) {
+      setSelection([id]);
+      openAnnotation(note, id);
+      return;
+    }
+    if (
+      !field &&
+      !doc.labels.some((label) => label.id === id) &&
+      !doc.wires.some((wire) => wire.id === id)
+    )
+      return;
+    setSelection([id]);
+    setExplicitPropertiesId(id);
+    showRightSidebar();
+    setPropertiesExpanded(true);
+    setTool('select');
+    setModal(null);
+    setPropertiesFocusRequest({ schematicId: doc.id, objectId: id });
+  }
+  function saveFields(
+    ref: string,
+    value: string,
+    fields: Record<string, string>,
+    partId = selected,
+    includeInSimulation?: boolean,
+    sourceCircuit: Circuit | null = doc,
+    footprintDetail?: FootprintDetail,
+  ) {
+    if (!sourceCircuit) return false;
+    const selectedPart = sourceCircuit.parts.find((p) => p.id === partId);
+    if (!selectedPart) return false;
+    const d = structuredClone(sourceCircuit);
+    for (const p of d.parts.filter((p) => p.ref === selectedPart.ref)) {
+      p.ref = ref;
+      p.value = value;
+      p.fields = structuredClone(fields);
+      if (includeInSimulation !== undefined) p.excludeFromSimulation = !includeInSimulation;
+      if (p.raw)
+        p.raw = p.raw.filter(
+          (n) =>
+            !Array.isArray(n) ||
+            n[0] !== 'property' ||
+            ['Reference', 'Value'].includes(val(n)) ||
+            Object.hasOwn(fields, val(n)),
+        );
+    }
+    const assignment = (fields.Footprint || '').trim();
+    if (footprintDetail && assignment !== (partFields(selectedPart).Footprint || '').trim()) {
+      const latest = core.getSnapshot().project;
+      if (!latest || latest.schematic !== sourceCircuit) return false;
+      const previous = pcbSync.current.sources.get(assignment);
+      const restore = () => {
+        if (previous) pcbSync.current.sources.set(assignment, previous);
+        else pcbSync.current.sources.delete(assignment);
+      };
+      try {
+        if (footprintDetail.id !== assignment)
+          throw new Error('The selected footprint no longer matches this assignment.');
+        pcbSync.current.sources.set(assignment, footprintDetail);
+        if (!pcbSync.current.prepare({ ...latest, schematic: d }))
+          throw new Error('Wait for Layout synchronization before assigning this footprint.');
+        const accepted = commit(d);
+        if (!accepted) restore();
+        return accepted;
+      } catch (error) {
+        restore();
+        notify((error as Error).message);
+        return false;
+      }
+    }
+    return commit(d);
+  }
+  function patchGeometry(
+    key: 'x' | 'y' | 'rotation',
+    input: string,
+  ): { success: boolean; value: number } {
+    const existing = doc!.parts.find((p) => p.id === selected)!;
+    const limit = key === 'rotation' ? 360 : 100000;
+    const value = Number(input);
+    if (!input.trim() || !Number.isFinite(value) || Math.abs(value) > limit) {
+      notify(
+        `${key === 'rotation' ? 'Rotation' : 'Position'} must be between ${-limit} and ${limit}${key === 'rotation' ? '°' : ' mm'}.`,
+      );
+      return { success: false, value: existing[key] };
+    }
+    const next = key === 'rotation' ? Number(value.toFixed(4)) : snap(value);
+    if (Math.abs(next) > limit) {
+      notify('Position is outside the supported grid range.');
+      return { success: false, value: existing[key] };
+    }
+    if (next !== existing[key]) {
+      const d = structuredClone(doc!);
+      d.parts.find((p) => p.id === selected)![key] = next;
+      if (!commit(d)) return { success: false, value: existing[key] };
+    }
+    return { success: true, value: next };
+  }
+  function onApply(ops: Operation[], basis?: string) {
+    const latest =
+      basis && projectRef.current
+        ? projectSchematics(projectRef.current).find((file) => circuitFingerprint(file) === basis)
+        : current.current;
+    if (!latest) {
+      notify('The schematic has changed. Ask your agent for a fresh proposal.');
+      return false;
+    }
+    try {
+      const next = applyProposal(latest, ops);
+      if (!commit(next)) return false;
+      notify(`Applied ${ops.length} changes.`);
+      return true;
+    } catch (e) {
+      notify((e as Error).message);
+      return false;
+    }
+  }
+  useEffect(() => {
+    function key(e: KeyboardEvent) {
+      const el = e.target as HTMLElement;
+      const input = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
+      if (!active || e.defaultPrevented || e.isComposing || hasOpenOverlay()) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (screen === 'workspace') void save(e.shiftKey);
+        return;
+      }
+      if (input || screen === 'plugins') return;
+      if (e.altKey) return;
+      if (e.key === 'Escape') {
+        setModal(null);
+        setTool('select');
+        setSelected(null);
+        return;
+      }
+      if (modal) return;
+      const k = e.key.toLowerCase();
+      if (e.ctrlKey || e.metaKey) {
+        if (view === 'canvas' && tool === 'annotate' && !['o', 'a', 'c'].includes(k)) {
+          e.preventDefault();
+          return;
+        }
+        if (view === 'canvas' && screen === 'workspace' && el.matches('.canvas-wrap > svg')) {
+          if (k === 'c') {
+            e.preventDefault();
+            copySelection();
+            return;
+          }
+          if (k === 'v') {
+            e.preventDefault();
+            pasteSelection();
+            return;
+          }
+          if (k === 'd') {
+            e.preventDefault();
+            duplicate();
+            return;
+          }
+          if (k === 'a' && doc) {
+            e.preventDefault();
+            const visible = selectableSchematicIds(doc, layers, selectionFilters);
+            setSelection(
+              [...visible].filter((id) => {
+                const field = selectedField(id);
+                return !field || !visible.has(field.id);
+              }),
+            );
+            return;
+          }
+        }
+        if (k === 'z' && screen === 'workspace') {
+          e.preventDefault();
+          e.shiftKey ? redoStep() : undoStep();
+        }
+        if (k === 'o') {
+          e.preventDefault();
+          void open();
+        }
+        return;
+      }
+      if (screen !== 'workspace' || !doc || view !== 'canvas') return;
+      if (
+        e.code === 'Space' &&
+        !e.altKey &&
+        !e.shiftKey &&
+        view === 'canvas' &&
+        el.matches('.canvas-wrap > svg')
+      ) {
+        e.preventDefault();
+        if (!e.repeat) setFitKey((k) => k + 1);
+        return;
+      }
+      if (k === 'v') setTool('select');
+      if (tool === 'annotate' && ['r', 'x', 'y', 'delete', 'backspace'].includes(k)) {
+        e.preventDefault();
+        return;
+      }
+      if (k === 'h') setTool('hand');
+      if (k === 'a') {
+        e.preventDefault();
+        setModal('library');
+      }
+    }
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
+  const part = doc?.parts.find((p) => p.id === selected),
+    label = doc?.labels.find((l) => l.id === selected),
+    wire = doc?.wires.find((w) => w.id === selected);
+  const annotation = useMemo(
+    () => schematicTexts(doc?.original).find((t) => t.id === selected),
+    [doc?.original, selected],
+  );
+  const inspectedField = inspectedPartId ? null : selectedField(activeSelection);
+  const fieldPosition =
+    doc && inspectedField && activeSelection ? objectPosition(doc, activeSelection) : null;
+  const propertiesMounted =
+    tool !== 'annotate' && (!wire || explicitPropertiesId === wire.id) && !propertiesDismissed;
+  const propertiesVisible = view === 'canvas' && propertiesMounted;
+  const propertiesPresented =
+    propertiesVisible &&
+    active &&
+    screen === 'workspace' &&
+    rightSidebarVisible &&
+    !simulationVisible;
+  const propertiesActive =
+    propertiesPresented &&
+    propertiesExpanded &&
+    !modal &&
+    !confirmation &&
+    !sourcePending &&
+    !coreSnapshot.editingBlocked;
+  const canEditProperties = () => propertiesActive && current.current === doc;
+  function saveNetName(value: string): boolean {
+    if (!canEditProperties() || !doc || !label) return false;
+    if (!value.trim()) {
+      notify('Enter a net name.');
+      return false;
+    }
+    if (value === label.text) return true;
+    const next = structuredClone(doc);
+    next.labels.find((item) => item.id === label.id)!.text = value;
+    return commit(next);
+  }
+  useEffect(() => {
+    if (
+      !propertiesFocusRequest ||
+      !propertiesActive ||
+      propertiesFocusRequest.schematicId !== doc?.id ||
+      propertiesFocusRequest.objectId !== (inspectedPartId || activeSelection)
+    )
+      return;
+    const inspector = propertiesInspector.current;
+    (
+      inspector?.querySelector<HTMLElement>('input:not([disabled]), textarea, select') ??
+      inspector?.querySelector<HTMLElement>('button:not([disabled])')
+    )?.focus({ preventScroll: true });
+    setPropertiesFocusRequest(null);
+  }, [propertiesFocusRequest, propertiesActive, doc?.id, inspectedPartId, activeSelection]);
+
+  useEffect(() => {
+    if (!active || screen !== 'workspace' || !project || datasheetReader) return;
+    let cancelled = false;
+    void import('@/lib/example-datasheets')
+      .then((reader) => {
+        if (!cancelled) {
+          setDatasheetReader(reader);
+        }
+      })
+      .catch(() => {
+        if (!cancelled)
+          notify('Could not load IC datasheet references. Save your work and reload OpenPE.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, screen, project?.id, datasheetReader]);
+
+  async function readProjectDatasheet(signal?: AbortSignal) {
+    const before = core.getSnapshot();
+    signal?.throwIfAborted();
+    const reader = await import('@/lib/example-datasheets');
+    signal?.throwIfAborted();
+    if (closingDocument.current || core.getSnapshot().revision !== before.revision)
+      throw new Error('The project changed while reading IC specifications. Read it again.');
+    return reader.projectDatasheetContext(before.project);
+  }
+
+  async function readWorkspaceContext(signal?: AbortSignal): Promise<AgentWorkspaceContext> {
+    const state = core.getSnapshot();
+    const schematic =
+      state.project &&
+      (findSchematic(state.project, activeSchematicRef.current ?? '') ?? state.project.schematic);
+    if (!schematic) throw new Error('Open a project to read workspace content.');
+    const reference = await readProjectDatasheet(signal);
+    if (
+      core.getSnapshot().revision !== state.revision ||
+      activeSchematicRef.current !== schematic.id ||
+      contextActive.current !== active
+    )
+      throw new Error(
+        'The project or active file changed while preparing Agent context. Submit again.',
+      );
+    const simulation =
+      spiceAvailable && simulationOpened ? simulationAgentContext.current?.() : null;
+    const currentSimulation =
+      simulation &&
+      simulation.circuitId === schematic.id &&
+      simulation.basis === circuitFingerprint(schematic)
+        ? simulation
+        : null;
+    // Explicit observations read live Core files even while Source presentation
+    // is hidden, retaining the selected resident filename and reference policy.
+    const observedSourceFile = sourceFileFrom(core.getNativeFiles().files);
+    return {
+      version: 1,
+      capturedAt: new Date().toISOString(),
+      project: core.query('project.get'),
+      icDatasheet: reference,
+      source: {
+        pending: state.sourceDraft !== null,
+        draft: state.sourceDraft,
+        error: state.sourceError,
+      },
+      ui: {
+        active,
+        revision: String(core.getSnapshot().revision),
+        screen,
+        view,
+        mode: tool === 'annotate' ? 'annotation' : 'interaction',
+        tool,
+        activeSchematicId: schematic.id,
+        selection,
+        inspectedPartId,
+        filename,
+        sourceFile: diskObservationSelected ? null : (observedSourceFile?.name ?? null),
+        sourceReadOnly:
+          diskObservationSelected ||
+          (!!observedSourceFile && 'readOnly' in observedSourceFile && observedSourceFile.readOnly),
+        dirty: nativeProjectDirty(state.project, cleanSourceRef.current, filenameRef.current),
+        layers,
+        selectionFilters,
+        grid,
+        gridSpacing,
+        layoutGridSpacing,
+        modelGridSpacing,
+        viewport: fileViewports.current.get(schematic.id) ?? null,
+        modelView: pcb3DView.current,
+        layoutView: layoutAgentContext.current,
+        modal,
+        toast,
+        projects: getProjects?.() ?? projects,
+        presentation: active
+          ? captureAgentPresentation()
+          : { text: '', controls: [], drawings: [], truncated: false },
+      },
+      simulation: !spiceAvailable
+        ? { status: 'disabled' }
+        : (currentSimulation ?? { status: 'not-opened' }),
+      thermal: !thermalAvailable
+        ? { status: 'disabled' }
+        : (thermalAgentContext.current?.() ?? { status: 'not-opened' }),
+    };
+  }
+  const capabilityPorts = useRef<WorkbenchCapabilityPorts>(null!);
+  capabilityPorts.current = {
+    revision: () => String(core.getSnapshot().revision),
+    state: (signal) => (doc ? readWorkspaceContext(signal) : core.query('project.snapshot')),
+    datasheet: readProjectDatasheet,
+    view: changeView,
+    sheet: async (id, signal) => {
+      if (!projectRef.current || !findSchematic(projectRef.current, id))
+        throw new Error('Choose a schematic in this project.');
+      if (sourceDraftRef.current !== null)
+        throw new Error('Apply Source edits before switching schematics.');
+      await selectSchematic(id, signal);
+    },
+    selection: (ids) => {
+      if (!doc) throw new Error('Open a schematic before selecting objects.');
+      const visible = selectableSchematicIds(doc, layers, selectionFilters);
+      if (ids.some((id) => !visible.has(id)))
+        throw new Error(
+          'Choose visible objects allowed by the active schematic selection filters.',
+        );
+      setSelection(ids);
+    },
+    panel: async (panel, signal) => {
+      if (panel === 'layers') {
+        if (!(await changeView('canvas', signal)))
+          throw new Error('Apply valid Source edits before opening schematic layers.');
+        setModal(null);
+        showRightSidebar();
+        setSchematicVisualizationOpen(true);
+      } else setModal(panel);
+    },
+    save,
+    export: async (signal) => {
+      const result = await exportFile(signal);
+      if (result instanceof Error) throw result;
+      return result;
+    },
+    enclosureExportAvailable: () => {
+      const state = core.getSnapshot();
+      if (!state.project?.pcb) return 'Open a PCB layout before exporting a model.';
+      if (state.sourceDraft !== null) return 'Apply Source edits before exporting a model.';
+      if (state.editingBlocked) return state.editingBlocked;
+      if (!modelCadFromProject(state.project)?.objects.length)
+        return 'Create a CAD solid before exporting STEP.';
+      if (!active || screen !== 'workspace' || view !== '3d')
+        return 'Open the active Model view before exporting a model.';
+      if (!window.openpe) return 'Use the desktop app to export a model STEP file.';
+      return true;
+    },
+    enclosureExport: async (signal) => {
+      signal.throwIfAborted();
+      const availability = capabilityPorts.current.enclosureExportAvailable!();
+      if (availability !== true)
+        throw new Error(
+          typeof availability === 'string' ? availability : 'Model STEP export is unavailable.',
+        );
+      if (nativeVersionBusy.current || closingDocument.current)
+        throw new Error('A project file operation is already in progress.');
+      const current = core.getSnapshot().project!;
+      nativeVersionBusy.current = true;
+      try {
+        signal.throwIfAborted();
+        const result = await window.openpe!.exportEnclosure({ source: serializeProject(current) });
+        signal.throwIfAborted();
+        return result;
+      } finally {
+        nativeVersionBusy.current = false;
+      }
+    },
+    historyList: async (offset) => {
+      if (!fileId || !window.openpe)
+        throw new Error('Open the desktop project to access local version history.');
+      return window.openpe.historyList({ fileId, offset });
+    },
+    historyRead: async (id) => {
+      if (!fileId || !window.openpe)
+        throw new Error('Open the desktop project to access local version history.');
+      return serializeProject(parseProject(await window.openpe.historyRead({ fileId, id })));
+    },
+    historyCreate: async (message) => {
+      const snapshot = core.getSnapshot();
+      if (snapshot.sourceDraft !== null)
+        throw new Error('Apply Source edits before creating a version.');
+      if (!fileId || !window.openpe)
+        throw new Error('Open the desktop project to access local version history.');
+      if (nativeVersionBusy.current || closingDocument.current)
+        throw new Error('A project file operation is already in progress.');
+      nativeVersionBusy.current = true;
+      try {
+        return await window.openpe.historyCreate({ fileId, source: snapshot.source, message });
+      } finally {
+        nativeVersionBusy.current = false;
+      }
+    },
+    simulation: async (visible, signal) => {
+      if (!spiceAvailable)
+        throw new Error('Install and enable SPICE Simulation in Plugins > Marketplace.');
+      if (!active && visible) throw new Error('Activate this project before opening Simulation.');
+      if (!visible) {
+        setSimulationEnabled(false);
+        return { visible: false };
+      }
+      if (!(await changeView('canvas', signal)))
+        throw new Error('Apply valid Source edits before opening Simulation.');
+      setScreen('workspace');
+      setSimulationOpened(true);
+      setSimulationEnabled(true);
+      setTool('select');
+      setModal(null);
+      // Lazy mounting is a presentation boundary. Do not report readiness until
+      // the plugin has registered its current visible state and commands.
+      const started = performance.now();
+      while (true) {
+        signal.throwIfAborted();
+        if (capabilityHost.catalog().some((item) => item.id === 'simulation.status')) {
+          const state = (await capabilityHost.query('simulation.status')) as AgentSimulationContext;
+          if (state.settingsVisible) return { visible: true };
+        }
+        if (performance.now() - started > 15000)
+          throw new Error('Simulation could not open. Try again.');
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    },
+    thermal: async (visible, signal) => {
+      if (!thermalAvailable)
+        throw new Error('Install and enable Thermal FEM in Plugins > Marketplace.');
+      if (!visible) {
+        setThermalEnabled(false);
+        return { visible: false };
+      }
+      if (!active) throw new Error('Activate this project before opening Thermal FEM.');
+      if (sourcePending) throw new Error('Apply Source edits before opening Thermal FEM.');
+      if (!projectRef.current?.pcb)
+        throw new Error('Open a PCB layout before opening Thermal FEM.');
+      if (!(await changeView('layout', signal)))
+        throw new Error('Apply valid Source edits before opening Thermal FEM.');
+      setScreen('workspace');
+      setThermalOpened(true);
+      setThermalEnabled(true);
+      setModal(null);
+      const started = performance.now();
+      while (true) {
+        signal.throwIfAborted();
+        if (capabilityHost.catalog().some((item) => item.id === 'thermal.status')) {
+          const status = (await capabilityHost.query('thermal.status')) as { visible?: boolean };
+          if (status.visible) return { visible: true };
+        }
+        if (performance.now() - started > 15000)
+          throw new Error('Thermal FEM could not open. Try again.');
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    },
+  };
+  useEffect(
+    () => registerWorkbenchCapabilities(capabilityHost, () => capabilityPorts.current),
+    [capabilityHost],
+  );
+  useEffect(() => {
+    capabilityHost.emit('workbench.changed', {
+      revision: String(coreSnapshot.revision),
+      screen,
+      view,
+      activeSchematicId: doc?.id ?? null,
+      selected: selection.slice(0, 256),
+      selectionCount: selection.length,
+      modal,
+      sourcePending,
+    });
+  }, [
+    capabilityHost,
+    coreSnapshot.revision,
+    screen,
+    view,
+    doc?.id,
+    selection,
+    modal,
+    sourcePending,
+  ]);
+  const titlebarMenus: TitlebarMenu[] = [
+    {
+      label: 'File',
+      items: [
+        { label: 'New project', run: () => newFile() },
+        {
+          label: 'Open project',
+          run: () => {
+            void open();
+          },
+        },
+        ...homeExampleSections.map((section, index) => ({
+          label: section.title,
+          separatorBefore: index === 0,
+          items: section.examples.map((example) => ({
+            label: example.title,
+            run: () => newFile(example.id),
+          })),
+        })),
+        ...(doc
+          ? [
+              {
+                label: 'Save',
+                separatorBefore: true,
+                run: () => {
+                  void save();
+                },
+              },
+              {
+                label: 'Save as',
+                run: () => {
+                  void save(true);
+                },
+              },
+              {
+                label: 'Export',
+                run: () => {
+                  void exportFile();
+                },
+              },
+              { label: 'Close project', run: requestProjectClose, separatorBefore: true },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: 'Edit',
+      items: [
+        ...(screen === 'workspace' && doc && !sourcePending
+          ? [
+              ...(coreSnapshot.canUndo ? [{ label: 'Undo', run: undoStep }] : []),
+              ...(coreSnapshot.canRedo ? [{ label: 'Redo', run: redoStep }] : []),
+              ...(view === 'canvas' && selection.length
+                ? [
+                    { label: 'Move selection', run: () => requestSchematicMove(false) },
+                    { label: 'Drag with connections', run: () => requestSchematicMove(true) },
+                    { label: 'Copy selection', run: copySelection },
+                    { label: 'Duplicate selection', run: duplicate },
+                    { label: 'Delete selection', run: remove },
+                  ]
+                : []),
+              ...(view === 'canvas' && clipboard.current
+                ? [{ label: 'Paste', run: pasteSelection }]
+                : []),
+            ]
+          : []),
+        { label: 'Settings', run: () => setModal('settings') },
+      ],
+    },
+    {
+      label: 'View',
+      items: [
+        {
+          label: 'Home',
+          run: () => {
+            cancelPendingNavigation();
+            setScreen('home');
+          },
+        },
+        { label: 'Plugins', run: openPlugins },
+        ...(doc
+          ? [
+              {
+                label: 'Schematic',
+                run: async () => {
+                  if (await changeView('canvas')) setScreen('workspace');
+                },
+              },
+              {
+                label: 'Layout',
+                run: async () => {
+                  if (await changeView('layout')) setScreen('workspace');
+                },
+              },
+              {
+                label: 'Model',
+                run: async () => {
+                  if (await changeView('3d')) setScreen('workspace');
+                },
+              },
+              {
+                label: 'Source',
+                run: () => {
+                  changeView('source');
+                  setScreen('workspace');
+                },
+              },
+            ]
+          : []),
+        ...(screen === 'workspace' && doc
+          ? [
+              {
+                label: sidebarVisible ? 'Hide sidebar' : 'Show sidebar',
+                run: () => setSidebarVisible((value) => !value),
+              },
+              ...(rightSidebarAvailable
+                ? [
+                    {
+                      label: ordinarySidebarVisible ? 'Hide right sidebar' : 'Show right sidebar',
+                      run: toggleCurrentRightSidebar,
+                    },
+                  ]
+                : []),
+            ]
+          : []),
+      ],
+    },
+    {
+      label: 'Help',
+      items: [{ label: 'About OpenPE', run: () => setModal('about') }],
+    },
+  ];
+  const activeGridSpacing =
+    view === 'layout' ? layoutGridSpacing : view === '3d' ? modelGridSpacing : gridSpacing;
+  const activeGridSpacingOptions =
+    view === 'layout' ? layoutGridSpacingOptions : gridSpacingOptions;
+  const canvasProperties = useEditorAction(openObjectProperties);
+  const canvasDelete = useEditorAction(remove);
+  const canvasViewport = useMemo(
+    () => (doc ? fileViewports.current.get(doc.id) : undefined),
+    [doc?.id],
+  );
+  const onCanvasViewportChange = useCallback(
+    (viewport: CanvasViewport) => {
+      if (doc) fileViewports.current.set(doc.id, viewport);
+    },
+    [doc?.id],
+  );
+  const onMoveRequestHandled = useCallback((id: number) => {
+    setSchematicMoveRequest((request) => (request?.id === id ? null : request));
+  }, []);
+  const onNavigationRequestHandled = useCallback((id: number) => {
+    setSchematicNavigationRequest((request) => (request?.id === id ? null : request));
+  }, []);
+  const annotations =
+    sessions.find((session) => session.id === activeSessionId)?.annotations ?? emptyAnnotations;
+  const onAnnotationsChange = useCallback(
+    (annotations: AgentAnnotation[]) => {
+      validateAnnotations(annotations);
+      setSessions((items) =>
+        items.map((session) =>
+          session.id === activeSessionId ? { ...session, annotations } : session,
+        ),
+      );
+    },
+    [activeSessionId],
+  );
+  const onAnnotationAdd = useCallback(() => {
+    setSidebarVisible(true);
+  }, []);
+  const getChatDesign = useCallback(() => {
+    const project = projectRef.current;
+    const doc =
+      project && projectSchematics(project).find((file) => file.id === activeSchematicRef.current);
+    if (!project || !doc) throw new Error('Open a schematic before sending a message.');
+    return { doc, pcb: project.pcb, pcbSchematic: project.schematic };
+  }, []);
+  const chatAnnotationDesign = useMemo(
+    () => (doc ? { doc, pcb: project?.pcb, pcbSchematic: project?.schematic } : undefined),
+    [doc, project?.pcb, project?.schematic],
+  );
+  const chatSessionOptions = useMemo(
+    () => sessions.map((item) => ({ value: item.id, label: sessionTitle(item) })),
+    [sessions],
+  );
+  const chatCapabilities = useMemo<AgentCapabilities>(
+    () => ({
+      query: (name, input, options) =>
+        capabilityHost.query(name, input, { ...options, actor: 'agent' }),
+      execute: (name, input, options) =>
+        capabilityHost.execute(name, input, { ...options, actor: 'agent' }),
+      observe: (after) => capabilityHost.observe(after),
+    }),
+    [capabilityHost],
+  );
+  const readChatContext = useEditorAction(readWorkspaceContext);
+  const applyChatProposal = useEditorAction(onApply);
+  const openChatSettings = useCallback(() => setModal('settings'), []);
+  const newChatSession = useCallback(() => {
+    const next = createSession();
+    setSessions((items) => [...items, next]);
+    setActiveSessionId(next.id);
+  }, []);
+  const setChatModel = useEditorAction((value: string) =>
+    setModels((current) => ({ ...current, [provider]: value })),
+  );
+  const clearChatSession = useEditorAction((id: string) => {
+    if (!sessions.find((session) => session.id === id)?.messages.length) return;
+    setConfirmError('');
+    setConfirmation({
+      kind: 'clear',
+      action: () =>
+        setSessions((items) =>
+          items.map((item) => (item.id === id ? { ...item, messages: [] } : item)),
+        ),
+    });
+  });
+  const modelAnnotationProps = useMemo(
+    () => ({
+      disabled: sourcePending,
+      sessionId: activeSessionId,
+      annotations,
+      onChange: onAnnotationsChange,
+      onAdd: onAnnotationAdd,
+    }),
+    [sourcePending, activeSessionId, annotations, onAnnotationsChange, onAnnotationAdd],
+  );
+  const openHistory = useCallback(() => setModal('history'), []);
+  const historyAction = useMemo(
+    () => (
+      <ToolButton label="Version history" active={modal === 'history'} onClick={openHistory}>
+        <GitCommitHorizontal size={17} />
+      </ToolButton>
+    ),
+    [modal, openHistory],
+  );
+  const openThermal = useEditorAction(() => {
+    void capabilityHost
+      .execute(thermalEnabled ? 'thermal.hide' : 'thermal.show')
+      .catch((error: Error) => notify(error.message));
+  });
+  const closeThermal = useCallback(() => setThermalEnabled(false), []);
+  const rightSidebarAction = useMemo(
+    () => (
+      <div
+        className="editor-tool-group editor-view-controls"
+        role="group"
+        aria-label="View controls"
+      >
+        <RightSidebarToggle
+          visible={ordinarySidebarVisible}
+          onToggle={toggleCurrentRightSidebar}
+          className="editor-sidebar-toggle"
+        />
+      </div>
+    ),
+    [ordinarySidebarVisible, toggleCurrentRightSidebar],
+  );
+  const currentThermalPresentation =
+    active &&
+    screen === 'workspace' &&
+    thermalVisible &&
+    !sourcePending &&
+    thermalPresentation?.project === project &&
+    thermalPresentation.fileId === fileId &&
+    thermalPresentation.shown
+      ? thermalPresentation
+      : null;
+  const thermalDrawing = useMemo(
+    () =>
+      currentThermalPresentation ? (
+        <ThermalField
+          result={currentThermalPresentation.result}
+          surface={currentThermalPresentation.surface}
+          probe={currentThermalPresentation.probe}
+        />
+      ) : null,
+    [currentThermalPresentation],
+  );
+  const thermalReadout = useMemo(
+    () =>
+      currentThermalPresentation ? (
+        <ThermalLayoutResults
+          result={currentThermalPresentation.result}
+          surface={currentThermalPresentation.surface}
+          probe={currentThermalPresentation.probe}
+        />
+      ) : null,
+    [currentThermalPresentation],
+  );
+  const thermalPanel = useMemo(
+    () =>
+      thermalAvailable && thermalOpened && project ? (
+        <Suspense fallback={null}>
+          <ThermalSimulation
+            project={project}
+            fileId={fileId}
+            visible={active && screen === 'workspace' && thermalVisible}
+            sourcePending={sourcePending}
+            spiceAvailable={spiceAvailable}
+            capabilityHost={capabilityHost}
+            agentContextRef={thermalAgentContext}
+            docked
+            onPresentationChange={setThermalPresentation}
+            onClose={closeThermal}
+          />
+        </Suspense>
+      ) : null,
+    [
+      thermalAvailable,
+      thermalOpened,
+      project,
+      fileId,
+      active,
+      screen,
+      thermalVisible,
+      sourcePending,
+      spiceAvailable,
+      capabilityHost,
+      closeThermal,
+    ],
+  );
+  const thermalAction = useMemo(
+    () =>
+      thermalAvailable ? (
+        <ToolButton
+          label="Thermal FEM"
+          active={thermalEnabled}
+          disabled={sourcePending || !project?.pcb}
+          onClick={openThermal}
+        >
+          <PluginLogo id={THERMAL_PLUGIN_ID} />
+        </ToolButton>
+      ) : null,
+    [thermalAvailable, thermalEnabled, sourcePending, project?.pcb, openThermal],
+  );
+  const ruleActions = useMemo(() => {
+    const action = (kind: 'erc' | 'drc') => (
+      <button
+        type="button"
+        className={`tool-button${rulesOpen === kind ? ' active' : ''}`}
+        aria-label={kind === 'erc' ? 'Electrical rules (ERC)' : 'Design rules (DRC)'}
+        title={kind === 'erc' ? 'Electrical rules' : 'Design rules'}
+        aria-haspopup="dialog"
+        aria-expanded={rulesOpen === kind}
+        disabled={
+          sourcePending || Boolean(coreSnapshot.editingBlocked) || (kind === 'drc' && !project?.pcb)
+        }
+        onClick={() => openRuleChecks(kind)}
+      >
+        <ShieldCheck size={17} aria-hidden="true" />
+      </button>
+    );
+    return { erc: action('erc'), drc: action('drc') };
+  }, [rulesOpen, sourcePending, coreSnapshot.editingBlocked, project?.pcb, openRuleChecks]);
+  const undoAction = useMemo(
+    () => (
+      <>
+        <ToolButton label="Undo" disabled={!coreSnapshot.canUndo} onClick={undoStep}>
+          <Undo2 size={16} />
+        </ToolButton>
+        <ToolButton label="Redo" disabled={!coreSnapshot.canRedo} onClick={redoStep}>
+          <Redo2 size={16} />
+        </ToolButton>
+      </>
+    ),
+    [coreSnapshot.canUndo, coreSnapshot.canRedo, undoStep, redoStep],
+  );
+  const onSourceChange = useCallback(
+    (value: string) => {
+      if (!activeSourceFile || sourceReadOnly) return;
+      if (diskObservationSelected) directoryObservation.change(activeSourceFile.name, value);
+      else core.updateNativeSource(activeSourceFile.name, value);
+    },
+    [
+      core,
+      activeSourceFile?.name,
+      sourceReadOnly,
+      diskObservationSelected,
+      directoryObservation.change,
+    ],
+  );
+  const onSourceApply = useEditorAction(async () => {
+    if (diskObservationSelected && activeSourceFile) {
+      try {
+        await directoryObservation.save(activeSourceFile.name);
+      } catch (error) {
+        notify((error as Error).message);
+      }
+    } else await applySource();
+  });
+  const onSourceCopy = useEditorAction(
+    () =>
+      void navigator.clipboard
+        .writeText(activeSourceFile?.source ?? '')
+        .then(() => notify('File source copied'))
+        .catch(() => notify('Clipboard access is unavailable.')),
+  );
+  const sourceHistoryAction = useMemo(
+    () => (
+      <span className="editor-tool-group">
+        <ToolButton label="Version history" onClick={openHistory}>
+          <GitCommitHorizontal size={17} />
+        </ToolButton>
+      </span>
+    ),
+    [openHistory],
+  );
+  const gridDensityControl = useMemo(
+    () => (
+      <span className="grid-density">
+        <Select
+          label="Grid density"
+          icon={<span aria-hidden="true">Grid</span>}
+          value={grid ? String(activeGridSpacing) : 'off'}
+          options={[
+            ...activeGridSpacingOptions.map((spacing) => ({
+              value: String(spacing),
+              label: `${spacing} mm`,
+            })),
+            { value: 'off', label: 'Off' },
+          ]}
+          disabled={!appearanceSettings.ready}
+          onChange={(value) => {
+            const schematicSpacing = gridSpacingOptions.find((item) => String(item) === value);
+            const layoutSpacing = layoutGridSpacingOptions.find((item) => String(item) === value);
+            if (
+              value !== 'off' &&
+              (view === 'layout' ? layoutSpacing : schematicSpacing) === undefined
+            )
+              return;
+            appearanceSettings.update({
+              ...appearanceSettings.appearance,
+              gridSpacing: view === 'canvas' ? (schematicSpacing ?? gridSpacing) : gridSpacing,
+              layoutGridSpacing:
+                view === 'layout' ? (layoutSpacing ?? layoutGridSpacing) : layoutGridSpacing,
+              modelGridSpacing:
+                view === '3d' ? (schematicSpacing ?? modelGridSpacing) : modelGridSpacing,
+              schematicLayers: { ...layers, grid: value !== 'off' },
+            });
+          }}
+        />
+        {appearanceSettings.error && (
+          <ToolButton
+            label={appearanceSettings.error}
+            hint="Appearance settings"
+            onClick={() => notify(appearanceSettings.error)}
+          >
+            <AlertCircle size={14} aria-hidden="true" />
+          </ToolButton>
+        )}
+      </span>
+    ),
+    [
+      activeGridSpacing,
+      activeGridSpacingOptions,
+      appearanceSettings,
+      view,
+      gridSpacing,
+      layoutGridSpacing,
+      modelGridSpacing,
+      layers,
+      grid,
+      notify,
+    ],
+  );
+  const openPartsList = useEditorAction(async () => {
+    if (!(await applySource())) return;
+    setPropertiesDismissed(true);
+    setModal('parts');
+  });
+  const partsListAction = useMemo(
+    () => (
+      <button
+        type="button"
+        className={`tool-button${modal === 'parts' ? ' active' : ''}`}
+        aria-label="Parts list"
+        title="Parts list"
+        aria-haspopup="dialog"
+        aria-expanded={modal === 'parts'}
+        onClick={openPartsList}
+      >
+        <List size={17} aria-hidden="true" />
+      </button>
+    ),
+    [modal, openPartsList],
+  );
+  const activateSchematicTool = useEditorAction(async (next: Tool) => {
+    if (!(await changeView('canvas'))) return;
+    setTool(next);
+    queueSchematicNavigation(next, undefined, next === 'select');
+  });
+  const activateSchematicWire = useEditorAction(async () => {
+    if (!(await changeView('canvas'))) return;
+    setTool('wire');
+    queueSchematicNavigation('wire');
+  });
+  const openSchematicLibrary = useCallback(() => setModal('library'), []);
+  const placeSchematicMarker = useEditorAction(async (value: string) => {
+    if (!(await changeView('canvas'))) return;
+    if (value === 'power') setModal('power');
+    else {
+      setTool(value as Tool);
+      queueSchematicNavigation(value as Tool);
+    }
+  });
+  const schematicCanvasView = view === 'canvas';
+  // These groups have no design/selection/history dependency. Retain their JSX
+  // and icons while stable actions read current Source/view state on activation.
+  const schematicModeActions = useMemo(
+    () => (
+      <div className="editor-tool-group" role="group" aria-label="Canvas modes">
+        <ToolButton
+          label="Interaction mode"
+          active={schematicCanvasView && tool === 'select'}
+          onClick={() => activateSchematicTool('select')}
+        >
+          <MousePointer2 size={17} />
+        </ToolButton>
+        <ToolButton
+          label="Annotation mode"
+          active={schematicCanvasView && tool === 'annotate'}
+          disabled={sourcePending}
+          onClick={() => activateSchematicTool('annotate')}
+        >
+          <MessageSquareText size={17} />
+        </ToolButton>
+      </div>
+    ),
+    [schematicCanvasView, tool, sourcePending, activateSchematicTool],
+  );
+  const schematicPlaceActions = useMemo(
+    () => (
+      <div className="editor-tool-group" role="group" aria-label="Place and connect">
+        <ToolButton label="Add component" onClick={openSchematicLibrary}>
+          <Cpu size={17} />
+        </ToolButton>
+        <ToolButton
+          label="Wire"
+          active={schematicCanvasView && tool === 'wire'}
+          onClick={activateSchematicWire}
+        >
+          <svg
+            width={17}
+            height={17}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M6 19h4L20 9V7" />
+            <rect x={2} y={17} width={4} height={4} rx={0.5} />
+            <rect x={18} y={3} width={4} height={4} rx={0.5} />
+          </svg>
+        </ToolButton>
+        <div
+          className={
+            schematicCanvasView && ['label', 'global-label', 'no-connect'].includes(tool)
+              ? 'tool-menu active'
+              : 'tool-menu'
+          }
+        >
+          <Select
+            label="Place electrical marker"
+            value=""
+            icon={<Tag size={16} />}
+            compact
+            iconOnly
+            showChevron={false}
+            options={[
+              { value: 'label', label: 'Net label' },
+              { value: 'global-label', label: 'Global label' },
+              { value: 'no-connect', label: 'No-connect marker' },
+              { value: 'power', label: 'Power symbol' },
+            ]}
+            onChange={placeSchematicMarker}
+          />
+        </div>
+      </div>
+    ),
+    [schematicCanvasView, tool, openSchematicLibrary, activateSchematicWire, placeSchematicMarker],
+  );
+  const selectEditorView = useEditorAction(changeView);
+  const runHeaderFileAction = useEditorAction((value: string) =>
+    runTitlebarMenuAction(titlebarMenus[0].items, value),
+  );
+  const hasDocument = Boolean(doc);
+  const headerProjectTitle = project?.name ?? project?.schematic.title;
+  // File labels vary only with document presence; actions still resolve the
+  // latest menu so retained chrome cannot bypass current Source/save guards.
+  const headerFileOptions = useMemo(
+    () => titlebarMenuOptions(titlebarMenus[0].items),
+    [hasDocument],
+  );
+  const appHeader = useMemo(
+    () => (
+      <header className="app-header">
+        <div className="brand">
+          <div className="brand-mark">
+            <Logo size={32} />
+          </div>
+          <strong>OpenPE</strong>
+          <span className="version">Preview</span>
+        </div>
+        {screen === 'workspace' && hasDocument && (
+          <>
+            <span className="header-separator" />
+            <div className="breadcrumb">
+              <strong>{headerProjectTitle}</strong>
+            </div>
+          </>
+        )}
+        <div className="app-header-actions">
+          {!hasNativeTitlebar && (
+            <nav className="header-file-menu" aria-label="Application menus">
+              <Select
+                label="File"
+                value=""
+                placeholder="File"
+                compact
+                showChevron={false}
+                options={headerFileOptions}
+                onChange={runHeaderFileAction}
+              />
+            </nav>
+          )}
+        </div>
+      </header>
+    ),
+    [
+      screen,
+      hasDocument,
+      headerProjectTitle,
+      hasNativeTitlebar,
+      headerFileOptions,
+      runHeaderFileAction,
+    ],
+  );
+  const openWorkspaceHome = useCallback(() => {
+    cancelPendingNavigation();
+    setModal(null);
+    setScreen('home');
+  }, []);
+  const createWorkspaceProject = useEditorAction(() => newFile());
+  const openWorkspaceProject = useEditorAction(() => void open());
+  const openWorkspacePlugins = useEditorAction(openPlugins);
+  const workspaceNavigationActions = useMemo(
+    () => (
+      <>
+        <NavigationButton compact icon={HomeIcon} label="Home" onClick={openWorkspaceHome} />
+        <NavigationButton
+          compact
+          icon={FolderPlus}
+          label="New project"
+          onClick={createWorkspaceProject}
+        />
+        <NavigationButton
+          compact
+          icon={FolderOpen}
+          label="Open project"
+          onClick={openWorkspaceProject}
+        />
+        <NavigationButton compact icon={Blocks} label="Plugins" onClick={openWorkspacePlugins} />
+      </>
+    ),
+    [openWorkspaceHome, createWorkspaceProject, openWorkspaceProject, openWorkspacePlugins],
+  );
+  const openWorkspaceSettings = useCallback(() => setModal('settings'), []);
+  const openWorkspaceAbout = useCallback(() => setModal('about'), []);
+  const providerBusy = Boolean(runningSessions[activeSessionId]);
+  const workspaceNavigationSettings = useMemo(
+    () => (
+      <>
+        <div className="rail-spacer" />
+        <AgentPicker
+          compact
+          provider={provider}
+          agents={agents}
+          onChange={setProvider}
+          disabled={providerBusy}
+        />
+        <SettingsMenu
+          active={active}
+          onSettings={openWorkspaceSettings}
+          onAbout={openWorkspaceAbout}
+        />
+      </>
+    ),
+    [
+      provider,
+      agents,
+      setProvider,
+      providerBusy,
+      active,
+      openWorkspaceSettings,
+      openWorkspaceAbout,
+    ],
+  );
+  const requestPropertiesSave = useEditorAction((saveAs: boolean) => {
+    // The property commit has already advanced Core beyond this render's doc.
+    // Save reads that live Core through applySource(), preserving its guards.
+    void save(saveAs);
+  });
+  const saveCurrentPartProperties = useEditorAction(
+    (
+      id: string,
+      ref: string,
+      value: string,
+      fields: Record<string, string>,
+      includeInSimulation?: boolean,
+    ) =>
+      canEditProperties() && part?.id === id
+        ? saveFields(ref, value, fields, id, includeInSimulation)
+        : false,
+  );
+  const propertiesPartId = part?.id;
+  const saveSelectedPartProperties = useCallback(
+    (ref: string, value: string, fields: Record<string, string>, includeInSimulation?: boolean) =>
+      propertiesPartId
+        ? saveCurrentPartProperties(propertiesPartId, ref, value, fields, includeInSimulation)
+        : false,
+    [propertiesPartId, saveCurrentPartProperties],
+  );
+  const saveLayoutPartProperties = useEditorAction(
+    (
+      schematicBasis: Circuit,
+      partId: string,
+      ref: string,
+      value: string,
+      fields: Record<string, string>,
+      includeInSimulation?: boolean,
+      footprintDetail?: FootprintDetail,
+    ) => {
+      const snapshot = core.getSnapshot();
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        view !== 'layout' ||
+        !rightSidebarVisible ||
+        thermalVisible ||
+        modal ||
+        confirmation ||
+        snapshot.sourceDraft !== null ||
+        snapshot.editingBlocked !== null ||
+        !snapshot.project ||
+        snapshot.project.schematic !== schematicBasis ||
+        !snapshot.project.pcb?.footprints.some((footprint) => footprint.symbolId === partId)
+      )
+        return false;
+      return saveFields(
+        ref,
+        value,
+        fields,
+        partId,
+        includeInSimulation,
+        schematicBasis,
+        footprintDetail,
+      );
+    },
+  );
+  return (
+    <>
+      <DesktopTitlebar
+        menus={titlebarMenus}
+        onBack={navigation.index > 0 ? () => navigateHistory(-1) : undefined}
+        onForward={
+          navigation.index < navigation.entries.length - 1 ? () => navigateHistory(1) : undefined
+        }
+        sidebarVisible={screen === 'workspace' && Boolean(doc) && sidebarVisible}
+        onToggleSidebar={
+          screen === 'workspace' && doc ? () => setSidebarVisible((value) => !value) : undefined
+        }
+      />
+      <main className={'app-shell' + (sidebarVisible ? '' : ' sidebar-hidden')}>
+        {appHeader}
+        {screen === 'home' && (
+          <Home
+            active={active}
+            brief={homeBrief}
+            setBrief={setHomeBrief}
+            projects={projects}
+            onProjectAction={onProjectAction}
+            error={startupError}
+            onNew={(brief) => newFile(undefined, brief)}
+            onOpen={() => void open()}
+            onExample={(id) => newFile(id)}
+            onResume={(id) => {
+              if (id === documentId) setScreen('workspace');
+              onSelectProject(id);
+            }}
+            onSettings={() => setModal('settings')}
+            onAbout={() => setModal('about')}
+            onPlugins={openPlugins}
+            agentPicker={{
+              provider,
+              agents,
+              onChange: setProvider,
+              disabled: Boolean(runningSessions[activeSessionId]),
+            }}
+            composer={{
+              provider,
+              available: Boolean(agents.find((a) => a.id === provider)?.available),
+              agentSupportsEffort: agents.find((a) => a.id === provider)?.supportsEffort,
+              effort,
+              setEffort,
+              approvalMode,
+              setApprovalMode,
+              model: models[provider] || '',
+              setModel: (value) => setModels((current) => ({ ...current, [provider]: value })),
+              observedModel: (
+                sessions
+                  .find((session) => session.id === activeSessionId)
+                  ?.messages.slice()
+                  .reverse()
+                  .find((message) => message.provider === provider && message.model)?.model || ''
+              ).split(' · ')[0],
+            }}
+          />
+        )}
+        {doc && (
+          <div className="workspace" hidden={screen !== 'workspace'}>
+            <nav className="nav-rail" aria-label="Workspace navigation">
+              {workspaceNavigationActions}
+              <ProjectNavigation
+                projects={projects}
+                active={active && screen === 'workspace'}
+                activeId={documentId}
+                onAction={onProjectAction}
+                onSelect={(id) => {
+                  if (id === documentId) setScreen('workspace');
+                  else onSelectProject(id);
+                }}
+              />
+              {workspaceNavigationSettings}
+            </nav>
+            {sessions.map((session) => (
+              <ConversationSession
+                key={documentKey + ':' + session.id}
+                active={active && screen === 'workspace' && session.id === activeSessionId}
+                onRunningChange={onRunningChange}
+                session={session}
+                setSessions={setSessions}
+                getDesign={getChatDesign}
+                annotationDesign={session.annotations?.length ? chatAnnotationDesign : undefined}
+                sessionOptions={chatSessionOptions}
+                onSelectSession={setActiveSessionId}
+                onNewSession={newChatSession}
+                onClearSession={clearChatSession}
+                getWorkspaceContext={readChatContext}
+                capabilities={chatCapabilities}
+                agents={agents}
+                provider={provider}
+                effort={effort}
+                approvalMode={approvalMode}
+                setApprovalMode={setApprovalMode}
+                setEffort={setEffort}
+                model={models[provider] || ''}
+                setModel={setChatModel}
+                onSettings={openChatSettings}
+                onApply={applyChatProposal}
+              />
+            ))}
+            <WorkspaceDivider active={active && screen === 'workspace'} />
+            <section className="editor" data-editor-view={view}>
+              <div className="document-bar">
+                <SchematicFileTabs
+                  files={openSchematicFiles.map((file) => ({
+                    id: file.id,
+                    name: file.title,
+                    modified:
+                      savedSchematics.get(file.id) !== currentSchematics.get(file.id) ||
+                      sourcePending ||
+                      Boolean(file.id === project!.schematic.id && projectMetadataDirty),
+                  }))}
+                  activeId={doc.id}
+                  panelId={`schematic-panel-${documentId}`}
+                  onSelect={selectSchematic}
+                  onClose={closeSchematicFile}
+                />
+                {closedSchematicIds.length > 0 && (
+                  <span className="schematic-open-file">
+                    <Select
+                      label="Open file"
+                      icon={<FolderOpen size={17} />}
+                      iconOnly
+                      compact
+                      showChevron={false}
+                      value=""
+                      options={schematicFiles
+                        .filter((file) => closedSchematicIds.includes(file.id))
+                        .map((file) => ({ value: file.id, label: file.title }))}
+                      onChange={selectSchematic}
+                    />
+                  </span>
+                )}
+                <ToolButton
+                  label="New file"
+                  onClick={newSchematicFile}
+                  disabled={projectSchematics(project!).length >= MAX_SCHEMATIC_FILES}
+                >
+                  <Plus size={17} />
+                </ToolButton>
+                <div className="editor-view-switch-host">
+                  <EditorViewSwitch view={view} onChange={selectEditorView} />
+                </div>
+              </div>
+              <RetainedSchematicToolbar
+                visible={active && screen === 'workspace' && view === 'canvas'}
+              >
+                {() => (
+                  <div
+                    className="editor-toolbar"
+                    role="group"
+                    aria-label="Schematic tools"
+                    hidden={view !== 'canvas'}
+                  >
+                    {schematicModeActions}
+                    {schematicPlaceActions}
+                    <div className="editor-tool-group" role="group" aria-label="Edit and history">
+                      <div
+                        className={
+                          view === 'canvas' && (tool === 'drag' || schematicMoveMode)
+                            ? 'tool-menu active'
+                            : 'tool-menu'
+                        }
+                      >
+                        <Select
+                          label="Edit schematic"
+                          value=""
+                          icon={<RotateCw size={16} />}
+                          compact
+                          iconOnly
+                          showChevron={false}
+                          options={[
+                            ...(selection.length
+                              ? [{ value: 'move', label: 'Move selection' }]
+                              : []),
+                            ...(selection.some((id) => !selectedField(id))
+                              ? [
+                                  { value: 'copy', label: 'Copy selection' },
+                                  { value: 'duplicate', label: 'Duplicate selection' },
+                                  { value: 'rotate', label: 'Rotate' },
+                                  { value: 'mirrorY', label: 'Mirror horizontally' },
+                                  { value: 'mirrorX', label: 'Mirror vertically' },
+                                  { value: 'delete', label: 'Delete selection' },
+                                ]
+                              : []),
+                            ...(clipboard.current?.doc.id === doc.id
+                              ? [{ value: 'paste', label: 'Paste' }]
+                              : []),
+                            { value: 'drag', label: 'Drag with connections' },
+                            { value: 'simplify', label: 'Simplify wires' },
+                          ]}
+                          onChange={async (value) => {
+                            if (!(await changeView('canvas'))) return;
+                            if (value === 'copy') copySelection();
+                            else if (value === 'paste') pasteSelection();
+                            else if (value === 'duplicate') duplicate();
+                            else if (value === 'rotate') rotate();
+                            else if (value === 'delete') remove();
+                            else if (value === 'move') requestSchematicMove(false);
+                            else if (value === 'drag') {
+                              if (selection.length) requestSchematicMove(true);
+                              else {
+                                setTool('drag');
+                                queueSchematicNavigation('drag');
+                              }
+                            } else if (value === 'simplify') commit(simplifyWires(doc));
+                            else
+                              commit(
+                                transformSelection(doc, selection, value as 'mirrorX' | 'mirrorY'),
+                              );
+                          }}
+                        />
+                      </div>
+                      <ToolButton label="Undo" disabled={!coreSnapshot.canUndo} onClick={undoStep}>
+                        <Undo2 size={16} />
+                      </ToolButton>
+                      <ToolButton label="Redo" disabled={!coreSnapshot.canRedo} onClick={redoStep}>
+                        <Redo2 size={16} />
+                      </ToolButton>
+                    </div>
+                    {spiceAvailable && (
+                      <div
+                        className="editor-tool-group editor-plugin-actions"
+                        role="group"
+                        aria-label="Plugins"
+                      >
+                        <ToolButton
+                          label="Simulation"
+                          active={simulationEnabled}
+                          disabled={sourcePending}
+                          onClick={() => {
+                            setModal(null);
+                            setSimulationOpened(true);
+                            setSimulationEnabled(true);
+                          }}
+                        >
+                          <PluginLogo id={SPICE_PLUGIN_ID} />
+                        </ToolButton>
+                      </div>
+                    )}
+                    <div
+                      ref={schematicPanelsAnchor}
+                      className="editor-tool-group editor-tool-group-end"
+                      role="group"
+                      aria-label="Analysis and display"
+                    >
+                      {ruleActions.erc}
+                      {partsListAction}
+                      <button
+                        className={'tool-button ' + (modal === 'history' ? 'active' : '')}
+                        aria-label="Version history"
+                        title="Version history"
+                        aria-haspopup="dialog"
+                        aria-expanded={modal === 'history'}
+                        onClick={() => {
+                          setPropertiesDismissed(true);
+                          setModal('history');
+                        }}
+                      >
+                        <GitCommitHorizontal size={17} />
+                      </button>
+                      {rightSidebarAction}
+                    </div>
+                  </div>
+                )}
+              </RetainedSchematicToolbar>
+              <div
+                className="editor-body"
+                data-view={view}
+                id={`schematic-panel-${documentId}`}
+                role="tabpanel"
+                aria-label={doc.title}
+              >
+                <div className="file-editor-surface schematic-surface" hidden={view !== 'canvas'}>
+                  <div className="schematic-drawing">
+                    <div className="schematic-canvas-area">
+                      <SchematicCanvas
+                        ruleFocus={ruleFocus?.kind === 'erc' && !ruleReportStale ? ruleFocus : null}
+                        active={active && screen === 'workspace' && view === 'canvas'}
+                        editingBlocked={sourcePending}
+                        moveRequest={schematicMoveRequest}
+                        onMoveStateChange={setSchematicMoveMode}
+                        onMoveRequestHandled={onMoveRequestHandled}
+                        navigationRequest={
+                          schematicNavigationEligible ? schematicNavigationRequest : null
+                        }
+                        onNavigationRequestHandled={onNavigationRequestHandled}
+                        key={doc.id}
+                        initialViewport={canvasViewport}
+                        onViewportChange={onCanvasViewportChange}
+                        doc={doc}
+                        selection={selection}
+                        onSelection={setSelection}
+                        onSelect={setSelected}
+                        tool={tool}
+                        probing={simulationVisible && !sourcePending}
+                        onProbe={setProbe}
+                        kind="R"
+                        placement={placement}
+                        onProperties={canvasProperties}
+                        onDelete={canvasDelete}
+                        annotationSessionId={activeSessionId}
+                        annotations={annotations}
+                        onAnnotationsChange={onAnnotationsChange}
+                        onAnnotationAdd={onAnnotationAdd}
+                        onCommit={commit}
+                        setTool={setTool}
+                        fitKey={fitKey}
+                        onPosition={coordinates.update}
+                        grid={grid}
+                        gridSpacing={gridSpacing}
+                        layers={layers}
+                        selectionFilters={selectionFilters}
+                        leftButtonDrag={appearanceSettings.appearance.leftButtonDrag}
+                        onNotify={notify}
+                      />
+                    </div>
+                    <div
+                      ref={waveformHost}
+                      className="simulation-host"
+                      hidden={!simulationVisible || !waveformRequested}
+                    >
+                      <SimulationResize
+                        target={waveformHost}
+                        visible={simulationVisible && waveformRequested}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    ref={simulationSettingsHost}
+                    className="simulation-settings-host"
+                    hidden={!simulationVisible}
+                    style={{ width: inspectorSize.width }}
+                  />
+                  <div
+                    ref={propertiesDock}
+                    className="schematic-properties-dock editor-sidebar-sections"
+                    role="complementary"
+                    aria-label="Schematic properties"
+                    data-testid="schematic-properties-panel"
+                    hidden={!rightSidebarVisible || simulationVisible}
+                    style={{ width: inspectorSize.width }}
+                  >
+                    <EditorDisplayDrawer
+                      label="Properties"
+                      className="editor-properties-drawer"
+                      open={propertiesExpanded}
+                      onOpenChange={setPropertiesExpanded}
+                      headerActions={
+                        inspectedField && part ? (
+                          <button
+                            className="icon-button"
+                            aria-label="Component properties"
+                            title="Component properties"
+                            disabled={!propertiesActive}
+                            onClick={() => openProperties(part.id)}
+                          >
+                            <SlidersHorizontal size={17} />
+                          </button>
+                        ) : undefined
+                      }
+                    >
+                      {propertiesMounted && (part || label || wire || annotation) ? (
+                        <aside
+                          ref={propertiesInspector}
+                          inert={!propertiesPresented}
+                          className={
+                            'inspector' +
+                            (part ? ' part-inspector' : '') +
+                            (inspectedField ? ' field-inspector' : '')
+                          }
+                          aria-label="Object properties"
+                          key={inspectedField ? activeSelection : selected}
+                        >
+                          <div className="inspector-body">
+                            {part ? (
+                              <>
+                                <PartIdentity part={part} library={doc.libraries[part.libId]} />
+                                {inspectedField && fieldPosition && activeSelection ? (
+                                  <FieldProperties
+                                    active={propertiesActive}
+                                    onRequestSave={requestPropertiesSave}
+                                    field={inspectedField.field}
+                                    text={
+                                      inspectedField.field === 'Reference'
+                                        ? part.ref
+                                        : inspectedField.field === 'Value'
+                                          ? displayPartValue(part)
+                                          : partFields(part)[inspectedField.field] || ''
+                                    }
+                                    position={fieldPosition}
+                                    onText={(text) => {
+                                      if (!canEditProperties()) return false;
+                                      const change = preparePartProperties(
+                                        part,
+                                        inspectedField.field === 'Reference' ? text : part.ref,
+                                        inspectedField.field === 'Value'
+                                          ? text
+                                          : displayPartValue(part),
+                                        Object.entries(partFields(part)).map(([name, value]) => ({
+                                          name,
+                                          value: name === inspectedField.field ? text : value,
+                                        })),
+                                      );
+                                      return (
+                                        !change ||
+                                        saveFields(change.ref, change.value, change.fields, part.id)
+                                      );
+                                    }}
+                                    onPosition={(position) =>
+                                      canEditProperties() &&
+                                      commit(moveText(doc, activeSelection, position))
+                                    }
+                                  />
+                                ) : (
+                                  <>
+                                    <PartProperties
+                                      active={propertiesActive}
+                                      onRequestSave={requestPropertiesSave}
+                                      capabilityHost={capabilityHost}
+                                      key={part.id}
+                                      part={part}
+                                      onSave={saveSelectedPartProperties}
+                                    />
+                                    <div className="geometry-fields component-geometry">
+                                      {(['x', 'y', 'rotation'] as const).map((key) => (
+                                        <label key={key}>
+                                          {key === 'rotation'
+                                            ? 'Rotation (°)'
+                                            : `${key.toUpperCase()} (mm)`}
+                                          <input
+                                            aria-label={
+                                              key === 'rotation'
+                                                ? 'Component rotation'
+                                                : `Component ${key.toUpperCase()} position`
+                                            }
+                                            type="number"
+                                            step={key === 'rotation' ? 'any' : '1.27'}
+                                            min={key === 'rotation' ? -360 : -100000}
+                                            max={key === 'rotation' ? 360 : 100000}
+                                            defaultValue={fmt(part[key])}
+                                            key={part[key]}
+                                            disabled={!propertiesActive}
+                                            onBlur={(e) => {
+                                              if (!canEditProperties()) return;
+                                              if (e.currentTarget.value === fmt(part[key])) return;
+                                              e.currentTarget.value = fmt(
+                                                patchGeometry(key, e.currentTarget.value).value,
+                                              );
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (
+                                                !propertiesActive ||
+                                                e.nativeEvent.isComposing ||
+                                                e.nativeEvent.keyCode === 229
+                                              ) {
+                                                e.stopPropagation();
+                                                return;
+                                              }
+                                              if (
+                                                (e.ctrlKey || e.metaKey) &&
+                                                e.key.toLowerCase() === 's'
+                                              ) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (!canEditProperties()) return;
+                                                const result = patchGeometry(
+                                                  key,
+                                                  e.currentTarget.value,
+                                                );
+                                                if (result.success) {
+                                                  e.currentTarget.value = fmt(result.value);
+                                                  requestPropertiesSave(e.shiftKey);
+                                                }
+                                                return;
+                                              }
+                                              if (e.key === 'Escape') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                e.currentTarget.value = fmt(part[key]);
+                                                e.currentTarget.blur();
+                                              }
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                e.currentTarget.blur();
+                                              }
+                                            }}
+                                          />
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            ) : annotation ? (
+                              <button
+                                className="dialog-button secondary"
+                                disabled={!propertiesActive}
+                                onClick={() => openAnnotation(annotation, annotation.id)}
+                              >
+                                Edit annotation
+                              </button>
+                            ) : label ? (
+                              <>
+                                <label>
+                                  Net name
+                                  <input
+                                    aria-label="Net name"
+                                    key={`${label.id}:${label.text}`}
+                                    defaultValue={label.text}
+                                    disabled={!propertiesActive}
+                                    onBlur={(e) => {
+                                      saveNetName(e.currentTarget.value);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (
+                                        !propertiesActive ||
+                                        e.nativeEvent.isComposing ||
+                                        e.nativeEvent.keyCode === 229
+                                      ) {
+                                        e.stopPropagation();
+                                        return;
+                                      }
+                                      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (saveNetName(e.currentTarget.value))
+                                          requestPropertiesSave(e.shiftKey);
+                                        return;
+                                      }
+                                      if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        e.currentTarget.value = label.text;
+                                      }
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        e.currentTarget.blur();
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                {label.scope === 'global' && (
+                                  <Select
+                                    label="Global label shape"
+                                    disabled={!propertiesActive}
+                                    value={label.shape || 'input'}
+                                    options={labelShapes.map((value) => ({
+                                      value,
+                                      label: value.replace('_', ' '),
+                                    }))}
+                                    onChange={(shape) => {
+                                      if (!canEditProperties()) return;
+                                      const d = structuredClone(doc);
+                                      d.labels.find((l) => l.id === label.id)!.shape =
+                                        shape as (typeof labelShapes)[number];
+                                      commit(d);
+                                    }}
+                                  />
+                                )}
+                              </>
+                            ) : (
+                              <div className="wire-properties">
+                                <strong>Electrical wire</strong>
+                                <p>
+                                  Length{' '}
+                                  {Math.hypot(wire!.a.x - wire!.b.x, wire!.a.y - wire!.b.y).toFixed(
+                                    2,
+                                  )}{' '}
+                                  mm
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          {!inspectedField && (
+                            <div className="inspector-footer">
+                              <button
+                                className="delete-button"
+                                onClick={() =>
+                                  remove(inspectedPartId ? [inspectedPartId] : selection)
+                                }
+                                disabled={
+                                  !propertiesActive ||
+                                  (!inspectedPartId && selection.every((id) => !!selectedField(id)))
+                                }
+                              >
+                                <Trash2 size={14} /> Delete object
+                              </button>
+                            </div>
+                          )}
+                        </aside>
+                      ) : (
+                        <section className="schematic-properties-empty">
+                          <div className="schematic-properties-placeholder">
+                            <Cpu size={28} aria-hidden="true" />
+                            <p>
+                              {simulationEnabled
+                                ? 'Close simulation to inspect component properties.'
+                                : tool === 'annotate'
+                                  ? 'Exit annotation mode to inspect component properties.'
+                                  : 'Select a component to view its properties.'}
+                            </p>
+                          </div>
+                        </section>
+                      )}
+                    </EditorDisplayDrawer>
+                    <div className="editor-display-drawers">
+                      <EditorDisplayDrawer
+                        label="Visualization"
+                        className="editor-visualization-drawer"
+                        open={schematicVisualizationOpen}
+                        onOpenChange={setSchematicVisualizationOpen}
+                      >
+                        <SchematicLayers
+                          layers={layers}
+                          onChange={(schematicLayers) =>
+                            appearanceSettings.update({
+                              ...appearanceSettings.appearance,
+                              schematicLayers,
+                            })
+                          }
+                          disabled={!appearanceSettings.ready}
+                          error={appearanceSettings.error}
+                        />
+                      </EditorDisplayDrawer>
+                      <EditorDisplayDrawer
+                        label="Selection"
+                        className="editor-filters-drawer"
+                        defaultOpen
+                      >
+                        <SchematicSelectionFilters
+                          filters={selectionFilters}
+                          onChange={setSelectionFilters}
+                        />
+                      </EditorDisplayDrawer>
+                    </div>
+                    <InspectorResize
+                      target={propertiesDock}
+                      size={inspectorSize}
+                      onResize={setInspectorSize}
+                      axes={['width']}
+                      minWidth={280}
+                      bounds={() => ({
+                        width: Math.min(
+                          480,
+                          Math.max(
+                            0,
+                            (propertiesDock.current?.parentElement?.clientWidth ?? 440) - 160,
+                          ),
+                        ),
+                        height: propertiesDock.current?.parentElement?.clientHeight ?? 0,
+                      })}
+                    />
+                  </div>
+                </div>
+                {layoutOpened && project && (
+                  <div className="file-editor-surface" hidden={view !== 'layout'}>
+                    <Suspense fallback={<p role="status">Loading layout editor…</p>}>
+                      <RetainedLayoutEditor
+                        visible={active && screen === 'workspace' && view === 'layout'}
+                        sidebarVisible={rightSidebarVisible && !thermalVisible}
+                        onShowSidebar={showLayoutSidebar}
+                        onToggleSidebar={toggleRightSidebar}
+                        ruleFocus={ruleFocus?.kind === 'drc' && !ruleReportStale ? ruleFocus : null}
+                        capabilityHost={capabilityHost}
+                        agentContextRef={layoutAgentContext}
+                        board={project.pcb ?? undefined}
+                        schematic={project.schematic}
+                        grid={grid}
+                        gridSpacing={layoutGridSpacing}
+                        leftButtonDrag={appearanceSettings.appearance.leftButtonDrag}
+                        gridControl={gridDensityControl}
+                        draftStatus={draftStatus || undefined}
+                        active={
+                          active &&
+                          screen === 'workspace' &&
+                          view === 'layout' &&
+                          !modal &&
+                          !confirmation
+                        }
+                        onCommit={commitBoard}
+                        onSavePartProperties={saveLayoutPartProperties}
+                        onRequestSave={requestPropertiesSave}
+                        syncStatus={layoutSyncStatus}
+                        toolbarRef={layoutPanelsAnchor}
+                        listAction={partsListAction}
+                        undoAction={undoAction}
+                        analysisAction={thermalAction}
+                        analysisDrawing={thermalDrawing}
+                        analysisReadout={thermalReadout}
+                        analysisPanel={layoutAnalysisPanelMount}
+                        onAnalysisProbe={
+                          currentThermalPresentation?.probing
+                            ? currentThermalPresentation.probeAt
+                            : undefined
+                        }
+                        historyAction={historyAction}
+                        sidebarAction={project.pcb ? rightSidebarAction : undefined}
+                        ruleAction={ruleActions.drc}
+                        annotationSessionId={activeSessionId}
+                        annotations={annotations}
+                        onAnnotationsChange={onAnnotationsChange}
+                        annotationDisabled={sourcePending}
+                        onAnnotationAdd={onAnnotationAdd}
+                      />
+                    </Suspense>
+                    {/* Keep plugin lifecycle updates outside the retained editor's hidden tree. */}
+                    {layoutAnalysisPanelTarget &&
+                      createPortal(thermalPanel, layoutAnalysisPanelTarget)}
+                  </div>
+                )}
+                {objectOpened && project && (
+                  <div className="file-editor-surface pcb-3d-surface" hidden={view !== '3d'}>
+                    {project.pcb ? (
+                      <Suspense fallback={<p role="status">Loading 3D board…</p>}>
+                        <RetainedModelPreview
+                          visible={active && screen === 'workspace' && view === '3d'}
+                          sidebarVisible={rightSidebarVisible}
+                          onShowSidebar={showRightSidebar}
+                          onToggleSidebar={toggleRightSidebar}
+                          active={
+                            active &&
+                            screen === 'workspace' &&
+                            view === '3d' &&
+                            !modal &&
+                            !confirmation
+                          }
+                          board={project.pcb}
+                          schematic={project.schematic}
+                          grid={grid}
+                          gridSpacing={modelGridSpacing}
+                          viewState={pcb3DView}
+                          toolbarRef={objectPanelsAnchor}
+                          listAction={partsListAction}
+                          historyAction={historyAction}
+                          sidebarAction={rightSidebarAction}
+                          annotationProps={modelAnnotationProps}
+                          modelCad={modelCad}
+                          undoDepth={coreSnapshot.undoDepth}
+                          redoDepth={coreSnapshot.redoDepth}
+                          capabilityHost={capabilityHost}
+                          revision={String(coreSnapshot.revision)}
+                          sourcePending={sourcePending || Boolean(coreSnapshot.editingBlocked)}
+                        />
+                      </Suspense>
+                    ) : (
+                      <div className="pcb-model-preview">
+                        <div
+                          className="editor-toolbar"
+                          ref={objectPanelsAnchor}
+                          role="group"
+                          aria-label="Model tools"
+                        >
+                          <div
+                            className="editor-tool-group editor-tool-group-end"
+                            role="group"
+                            aria-label="3D display"
+                          >
+                            {partsListAction}
+                            <ToolButton
+                              label="Version history"
+                              active={modal === 'history'}
+                              onClick={() => setModal('history')}
+                            >
+                              <GitCommitHorizontal size={17} />
+                            </ToolButton>
+                          </div>
+                        </div>
+                        <div className="pcb-3d-empty">
+                          <p>No PCB layout in this project.</p>
+                          <button className="secondary" onClick={() => changeView('layout')}>
+                            Open Layout
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="file-editor-surface" hidden={view !== 'source'}>
+                  {sourceOpened && (
+                    <Suspense fallback={<p role="status">Loading source editor…</p>}>
+                      <RetainedSourceEditor
+                        visible={sourceVisible}
+                        listAction={partsListAction}
+                        active={
+                          active &&
+                          screen === 'workspace' &&
+                          view === 'source' &&
+                          !modal &&
+                          !confirmation
+                        }
+                        trailingAction={sourceHistoryAction}
+                        status={
+                          diskObservationSelected && directoryObservation.selectedPending
+                            ? 'Unsaved changes'
+                            : draftStatus || undefined
+                        }
+                        files={sourceFiles}
+                        directories={directoryObservation.directories}
+                        fileError={directoryObservation.error}
+                        onRefreshFiles={
+                          fileId && window.openpe ? directoryObservation.refresh : undefined
+                        }
+                        activeFile={activeSourceFile?.name}
+                        onSelectFile={setSelectedSourceFile}
+                        value={activeSourceFile?.source ?? ''}
+                        pending={
+                          diskObservationSelected
+                            ? directoryObservation.selectedPending && !directoryObservation.saving
+                            : sourcePending
+                        }
+                        applyLabel={diskObservationSelected ? 'Save file' : 'Apply'}
+                        error={sourceError}
+                        onChange={onSourceChange}
+                        onApply={onSourceApply}
+                        onCopy={onSourceCopy}
+                      />
+                    </Suspense>
+                  )}
+                </div>
+              </div>
+              <EditorStatusBar
+                hidden={view !== 'canvas' && view !== '3d'}
+                active={active && screen === 'workspace'}
+                mode={
+                  view === '3d'
+                    ? 'Model view'
+                    : schematicMoveMode
+                      ? schematicMoveMode === 'drag'
+                        ? 'Click to place · Keep connections'
+                        : 'Click to place selection'
+                      : {
+                          select: 'Interaction mode',
+                          hand: 'Pan',
+                          annotate: 'Annotation mode',
+                          wire: 'Click to route · Connect to finish',
+                          place: 'Click to place component',
+                          label: 'Click to place label',
+                          'global-label': 'Click to place global label',
+                          'no-connect': 'Click a pin to mark unconnected',
+                          drag: 'Drag with connections',
+                        }[tool]
+                }
+                coordinates={
+                  view === 'canvas' ? <CanvasCoordinates coordinates={coordinates} /> : undefined
+                }
+                controls={
+                  view === 'canvas' || (view === '3d' && project?.pcb)
+                    ? gridDensityControl
+                    : undefined
+                }
+                status={draftStatus || undefined}
+              />
+            </section>
+          </div>
+        )}
+        {toast && (
+          <div className="toast" role="status">
+            <span>{toast}</span>
+            <button
+              aria-label="Dismiss notification"
+              title="Dismiss notification"
+              onClick={() => setToast('')}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          multiple
+          accept=".kicad_pro,.kicad_sch,.kicad_pcb"
+          onChange={async (e) => {
+            const selected = Array.from(e.target.files ?? []);
+            const f = selected.find((file) => file.name.endsWith('.kicad_pro')) ?? selected[0];
+            if (f)
+              try {
+                const files = await Promise.all(
+                  selected.map(async (file) => ({ name: file.name, source: await file.text() })),
+                );
+                const d = projectFromNativeFiles({ entry: f.name, files });
+                await enterDocument(
+                  d,
+                  f.name,
+                  false,
+                  '',
+                  undefined,
+                  undefined,
+                  `browser:${f.name}:${d.id}`,
+                );
+              } catch (err) {
+                notify((err as Error).message);
+              }
+            e.target.value = '';
+          }}
+        />
+        {screen === 'plugins' && (
+          <div className="plugins-layout">
+            <nav className="home-sidebar" aria-label="Plugin page navigation">
+              <NavigationButton
+                compact
+                icon={HomeIcon}
+                label="Home"
+                onClick={() => {
+                  cancelPendingNavigation();
+                  setScreen('home');
+                }}
+              />
+              <NavigationButton
+                compact
+                icon={FolderPlus}
+                label="New project"
+                onClick={() => newFile()}
+              />
+              <NavigationButton
+                compact
+                icon={FolderOpen}
+                label="Open project"
+                onClick={() => void open()}
+              />
+              <NavigationButton
+                compact
+                icon={Blocks}
+                label="Plugins"
+                active
+                onClick={openPlugins}
+              />
+              <ProjectNavigation
+                projects={projects}
+                active={active && screen === 'plugins'}
+                onAction={onProjectAction}
+                onSelect={(id) => {
+                  if (id === documentId) setScreen('workspace');
+                  else onSelectProject(id);
+                }}
+              />
+              <div className="rail-spacer" />
+              <AgentPicker
+                compact
+                provider={provider}
+                agents={agents}
+                onChange={setProvider}
+                disabled={Boolean(runningSessions[activeSessionId])}
+              />
+              <SettingsMenu
+                active={active}
+                onSettings={() => setModal('settings')}
+                onAbout={() => setModal('about')}
+              />
+            </nav>
+            <Suspense fallback={<p role="status">Loading plugins…</p>}>
+              <PluginsPage
+                capabilityHost={capabilityHost}
+                onBack={() => setScreen(beforePlugins.current)}
+              />
+            </Suspense>
+          </div>
+        )}
+        {(modal === 'library' || modal === 'power') && doc && (
+          <DeferredDialog title="Choose symbol" onClose={() => setModal(null)}>
+            <LibraryChooser
+              capabilityHost={capabilityHost}
+              kind="symbols"
+              initialLibrary={modal === 'power' ? 'power' : ''}
+              onClose={() => setModal(null)}
+              onChoose={async (detail, unit) => {
+                if (!('symbol' in detail) || detail.error) return;
+                setModal(null);
+                if (!(await changeView('canvas'))) return;
+                setPlacement({ symbol: detail.symbol, unit });
+                setTool('place');
+                queueSchematicNavigation('place');
+              }}
+            />
+          </DeferredDialog>
+        )}
+        {modal === 'annotation' && doc && annotationTarget && (
+          <AnnotationDialog
+            initialText={
+              schematicTexts(doc.original).find((t) => t.id === annotationTarget.id)?.text || ''
+            }
+            editing={Boolean(annotationTarget.id)}
+            onClose={() => setModal(null)}
+            onSave={(text) => {
+              const latest = current.current;
+              if (!latest) throw new Error('The project is no longer open.');
+              const result = saveAnnotation(latest, text, annotationTarget, annotationTarget.id);
+              if (!commit(result.circuit)) throw new Error('Could not save the annotation.');
+              setSelected(result.id);
+              setModal(null);
+            }}
+          />
+        )}
+        {modal === 'parts' && doc && (
+          <PartsList
+            size={partsSize}
+            onResize={setPartsSize}
+            parts={doc.parts}
+            selected={selected}
+            onEdit={openProperties}
+            onLocate={async (id) => {
+              if (!(await changeView('canvas'))) return;
+              setSelected(id);
+              setTool('select');
+              setModal(null);
+              queueSchematicNavigation('select', id);
+            }}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal === 'history' && project && active && (
+          <DeferredDialog
+            title="Version history"
+            onClose={() => {
+              cancelPendingNavigation();
+              setModal(null);
+            }}
+          >
+            <ProjectHistoryDialog
+              capabilityHost={capabilityHost}
+              size={historySize}
+              onResize={setHistorySize}
+              fileId={fileId}
+              source={source}
+              sourcePending={sourcePending}
+              onSave={() => save()}
+              onClose={() => {
+                cancelPendingNavigation();
+                setModal(null);
+              }}
+              onRestore={restoreProjectVersion}
+            />
+          </DeferredDialog>
+        )}
+        {spiceAvailable && simulationProject && (
+          <Suspense fallback={null}>
+            <SimulationDialog
+              capabilityHost={capabilityHost}
+              project={simulationProject}
+              agentContextRef={simulationAgentContext}
+              fileId={fileId}
+              visible={active && simulationVisible && screen === 'workspace'}
+              onCloseSettings={() => {
+                setSimulationEnabled(false);
+              }}
+              settingsHost={simulationSettingsHost}
+              sourcePending={sourcePending}
+              probe={probe}
+              waveformHost={waveformHost}
+              onWaveformVisibilityChange={setWaveformRequested}
+              onStoreModels={(models, expectedSource) => {
+                const latest = projectRef.current;
+                if (
+                  !latest ||
+                  sourceDraftRef.current !== null ||
+                  activeSchematicRef.current !== simulationProject.schematic.id
+                )
+                  return false;
+                if (
+                  serializeProject(schematicSnapshot(latest, simulationProject.schematic.id)) !==
+                  expectedSource
+                )
+                  return false;
+                return commitProject({ ...latest, simulationModels: models });
+              }}
+            />
+          </Suspense>
+        )}
+        {modal === 'about' && (
+          <DeferredDialog title="About OpenPE" onClose={() => setModal(null)}>
+            <AboutDialog onClose={() => setModal(null)} />
+          </DeferredDialog>
+        )}
+        {rulesOpen &&
+          active &&
+          screen === 'workspace' &&
+          !modal &&
+          !confirmation &&
+          view === (rulesOpen === 'erc' ? 'canvas' : 'layout') && (
+            <Suspense fallback={null}>
+              <RuleCheckPanel
+                kind={rulesOpen}
+                report={currentRuleReport?.result ?? null}
+                busy={ruleBusy === rulesOpen}
+                error={ruleErrors[rulesOpen]}
+                stale={ruleReportStale}
+                sourcePending={sourcePending}
+                blockedReason={coreSnapshot.editingBlocked ?? ''}
+                drcSettings={drcSettings}
+                onDRCSettingsChange={setDRCSettings}
+                onRun={(settings) => void runRuleChecks(settings)}
+                onSelectIssue={locateRuleIssue}
+                onClose={closeRuleChecks}
+                size={rulePanelSize}
+                onResize={setRulePanelSize}
+              />
+            </Suspense>
+          )}
+        {modal === 'settings' && (
+          <DeferredDialog title="Settings" onClose={() => setModal(null)}>
+            <SettingsDialog
+              appearance={appearanceSettings}
+              agents={agents}
+              detecting={detecting}
+              error={agentError}
+              onDetect={detect}
+              onClose={() => setModal(null)}
+            />
+          </DeferredDialog>
+        )}
+        {confirmation && (
+          <ConfirmationDialog
+            key={confirmation.kind}
+            kind={confirmation.kind}
+            documentTitle={project?.name ?? project?.schematic.title}
+            busy={confirmBusy}
+            error={confirmError}
+            onCancel={cancelConfirmation}
+            onConfirm={finishConfirmation}
+          />
+        )}
+      </main>
+    </>
+  );
+}

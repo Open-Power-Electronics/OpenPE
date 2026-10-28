@@ -1,0 +1,213 @@
+{
+  "collection": "Power electronics reference circuits",
+  "description": "Nine curated projects with official TI chip models, schematic test sources, loads and editable PCB layouts.",
+  "examples": [
+    {
+      "id": "reference-lm2596-to220-5-buck",
+      "file": "lm2596-to220-5-buck",
+      "title": "LM2596 Buck",
+      "description": "Buck converter · TO-220-5.",
+      "topology": "Buck",
+      "package": "TO-220-5",
+      "modelId": "lm2596-5",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lm2596-to220-5-buck/input.kicad_sch",
+          "upstreamPath": "data/test/lm2596_to220-5_buck/input.kicad_sch",
+          "sha256": "270b07d3a1dd7020fb995d6917443151e176ce98579cf887c711a4622b713e5c"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lm2596-to220-5-buck/expert.kicad_pcb",
+          "upstreamPath": "data/test/lm2596_to220-5_buck/expert.kicad_pcb",
+          "sha256": "38f98702852e5f931ea48fdcc021e9522ade9f15922dd6e611e1895ee3d03edd"
+        }
+      }
+    },
+    {
+      "id": "reference-tps61046-bga6-boost",
+      "file": "tps61046-bga6-boost",
+      "title": "TPS61046 Boost",
+      "description": "Boost converter · BGA-6.",
+      "topology": "Boost",
+      "package": "BGA-6",
+      "modelId": "reference-tps61046",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/tps61046-bga6-boost/input.kicad_sch",
+          "upstreamPath": "data/test/tps61046_bga6_boost/input.kicad_sch",
+          "sha256": "c3bfd0b1b22752c5f6962626691adac454c154d9f7faaf95fdb69088dd67598e"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/tps61046-bga6-boost/expert.kicad_pcb",
+          "upstreamPath": "data/test/tps61046_bga6_boost/expert.kicad_pcb",
+          "sha256": "e1f1153f12085eb81cf117e177b0c0c10e414cdd9cf62bf5978b2fffea6b3e1f"
+        }
+      }
+    },
+    {
+      "id": "reference-lm2735-msop8-sepic",
+      "file": "lm2735-msop8-sepic",
+      "title": "LM2735 SEPIC",
+      "description": "SEPIC converter · MSOP-8.",
+      "topology": "SEPIC",
+      "package": "MSOP-8",
+      "modelId": "reference-lm2735y",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lm2735-msop8-sepic/input.kicad_sch",
+          "upstreamPath": "data/train/lm2735_msop8_sepic/input.kicad_sch",
+          "sha256": "5b51bfdd52e2fb689a80830ed170289f4fcf2149ac35e5e8b6131f8c05f79dc6"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lm2735-msop8-sepic/expert.kicad_pcb",
+          "upstreamPath": "data/train/lm2735_msop8_sepic/expert.kicad_pcb",
+          "sha256": "2ee0085b4cfd55c6989b2d0f8aaa85c3034ea6006ae6253815960b5dd55f4f36"
+        }
+      }
+    },
+    {
+      "id": "reference-lm25017-wson8-flybuck",
+      "file": "lm25017-wson8-flybuck",
+      "title": "LM25017 Fly-Buck",
+      "description": "Fly-Buck converter · WSON-8.",
+      "topology": "Fly-Buck",
+      "package": "WSON-8",
+      "modelId": "reference-lm25017",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lm25017-wson8-flybuck/input.kicad_sch",
+          "upstreamPath": "data/test/lm25017_wson8_flybuck/input.kicad_sch",
+          "sha256": "4f86ce5941b46b4ba68c8a6e9ff2c5bd3307e3a4d8159769f66f63dd9d90003a"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lm25017-wson8-flybuck/expert.kicad_pcb",
+          "upstreamPath": "data/test/lm25017_wson8_flybuck/expert.kicad_pcb",
+          "sha256": "946d1f18c70913ab44521fe3688d8251940cef502c6ff154c43f0ca7cceb969d"
+        }
+      }
+    },
+    {
+      "id": "reference-lm5001-soic8-boost",
+      "file": "lm5001-soic8-boost",
+      "title": "LM5001 Boost",
+      "description": "Boost converter · SOIC-8.",
+      "topology": "Boost",
+      "package": "SOIC-8",
+      "modelId": "reference-lm5001",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lm5001-soic8-boost/input.kicad_sch",
+          "upstreamPath": "data/val/lm5001_soic8_boost/input.kicad_sch",
+          "sha256": "b18e359478f4118df2720e4bb900939265b627bf9c69659fc68e3d9593f48d93"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lm5001-soic8-boost/expert.kicad_pcb",
+          "upstreamPath": "data/val/lm5001_soic8_boost/expert.kicad_pcb",
+          "sha256": "c122e14f340d8e3e7390db8e65f51712836961b5f74d433aaa1f232e5609abcd"
+        }
+      }
+    },
+    {
+      "id": "reference-lm27761-wson8-pump",
+      "file": "lm27761-wson8-pump",
+      "title": "LM27761 Charge Pump",
+      "description": "Charge pump converter · WSON-8.",
+      "topology": "Charge pump",
+      "package": "WSON-8",
+      "modelId": "reference-lm27761",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lm27761-wson8-pump/input.kicad_sch",
+          "upstreamPath": "data/test/lm27761_wson8_pump/input.kicad_sch",
+          "sha256": "74ea912f7fcf6bb00e22607c197c072389d206d2cdfd82efe4b3e777e5dd03d1"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lm27761-wson8-pump/expert.kicad_pcb",
+          "upstreamPath": "data/test/lm27761_wson8_pump/expert.kicad_pcb",
+          "sha256": "962d42035da03c337892d9c02e2374d6411e3e066122bca0e1a71c13dd86d8b4"
+        }
+      }
+    },
+    {
+      "id": "reference-lmr12010-sot236-buck",
+      "file": "lmr12010-sot236-buck",
+      "title": "LMR12010 Buck",
+      "description": "Buck converter · SOT-23-6.",
+      "topology": "Buck",
+      "package": "SOT-23-6",
+      "modelId": "reference-lmr12010x",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lmr12010-sot236-buck/input.kicad_sch",
+          "upstreamPath": "data/test/lmr12010_sot236_buck/input.kicad_sch",
+          "sha256": "4688e78865cd67ce5dc81d4ad1cbcdb83e096f61c17da36fe2b3e9f5e5209ce7"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lmr12010-sot236-buck/expert.kicad_pcb",
+          "upstreamPath": "data/test/lmr12010_sot236_buck/expert.kicad_pcb",
+          "sha256": "26f2652bb2a40a97c2103eb655e57fd1b6c9877afaffc42c40eaaaa9c4c8a58c"
+        }
+      }
+    },
+    {
+      "id": "reference-lmr70503-bga8-buckboost",
+      "file": "lmr70503-bga8-buckboost",
+      "title": "LMR70503 Buck-Boost",
+      "description": "Buck-Boost converter · BGA-8.",
+      "topology": "Buck-Boost",
+      "package": "BGA-8",
+      "modelId": "reference-lmr70503",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lmr70503-bga8-buckboost/input.kicad_sch",
+          "upstreamPath": "data/train/lmr70503_bga8_buckboost/input.kicad_sch",
+          "sha256": "cc2147bfc4560be63bc4e602e01d61353bc529a2072d15ed2414aa0183074400"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lmr70503-bga8-buckboost/expert.kicad_pcb",
+          "upstreamPath": "data/train/lmr70503_bga8_buckboost/expert.kicad_pcb",
+          "sha256": "0e63c6c6116af39701fb7d24122992721c3efa8ed84b22827d1c86a532174557"
+        }
+      }
+    },
+    {
+      "id": "reference-lm2598-to220-7-buck",
+      "file": "lm2598-to220-7-buck",
+      "title": "LM2598 Buck",
+      "description": "Buck converter · TO-220-7.",
+      "topology": "Buck",
+      "package": "TO-220-7",
+      "modelId": "reference-lm2598-adj",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "resources/example-catalog/sources/lm2598-to220-7-buck/input.kicad_sch",
+          "upstreamPath": "data/test/lm2598_to220-7_buck/input.kicad_sch",
+          "sha256": "ffc7eb404bbdf1507beb1526e3074a11a96a41a6e361ea044e692c53a51c9671"
+        },
+        "pcb": {
+          "path": "resources/example-catalog/sources/lm2598-to220-7-buck/expert.kicad_pcb",
+          "upstreamPath": "data/test/lm2598_to220-7_buck/expert.kicad_pcb",
+          "sha256": "08dc434a043806e680b178da416232b7c7c59afd960c465ec716b213ebc6da94"
+        }
+      }
+    }
+  ]
+}

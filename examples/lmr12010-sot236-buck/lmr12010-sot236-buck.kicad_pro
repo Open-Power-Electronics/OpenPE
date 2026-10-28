@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "filename": "lmr12010-sot236-buck.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_SIMULATION_MODELS": "[\"circuits/LMR12010X.lib\"]"
+  }
+}

@@ -1,0 +1,5515 @@
+{
+  "format": "openpe",
+  "version": 1,
+  "units": "mm",
+  "project": {
+    "id": "f0229f5b-b83c-52bd-a37a-3cc82578ea50",
+    "name": "LM2611 Cuk"
+  },
+  "schematic": {
+    "id": "0ff534e9-0989-452d-98cf-e96729a5a9b8",
+    "name": "LM2611 Cuk",
+    "kicad": [["sheet_instances",["path","\"/\"",["page","\"1\""]]],["embedded_fonts","no"]],
+    "components": [
+      {
+        "id": "171bcb3f-b4f8-4faf-b025-5226856a32aa",
+        "position": { "x": 165.1, "y": 63.5 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"b20271b4-8338-4604-b4bc-57f246d7c43e\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR08",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","165.1","69.85","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","165.1","68.58","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "19da05ed-9066-40f6-8464-ef0dee72ec07",
+        "position": { "x": 35.56, "y": 53.34 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"ae4bcfa7-6146-4dea-9269-b25ef4b51497\""]],
+          ["pin","\"2\"",["uuid","\"854cddf4-86af-499c-9a73-b2c14894278f\""]]
+        ],
+        "symbol": "Device:C",
+        "reference": "C1",
+        "value": "22uF",
+        "fieldLayout": {
+          "Reference": [
+            ["at","39.37","52.0699","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","39.37","54.6099","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Footprint": [["at","36.5252","57.15","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Capacitor_SMD:C_1210_3225Metric",
+          "Datasheet": "",
+          "Description": "Unpolarized capacitor"
+        },
+        "footprints": [
+          {
+            "id": "c197f622-9a2c-42b0-80f8-c6ea1adab715",
+            "libraryId": "Capacitor_SMD:C_1210_3225Metric",
+            "x": 59.55,
+            "y": 47.275,
+            "rotation": 90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "8db47596-b53f-42f4-a7a5-89cff5137d24",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -1.475,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.15, "y": 2.7 },
+                "netId": "8472177e-6685-5d75-afbe-ad78af6864b3",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.217391
+              },
+              {
+                "id": "4b229fb6-a8e5-4d2f-a225-6eed41e2b2f7",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 1.475,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.15, "y": 2.7 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.217391
+              }
+            ],
+            "graphics": [
+              {
+                "id": "c1cd59ac-d982-4aa0-86e9-198c02bec600",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 3.1, "y": -0.85 },
+                "end": { "x": 3.1, "y": -0.85 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 90,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "d79d0e04-4a50-47cc-b1d7-fa588c337dad",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 2.3 },
+                "end": { "x": 0, "y": 2.3 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "71c78079-2352-457a-8a9f-daf3ca6b199e",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.711298, "y": -1.36 },
+                "end": { "x": 0.7113, "y": -1.359999 }
+              },
+              {
+                "id": "9f9c7dd3-60e5-44cf-bb9a-bff00ff7d044",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.7113, "y": 1.359999 },
+                "end": { "x": 0.711298, "y": 1.36 }
+              },
+              {
+                "id": "7f21c439-3e40-4ff9-867d-71190941cf7f",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.299999, "y": -1.6 },
+                "end": { "x": -2.299999, "y": 1.6 },
+                "points": [{"x":2.299999,"y":-1.6},{"x":2.299999,"y":1.6}]
+              },
+              {
+                "id": "e5a36743-c966-42dd-a2a5-f986d7a32bdf",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.599998, "y": -1.25 },
+                "end": { "x": -1.599998, "y": 1.25 },
+                "points": [{"x":1.599998,"y":-1.25},{"x":1.599998,"y":1.25}]
+              },
+              {
+                "id": "bf8c45b0-f043-463b-a7c8-5c2d3400a5f1",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.8, "y": 0.8 },
+                  "thickness": 0.12
+                }
+              }
+            ],
+            "order": 13,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Capacitor_SMD.3dshapes/C_1210_3225Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "2bb2226a-0b44-444c-a5e4-0712623925ef",
+        "position": { "x": 130.81, "y": 73.66 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"2\"",["uuid","\"73a9d047-1c39-4168-a14b-b35a6f95c8bd\""]],
+          ["pin","\"1\"",["uuid","\"b578f969-6926-4eb3-b537-cfdf892080e5\""]]
+        ],
+        "symbol": "Device:R",
+        "reference": "R3",
+        "value": "1k",
+        "fieldLayout": {
+          "Reference": [
+            ["at","133.35","72.3899","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","133.35","74.9299","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Footprint": [["at","129.032","73.66","90"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Resistor_SMD:R_0805_2012Metric",
+          "Datasheet": "",
+          "Description": "Resistor"
+        },
+        "footprints": [
+          {
+            "id": "93b3d533-4cdd-47dd-afa0-dd1f4c07d755",
+            "libraryId": "Resistor_SMD:R_0805_2012Metric",
+            "x": 56.0125,
+            "y": 53.275,
+            "rotation": 0,
+            "side": "front",
+            "pads": [
+              {
+                "id": "873b149d-1a0e-45b4-bb0b-ed12e3b0f0fe",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "80b6ffc7-2181-5891-a1e3-21e935dc57eb",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              },
+              {
+                "id": "3b2c4a1c-744f-44c3-bd3e-c202ce4cb702",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "2d067aab-9d83-552d-a044-c95cb4e8ce13",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              }
+            ],
+            "graphics": [
+              {
+                "id": "deae50ca-72f2-4922-b575-0a403bef0caa",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 2.6375, "y": 0.85 },
+                "end": { "x": 2.6375, "y": 0.85 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "2be730eb-b80a-43a1-b5da-82594495cdf9",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.65 },
+                "end": { "x": 0, "y": 1.65 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "6c0df255-2677-43b3-911b-34b129525762",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.2271, "y": -0.735 },
+                "end": { "x": 0.2271, "y": -0.735 }
+              },
+              {
+                "id": "3d750cc5-5c46-4016-963b-a5512cd518e5",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.2271, "y": 0.735 },
+                "end": { "x": 0.2271, "y": 0.735 }
+              },
+              {
+                "id": "de4ed379-b782-45ea-b0fb-40e0fec0b4f1",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.68, "y": -0.95 },
+                "end": { "x": -1.68, "y": 0.95 },
+                "points": [{"x":1.68,"y":-0.95},{"x":1.68,"y":0.95}]
+              },
+              {
+                "id": "770b3bf8-fc5e-4e77-be5e-446bfb980139",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1, "y": -0.625 },
+                "end": { "x": -1, "y": 0.625 },
+                "points": [{"x":1,"y":-0.625},{"x":1,"y":0.625}]
+              },
+              {
+                "id": "0914054f-08df-47db-aa19-4044148c286c",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.5, "y": 0.5 },
+                  "thickness": 0.08
+                }
+              }
+            ],
+            "order": 9,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0805_2012Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "38a25e29-2a7c-4d29-9941-756478dd9ff5",
+        "position": { "x": 142.24, "y": 54.61 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"b7660aa2-4bf7-4dcc-a2cc-2e7089b212ee\""]],
+          ["pin","\"2\"",["uuid","\"7bb4a747-5ce6-40ea-814f-50aad4ae3a6b\""]]
+        ],
+        "symbol": "Device:C",
+        "reference": "C3",
+        "value": "1uF",
+        "rotation": 180,
+        "fieldLayout": {
+          "Reference": [
+            ["at","146.05","53.3399","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","right"]]
+          ],
+          "Value": [
+            ["at","146.05","55.8799","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","right"]]
+          ],
+          "Footprint": [["at","141.2748","50.8","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Capacitor_SMD:C_0603_1608Metric",
+          "Datasheet": "",
+          "Description": "Unpolarized capacitor"
+        },
+        "footprints": [
+          {
+            "id": "7f6abd84-5188-48b9-a8e1-32e0a57548d8",
+            "libraryId": "Capacitor_SMD:C_0603_1608Metric",
+            "x": 52.2625,
+            "y": 55.2,
+            "rotation": 180,
+            "side": "front",
+            "pads": [
+              {
+                "id": "ff3d715e-a234-4a88-9867-2a917e5d9a4f",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.775,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 0.95 },
+                "netId": "80b6ffc7-2181-5891-a1e3-21e935dc57eb",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "2896bd89-2256-43a6-9dad-3a270f7770ff",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.775,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 0.95 },
+                "netId": "00e5e4cd-f973-5161-a537-8a9ffd02794c",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              }
+            ],
+            "graphics": [
+              {
+                "id": "d292a8f1-6d7e-4003-9f4f-8b79a2088f48",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -0.0125, "y": -3.175 },
+                "end": { "x": -0.0125, "y": -3.175 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "fd86bcac-6ae1-4f23-980a-5a8049fa9628",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.43 },
+                "end": { "x": 0, "y": 1.43 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "149a7e00-c118-4d0b-89b6-d2e5cc0270c0",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.140599, "y": -0.51 },
+                "end": { "x": 0.1406, "y": -0.51 }
+              },
+              {
+                "id": "de50d293-2fe7-4a2d-bc9a-033de04b3c80",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.1406, "y": 0.51 },
+                "end": { "x": 0.140599, "y": 0.51 }
+              },
+              {
+                "id": "d07ac6aa-545f-4392-897a-6e997bd63394",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.48, "y": -0.73 },
+                "end": { "x": -1.48, "y": 0.73 },
+                "points": [{"x":1.48,"y":-0.73},{"x":1.48,"y":0.73}]
+              },
+              {
+                "id": "fa26f0a0-9bc2-4976-8349-ea7228ae9024",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -0.8, "y": -0.4 },
+                "end": { "x": -0.8, "y": 0.4 },
+                "points": [{"x":0.8,"y":-0.4},{"x":0.8,"y":0.4}]
+              },
+              {
+                "id": "e6f114d1-0b3d-4aa3-b3b7-913dbc1f3773",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.4, "y": 0.4 },
+                  "thickness": 0.06
+                }
+              }
+            ],
+            "order": 6,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Capacitor_SMD.3dshapes/C_0603_1608Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "6efa560b-73fd-474a-8003-d31f54e5bf4f",
+        "position": { "x": 35.56, "y": 62.23 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"816cdba7-2b3e-4fd5-b13d-a3c8a07438fc\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR02",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","35.56","68.58","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","35.56","67.31","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "6f8993bc-e245-47a1-95b7-f013884753e3",
+        "position": { "x": 33.02, "y": 20.32 },
+        "kicad": [
+          ["pin","\"2\"",["uuid","\"98356cb5-ead7-4319-a1d0-55a8bc6f98c7\""]],
+          ["pin","\"1\"",["uuid","\"281d9e63-3a3c-42f2-aced-d86580506f6b\""]]
+        ],
+        "symbol": "Connector_Generic:Conn_01x02",
+        "reference": "J1",
+        "value": "Conn_01x02",
+        "fieldLayout": {
+          "Reference": [
+            ["at","35.56","20.3199","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","29.21","26.924","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ]
+        },
+        "fields": {
+          "Footprint": "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical",
+          "Datasheet": "",
+          "Description": "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+        },
+        "footprints": [
+          {
+            "id": "1cd63892-c47e-4199-8018-5a21a41484d5",
+            "libraryId": "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical",
+            "x": 64.9825,
+            "y": 50,
+            "rotation": -90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "d867ef83-142a-4c58-a6c3-14e92c58b378",
+                "number": "1",
+                "type": "thru_hole",
+                "shape": "roundrect",
+                "x": -1.275,
+                "y": 0.02,
+                "rotation": 0,
+                "size": { "x": 1.74, "y": 2.19 },
+                "netId": "8472177e-6685-5d75-afbe-ad78af6864b3",
+                "layers": ["*.Cu","*.Mask"],
+                "drill": 1.19,
+                "roundrectRatio": 0.143678,
+                "removeUnusedLayers": false
+              },
+              {
+                "id": "0c98b0cb-6dd8-4531-835e-f24859d0cb18",
+                "number": "2",
+                "type": "thru_hole",
+                "shape": "oval",
+                "x": 1.265,
+                "y": 0.02,
+                "rotation": 0,
+                "size": { "x": 1.74, "y": 2.19 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["*.Cu","*.Mask"],
+                "drill": 1.19,
+                "removeUnusedLayers": false
+              }
+            ],
+            "graphics": [
+              {
+                "id": "31962f93-1cf0-4d02-b1ae-9ded582c50f9",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": -4.4 },
+                "end": { "x": 0, "y": -4.4 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 180,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "3ebfafeb-c2a5-4eb9-ad9d-8025eb72b9bd",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -0.005, "y": 4.1 },
+                "end": { "x": -0.005, "y": 4.1 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 180,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "c8b76390-576f-4714-bdcf-950fda420561",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.275, "y": 3.01 },
+                "end": { "x": -1.275, "y": 2.01 }
+              },
+              {
+                "id": "c4afe52e-457a-4c7e-b782-29aaa777dbfd",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.025, "y": 3.01 },
+                "end": { "x": -1.025, "y": 2.01 }
+              },
+              {
+                "id": "26979d2c-e523-44e9-a80b-fec0581a412c",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 1.015, "y": 3.01 },
+                "end": { "x": 1.015, "y": 2.01 }
+              },
+              {
+                "id": "f122ead0-bb5d-46a2-8a2a-770455a41d64",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.275, "y": 2.01 },
+                "end": { "x": 1.265, "y": 2.01 }
+              },
+              {
+                "id": "3b2b2b99-684e-49e7-a0ca-d9f70c3f0cbf",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.275, "y": 2.01 },
+                "end": { "x": -1.025, "y": 1.48 }
+              },
+              {
+                "id": "5df2ec8a-b90d-48d6-bd7f-1b5fb50aca03",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 1.265, "y": 2.01 },
+                "end": { "x": 1.265, "y": 3.01 }
+              },
+              {
+                "id": "6dc206a5-d88c-4d03-b6d8-252c65494782",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.025, "y": 1.48 },
+                "end": { "x": 1.015, "y": 1.48 }
+              },
+              {
+                "id": "1fbc14d8-ae84-42fc-89f0-f18930598090",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 1.015, "y": 1.48 },
+                "end": { "x": 1.265, "y": 2.01 }
+              },
+              {
+                "id": "a327df50-6950-4cb6-974e-62df37e5ed94",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.945, "y": -1.98 },
+                "end": { "x": -2.945, "y": 2.02 }
+              },
+              {
+                "id": "eada33a1-17e6-4b26-9f33-ed5e969b53dc",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.075, "y": -2.41 },
+                "end": { "x": -0.475, "y": -2.41 }
+              },
+              {
+                "id": "470729c1-5df4-4433-b39e-e7835cf53e80",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.475, "y": -2.41 },
+                "end": { "x": -0.475, "y": -3.01 }
+              },
+              {
+                "id": "8497b865-1205-45ac-81a0-2eecc7c80188",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.465, "y": -2.41 },
+                "end": { "x": 2.065, "y": -2.41 }
+              },
+              {
+                "id": "de47353f-b65f-4099-af8d-284f9769bb4b",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 2.065, "y": -2.41 },
+                "end": { "x": 2.065, "y": -3.01 }
+              },
+              {
+                "id": "15e4404d-2107-44ac-a211-ba1f01b22cbe",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.075, "y": -3.01 },
+                "end": { "x": -2.075, "y": -2.41 }
+              },
+              {
+                "id": "f9328de1-391a-49e8-8608-00df80860b42",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.465, "y": -3.01 },
+                "end": { "x": 0.465, "y": -2.41 }
+              },
+              {
+                "id": "eb06b2c5-9700-4c58-a8f4-c48033a9c28d",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.655, "y": -3.01 },
+                "end": { "x": -2.655, "y": 3.01 },
+                "points": [{"x":2.645,"y":-3.01},{"x":2.645,"y":3.01}]
+              },
+              {
+                "id": "2233cb1d-d4b6-413c-97ec-71af92ab24ea",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -3.045, "y": -3.4 },
+                "end": { "x": -3.045, "y": 3.4 },
+                "points": [{"x":3.045,"y":-3.4},{"x":3.045,"y":3.4}]
+              },
+              {
+                "id": "07a7e653-16ca-4f19-a35f-578f32679a25",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -1.8379, "y": 0.02 },
+                "end": { "x": -2.545, "y": 0.52 }
+              },
+              {
+                "id": "de5e9504-6c83-4d8e-be11-52b95c0d85b3",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -2.545, "y": -0.48 },
+                "end": { "x": -1.8379, "y": 0.02 }
+              },
+              {
+                "id": "2fa6cd92-564d-450d-a850-3de8f4f45d83",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.545, "y": -2.9 },
+                "end": { "x": -2.545, "y": 2.9 },
+                "points": [{"x":2.535,"y":-2.9},{"x":2.535,"y":2.9}]
+              },
+              {
+                "id": "46417ef0-d39e-48e8-a5df-743b8cd43f68",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 90,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15
+                }
+              }
+            ],
+            "order": 1,
+            "models": [
+              {
+                "path": "${KICAD10_3DMODEL_DIR}/Connector_Molex.3dshapes/Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical.step",
+                "offset": {
+                  "x": -1.275,
+                  "y": -0.02,
+                  "z": 0
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "78046483-fe28-445d-a9f4-8ceb674a7efb",
+        "position": { "x": 71.12, "y": 22.86 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"b1398bd7-62ed-49f8-969d-39bf7b58f6ba\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR05",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","71.12","29.21","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","71.12","27.94","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "81b421da-aa98-4e46-ab21-46cb44e7cd69",
+        "position": { "x": 55.88, "y": 20.32 },
+        "kicad": [
+          ["pin","\"2\"",["uuid","\"f53086e6-7087-4ac3-a24a-22e8e1826f93\""]],
+          ["pin","\"1\"",["uuid","\"d58692d9-2527-4572-8a9c-11d50c18394a\""]]
+        ],
+        "symbol": "Connector_Generic:Conn_01x02",
+        "reference": "J2",
+        "value": "Conn_01x02",
+        "fieldLayout": {
+          "Reference": [
+            ["at","58.42","20.3199","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","52.07","26.924","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ]
+        },
+        "fields": {
+          "Footprint": "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical",
+          "Datasheet": "",
+          "Description": "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+        },
+        "footprints": [
+          {
+            "id": "9224b5d0-cc40-4ae1-b743-931428abc46c",
+            "libraryId": "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical",
+            "x": 35.2175,
+            "y": 50,
+            "rotation": 90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "142938d6-02b2-4542-aaef-82bffe8391ab",
+                "number": "1",
+                "type": "thru_hole",
+                "shape": "roundrect",
+                "x": -1.275,
+                "y": 0.02,
+                "rotation": 0,
+                "size": { "x": 1.74, "y": 2.19 },
+                "netId": "00e5e4cd-f973-5161-a537-8a9ffd02794c",
+                "layers": ["*.Cu","*.Mask"],
+                "drill": 1.19,
+                "roundrectRatio": 0.143678,
+                "removeUnusedLayers": false
+              },
+              {
+                "id": "91ae1f83-1ed9-462f-999f-12c09fa268d8",
+                "number": "2",
+                "type": "thru_hole",
+                "shape": "oval",
+                "x": 1.265,
+                "y": 0.02,
+                "rotation": 0,
+                "size": { "x": 1.74, "y": 2.19 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["*.Cu","*.Mask"],
+                "drill": 1.19,
+                "removeUnusedLayers": false
+              }
+            ],
+            "graphics": [
+              {
+                "id": "19fcd1d1-a0ae-4a90-90f4-d2c9a7839dbb",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": -4.4 },
+                "end": { "x": 0, "y": -4.4 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "b66c56e0-6579-4611-ac59-8dd7638f9fd4",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -0.005, "y": 4.1 },
+                "end": { "x": -0.005, "y": 4.1 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "28836034-1ed0-4009-bbad-750eece49bb2",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.465, "y": -3.01 },
+                "end": { "x": 0.465, "y": -2.41 }
+              },
+              {
+                "id": "0b6e39bc-e417-4029-824e-f132d383da1a",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.075, "y": -3.01 },
+                "end": { "x": -2.075, "y": -2.41 }
+              },
+              {
+                "id": "915ed751-cf09-4505-bfe3-8ead80d8bc5e",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 2.065, "y": -2.41 },
+                "end": { "x": 2.065, "y": -3.01 }
+              },
+              {
+                "id": "0defa165-9a93-4a7b-b6f9-ec2fc104f23e",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.465, "y": -2.41 },
+                "end": { "x": 2.065, "y": -2.41 }
+              },
+              {
+                "id": "33cc490b-27f6-4179-898b-f65c46a529dc",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.475, "y": -2.41 },
+                "end": { "x": -0.475, "y": -3.01 }
+              },
+              {
+                "id": "fd5cdc1a-ff19-41ee-a779-23214f8d4af4",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.075, "y": -2.41 },
+                "end": { "x": -0.475, "y": -2.41 }
+              },
+              {
+                "id": "a42b6d18-e175-41b0-a8f7-cbbe88a1f28e",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.945, "y": -1.98 },
+                "end": { "x": -2.945, "y": 2.02 }
+              },
+              {
+                "id": "f4c97daa-9cfa-4071-b77e-9ed95a3d8089",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 1.015, "y": 1.48 },
+                "end": { "x": 1.265, "y": 2.01 }
+              },
+              {
+                "id": "9239be1b-e1f5-49d3-bcfb-5879d86f76f7",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.025, "y": 1.48 },
+                "end": { "x": 1.015, "y": 1.48 }
+              },
+              {
+                "id": "a987f723-a1ed-48b9-9125-45d4b66bdb49",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 1.265, "y": 2.01 },
+                "end": { "x": 1.265, "y": 3.01 }
+              },
+              {
+                "id": "244d7a1d-425d-4ee0-8a37-fe34e7773a71",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.275, "y": 2.01 },
+                "end": { "x": -1.025, "y": 1.48 }
+              },
+              {
+                "id": "64b12b00-163d-4eb3-8ba9-9bec1208ed39",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.275, "y": 2.01 },
+                "end": { "x": 1.265, "y": 2.01 }
+              },
+              {
+                "id": "c02871eb-dbfa-4a23-adba-a82eea97bbe9",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 1.015, "y": 3.01 },
+                "end": { "x": 1.015, "y": 2.01 }
+              },
+              {
+                "id": "4cc9265b-fdc6-44f5-aed4-09cff2d716d5",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.025, "y": 3.01 },
+                "end": { "x": -1.025, "y": 2.01 }
+              },
+              {
+                "id": "bcf3e456-b9d9-4d28-abba-ecf7b92162ac",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -1.275, "y": 3.01 },
+                "end": { "x": -1.275, "y": 2.01 }
+              },
+              {
+                "id": "30aa8eed-5a12-42bf-b32a-329843d31f67",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.655, "y": -3.01 },
+                "end": { "x": -2.655, "y": 3.01 },
+                "points": [{"x":2.645,"y":-3.01},{"x":2.645,"y":3.01}]
+              },
+              {
+                "id": "283fb8d4-d0ea-4293-9165-b54f35566002",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -3.045, "y": -3.4 },
+                "end": { "x": -3.045, "y": 3.4 },
+                "points": [{"x":3.045,"y":-3.4},{"x":3.045,"y":3.4}]
+              },
+              {
+                "id": "f4190c3a-429f-47f2-9dbd-99d4e9e112d2",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -2.545, "y": -0.48 },
+                "end": { "x": -1.8379, "y": 0.02 }
+              },
+              {
+                "id": "3235a0da-5c34-48fa-bc18-55020e723047",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -1.8379, "y": 0.02 },
+                "end": { "x": -2.545, "y": 0.52 }
+              },
+              {
+                "id": "8f8bf374-52d3-4ebc-8fe8-755ce2da7a2d",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.545, "y": -2.9 },
+                "end": { "x": -2.545, "y": 2.9 },
+                "points": [{"x":2.535,"y":-2.9},{"x":2.535,"y":2.9}]
+              },
+              {
+                "id": "b9375903-a372-4dbb-8e8b-b1164a3cdfb6",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 270,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15
+                }
+              }
+            ],
+            "order": 8,
+            "models": [
+              {
+                "path": "${KICAD10_3DMODEL_DIR}/Connector_Molex.3dshapes/Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical.step",
+                "offset": {
+                  "x": -1.275,
+                  "y": -0.02,
+                  "z": 0
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "8846997f-30b7-4ea8-bcfa-814c9489156d",
+        "position": { "x": 80.01, "y": 20.32 },
+        "kicad": [
+          ["pin","\"2\"",["uuid","\"ae2254df-fc94-4b21-abca-6433a40e2404\""]],
+          ["pin","\"1\"",["uuid","\"4e8dc459-d62f-407f-9525-20d712198f1d\""]]
+        ],
+        "symbol": "Connector_Generic:Conn_01x02",
+        "reference": "J3",
+        "value": "Conn_01x02",
+        "fieldLayout": {
+          "Reference": [
+            ["at","82.55","20.3199","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","76.2","26.924","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ]
+        },
+        "fields": {
+          "Footprint": "Connector_PinHeader_1.00mm:PinHeader_1x02_P1.00mm_Vertical",
+          "Datasheet": "",
+          "Description": "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)"
+        },
+        "footprints": [
+          {
+            "id": "d7cfc0d4-8029-4d5b-a7d9-21a20d00c29d",
+            "libraryId": "Connector_PinHeader_1.00mm:PinHeader_1x02_P1.00mm_Vertical",
+            "x": 62.95,
+            "y": 54.65,
+            "rotation": 90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "a2d7a7cc-c595-4dfa-8608-a88151b52334",
+                "number": "1",
+                "type": "thru_hole",
+                "shape": "rect",
+                "x": 0,
+                "y": -0.5,
+                "rotation": 0,
+                "size": { "x": 0.85, "y": 0.85 },
+                "netId": "3a985967-32df-5df9-af1b-a1377cdbd94f",
+                "layers": ["*.Cu","*.Mask"],
+                "drill": 0.5,
+                "removeUnusedLayers": false
+              },
+              {
+                "id": "5a0292de-d847-4487-b33f-894ce89b5bba",
+                "number": "2",
+                "type": "thru_hole",
+                "shape": "circle",
+                "x": 0,
+                "y": 0.5,
+                "rotation": 0,
+                "size": { "x": 0.85, "y": 0.85 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["*.Cu","*.Mask"],
+                "drill": 0.5,
+                "removeUnusedLayers": false
+              }
+            ],
+            "graphics": [
+              {
+                "id": "b3ed9132-e2a7-46cd-b694-5d42b4f81146",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 2.45 },
+                "end": { "x": 0, "y": 2.45 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "5051418b-e6a5-46e5-9c8b-623d639e62ea",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 2.11 },
+                "end": { "x": 0, "y": 2.11 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "e32ebe06-260a-4f47-9b6f-5dfb63f2e867",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.744999, "y": -1.235 },
+                "end": { "x": 0, "y": -1.235 }
+              },
+              {
+                "id": "8a16a566-543f-43dc-a466-e4bea825ae5b",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.745, "y": -0.5 },
+                "end": { "x": -0.744999, "y": -1.235 }
+              },
+              {
+                "id": "1f38c5cb-9d32-40bd-ab7b-8af2e648f901",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.745, "y": 0.234999 },
+                "end": { "x": -0.6856, "y": 0.234999 }
+              },
+              {
+                "id": "9a0bdaf3-0118-4a49-86c9-75a59be25df9",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.745, "y": 0.234999 },
+                "end": { "x": -0.745, "y": 1.11 }
+              },
+              {
+                "id": "83bdcc6d-f408-4335-94db-4cc4ca1fa958",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.745, "y": 0.235 },
+                "end": { "x": 0.744999, "y": 1.11 }
+              },
+              {
+                "id": "45eb5824-4791-4550-84c4-dec2b606386f",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.6856, "y": 0.235 },
+                "end": { "x": 0.745, "y": 0.235 }
+              },
+              {
+                "id": "e9bfffbe-c7eb-448a-90fd-dba54eca8cc3",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.409999, "y": 1.11 },
+                "end": { "x": 0.744999, "y": 1.11 }
+              },
+              {
+                "id": "22214af8-b4c8-4dd4-8b0d-77600468949e",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.745, "y": 1.11 },
+                "end": { "x": -0.41, "y": 1.11 }
+              },
+              {
+                "id": "f4a8aa3d-675d-406e-a67b-17fb0ef72a1a",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.14, "y": -1.5 },
+                "end": { "x": -1.14, "y": 1.5 },
+                "points": [{"x":1.14,"y":-1.5},{"x":1.14,"y":1.5}]
+              },
+              {
+                "id": "5ee78c17-b074-494b-893a-663fc72f879a",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 0.635, "y": -1 },
+                "end": { "x": 0.634999, "y": 1 }
+              },
+              {
+                "id": "5ef80886-7acd-4be6-8268-3e3fc19bbfea",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.317499, "y": -1 },
+                "end": { "x": 0.635, "y": -1 }
+              },
+              {
+                "id": "0b64c0b1-2208-4f51-ad7b-266ece542485",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.635, "y": -0.6825 },
+                "end": { "x": -0.317499, "y": -1 }
+              },
+              {
+                "id": "4d49f7ed-6f48-4fa1-afa4-2806aac843ea",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 0.634999, "y": 1 },
+                "end": { "x": -0.635, "y": 1 }
+              },
+              {
+                "id": "f1b68af6-1ed8-4ab7-8b86-1af277c8c9e4",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.635, "y": 1 },
+                "end": { "x": -0.635, "y": -0.6825 }
+              },
+              {
+                "id": "49244a6b-52fb-4cc3-b5f9-c7f72bd3029f",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 90,
+                  "size": { "x": 0.76, "y": 0.76 },
+                  "thickness": 0.114
+                }
+              }
+            ],
+            "order": 14,
+            "models": [
+              {
+                "path": "${KICAD10_3DMODEL_DIR}/Connector_PinHeader_1.00mm.3dshapes/PinHeader_1x02_P1.00mm_Vertical.step",
+                "offset": {
+                  "x": 0,
+                  "y": 0.5,
+                  "z": 0
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "934572ae-4096-4e47-8666-d877f3544ec9",
+        "position": { "x": 69.85, "y": 72.39 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"3bd2ad2c-7ebf-4dd4-b734-6e5b48e09fbd\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR04",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","69.85","78.74","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","69.85","77.47","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "aecedcec-0b63-480f-a764-6d12525e34f0",
+        "position": { "x": 130.81, "y": 99.06 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"23192902-9640-48bc-b994-a43f68d695ad\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR07",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","130.81","105.41","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [
+            ["at","133.35","100.3299","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "b12b826a-1271-456d-81b8-885cb746b960",
+        "position": { "x": 130.81, "y": 87.63 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"2\"",["uuid","\"9c9eca40-71da-43fd-8eac-b444f5353c42\""]],
+          ["pin","\"1\"",["uuid","\"0d2b4c7b-d6d6-4c71-9a2c-e150847690af\""]]
+        ],
+        "symbol": "Device:R",
+        "reference": "R4",
+        "value": "9k",
+        "fieldLayout": {
+          "Reference": [
+            ["at","133.35","86.3599","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","133.35","88.8999","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Footprint": [["at","129.032","87.63","90"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Resistor_SMD:R_0805_2012Metric",
+          "Datasheet": "",
+          "Description": "Resistor"
+        },
+        "footprints": [
+          {
+            "id": "0f23ee46-8dfe-428f-8f2e-1b676c86a523",
+            "libraryId": "Resistor_SMD:R_0805_2012Metric",
+            "x": 56.0125,
+            "y": 55.375,
+            "rotation": 180,
+            "side": "front",
+            "pads": [
+              {
+                "id": "5b10dbed-2a7f-4058-80f8-6876c0688f92",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "2d067aab-9d83-552d-a044-c95cb4e8ce13",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              },
+              {
+                "id": "18679bc8-ee11-40e5-bae0-5a248fbf3f72",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              }
+            ],
+            "graphics": [
+              {
+                "id": "d834b7e8-63e7-46ff-b359-4069a7490abe",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": -1.95 },
+                "end": { "x": 0, "y": -1.95 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "7d09657b-f20e-4311-9623-c338051b3482",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.65 },
+                "end": { "x": 0, "y": 1.65 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "f6c039e3-fbbc-4f56-9901-81ad7ef73689",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.227099, "y": -0.735 },
+                "end": { "x": 0.2271, "y": -0.735 }
+              },
+              {
+                "id": "f52ee800-9adf-4c6c-a32c-4f3388c1a013",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.2271, "y": 0.735 },
+                "end": { "x": 0.227099, "y": 0.735 }
+              },
+              {
+                "id": "a0f6405e-9bf6-49ca-8028-bc81e9ea10d4",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.68, "y": -0.95 },
+                "end": { "x": -1.68, "y": 0.95 },
+                "points": [{"x":1.68,"y":-0.95},{"x":1.68,"y":0.95}]
+              },
+              {
+                "id": "a934cf5c-7f97-4f86-b4f1-a71d5794cd6e",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -0.999999, "y": -0.625 },
+                "end": { "x": -0.999999, "y": 0.625 },
+                "points": [{"x":0.999999,"y":-0.625},{"x":0.999999,"y":0.625}]
+              },
+              {
+                "id": "0de60d63-dc0a-4dfa-9d76-0250724f68cf",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.5, "y": 0.5 },
+                  "thickness": 0.08
+                }
+              }
+            ],
+            "order": 0,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0805_2012Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "b4007a3c-5861-4eba-9c3f-4b5e6a62f387",
+        "position": { "x": 142.24, "y": 87.63 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"e69c6565-18c6-477f-b66f-451cfa6896a6\""]],
+          ["pin","\"2\"",["uuid","\"bf31b212-7fcb-4582-95be-84fcf6a21364\""]]
+        ],
+        "symbol": "Device:C",
+        "reference": "C4",
+        "value": "1uF",
+        "rotation": 180,
+        "fieldLayout": {
+          "Reference": [
+            ["at","146.05","86.3599","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","right"]]
+          ],
+          "Value": [
+            ["at","146.05","88.8999","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","right"]]
+          ],
+          "Footprint": [["at","141.2748","83.82","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Capacitor_SMD:C_0603_1608Metric",
+          "Datasheet": "",
+          "Description": "Unpolarized capacitor"
+        },
+        "footprints": [
+          {
+            "id": "35f2407b-f4a7-4f04-a8fb-97c2a6433baa",
+            "libraryId": "Capacitor_SMD:C_0603_1608Metric",
+            "x": 58.7,
+            "y": 56.2,
+            "rotation": 90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "10d26aea-b90f-46af-b9ce-d6449656642f",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.775,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 0.95 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "a26c068a-ccd6-4083-b0b2-26bc18e9d393",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.775,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 0.95 },
+                "netId": "2d067aab-9d83-552d-a044-c95cb4e8ce13",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              }
+            ],
+            "graphics": [
+              {
+                "id": "029d2924-744f-4794-96ae-128ade52d586",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -0.75, "y": 1.65 },
+                "end": { "x": -0.75, "y": 1.65 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "9f9cb807-e207-4f3b-bbf5-959608870849",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.43 },
+                "end": { "x": 0, "y": 1.43 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "1d4484bc-6854-490a-8374-d790e303a72c",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.140598, "y": -0.51 },
+                "end": { "x": 0.1406, "y": -0.51 }
+              },
+              {
+                "id": "13224a5b-57ab-4665-8426-85e891e3c177",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.1406, "y": 0.51 },
+                "end": { "x": 0.140598, "y": 0.51 }
+              },
+              {
+                "id": "a60b1f08-bdda-4ff8-9d77-4ee5b69a77a9",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.479999, "y": -0.73 },
+                "end": { "x": -1.479999, "y": 0.73 },
+                "points": [{"x":1.479999,"y":-0.73},{"x":1.479999,"y":0.73}]
+              },
+              {
+                "id": "9a85d68a-40bb-4287-b20f-2434a8f78494",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -0.799999, "y": -0.4 },
+                "end": { "x": -0.799999, "y": 0.4 },
+                "points": [{"x":0.799999,"y":-0.4},{"x":0.799999,"y":0.4}]
+              },
+              {
+                "id": "0e773270-3eae-4d03-9e4d-f4cde4c76174",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.4, "y": 0.4 },
+                  "thickness": 0.06
+                }
+              }
+            ],
+            "order": 2,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Capacitor_SMD.3dshapes/C_0603_1608Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "b521947d-2fca-414a-a9dc-12041c5f88dd",
+        "position": { "x": 53.34, "y": 67.31 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"2\"",["uuid","\"27f005c4-1b24-4890-a1ea-39242079b2a8\""]],
+          ["pin","\"1\"",["uuid","\"227f5f58-2d3e-4721-bd82-59a54b203fef\""]]
+        ],
+        "symbol": "Device:R",
+        "reference": "R1",
+        "value": "100k",
+        "fieldLayout": {
+          "Reference": [
+            ["at","55.88","66.0399","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","55.88","68.5799","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Footprint": [["at","51.562","67.31","90"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Resistor_SMD:R_0805_2012Metric",
+          "Datasheet": "",
+          "Description": "Resistor"
+        },
+        "footprints": [
+          {
+            "id": "503ca49a-d5bf-4ab3-b10d-3d83413a3ba9",
+            "libraryId": "Resistor_SMD:R_0805_2012Metric",
+            "x": 58.6875,
+            "y": 50.7,
+            "rotation": 0,
+            "side": "front",
+            "pads": [
+              {
+                "id": "fcab62ee-4c83-4c1b-b525-0aa1b4d5d997",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "3a985967-32df-5df9-af1b-a1377cdbd94f",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              },
+              {
+                "id": "f8da2146-7e10-4702-bc99-3323efe6eedf",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "8472177e-6685-5d75-afbe-ad78af6864b3",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              }
+            ],
+            "graphics": [
+              {
+                "id": "4e236db2-c0a1-4aa7-aea9-6d390504e066",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0.0625, "y": 1.7 },
+                "end": { "x": 0.0625, "y": 1.7 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "7b81e899-0c25-459a-9d1a-3ed602deaba5",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.65 },
+                "end": { "x": 0, "y": 1.65 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "87caf1be-db5e-4edd-a02b-e086ac610a7c",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.2271, "y": 0.735 },
+                "end": { "x": 0.227098, "y": 0.735 }
+              },
+              {
+                "id": "0e487f8b-9259-41ec-949f-900ab2a428c4",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.227098, "y": -0.735 },
+                "end": { "x": 0.2271, "y": -0.735 }
+              },
+              {
+                "id": "72ad677e-107f-4886-98f7-058e4014631e",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.679999, "y": -0.95 },
+                "end": { "x": -1.679999, "y": 0.95 },
+                "points": [{"x":1.679999,"y":-0.95},{"x":1.679999,"y":0.95}]
+              },
+              {
+                "id": "a6577943-a31c-4b4a-b645-3c5ae4f831d1",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -0.999999, "y": -0.625 },
+                "end": { "x": -0.999999, "y": 0.625 },
+                "points": [{"x":0.999999,"y":-0.625},{"x":0.999999,"y":0.625}]
+              },
+              {
+                "id": "c2c443f7-9b84-41d7-887b-ec177dee6108",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.5, "y": 0.5 },
+                  "thickness": 0.08
+                }
+              }
+            ],
+            "order": 4,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0805_2012Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "b78a1789-d2aa-40ee-b91c-6d144143af6d",
+        "position": { "x": 102.87, "y": 59.69 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"360b95ef-5c1d-4b80-8764-707e8c39d2eb\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR06",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","102.87","66.04","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","102.87","64.77","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "c1abb54b-c671-46a0-a1c1-0f73c50778f2",
+        "position": { "x": 120.65, "y": 48.26 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"2b3e22d8-32a5-4ccd-a954-37ed388c77b6\""]],
+          ["pin","\"2\"",["uuid","\"e9c9e51f-022e-45bb-8d19-06d06d3c8633\""]]
+        ],
+        "symbol": "Device:L_Iron",
+        "reference": "L2",
+        "value": "10uH",
+        "rotation": 90,
+        "fieldLayout": {
+          "Reference": [["at","120.65","41.91","90"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","120.65","44.45","90"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Inductor_SMD:L_Changjiang_FNR6028S",
+          "Datasheet": "",
+          "Description": "Inductor with iron core"
+        },
+        "footprints": [
+          {
+            "id": "b03ec71b-442d-4b54-abce-0d4194754b0b",
+            "libraryId": "Inductor_SMD:L_Changjiang_FNR6028S",
+            "x": 47.125,
+            "y": 51.75,
+            "rotation": 180,
+            "side": "front",
+            "pads": [
+              {
+                "id": "1051f383-1df6-44e0-8f5e-95b0d4eba0c6",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -2.25,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.7, "y": 5.7 },
+                "netId": "d47c33c4-0f59-5d8c-a29d-5118b63b5a87",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.147059
+              },
+              {
+                "id": "7ae8d1c4-d86b-4526-ab50-93886bbab85c",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 2.25,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.7, "y": 5.7 },
+                "netId": "00e5e4cd-f973-5161-a537-8a9ffd02794c",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.147059
+              }
+            ],
+            "graphics": [
+              {
+                "id": "dbc170f1-6072-4341-846d-569fc8938bc2",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": -4.25 },
+                "end": { "x": 0, "y": -4.25 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "61abbd8d-e8ad-493f-87af-cbf322e2459d",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 3.95 },
+                "end": { "x": 0, "y": 3.95 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "eb4281ca-4d22-4da3-951f-b3c5f3a650b6",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 3.109999, "y": 3.11 },
+                "end": { "x": -3.11, "y": 3.109999 }
+              },
+              {
+                "id": "5bbfeb7f-eaa0-4e74-adaf-f52e59707c75",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -3.109999, "y": -3.11 },
+                "end": { "x": 3.11, "y": -3.109999 }
+              },
+              {
+                "id": "67ad3372-cfe6-40f7-8942-12a7d2a1940f",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.35, "y": -3.099999 },
+                "end": { "x": 3.349999, "y": 3.1 }
+              },
+              {
+                "id": "c315a64f-3774-4375-8666-0d272dafd31e",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.349999, "y": 3.1 },
+                "end": { "x": 3.249999, "y": 3.1 }
+              },
+              {
+                "id": "e843524c-15e4-439f-8344-9bc4dbad1393",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.25, "y": -3.099999 },
+                "end": { "x": 3.35, "y": -3.099999 }
+              },
+              {
+                "id": "d79644c6-6f9a-4a4e-9631-6f24f9ecb8a1",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.25, "y": -3.249999 },
+                "end": { "x": 3.25, "y": -3.099999 }
+              },
+              {
+                "id": "14a5379b-c6c6-4784-850f-d6713d875f43",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.249999, "y": 3.25 },
+                "end": { "x": -3.25, "y": 3.249999 }
+              },
+              {
+                "id": "6f8de745-556b-41ff-9ffd-c49591b0bdf3",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.249999, "y": 3.1 },
+                "end": { "x": 3.249999, "y": 3.25 }
+              },
+              {
+                "id": "e79a4169-402a-41ea-82ff-8ba5b2218ceb",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.249999, "y": -3.1 },
+                "end": { "x": -3.249999, "y": -3.25 }
+              },
+              {
+                "id": "805db33b-6d3d-4b2d-8234-8d7974c1a250",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.249999, "y": -3.25 },
+                "end": { "x": 3.25, "y": -3.249999 }
+              },
+              {
+                "id": "9a6c84b3-d01e-472b-821f-1c9e414c9991",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.25, "y": 3.249999 },
+                "end": { "x": -3.25, "y": 3.099999 }
+              },
+              {
+                "id": "07c979b1-71fe-4e56-89db-1c12623b3b9f",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.25, "y": 3.099999 },
+                "end": { "x": -3.35, "y": 3.099999 }
+              },
+              {
+                "id": "6134c46a-0268-4a62-a2ed-62a3363499c5",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.349999, "y": -3.1 },
+                "end": { "x": -3.249999, "y": -3.1 }
+              },
+              {
+                "id": "e47f62cb-9396-426d-81a9-25056f1f5a55",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.35, "y": 3.099999 },
+                "end": { "x": -3.349999, "y": -3.1 }
+              },
+              {
+                "id": "03239dd8-c481-4d63-a064-8698028f723e",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.999999, "y": -3 },
+                "end": { "x": -2.999999, "y": 3 },
+                "points": [{"x":2.999999,"y":-3},{"x":2.999999,"y":3}]
+              },
+              {
+                "id": "54ca0b49-f959-48b2-ba2b-ddd509297d7e",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15
+                }
+              }
+            ],
+            "order": 12,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Inductor_SMD.3dshapes/L_Changjiang_FNR6028S.step"}]
+          }
+        ]
+      },
+      {
+        "id": "c262607e-cc70-4966-91b4-03b0a0d830c8",
+        "position": { "x": 69.85, "y": 62.23 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"4\"",["uuid","\"8eca7737-3f38-4543-a702-c9c865be7886\""]],
+          ["pin","\"5\"",["uuid","\"d321b226-a0ea-42cd-9b8c-b380a9e88f71\""]],
+          ["pin","\"3\"",["uuid","\"04d2b1a0-f847-4e07-90d5-918e3c648593\""]],
+          ["pin","\"1\"",["uuid","\"984e763b-b65d-40bf-8198-a5b8ed2390d5\""]],
+          ["pin","\"2\"",["uuid","\"d54f8eba-9bcd-4e20-a6b3-d861766ba93e\""]]
+        ],
+        "symbol": "Regulator_Switching:TLV61047DDC",
+        "reference": "U1",
+        "value": "LM2611",
+        "fieldLayout": {
+          "Reference": [["at","69.85","52.07","0"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","69.85","54.61","0"],["effects",["font",["size","1.27","1.27"]]]],
+          "Footprint": [
+            ["at","72.39","68.58","0"],
+            ["hide","yes"],
+            ["effects",["font",["size","1.27","1.27"],["italic","yes"]],["justify","left"]]
+          ],
+          "Datasheet": [["at","64.77","54.61","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Package_TO_SOT_SMD:SOT-23-5",
+          "Datasheet": "https://www.ti.com/lit/ds/symlink/lm2611.pdf",
+          "Description": "1.4MHz Cuk Converter"
+        },
+        "footprints": [
+          {
+            "id": "94ec0692-508a-42f8-b6f2-1762e72b87af",
+            "libraryId": "Package_TO_SOT_SMD:SOT-23-5",
+            "x": 54.8,
+            "y": 49.725,
+            "rotation": 0,
+            "side": "front",
+            "pads": [
+              {
+                "id": "d81f7059-9426-4bc2-b0b0-8ee787412bdd",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -1.1375,
+                "y": -0.95,
+                "rotation": 0,
+                "size": { "x": 1.325, "y": 0.6 },
+                "netId": "60b86586-4906-521c-a19f-7e7d9fc73e1e",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "f3000f15-2ed1-4e88-a045-41aa7c2d6a77",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -1.1375,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.325, "y": 0.6 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "2e114409-b7d7-408b-9523-ae4bef1b31d8",
+                "number": "3",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -1.1375,
+                "y": 0.95,
+                "rotation": 0,
+                "size": { "x": 1.325, "y": 0.6 },
+                "netId": "80b6ffc7-2181-5891-a1e3-21e935dc57eb",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "33360e8f-2c02-4ea5-8e30-0dd7b9e942e6",
+                "number": "4",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 1.1375,
+                "y": 0.95,
+                "rotation": 0,
+                "size": { "x": 1.325, "y": 0.6 },
+                "netId": "3a985967-32df-5df9-af1b-a1377cdbd94f",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "2a362a06-8faa-46d6-992f-f1d68f6ba69c",
+                "number": "5",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 1.1375,
+                "y": -0.95,
+                "rotation": 0,
+                "size": { "x": 1.325, "y": 0.6 },
+                "netId": "8472177e-6685-5d75-afbe-ad78af6864b3",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              }
+            ],
+            "graphics": [
+              {
+                "id": "932389ef-982a-49b2-8e0e-952e59c6d747",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -5.625, "y": -5.2125 },
+                "end": { "x": -5.625, "y": -5.2125 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "5f428358-8eb2-4e00-b973-7211da517ce7",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 2.4 },
+                "end": { "x": 0, "y": 2.4 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "d2e24d9b-cbc2-4b88-be98-74923891f286",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.91, "y": -1.56 },
+                "end": { "x": 0.91, "y": -1.56 }
+              },
+              {
+                "id": "6d942592-6ce0-4bae-9207-a1d39fbe9b5a",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.91, "y": -1.51 },
+                "end": { "x": -0.91, "y": -1.56 }
+              },
+              {
+                "id": "b53df92d-40f8-41f3-986e-e12179824e40",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.91, "y": 1.56 },
+                "end": { "x": -0.91, "y": 1.51 }
+              },
+              {
+                "id": "7659d2ef-b651-48fb-8e0a-43312d9665e4",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.91, "y": -1.56 },
+                "end": { "x": 0.91, "y": -1.51 }
+              },
+              {
+                "id": "d6c1a39a-5f03-4455-8eb0-2d8f20a710d5",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.91, "y": -0.39 },
+                "end": { "x": 0.91, "y": 0.39 }
+              },
+              {
+                "id": "5022396a-f8ae-4444-8948-19cfee15d21a",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.91, "y": 1.51 },
+                "end": { "x": 0.91, "y": 1.56 }
+              },
+              {
+                "id": "d21096d5-d5a9-4645-abf1-d7a913d25dff",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 0.91, "y": 1.56 },
+                "end": { "x": -0.91, "y": 1.56 }
+              },
+              {
+                "id": "bc21aa0c-81ed-4da4-9d3f-e141e8217e00",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "fill": true,
+                "kind": "polygon",
+                "start": { "x": -1.45, "y": -1.51 },
+                "end": { "x": -1.21, "y": -1.84 },
+                "points": [{"x":-1.69,"y":-1.84}]
+              },
+              {
+                "id": "70a9ab50-ae5b-417f-af3a-f4d65bca78ff",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -2.05, "y": -1.5 },
+                "end": { "x": -1.05, "y": -1.5 }
+              },
+              {
+                "id": "6b463449-b8c3-4239-96c7-a8196227c0af",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -2.05, "y": 1.5 },
+                "end": { "x": -2.05, "y": -1.5 }
+              },
+              {
+                "id": "8edb1626-251d-48b7-8800-668e5b26ff12",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -1.05, "y": -1.7 },
+                "end": { "x": 1.05, "y": -1.7 }
+              },
+              {
+                "id": "ad68e70d-5ce0-41af-8a9d-52393cee57f6",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -1.05, "y": -1.5 },
+                "end": { "x": -1.05, "y": -1.7 }
+              },
+              {
+                "id": "df0a78fa-cc87-471e-a367-b3681b0ef394",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -1.05, "y": 1.5 },
+                "end": { "x": -2.05, "y": 1.5 }
+              },
+              {
+                "id": "c0f9c422-67fd-4337-a114-cd4b55d37d50",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -1.05, "y": 1.7 },
+                "end": { "x": -1.05, "y": 1.5 }
+              },
+              {
+                "id": "00157333-9f2b-4c8d-b10b-9ba44ea38816",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 1.05, "y": -1.7 },
+                "end": { "x": 1.05, "y": -1.5 }
+              },
+              {
+                "id": "6e3e287e-5933-442a-acfa-0b5a22d9f6cb",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 1.05, "y": -1.5 },
+                "end": { "x": 2.05, "y": -1.5 }
+              },
+              {
+                "id": "69c03caf-d2e3-4652-a4a0-21733b955667",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 1.05, "y": -0.39 },
+                "end": { "x": 1.05, "y": 0.39 }
+              },
+              {
+                "id": "ea4ad85f-b1c6-4d87-8b9c-c49630500e93",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 1.05, "y": 0.39 },
+                "end": { "x": 2.05, "y": 0.39 }
+              },
+              {
+                "id": "3b4dc0ec-f0f0-45f2-bd2d-68618a71bdec",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 1.05, "y": 1.5 },
+                "end": { "x": 1.05, "y": 1.7 }
+              },
+              {
+                "id": "f58460fe-36df-4b5f-913c-e6f2b8af1c35",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 1.05, "y": 1.7 },
+                "end": { "x": -1.05, "y": 1.7 }
+              },
+              {
+                "id": "9b0e7a00-98fd-4c9b-86ba-fc071d27f891",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 2.05, "y": -1.5 },
+                "end": { "x": 2.05, "y": -0.39 }
+              },
+              {
+                "id": "0a8b4397-71aa-4f8c-aeee-4cc6bbb32d6c",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 2.05, "y": -0.39 },
+                "end": { "x": 1.05, "y": -0.39 }
+              },
+              {
+                "id": "95c7266d-7c9f-406c-9e0f-d0ded9d0b7d5",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 2.05, "y": 0.39 },
+                "end": { "x": 2.05, "y": 1.5 }
+              },
+              {
+                "id": "1201d314-0326-46f4-980a-8f523862c916",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 2.05, "y": 1.5 },
+                "end": { "x": 1.05, "y": 1.5 }
+              },
+              {
+                "id": "b64f1fbd-2993-4ecb-8650-dfe39c8e4b31",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -0.4, "y": -1.45 },
+                "end": { "x": -0.8, "y": -1.05 },
+                "points": [{"x":0.8,"y":-1.45},{"x":0.8,"y":1.45},{"x":-0.8,"y":1.45}]
+              },
+              {
+                "id": "6aa39344-bf72-4cab-be78-2b36c5daeaac",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 90,
+                  "size": { "x": 0.72, "y": 0.72 },
+                  "thickness": 0.11
+                }
+              }
+            ],
+            "order": 10,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Package_TO_SOT_SMD.3dshapes/SOT-23-5.step"}]
+          }
+        ]
+      },
+      {
+        "id": "c6f69317-048c-48fa-8124-805039d7aceb",
+        "position": { "x": 130.81, "y": 55.88 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"2\"",["uuid","\"2a40dcd6-c388-4a1a-9054-0e200427026c\""]],
+          ["pin","\"1\"",["uuid","\"f325f066-9327-4df7-b4b4-1c038ca0370c\""]]
+        ],
+        "symbol": "Device:R",
+        "reference": "R2",
+        "value": "29.4k",
+        "fieldLayout": {
+          "Reference": [
+            ["at","133.35","54.6099","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","133.35","57.1499","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Footprint": [["at","129.032","55.88","90"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Resistor_SMD:R_0805_2012Metric",
+          "Datasheet": "",
+          "Description": "Resistor"
+        },
+        "footprints": [
+          {
+            "id": "90e0c1dd-f293-4172-94d7-db8bc50888c8",
+            "libraryId": "Resistor_SMD:R_0805_2012Metric",
+            "x": 52.4125,
+            "y": 53.275,
+            "rotation": 0,
+            "side": "front",
+            "pads": [
+              {
+                "id": "41ae8e06-4b3f-42f0-bf3b-1323ac4fa1b3",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "00e5e4cd-f973-5161-a537-8a9ffd02794c",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              },
+              {
+                "id": "8d5754ae-f34a-43b5-9379-b60471018233",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.9125,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.025, "y": 1.4 },
+                "netId": "80b6ffc7-2181-5891-a1e3-21e935dc57eb",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.243902
+              }
+            ],
+            "graphics": [
+              {
+                "id": "6baedb3d-7ef0-47ba-8f5f-6ac952e18396",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -0.1125, "y": 3.525 },
+                "end": { "x": -0.1125, "y": 3.525 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "0a03acd8-6177-4aa5-a909-4f2766d5164b",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.65 },
+                "end": { "x": 0, "y": 1.65 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "f6a62f44-e31b-4ebf-bb84-13f7fd6330d1",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.2271, "y": -0.735 },
+                "end": { "x": 0.2271, "y": -0.735 }
+              },
+              {
+                "id": "87643f5c-b8a2-4de1-a211-d698cc564c92",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.2271, "y": 0.735 },
+                "end": { "x": 0.2271, "y": 0.735 }
+              },
+              {
+                "id": "44743ce0-b96b-4754-81f7-1d35d743eb89",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.68, "y": -0.95 },
+                "end": { "x": -1.68, "y": 0.95 },
+                "points": [{"x":1.68,"y":-0.95},{"x":1.68,"y":0.95}]
+              },
+              {
+                "id": "79d0ec0f-31e8-4af2-9340-185168250cc5",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1, "y": -0.625 },
+                "end": { "x": -1, "y": 0.625 },
+                "points": [{"x":1,"y":-0.625},{"x":1,"y":0.625}]
+              },
+              {
+                "id": "bdeb9053-8504-493e-b4eb-ebd6bd2559f9",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.5, "y": 0.5 },
+                  "thickness": 0.08
+                }
+              }
+            ],
+            "order": 7,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0805_2012Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "cfdbbf56-2106-4ed7-9088-ec7c37d6bc0e",
+        "position": { "x": 102.87, "y": 54.61 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"2\"",["uuid","\"9527b4ee-8dd3-4245-8117-92fbe3457b36\""]],
+          ["pin","\"1\"",["uuid","\"ea5f514a-2ea2-4ecb-9ffb-1e195137ca0c\""]]
+        ],
+        "symbol": "Diode:MBR0520",
+        "reference": "D1",
+        "value": "MBR0520",
+        "rotation": 90,
+        "fieldLayout": {
+          "Reference": [
+            ["at","105.41","53.6574","90"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","right"]]
+          ],
+          "Value": [
+            ["at","105.41","56.1974","90"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","right"]]
+          ],
+          "Footprint": [["at","107.315","54.61","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Diode_SMD:D_SOD-123",
+          "Datasheet": "http://www.mccsemi.com/up_pdf/MBR0520~MBR0580(SOD123).pdf",
+          "Description": "20V 0.5A Schottky Power Rectifier Diode, SOD-123"
+        },
+        "footprints": [
+          {
+            "id": "eaa52c71-7c73-4d0e-9563-377d4763730b",
+            "libraryId": "Diode_SMD:D_SOD-123",
+            "x": 47.775,
+            "y": 46.9,
+            "rotation": 0,
+            "side": "front",
+            "pads": [
+              {
+                "id": "6d9dbe28-d2c0-429c-9c2b-a73df7416f86",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -1.65,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 1.2 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "ed0f0ea1-a2b8-427b-b220-9e0c51f8863c",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 1.65,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 1.2 },
+                "netId": "d47c33c4-0f59-5d8c-a29d-5118b63b5a87",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              }
+            ],
+            "graphics": [
+              {
+                "id": "dcf6b472-48a3-4ac7-8c81-9181639f82e1",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -1.675, "y": -2.075 },
+                "end": { "x": -1.675, "y": -2.075 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "231453e6-7231-48fa-99ea-933682fcb7ca",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 2.1 },
+                "end": { "x": 0, "y": 2.1 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "7213cdcb-c7ed-4153-8730-66ba8e554c7f",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.36, "y": -1 },
+                "end": { "x": -2.36, "y": 0.999998 }
+              },
+              {
+                "id": "4779bfee-ee21-48eb-af76-d7f8cc63bb3b",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.36, "y": -1 },
+                "end": { "x": 1.65, "y": -0.999998 }
+              },
+              {
+                "id": "b5bfe10d-d1f7-4c3b-8234-890038a451d6",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -2.36, "y": 0.999998 },
+                "end": { "x": 1.649999, "y": 1 }
+              },
+              {
+                "id": "7ea76e5a-5a39-4235-8890-7d14c843e263",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -2.35, "y": -1.15 },
+                "end": { "x": -2.35, "y": 1.149998 }
+              },
+              {
+                "id": "8633e466-b8cb-4bb8-9153-abe6e97bed46",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -2.35, "y": -1.15 },
+                "end": { "x": 2.35, "y": -1.149998 }
+              },
+              {
+                "id": "daa32bba-543d-406e-b2f8-963336afbc41",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 2.35, "y": -1.149998 },
+                "end": { "x": 2.35, "y": 1.15 }
+              },
+              {
+                "id": "8ace439a-e050-4ea1-aaf5-5e6374cc417e",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 2.35, "y": 1.15 },
+                "end": { "x": -2.35, "y": 1.149998 }
+              },
+              {
+                "id": "490a1ae9-3db3-4b48-875b-44d48fcb2bce",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -1.4, "y": 0.899998 },
+                "end": { "x": -1.399999, "y": -0.9 }
+              },
+              {
+                "id": "691b34f8-7d24-4ea5-95d3-e5d33dee6665",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -1.399999, "y": -0.9 },
+                "end": { "x": 1.4, "y": -0.899998 }
+              },
+              {
+                "id": "e5a4309f-0cf4-4c22-a51e-c38ccf894056",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.75, "y": 0 },
+                "end": { "x": -0.35, "y": 0 }
+              },
+              {
+                "id": "bf935519-1f8b-4ace-9030-16868567d48f",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.35, "y": 0 },
+                "end": { "x": -0.35, "y": 0.549999 }
+              },
+              {
+                "id": "070889ee-c5ef-425b-a988-466ccdd7c14d",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.35, "y": 0 },
+                "end": { "x": -0.349998, "y": -0.55 }
+              },
+              {
+                "id": "ac8033a8-a4ff-4bf3-b8a9-25b7d9978c33",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": -0.35, "y": 0 },
+                "end": { "x": 0.25, "y": -0.399999 }
+              },
+              {
+                "id": "612ef0d4-4655-4b1b-b11a-af784633781c",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 0.249998, "y": 0.4 },
+                "end": { "x": -0.35, "y": 0 }
+              },
+              {
+                "id": "65ea3022-c1cb-41b8-9122-d4cef8f3f707",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 0.25, "y": -0.399999 },
+                "end": { "x": 0.249998, "y": 0.4 }
+              },
+              {
+                "id": "19832c1f-630f-4e98-ba79-4334a7dd9255",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 0.25, "y": 0 },
+                "end": { "x": 0.75, "y": 0 }
+              },
+              {
+                "id": "470b0fa5-7b7c-4d9f-9556-ea9ef9d5f787",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 1.399999, "y": 0.9 },
+                "end": { "x": -1.4, "y": 0.899998 }
+              },
+              {
+                "id": "1bbe539f-c9d1-4789-bdbe-39b425ecad25",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "start": { "x": 1.4, "y": -0.899998 },
+                "end": { "x": 1.399999, "y": 0.9 }
+              },
+              {
+                "id": "97bf949b-797f-4996-9789-3531b1dc9917",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15
+                }
+              }
+            ],
+            "order": 15,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Diode_SMD.3dshapes/D_SOD-123.step"}]
+          }
+        ]
+      },
+      {
+        "id": "eb345141-adf9-4896-bf8b-a31b24088a40",
+        "position": { "x": 88.9, "y": 48.26 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"dd90b2bf-4e4e-4c7b-a6da-1afd420288d4\""]],
+          ["pin","\"2\"",["uuid","\"53bb1cc2-61bb-4a90-91c3-9bbc53836e02\""]]
+        ],
+        "symbol": "Device:C",
+        "reference": "C2",
+        "value": "10uF",
+        "rotation": 270,
+        "fieldLayout": {
+          "Reference": [["at","88.9","40.64","90"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","88.9","43.18","90"],["effects",["font",["size","1.27","1.27"]]]],
+          "Footprint": [["at","85.09","49.2252","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Capacitor_SMD:C_0603_1608Metric",
+          "Datasheet": "",
+          "Description": "Unpolarized capacitor"
+        },
+        "footprints": [
+          {
+            "id": "59cdfd4e-46db-4768-9bbe-bca2688f9a12",
+            "libraryId": "Capacitor_SMD:C_0603_1608Metric",
+            "x": 51.825,
+            "y": 49.5625,
+            "rotation": 90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "86e08e9a-8087-4151-a1f5-2f8b95316c3a",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -0.775,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 0.95 },
+                "netId": "d47c33c4-0f59-5d8c-a29d-5118b63b5a87",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              },
+              {
+                "id": "997c57ce-3bda-4731-b8e7-0c7dbf98ce33",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 0.775,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 0.9, "y": 0.95 },
+                "netId": "60b86586-4906-521c-a19f-7e7d9fc73e1e",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.25
+              }
+            ],
+            "graphics": [
+              {
+                "id": "51f46f4c-a6b1-4062-bce4-f1ffdb189659",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -6.95, "y": -1.75 },
+                "end": { "x": -6.95, "y": -1.75 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 90,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "d8971d6c-8268-49ab-992f-7f561255ec69",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 1.43 },
+                "end": { "x": 0, "y": 1.43 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "0cce64f4-e906-48bb-b6cd-d048e6434053",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.140599, "y": -0.51 },
+                "end": { "x": 0.1406, "y": -0.51 }
+              },
+              {
+                "id": "0a7b9fe1-0df8-480f-b621-3e8b614c76f6",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.1406, "y": 0.51 },
+                "end": { "x": 0.140599, "y": 0.51 }
+              },
+              {
+                "id": "5eb95fc2-52be-4f2a-b397-4437ff7b33bf",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.48, "y": -0.73 },
+                "end": { "x": -1.48, "y": 0.73 },
+                "points": [{"x":1.48,"y":-0.73},{"x":1.48,"y":0.73}]
+              },
+              {
+                "id": "6af19a0a-6b90-46ff-a9d5-736074979d92",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -0.8, "y": -0.4 },
+                "end": { "x": -0.8, "y": 0.4 },
+                "points": [{"x":0.8,"y":-0.4},{"x":0.8,"y":0.4}]
+              },
+              {
+                "id": "bfbcee54-8c56-42ed-a1fd-6e39c64a7f49",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.4, "y": 0.4 },
+                  "thickness": 0.06
+                }
+              }
+            ],
+            "order": 5,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Capacitor_SMD.3dshapes/C_0603_1608Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "f49a6d84-9d88-47ba-a5e9-83fd0be9f439",
+        "position": { "x": 165.1, "y": 54.61 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"d089b004-7fc6-40fc-aa7b-02bee36fa396\""]],
+          ["pin","\"2\"",["uuid","\"9f26ae9e-eae7-4184-abd7-133da9fc26ad\""]]
+        ],
+        "symbol": "Device:C",
+        "reference": "C5",
+        "value": "22uF",
+        "fieldLayout": {
+          "Reference": [
+            ["at","168.91","53.3399","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Value": [
+            ["at","168.91","55.8799","0"],
+            ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+          ],
+          "Footprint": [["at","166.0652","58.42","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Capacitor_SMD:C_1210_3225Metric",
+          "Datasheet": "",
+          "Description": "Unpolarized capacitor"
+        },
+        "footprints": [
+          {
+            "id": "a0ff36ba-8d39-4c9c-ac29-aea9ef141e04",
+            "libraryId": "Capacitor_SMD:C_1210_3225Metric",
+            "x": 41.475,
+            "y": 50.875,
+            "rotation": 90,
+            "side": "front",
+            "pads": [
+              {
+                "id": "8968e352-22e8-46ce-b087-00362a45b4cf",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -1.475,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.15, "y": 2.7 },
+                "netId": "00e5e4cd-f973-5161-a537-8a9ffd02794c",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.217391
+              },
+              {
+                "id": "a1ab9c9f-3236-4061-9b81-1c2734339978",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 1.475,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.15, "y": 2.7 },
+                "netId": "53426a21-384c-5588-a698-e2d1ed680c02",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.217391
+              }
+            ],
+            "graphics": [
+              {
+                "id": "68eeaa77-76cc-4745-86c6-e380f460d684",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 3.45, "y": 0.05 },
+                "end": { "x": 3.45, "y": 0.05 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "25120c73-36d6-40c3-bc83-70787bc62c04",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 2.3 },
+                "end": { "x": 0, "y": 2.3 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "efee2852-57fe-42af-8384-27a1eacbcbb5",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.711299, "y": -1.36 },
+                "end": { "x": 0.7113, "y": -1.36 }
+              },
+              {
+                "id": "4700a596-7bd5-44a6-9994-c0312f6985c8",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -0.7113, "y": 1.36 },
+                "end": { "x": 0.711299, "y": 1.36 }
+              },
+              {
+                "id": "80f95fa7-c8b5-442f-878c-4b8168430e00",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.3, "y": -1.6 },
+                "end": { "x": -2.3, "y": 1.6 },
+                "points": [{"x":2.3,"y":-1.6},{"x":2.3,"y":1.6}]
+              },
+              {
+                "id": "5224c921-85d0-4b6b-979b-95e2a7b7f8d7",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -1.6, "y": -1.25 },
+                "end": { "x": -1.6, "y": 1.25 },
+                "points": [{"x":1.6,"y":-1.25},{"x":1.6,"y":1.25}]
+              },
+              {
+                "id": "e8774262-3b7f-4708-aaca-6c7711a68fc6",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 0.8, "y": 0.8 },
+                  "thickness": 0.12
+                }
+              }
+            ],
+            "order": 11,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Capacitor_SMD.3dshapes/C_1210_3225Metric.step"}]
+          }
+        ]
+      },
+      {
+        "id": "f6ac8810-2fb1-4fba-a56e-88507a664d78",
+        "position": { "x": 46.99, "y": 22.86 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"1831a5eb-049c-4eaa-b1c2-520a96e453a7\""]]
+        ],
+        "symbol": "power:GND",
+        "reference": "#PWR03",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","46.99","29.21","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","46.99","27.94","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "f782901d-2486-4ed2-a530-c020b5e27428",
+        "position": { "x": 24.13, "y": 22.86 },
+        "kicad": [["pin","\"1\"",["uuid","\"9e4e82e5-69bb-4fa1-b6c1-533c9fc8c6c8\""]]],
+        "symbol": "power:GND",
+        "reference": "#PWR01",
+        "value": "GND",
+        "fieldLayout": {
+          "Reference": [["at","24.13","29.21","0"],["hide","yes"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","24.13","27.94","0"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "",
+          "Datasheet": "",
+          "Description": "Power symbol creates a global label with name \"GND\" , ground"
+        }
+      },
+      {
+        "id": "fd844e88-54f2-4ff8-b135-b2b655648a3d",
+        "position": { "x": 71.12, "y": 48.26 },
+        "kicad": [
+          ["fields_autoplaced","yes"],
+          ["pin","\"1\"",["uuid","\"332acc7b-9c80-4050-b2a6-d754d3cccb9c\""]],
+          ["pin","\"2\"",["uuid","\"f008552d-feb3-4af3-bc67-3770e497aa7d\""]]
+        ],
+        "symbol": "Device:L_Iron",
+        "reference": "L1",
+        "value": "10uH",
+        "rotation": 90,
+        "fieldLayout": {
+          "Reference": [["at","71.12","41.91","90"],["effects",["font",["size","1.27","1.27"]]]],
+          "Value": [["at","71.12","44.45","90"],["effects",["font",["size","1.27","1.27"]]]]
+        },
+        "fields": {
+          "Footprint": "Inductor_SMD:L_Changjiang_FNR6028S",
+          "Datasheet": "",
+          "Description": "Inductor with iron core"
+        },
+        "footprints": [
+          {
+            "id": "440e322e-e140-4ec0-beea-42c5ab9cf949",
+            "libraryId": "Inductor_SMD:L_Changjiang_FNR6028S",
+            "x": 53.725,
+            "y": 44.5375,
+            "rotation": 180,
+            "side": "front",
+            "pads": [
+              {
+                "id": "8121b2ed-9d0b-4179-93b9-8eed388d2113",
+                "number": "1",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": -2.25,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.7, "y": 5.7 },
+                "netId": "8472177e-6685-5d75-afbe-ad78af6864b3",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.147059
+              },
+              {
+                "id": "2c382f80-940d-4774-8fb7-823c0e1e524b",
+                "number": "2",
+                "type": "smd",
+                "shape": "roundrect",
+                "x": 2.25,
+                "y": 0,
+                "rotation": 0,
+                "size": { "x": 1.7, "y": 5.7 },
+                "netId": "60b86586-4906-521c-a19f-7e7d9fc73e1e",
+                "layers": ["F.Cu","F.Mask","F.Paste"],
+                "roundrectRatio": 0.147059
+              }
+            ],
+            "graphics": [
+              {
+                "id": "e520f4b1-c9ee-42a8-b80a-62764eaaf0b0",
+                "layer": "F.SilkS",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": -4.35, "y": 2.525 },
+                "end": { "x": -4.35, "y": 2.525 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "property": "Reference"
+                }
+              },
+              {
+                "id": "ed39201e-1a00-4547-9fd2-7e70e8a7d6a1",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 3.95 },
+                "end": { "x": 0, "y": 3.95 },
+                "text": {
+                  "value": "${VALUE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15,
+                  "hidden": true,
+                  "property": "Value"
+                }
+              },
+              {
+                "id": "6b7bdc25-230c-4d22-95c2-937925e7c1e9",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": 3.109999, "y": 3.11 },
+                "end": { "x": -3.11, "y": 3.109999 }
+              },
+              {
+                "id": "382da082-b113-43a6-8be8-069df2b5961f",
+                "layer": "F.SilkS",
+                "width": 0.12,
+                "stroke": "solid",
+                "start": { "x": -3.109999, "y": -3.11 },
+                "end": { "x": 3.11, "y": -3.109999 }
+              },
+              {
+                "id": "18eac053-ed28-485e-8a70-0b2210a60138",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.35, "y": -3.099999 },
+                "end": { "x": 3.349999, "y": 3.1 }
+              },
+              {
+                "id": "77171e7d-0e16-4eb4-b104-07c572d48390",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.349999, "y": 3.1 },
+                "end": { "x": 3.249999, "y": 3.1 }
+              },
+              {
+                "id": "3b334d47-d172-41dd-9601-6e770a535380",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.25, "y": -3.099999 },
+                "end": { "x": 3.35, "y": -3.099999 }
+              },
+              {
+                "id": "fab498cf-4543-42c5-aeea-06c045e9f555",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.25, "y": -3.249999 },
+                "end": { "x": 3.25, "y": -3.099999 }
+              },
+              {
+                "id": "bb54c7d2-78c9-4ef6-bc5a-db36c907e19e",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.249999, "y": 3.25 },
+                "end": { "x": -3.25, "y": 3.249999 }
+              },
+              {
+                "id": "01a85e56-8bfb-43b3-b9ce-0e2f74042772",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": 3.249999, "y": 3.1 },
+                "end": { "x": 3.249999, "y": 3.25 }
+              },
+              {
+                "id": "a4e5fc6c-e32d-4b5d-91a0-b876ed74f48b",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.249999, "y": -3.1 },
+                "end": { "x": -3.249999, "y": -3.25 }
+              },
+              {
+                "id": "190a9654-019f-4348-a822-13bb40016080",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.249999, "y": -3.25 },
+                "end": { "x": 3.25, "y": -3.249999 }
+              },
+              {
+                "id": "f8248c96-2e21-43a0-8471-6d4983d9c1f1",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.25, "y": 3.249999 },
+                "end": { "x": -3.25, "y": 3.099999 }
+              },
+              {
+                "id": "131d98a5-e2ab-4fb9-a4c8-eaeb1ad90d63",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.25, "y": 3.099999 },
+                "end": { "x": -3.35, "y": 3.099999 }
+              },
+              {
+                "id": "5d67ae4c-39f2-432f-b71f-0ee43bc23337",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.349999, "y": -3.1 },
+                "end": { "x": -3.249999, "y": -3.1 }
+              },
+              {
+                "id": "339a6a7d-4f48-4aeb-801a-e3efc22a19ee",
+                "layer": "F.CrtYd",
+                "width": 0.05,
+                "stroke": "solid",
+                "start": { "x": -3.35, "y": 3.099999 },
+                "end": { "x": -3.349999, "y": -3.1 }
+              },
+              {
+                "id": "1c938bc2-d134-4614-8bde-d597d93ef597",
+                "layer": "F.Fab",
+                "width": 0.1,
+                "stroke": "solid",
+                "fill": false,
+                "kind": "polygon",
+                "start": { "x": -2.999999, "y": -3 },
+                "end": { "x": -2.999999, "y": 3 },
+                "points": [{"x":2.999999,"y":-3},{"x":2.999999,"y":3}]
+              },
+              {
+                "id": "f98be797-186b-4dc9-8d99-a7e48007bcf9",
+                "layer": "F.Fab",
+                "width": 0,
+                "kind": "text",
+                "start": { "x": 0, "y": 0 },
+                "end": { "x": 0, "y": 0 },
+                "text": {
+                  "value": "${REFERENCE}",
+                  "rotation": 0,
+                  "size": { "x": 1, "y": 1 },
+                  "thickness": 0.15
+                }
+              }
+            ],
+            "order": 3,
+            "models": [{"path":"${KICAD10_3DMODEL_DIR}/Inductor_SMD.3dshapes/L_Changjiang_FNR6028S.step"}]
+          }
+        ]
+      }
+    ],
+    "nets": [
+      {
+        "id": "2d067aab-9d83-552d-a044-c95cb4e8ce13",
+        "name": "Net-(C4-Pad2)",
+        "pcb": {
+          "order": 0,
+          "tracks": [
+            {
+              "id": "333ca4ff-cc57-473a-b3ef-12f195e6d418",
+              "start": { "x": 56.925, "y": 55.375 },
+              "end": { "x": 58.65, "y": 55.375 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 0
+            },
+            {
+              "id": "bb54dd35-cafc-42f1-8c2a-847b6c3bfa35",
+              "start": { "x": 56.925, "y": 53.275 },
+              "end": { "x": 56.925, "y": 55.375 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 1
+            },
+            {
+              "id": "dc742db3-657b-4634-a6a2-170cc4a31aa1",
+              "start": { "x": 58.65, "y": 55.375 },
+              "end": { "x": 58.7, "y": 55.425 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 2
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "132546d9-437c-4835-9e2b-5eef46ab0707",
+              "start": { "x": 130.81, "y": 77.47 },
+              "end": { "x": 130.81, "y": 82.55 },
+              "order": 3
+            },
+            {
+              "id": "694a0e33-ae90-4579-9ca2-36d18112a71c",
+              "start": { "x": 130.81, "y": 82.55 },
+              "end": { "x": 142.24, "y": 82.55 },
+              "order": 21
+            },
+            {
+              "id": "8a54c32b-4cda-449c-b784-51d749a6969e",
+              "start": { "x": 142.24, "y": 83.82 },
+              "end": { "x": 142.24, "y": 82.55 },
+              "order": 28
+            },
+            {
+              "id": "e07643d7-f9d2-4392-8ae1-f959bef02081",
+              "start": { "x": 130.81, "y": 82.55 },
+              "end": { "x": 130.81, "y": 83.82 },
+              "order": 40
+            }
+          ],
+          "junctions": [
+            {
+              "id": "0f9fdfe3-9335-4519-9352-b1661f6ddba8",
+              "position": { "x": 130.81, "y": 82.55 },
+              "order": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "53426a21-384c-5588-a698-e2d1ed680c02",
+        "name": "GND",
+        "pcb": {
+          "order": 1,
+          "tracks": [
+            {
+              "id": "33ee233d-dca7-4d47-8e9f-7108e48fe35b",
+              "start": { "x": 41.475, "y": 49.4 },
+              "end": { "x": 41.475, "y": 48.325 },
+              "width": 0.5,
+              "layer": "F.Cu",
+              "order": 3
+            },
+            {
+              "id": "6fc4e3ff-bd53-4a53-9768-4ba8b7a6f624",
+              "start": { "x": 59.55, "y": 45.8 },
+              "end": { "x": 59.55, "y": 44.725 },
+              "width": 0.5,
+              "layer": "F.Cu",
+              "order": 4
+            },
+            {
+              "id": "cf6df3e4-a6cb-4cc7-a9f5-945fed3f2e45",
+              "start": { "x": 58.7, "y": 56.975 },
+              "end": { "x": 58.7, "y": 57.975 },
+              "width": 0.5,
+              "layer": "F.Cu",
+              "order": 5
+            },
+            {
+              "id": "e2f847ed-fe81-477f-9f19-a82a412d1cba",
+              "start": { "x": 46.125, "y": 46.9 },
+              "end": { "x": 45.125, "y": 46.9 },
+              "width": 0.5,
+              "layer": "F.Cu",
+              "order": 6
+            },
+            {
+              "id": "f61fa6bc-b011-4991-a5aa-cdfc056b3be0",
+              "start": { "x": 55.1, "y": 55.375 },
+              "end": { "x": 55.1, "y": 56.575 },
+              "width": 0.5,
+              "layer": "F.Cu",
+              "order": 7
+            }
+          ],
+          "vias": [
+            {
+              "id": "03e0dd4f-5569-4566-8fa6-e1df7c1e8f3c",
+              "x": 59.55,
+              "y": 44.725,
+              "diameter": 0.6,
+              "drill": 0.3,
+              "order": 0
+            },
+            {
+              "id": "18220863-ecf0-4be6-abb3-f5e621217420",
+              "x": 45.125,
+              "y": 46.9,
+              "diameter": 0.6,
+              "drill": 0.3,
+              "order": 1
+            },
+            {
+              "id": "21db792b-c613-4f7e-bc30-3b21b9f26d1c",
+              "x": 55.1,
+              "y": 56.575,
+              "diameter": 0.6,
+              "drill": 0.3,
+              "order": 2
+            },
+            {
+              "id": "b0e908ab-ec2e-4702-92a3-6929d8b18483",
+              "x": 41.475,
+              "y": 48.325,
+              "diameter": 0.6,
+              "drill": 0.3,
+              "order": 3
+            },
+            {
+              "id": "b51fad56-51f5-4d03-8e4b-b1eeae61062e",
+              "x": 58.7,
+              "y": 57.975,
+              "diameter": 0.6,
+              "drill": 0.3,
+              "order": 4
+            }
+          ],
+          "zones": [
+            {
+              "id": "3bac9921-7edc-45cc-b44e-c16284062316",
+              "layer": "F.Cu",
+              "outline": [
+                { "x": 29.8375, "y": 40.4267 }, { "x": 70.1625, "y": 40.4267 },
+                { "x": 70.1625, "y": 59.5733 }, { "x": 29.8375, "y": 59.5733 }
+              ],
+              "holes": [
+                [
+                  { "x": 50.675, "y": 41.4875 }, { "x": 56.775, "y": 41.4875 },
+                  { "x": 56.775, "y": 47.5875 }, { "x": 50.675, "y": 47.5875 }
+                ],
+                [
+                  { "x": 44.075, "y": 48.7 }, { "x": 50.175, "y": 48.7 },
+                  { "x": 50.175, "y": 54.8 }, { "x": 44.075, "y": 54.8 }
+                ]
+              ],
+              "clearance": 0,
+              "minThickness": 0.25,
+              "thermalGap": 0,
+              "thermalBridge": 0,
+              "fillEnabled": true,
+              "islandRemovalMode": 0,
+              "order": 0
+            },
+            {
+              "id": "238b2b8c-63d9-425d-9339-9f88e81808f9",
+              "layer": "B.Cu",
+              "outline": [
+                { "x": 29.8375, "y": 40.4267 }, { "x": 70.1625, "y": 40.4267 },
+                { "x": 70.1625, "y": 59.5733 }, { "x": 29.8375, "y": 59.5733 }
+              ],
+              "holes": [
+                [
+                  { "x": 50.675, "y": 41.4875 }, { "x": 56.775, "y": 41.4875 },
+                  { "x": 56.775, "y": 47.5875 }, { "x": 50.675, "y": 47.5875 }
+                ],
+                [
+                  { "x": 44.075, "y": 48.7 }, { "x": 50.175, "y": 48.7 },
+                  { "x": 50.175, "y": 54.8 }, { "x": 44.075, "y": 54.8 }
+                ]
+              ],
+              "clearance": 0,
+              "minThickness": 0.25,
+              "thermalGap": 0,
+              "thermalBridge": 0,
+              "fillEnabled": true,
+              "islandRemovalMode": 0,
+              "order": 1
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "3e36123c-a71b-4da6-a0a0-bf9e00dbbc03",
+              "start": { "x": 130.81, "y": 95.25 },
+              "end": { "x": 130.81, "y": 99.06 },
+              "order": 9
+            },
+            {
+              "id": "4dea040c-1abe-467b-9c6d-ec6540dcf42e",
+              "start": { "x": 71.12, "y": 22.86 },
+              "end": { "x": 74.93, "y": 22.86 },
+              "order": 11
+            },
+            {
+              "id": "64f65743-36eb-4e7c-846f-9092eb34c391",
+              "start": { "x": 69.85, "y": 71.12 },
+              "end": { "x": 69.85, "y": 72.39 },
+              "order": 19
+            },
+            {
+              "id": "a6cd06cf-37a7-40f1-b203-56f989f74169",
+              "start": { "x": 46.99, "y": 22.86 },
+              "end": { "x": 50.8, "y": 22.86 },
+              "order": 29
+            },
+            {
+              "id": "ac3af59b-650c-479e-bedc-40ee22081c79",
+              "start": { "x": 24.13, "y": 22.86 },
+              "end": { "x": 27.94, "y": 22.86 },
+              "order": 30
+            },
+            {
+              "id": "c5b1a51c-1a16-49a1-b682-9718b8c820be",
+              "start": { "x": 142.24, "y": 91.44 },
+              "end": { "x": 142.24, "y": 95.25 },
+              "order": 34
+            },
+            {
+              "id": "ce955635-acfc-4386-aeb5-91bee273caed",
+              "start": { "x": 35.56, "y": 57.15 },
+              "end": { "x": 35.56, "y": 62.23 },
+              "order": 36
+            },
+            {
+              "id": "d0eed83b-0392-4944-9353-a4071a2f003c",
+              "start": { "x": 130.81, "y": 91.44 },
+              "end": { "x": 130.81, "y": 95.25 },
+              "order": 37
+            },
+            {
+              "id": "eedc755f-0f54-4d7e-8073-ce5df360cccb",
+              "start": { "x": 165.1, "y": 58.42 },
+              "end": { "x": 165.1, "y": 63.5 },
+              "order": 42
+            },
+            {
+              "id": "f6b4e92f-a165-4cfd-8c32-95eb90ba6b58",
+              "start": { "x": 130.81, "y": 95.25 },
+              "end": { "x": 142.24, "y": 95.25 },
+              "order": 44
+            },
+            {
+              "id": "fc54cea6-d2c0-4f3a-951e-81e7c6665ff6",
+              "start": { "x": 102.87, "y": 58.42 },
+              "end": { "x": 102.87, "y": 59.69 },
+              "order": 45
+            }
+          ],
+          "junctions": [
+            {
+              "id": "93b7886a-a997-447b-a737-bbc0ee660b43",
+              "position": { "x": 130.81, "y": 95.25 },
+              "order": 8
+            }
+          ]
+        }
+      },
+      {
+        "id": "8472177e-6685-5d75-afbe-ad78af6864b3",
+        "name": "/VIN",
+        "pcb": {
+          "order": 2,
+          "tracks": [
+            {
+              "id": "0ca99525-5b6a-4cf4-aaad-b756cf667be7",
+              "start": { "x": 59.6, "y": 48.8 },
+              "end": { "x": 59.55, "y": 48.75 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 8
+            },
+            {
+              "id": "1c783e2c-a8e6-4117-a876-891ad349b4af",
+              "start": { "x": 59.6, "y": 50.7 },
+              "end": { "x": 59.6, "y": 48.8 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 9
+            },
+            {
+              "id": "7824611e-d9e3-4b1f-ad75-5626d51da3dd",
+              "start": { "x": 58.925, "y": 48.725 },
+              "end": { "x": 58.875, "y": 48.775 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 10
+            },
+            {
+              "id": "9a4f634c-ba9c-4c48-8cf5-37f87f33580c",
+              "start": { "x": 58.875, "y": 48.775 },
+              "end": { "x": 55.9375, "y": 48.775 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 11
+            },
+            {
+              "id": "9b55727a-22e2-48e7-85d0-72b320b7ed69",
+              "start": { "x": 55.9375, "y": 48.775 },
+              "end": { "x": 55.9375, "y": 44.575 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 12
+            },
+            {
+              "id": "b7316b38-d5c5-4f57-9714-1c92676a91e6",
+              "start": { "x": 64.9625, "y": 48.725 },
+              "end": { "x": 58.925, "y": 48.725 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 13
+            },
+            {
+              "id": "e13c24a9-f124-44cf-9386-9b1ec9315f64",
+              "start": { "x": 55.9375, "y": 44.575 },
+              "end": { "x": 55.975, "y": 44.5375 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 14
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "0b4e6576-0250-4868-95bb-80c19a7c6f95",
+              "start": { "x": 53.34, "y": 48.26 },
+              "end": { "x": 53.34, "y": 59.69 },
+              "order": 1
+            },
+            {
+              "id": "3bd626d4-7e15-4d3a-9191-5d9ad157c2ab",
+              "start": { "x": 53.34, "y": 71.12 },
+              "end": { "x": 53.34, "y": 73.66 },
+              "order": 8
+            },
+            {
+              "id": "55f4c7f4-7eb5-401d-9fa8-a3e8f274e59a",
+              "start": { "x": 24.13, "y": 20.32 },
+              "end": { "x": 27.94, "y": 20.32 },
+              "order": 13
+            },
+            {
+              "id": "56ac176c-caac-476b-a634-babb20a81871",
+              "start": { "x": 53.34, "y": 48.26 },
+              "end": { "x": 67.31, "y": 48.26 },
+              "order": 14
+            },
+            {
+              "id": "6fe699e4-ceb9-4273-b1fb-5d1a88ddfbf5",
+              "start": { "x": 35.56, "y": 48.26 },
+              "end": { "x": 53.34, "y": 48.26 },
+              "order": 23
+            },
+            {
+              "id": "cdec9c65-e2a8-4d72-a81a-3efe12fcf1cc",
+              "start": { "x": 53.34, "y": 59.69 },
+              "end": { "x": 62.23, "y": 59.69 },
+              "order": 35
+            },
+            {
+              "id": "fecb17cf-85a3-4d6e-ae4e-77364c8c2ab2",
+              "start": { "x": 35.56, "y": 48.26 },
+              "end": { "x": 35.56, "y": 49.53 },
+              "order": 46
+            },
+            {
+              "id": "fed43160-4093-4c02-a759-3f3d01ff030d",
+              "start": { "x": 26.67, "y": 48.26 },
+              "end": { "x": 35.56, "y": 48.26 },
+              "order": 47
+            }
+          ],
+          "junctions": [
+            {
+              "id": "24cb94a0-fac7-452d-93a6-49c4a91d0574",
+              "position": { "x": 35.56, "y": 48.26 },
+              "order": 1
+            },
+            {
+              "id": "dbcb51da-1806-40db-be4e-3a0b1a2706b1",
+              "position": { "x": 53.34, "y": 48.26 },
+              "order": 10
+            }
+          ],
+          "labels": [
+            {
+              "id": "1707f95e-5491-419d-971b-3bf530126bd7",
+              "position": { "x": 53.34, "y": 73.66 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "VIN",
+              "order": 0
+            },
+            {
+              "id": "6f072e78-8bb9-4efb-a784-9e6a74c67779",
+              "position": { "x": 24.13, "y": 20.32 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "VIN",
+              "order": 3
+            },
+            {
+              "id": "7ee8a0e8-7715-4fb3-adb3-74a39532a060",
+              "position": { "x": 26.67, "y": 48.26 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "VIN",
+              "order": 4
+            }
+          ]
+        }
+      },
+      {
+        "id": "60b86586-4906-521c-a19f-7e7d9fc73e1e",
+        "name": "Net-(U1-SW)",
+        "pcb": {
+          "order": 3,
+          "tracks": [
+            {
+              "id": "28063dc0-9a41-42b4-8b62-71d5c337bdb4",
+              "start": { "x": 51.825, "y": 44.8875 },
+              "end": { "x": 51.475, "y": 44.5375 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 15
+            },
+            {
+              "id": "94a60974-b488-4c2b-bd8f-9112641e4233",
+              "start": { "x": 51.825, "y": 48.7875 },
+              "end": { "x": 51.825, "y": 44.8875 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 16
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "0b5046f2-d235-4ea3-af73-31c35b605fa9",
+              "start": { "x": 81.28, "y": 48.26 },
+              "end": { "x": 85.09, "y": 48.26 },
+              "order": 2
+            },
+            {
+              "id": "6002bdb3-291f-4308-ae66-c5d76556bc33",
+              "start": { "x": 74.93, "y": 48.26 },
+              "end": { "x": 81.28, "y": 48.26 },
+              "order": 17
+            },
+            {
+              "id": "6006be77-b558-4c26-be00-16e1b33460eb",
+              "start": { "x": 77.47, "y": 59.69 },
+              "end": { "x": 81.28, "y": 59.69 },
+              "order": 18
+            },
+            {
+              "id": "d4b727f2-804a-478f-ae0d-ef4e6bec93c8",
+              "start": { "x": 81.28, "y": 59.69 },
+              "end": { "x": 81.28, "y": 48.26 },
+              "order": 38
+            }
+          ],
+          "junctions": [{"id":"7c615376-4d36-4237-8984-d911d6dbf20f","position":{"x":81.28,"y":48.26},"order":6}]
+        }
+      },
+      {
+        "id": "3a985967-32df-5df9-af1b-a1377cdbd94f",
+        "name": "/EN",
+        "pcb": {
+          "order": 4,
+          "tracks": [
+            {
+              "id": "2215c200-40dd-4d87-b0e3-0db4e8a130e3",
+              "start": { "x": 55.9625, "y": 50.7 },
+              "end": { "x": 55.9375, "y": 50.675 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 17
+            },
+            {
+              "id": "34c83599-927e-47ac-b908-060b88b0ddb5",
+              "start": { "x": 57.775, "y": 50.7 },
+              "end": { "x": 57.775, "y": 51.975 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 18
+            },
+            {
+              "id": "39666e5e-6084-4d58-a9c4-bc1d8a4f38f6",
+              "start": { "x": 57.775, "y": 50.7 },
+              "end": { "x": 55.9625, "y": 50.7 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 19
+            },
+            {
+              "id": "5ad36b6d-0389-46a2-ae88-a7a9a3a16fb4",
+              "start": { "x": 60.45, "y": 54.65 },
+              "end": { "x": 62.45, "y": 54.65 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 20
+            },
+            {
+              "id": "c80de67d-0424-472d-a00b-6a592225bac3",
+              "start": { "x": 57.775, "y": 51.975 },
+              "end": { "x": 60.45, "y": 54.65 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 21
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "262c7c5a-bfbe-469e-a3ca-7cf76c6265a6",
+              "start": { "x": 49.53, "y": 62.23 },
+              "end": { "x": 53.34, "y": 62.23 },
+              "order": 6
+            },
+            {
+              "id": "42c31ed1-15ad-413e-989c-e95eeb9d2f84",
+              "start": { "x": 68.58, "y": 20.32 },
+              "end": { "x": 74.93, "y": 20.32 },
+              "order": 10
+            },
+            {
+              "id": "542310f0-626c-4fbf-b110-cc286ef58887",
+              "start": { "x": 53.34, "y": 62.23 },
+              "end": { "x": 62.23, "y": 62.23 },
+              "order": 12
+            },
+            {
+              "id": "dd43af9d-e9ab-440f-b04a-f56527db671a",
+              "start": { "x": 53.34, "y": 62.23 },
+              "end": { "x": 53.34, "y": 63.5 },
+              "order": 39
+            }
+          ],
+          "junctions": [{"id":"8d8daaf4-39f9-4780-a3ea-a945b9aedecd","position":{"x":53.34,"y":62.23},"order":7}],
+          "labels": [
+            {
+              "id": "6571ba2c-3c23-4e6f-9490-2cc4c75328ed",
+              "position": { "x": 68.58, "y": 20.32 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "EN",
+              "order": 2
+            },
+            {
+              "id": "daf7e77d-abc3-41c2-85ea-07f273593e52",
+              "position": { "x": 49.53, "y": 62.23 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "EN",
+              "order": 6
+            }
+          ]
+        }
+      },
+      {
+        "id": "d47c33c4-0f59-5d8c-a29d-5118b63b5a87",
+        "name": "Net-(D1-A)",
+        "pcb": {
+          "order": 5,
+          "tracks": [
+            {
+              "id": "4a95ff01-7d0e-44d8-87ef-16a87d9ea902",
+              "start": { "x": 51.825, "y": 51.025 },
+              "end": { "x": 51.1, "y": 51.75 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 22
+            },
+            {
+              "id": "7a890db0-8b06-44d4-a6dc-55cf7a6a59b2",
+              "start": { "x": 49.425, "y": 46.9 },
+              "end": { "x": 49.425, "y": 51.7 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 23
+            },
+            {
+              "id": "920cfbe6-ecbf-49cd-ade0-4913e7f6f90a",
+              "start": { "x": 49.425, "y": 51.7 },
+              "end": { "x": 49.375, "y": 51.75 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 24
+            },
+            {
+              "id": "95f65632-fad7-4a10-a186-d34bd7a0a8c9",
+              "start": { "x": 51.825, "y": 50.3375 },
+              "end": { "x": 51.825, "y": 51.025 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 25
+            },
+            {
+              "id": "f2526b16-f770-4ecb-9668-69a7bde67687",
+              "start": { "x": 51.1, "y": 51.75 },
+              "end": { "x": 49.375, "y": 51.75 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 26
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "6ef8c9a6-14b9-4921-b668-944d20170308",
+              "start": { "x": 102.87, "y": 48.26 },
+              "end": { "x": 102.87, "y": 50.8 },
+              "order": 22
+            },
+            {
+              "id": "b3772e98-d04d-4264-9b81-7361e4321280",
+              "start": { "x": 92.71, "y": 48.26 },
+              "end": { "x": 102.87, "y": 48.26 },
+              "order": 31
+            },
+            {
+              "id": "f06507fa-93a2-4d2e-8997-c4c5c763361f",
+              "start": { "x": 102.87, "y": 48.26 },
+              "end": { "x": 116.84, "y": 48.26 },
+              "order": 43
+            }
+          ],
+          "junctions": [
+            {
+              "id": "5eb7e00d-37f1-433f-bf63-5d0b9b116155",
+              "position": { "x": 102.87, "y": 48.26 },
+              "order": 5
+            }
+          ]
+        }
+      },
+      {
+        "id": "80b6ffc7-2181-5891-a1e3-21e935dc57eb",
+        "name": "Net-(U1-FB)",
+        "pcb": {
+          "order": 6,
+          "tracks": [
+            {
+              "id": "002b03fe-f8b0-4c4f-be31-d61217ec0e86",
+              "start": { "x": 53.0375, "y": 55.2 },
+              "end": { "x": 53.15, "y": 55.0875 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 27
+            },
+            {
+              "id": "049207f6-ae0c-46a1-b3a8-f2718d1c7eb5",
+              "start": { "x": 53.15, "y": 53.45 },
+              "end": { "x": 53.325, "y": 53.275 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 28
+            },
+            {
+              "id": "71d90541-4194-4727-bef1-6e71a19d94f8",
+              "start": { "x": 53.325, "y": 53.275 },
+              "end": { "x": 55.1, "y": 53.275 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 29
+            },
+            {
+              "id": "b7a41e49-91f4-402c-afeb-56a1b20afb69",
+              "start": { "x": 53.325, "y": 53.275 },
+              "end": { "x": 53.475, "y": 53.125 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 30
+            },
+            {
+              "id": "be631bdd-73da-42eb-9f4c-a77710539b74",
+              "start": { "x": 53.475, "y": 53.125 },
+              "end": { "x": 53.475, "y": 50.8625 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 31
+            },
+            {
+              "id": "d948c853-5ed4-41bb-b9ce-83d53b4a307a",
+              "start": { "x": 53.475, "y": 50.8625 },
+              "end": { "x": 53.6625, "y": 50.675 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 32
+            },
+            {
+              "id": "d9a3a4a7-df4d-4fc1-a790-26021947aa34",
+              "start": { "x": 53.15, "y": 55.0875 },
+              "end": { "x": 53.15, "y": 53.45 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 33
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "22501e25-523c-4c7d-a536-fbcf8b92acec",
+              "start": { "x": 130.81, "y": 59.69 },
+              "end": { "x": 130.81, "y": 68.58 },
+              "order": 5
+            },
+            {
+              "id": "68d31b05-34da-4bf3-9894-6f97170c7d8d",
+              "start": { "x": 77.47, "y": 68.58 },
+              "end": { "x": 130.81, "y": 68.58 },
+              "order": 20
+            },
+            {
+              "id": "7c6d8515-f86c-4a84-a3aa-97bb6ddb3887",
+              "start": { "x": 142.24, "y": 68.58 },
+              "end": { "x": 130.81, "y": 68.58 },
+              "order": 25
+            },
+            {
+              "id": "7d7a9954-6c0b-4428-a4d5-1dff8536e3d7",
+              "start": { "x": 77.47, "y": 62.23 },
+              "end": { "x": 77.47, "y": 68.58 },
+              "order": 26
+            },
+            {
+              "id": "84973190-68a8-4fd9-9fa9-d043d43cf18a",
+              "start": { "x": 130.81, "y": 68.58 },
+              "end": { "x": 130.81, "y": 69.85 },
+              "order": 27
+            },
+            {
+              "id": "eb474250-1fc1-4178-99c2-43d00fb635c6",
+              "start": { "x": 142.24, "y": 58.42 },
+              "end": { "x": 142.24, "y": 68.58 },
+              "order": 41
+            }
+          ],
+          "junctions": [
+            {
+              "id": "348d0d28-bb81-4d4f-8dc0-b325002d4fc0",
+              "position": { "x": 130.81, "y": 68.58 },
+              "order": 2
+            }
+          ]
+        }
+      },
+      {
+        "id": "00e5e4cd-f973-5161-a537-8a9ffd02794c",
+        "name": "/VOUT",
+        "pcb": {
+          "order": 7,
+          "tracks": [
+            {
+              "id": "01597b54-52a8-4c98-a282-846f8376d582",
+              "start": { "x": 38.925, "y": 52.35 },
+              "end": { "x": 37.85, "y": 51.275 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 34
+            },
+            {
+              "id": "03592a1d-3401-4613-b649-abfa638d25ba",
+              "start": { "x": 44.2, "y": 57.125 },
+              "end": { "x": 50.65, "y": 57.125 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 35
+            },
+            {
+              "id": "0ccf2a5c-b598-49ec-a7d2-e297b7f50e67",
+              "start": { "x": 41.475, "y": 52.35 },
+              "end": { "x": 38.925, "y": 52.35 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 36
+            },
+            {
+              "id": "1a8913e8-2b05-4a05-9552-e59a398c7828",
+              "start": { "x": 44.875, "y": 51.75 },
+              "end": { "x": 44.275, "y": 52.35 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 37
+            },
+            {
+              "id": "23c99525-2b6a-4ca9-8e7a-cdf28e7504e6",
+              "start": { "x": 51.4875, "y": 56.2875 },
+              "end": { "x": 51.4875, "y": 55.2 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 38
+            },
+            {
+              "id": "2b89bbc9-8faa-4a14-a2a2-572962fea7f8",
+              "start": { "x": 41.475, "y": 52.35 },
+              "end": { "x": 41.475, "y": 54.4 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 39
+            },
+            {
+              "id": "32bd52f3-b3c6-49e3-a733-d365a462ae92",
+              "start": { "x": 44.275, "y": 52.35 },
+              "end": { "x": 41.475, "y": 52.35 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 40
+            },
+            {
+              "id": "3d31234e-3748-492d-90fe-c04e443f9c7c",
+              "start": { "x": 50.65, "y": 57.125 },
+              "end": { "x": 51.4875, "y": 56.2875 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 41
+            },
+            {
+              "id": "716aa759-cb63-471f-9df6-e08a55e1ef0e",
+              "start": { "x": 37.85, "y": 51.275 },
+              "end": { "x": 35.2375, "y": 51.275 },
+              "width": 0.6,
+              "layer": "F.Cu",
+              "order": 42
+            },
+            {
+              "id": "8e52a0d7-0378-4037-9ca4-58df14e1e00a",
+              "start": { "x": 51.4875, "y": 55.2 },
+              "end": { "x": 51.4875, "y": 53.2875 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 43
+            },
+            {
+              "id": "f4e90b38-9876-4d1f-b1f6-3aedd1cddcb5",
+              "start": { "x": 41.475, "y": 54.4 },
+              "end": { "x": 44.2, "y": 57.125 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 44
+            },
+            {
+              "id": "f9d4f68f-6f05-474f-b67a-8e83fe3c4d73",
+              "start": { "x": 51.4875, "y": 53.2875 },
+              "end": { "x": 51.5, "y": 53.275 },
+              "width": 0.2,
+              "layer": "F.Cu",
+              "order": 45
+            }
+          ]
+        },
+        "schematic": {
+          "wires": [
+            {
+              "id": "05b4bbdd-6a83-4ea0-a05b-d1ecfff428b7",
+              "start": { "x": 165.1, "y": 50.8 },
+              "end": { "x": 165.1, "y": 48.26 },
+              "order": 0
+            },
+            {
+              "id": "21c5423b-81a7-4cd2-adb3-4c739dcaa4bf",
+              "start": { "x": 44.45, "y": 20.32 },
+              "end": { "x": 50.8, "y": 20.32 },
+              "order": 4
+            },
+            {
+              "id": "32558704-c80d-43bc-8a8b-0c9ffeb026bd",
+              "start": { "x": 142.24, "y": 48.26 },
+              "end": { "x": 165.1, "y": 48.26 },
+              "order": 7
+            },
+            {
+              "id": "5a2c636f-5793-4875-b387-fa61f9877d36",
+              "start": { "x": 124.46, "y": 48.26 },
+              "end": { "x": 130.81, "y": 48.26 },
+              "order": 15
+            },
+            {
+              "id": "5cdfcfd8-e210-4409-9df4-c6cd45506d80",
+              "start": { "x": 142.24, "y": 48.26 },
+              "end": { "x": 142.24, "y": 50.8 },
+              "order": 16
+            },
+            {
+              "id": "76b7f397-b73d-49af-8d01-f1e83060a69b",
+              "start": { "x": 130.81, "y": 52.07 },
+              "end": { "x": 130.81, "y": 48.26 },
+              "order": 24
+            },
+            {
+              "id": "c184fb4e-9a0c-4813-be1b-d14b387936f7",
+              "start": { "x": 130.81, "y": 48.26 },
+              "end": { "x": 142.24, "y": 48.26 },
+              "order": 32
+            },
+            {
+              "id": "c59daf35-44aa-4b11-ae0d-1b6c36b28186",
+              "start": { "x": 165.1, "y": 48.26 },
+              "end": { "x": 180.34, "y": 48.26 },
+              "order": 33
+            }
+          ],
+          "junctions": [
+            {
+              "id": "3b084439-609b-439d-ba8d-ba457fc4ea18",
+              "position": { "x": 130.81, "y": 48.26 },
+              "order": 3
+            },
+            {
+              "id": "543cc37b-d7c4-4f09-a118-907c991e04dd",
+              "position": { "x": 142.24, "y": 48.26 },
+              "order": 4
+            },
+            {
+              "id": "94dc8e6f-f255-4339-bc7a-40942ae83435",
+              "position": { "x": 165.1, "y": 48.26 },
+              "order": 9
+            }
+          ],
+          "labels": [
+            {
+              "id": "4dd5c78b-9a43-4674-ab60-025514a58849",
+              "position": { "x": 44.45, "y": 20.32 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "VOUT",
+              "order": 1
+            },
+            {
+              "id": "bb3a27ac-086f-4dfa-9ce1-86e1ffa074d6",
+              "position": { "x": 180.34, "y": 48.26 },
+              "kicad": [["effects",["font",["size","1.27","1.27"]],["justify","left","bottom"]]],
+              "text": "VOUT",
+              "order": 5
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "pcb": {
+    "id": "35c9d85a-6ca7-5fe8-ac31-327a676a2e64",
+    "thickness": 1.6,
+    "layers": ["F.Cu","B.Cu"],
+    "graphics": [
+      {
+        "id": "23a5172b-0963-4fd6-9ed4-b767b7609b19",
+        "layer": "Edge.Cuts",
+        "width": 0.05,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 29.8375, "y": 40.4267 },
+        "end": { "x": 29.8375, "y": 59.5733 },
+        "points": [{"x":70.1625,"y":40.4267},{"x":70.1625,"y":59.5733}]
+      },
+      {
+        "id": "d4b7ecc3-d409-5d2f-8430-cf50ca2135f0",
+        "layer": "User.1",
+        "width": 0.1,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 10, "y": 10 },
+        "end": { "x": 10, "y": 19.5 },
+        "points": [{"x":23.8,"y":10},{"x":23.8,"y":19.5}]
+      },
+      {
+        "id": "7e0b57e1-4234-5589-bcf2-d1a9e029a6c5",
+        "layer": "User.1",
+        "width": 0.1,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 10, "y": 27 },
+        "end": { "x": 10, "y": 35.4 },
+        "points": [{"x":20.2,"y":27},{"x":20.2,"y":35.4}]
+      },
+      {
+        "id": "dbbfcd2f-8052-5b02-9495-ca85b91d6725",
+        "layer": "User.1",
+        "width": 0.1,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 24.2, "y": 27 },
+        "end": { "x": 24.2, "y": 35.4 },
+        "points": [{"x":51.2,"y":27},{"x":51.2,"y":35.4}]
+      },
+      {
+        "id": "d7e2c0f4-576c-5a6e-935b-55af8769e8d4",
+        "layer": "User.1",
+        "width": 0.1,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 27.8, "y": 10 },
+        "end": { "x": 27.8, "y": 19.7 },
+        "points": [{"x":36.8,"y":10},{"x":36.8,"y":19.7}]
+      },
+      {
+        "id": "dbd80904-1f1f-5fcf-b03c-0f89182c0a3a",
+        "layer": "User.1",
+        "width": 0.1,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 40.8, "y": 10 },
+        "end": { "x": 40.8, "y": 19.7 },
+        "points": [{"x":51,"y":10},{"x":51,"y":19.7}]
+      },
+      {
+        "id": "aa47ee95-b540-53b7-8062-1db9c4c5e6c2",
+        "layer": "User.1",
+        "width": 0.1,
+        "stroke": "solid",
+        "fill": false,
+        "kind": "polygon",
+        "start": { "x": 55, "y": 10 },
+        "end": { "x": 55, "y": 23 },
+        "points": [{"x":91.16,"y":10},{"x":91.16,"y":23}]
+      },
+      {
+        "id": "15cb7ad0-c1f3-57c0-be62-c6fa64edde22",
+        "layer": "User.1",
+        "width": 0,
+        "kind": "text",
+        "start": { "x": 11.5, "y": 11 },
+        "end": { "x": 11.5, "y": 11 },
+        "text": {
+          "value": "connector",
+          "rotation": 0,
+          "size": { "x": 1.2, "y": 1.2 },
+          "thickness": 0.3,
+          "justify": ["left","top"]
+        }
+      },
+      {
+        "id": "0b3e7868-87e1-535f-b2ad-66a075f1c37e",
+        "layer": "User.1",
+        "width": 0,
+        "kind": "text",
+        "start": { "x": 11.5, "y": 28 },
+        "end": { "x": 11.5, "y": 28 },
+        "text": {
+          "value": "pullup",
+          "rotation": 0,
+          "size": { "x": 1.2, "y": 1.2 },
+          "thickness": 0.3,
+          "justify": ["left","top"]
+        }
+      },
+      {
+        "id": "678dd45e-c49e-55b4-a1e4-dd516ce5d2a5",
+        "layer": "User.1",
+        "width": 0,
+        "kind": "text",
+        "start": { "x": 25.7, "y": 28 },
+        "end": { "x": 25.7, "y": 28 },
+        "text": {
+          "value": "feedback",
+          "rotation": 0,
+          "size": { "x": 1.2, "y": 1.2 },
+          "thickness": 0.3,
+          "justify": ["left","top"]
+        }
+      },
+      {
+        "id": "a569f870-e916-549b-a31b-6148ea300187",
+        "layer": "User.1",
+        "width": 0,
+        "kind": "text",
+        "start": { "x": 29.3, "y": 11 },
+        "end": { "x": 29.3, "y": 11 },
+        "text": {
+          "value": "input",
+          "rotation": 0,
+          "size": { "x": 1.2, "y": 1.2 },
+          "thickness": 0.3,
+          "justify": ["left","top"]
+        }
+      },
+      {
+        "id": "83cca364-aa29-57ba-a6a4-763be543ace7",
+        "layer": "User.1",
+        "width": 0,
+        "kind": "text",
+        "start": { "x": 42.3, "y": 11 },
+        "end": { "x": 42.3, "y": 11 },
+        "text": {
+          "value": "output",
+          "rotation": 0,
+          "size": { "x": 1.2, "y": 1.2 },
+          "thickness": 0.3,
+          "justify": ["left","top"]
+        }
+      },
+      {
+        "id": "ca592bdf-66cf-5b9c-81fb-dd074b2af7ad",
+        "layer": "User.1",
+        "width": 0,
+        "kind": "text",
+        "start": { "x": 56.5, "y": 11 },
+        "end": { "x": 56.5, "y": 11 },
+        "text": {
+          "value": "conversion",
+          "rotation": 0,
+          "size": { "x": 1.2, "y": 1.2 },
+          "thickness": 0.3,
+          "justify": ["left","top"]
+        }
+      }
+    ]
+  },
+  "libraries": {
+    "symbols": {
+      "Connector_Generic:Conn_01x02": [
+        "symbol",
+        "\"Connector_Generic:Conn_01x02\"",
+        ["pin_names",["offset","1.016"],["hide","yes"]],
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"J\"",
+          ["at","0","2.54","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"Conn_01x02\"",
+          ["at","0","-5.08","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"connector\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_fp_filters\"",
+          "\"Connector*:*_1x??_*\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"Conn_01x02_1_1\"",
+          [
+            "rectangle",
+            ["start","-1.27","1.27"],
+            ["end","1.27","-3.81"],
+            ["stroke",["width","0.254"],["type","default"]],
+            ["fill",["type","background"]]
+          ],
+          [
+            "rectangle",
+            ["start","-1.27","0.127"],
+            ["end","0","-0.127"],
+            ["stroke",["width","0.1524"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "rectangle",
+            ["start","-1.27","-2.413"],
+            ["end","0","-2.667"],
+            ["stroke",["width","0.1524"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","-5.08","0","0"],
+            ["length","3.81"],
+            ["name","\"Pin_1\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","-5.08","-2.54","0"],
+            ["length","3.81"],
+            ["name","\"Pin_2\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"2\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ],
+      "Device:C": [
+        "symbol",
+        "\"Device:C\"",
+        ["pin_numbers",["hide","yes"]],
+        ["pin_names",["offset","0.254"]],
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"C\"",
+          ["at","0.635","2.54","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"C\"",
+          ["at","0.635","-2.54","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]],["justify","left"]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"\"",
+          ["at","0.9652","-3.81","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"Unpolarized capacitor\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"cap capacitor\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_fp_filters\"",
+          "\"C_*\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"C_0_1\"",
+          [
+            "polyline",
+            ["pts",["xy","-2.032","0.762"],["xy","2.032","0.762"]],
+            ["stroke",["width","0.508"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "polyline",
+            ["pts",["xy","-2.032","-0.762"],["xy","2.032","-0.762"]],
+            ["stroke",["width","0.508"],["type","default"]],
+            ["fill",["type","none"]]
+          ]
+        ],
+        [
+          "symbol",
+          "\"C_1_1\"",
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","0","3.81","270"],
+            ["length","2.794"],
+            ["name","\"\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","0","-3.81","90"],
+            ["length","2.794"],
+            ["name","\"\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"2\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ],
+      "Device:L_Iron": [
+        "symbol",
+        "\"Device:L_Iron\"",
+        ["pin_numbers",["hide","yes"]],
+        ["pin_names",["offset","1.016"],["hide","yes"]],
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"L\"",
+          ["at","-1.27","0","90"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"L_Iron\"",
+          ["at","2.794","0","90"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"Inductor with iron core\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"inductor choke coil reactor magnetic\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_fp_filters\"",
+          "\"Choke_* *Coil* Inductor_* L_*\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"L_Iron_0_1\"",
+          [
+            "arc",
+            ["start","0","2.54"],
+            ["mid","0.6323","1.905"],
+            ["end","0","1.27"],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "arc",
+            ["start","0","1.27"],
+            ["mid","0.6323","0.635"],
+            ["end","0","0"],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "arc",
+            ["start","0","0"],
+            ["mid","0.6323","-0.635"],
+            ["end","0","-1.27"],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "arc",
+            ["start","0","-1.27"],
+            ["mid","0.6323","-1.905"],
+            ["end","0","-2.54"],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "polyline",
+            ["pts",["xy","1.016","2.54"],["xy","1.016","-2.54"]],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "polyline",
+            ["pts",["xy","1.524","-2.54"],["xy","1.524","2.54"]],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ]
+        ],
+        [
+          "symbol",
+          "\"L_Iron_1_1\"",
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","0","3.81","270"],
+            ["length","1.27"],
+            ["name","\"1\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","0","-3.81","90"],
+            ["length","1.27"],
+            ["name","\"2\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"2\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ],
+      "Device:R": [
+        "symbol",
+        "\"Device:R\"",
+        ["pin_numbers",["hide","yes"]],
+        ["pin_names",["offset","0"]],
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"R\"",
+          ["at","2.032","0","90"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"R\"",
+          ["at","0","0","90"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"\"",
+          ["at","-1.778","0","90"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"Resistor\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"R res resistor\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_fp_filters\"",
+          "\"R_*\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"R_0_1\"",
+          [
+            "rectangle",
+            ["start","-1.016","-2.54"],
+            ["end","1.016","2.54"],
+            ["stroke",["width","0.254"],["type","default"]],
+            ["fill",["type","none"]]
+          ]
+        ],
+        [
+          "symbol",
+          "\"R_1_1\"",
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","0","3.81","270"],
+            ["length","1.27"],
+            ["name","\"\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","0","-3.81","90"],
+            ["length","1.27"],
+            ["name","\"\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"2\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ],
+      "Diode:MBR0520": [
+        "symbol",
+        "\"Diode:MBR0520\"",
+        ["pin_numbers",["hide","yes"]],
+        ["pin_names",["offset","1.016"],["hide","yes"]],
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"D\"",
+          ["at","0","2.54","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"MBR0520\"",
+          ["at","0","-2.54","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"Diode_SMD:D_SOD-123\"",
+          ["at","0","-4.445","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"http://www.mccsemi.com/up_pdf/MBR0520~MBR0580(SOD123).pdf\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"20V 0.5A Schottky Power Rectifier Diode, SOD-123\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"diode Schottky\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_fp_filters\"",
+          "\"D*SOD?123*\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"MBR0520_0_1\"",
+          [
+            "polyline",
+            [
+              "pts",
+              ["xy","-1.905","0.635"],
+              ["xy","-1.905","1.27"],
+              ["xy","-1.27","1.27"],
+              ["xy","-1.27","-1.27"],
+              ["xy","-0.635","-1.27"],
+              ["xy","-0.635","-0.635"]
+            ],
+            ["stroke",["width","0.254"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "polyline",
+            [
+              "pts",
+              ["xy","1.27","1.27"],
+              ["xy","1.27","-1.27"],
+              ["xy","-1.27","0"],
+              ["xy","1.27","1.27"]
+            ],
+            ["stroke",["width","0.254"],["type","default"]],
+            ["fill",["type","none"]]
+          ],
+          [
+            "polyline",
+            ["pts",["xy","1.27","0"],["xy","-1.27","0"]],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ]
+        ],
+        [
+          "symbol",
+          "\"MBR0520_1_1\"",
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","-3.81","0","0"],
+            ["length","2.54"],
+            ["name","\"K\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "passive",
+            "line",
+            ["at","3.81","0","180"],
+            ["length","2.54"],
+            ["name","\"A\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"2\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ],
+      "Regulator_Switching:TLV61047DDC": [
+        "symbol",
+        "\"Regulator_Switching:TLV61047DDC\"",
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"U1\"",
+          ["at","0","10.16","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"TLV61047DDC\"",
+          ["at","0","7.62","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"Package_TO_SOT_SMD:SOT-23-5\"",
+          ["at","2.54","-6.35","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"],["italic","yes"]],["justify","left"]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"https://www.ti.com/lit/ds/symlink/tlv61047.pdf\"",
+          ["at","-5.08","7.62","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"Non-synchronous Boost Regulator, Adjustable Output up to 28V, 2.2A Switch Current Limit, SOT-23-5\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"Step-Up Boost DC-DC Regulator Adjustable\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_fp_filters\"",
+          "\"SOT?23*\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"TLV61047DDC_0_1\"",
+          [
+            "rectangle",
+            ["start","-5.08","5.08"],
+            ["end","5.08","-6.35"],
+            ["stroke",["width","0.254"],["type","default"]],
+            ["fill",["type","background"]]
+          ]
+        ],
+        [
+          "symbol",
+          "\"TLV61047DDC_1_1\"",
+          [
+            "pin",
+            "power_out",
+            "line",
+            ["at","7.62","2.54","180"],
+            ["length","2.54"],
+            ["name","\"SW\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "power_in",
+            "line",
+            ["at","0","-8.89","90"],
+            ["length","2.54"],
+            ["name","\"GND\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"2\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "input",
+            "line",
+            ["at","7.62","0","180"],
+            ["length","2.54"],
+            ["name","\"FB\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"3\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "input",
+            "line",
+            ["at","-7.62","0","0"],
+            ["length","2.54"],
+            ["name","\"EN\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"4\"",["effects",["font",["size","1.27","1.27"]]]]
+          ],
+          [
+            "pin",
+            "power_in",
+            "line",
+            ["at","-7.62","2.54","0"],
+            ["length","2.54"],
+            ["name","\"VIN\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"5\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ],
+      "power:GND": [
+        "symbol",
+        "\"power:GND\"",
+        ["power","global"],
+        ["pin_numbers",["hide","yes"]],
+        ["pin_names",["offset","0"],["hide","yes"]],
+        ["exclude_from_sim","no"],
+        ["in_bom","yes"],
+        ["on_board","yes"],
+        ["in_pos_files","yes"],
+        ["duplicate_pin_numbers_are_jumpers","no"],
+        [
+          "property",
+          "\"Reference\"",
+          "\"#PWR\"",
+          ["at","0","-6.35","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Value\"",
+          "\"GND\"",
+          ["at","0","-3.81","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Footprint\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Datasheet\"",
+          "\"\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"Description\"",
+          "\"Power symbol creates a global label with name \\\"GND\\\" , ground\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "property",
+          "\"ki_keywords\"",
+          "\"global power\"",
+          ["at","0","0","0"],
+          ["show_name","no"],
+          ["do_not_autoplace","no"],
+          ["hide","yes"],
+          ["effects",["font",["size","1.27","1.27"]]]
+        ],
+        [
+          "symbol",
+          "\"GND_0_1\"",
+          [
+            "polyline",
+            [
+              "pts",
+              ["xy","0","0"],
+              ["xy","0","-1.27"],
+              ["xy","1.27","-1.27"],
+              ["xy","0","-2.54"],
+              ["xy","-1.27","-1.27"],
+              ["xy","0","-1.27"]
+            ],
+            ["stroke",["width","0"],["type","default"]],
+            ["fill",["type","none"]]
+          ]
+        ],
+        [
+          "symbol",
+          "\"GND_1_1\"",
+          [
+            "pin",
+            "power_in",
+            "line",
+            ["at","0","0","270"],
+            ["length","0"],
+            ["name","\"\"",["effects",["font",["size","1.27","1.27"]]]],
+            ["number","\"1\"",["effects",["font",["size","1.27","1.27"]]]]
+          ]
+        ],
+        ["embedded_fonts","no"]
+      ]
+    }
+  },
+  "extensions": {
+    "org.openpe.reference-example": {
+      "id": "reference-lm2611-sot235-cuk",
+      "source": {
+        "author": "fleaxiao",
+        "commit": "3e94f7eb08821dcaf3309ac433f530cb56418030",
+        "schematic": {
+          "path": "tests/fixtures/reference-retired/upstream/lm2611-sot235-cuk/input.kicad_sch",
+          "upstreamPath": "data/test/lm2611_sot235_cuk/input.kicad_sch",
+          "sha256": "1a9b3bf17458b26ec4b995bef2233f7cc824ec4516240401d44737de59d2fcc7"
+        },
+        "pcb": {
+          "path": "tests/fixtures/reference-retired/upstream/lm2611-sot235-cuk/expert.kicad_pcb",
+          "upstreamPath": "data/test/lm2611_sot235_cuk/expert.kicad_pcb",
+          "sha256": "e575c29efe20c95cc061e5c473eebabc54855a92b85d9d9eae30840dddb060df"
+        }
+      },
+      "topology": "Cuk",
+      "package": "SOT-23-5",
+      "changes": "Input schematic imported with embedded source symbols; expert PCB converted to editable geometry. Rectangles represented as exact polygons; multi-layer zones represented independently per layer. Printing settings and generated zone-fill caches omitted. Ancillary PCB metadata omitted; pinned originals retained. No simulation profile or ERC/DRC qualification is added."
+    }
+  }
+}

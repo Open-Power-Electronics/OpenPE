@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "filename": "lm27761-wson8-pump.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_SIMULATION_MODELS": "[\"circuits/LM27761.lib\"]"
+  }
+}

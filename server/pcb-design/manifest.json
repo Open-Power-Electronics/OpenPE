@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "source": "https://github.com/ChengminLi/AI-PCB-layout",
+  "revision": "e1b9a64ac9ac306647fa30094932fb792d17e373",
+  "license": "CC-BY-4.0",
+  "attribution": "power-pcb-design skill by Chengmin Li, Xiao Yang",
+  "documents": [
+    {
+      "id": "workflow",
+      "file": "SKILL.md",
+      "sha256": "88b36dc55d75e501297207f46147f53e738f4c4d3d5fad6f602828df2233d1a8"
+    },
+    {
+      "id": "analysis-and-measurement",
+      "file": "references/analysis-and-measurement.md",
+      "sha256": "b789da018075919fa965b2b7b39593cae304f37fd6dd4979f9a1df843590d0ed"
+    },
+    {
+      "id": "behavioral-evaluation",
+      "file": "references/behavioral-evaluation.md",
+      "sha256": "bbf66092e3c899e95b4cc72a223f63f817330618ca752129d0d5b7b696c5d123"
+    },
+    {
+      "id": "cad-and-tools",
+      "file": "references/cad-and-tools.md",
+      "sha256": "8fb4a7319bd241f32b6da6c67ded1f2e1cb141e4ef973f36a6625060e1336c16"
+    },
+    {
+      "id": "devices",
+      "file": "references/devices.md",
+      "sha256": "694938fec75c5a7c0bdd2bfac51edb6886c5f9a24f8edacd6e0e30ff8f738eef"
+    },
+    {
+      "id": "electrical-layout",
+      "file": "references/electrical-layout.md",
+      "sha256": "93195ca2069a0e3181eb0b0afe13717289766c71523811b10b8305b49f691ffb"
+    },
+    {
+      "id": "electrical-net-table",
+      "file": "references/electrical-net-table.md",
+      "sha256": "bcd1d806c3ed4db2fc0180e2647afeb37db3ce2c11906e24769902a64ae8953f"
+    },
+    {
+      "id": "implementation-and-delivery",
+      "file": "references/implementation-and-delivery.md",
+      "sha256": "0f2d79ea21b1377de9b573da711e6ea32e7cff668153605caa2b5332ae31c5b1"
+    },
+    {
+      "id": "insulation-and-copper",
+      "file": "references/insulation-and-copper.md",
+      "sha256": "13349503283b34c3ca61a1abea850e5c07912f30d0e3d769aef41aeef7e4930c"
+    },
+    {
+      "id": "regimes-and-standards",
+      "file": "references/regimes-and-standards.md",
+      "sha256": "74ff4695f278b038a8dfbc33aa1fc4cb2f9acbe494e751964afb1fc5d9ee47ab"
+    },
+    {
+      "id": "topologies",
+      "file": "references/topologies.md",
+      "sha256": "8307d7b38c10fa27b2c8547d272eda7fd0b11038964ec58b4ae3e18a85892f01"
+    }
+  ]
+}

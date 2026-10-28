@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "filename": "tps61046-bga6-boost.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_SIMULATION_MODELS": "[\"circuits/TPS61046.lib\"]"
+  }
+}

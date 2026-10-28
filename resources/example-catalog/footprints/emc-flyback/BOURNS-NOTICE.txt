@@ -1,0 +1,14 @@
+Bourns SRN8040TA manufacturer STEP model
+Copyright Bourns, Inc. All rights reserved.
+
+Product: https://www.bourns.com/products/magnetic-products/details/power-inductors-smd-semi-shielded/srn8040ta
+Engineering files: https://www.bourns.com/resources/design-tools/engineering-files-list?folder=SRN8040TA
+Original file: https://www.bourns.com/engineering/SRN8040TA/SRN8040TA.stp
+Legal disclaimers, terms and policies: https://www.bourns.com/legal/disclaimers-terms-and-policies
+Product disclaimer: https://www.bourns.com/docs/legal/disclaimer.pdf
+
+The original SRN8040TA.stp bytes are retained as Bourns_SRN8040TA.step to match
+the existing EMC Flyback native reference. No shape or placement data are changed.
+Bourns describes its design files as using typical dimensions unless noted.
+Users must verify suitability for their own designs. This asset is not covered
+by the EMC demonstration's CC BY 4.0 license or by an asserted open-source grant.

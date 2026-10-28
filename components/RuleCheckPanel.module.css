@@ -1,0 +1,153 @@
+.panel:global(.surface-dialog) {
+  width: 420px;
+}
+
+.panel:global(.surface-dialog) > :global(.dialog-content) {
+  min-width: 0;
+  max-height: 540px;
+  overflow-y: auto;
+  font-size: var(--font-control);
+  padding-bottom: 12px;
+}
+
+.panel:global(.surface-dialog) > :global(.dialog-footer) {
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px var(--dialog-inset);
+}
+
+.runStatus {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary > span:first-child > svg {
+  color: var(--error-ink);
+}
+
+.summary > span:last-child > svg {
+  color: var(--muted);
+}
+
+.issues {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.issues > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.issueText {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.severity {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
+
+.notice,
+.error,
+.empty {
+  margin: 12px 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--error-ink);
+}
+
+.empty {
+  padding: 24px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+  color: var(--muted);
+  text-align: center;
+}
+
+.limits {
+  margin: 0;
+  padding: 4px 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.limits > legend {
+  padding: 0 0 6px;
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.limitGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.limitGrid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+  line-height: 1.4;
+}
+
+.limitGrid input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-control);
+  background: var(--field-surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--code-font);
+}
+
+.limitGrid input[aria-invalid='true'] {
+  border-color: var(--error-ink);
+}

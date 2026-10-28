@@ -1,0 +1,2325 @@
+{
+  "id": "pebench-big-easy-driver",
+  "sourceSha256": "df18e7baa0f0781e4f32901fc8993fad2ce9b0ee57cf943c9069db53cf676055",
+  "coordinateTransform": {
+    "xOffset": 20,
+    "yOrigin": 182.56,
+    "sourceYUp": true
+  },
+  "symbols": [
+    {
+      "reference": "P+4",
+      "gate": "1",
+      "unit": 1,
+      "id": "c537181c-46c7-5d1c-a2bf-4c5eadd6774f",
+      "libraryId": "PEBench:supply1/+5V/",
+      "pads": {
+        "+5V": [
+          "+5V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "MOT_PWR",
+      "gate": "1",
+      "unit": 1,
+      "id": "7adda6a5-5857-5539-ba8f-5ac8a1ff0492",
+      "libraryId": "PEBench:supply1/V+/",
+      "pads": {
+        "V+": [
+          "V+"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND1",
+      "gate": "1",
+      "unit": 1,
+      "id": "b183cedc-a5c7-5481-93a7-5b07a03c3f1a",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "FRAME1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "9c9bb37b-d2df-507d-bddb-33d9cfa410d4",
+      "libraryId": "PEBench:SparkFun-Aesthetics/FRAME-LETTER/",
+      "pads": {},
+      "package": "CREATIVE_COMMONS"
+    },
+    {
+      "reference": "FRAME1",
+      "gate": "G$2",
+      "unit": 2,
+      "id": "a1efd893-1881-5422-8b7e-088ed7334518",
+      "libraryId": "PEBench:SparkFun-Aesthetics/FRAME-LETTER/",
+      "pads": {},
+      "package": "CREATIVE_COMMONS"
+    },
+    {
+      "reference": "R6",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "5e6eeb0c-bb8b-5851-838e-c5086e6ae0c9",
+      "libraryId": "PEBench:SparkFun-Resistors/390OHM1/10W1__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R8",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "58a238f8-3059-5ea5-8790-11d8bbade4ff",
+      "libraryId": "PEBench:SparkFun-Resistors/240OHM1/10W1__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "PWR_LED",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "e4a6a59f-1907-5327-8082-dae5cb283270",
+      "libraryId": "PEBench:SparkFun03_30_09/LED/0603",
+      "pads": {
+        "C": [
+          "C"
+        ],
+        "A": [
+          "A"
+        ]
+      },
+      "package": "LED-0603"
+    },
+    {
+      "reference": "R9",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "f6fc3bd6-af29-57ea-b0ed-29011c7a8f3b",
+      "libraryId": "PEBench:SparkFun-Resistors/1KOHM1/10W1__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "P+1",
+      "gate": "1",
+      "unit": 1,
+      "id": "4bf36d02-5e07-5876-9355-c5ffd1df9b29",
+      "libraryId": "PEBench:supply1/+5V/",
+      "pads": {
+        "+5V": [
+          "+5V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "91d6aa66-77fd-590c-8ea5-45bb4e64f70f",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.1UF-100V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "IC2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "255522cd-c1ab-5616-86b1-45d973689271",
+      "libraryId": "PEBench:BigEasyDriver_v11/SPARKFUN03_30_09_V_REG_317/SOT89",
+      "pads": {
+        "ADJ": [
+          "ADJ"
+        ],
+        "IN": [
+          "IN"
+        ],
+        "OUT": [
+          "OUT"
+        ],
+        "OUT@1": [
+          "OUT@1"
+        ]
+      },
+      "package": "SCHMALZHAUS_SOT89"
+    },
+    {
+      "reference": "APWR",
+      "gate": "1",
+      "unit": 1,
+      "id": "1a4b8f33-4988-5493-a164-e63f347c90da",
+      "libraryId": "PEBench:SparkFun03_30_09/SOLDERJUMPER/TRACE",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "SJ_2S-TRACE"
+    },
+    {
+      "reference": "3/5V",
+      "gate": "1",
+      "unit": 1,
+      "id": "66e3803c-ea61-5ffa-9640-0a754fb6e5f5",
+      "libraryId": "PEBench:SparkFun03_30_09/SOLDERJUMPER/NO",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "SJ_2S-NO"
+    },
+    {
+      "reference": "R7",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "a836253a-cb28-55bf-91dd-e1ed8068e188",
+      "libraryId": "PEBench:SparkFun-Resistors/330OHM1/10W1__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R16",
+      "gate": "R?",
+      "unit": 1,
+      "id": "dfe3ae60-643a-5bac-9716-2c6c2e2ab410",
+      "libraryId": "PEBench:SparkFun-Electromechanical/TRIMPOT/3MM-2",
+      "pads": {
+        "CCW": [
+          "1"
+        ],
+        "CW": [
+          "3"
+        ],
+        "WIPER": [
+          "2"
+        ]
+      },
+      "package": "TRIMPOT-3MM-2"
+    },
+    {
+      "reference": "GND4",
+      "gate": "1",
+      "unit": 1,
+      "id": "407c3782-2455-549b-b953-7ddf0488ec6d",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND5",
+      "gate": "1",
+      "unit": 1,
+      "id": "cc096e6c-a71c-5796-a573-207120d71f51",
+      "libraryId": "PEBench:SparkFun/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND9",
+      "gate": "1",
+      "unit": 1,
+      "id": "b0a8c3e2-2c74-5b93-a42a-706dbad75a1c",
+      "libraryId": "PEBench:SparkFun/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND11",
+      "gate": "1",
+      "unit": 1,
+      "id": "4624e06a-5433-5237-95da-52e6a55a6a09",
+      "libraryId": "PEBench:SparkFun/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND12",
+      "gate": "1",
+      "unit": 1,
+      "id": "6466ce30-cd82-5d0c-b8f8-c9ce34b9aa0f",
+      "libraryId": "PEBench:SparkFun/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND14",
+      "gate": "1",
+      "unit": 1,
+      "id": "75ae1fd4-1869-5cf8-917e-a62fd5cf454e",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND15",
+      "gate": "1",
+      "unit": 1,
+      "id": "a1dbdaa6-f851-5241-b220-c6a9dbbe7bc2",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "0b0ad53d-d01f-577a-afec-5bb53ffa97ae",
+      "libraryId": "PEBench:SparkFun/LOGO-SFE/NEW",
+      "pads": {},
+      "package": "SFE-NEW-WEBLOGO"
+    },
+    {
+      "reference": "TP1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "424ce73b-e24a-5ec0-a592-763f7f1ed020",
+      "libraryId": "PEBench:testpad/TP/PAD1-13",
+      "pads": {
+        "TP": [
+          "TP"
+        ]
+      },
+      "package": "P1-13"
+    },
+    {
+      "reference": "JP8",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "bed14b58-f8dd-59c1-96b1-b378f18d238b",
+      "libraryId": "PEBench:SparkFun-7-28-09/STAND-OFF/",
+      "pads": {},
+      "package": "STAND-OFF"
+    },
+    {
+      "reference": "JP9",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "9ccb6e10-2b29-5017-8f35-e6425db0e839",
+      "libraryId": "PEBench:SparkFun-7-28-09/STAND-OFF/",
+      "pads": {},
+      "package": "STAND-OFF"
+    },
+    {
+      "reference": "JP6",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "6605b5c7-694a-5f3e-b352-d2cf3f4e9582",
+      "libraryId": "PEBench:SparkFun/M02/PTH",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "1X02"
+    },
+    {
+      "reference": "JP3",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2cbcdbda-7068-521b-9b71-4a08b3158f27",
+      "libraryId": "PEBench:SparkFun/M04/PTH",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ]
+      },
+      "package": "1X04"
+    },
+    {
+      "reference": "JP1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "4ea004b4-24d2-5e2a-8545-22e97680bc08",
+      "libraryId": "PEBench:SparkFun/M02/PTH",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "1X02"
+    },
+    {
+      "reference": "GND19",
+      "gate": "1",
+      "unit": 1,
+      "id": "baae6209-5bda-58c1-a990-8babaca03129",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "R18",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "26e10ea5-3c5f-59a5-afc7-4f21463334f1",
+      "libraryId": "PEBench:SparkFun-Resistors/0.11OHM1/2W1__2010_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "R2010"
+    },
+    {
+      "reference": "R19",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2bd6b85d-a95a-5e40-afeb-bfd8aa601544",
+      "libraryId": "PEBench:SparkFun-Resistors/0.11OHM1/2W1__2010_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "R2010"
+    },
+    {
+      "reference": "IC1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "27ac7453-dbfd-58c9-9274-80c9ecd69d25",
+      "libraryId": "PEBench:SparkFun-PowerIC/A4988/ALT1",
+      "pads": {
+        "CP1": [
+          "P$4"
+        ],
+        "CP2": [
+          "P$5"
+        ],
+        "DIR": [
+          "P$19"
+        ],
+        "ENABLE": [
+          "P$2"
+        ],
+        "GND@1": [
+          "P$3"
+        ],
+        "GND@2": [
+          "P$18"
+        ],
+        "GND_PAD": [
+          "P$29"
+        ],
+        "MS1": [
+          "P$9"
+        ],
+        "MS2": [
+          "P$10"
+        ],
+        "MS3": [
+          "P$11"
+        ],
+        "NC@1": [
+          "P$7"
+        ],
+        "NC@2": [
+          "P$20"
+        ],
+        "NC@3": [
+          "P$25"
+        ],
+        "OUT1A": [
+          "P$24"
+        ],
+        "OUT1B": [
+          "P$21"
+        ],
+        "OUT2A": [
+          "P$26"
+        ],
+        "OUT2B": [
+          "P$1"
+        ],
+        "REF": [
+          "P$17"
+        ],
+        "RESET": [
+          "P$12"
+        ],
+        "ROSC": [
+          "P$13"
+        ],
+        "SENSE1": [
+          "P$23"
+        ],
+        "SENSE2": [
+          "P$27"
+        ],
+        "SLEEP": [
+          "P$14"
+        ],
+        "STEP": [
+          "P$16"
+        ],
+        "VBB1": [
+          "P$22"
+        ],
+        "VBB2": [
+          "P$28"
+        ],
+        "VCP": [
+          "P$6"
+        ],
+        "VDD": [
+          "P$15"
+        ],
+        "VREG": [
+          "P$8"
+        ]
+      },
+      "package": "QFN-28-5MM_ALT1"
+    },
+    {
+      "reference": "GND16",
+      "gate": "1",
+      "unit": 1,
+      "id": "eb414cb8-86dd-5d13-9209-e3413fd3edd7",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "R20",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2c694b43-cb81-52fd-81e1-204fbebed3b8",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "GND17",
+      "gate": "1",
+      "unit": 1,
+      "id": "a760cff6-1fa0-54c3-b400-67c8c0a63cdd",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C6",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2238611d-9d43-58f9-839d-7a7ff7f90e5b",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.1UF-100V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "C7",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "8cd10b6f-ecef-5dbc-ad78-9efc85ef3445",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.1UF-100V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "GND18",
+      "gate": "1",
+      "unit": 1,
+      "id": "1f5d2fa6-325e-5a9e-8e85-631946566385",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "P+2",
+      "gate": "1",
+      "unit": 1,
+      "id": "07fbc84f-f91d-5d65-bfc9-7035f232e677",
+      "libraryId": "PEBench:SparkFun-2-11-09/VCC/",
+      "pads": {
+        "VCC": [
+          "VCC"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C8",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "761dec31-9adf-5f45-ba6b-68222fb841bc",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.1UF-100V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "C9",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "ff0ea4cf-3e01-5493-9f49-4e1b1936ba62",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.1UF-100V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "GND20",
+      "gate": "1",
+      "unit": 1,
+      "id": "26b137e4-72a2-5460-9345-02101717997d",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C10",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "7a7f2d77-e474-5bae-bf02-1c0715050133",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.22UF50V-20__+80__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "C11",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "f902bb04-7cbb-55ce-999b-0c5da7b58a6b",
+      "libraryId": "PEBench:SparkFun-Capacitors/0.1UF-100V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "D1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "5ee8dc50-9595-596a-b061-aaeb2825b21a",
+      "libraryId": "PEBench:diode/DIODE-/DO-214AC",
+      "pads": {
+        "A": [
+          "A"
+        ],
+        "C": [
+          "C"
+        ]
+      },
+      "package": "DO-214AC"
+    },
+    {
+      "reference": "C14",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "53014a87-d8b6-5f53-b6c0-df671e14f8c4",
+      "libraryId": "PEBench:SparkFun-Capacitors/47UF-50V-20__ELECT_/",
+      "pads": {
+        "+": [
+          "+"
+        ],
+        "-": [
+          "-"
+        ]
+      },
+      "package": "PANASONIC_D"
+    },
+    {
+      "reference": "JP10",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3cc4f775-e164-5b3c-b097-3ff7bce947ec",
+      "libraryId": "PEBench:SparkFun/M04/PTH",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ]
+      },
+      "package": "1X04"
+    },
+    {
+      "reference": "JP5",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "e09416e0-fed0-5d0d-bd85-5a5eaaccf3c9",
+      "libraryId": "PEBench:BigEasyDriver_v11/M04/SCREW_LOCK",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ]
+      },
+      "package": "SCREWTERMINAL-3.5MM-4_LOCK"
+    },
+    {
+      "reference": "JP7",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "752936c4-b427-51f5-a38c-349a95e98f0b",
+      "libraryId": "PEBench:BigEasyDriver_v11/M02/3.5MM_LOCK",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "SCREWTERMINAL-3.5MM-2_LOCK"
+    },
+    {
+      "reference": "R1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "87299e19-7661-544d-912f-a3d6679d863c",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "babca4d9-a550-5183-9a03-d982c78dc5ba",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R3",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "def83f71-510b-511d-a062-b5cf954a9c2e",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R4",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "865c7ac5-590e-50c1-9794-2d7c921470bf",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R5",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "89a9a213-d0b6-54c3-9cb0-7d24b9792ca0",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "P+3",
+      "gate": "1",
+      "unit": 1,
+      "id": "d9c8f59a-f316-5932-9b69-76b96a8ab0c3",
+      "libraryId": "PEBench:SparkFun-2-11-09/VCC/",
+      "pads": {
+        "VCC": [
+          "VCC"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND3",
+      "gate": "1",
+      "unit": 1,
+      "id": "7cc29cf0-39dc-5a42-aa15-3941ad327a2d",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "R10",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "a0f37e7e-1e4a-519a-b69b-28b373191dbe",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R11",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "a14192f9-a889-5141-ac75-501c587407a1",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R12",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "8f112495-5abf-5ad2-a9c6-4c8fa0fe6b05",
+      "libraryId": "PEBench:SparkFun-Resistors/20KOHM1/10W5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R13",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "f6878724-a4af-5924-a6a2-58bb167e08e8",
+      "libraryId": "PEBench:SparkFun-Resistors/8.2KOHM-1/10W-5__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "JP11",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "1d117f8c-90e8-5a7f-99f7-28c62d96048e",
+      "libraryId": "PEBench:BigEasyDriver_v11/M04/SCREW_LOCK",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ]
+      },
+      "package": "SCREWTERMINAL-3.5MM-4_LOCK"
+    },
+    {
+      "reference": "JP12",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3c551109-6886-5728-b231-57a43911dd38",
+      "libraryId": "PEBench:BigEasyDriver_v11/M04/SCREW_LOCK",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ]
+      },
+      "package": "SCREWTERMINAL-3.5MM-4_LOCK"
+    },
+    {
+      "reference": "JP13",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "da9dc6f3-ecf7-5025-91ed-13495a2ab896",
+      "libraryId": "PEBench:BigEasyDriver_v11/M02/3.5MM_LOCK",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "SCREWTERMINAL-3.5MM-2_LOCK"
+    },
+    {
+      "reference": "JP14",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "f77d12af-3982-5a68-89ce-80a86d66b0c7",
+      "libraryId": "PEBench:SparkFun/M04/PTH",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ]
+      },
+      "package": "1X04"
+    },
+    {
+      "reference": "C2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "e3d3fdab-d27a-575a-85ca-cda9fa7189c3",
+      "libraryId": "PEBench:SparkFun-Capacitors/1.0UF-16V-10__0603_/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0603-CAP"
+    },
+    {
+      "reference": "LOGO1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "7455eb77-9335-5f55-9aff-e9ea697556f1",
+      "libraryId": "PEBench:OSHW/OSHW_LOGO_FILL/X0100-NT",
+      "pads": {},
+      "package": "OSHW_FILLX100_NOTEXT"
+    },
+    {
+      "reference": "U$3",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "576d6b38-1124-55c1-8f8b-5ec69da2a708",
+      "libraryId": "PEBench:Testing/PAD/",
+      "pads": {
+        "P$1": [
+          "P$1"
+        ]
+      },
+      "package": "PAD-0.008"
+    },
+    {
+      "reference": "U$4",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "787a8b76-7afb-5c80-8608-3a7cfa1292fc",
+      "libraryId": "PEBench:Testing/PAD/",
+      "pads": {
+        "P$1": [
+          "P$1"
+        ]
+      },
+      "package": "PAD-0.008"
+    },
+    {
+      "reference": "U$5",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "846e8c3a-7021-5bf7-81ce-60a35e873e7b",
+      "libraryId": "PEBench:Testing/PAD/",
+      "pads": {
+        "P$1": [
+          "P$1"
+        ]
+      },
+      "package": "PAD-0.008"
+    },
+    {
+      "reference": "R14",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3966c344-4b5d-52dd-b8d9-bdacd93c30d9",
+      "libraryId": "PEBench:SparkFun-Resistors/1KOHM1/10W1__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "R15",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "cc1ff907-2f91-5b7a-9386-855d381d3266",
+      "libraryId": "PEBench:SparkFun-Resistors/1KOHM1/10W1__0603_/",
+      "pads": {
+        "2": [
+          "2"
+        ],
+        "1": [
+          "1"
+        ]
+      },
+      "package": "0603-RES"
+    },
+    {
+      "reference": "FID1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3ccf80cd-42e7-5b91-8886-a0b003c0dbd3",
+      "libraryId": "PEBench:SparkFun-Aesthetics/FIDUCIAL/1X2",
+      "pads": {},
+      "package": "FIDUCIAL-1X2"
+    },
+    {
+      "reference": "FID2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "83b3bf5c-35bb-54fe-a9b1-b88831251c00",
+      "libraryId": "PEBench:SparkFun-Aesthetics/FIDUCIAL/1X2",
+      "pads": {},
+      "package": "FIDUCIAL-1X2"
+    }
+  ],
+  "nets": [
+    {
+      "name": "GND",
+      "pins": [
+        {
+          "reference": "GND1",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R16",
+          "pin": "3",
+          "gate": "R?",
+          "sourcePin": "CW"
+        },
+        {
+          "reference": "GND4",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "JP1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP7",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "GND5",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C14",
+          "pin": "-",
+          "gate": "G$1",
+          "sourcePin": "-"
+        },
+        {
+          "reference": "C1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND9",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "GND11",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C2",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "PWR_LED",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        },
+        {
+          "reference": "GND12",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "3/5V",
+          "pin": "2",
+          "gate": "1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND14",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R7",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "GND15",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "GND19",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R18",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R19",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$3",
+          "gate": "G$1",
+          "sourcePin": "GND@1"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$18",
+          "gate": "G$1",
+          "sourcePin": "GND@2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$29",
+          "gate": "G$1",
+          "sourcePin": "GND_PAD"
+        },
+        {
+          "reference": "GND16",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R20",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND17",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C10",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "C7",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND18",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C8",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND20",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C9",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R10",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND3",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "JP14",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "JP12",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "VCC",
+      "pins": [
+        {
+          "reference": "P+4",
+          "pin": "+5V",
+          "gate": "1",
+          "sourcePin": "+5V"
+        },
+        {
+          "reference": "R9",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "APWR",
+          "pin": "2",
+          "gate": "1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "C2",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$15",
+          "gate": "G$1",
+          "sourcePin": "VDD"
+        },
+        {
+          "reference": "C7",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "P+2",
+          "pin": "VCC",
+          "gate": "1",
+          "sourcePin": "VCC"
+        },
+        {
+          "reference": "R1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "P+3",
+          "pin": "VCC",
+          "gate": "1",
+          "sourcePin": "VCC"
+        },
+        {
+          "reference": "R2",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R3",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R4",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R5",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R12",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R11",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "JP14",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP12",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R13",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "P+1",
+          "pin": "+5V",
+          "gate": "1",
+          "sourcePin": "+5V"
+        }
+      ]
+    },
+    {
+      "name": "V+",
+      "pins": [
+        {
+          "reference": "MOT_PWR",
+          "pin": "V+",
+          "gate": "1",
+          "sourcePin": "V+"
+        },
+        {
+          "reference": "C1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "IC2",
+          "pin": "IN",
+          "gate": "G$1",
+          "sourcePin": "IN"
+        },
+        {
+          "reference": "D1",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        },
+        {
+          "reference": "C14",
+          "pin": "+",
+          "gate": "G$1",
+          "sourcePin": "+"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$28",
+          "gate": "G$1",
+          "sourcePin": "VBB2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$22",
+          "gate": "G$1",
+          "sourcePin": "VBB1"
+        },
+        {
+          "reference": "C8",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "C9",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "C11",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "CUR_REF",
+      "pins": [
+        {
+          "reference": "R16",
+          "pin": "2",
+          "gate": "R?",
+          "sourcePin": "WIPER"
+        },
+        {
+          "reference": "TP1",
+          "pin": "TP",
+          "gate": "G$1",
+          "sourcePin": "TP"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$17",
+          "gate": "G$1",
+          "sourcePin": "REF"
+        }
+      ]
+    },
+    {
+      "name": "N$6",
+      "pins": [
+        {
+          "reference": "R6",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R8",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "IC2",
+          "pin": "ADJ",
+          "gate": "G$1",
+          "sourcePin": "ADJ"
+        }
+      ]
+    },
+    {
+      "name": "COILB+",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$1",
+          "gate": "G$1",
+          "sourcePin": "OUT2B"
+        },
+        {
+          "reference": "JP3",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP5",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "COILB-",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$26",
+          "gate": "G$1",
+          "sourcePin": "OUT2A"
+        },
+        {
+          "reference": "JP3",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "JP5",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "DIR",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$19",
+          "gate": "G$1",
+          "sourcePin": "DIR"
+        },
+        {
+          "reference": "R11",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R14",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "MS1",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$9",
+          "gate": "G$1",
+          "sourcePin": "MS1"
+        },
+        {
+          "reference": "JP6",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP13",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "MS2",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$10",
+          "gate": "G$1",
+          "sourcePin": "MS2"
+        },
+        {
+          "reference": "R2",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP10",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP11",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "ENABLE",
+      "pins": [
+        {
+          "reference": "JP6",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$2",
+          "gate": "G$1",
+          "sourcePin": "ENABLE"
+        },
+        {
+          "reference": "R10",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP13",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "COILA-",
+      "pins": [
+        {
+          "reference": "JP3",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "3"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$24",
+          "gate": "G$1",
+          "sourcePin": "OUT1A"
+        },
+        {
+          "reference": "JP5",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "3"
+        }
+      ]
+    },
+    {
+      "name": "COILA+",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$21",
+          "gate": "G$1",
+          "sourcePin": "OUT1B"
+        },
+        {
+          "reference": "JP5",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "4"
+        },
+        {
+          "reference": "JP3",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "4"
+        }
+      ]
+    },
+    {
+      "name": "RESET",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$12",
+          "gate": "G$1",
+          "sourcePin": "RESET"
+        },
+        {
+          "reference": "R5",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP10",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "3"
+        },
+        {
+          "reference": "JP11",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "3"
+        }
+      ]
+    },
+    {
+      "name": "STEP",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$16",
+          "gate": "G$1",
+          "sourcePin": "STEP"
+        },
+        {
+          "reference": "R12",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R15",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "SLEEP",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$14",
+          "gate": "G$1",
+          "sourcePin": "SLEEP"
+        },
+        {
+          "reference": "R4",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP10",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "4"
+        },
+        {
+          "reference": "JP11",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "4"
+        }
+      ]
+    },
+    {
+      "name": "5V_ALT",
+      "pins": [
+        {
+          "reference": "R8",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "IC2",
+          "pin": "OUT",
+          "gate": "G$1",
+          "sourcePin": "OUT"
+        },
+        {
+          "reference": "IC2",
+          "pin": "OUT@1",
+          "gate": "G$1",
+          "sourcePin": "OUT@1"
+        },
+        {
+          "reference": "APWR",
+          "pin": "1",
+          "gate": "1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "N$2",
+      "pins": [
+        {
+          "reference": "R9",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "PWR_LED",
+          "pin": "A",
+          "gate": "G$1",
+          "sourcePin": "A"
+        }
+      ]
+    },
+    {
+      "name": "N$4",
+      "pins": [
+        {
+          "reference": "R6",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R7",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "3/5V",
+          "pin": "1",
+          "gate": "1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "N$31",
+      "pins": [
+        {
+          "reference": "R18",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$27",
+          "gate": "G$1",
+          "sourcePin": "SENSE2"
+        }
+      ]
+    },
+    {
+      "name": "N$32",
+      "pins": [
+        {
+          "reference": "R19",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "P$23",
+          "gate": "G$1",
+          "sourcePin": "SENSE1"
+        }
+      ]
+    },
+    {
+      "name": "N$8",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$4",
+          "gate": "G$1",
+          "sourcePin": "CP1"
+        },
+        {
+          "reference": "C6",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "N$9",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$5",
+          "gate": "G$1",
+          "sourcePin": "CP2"
+        },
+        {
+          "reference": "C6",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$19",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$13",
+          "gate": "G$1",
+          "sourcePin": "ROSC"
+        },
+        {
+          "reference": "R20",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "N$20",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$8",
+          "gate": "G$1",
+          "sourcePin": "VREG"
+        },
+        {
+          "reference": "C10",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "N$21",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$6",
+          "gate": "G$1",
+          "sourcePin": "VCP"
+        },
+        {
+          "reference": "C11",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "MS3",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$11",
+          "gate": "G$1",
+          "sourcePin": "MS3"
+        },
+        {
+          "reference": "R3",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP10",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "JP11",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$1",
+      "pins": [
+        {
+          "reference": "JP1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "D1",
+          "pin": "A",
+          "gate": "G$1",
+          "sourcePin": "A"
+        },
+        {
+          "reference": "JP7",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$3",
+      "pins": [
+        {
+          "reference": "R13",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R16",
+          "pin": "1",
+          "gate": "R?",
+          "sourcePin": "CCW"
+        }
+      ]
+    },
+    {
+      "name": "N$5",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$7",
+          "gate": "G$1",
+          "sourcePin": "NC@1"
+        },
+        {
+          "reference": "U$3",
+          "pin": "P$1",
+          "gate": "G$1",
+          "sourcePin": "P$1"
+        }
+      ]
+    },
+    {
+      "name": "N$7",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$20",
+          "gate": "G$1",
+          "sourcePin": "NC@2"
+        },
+        {
+          "reference": "U$4",
+          "pin": "P$1",
+          "gate": "G$1",
+          "sourcePin": "P$1"
+        }
+      ]
+    },
+    {
+      "name": "N$10",
+      "pins": [
+        {
+          "reference": "IC1",
+          "pin": "P$25",
+          "gate": "G$1",
+          "sourcePin": "NC@3"
+        },
+        {
+          "reference": "U$5",
+          "pin": "P$1",
+          "gate": "G$1",
+          "sourcePin": "P$1"
+        }
+      ]
+    },
+    {
+      "name": "DIR_IN",
+      "pins": [
+        {
+          "reference": "R14",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "JP14",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "4"
+        },
+        {
+          "reference": "JP12",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "4"
+        }
+      ]
+    },
+    {
+      "name": "STEP_IN",
+      "pins": [
+        {
+          "reference": "JP12",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "3"
+        },
+        {
+          "reference": "JP14",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "3"
+        },
+        {
+          "reference": "R15",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    }
+  ],
+  "tessellatedPolygons": [],
+  "preservedSourceFiles": [
+    "source.sch",
+    "source.brd",
+    "board.kicad_pcb"
+  ],
+  "notes": [
+    "Original EAGLE symbols, gate identities and physical pad mappings are retained.",
+    "Source frame objects and decorative sheet graphics are expanded into pinless annotation symbols.",
+    "A net label is attached to every disconnected named source segment to retain EAGLE net identity.",
+    "PEBench:SparkFun-PowerIC/A4988/ALT1 G$1 NC@1: EAGLE NC pin rendered passive because explicit source nets remain authoritative; no ERC equivalence is claimed.",
+    "PEBench:SparkFun-PowerIC/A4988/ALT1 G$1 NC@2: EAGLE NC pin rendered passive because explicit source nets remain authoritative; no ERC equivalence is claimed.",
+    "PEBench:SparkFun-PowerIC/A4988/ALT1 G$1 NC@3: EAGLE NC pin rendered passive because explicit source nets remain authoritative; no ERC equivalence is claimed."
+  ],
+  "counts": {
+    "sourceParts": 74,
+    "sourceInstances": 75,
+    "generatedInstances": 76,
+    "wires": 164,
+    "junctions": 27,
+    "labels": 92,
+    "embeddedSymbols": 35
+  }
+}

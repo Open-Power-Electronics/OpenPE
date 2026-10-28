@@ -1,0 +1,34 @@
+KiCad official schematic demos — KiCad demo contributors
+
+Upstream: https://github.com/KiCad/kicad-source-mirror
+Release: 10.0.0
+Commit: 0feeca2a807f428ad2b3fa7c1e39625cb769f02c
+Sources:
+  demos/simulation/rectifier/rectifier.kicad_sch
+  demos/simulation/power_supplies/buck_conv/buck_conv.kicad_sch
+  demos/simulation/power_supplies/buck_conv/IRF-Power-VDMOS.mod
+  demos/simulation/power_supplies/boost/smps-com.kicad_sch
+  demos/simulation/power_supplies/royer/royer1.kicad_sch
+  demos/simulation/power_supplies/hv_converter/hv_converter.kicad_sch
+  demos/simulation/power_supplies/LM317_power_supply/power_supply.kicad_sch
+  demos/simulation/class-d/Class-D.kicad_sch
+  demos/simulation/laser_driver/laser_driver.kicad_sch
+  demos/simulation/generic_models/generic_opamp_bip.kicad_sch
+
+Licensed under Creative Commons Attribution-ShareAlike 4.0 International
+(CC BY-SA 4.0): https://creativecommons.org/licenses/by-sa/4.0/
+See LICENSE.txt and UPSTREAM-LICENSE.README in this directory.
+
+OpenPE includes unchanged upstream schematics and a generated offline snapshot.
+The derived OpenPE example documents and native exports retain this license.
+Changes: conversion to OpenPE JSON, fresh instance UUIDs and display titles;
+instance field positions, visibility and reading direction arranged for clarity;
+exports normalize the KiCad 10 header and property visibility syntax;
+active-sheet instance references take precedence over stale property text.
+Embedded symbols, connections, custom properties and schematic text are retained.
+The Buck IRF540N VDMOS model is also bundled as an unchanged model definition
+extracted from IRF-Power-VDMOS.mod, with generated electrical pin signatures.
+Original model SHA-256: 840295ba890baad25b3921fb9ab17f6174cf9673f58fde37f26bc3ca1cdde596
+Other external model files, full KiCad project settings and PCB are not included.
+No upstream endorsement, ERC or production validation is claimed.
+This attribution and license do not imply endorsement by KiCad.

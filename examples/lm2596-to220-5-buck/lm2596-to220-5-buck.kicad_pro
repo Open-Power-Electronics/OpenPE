@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "filename": "lm2596-to220-5-buck.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_SIMULATION_MODELS": "[\"circuits/LM2596-5.lib\"]"
+  }
+}

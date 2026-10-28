@@ -1,0 +1,2507 @@
+{
+  "id": "pebench-powerboost-1000c",
+  "sourceSha256": "c21bb1d248f9f321a47ada8d0c23c575091b5b7ec7b450e8b8bd3c4fd78c0a04",
+  "coordinateTransform": {
+    "xOffset": 20,
+    "yOrigin": 187.64,
+    "sourceYUp": true
+  },
+  "symbols": [
+    {
+      "reference": "U1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "9cd9f61f-6d43-5c17-8380-daee881bffcd",
+      "libraryId": "PEBench:microbuilder/VREG_TPS6103X/",
+      "pads": {
+        "SW": [
+          "3",
+          "4"
+        ],
+        "VBAT": [
+          "8"
+        ],
+        "EN": [
+          "11"
+        ],
+        "LBI": [
+          "9"
+        ],
+        "SYNC": [
+          "10"
+        ],
+        "GND": [
+          "13"
+        ],
+        "PGND": [
+          "5",
+          "6",
+          "7",
+          "P$18",
+          "P$19",
+          "P$20",
+          "P$21",
+          "P$22",
+          "THERMAL"
+        ],
+        "LBO": [
+          "12"
+        ],
+        "FB": [
+          "14"
+        ],
+        "VOUT": [
+          "1",
+          "15",
+          "16"
+        ]
+      },
+      "package": "PVQFN-16"
+    },
+    {
+      "reference": "L1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "479e5632-5287-5d4a-b034-0815d09afde3",
+      "libraryId": "PEBench:microbuilder/INDUCTOR/TDK_VLC5045",
+      "pads": {
+        "1": [
+          "P$1"
+        ],
+        "2": [
+          "P$2"
+        ]
+      },
+      "package": "INDUCTOR_5X5MM_TDK_VLC5045"
+    },
+    {
+      "reference": "U$1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "4cfb8118-1a13-5c68-a171-c041ad1b09e4",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "725f2372-7e1c-5f5b-ae2f-cdc643fa7a22",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "680ca6e8-d0ca-5c2d-a778-e6af322567b4",
+      "libraryId": "PEBench:microbuilder/CAP_CERAMIC/0805-NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "U$4",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2adabc2a-4f66-5204-a879-3e1389ba42af",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "B1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "32dcce8d-f5c8-58d7-bff9-e56fed08e892",
+      "libraryId": "PEBench:microbuilder/BATTERY/",
+      "pads": {
+        "-": [
+          "1"
+        ],
+        "+": [
+          "2"
+        ]
+      },
+      "package": "JSTPH2"
+    },
+    {
+      "reference": "U$5",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "c7e61c60-5cd4-527e-b292-bead6a8ab553",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "01aa6cf3-d895-5f6d-af21-9d0fe8d088ac",
+      "libraryId": "PEBench:microbuilder/CAP_CERAMIC/0805-NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "U$7",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "abbe58a8-3748-5500-b019-66222aacadb8",
+      "libraryId": "PEBench:microbuilder/5.0V/",
+      "pads": {
+        "5.0V": [
+          "5.0V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "FID2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2ac5fab2-3f62-5afe-af6a-542a0a8f151b",
+      "libraryId": "PEBench:microbuilder/FIDUCIAL/__",
+      "pads": {},
+      "package": "FIDUCIAL_1MM"
+    },
+    {
+      "reference": "U$10",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "94c422ec-4eff-5a55-b444-130537d06947",
+      "libraryId": "PEBench:microbuilder/MOUNTINGHOLE/2.5",
+      "pads": {},
+      "package": "MOUNTINGHOLE_2.5_PLATED"
+    },
+    {
+      "reference": "U$11",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "6f246bf0-d5dd-528e-bd62-5fdf66ce45cb",
+      "libraryId": "PEBench:microbuilder/MOUNTINGHOLE/2.5",
+      "pads": {},
+      "package": "MOUNTINGHOLE_2.5_PLATED"
+    },
+    {
+      "reference": "X1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "243a76b6-2977-5f47-924d-84c7e20a5639",
+      "libraryId": "PEBench:microbuilder/TERMBLOCK_1X2/",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "TERMBLOCK_1X2-3.5MM"
+    },
+    {
+      "reference": "R9",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "d49c769e-8521-560e-9426-431292e29256",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R10",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "b00b0568-a7fa-50aa-ae77-253b4c863553",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R11",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "6e27e325-5890-596c-8981-0753988c3e1d",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R12",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "c22fb750-75dd-5366-93af-ec9192a09b86",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "CN1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "ec09e0f4-9cdc-560e-95de-f37657955635",
+      "libraryId": "PEBench:microbuilder/USB_TYPEA/PTHFML",
+      "pads": {
+        "D+": [
+          "D+"
+        ],
+        "D-": [
+          "D-"
+        ],
+        "VBUS": [
+          "VBUS"
+        ],
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": "USB_HOST-PTH"
+    },
+    {
+      "reference": "U$15",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "2f36acdf-ba37-5f69-96b4-dca1f4ad52ae",
+      "libraryId": "PEBench:microbuilder/5.0V/",
+      "pads": {
+        "5.0V": [
+          "5.0V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$16",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "77166176-3a2e-514d-9fdd-b6c9e95b170d",
+      "libraryId": "PEBench:microbuilder/5.0V/",
+      "pads": {
+        "5.0V": [
+          "5.0V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$17",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "fbf3c97d-d375-5aa5-a29e-c63e19985e44",
+      "libraryId": "PEBench:microbuilder/5.0V/",
+      "pads": {
+        "5.0V": [
+          "5.0V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$19",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "b9e861cb-8631-53f5-8f9f-04e9743bc0d8",
+      "libraryId": "PEBench:microbuilder/VBAT/",
+      "pads": {
+        "VBAT": [
+          "VBAT"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "LED1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "5e308881-d6a4-5761-8fe8-909760840f22",
+      "libraryId": "PEBench:microbuilder/LED/0805_NOOUTLINE",
+      "pads": {
+        "A": [
+          "A"
+        ],
+        "C": [
+          "C"
+        ]
+      },
+      "package": "CHIPLED_0805_NOOUTLINE"
+    },
+    {
+      "reference": "R20",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "88c260c2-f472-56b8-876c-ced848aa6306",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "LED2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "0817c310-ea17-5fec-8f6d-66f89f3ebcc0",
+      "libraryId": "PEBench:microbuilder/LED/0805_NOOUTLINE",
+      "pads": {
+        "A": [
+          "A"
+        ],
+        "C": [
+          "C"
+        ]
+      },
+      "package": "CHIPLED_0805_NOOUTLINE"
+    },
+    {
+      "reference": "R5",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "6c174b6d-b65a-52fc-8d1f-7a1918eaf52b",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R13",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "0f0589c3-37c4-5420-806f-53b708242184",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "U$27",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "37840c86-ccc9-5cda-bcc2-2c7c792fbbd3",
+      "libraryId": "PEBench:microbuilder/VBAT/",
+      "pads": {
+        "VBAT": [
+          "VBAT"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$24",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "76e11dc5-8ae4-536a-a544-cf3f3390c3f3",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C4",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "f3416125-6bb7-5187-9aaf-c9149ce7cace",
+      "libraryId": "PEBench:microbuilder/CAP_CERAMIC/0805_10MGAP",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805_10MGAP"
+    },
+    {
+      "reference": "R3",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "925156e0-e3d2-5546-a46a-480d5dd538a4",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R4",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "76935c5f-aeed-5520-83d9-8f92e7363431",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "U$3",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "4b94f752-327e-5ce9-94e0-d152f637a56d",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$6",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "542f39ef-2e97-5507-b5ba-58d7e58d40cb",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$8",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "180ebbfc-bfcf-513f-820f-590bba6876bc",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$9",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "c4553ff4-1da0-5935-a075-ef20d9c42eec",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$14",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "41de5e46-a806-5146-bb51-d07446b63a2c",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$18",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "d364f6a8-bd9f-5046-b124-84225b9c6009",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$21",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3a02793d-648e-540b-b846-c9ae819aa579",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$22",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "543ab1ed-a892-524a-9293-340b734d790e",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "R2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "925ad931-e28e-5f38-b2d3-187f0575ca36",
+      "libraryId": "PEBench:microbuilder/RESISTOR/_0805MP",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "_0805MP"
+    },
+    {
+      "reference": "R1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "0f284492-c7ec-5534-a299-5bfe579a52e4",
+      "libraryId": "PEBench:microbuilder/RESISTOR/_0805MP",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "_0805MP"
+    },
+    {
+      "reference": "U$20",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3fdac20b-d75f-54b5-b6ec-81e17a50fd37",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$23",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "321ce5a8-8c9d-5912-aeb8-89f59ad9b55f",
+      "libraryId": "PEBench:microbuilder/VBAT/",
+      "pads": {
+        "VBAT": [
+          "VBAT"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "T1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "0d2a4150-22bd-5dcd-b157-38990b679abe",
+      "libraryId": "PEBench:transistor/_-PNP_DRIVER-/SC59-BEC",
+      "pads": {
+        "B": [
+          "B"
+        ],
+        "C": [
+          "C"
+        ],
+        "E": [
+          "E"
+        ]
+      },
+      "package": "SC59-BEC"
+    },
+    {
+      "reference": "U$29",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "8988c12b-81c9-501e-8785-b4d861bbea68",
+      "libraryId": "PEBench:microbuilder/VBAT/",
+      "pads": {
+        "VBAT": [
+          "VBAT"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$31",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "0289886c-847c-5ea3-b0dd-6e8788d17bb8",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$32",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "7051cb9f-6567-5f48-9710-d970ccdea9e9",
+      "libraryId": "PEBench:microbuilder/5.0V/",
+      "pads": {
+        "5.0V": [
+          "5.0V"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "C6",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "ac95bc17-c743-5a99-aa7f-72d6bd4aa8ac",
+      "libraryId": "PEBench:rcl/C-US/C1210",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "C1210"
+    },
+    {
+      "reference": "FID1",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "7a75c591-064a-522a-9888-d4a882ce3409",
+      "libraryId": "PEBench:microbuilder/FIDUCIAL/__",
+      "pads": {},
+      "package": "FIDUCIAL_1MM"
+    },
+    {
+      "reference": "FID3",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "ba7e3dfc-8a92-53c4-a077-1a38074c7175",
+      "libraryId": "PEBench:microbuilder/FIDUCIAL/__",
+      "pads": {},
+      "package": "FIDUCIAL_1MM"
+    },
+    {
+      "reference": "GND1",
+      "gate": "1",
+      "unit": 1,
+      "id": "10701aaa-c08a-5f73-b285-f1eb2e3ab4f3",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "R6",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "a1f86530-b27a-5956-9494-b092ae95b968",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R7",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "bc2364d8-af7a-5a96-9a60-785cf9b31c48",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "GND2",
+      "gate": "1",
+      "unit": 1,
+      "id": "21450308-b974-5fe5-9723-b9cec697b9e7",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "DONE",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "9b7cd592-ce78-54b0-9e49-3dfa4202de1a",
+      "libraryId": "PEBench:microbuilder/LED/0805_NOOUTLINE",
+      "pads": {
+        "A": [
+          "A"
+        ],
+        "C": [
+          "C"
+        ]
+      },
+      "package": "CHIPLED_0805_NOOUTLINE"
+    },
+    {
+      "reference": "CHRG/LBO",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "94b3cfe5-68d6-5984-989c-d2622fd07939",
+      "libraryId": "PEBench:microbuilder/LED/0805_NOOUTLINE",
+      "pads": {
+        "A": [
+          "A"
+        ],
+        "C": [
+          "C"
+        ]
+      },
+      "package": "CHIPLED_0805_NOOUTLINE"
+    },
+    {
+      "reference": "R8",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "dcbe42d7-9687-54f1-9e9a-347ac9a18dd1",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R14",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "1bc74db1-975e-5257-9547-8ce51690667c",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "C7",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "b09604bd-5310-551a-bb75-82a1da5b6581",
+      "libraryId": "PEBench:microbuilder/CAP_CERAMIC/0805-NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "C8",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "d9c66c2f-2fb5-51cb-bbec-4078a1255f96",
+      "libraryId": "PEBench:microbuilder/CAP_CERAMIC/0805-NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "GND4",
+      "gate": "1",
+      "unit": 1,
+      "id": "07857df2-ff84-5612-af6b-452aecaf87f1",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "R16",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "9565a5d7-cdee-5b71-ac42-a5c0ff2a2b40",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "R17",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "1ade59ac-6919-59e9-a16c-db21a2eed2c2",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "GND10",
+      "gate": "1",
+      "unit": 1,
+      "id": "12103891-cd51-5665-adef-d0e30878e535",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND11",
+      "gate": "1",
+      "unit": 1,
+      "id": "26c6cfe7-9ce5-5b02-ad5d-5ad53945baab",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "CN4",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "04581d03-e95b-5ab9-a106-b0102b56606f",
+      "libraryId": "PEBench:microbuilder/USB/MICRO_20329",
+      "pads": {
+        "D+": [
+          "D+"
+        ],
+        "D-": [
+          "D-"
+        ],
+        "VBUS": [
+          "VBUS"
+        ],
+        "GND": [
+          "BASE@1",
+          "BASE@2",
+          "GND",
+          "SPRT@1",
+          "SPRT@2",
+          "SPRT@3",
+          "SPRT@4"
+        ],
+        "ID": [
+          "ID"
+        ]
+      },
+      "package": "4UCONN_20329"
+    },
+    {
+      "reference": "GND14",
+      "gate": "1",
+      "unit": 1,
+      "id": "42a41e3c-7e67-536d-8f37-c99ddd102eae",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "GND15",
+      "gate": "1",
+      "unit": 1,
+      "id": "b12fed10-7f05-51ab-8d85-787bf3c25deb",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "THERM",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "cfe24108-4ac8-50cc-8095-7c753e204c3f",
+      "libraryId": "PEBench:microbuilder/RESISTOR/0805_NOOUTLINE",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      },
+      "package": "0805-NO"
+    },
+    {
+      "reference": "GND9",
+      "gate": "1",
+      "unit": 1,
+      "id": "081960ad-0179-5f0f-b300-83940f80181a",
+      "libraryId": "PEBench:supply1/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$34",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "173e113b-e861-5c14-b94a-c1ea47062563",
+      "libraryId": "PEBench:microbuilder/VBAT/",
+      "pads": {
+        "VBAT": [
+          "VBAT"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$35",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "63a2d0cb-a5a6-5ff3-b5d5-c06f2941a15a",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$36",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "4ad2794e-cd36-5fc5-9e2b-ea9bc1287cef",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$37",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "4d196121-9e21-50c2-a780-8f46911d269f",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$38",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "c9e55c60-7282-58b0-92bb-4ec2f9c3557c",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$39",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "dbafd463-e2a9-53cb-a65d-940ced0dcae2",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$30",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "3b4cc11c-f63e-5441-a845-ce2ee965b3fd",
+      "libraryId": "PEBench:microbuilder/GND/",
+      "pads": {
+        "GND": [
+          "GND"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "JP2",
+      "gate": "A",
+      "unit": 1,
+      "id": "8f44648e-ade0-5d8c-985c-66f2f7152cb2",
+      "libraryId": "PEBench:microbuilder/HEADER-1X8/ROUND",
+      "pads": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ],
+        "3": [
+          "3"
+        ],
+        "4": [
+          "4"
+        ],
+        "5": [
+          "5"
+        ],
+        "6": [
+          "6"
+        ],
+        "7": [
+          "7"
+        ],
+        "8": [
+          "8"
+        ]
+      },
+      "package": "1X08_ROUND"
+    },
+    {
+      "reference": "U$40",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "bfbd7c2f-8d6c-5bf6-b453-b8ee9e2c3a15",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$41",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "1d26fee3-ecb0-5ad5-aa0a-196715e2dc96",
+      "libraryId": "PEBench:microbuilder/VLIPO/",
+      "pads": {
+        "VLIPO": [
+          "VLIPO"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$42",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "245c52c4-0756-5292-ae48-ce87ad65ae90",
+      "libraryId": "PEBench:microbuilder/VBUS/",
+      "pads": {
+        "VBUS": [
+          "VBUS"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U$43",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "fbc6dae8-aa34-5c80-b675-83eed5421b1a",
+      "libraryId": "PEBench:microbuilder/VLIPO/",
+      "pads": {
+        "VLIPO": [
+          "VLIPO"
+        ]
+      },
+      "package": null
+    },
+    {
+      "reference": "U2",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "7b8f0fd9-eb71-5906-b702-4c0165b9730b",
+      "libraryId": "PEBench:microbuilder/MCP73871/",
+      "pads": {
+        "VIN2": [
+          "P$19"
+        ],
+        "VPCC": [
+          "P$2"
+        ],
+        "/PG": [
+          "P$6"
+        ],
+        "STAT2": [
+          "P$7"
+        ],
+        "STAT1/LBO": [
+          "P$8"
+        ],
+        "SEL": [
+          "P$3"
+        ],
+        "PROG2": [
+          "P$4"
+        ],
+        "/TE": [
+          "P$9"
+        ],
+        "CE": [
+          "P$17"
+        ],
+        "VSS2": [
+          "P$11"
+        ],
+        "PROG3": [
+          "P$12"
+        ],
+        "PROG1": [
+          "P$13"
+        ],
+        "THERM": [
+          "P$5"
+        ],
+        "VBATSENS": [
+          "P$16"
+        ],
+        "VOUT2": [
+          "P$20"
+        ],
+        "VIN1": [
+          "P$18"
+        ],
+        "VOUT1": [
+          "P$1"
+        ],
+        "VSS1": [
+          "P$10"
+        ],
+        "VBAT1": [
+          "P$14"
+        ],
+        "VBAT2": [
+          "P$15"
+        ],
+        "THERMAL": [
+          "P$21"
+        ]
+      },
+      "package": "QFN20_4MM"
+    },
+    {
+      "reference": "U$13",
+      "gate": "G$1",
+      "unit": 1,
+      "id": "b088945c-080c-5c5c-b6e5-c181db51b32f",
+      "libraryId": "PEBench:microbuilder/FRAME_A4_ADAFRUIT/",
+      "pads": {},
+      "package": null
+    }
+  ],
+  "nets": [
+    {
+      "name": "GND",
+      "pins": [
+        {
+          "reference": "U1",
+          "pin": "13",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$2",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U1",
+          "pin": "10",
+          "gate": "G$1",
+          "sourcePin": "SYNC"
+        },
+        {
+          "reference": "C1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$4",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "B1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "-"
+        },
+        {
+          "reference": "U$5",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$24",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C4",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U1",
+          "pin": "5",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "6",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "7",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "P$18",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "P$19",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "P$20",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "P$21",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "P$22",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "U1",
+          "pin": "THERMAL",
+          "gate": "G$1",
+          "sourcePin": "PGND"
+        },
+        {
+          "reference": "R4",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U$3",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C2",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$6",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$8",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C6",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "X1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U$9",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$14",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "LED2",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        },
+        {
+          "reference": "R10",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$18",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R12",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$21",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN1",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$22",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$1",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R2",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "LED1",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        },
+        {
+          "reference": "U$20",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$31",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "JP2",
+          "pin": "7",
+          "gate": "A",
+          "sourcePin": "7"
+        },
+        {
+          "reference": "R7",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND2",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C7",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND4",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R17",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "GND10",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "R16",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "GND11",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "C8",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "GND14",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "GND1",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$11",
+          "gate": "G$1",
+          "sourcePin": "VSS2"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$10",
+          "gate": "G$1",
+          "sourcePin": "VSS1"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$21",
+          "gate": "G$1",
+          "sourcePin": "THERMAL"
+        },
+        {
+          "reference": "GND15",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "THERM",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "CN4",
+          "pin": "BASE@1",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN4",
+          "pin": "BASE@2",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN4",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN4",
+          "pin": "SPRT@1",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN4",
+          "pin": "SPRT@2",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN4",
+          "pin": "SPRT@3",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "CN4",
+          "pin": "SPRT@4",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "GND9",
+          "pin": "GND",
+          "gate": "1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "U$30",
+          "pin": "GND",
+          "gate": "G$1",
+          "sourcePin": "GND"
+        },
+        {
+          "reference": "JP2",
+          "pin": "5",
+          "gate": "A",
+          "sourcePin": "5"
+        },
+        {
+          "reference": "JP2",
+          "pin": "5",
+          "gate": "A",
+          "sourcePin": "5"
+        }
+      ]
+    },
+    {
+      "name": "N$1",
+      "pins": [
+        {
+          "reference": "U1",
+          "pin": "3",
+          "gate": "G$1",
+          "sourcePin": "SW"
+        },
+        {
+          "reference": "U1",
+          "pin": "4",
+          "gate": "G$1",
+          "sourcePin": "SW"
+        },
+        {
+          "reference": "L1",
+          "pin": "P$2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$3",
+      "pins": [
+        {
+          "reference": "U1",
+          "pin": "9",
+          "gate": "G$1",
+          "sourcePin": "LBI"
+        },
+        {
+          "reference": "R2",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "5.0V",
+      "pins": [
+        {
+          "reference": "U1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "VOUT"
+        },
+        {
+          "reference": "U1",
+          "pin": "15",
+          "gate": "G$1",
+          "sourcePin": "VOUT"
+        },
+        {
+          "reference": "U1",
+          "pin": "16",
+          "gate": "G$1",
+          "sourcePin": "VOUT"
+        },
+        {
+          "reference": "U$7",
+          "pin": "5.0V",
+          "gate": "G$1",
+          "sourcePin": "5.0V"
+        },
+        {
+          "reference": "C2",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "X1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R3",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R5",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "C6",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R9",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$15",
+          "pin": "5.0V",
+          "gate": "G$1",
+          "sourcePin": "5.0V"
+        },
+        {
+          "reference": "R11",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$16",
+          "pin": "5.0V",
+          "gate": "G$1",
+          "sourcePin": "5.0V"
+        },
+        {
+          "reference": "CN1",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "U$17",
+          "pin": "5.0V",
+          "gate": "G$1",
+          "sourcePin": "5.0V"
+        },
+        {
+          "reference": "U$32",
+          "pin": "5.0V",
+          "gate": "G$1",
+          "sourcePin": "5.0V"
+        },
+        {
+          "reference": "JP2",
+          "pin": "8",
+          "gate": "A",
+          "sourcePin": "8"
+        }
+      ]
+    },
+    {
+      "name": "D+",
+      "pins": [
+        {
+          "reference": "R11",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R12",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "CN1",
+          "pin": "D+",
+          "gate": "G$1",
+          "sourcePin": "D+"
+        }
+      ]
+    },
+    {
+      "name": "D-",
+      "pins": [
+        {
+          "reference": "R9",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R10",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "CN1",
+          "pin": "D-",
+          "gate": "G$1",
+          "sourcePin": "D-"
+        }
+      ]
+    },
+    {
+      "name": "VBAT",
+      "pins": [
+        {
+          "reference": "R13",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U$27",
+          "pin": "VBAT",
+          "gate": "G$1",
+          "sourcePin": "VBAT"
+        },
+        {
+          "reference": "U1",
+          "pin": "8",
+          "gate": "G$1",
+          "sourcePin": "VBAT"
+        },
+        {
+          "reference": "C1",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "L1",
+          "pin": "P$1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U$19",
+          "pin": "VBAT",
+          "gate": "G$1",
+          "sourcePin": "VBAT"
+        },
+        {
+          "reference": "C4",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$23",
+          "pin": "VBAT",
+          "gate": "G$1",
+          "sourcePin": "VBAT"
+        },
+        {
+          "reference": "T1",
+          "pin": "E",
+          "gate": "G$1",
+          "sourcePin": "E"
+        },
+        {
+          "reference": "U$34",
+          "pin": "VBAT",
+          "gate": "G$1",
+          "sourcePin": "VBAT"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$1",
+          "gate": "G$1",
+          "sourcePin": "VOUT1"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$20",
+          "gate": "G$1",
+          "sourcePin": "VOUT2"
+        },
+        {
+          "reference": "U$29",
+          "pin": "VBAT",
+          "gate": "G$1",
+          "sourcePin": "VBAT"
+        },
+        {
+          "reference": "JP2",
+          "pin": "3",
+          "gate": "A",
+          "sourcePin": "3"
+        }
+      ]
+    },
+    {
+      "name": "N$2",
+      "pins": [
+        {
+          "reference": "LED1",
+          "pin": "A",
+          "gate": "G$1",
+          "sourcePin": "A"
+        },
+        {
+          "reference": "R20",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        }
+      ]
+    },
+    {
+      "name": "ENABLE",
+      "pins": [
+        {
+          "reference": "U1",
+          "pin": "11",
+          "gate": "G$1",
+          "sourcePin": "EN"
+        },
+        {
+          "reference": "R13",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "JP2",
+          "pin": "4",
+          "gate": "A",
+          "sourcePin": "4"
+        }
+      ]
+    },
+    {
+      "name": "N$5",
+      "pins": [
+        {
+          "reference": "R4",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "R3",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U1",
+          "pin": "14",
+          "gate": "G$1",
+          "sourcePin": "FB"
+        }
+      ]
+    },
+    {
+      "name": "N$6",
+      "pins": [
+        {
+          "reference": "R20",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "T1",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        }
+      ]
+    },
+    {
+      "name": "LBO",
+      "pins": [
+        {
+          "reference": "U1",
+          "pin": "12",
+          "gate": "G$1",
+          "sourcePin": "LBO"
+        },
+        {
+          "reference": "T1",
+          "pin": "B",
+          "gate": "G$1",
+          "sourcePin": "B"
+        },
+        {
+          "reference": "JP2",
+          "pin": "6",
+          "gate": "A",
+          "sourcePin": "6"
+        }
+      ]
+    },
+    {
+      "name": "N$4",
+      "pins": [
+        {
+          "reference": "R5",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "LED2",
+          "pin": "A",
+          "gate": "G$1",
+          "sourcePin": "A"
+        }
+      ]
+    },
+    {
+      "name": "N$7",
+      "pins": [
+        {
+          "reference": "R6",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "R7",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$2",
+          "gate": "G$1",
+          "sourcePin": "VPCC"
+        }
+      ]
+    },
+    {
+      "name": "N$9",
+      "pins": [
+        {
+          "reference": "R14",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$7",
+          "gate": "G$1",
+          "sourcePin": "STAT2"
+        }
+      ]
+    },
+    {
+      "name": "N$11",
+      "pins": [
+        {
+          "reference": "R8",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$8",
+          "gate": "G$1",
+          "sourcePin": "STAT1/LBO"
+        }
+      ]
+    },
+    {
+      "name": "N$16",
+      "pins": [
+        {
+          "reference": "R16",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$13",
+          "gate": "G$1",
+          "sourcePin": "PROG1"
+        }
+      ]
+    },
+    {
+      "name": "N$10",
+      "pins": [
+        {
+          "reference": "THERM",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$5",
+          "gate": "G$1",
+          "sourcePin": "THERM"
+        }
+      ]
+    },
+    {
+      "name": "VBUS",
+      "pins": [
+        {
+          "reference": "C8",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U$35",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "CN4",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "R6",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        },
+        {
+          "reference": "U$37",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "U$38",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$19",
+          "gate": "G$1",
+          "sourcePin": "VIN2"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$18",
+          "gate": "G$1",
+          "sourcePin": "VIN1"
+        },
+        {
+          "reference": "U$39",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$3",
+          "gate": "G$1",
+          "sourcePin": "SEL"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$4",
+          "gate": "G$1",
+          "sourcePin": "PROG2"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$9",
+          "gate": "G$1",
+          "sourcePin": "/TE"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$17",
+          "gate": "G$1",
+          "sourcePin": "CE"
+        },
+        {
+          "reference": "U$40",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "JP2",
+          "pin": "1",
+          "gate": "A",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "U$36",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        },
+        {
+          "reference": "CHRG/LBO",
+          "pin": "A",
+          "gate": "G$1",
+          "sourcePin": "A"
+        },
+        {
+          "reference": "DONE",
+          "pin": "A",
+          "gate": "G$1",
+          "sourcePin": "A"
+        },
+        {
+          "reference": "U$42",
+          "pin": "VBUS",
+          "gate": "G$1",
+          "sourcePin": "VBUS"
+        }
+      ]
+    },
+    {
+      "name": "VLIPO",
+      "pins": [
+        {
+          "reference": "C7",
+          "pin": "1",
+          "gate": "G$1",
+          "sourcePin": "1"
+        },
+        {
+          "reference": "B1",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "+"
+        },
+        {
+          "reference": "U$41",
+          "pin": "VLIPO",
+          "gate": "G$1",
+          "sourcePin": "VLIPO"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$14",
+          "gate": "G$1",
+          "sourcePin": "VBAT1"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$15",
+          "gate": "G$1",
+          "sourcePin": "VBAT2"
+        },
+        {
+          "reference": "U2",
+          "pin": "P$16",
+          "gate": "G$1",
+          "sourcePin": "VBATSENS"
+        },
+        {
+          "reference": "U$43",
+          "pin": "VLIPO",
+          "gate": "G$1",
+          "sourcePin": "VLIPO"
+        },
+        {
+          "reference": "JP2",
+          "pin": "2",
+          "gate": "A",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$8",
+      "pins": [
+        {
+          "reference": "DONE",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        },
+        {
+          "reference": "R14",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$12",
+      "pins": [
+        {
+          "reference": "CHRG/LBO",
+          "pin": "C",
+          "gate": "G$1",
+          "sourcePin": "C"
+        },
+        {
+          "reference": "R8",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    },
+    {
+      "name": "N$13",
+      "pins": [
+        {
+          "reference": "U2",
+          "pin": "P$12",
+          "gate": "G$1",
+          "sourcePin": "PROG3"
+        },
+        {
+          "reference": "R17",
+          "pin": "2",
+          "gate": "G$1",
+          "sourcePin": "2"
+        }
+      ]
+    }
+  ],
+  "tessellatedPolygons": [],
+  "preservedSourceFiles": [
+    "source.sch",
+    "source.brd",
+    "board.kicad_pcb"
+  ],
+  "notes": [
+    "Original EAGLE symbols, gate identities and physical pad mappings are retained.",
+    "Source frame objects and decorative sheet graphics are expanded into pinless annotation symbols.",
+    "A net label is attached to every disconnected named source segment to retain EAGLE net identity."
+  ],
+  "counts": {
+    "sourceParts": 86,
+    "sourceInstances": 86,
+    "generatedInstances": 87,
+    "wires": 129,
+    "junctions": 29,
+    "labels": 63,
+    "embeddedSymbols": 25
+  }
+}

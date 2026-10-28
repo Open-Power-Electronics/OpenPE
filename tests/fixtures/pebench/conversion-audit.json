@@ -1,0 +1,454 @@
+[
+  {
+    "id": "pebench-sunny-buddy",
+    "bytes": 1427567,
+    "sha256": "ebd0ed5e3b374391fbd96c3350eaf497db327210959e9890e650e1c5f5e6058f",
+    "schematic": {
+      "components": 54,
+      "wires": 151
+    },
+    "pcb": {
+      "footprints": 40,
+      "pads": 88,
+      "tracks": 154,
+      "vias": 13,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 5
+    },
+    "conversion": {
+      "footprints": 40,
+      "pads": 88,
+      "tracks": 154,
+      "vias": 13,
+      "zones": 5,
+      "graphics": 541,
+      "unlinkedReferences": [
+        "FID2",
+        "LOGO1",
+        "FRAME1",
+        "STANDOFF1",
+        "STANDOFF2",
+        "STANDOFF4",
+        "STANDOFF3",
+        "FID1",
+        "LOGO2",
+        "LOGO4",
+        "LOGO3"
+      ]
+    }
+  },
+  {
+    "id": "pebench-buck-boost",
+    "bytes": 2892540,
+    "sha256": "4c4a17c12a0896d78380253c92d5183a35a4feec27b4ca3bd8d66f71260f5ae8",
+    "schematic": {
+      "components": 56,
+      "wires": 107
+    },
+    "pcb": {
+      "footprints": 67,
+      "pads": 80,
+      "tracks": 95,
+      "vias": 41,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 6
+    },
+    "conversion": {
+      "footprints": 67,
+      "pads": 80,
+      "tracks": 95,
+      "vias": 41,
+      "zones": 6,
+      "graphics": 5494,
+      "unlinkedReferences": [
+        "U$17",
+        "U$9",
+        "U$7",
+        "U$5",
+        "U$24",
+        "U$1",
+        "U$18",
+        "FD3",
+        "U$20",
+        "U$19",
+        "FRAME1",
+        "U$4",
+        "H1",
+        "LOGO3",
+        "H3",
+        "LOGO2",
+        "U$23",
+        "U$8",
+        "U$3",
+        "FD1",
+        "H4",
+        "U$6",
+        "U$2",
+        "H2",
+        "U$21",
+        "U$22",
+        "U$12",
+        "U$29",
+        "U$27",
+        "U$14",
+        "FD2",
+        "U$28",
+        "U$25",
+        "U$16",
+        "LOGO1",
+        "U$11",
+        "U$10",
+        "U$31",
+        "U$26",
+        "U$15",
+        "FD4",
+        "U$13",
+        "U$30"
+      ]
+    }
+  },
+  {
+    "id": "pebench-buck-ap63357",
+    "bytes": 1047031,
+    "sha256": "e1587685545db36a221d00e47c1c4246cc061df4cfda07659307146ce44107e0",
+    "schematic": {
+      "components": 48,
+      "wires": 65
+    },
+    "pcb": {
+      "footprints": 54,
+      "pads": 57,
+      "tracks": 35,
+      "vias": 92,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ],
+      "zones": 20
+    },
+    "conversion": {
+      "footprints": 54,
+      "pads": 57,
+      "tracks": 35,
+      "vias": 92,
+      "zones": 20,
+      "graphics": 573,
+      "unlinkedReferences": [
+        "U$24",
+        "U$17",
+        "H4",
+        "H1",
+        "H3",
+        "U$12",
+        "H2",
+        "U$23",
+        "FD1",
+        "U$26",
+        "U$21",
+        "U$6",
+        "FD2",
+        "U$22",
+        "U$20",
+        "FRAME1",
+        "U$18",
+        "U$8",
+        "U$16",
+        "U$1",
+        "U$5",
+        "U$3",
+        "U$2",
+        "LOGO1",
+        "U$10",
+        "U$7",
+        "U$11",
+        "U$19",
+        "U$14",
+        "U$13",
+        "U$9",
+        "U$15",
+        "FD4",
+        "U$4",
+        "FD3",
+        "LOGO2"
+      ]
+    }
+  },
+  {
+    "id": "pebench-big-easy-driver",
+    "bytes": 1903688,
+    "sha256": "69a6cb17798e4cdcd2a4cbc2e93693ca546d79d527dab066fe4764d0c76d8202",
+    "schematic": {
+      "components": 76,
+      "wires": 164
+    },
+    "pcb": {
+      "footprints": 56,
+      "pads": 138,
+      "tracks": 252,
+      "vias": 49,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ],
+      "zones": 15
+    },
+    "conversion": {
+      "footprints": 56,
+      "pads": 138,
+      "tracks": 252,
+      "vias": 49,
+      "zones": 15,
+      "graphics": 3340,
+      "unlinkedReferences": [
+        "LOGO1",
+        "FRAME1",
+        "U$1",
+        "JP8",
+        "JP9",
+        "FID2",
+        "FID1",
+        "U$2"
+      ]
+    }
+  },
+  {
+    "id": "pebench-tb6612fng",
+    "bytes": 720231,
+    "sha256": "55f1dbefc42ea8a0abc2303fdbc0b5ada37aa8a6580e0b3522648d3c8085ced8",
+    "schematic": {
+      "components": 26,
+      "wires": 76
+    },
+    "pcb": {
+      "footprints": 14,
+      "pads": 66,
+      "tracks": 113,
+      "vias": 7,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 2
+    },
+    "conversion": {
+      "footprints": 14,
+      "pads": 66,
+      "tracks": 113,
+      "vias": 7,
+      "zones": 2,
+      "graphics": 201,
+      "unlinkedReferences": [
+        "FRAME1",
+        "FD4",
+        "LOGO1",
+        "FD2",
+        "FD1",
+        "FD3",
+        "LOGO4",
+        "LOGO2"
+      ]
+    }
+  },
+  {
+    "id": "pebench-powerboost-1000c",
+    "bytes": 1898064,
+    "sha256": "c787dee499b8671051988c59c5cfd9099c2555d37639525c39713e8a2e42a6b8",
+    "schematic": {
+      "components": 87,
+      "wires": 129
+    },
+    "pcb": {
+      "footprints": 47,
+      "pads": 142,
+      "tracks": 238,
+      "vias": 41,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 9
+    },
+    "conversion": {
+      "footprints": 47,
+      "pads": 142,
+      "tracks": 238,
+      "vias": 41,
+      "zones": 13,
+      "graphics": 3050,
+      "unlinkedReferences": [
+        "U$26",
+        "U$45",
+        "FID3",
+        "U$25",
+        "FID1",
+        "U$10",
+        "FID2",
+        "U$11",
+        "U$28",
+        "U$12"
+      ]
+    }
+  },
+  {
+    "id": "pebench-motor-shield-v2",
+    "bytes": 2927632,
+    "sha256": "8f0ead41b6f0a88ae58e95c5e4aed69ac2d4fee3278e62758e1efe0ac3313847",
+    "schematic": {
+      "components": 100,
+      "wires": 230
+    },
+    "pcb": {
+      "footprints": 55,
+      "pads": 237,
+      "tracks": 464,
+      "vias": 152,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 3
+    },
+    "conversion": {
+      "footprints": 55,
+      "pads": 237,
+      "tracks": 464,
+      "vias": 152,
+      "zones": 7,
+      "graphics": 4826,
+      "unlinkedReferences": [
+        "U$6",
+        "U$4",
+        "UNK_HOLE_0",
+        "UNK_HOLE_2",
+        "UNK_HOLE_1",
+        "U$3",
+        "U$2",
+        "U$5"
+      ]
+    }
+  },
+  {
+    "id": "pebench-drv8871",
+    "bytes": 675536,
+    "sha256": "5899282ab892bd4264fb4e346b1859afa9c53244780287d6b10ca8ec509bceb3",
+    "schematic": {
+      "components": 24,
+      "wires": 26
+    },
+    "pcb": {
+      "footprints": 15,
+      "pads": 31,
+      "tracks": 12,
+      "vias": 18,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 5
+    },
+    "conversion": {
+      "footprints": 15,
+      "pads": 31,
+      "tracks": 12,
+      "vias": 18,
+      "zones": 9,
+      "graphics": 1347,
+      "unlinkedReferences": [
+        "FID2",
+        "U$11",
+        "U$12",
+        "U$14",
+        "U$9",
+        "U$15",
+        "U$10",
+        "FID1"
+      ]
+    }
+  },
+  {
+    "id": "pebench-tps61023",
+    "bytes": 658686,
+    "sha256": "16f70434c1ad8d7aee267ed419ad9250460194958b88553b88d488ef4f6ac848",
+    "schematic": {
+      "components": 28,
+      "wires": 27
+    },
+    "pcb": {
+      "footprints": 13,
+      "pads": 26,
+      "tracks": 26,
+      "vias": 6,
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "zones": 6
+    },
+    "conversion": {
+      "footprints": 13,
+      "pads": 26,
+      "tracks": 26,
+      "vias": 6,
+      "zones": 8,
+      "graphics": 1341,
+      "unlinkedReferences": [
+        "FID1",
+        "U$9",
+        "U$10",
+        "U$11"
+      ]
+    }
+  },
+  {
+    "id": "pebench-autodriver-l6470",
+    "bytes": 1153167,
+    "sha256": "a5d44eef437284f022f55f2ff12f8e6cdfaa4fe66079ddc72a49c8d10759b79b",
+    "schematic": {
+      "components": 60,
+      "wires": 165
+    },
+    "pcb": {
+      "footprints": 39,
+      "pads": 118,
+      "tracks": 336,
+      "vias": 52,
+      "layers": [
+        "F.Cu",
+        "In1.Cu",
+        "In2.Cu",
+        "B.Cu"
+      ],
+      "zones": 6
+    },
+    "conversion": {
+      "footprints": 39,
+      "pads": 118,
+      "tracks": 336,
+      "vias": 52,
+      "zones": 6,
+      "graphics": 642,
+      "unlinkedReferences": [
+        "LOGO2",
+        "STANDOFF4",
+        "LOGO1",
+        "FRAME1",
+        "FID1",
+        "STANDOFF1",
+        "U$4",
+        "STANDOFF3",
+        "FID2",
+        "STANDOFF2"
+      ]
+    }
+  }
+]

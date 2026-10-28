@@ -1,0 +1,66 @@
+[
+  {
+    "id": "pebench-sunny-buddy",
+    "title": "Sunny Buddy"
+  },
+  {
+    "id": "pebench-buck-boost",
+    "title": "Buck-Boost TPS63070"
+  },
+  {
+    "id": "pebench-buck-ap63357",
+    "title": "Buck AP63357"
+  },
+  {
+    "id": "pebench-big-easy-driver",
+    "title": "Big Easy Driver"
+  },
+  {
+    "id": "pebench-tb6612fng",
+    "title": "Dual TB6612FNG"
+  },
+  {
+    "id": "pebench-powerboost-1000c",
+    "title": "PowerBoost 1000C"
+  },
+  {
+    "id": "pebench-motor-shield-v2",
+    "title": "Motor Shield V2"
+  },
+  {
+    "id": "pebench-drv8871",
+    "title": "DRV8871 Motor Driver"
+  },
+  {
+    "id": "pebench-tps61023",
+    "title": "MiniBoost TPS61023"
+  },
+  {
+    "id": "pebench-autodriver-l6470",
+    "title": "AutoDriver L6470"
+  },
+  {
+    "id": "reference-tps62a01-q1-sot563-buck",
+    "title": "TPS62A01-Q1 Buck"
+  },
+  {
+    "id": "reference-lm25183-wson8-flyback",
+    "title": "LM25183 Flyback"
+  },
+  {
+    "id": "reference-lm2611-sot235-cuk",
+    "title": "LM2611 Cuk"
+  },
+  {
+    "id": "reference-tps6755-pdip8-buckboost",
+    "title": "TPS6755 Buck-Boost"
+  },
+  {
+    "id": "reference-lt1054-pdip8-pump",
+    "title": "LT1054 Charge Pump"
+  },
+  {
+    "id": "reference-tps61070-sot236-dualboost",
+    "title": "TPS61070 Dual Boost"
+  }
+]

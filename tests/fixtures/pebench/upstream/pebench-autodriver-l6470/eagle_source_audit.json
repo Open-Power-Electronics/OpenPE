@@ -1,0 +1,228 @@
+{
+  "original_elements": 39,
+  "original_contactrefs": 110,
+  "standalone_holes_converted_to_footprints": 0,
+  "original_signal_wires": 336,
+  "original_vias": 52,
+  "missing_contacts": [],
+  "net_name_mapping": {
+    "5V": "5V",
+    "GND": "GND",
+    "FLAGN": "FLAGN",
+    "BUSYN": "BUSYN",
+    "STCK": "STCK",
+    "V_CP": "V_CP",
+    "CP_HIGH": "CP_HIGH",
+    "V_BOOT": "V_BOOT",
+    "OUT1A": "OUT1A",
+    "OUT2A": "OUT2A",
+    "OUT1B": "OUT1B",
+    "OUT2B": "OUT2B",
+    "ADC": "ADC",
+    "SWITCH_SIG": "SWITCH_SIG",
+    "SWITCH_INPUT": "SWITCH_INPUT",
+    "N$11": "N$11",
+    "SDI": "SDI",
+    "SCK": "SCK",
+    "CSN": "CSN",
+    "VLOGIC": "VLOGIC",
+    "3.3V": "3.3V",
+    "OSCIN": "OSCIN",
+    "OSCOUT": "OSCOUT",
+    "RESETN": "RESETN",
+    "VS": "VS",
+    "PGND": "PGND",
+    "D_RETURN": "D_RETURN",
+    "SDO": "SDO",
+    "SDO_DOWNSTREAM": "SDO_DOWNSTREAM"
+  },
+  "reference_mapping": {
+    "U1": "U1",
+    "JP2": "JP2",
+    "C1": "C1",
+    "R1": "R1",
+    "R2": "R2",
+    "C2": "C2",
+    "D1": "D1",
+    "C6": "C6",
+    "C5": "C5",
+    "C4": "C4",
+    "C3": "C3",
+    "JP7": "JP7",
+    "JP8": "JP8",
+    "JP9": "JP9",
+    "JP5": "JP5",
+    "C7": "C7",
+    "R3": "R3",
+    "R4": "R4",
+    "R5": "R5",
+    "R6": "R6",
+    "STANDOFF2": "STANDOFF2",
+    "STANDOFF4": "STANDOFF4",
+    "STANDOFF1": "STANDOFF1",
+    "STANDOFF3": "STANDOFF3",
+    "LOGO1": "LOGO1",
+    "SJ1": "SJ1",
+    "C8": "C8",
+    "JP1": "JP1",
+    "JP6": "JP6",
+    "JP3": "JP3",
+    "JP4": "JP4",
+    "SJ2": "SJ2",
+    "U$4": "U$4",
+    "FID1": "FID1",
+    "FID2": "FID2",
+    "LOGO2": "LOGO2",
+    "TP1": "TP1",
+    "FRAME1": "FRAME1",
+    "SJ3": "SJ3"
+  },
+  "mismatches": [],
+  "layers_used_in_source_including_library_definitions": {
+    "21": {
+      "name": "tPlace",
+      "objects": 155
+    },
+    "20": {
+      "name": "Dimension",
+      "objects": 8
+    },
+    "30": {
+      "name": "bStop",
+      "objects": 2
+    },
+    "22": {
+      "name": "bPlace",
+      "objects": 19
+    },
+    "1": {
+      "name": "Top",
+      "objects": 289
+    },
+    "2": {
+      "name": "Route2",
+      "objects": 25
+    },
+    "15": {
+      "name": "Route15",
+      "objects": 3
+    },
+    "16": {
+      "name": "Bottom",
+      "objects": 78
+    },
+    "47": {
+      "name": "Measures",
+      "objects": 7
+    },
+    "51": {
+      "name": "tDocu",
+      "objects": 59
+    },
+    "25": {
+      "name": "tNames",
+      "objects": 12
+    },
+    "27": {
+      "name": "tValues",
+      "objects": 40
+    },
+    "41": {
+      "name": "tRestrict",
+      "objects": 2
+    },
+    "42": {
+      "name": "bRestrict",
+      "objects": 2
+    },
+    "39": {
+      "name": "tKeepout",
+      "objects": 9
+    },
+    "35": {
+      "name": "tGlue",
+      "objects": 2
+    },
+    "31": {
+      "name": "tCream",
+      "objects": 1
+    }
+  },
+  "source_designrules": {
+    "layerSetup": "(1*2*15*16)",
+    "mtCopper": "0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm 0.035mm",
+    "mtIsolate": "0.2mm 0.15mm 0.2mm 0.15mm 0.2mm 0.15mm 0.2mm 0.15mm 0.2mm 0.15mm 0.2mm 0.15mm 0.2mm 0.15mm 0.2mm",
+    "mdWireWire": "5mil",
+    "mdWirePad": "5mil",
+    "mdWireVia": "5mil",
+    "mdPadPad": "5mil",
+    "mdPadVia": "5mil",
+    "mdViaVia": "5mil",
+    "mdSmdPad": "0mil",
+    "mdSmdVia": "0mil",
+    "mdSmdSmd": "0mil",
+    "mdViaViaSameLayer": "8mil",
+    "mnLayersViaInSmd": "2",
+    "mdCopperDimension": "8mil",
+    "mdDrill": "8mil",
+    "mdSmdStop": "0mil",
+    "msWidth": "5mil",
+    "msDrill": "6mil",
+    "msMicroVia": "9.99mm",
+    "msBlindViaRatio": "0.5",
+    "rvPadTop": "0.25",
+    "rvPadInner": "0.25",
+    "rvPadBottom": "0.25",
+    "rvViaOuter": "0.25",
+    "rvViaInner": "0.25",
+    "rvMicroViaOuter": "0.25",
+    "rvMicroViaInner": "0.25",
+    "rlMinPadTop": "5mil",
+    "rlMaxPadTop": "20mil",
+    "rlMinPadInner": "10mil",
+    "rlMaxPadInner": "20mil",
+    "rlMinPadBottom": "5mil",
+    "rlMaxPadBottom": "20mil",
+    "rlMinViaOuter": "5mil",
+    "rlMaxViaOuter": "20mil",
+    "rlMinViaInner": "6mil",
+    "rlMaxViaInner": "20mil",
+    "rlMinMicroViaOuter": "4mil",
+    "rlMaxMicroViaOuter": "20mil",
+    "rlMinMicroViaInner": "4mil",
+    "rlMaxMicroViaInner": "20mil",
+    "psTop": "-1",
+    "psBottom": "-1",
+    "psFirst": "-1",
+    "psElongationLong": "100",
+    "psElongationOffset": "100",
+    "mvStopFrame": "1",
+    "mvCreamFrame": "0",
+    "mlMinStopFrame": "4mil",
+    "mlMaxStopFrame": "4mil",
+    "mlMinCreamFrame": "0mil",
+    "mlMaxCreamFrame": "0mil",
+    "mlViaStopLimit": "20mil",
+    "srRoundness": "0",
+    "srMinRoundness": "0mil",
+    "srMaxRoundness": "0mil",
+    "slThermalIsolate": "10mil",
+    "slThermalsForVias": "0",
+    "dpMaxLengthDifference": "10mm",
+    "dpGapFactor": "2.5",
+    "checkGrid": "0",
+    "checkAngle": "1",
+    "checkFont": "1",
+    "checkRestrict": "1",
+    "useDiameter": "13",
+    "maxErrors": "50"
+  },
+  "source_netclasses": [
+    {
+      "number": "0",
+      "name": "default",
+      "width": "0",
+      "drill": "0"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "filename": "lm25017-wson8-flybuck.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_SIMULATION_MODELS": "[\"circuits/LM25017.lib\"]"
+  }
+}

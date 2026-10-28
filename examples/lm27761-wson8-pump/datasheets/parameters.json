@@ -1,0 +1,286 @@
+{
+  "$schema": "../../../resources/example-catalog/ic-datasheet.schema.json",
+  "schema_version": "1.0.0",
+  "example": {
+    "id": "reference-lm27761-wson8-pump",
+    "file": "lm27761-wson8-pump",
+    "title": "LM27761 Charge Pump",
+    "topology": "Charge pump"
+  },
+  "ic": {
+    "manufacturer": "Texas Instruments",
+    "family": "LM27761",
+    "reference": "U1",
+    "schematic_value": "LM27761",
+    "symbol_library_id": "Regulator_SwitchedCapacitor:LM27761",
+    "footprint": "Package_SON:WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm",
+    "package": "WSON-8",
+    "datasheet_variant": "LM27761, WSON (DSG), 8 pins"
+  },
+  "datasheet": {
+    "title": "LM27761 Low-Noise, Regulated, Switched-Capacitor Voltage Inverter",
+    "document_number": "SNVSA85D",
+    "revision": "D",
+    "published_month": "2025-10",
+    "product_url": "https://www.ti.com/product/LM27761",
+    "source_url": "https://www.ti.com/lit/ds/symlink/lm27761.pdf",
+    "filename": "lm27761.pdf",
+    "sha256": "0724ce35e920e1350907de9f8a70f0e40257cff907fc0c9331609cf0267a6814",
+    "bytes": 2050711,
+    "page_count": 27,
+    "downloaded_on": "2026-10-22"
+  },
+  "extraction": {
+    "method": "pdf_text_with_visual_table_review",
+    "reviewed_on": "2026-10-22",
+    "scope": "main_controller",
+    "notes": [
+      "Negative output limits retain their sign and are ordered numerically: -5 V minimum, -1.5 V maximum.",
+      "Recommended output current (0.25 A) is separate from the absolute-maximum continuous current (0.3 A).",
+      "The regulator is a charge-pump inverter with a following negative LDO. No numeric switch-current limit is extracted because this table does not specify one."
+    ]
+  },
+  "parameters": {
+    "input_voltage": {
+      "category": "recommended_operating_condition",
+      "unit": "V",
+      "values": {
+        "min": 2.7,
+        "typ": null,
+        "max": 5.5
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "5.3 Recommended Operating Conditions",
+        "row": "Operating input voltage"
+      }
+    },
+    "output_voltage": {
+      "category": "electrical_characteristic",
+      "unit": "V",
+      "values": {
+        "min": -5,
+        "typ": null,
+        "max": -1.5
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. VIN = 2.7 to 5.5 V.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "Adjustable output voltage"
+      }
+    },
+    "output_current": {
+      "category": "recommended_operating_condition",
+      "unit": "A",
+      "values": {
+        "min": 0,
+        "typ": null,
+        "max": 0.25
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "5.3 Recommended Operating Conditions",
+        "row": "Operating output current"
+      }
+    },
+    "operating_ambient_temperature": {
+      "category": "recommended_operating_condition",
+      "unit": "degC",
+      "values": {
+        "min": -40,
+        "typ": null,
+        "max": 85
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "5.3 Recommended Operating Conditions",
+        "row": "Operating ambient temperature"
+      }
+    },
+    "operating_junction_temperature": {
+      "category": "recommended_operating_condition",
+      "unit": "degC",
+      "values": {
+        "min": -40,
+        "typ": null,
+        "max": 125
+      },
+      "conditions": "Use within the stated operating limits and the application requirements.",
+      "source": {
+        "page": 4,
+        "section": "5.3 Recommended Operating Conditions",
+        "row": "Operating junction temperature"
+      }
+    },
+    "input_voltage_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "V",
+      "values": {
+        "min": null,
+        "typ": null,
+        "max": 5.8
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "5.1 Absolute Maximum Ratings",
+        "row": "VIN to GND"
+      }
+    },
+    "output_current_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": null,
+        "max": 0.3
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "5.1 Absolute Maximum Ratings",
+        "row": "Continuous output current, CPOUT and VOUT"
+      }
+    },
+    "junction_temperature_absolute_maximum": {
+      "category": "absolute_maximum_rating",
+      "unit": "degC",
+      "values": {
+        "min": null,
+        "typ": null,
+        "max": 150
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "5.1 Absolute Maximum Ratings",
+        "row": "TJMAX"
+      }
+    },
+    "storage_temperature": {
+      "category": "absolute_maximum_rating",
+      "unit": "degC",
+      "values": {
+        "min": -65,
+        "typ": null,
+        "max": 150
+      },
+      "conditions": "Stress limit only; functional operation is not implied.",
+      "source": {
+        "page": 4,
+        "section": "5.1 Absolute Maximum Ratings",
+        "row": "Storage temperature"
+      }
+    },
+    "feedback_reference_voltage": {
+      "category": "electrical_characteristic",
+      "unit": "V",
+      "values": {
+        "min": 1.202,
+        "typ": 1.22,
+        "max": 1.238
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "VFB"
+      }
+    },
+    "switching_frequency": {
+      "category": "electrical_characteristic",
+      "unit": "Hz",
+      "values": {
+        "min": 1700000,
+        "typ": 2000000,
+        "max": 2300000
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. VIN = 3.6 V instead of 5 V.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "Switching frequency"
+      }
+    },
+    "quiescent_current": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": 0.00037,
+        "max": 0.0006
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. Open circuit, no load.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "Iq supply current"
+      }
+    },
+    "shutdown_current": {
+      "category": "electrical_characteristic",
+      "unit": "A",
+      "values": {
+        "min": null,
+        "typ": 7e-6,
+        "max": 1.2e-5
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "ISD"
+      }
+    },
+    "ldo_dropout_voltage": {
+      "category": "electrical_characteristic",
+      "unit": "V",
+      "values": {
+        "min": null,
+        "typ": 0.03,
+        "max": null
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.1 A, VOUT = -5 V.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "VDO"
+      }
+    },
+    "output_noise_voltage": {
+      "category": "electrical_characteristic",
+      "unit": "V",
+      "values": {
+        "min": null,
+        "typ": 2e-5,
+        "max": null
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.08 A; integrated over 10 Hz to 100 kHz.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "VN"
+      },
+      "notes": "RMS noise voltage, converted from uV RMS to V RMS; not peak-to-peak ripple."
+    },
+    "ldo_psrr": {
+      "category": "electrical_characteristic",
+      "unit": "dB",
+      "values": {
+        "min": null,
+        "typ": 35,
+        "max": null
+      },
+      "conditions": "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.08 A, VCPOUT = -5 V; at 2 MHz per page 1 feature summary.",
+      "source": {
+        "page": 5,
+        "section": "5.5 Electrical Characteristics",
+        "row": "PSRR"
+      }
+    }
+  }
+}

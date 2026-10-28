@@ -1,0 +1,96 @@
+{
+  "id": "009_Adafruit_DRV8871",
+  "category_zh": "DRV8871 限流 H 桥电机驱动器",
+  "repository": "adafruit/Adafruit-DRV8871-Breakout-PCB",
+  "source_url": "https://github.com/adafruit/Adafruit-DRV8871-Breakout-PCB",
+  "commit_sha": "4183ffe41cac746a327c60825b18fa814e081e0f",
+  "commit_url": "https://github.com/adafruit/Adafruit-DRV8871-Breakout-PCB/commit/4183ffe41cac746a327c60825b18fa814e081e0f",
+  "upstream_commit_date": "2019-05-21T21:14:41Z",
+  "retrieved_date": "2026-10-15",
+  "retrieved_timezone": "Asia/Shanghai",
+  "archive_url": "https://codeload.github.com/adafruit/Adafruit-DRV8871-Breakout-PCB/zip/4183ffe41cac746a327c60825b18fa814e081e0f",
+  "archive_sha256": "10533d3500e746dabef768e65edb3d7631016f5710dfa4893f3cfec6849f6d2a",
+  "source_file_count": 5,
+  "pcb_candidates": [
+    "Adafruit DRV8871.brd"
+  ],
+  "schematic_candidates": [
+    "Adafruit DRV8871.sch"
+  ],
+  "license_candidates": [
+    "license.txt"
+  ],
+  "status": "excluded_from_active_dataset",
+  "selected_source_pcb": "Adafruit DRV8871.brd",
+  "selected_source_schematic": "Adafruit DRV8871.sch",
+  "converted_pcb": "kicad10/board.kicad_pcb",
+  "kicad_version": "10.0.1",
+  "statistics": {
+    "footprints": 15,
+    "pads": 31,
+    "tracks": 12,
+    "vias": 18,
+    "zones": 5,
+    "copper_layers": 2,
+    "nets_used": 7,
+    "board_width_mm": 20.37,
+    "board_height_mm": 24.18
+  },
+  "validation_report": "validation/conversion.json",
+  "source_pcb_sha256": "9ef03092946747de0e64a29ff47a6b1207039135849c55bcba179b964e038a6a",
+  "converted_pcb_sha256": "8da492d506d3aced7882d0ea13e029a115f5f5f88421a200fea502c42298e689",
+  "schematic_status": "Original editable schematic preserved; not converted to KiCad 10",
+  "title": "DRV8871 DC Motor Driver",
+  "design_attribution": "Limor Fried / Adafruit",
+  "hardware_license": "CC-BY-SA-3.0",
+  "license_evidence": "source/license.txt",
+  "product_or_author_url": "https://www.adafruit.com/product/3190",
+  "pcb_file_commit_authors": [
+    "ladyada"
+  ],
+  "latest_pcb_file_commit": "c5d112167c9051c3303ce8e58ff8a0017f008eba",
+  "latest_pcb_file_change": "2016-07-06T18:42:30Z",
+  "quality_evidence": "README 明确署名 Limor Fried/Ladyada；官方产品、实物照片、源板和原理图齐全。",
+  "human_design_assessment": "High-confidence professional human/team provenance; not proof that every trace was manually routed.",
+  "quality_status": "Source-vetted engineering reference; conversion verified; DRC review required before manufacturing or zero-violation benchmark use.",
+  "drc": {
+    "violations": 39,
+    "unconnected_items": 0,
+    "severity_counts": {
+      "error": 15,
+      "warning": 24
+    },
+    "type_counts": {
+      "shorting_items": 3,
+      "copper_edge_clearance": 1,
+      "unresolved_variable": 1,
+      "solder_mask_bridge": 10,
+      "text_height": 7,
+      "silk_overlap": 14,
+      "silk_over_copper": 3
+    },
+    "basis": "Standalone-board KiCad defaults/imported board settings; zones refilled in memory; source project rule equivalence not established.",
+    "zero_drc": false
+  },
+  "source_file_hashes_verified": true,
+  "source_to_output_audit": "validation/source_to_output_audit.json",
+  "acceptance_review": {
+    "id": "009_Adafruit_DRV8871",
+    "functional_footprints_estimate": 7,
+    "decision": "too_simple",
+    "drc_errors": 15,
+    "unconnected": 0,
+    "report": "boards\\009_Adafruit_DRV8871\\validation\\drc.json",
+    "drc_types": {
+      "error:shorting_items": 3,
+      "error:copper_edge_clearance": 1,
+      "error:unresolved_variable": 1,
+      "error:solder_mask_bridge": 10,
+      "warning:text_height": 7,
+      "warning:silk_overlap": 14,
+      "warning:silk_over_copper": 3
+    },
+    "preserved_location": "excluded/2026-10-15-complexity/009_Adafruit_DRV8871"
+  },
+  "qualified_under_2026_10_15_gate": false
+}

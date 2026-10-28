@@ -1,0 +1,515 @@
+{
+  "version": 1,
+  "footprints": [
+    {
+      "id": "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
+      "models": [
+        "Package_TO_SOT_THT.3dshapes/TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical.step"
+      ]
+    },
+    {
+      "id": "Capacitor_THT:CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal",
+      "models": [
+        "Capacitor_THT.3dshapes/CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD:L_TDK_SLF7032",
+      "models": [
+        "Inductor_SMD.3dshapes/L_TDK_SLF7032.step"
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_SMA",
+      "models": [
+        "Diode_SMD.3dshapes/D_SMA.step"
+      ]
+    },
+    {
+      "id": "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal",
+      "models": [
+        "TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_0805_2012Metric",
+      "models": [
+        "Resistor_SMD.3dshapes/R_0805_2012Metric.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_0603_1608Metric",
+      "models": [
+        "Capacitor_SMD.3dshapes/C_0603_1608Metric.step"
+      ]
+    },
+    {
+      "id": "Connector_PinHeader_2.00mm:PinHeader_1x02_P2.00mm_Vertical",
+      "models": [
+        "Connector_PinHeader_2.00mm.3dshapes/PinHeader_1x02_P2.00mm_Vertical.step"
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_0603_1608Metric",
+      "models": [
+        "Resistor_SMD.3dshapes/R_0603_1608Metric.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD_Wurth:L_Wurth_WE-LQSH-2010",
+      "models": [
+        "Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2010.step"
+      ]
+    },
+    {
+      "id": "Package_BGA:Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC",
+      "models": [
+        "Package_BGA.3dshapes/Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC.step"
+      ]
+    },
+    {
+      "id": "TestPoint:TestPoint_Keystone_5005-5009_Compact",
+      "models": [
+        "TestPoint.3dshapes/TestPoint_Keystone_5005-5009_Compact.step"
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_SOD-128",
+      "models": [
+        "Diode_SMD.3dshapes/D_SOD-128.step"
+      ]
+    },
+    {
+      "id": "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal",
+      "models": [
+        "Connector_JST.3dshapes/JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_1210_3225Metric",
+      "models": [
+        "Capacitor_SMD.3dshapes/C_1210_3225Metric.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD:L_APV_ANR4030",
+      "models": [
+        "Inductor_SMD.3dshapes/L_APV_ANR4030.step"
+      ]
+    },
+    {
+      "id": "Package_SO:MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm",
+      "models": [
+        "Package_SO.3dshapes/MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_1206_3216Metric",
+      "models": [
+        "Capacitor_SMD.3dshapes/C_1206_3216Metric.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_0805_2012Metric",
+      "models": [
+        "Capacitor_SMD.3dshapes/C_0805_2012Metric.step"
+      ]
+    },
+    {
+      "id": "Package_SON:WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm_ThermalVias",
+      "models": [
+        "Package_SON.3dshapes/WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm.step"
+      ]
+    },
+    {
+      "id": "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical",
+      "models": [
+        "Connector_Molex.3dshapes/Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical.step"
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_SOD-123",
+      "models": [
+        "Diode_SMD.3dshapes/D_SOD-123.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD_Wurth:L_Wurth_WE-DD-7345straight",
+      "models": [
+        "Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-DD-7345straight.step"
+      ],
+      "file": "Inductor_SMD_Wurth.pretty/L_Wurth_WE-DD-7345straight.kicad_mod",
+      "sha256": "476eaa2198fdd454bce1ffebe8955858112475dc71943339e75f239e2a7be653"
+    },
+    {
+      "id": "Capacitor_THT:CP_Radial_D5.0mm_P2.50mm",
+      "models": [
+        "Capacitor_THT.3dshapes/CP_Radial_D5.0mm_P2.50mm.step"
+      ]
+    },
+    {
+      "id": "TerminalBlock_Phoenix:TerminalBlock_Phoenix_PT-1,5-2-3.5-H_1x02_P3.50mm_Horizontal",
+      "models": [
+        "TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-3.5-H_1x02_P3.50mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal",
+      "models": [
+        "Diode_THT.3dshapes/D_DO-35_SOD27_P7.62mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+      "models": [
+        "Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD:L_TDK_SLF7055",
+      "models": [
+        "Inductor_SMD.3dshapes/L_TDK_SLF7055.step"
+      ]
+    },
+    {
+      "id": "Connector_Wuerth:Wuerth_WR-PHD_613004216921_Large_2x02_P2.54mm_Vertical",
+      "models": [
+        "Connector_Wuerth.3dshapes/Wuerth_WR-PHD_613004216921_Large_2x02_P2.54mm_Vertical.step"
+      ]
+    },
+    {
+      "id": "Package_SON:WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm",
+      "models": [
+        "Package_SON.3dshapes/WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm.step"
+      ]
+    },
+    {
+      "id": "TerminalBlock_Wuerth:Wuerth_REDCUBE-THR_WP-THRSH_74651174_THR",
+      "models": [
+        "TerminalBlock_Wuerth.3dshapes/Wuerth_REDCUBE-THR_WP-THRSH_74651174_THR.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:CP_Elec_6.3x5.3",
+      "models": [
+        "Capacitor_SMD.3dshapes/CP_Elec_6.3x5.3.step"
+      ]
+    },
+    {
+      "id": "Package_TO_SOT_SMD:SOT-23-6",
+      "models": [
+        "Package_TO_SOT_SMD.3dshapes/SOT-23-6.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD:L_APV_APH0530",
+      "models": [
+        "Inductor_SMD.3dshapes/L_APV_APH0530.step"
+      ]
+    },
+    {
+      "id": "Connector_PinSocket_2.00mm:PinSocket_1x02_P2.00mm_Vertical",
+      "models": [
+        "Connector_PinSocket_2.00mm.3dshapes/PinSocket_1x02_P2.00mm_Vertical.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_0402_1005Metric",
+      "models": [
+        "Capacitor_SMD.3dshapes/C_0402_1005Metric.step"
+      ]
+    },
+    {
+      "id": "Package_BGA:Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm",
+      "models": [
+        "Package_BGA.3dshapes/Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm.step"
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_0402_1005Metric",
+      "models": [
+        "Resistor_SMD.3dshapes/R_0402_1005Metric.step"
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_MicroMELF",
+      "models": [
+        "Diode_SMD.3dshapes/D_MicroMELF.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD_Wurth:L_Wurth_WE-LQSH-2512",
+      "models": [
+        "Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2512.step"
+      ]
+    },
+    {
+      "id": "Connector_PinHeader_1.27mm:PinHeader_1x02_P1.27mm_Horizontal",
+      "models": [
+        "Connector_PinHeader_1.27mm.3dshapes/PinHeader_1x02_P1.27mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:CP_Elec_6.3x5.2",
+      "models": [
+        "Capacitor_SMD.3dshapes/CP_Elec_6.3x5.2.step"
+      ]
+    },
+    {
+      "id": "TerminalBlock_Phoenix:TerminalBlock_Phoenix_PT-1,5-2-5.0-H_1x02_P5.00mm_Horizontal",
+      "models": [
+        "TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-5.0-H_1x02_P5.00mm_Horizontal.step"
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_SMB",
+      "models": [
+        "Diode_SMD.3dshapes/D_SMB.step"
+      ]
+    },
+    {
+      "id": "Inductor_SMD:L_Changjiang_FXL1050",
+      "models": [
+        "Inductor_SMD.3dshapes/L_Changjiang_FXL1050.step"
+      ]
+    },
+    {
+      "id": "Package_TO_SOT_THT:TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical",
+      "models": [
+        "Package_TO_SOT_THT.3dshapes/TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical.step"
+      ]
+    }
+  ],
+  "models": {
+    "Package_TO_SOT_THT.3dshapes/TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical.step": {
+      "file": "models/Package_TO_SOT_THT.3dshapes/TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical.step",
+      "sha256": "d7962bdb0828f2d617258183df50c90920ef8e316727b628ecb8671809b4efcf",
+      "source": "resources/kicad/10.0.0/models/Package_TO_SOT_THT.3dshapes/TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical.step"
+    },
+    "Capacitor_THT.3dshapes/CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal.step": {
+      "file": "models/Capacitor_THT.3dshapes/CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal.step",
+      "sha256": "2c2f8975df3c6c7cfdbc653acff956bc3954a56f785ea05f89533bb3fcd6a36a",
+      "source": "resources/kicad/10.0.0/models/Capacitor_THT.3dshapes/CP_Axial_L10.0mm_D6.0mm_P15.00mm_Horizontal.step"
+    },
+    "Inductor_SMD.3dshapes/L_TDK_SLF7032.step": {
+      "file": "models/Inductor_SMD.3dshapes/L_TDK_SLF7032.step",
+      "sha256": "c9c6d4a34da2de0d8cf780a780d516b6bec786c1f4894e0c0d2297d443d2e572",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD.3dshapes/L_TDK_SLF7032.step"
+    },
+    "Diode_SMD.3dshapes/D_SMA.step": {
+      "file": "models/Diode_SMD.3dshapes/D_SMA.step",
+      "sha256": "1cfddd4e3b1bf22b8fc6ee3258c2aade882ed7b85b528e23b9db42437775a1db",
+      "source": "resources/kicad/10.0.0/models/Diode_SMD.3dshapes/D_SMA.step"
+    },
+    "TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal.step": {
+      "file": "models/TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal.step",
+      "sha256": "bc6f1df54b8e66322d910d8e0448219571e6058d5daad09cebdd85c9028764f3",
+      "source": "resources/kicad/10.0.0/models/TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_MPT-0,5-2-2.54_1x02_P2.54mm_Horizontal.step"
+    },
+    "Resistor_SMD.3dshapes/R_0805_2012Metric.step": {
+      "file": "models/Resistor_SMD.3dshapes/R_0805_2012Metric.step",
+      "sha256": "ded342cdb394fb45395227beaaa75cc390613cf2581b29cd6d22c12abd6103b2",
+      "source": "resources/kicad/10.0.0/models/Resistor_SMD.3dshapes/R_0805_2012Metric.step"
+    },
+    "Capacitor_SMD.3dshapes/C_0603_1608Metric.step": {
+      "file": "models/Capacitor_SMD.3dshapes/C_0603_1608Metric.step",
+      "sha256": "4857b3dc717675bf1fb22edda622ac3b3ae03cf44d81eefaf3fa3ba3a86d84c1",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/C_0603_1608Metric.step"
+    },
+    "Connector_PinHeader_2.00mm.3dshapes/PinHeader_1x02_P2.00mm_Vertical.step": {
+      "file": "models/Connector_PinHeader_2.00mm.3dshapes/PinHeader_1x02_P2.00mm_Vertical.step",
+      "sha256": "3b27d7fabcf90b9ef99b70d6c3f233b6f8c633479a0f25e95bf17952e52d3af2",
+      "source": "resources/kicad/10.0.0/models/Connector_PinHeader_2.00mm.3dshapes/PinHeader_1x02_P2.00mm_Vertical.step"
+    },
+    "Resistor_SMD.3dshapes/R_0603_1608Metric.step": {
+      "file": "models/Resistor_SMD.3dshapes/R_0603_1608Metric.step",
+      "sha256": "1875571c326d0d9e96f36b4efeb8094068ef7619f0a449c781caf0b49c2e5861",
+      "source": "resources/kicad/10.0.0/models/Resistor_SMD.3dshapes/R_0603_1608Metric.step"
+    },
+    "Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2010.step": {
+      "file": "models/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2010.step",
+      "sha256": "727167f1f1bddea079427797a5d11420c219b42504e35cf1a6c22266b58bd8da",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2010.step"
+    },
+    "Package_BGA.3dshapes/Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC.step": {
+      "file": "models/Package_BGA.3dshapes/Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC.step",
+      "sha256": "d2b3e675096229411aa795010e559247a76289c5d811b2f32acf16a40bc22fd3",
+      "source": "res/kicad/3dmodels/Package_BGA.3dshapes/Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC.step"
+    },
+    "TestPoint.3dshapes/TestPoint_Keystone_5005-5009_Compact.step": {
+      "file": "models/TestPoint.3dshapes/TestPoint_Keystone_5005-5009_Compact.step",
+      "sha256": "4271a16fe1344e01c4732867408ef1e704e23c786e7a4e35e51c5d96d35b412a",
+      "source": "resources/kicad/10.0.0/models/TestPoint.3dshapes/TestPoint_Keystone_5005-5009_Compact.step"
+    },
+    "Diode_SMD.3dshapes/D_SOD-128.step": {
+      "file": "models/Diode_SMD.3dshapes/D_SOD-128.step",
+      "sha256": "c98f6c45e31c085ad7293f96c19813d749b20d47245b9c5c01f816003df24d8c",
+      "source": "resources/kicad/10.0.0/models/Diode_SMD.3dshapes/D_SOD-128.step"
+    },
+    "Connector_JST.3dshapes/JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal.step": {
+      "file": "models/Connector_JST.3dshapes/JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal.step",
+      "sha256": "5343f72b9fe095ba999c44c2d42c2045032162dd11066bd4d36865caf3d1fba2",
+      "source": "resources/kicad/10.0.0/models/Connector_JST.3dshapes/JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal.step"
+    },
+    "Capacitor_SMD.3dshapes/C_1210_3225Metric.step": {
+      "file": "models/Capacitor_SMD.3dshapes/C_1210_3225Metric.step",
+      "sha256": "f8510481c5044113cf49b0fa6dd54ddab9224508bd6808e1afab8ef0cefdefc9",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/C_1210_3225Metric.step"
+    },
+    "Inductor_SMD.3dshapes/L_APV_ANR4030.step": {
+      "file": "models/Inductor_SMD.3dshapes/L_APV_ANR4030.step",
+      "sha256": "0e5e183db85a4e99a0853c0f031373bb5d3c0a83012f78472ba99f806909284d",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD.3dshapes/L_APV_ANR4030.step"
+    },
+    "Package_SO.3dshapes/MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm.step": {
+      "file": "models/Package_SO.3dshapes/MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm.step",
+      "sha256": "531731bc0888d66839315fa63738483c8811f5f3440acbc52a2d99c928e44e39",
+      "source": "resources/kicad/10.0.0/models/Package_SO.3dshapes/MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm.step"
+    },
+    "Capacitor_SMD.3dshapes/C_1206_3216Metric.step": {
+      "file": "models/Capacitor_SMD.3dshapes/C_1206_3216Metric.step",
+      "sha256": "11e948c72c90e2b6322436b72745f40ff4e8ba0da64fb2a0df943dfa61e89c1a",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/C_1206_3216Metric.step"
+    },
+    "Capacitor_SMD.3dshapes/C_0805_2012Metric.step": {
+      "file": "models/Capacitor_SMD.3dshapes/C_0805_2012Metric.step",
+      "sha256": "9a669c1a2f1ea25b88b401acef6efeaa80a067bd7da9db6993de719a7fbe155c",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/C_0805_2012Metric.step"
+    },
+    "Package_SON.3dshapes/WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm.step": {
+      "file": "models/Package_SON.3dshapes/WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm.step",
+      "sha256": "20f040223924bd36bf4057316dc5d2b334c3714f463b4551dedf7e2762f08486",
+      "source": "res/kicad/3dmodels/Package_SON.3dshapes/WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm.step"
+    },
+    "Connector_Molex.3dshapes/Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical.step": {
+      "file": "models/Connector_Molex.3dshapes/Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical.step",
+      "sha256": "cea03dce954c0480e2bbca87d6f070e71352f98e4e9f7447639ddc41bdcfddb4",
+      "source": "resources/kicad/10.0.0/models/Connector_Molex.3dshapes/Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical.step"
+    },
+    "Diode_SMD.3dshapes/D_SOD-123.step": {
+      "file": "models/Diode_SMD.3dshapes/D_SOD-123.step",
+      "sha256": "b3dc4065573abc72e3d5b4cca0e908f72a24205a41b6284b1f75ccacbe99adf8",
+      "source": "resources/kicad/10.0.0/models/Diode_SMD.3dshapes/D_SOD-123.step"
+    },
+    "Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-DD-7345straight.step": {
+      "file": "models/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-DD-7345straight.step",
+      "sha256": "510ce36606d5bb5bbc43f9cbaeb132fe25b394afab7aa94694ee7bb567c1b9ee",
+      "source": "res/kicad/3dmodels/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-DD-7345straight.step"
+    },
+    "Capacitor_THT.3dshapes/CP_Radial_D5.0mm_P2.50mm.step": {
+      "file": "models/Capacitor_THT.3dshapes/CP_Radial_D5.0mm_P2.50mm.step",
+      "sha256": "79deea96d81cb1e938ee80b9d546043f1678e6c4ce86a997adb27a3ea46f5108",
+      "source": "resources/kicad/10.0.0/models/Capacitor_THT.3dshapes/CP_Radial_D5.0mm_P2.50mm.step"
+    },
+    "TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-3.5-H_1x02_P3.50mm_Horizontal.step": {
+      "file": "models/TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-3.5-H_1x02_P3.50mm_Horizontal.step",
+      "sha256": "455fc6cf9c1fcfb357c0c6faa758c057aef0b587b104b50ce01692af8b5ea432",
+      "source": "resources/kicad/10.0.0/models/TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-3.5-H_1x02_P3.50mm_Horizontal.step"
+    },
+    "Diode_THT.3dshapes/D_DO-35_SOD27_P7.62mm_Horizontal.step": {
+      "file": "models/Diode_THT.3dshapes/D_DO-35_SOD27_P7.62mm_Horizontal.step",
+      "sha256": "9704292191fcb13b3dfc88c1e572df18313ac20023bb230486c878d8dddfdb54",
+      "source": "resources/kicad/10.0.0/models/Diode_THT.3dshapes/D_DO-35_SOD27_P7.62mm_Horizontal.step"
+    },
+    "Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step": {
+      "file": "models/Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step",
+      "sha256": "07f46cff378d30e6c27dfd5a03092c795323f86d91c71fc7e743f4f418dc553a",
+      "source": "resources/kicad/10.0.0/models/Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step"
+    },
+    "Inductor_SMD.3dshapes/L_TDK_SLF7055.step": {
+      "file": "models/Inductor_SMD.3dshapes/L_TDK_SLF7055.step",
+      "sha256": "ccee5a6790bf1a8aeb6a085997f3eaba962fcf9fa0e7187227beb16393c3ddd7",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD.3dshapes/L_TDK_SLF7055.step"
+    },
+    "Connector_Wuerth.3dshapes/Wuerth_WR-PHD_613004216921_Large_2x02_P2.54mm_Vertical.step": {
+      "file": "models/Connector_Wuerth.3dshapes/Wuerth_WR-PHD_613004216921_Large_2x02_P2.54mm_Vertical.step",
+      "sha256": "9507a8c762aa1148102e8f1c02a4d40a8f016bd19d9a9acea45790f661fbe485",
+      "source": "resources/kicad/10.0.0/models/Connector_Wuerth.3dshapes/Wuerth_WR-PHD_613004216921_Large_2x02_P2.54mm_Vertical.step"
+    },
+    "Package_SON.3dshapes/WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm.step": {
+      "file": "models/Package_SON.3dshapes/WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm.step",
+      "sha256": "7672cac8d88d8679800ef3bf90954e7996ea74e8ddb1f157f2d82bca6b2015e4",
+      "source": "resources/kicad/10.0.0/models/Package_SON.3dshapes/WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm.step"
+    },
+    "TerminalBlock_Wuerth.3dshapes/Wuerth_REDCUBE-THR_WP-THRSH_74651174_THR.step": {
+      "file": "models/TerminalBlock_Wuerth.3dshapes/Wuerth_REDCUBE-THR_WP-THRSH_74651174_THR.step",
+      "sha256": "625e6a055699c5d330af09324064c8958ad517d63248b0ecd384938ed2fd7872",
+      "source": "resources/kicad/10.0.0/models/TerminalBlock_Wuerth.3dshapes/Wuerth_REDCUBE-THR_WP-THRSH_74651174_THR.step"
+    },
+    "Capacitor_SMD.3dshapes/CP_Elec_6.3x5.3.step": {
+      "file": "models/Capacitor_SMD.3dshapes/CP_Elec_6.3x5.3.step",
+      "sha256": "6e3fdbf5be09593a255c6ee46342e6b2f9e478f254f14d1aa7b8f05273514249",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/CP_Elec_6.3x5.3.step"
+    },
+    "Package_TO_SOT_SMD.3dshapes/SOT-23-6.step": {
+      "file": "models/Package_TO_SOT_SMD.3dshapes/SOT-23-6.step",
+      "sha256": "c9fe686b4d1b56927a41fa84a9bc1efb61d8a45a123a3db43bcaa05c2891d635",
+      "source": "resources/kicad/10.0.0/models/Package_TO_SOT_SMD.3dshapes/SOT-23-6.step"
+    },
+    "Inductor_SMD.3dshapes/L_APV_APH0530.step": {
+      "file": "models/Inductor_SMD.3dshapes/L_APV_APH0530.step",
+      "sha256": "1ca48d8589b9cab9b6d5a66be6cbc4cbac7b2152c314f0685daacb5ba7c1a5d4",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD.3dshapes/L_APV_APH0530.step"
+    },
+    "Connector_PinSocket_2.00mm.3dshapes/PinSocket_1x02_P2.00mm_Vertical.step": {
+      "file": "models/Connector_PinSocket_2.00mm.3dshapes/PinSocket_1x02_P2.00mm_Vertical.step",
+      "sha256": "42e700aab5c47a795179ded379f53ef3e02a689baee49b888f0aa9b63fd18cfe",
+      "source": "resources/kicad/10.0.0/models/Connector_PinSocket_2.00mm.3dshapes/PinSocket_1x02_P2.00mm_Vertical.step"
+    },
+    "Capacitor_SMD.3dshapes/C_0402_1005Metric.step": {
+      "file": "models/Capacitor_SMD.3dshapes/C_0402_1005Metric.step",
+      "sha256": "03e44c4b2b727b8d4b6b1fd598cbd12dd5e614f1dfeefa96a92a07e3a3b312a2",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/C_0402_1005Metric.step"
+    },
+    "Package_BGA.3dshapes/Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm.step": {
+      "file": "models/Package_BGA.3dshapes/Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm.step",
+      "sha256": "aa40bad97f30fa02c0dbd6ad0ba6de7c1d8f0a0d6387eaa7921a985d4e084942",
+      "source": "resources/kicad/10.0.0/models/Package_BGA.3dshapes/Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm.step"
+    },
+    "Resistor_SMD.3dshapes/R_0402_1005Metric.step": {
+      "file": "models/Resistor_SMD.3dshapes/R_0402_1005Metric.step",
+      "sha256": "91507e5af4251cb4ef38e04889c9b98da29904432bd83786bba13ae9b605eacb",
+      "source": "resources/kicad/10.0.0/models/Resistor_SMD.3dshapes/R_0402_1005Metric.step"
+    },
+    "Diode_SMD.3dshapes/D_MicroMELF.step": {
+      "file": "models/Diode_SMD.3dshapes/D_MicroMELF.step",
+      "sha256": "ad171ddd866e5339c7d01d1412b0a7734c62837ba1d636cb4f67837cad644639",
+      "source": "resources/kicad/10.0.0/models/Diode_SMD.3dshapes/D_MicroMELF.step"
+    },
+    "Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2512.step": {
+      "file": "models/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2512.step",
+      "sha256": "dfe55e75ffd9ad278e1cf10dd216f383c2c3ae5d02a9d3efbca9db59b772334f",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD_Wurth.3dshapes/L_Wurth_WE-LQSH-2512.step"
+    },
+    "Connector_PinHeader_1.27mm.3dshapes/PinHeader_1x02_P1.27mm_Horizontal.step": {
+      "file": "models/Connector_PinHeader_1.27mm.3dshapes/PinHeader_1x02_P1.27mm_Horizontal.step",
+      "sha256": "9d9bc3b55eec5292c9489b60d5156cb8f901911fb9f5908fbe5daa037f6fb8f0",
+      "source": "resources/kicad/10.0.0/models/Connector_PinHeader_1.27mm.3dshapes/PinHeader_1x02_P1.27mm_Horizontal.step"
+    },
+    "Capacitor_SMD.3dshapes/CP_Elec_6.3x5.2.step": {
+      "file": "models/Capacitor_SMD.3dshapes/CP_Elec_6.3x5.2.step",
+      "sha256": "34376ae9742cfc95165995767a89de7e3b31b6bff6236d8d70687be1fb77b715",
+      "source": "resources/kicad/10.0.0/models/Capacitor_SMD.3dshapes/CP_Elec_6.3x5.2.step"
+    },
+    "TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-5.0-H_1x02_P5.00mm_Horizontal.step": {
+      "file": "models/TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-5.0-H_1x02_P5.00mm_Horizontal.step",
+      "sha256": "1a69199047fbbef2347a75b0ef66860acc64b57446587f5eda40b4ac81324194",
+      "source": "resources/kicad/10.0.0/models/TerminalBlock_Phoenix.3dshapes/TerminalBlock_Phoenix_PT-1,5-2-5.0-H_1x02_P5.00mm_Horizontal.step"
+    },
+    "Diode_SMD.3dshapes/D_SMB.step": {
+      "file": "models/Diode_SMD.3dshapes/D_SMB.step",
+      "sha256": "029466277d91e9f5492556be93e46611049e07115c7913880c547afa96058ed4",
+      "source": "resources/kicad/10.0.0/models/Diode_SMD.3dshapes/D_SMB.step"
+    },
+    "Inductor_SMD.3dshapes/L_Changjiang_FXL1050.step": {
+      "file": "models/Inductor_SMD.3dshapes/L_Changjiang_FXL1050.step",
+      "sha256": "6c19eb0b70ae5d56d3f6f2c65bd844839d6f174e6e33554db1d864008546adbb",
+      "source": "resources/kicad/10.0.0/models/Inductor_SMD.3dshapes/L_Changjiang_FXL1050.step"
+    },
+    "Package_TO_SOT_THT.3dshapes/TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical.step": {
+      "file": "models/Package_TO_SOT_THT.3dshapes/TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical.step",
+      "sha256": "54684bf2e2bf012bdf2b1a376c889f8b0466063409f6275a3aa1cd88d803cd4d",
+      "source": "res/kicad/3dmodels/Package_TO_SOT_THT.3dshapes/TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical.step"
+    }
+  }
+}

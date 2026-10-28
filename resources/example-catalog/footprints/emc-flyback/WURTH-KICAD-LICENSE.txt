@@ -1,0 +1,158 @@
+License Terms
+
+1.
+
+License Terms
+
+These License Terms will take effect upon using the models made available by Würth Elektronik eiSos GmbH &
+Co. KG (“WE eiSos”) solely or jointly in libraries in the GitHub repository (“Models”). You hereby agree that these
+license terms are applicable to Models made available by WE eiSos in any form in the GitHub repository. By
+using the Models you accept these license terms. You agree to comply with all provisions under these license
+terms.
+1.1
+
+Limited License Grant
+
+WE eiSos hereby grants you a limited, non-exclusive, non-transferable, non- sublicensable, royalty-free license
+to use the Models under the conditions set forth in these license terms.
+1.1.1
+
+Allowed Uses
+
+Under the conditions of these license terms, you shall be allowed the following uses in relation to the Models:
+You shall be allowed to download and save the Models to your device. You shall be allowed to create designs
+with the Models and share those designs. You shall be allowed to modify the Models. You shall be allowed to
+share the modified Models. You are not allowed to reverse engineer, decompile or disassemble the Models. No
+more extensive rights to use and exploit the Models are granted to you.
+1.1.2
+
+Modifications
+
+If you modify the Models in any way, shape or form, the following conditions apply:
+•
+
+You must clearly mark all modified Models in such a way that it is immediately clear to any third party
+that the Model has been modified.
+
+•
+
+You must attribute WE eiSos as the provider of the original Model. You must clearly mark all modified
+Models in such a way that it is immediately clear to any third party that it is a modified Model, which
+was originally provided by WE eiSos in its original form.
+
+1.2.
+
+Usage and Obligations
+
+The responsibility for the applicability and use of the Models in a particular design is always solely within the
+authority of the user. Due to this fact, it is up to you to evaluate and investigate, where appropriate, and to decide
+whether the Models with their specific characteristics described in the specifications are valid and suitable for
+your respective application or not. The Models may contain electrical simulation data which allow you to create
+
+1
+
+electrical simulations. The electrical simulation data is intended for skilled developers designing with the Models.
+You are solely responsible for ensuring the Model is appropriate for your application, and designing, validating
+and testing your application, and ensuring your application meets applicable standards and any other safety,
+security, regulatory or other requirements.
+If you determine that the Models are valid and suitable for a particular design and you want to order the
+corresponding components, you acknowledge to minimize the risk of loss and harm to individuals and bear the
+risk for failure leading to personal injury or death due to your usage of the components. The components have
+been designed and developed for usage in general electronic equipment only. The components are not authorized
+for use in equipment where a higher safety standard and reliability standard is especially required or where a
+failure of the components is reasonably expected to cause severe personal injury or death, unless the parties
+have executed an agreement specifically governing such use.
+Moreover WE eiSos’ components are neither designed nor intended for use in areas such as military, aerospace,
+aviation, nuclear control, submarine, transportation (automotive control, train control, ship control),
+transportation signal, disaster prevention, medical, public information network etc. WE eiSos must be informed
+about the intent of such usage before the design-in stage. In addition, sufficient reliability evaluation checks for
+safety must be performed on every component which is used in electrical circuits that require high safety and
+reliability functions or performance. YOU SHALL INDEMNIFY WE EISOS AGAINST ANY DAMAGES ARISING OUT
+OF THE USE OF THE COMPONENTS IN SUCH SAFETY-CRITICAL APPLICATIONS.
+1.3.
+
+Ownership
+
+The Models created and provided by WE eiSos are and will remain the exclusive property of WE eiSos. Nothing
+in these license terms is intended to grant any other licenses or other rights, in particular to name rights, as well
+as rights to patents, registered designs and/or trademarks as well as other industrial property rights, nor shall
+these license terms include an obligation to grant such rights.
+1.4.
+
+Updates
+
+WE eiSos assumes no responsibility for updating the Models, to keep information current or to ensure accuracy
+and completeness for any Models and or information. Accordingly, you must confirm the accuracy and
+completeness of all provided Models and information on our Website (https://www.we-online.com/en) before
+making any decision related to any Models or other matters.
+1.5.
+
+Disclaimer of Warranty
+
+THE MODELS ARE PROVIDED “AS IS”. YOU ACKNOWLEDGE THAT WE EISOS MAKES NO REPRESENTATIONS AND
+WARRANTIES OF ANY KIND RELATED TO, BUT NOT LIMITED TO THE NON-INFRINGEMENT OF THIRD PARTIES’
+INTELLECTUAL PROPERTY RIGHTS OR THE MERCHANTABILITY OR FITNESS FOR A PURPOSE OR USAGE. WE
+EISOS DOES NOT WARRANT OR REPRESENT THAT ANY LICENSE, EITHER EXPRESS OR IMPLIED, IS GRANTED
+UNDER ANY PATENT RIGHT, COPYRIGHT, MASK WORK RIGHT, OR OTHER INTELLECTUAL PROPERTY RIGHT
+
+2
+
+RELATING TO ANY COMBINATION, MACHINE, OR PROCESS IN WHICH WE EISOS’ MODELS ARE USED.
+INFORMATION PUBLISHED BY WE EISOS REGARDING THIRD-PARTY PRODUCTS OR SERVICES DOES NOT
+CONSTITUTE A LICENSE FROM WE EISOS TO USE SUCH PRODUCTS OR SERVICES OR A WARRANTY OR
+ENDORSEMENT THEREOF.
+1.6.
+
+Limitation of Liability
+
+Any liability not expressly provided by WE eiSos shall be disclaimed.
+You agree to hold WE eiSos harmless from any third-party claims related to your usage of the Models. WE eiSos
+disclaims any liability for any alteration, modification or development created by you as well as for any
+combination with other models and/or designs.
+1.7.
+
+Applicable Law
+
+Applicable law to these license terms shall be the laws of the Federal Republic of Germany.
+1.8.
+
+Dispute Resolution
+
+Any dispute, claim or controversy arising out of or relating to these license terms including, but not limited to, any
+breach, termination, enforcement, interpretation or validity thereof, the parties shall first attempt to resolve such
+dispute in a confidential and amicable way.
+In the event no settlement is reached within ninety (90) calendar days from the date of request for such
+negotiations the case shall be finally settled by conciliation referred to the Conciliation Office of the German
+Association of Law and Informatics e.V. (Deutsche Gesellschaft für Recht und Informatik e.V., hereinafter DGRI
+e.V.) in accordance with the Association’s rules. The place of conciliation shall be in Frankfurt, Germany. The
+language of arbitration shall be English. Each party shall appoint a conciliator and the appointed conciliator shall
+then jointly designate a third conciliator. The conciliation award is final and binding upon both parties and shall
+be transformed into an arbitral award. Each party bears its own costs.
+Each party may seek provisional measures from any court of competent jurisdiction, including without limitation
+provisional injunctive relief, provided that the final resolution of the dispute is through the conciliation proceeding.
+The conciliation shall be confidential. The parties agree that also the mere existence of a conciliation proceeding
+shall be kept confidential, except to the extent disclosure is required by law, regulation or an order of a competent
+court.
+1.9.
+
+Severability Clause
+
+Should any of the provisions of these license terms be determined to be invalid, void, unenforceable or
+incomplete, or, following the conclusion of these license terms become invalid, void, unenforceable or
+incomplete, this shall not affect the validity of the remaining provisions. The invalid, void or unenforceable
+
+3
+
+provision shall be replaced by the parties with a provision that comes as close as possible to the commercial
+meaning and purpose of this provision in a legally effective manner.
+1.10.
+
+Miscellaneous
+
+WE eiSos reserves the right at any time to change these terms at its own discretion. It is your responsibility to
+check these terms for any updates before your use. Your continued use of the Models will be deemed as the
+acceptance of the change.
+
+4
+
+

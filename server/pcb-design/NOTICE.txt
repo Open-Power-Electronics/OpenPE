@@ -1,0 +1,13 @@
+AI PCB Layout / power-pcb-design
+
+power-pcb-design skill by Chengmin Li, Xiao Yang,
+https://github.com/ChengminLi/AI-PCB-layout, licensed under CC BY 4.0.
+License: https://creativecommons.org/licenses/by/4.0/
+Pinned revision: e1b9a64ac9ac306647fa30094932fb792d17e373
+
+The bundled SKILL.md and reference documents are unmodified upstream text.
+OpenPE adds plugin lifecycle controls, verified offline document access and an
+Agent adapter limiting execution to advertised OpenPE capabilities. These
+integration changes are maintained by OpenPE and are not upstream capabilities.
+No upstream example board or executable code is bundled by this integration.
+

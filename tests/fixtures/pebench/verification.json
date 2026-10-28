@@ -1,0 +1,123 @@
+{
+  "kicadVersion": "10.0.1",
+  "checks": [
+    "Source EAGLE physical pin network partitions match exported KiCad schematic netlists.",
+    "KiCad PCB copper layers, pads, drill geometry, tracks and vias match pinned source boards.",
+    "Board and footprint artwork geometry, ordinary text and caption styles match pinned source boards.",
+    "Board and footprint zone boundaries, holes, keepout restrictions and thermal/island settings match pinned source boards.",
+    "Schematic and PCB SVG exports completed with KiCad 10."
+  ],
+  "scope": "Structural and connectivity verification only; not ERC, DRC, simulation or production qualification.",
+  "examples": [
+    {
+      "id": "pebench-sunny-buddy",
+      "physicalPins": 76,
+      "nets": 16,
+      "footprints": 40,
+      "copperLayers": 2,
+      "pads": 88,
+      "tracksAndVias": 167,
+      "zones": 5,
+      "graphics": 381
+    },
+    {
+      "id": "pebench-buck-boost",
+      "physicalPins": 66,
+      "nets": 15,
+      "footprints": 67,
+      "copperLayers": 2,
+      "pads": 80,
+      "tracksAndVias": 136,
+      "zones": 6,
+      "graphics": 5226
+    },
+    {
+      "id": "pebench-buck-ap63357",
+      "physicalPins": 49,
+      "nets": 9,
+      "footprints": 54,
+      "copperLayers": 4,
+      "pads": 57,
+      "tracksAndVias": 127,
+      "zones": 20,
+      "graphics": 357
+    },
+    {
+      "id": "pebench-big-easy-driver",
+      "physicalPins": 134,
+      "nets": 34,
+      "footprints": 56,
+      "copperLayers": 4,
+      "pads": 138,
+      "tracksAndVias": 301,
+      "zones": 15,
+      "graphics": 3116
+    },
+    {
+      "id": "pebench-tb6612fng",
+      "physicalPins": 46,
+      "nets": 14,
+      "footprints": 14,
+      "copperLayers": 2,
+      "pads": 66,
+      "tracksAndVias": 120,
+      "zones": 2,
+      "graphics": 145
+    },
+    {
+      "id": "pebench-powerboost-1000c",
+      "physicalPins": 130,
+      "nets": 23,
+      "footprints": 47,
+      "copperLayers": 2,
+      "pads": 142,
+      "tracksAndVias": 279,
+      "zones": 13,
+      "graphics": 2862
+    },
+    {
+      "id": "pebench-motor-shield-v2",
+      "physicalPins": 231,
+      "nets": 64,
+      "footprints": 55,
+      "copperLayers": 2,
+      "pads": 237,
+      "tracksAndVias": 616,
+      "zones": 7,
+      "graphics": 4606
+    },
+    {
+      "id": "pebench-drv8871",
+      "physicalPins": 27,
+      "nets": 7,
+      "footprints": 15,
+      "copperLayers": 2,
+      "pads": 31,
+      "tracksAndVias": 30,
+      "zones": 9,
+      "graphics": 1287
+    },
+    {
+      "id": "pebench-tps61023",
+      "physicalPins": 24,
+      "nets": 6,
+      "footprints": 13,
+      "copperLayers": 2,
+      "pads": 26,
+      "tracksAndVias": 32,
+      "zones": 8,
+      "graphics": 1289
+    },
+    {
+      "id": "pebench-autodriver-l6470",
+      "physicalPins": 112,
+      "nets": 29,
+      "footprints": 39,
+      "copperLayers": 4,
+      "pads": 118,
+      "tracksAndVias": 388,
+      "zones": 6,
+      "graphics": 486
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "kicad_version": "10.0.1",
+  "source": "Adafruit Motor Shield v2.3.brd",
+  "source_sha256": "f4857ea288f022d48d4b91baca10aa388cab2063eed16279fe70e7ac6c277534",
+  "output": "kicad10/board.kicad_pcb",
+  "modified_layout": false,
+  "import_input_note": "Derived copy only: XML layer declarations sorted numerically to preserve physical copper stack order; original source untouched.",
+  "source_semantics_restored": [
+    {
+      "kind": "mating_board_template_outline_to_document_layer",
+      "reference": "U$1",
+      "source_package": "ARDUINOR3_ICSP",
+      "graphics_moved": 9,
+      "physical_outline": "unchanged plain layer-20 closed contour"
+    }
+  ],
+  "method": "KiCad 10 pcbnew.PCB_IO_MGR.EAGLE + SaveBoard(skipSettings=True)",
+  "auxiliary_graphics_remapped": [],
+  "source_layer_setup": "(1*16)",
+  "imported_layer_count": 16,
+  "final_layer_count": 2,
+  "settings_note": "Board-only conversion. EAGLE rules are recorded in eagle_source_audit.json; no claim of equivalent KiCad project DRC rules.",
+  "structure_before": {
+    "footprints": 55,
+    "pads": 237,
+    "tracks": 464,
+    "vias": 152,
+    "zones": 3,
+    "copper_layers": 2,
+    "nets_used": 64,
+    "board_width_mm": 68.63,
+    "board_height_mm": 53.39
+  },
+  "structure_after": {
+    "footprints": 55,
+    "pads": 237,
+    "tracks": 464,
+    "vias": 152,
+    "zones": 3,
+    "copper_layers": 2,
+    "nets_used": 64,
+    "board_width_mm": 68.63,
+    "board_height_mm": 53.39
+  },
+  "roundtrip_changes": [],
+  "significant_structure_changes": [],
+  "roundtrip_pass": true,
+  "output_sha256": "7c71884fd4af86252cc364b60c199efaf0a6a587221e20ef48ceabda46cc4e40",
+  "drc": {
+    "violations": 273,
+    "unconnected_items": 2,
+    "severity_counts": {
+      "error": 32,
+      "warning": 243
+    },
+    "type_counts": {
+      "tracks_crossing": 1,
+      "shorting_items": 1,
+      "copper_edge_clearance": 2,
+      "starved_thermal": 4,
+      "solder_mask_bridge": 22,
+      "via_dangling": 114,
+      "silk_edge_clearance": 6,
+      "text_height": 14,
+      "text_thickness": 15,
+      "silk_overlap": 69,
+      "silk_over_copper": 25,
+      "unconnected_items": 2
+    },
+    "basis": "Standalone-board KiCad defaults/imported board settings; zones refilled in memory; source project rule equivalence not established.",
+    "zero_drc": false
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "id": "010_Adafruit_MiniBoost_TPS61023",
+  "category_zh": "TPS61023 同步升压 DC-DC",
+  "repository": "adafruit/Adafruit-TPS61023-PCB",
+  "source_url": "https://github.com/adafruit/Adafruit-TPS61023-PCB",
+  "commit_sha": "82b5a33a1900a5c13849029bc84e7856a44086e0",
+  "commit_url": "https://github.com/adafruit/Adafruit-TPS61023-PCB/commit/82b5a33a1900a5c13849029bc84e7856a44086e0",
+  "upstream_commit_date": "2020-07-01T16:10:35Z",
+  "retrieved_date": "2026-10-15",
+  "retrieved_timezone": "Asia/Shanghai",
+  "archive_url": "https://codeload.github.com/adafruit/Adafruit-TPS61023-PCB/zip/82b5a33a1900a5c13849029bc84e7856a44086e0",
+  "archive_sha256": "7e29ed23ed3a9ca1a47ac2e84c9888a2878861d3d6e96a34114207181cd6093e",
+  "source_file_count": 5,
+  "pcb_candidates": [
+    "Adafruit TPS61023.brd"
+  ],
+  "schematic_candidates": [
+    "Adafruit TPS61023.sch"
+  ],
+  "license_candidates": [
+    "license.txt"
+  ],
+  "status": "excluded_from_active_dataset",
+  "selected_source_pcb": "Adafruit TPS61023.brd",
+  "selected_source_schematic": "Adafruit TPS61023.sch",
+  "converted_pcb": "kicad10/board.kicad_pcb",
+  "kicad_version": "10.0.1",
+  "statistics": {
+    "footprints": 13,
+    "pads": 26,
+    "tracks": 26,
+    "vias": 6,
+    "zones": 6,
+    "copper_layers": 2,
+    "nets_used": 6,
+    "board_width_mm": 11.48,
+    "board_height_mm": 17.83
+  },
+  "validation_report": "validation/conversion.json",
+  "source_pcb_sha256": "3120167e68e07fa2f51759855c7cdb7ceba8e4b1cba024be39dd1c0edd274a68",
+  "converted_pcb_sha256": "b30f49cfbbb03b5abe3fcfb3d6c06f2397d8a6e35d7adc544e88c5db90b00634",
+  "schematic_status": "Original editable schematic preserved; not converted to KiCad 10",
+  "title": "MiniBoost TPS61023",
+  "design_attribution": "Limor Fried / Adafruit",
+  "hardware_license": "CC-BY-SA-3.0",
+  "license_evidence": "source/license.txt",
+  "product_or_author_url": "https://www.adafruit.com/product/4654",
+  "pcb_file_commit_authors": [
+    "Kattni Rembor"
+  ],
+  "latest_pcb_file_commit": "82b5a33a1900a5c13849029bc84e7856a44086e0",
+  "latest_pcb_file_change": "2020-07-01T16:10:35Z",
+  "quality_evidence": "README 明确署名 Limor Fried/Ladyada，并提供台式电源/电子负载测量结果；文件发布提交者为 Kattni Rembor。",
+  "human_design_assessment": "High-confidence professional human/team provenance; not proof that every trace was manually routed.",
+  "quality_status": "Source-vetted engineering reference; conversion verified; DRC review required before manufacturing or zero-violation benchmark use.",
+  "drc": {
+    "violations": 45,
+    "unconnected_items": 0,
+    "severity_counts": {
+      "error": 17,
+      "warning": 28
+    },
+    "type_counts": {
+      "clearance": 2,
+      "zones_intersect": 1,
+      "copper_edge_clearance": 1,
+      "unresolved_variable": 1,
+      "track_width": 8,
+      "solder_mask_bridge": 4,
+      "silk_edge_clearance": 1,
+      "text_height": 10,
+      "silk_overlap": 6,
+      "silk_over_copper": 11
+    },
+    "basis": "Standalone-board KiCad defaults/imported board settings; zones refilled in memory; source project rule equivalence not established.",
+    "zero_drc": false
+  },
+  "source_file_hashes_verified": true,
+  "source_to_output_audit": "validation/source_to_output_audit.json",
+  "acceptance_review": {
+    "id": "010_Adafruit_MiniBoost_TPS61023",
+    "functional_footprints_estimate": 9,
+    "decision": "too_simple",
+    "drc_errors": 17,
+    "unconnected": 0,
+    "report": "boards\\010_Adafruit_MiniBoost_TPS61023\\validation\\drc.json",
+    "drc_types": {
+      "error:clearance": 2,
+      "error:zones_intersect": 1,
+      "error:copper_edge_clearance": 1,
+      "error:unresolved_variable": 1,
+      "error:track_width": 8,
+      "error:solder_mask_bridge": 4,
+      "warning:silk_edge_clearance": 1,
+      "warning:text_height": 10,
+      "warning:silk_overlap": 6,
+      "warning:silk_over_copper": 11
+    },
+    "preserved_location": "excluded/2026-10-15-complexity/010_Adafruit_MiniBoost_TPS61023"
+  },
+  "qualified_under_2026_10_15_gate": false
+}

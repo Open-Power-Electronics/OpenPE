@@ -1,0 +1,5 @@
+KiCad library subset for the nine curated reference examples.
+Official KiCad 10 models are copied unchanged from the pinned bundled library.
+Missing models are copied unchanged from the pinned source checkout under res/kicad/3dmodels.
+The WE-DD-7345straight footprint is extracted from the hash-pinned LM25017 expert PCB; board-instance links are removed and its model uses a project-relative reference.
+See manifest.json for SHA-256 hashes and sources, ../manifest.json for the source PCB hash, LICENSE.md and CREDITS.md for upstream terms and attribution.

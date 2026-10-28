@@ -1,0 +1,25 @@
+{
+  "version": "10.0.0",
+  "license": "CC-BY-SA-4.0 WITH KiCad-libraries-exception",
+  "symbols": {
+    "repository": "https://gitlab.com/kicad/libraries/kicad-symbols",
+    "commit": "495444d353551ba5f610d47d22c979c50b0bd70c"
+  },
+  "footprints": {
+    "repository": "https://gitlab.com/kicad/libraries/kicad-footprints",
+    "commit": "eff413fd489b7ade27fc108781a95c4b28ccf0b7"
+  },
+  "models": {
+    "repository": "https://gitlab.com/kicad/libraries/kicad-packages3D",
+    "tag": "10.0.0",
+    "commit": "bc82151111e9edddf4295228e6ceb5e0584c9c3e",
+    "sha256": "6740994c77058fb417a9a016af22767aaab98c6413a7c9ded0b3f631b4950cc4",
+    "inventory": {
+      "files": 7299,
+      "step": 7236,
+      "wrl": 0,
+      "bytes": 3386654302
+    },
+    "delivery": "Three starter models by default; libraries:download-models installs the complete pinned offline library. Missing official models remain cached on demand."
+  }
+}
