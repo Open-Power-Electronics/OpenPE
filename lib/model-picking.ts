@@ -1,6 +1,6 @@
 import type { Intersection, Object3D } from 'three';
 
-export type ModelPickOptions = { cad: boolean; components: boolean };
+export type ModelPickOptions = { cad: boolean; components: boolean; board?: boolean };
 export type ModelPickResult = {
   cad: {
     id: string;
@@ -8,6 +8,7 @@ export type ModelPickResult = {
     normal?: { x: number; y: number; z: number };
   } | null;
   footprint: string | null;
+  board: boolean;
 };
 
 /** Interpret one depth-ordered ray without picking through opaque objects.
@@ -16,11 +17,12 @@ export function modelPickResult(
   intersections: readonly Intersection<Object3D>[],
   options: ModelPickOptions,
 ): ModelPickResult {
-  const result: ModelPickResult = { cad: null, footprint: null };
+  const result: ModelPickResult = { cad: null, footprint: null, board: false };
   let cadDone = !options.cad,
-    componentDone = !options.components;
+    componentDone = !options.components,
+    boardDone = !options.board;
   for (const hit of intersections) {
-    if (cadDone && componentDone) break;
+    if (cadDone && componentDone && boardDone) break;
     let visible = true,
       preview = false;
     for (let node: Object3D | null = hit.object; node; node = node.parent) {
@@ -28,6 +30,15 @@ export function modelPickResult(
       if (node.userData.modelCadPreview) preview = true;
     }
     if (!visible) continue;
+    if (!boardDone) {
+      boardDone = true;
+      if (!preview)
+        for (let node: Object3D | null = hit.object; node; node = node.parent)
+          if (node.userData.modelBoard) {
+            result.board = true;
+            break;
+          }
+    }
     if (!cadDone && !preview) {
       cadDone = true;
       if (hit.object.userData.modelCadId) {

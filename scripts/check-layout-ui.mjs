@@ -1,3 +1,4 @@
+import { runCanvasAction, exportCanvasImage } from './canvas-context-menu-test-helpers.mjs';
 import {
   readModelVisibility,
   toggleModelVisibility,
@@ -241,7 +242,7 @@ try {
     0,
     'Routed pads do not retain topology-guide airwires.',
   );
-  await button('Export image').click();
+  await exportCanvasImage(page);
   await page.waitForFunction(() =>
     document.querySelector('.layout-status')?.textContent.includes('Exported'),
   );
@@ -316,7 +317,7 @@ try {
   assert.equal(await button('Enhanced rendering').count(), 0);
   await selectModelView(page, 'Top view');
   await selectModelView(page, 'Bottom view');
-  await button('Fit 3D board').click();
+  await runCanvasAction(page, 'Fit 3D board');
   await page.waitForFunction(
     () => document.querySelector('.pcb-model-canvas')?.dataset.modelsVisible === 'true',
   );
@@ -359,8 +360,8 @@ try {
     'An explicit silkscreen choice survives view switches.',
   );
   await toggleModelVisibility(page, 'Show silkscreen');
-  await button('Fit 3D board').click();
-  await button('Export image').click();
+  await runCanvasAction(page, 'Fit 3D board');
+  await exportCanvasImage(page);
   await page.waitForFunction(() =>
     document.querySelector('.pcb-model-status')?.textContent.includes('Exported'),
   );

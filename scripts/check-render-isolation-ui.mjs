@@ -83,7 +83,8 @@ const bundle = await build({
             const component = path.basename(file, '.tsx');
             if (component === 'DesktopWorkspace') {
               const original = await readFile(file, 'utf8');
-              const marker = '  const [presentation] = useState(createWorkspacePresentation);';
+              const marker =
+                '  const [presentation, setPresentation] = useState(createWorkspacePresentation);';
               assert.ok(original.includes(marker), 'Find the actual workspace presentation host.');
               return {
                 contents: original.replace(

@@ -135,7 +135,7 @@ function restoreSessions(state) {
   const ids = /* @__PURE__ */ new Set();
   if (!Array.isArray(sessions) || !sessions.length) throw new Error("Invalid saved sessions.");
   for (const session of sessions) {
-    if (!session || typeof session.id !== "string" || !session.id || ids.has(session.id) || typeof session.draft !== "string" || !Array.isArray(session.messages) || session.messages.some(
+    if (!session || typeof session.id !== "string" || !session.id || ids.has(session.id) || typeof session.draft !== "string" || !Array.isArray(session.messages) || session.pinned !== void 0 && session.pinned !== true || session.archived !== void 0 && session.archived !== true || session.messages.some(
       (message) => !message || typeof message.id !== "string" || !["user", "assistant"].includes(message.role) || typeof message.text !== "string"
     )) {
       throw new Error("Invalid saved sessions. The recovery file was preserved.");
@@ -146,6 +146,8 @@ function restoreSessions(state) {
   }
   if (typeof state.activeSessionId !== "string" || !ids.has(state.activeSessionId))
     throw new Error("The active conversation is missing from the saved sessions.");
+  if (sessions.find((session) => session.id === state.activeSessionId)?.archived)
+    throw new Error("The active conversation cannot be archived.");
   return {
     sessions,
     activeSessionId: state.activeSessionId
@@ -635,6 +637,8 @@ function restoreWorkspace(value) {
     if (typeof doc.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id) || ids.has(doc.id))
       throw new Error("Invalid or duplicate project ID.");
     ids.add(doc.id);
+    if (doc.pinned !== void 0 && doc.pinned !== true)
+      throw new Error("Invalid saved project pin state.");
     if (typeof doc.source !== "string") throw new Error("Invalid project source.");
     const project = recoveryProjectSummary(doc.source);
     if (doc.exampleKey !== void 0 && doc.exampleKey !== null && !validExampleKey(doc.exampleKey))
@@ -660,6 +664,7 @@ function restoreWorkspace(value) {
     }
     return {
       id: doc.id,
+      ...doc.pinned === true ? { pinned: true } : {},
       ...exampleKey !== void 0 ? { exampleKey } : {},
       ...doc.localExample !== void 0 ? { localExample: doc.localExample } : {},
       ...doc.activeSchematicId !== void 0 ? { activeSchematicId: doc.activeSchematicId } : {},

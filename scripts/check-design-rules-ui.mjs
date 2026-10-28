@@ -386,7 +386,7 @@ try {
   await page.getByTestId('schematic-canvas').waitFor();
   await settled();
   assert.equal(
-    await button('Simulation').count(),
+    await button('SPICE Simulation').count(),
     0,
     'Rule checks remain independent of disabled simulation plugins.',
   );

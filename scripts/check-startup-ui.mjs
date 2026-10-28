@@ -419,13 +419,13 @@ try {
   );
   await button('Schematic').click();
   assert.equal(requested.has(chunkFor('SimulationDialog')), false);
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   const settings = page.getByRole('region', { name: 'Simulation settings', exact: true });
   await settings.waitFor();
   assert.ok(requested.has(chunkFor('SimulationDialog')));
   await page.getByLabel('Duration (ms)', { exact: true }).fill('3');
   await button('Close simulation settings').click();
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   assert.equal(await page.getByLabel('Duration (ms)', { exact: true }).inputValue(), '3');
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
 

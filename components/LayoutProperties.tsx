@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { CircuitBoard } from 'lucide-react';
+import PropertiesEmptyState from './PropertiesEmptyState';
 import type { Circuit } from '@/lib/circuit';
 import { isOwnedProjectNode } from '@/lib/immutable-project';
 import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
@@ -39,6 +41,7 @@ type Props = {
   padOwner?: Footprint;
   rectangle: PCBRectangle | null;
   selectionCount: number;
+  showEmptyState?: boolean;
   snap: (value: number) => number;
   onCommit: (board: PCB) => boolean;
   onFootprint: (footprint: Footprint) => boolean;
@@ -50,7 +53,6 @@ type Props = {
     ref: string,
     value: string,
     fields: Record<string, string>,
-    includeInSimulation?: boolean,
     footprintDetail?: FootprintDetail,
   ) => boolean;
   onTrack: (changes: {
@@ -80,6 +82,7 @@ export default function LayoutProperties({
   padOwner,
   rectangle,
   selectionCount,
+  showEmptyState = true,
   snap,
   onCommit,
   onFootprint,
@@ -385,14 +388,13 @@ export default function LayoutProperties({
                     active={active && !!onSavePartProperties}
                     capabilityHost={capabilityHost}
                     onRequestSave={onRequestSave}
-                    onSave={(ref, value, fields, includeInSimulation, footprintDetail) =>
+                    onSave={(ref, value, fields, _includeInSimulation, footprintDetail) =>
                       onSavePartProperties?.(
                         schematic,
                         part.id,
                         ref,
                         value,
                         fields,
-                        includeInSimulation,
                         footprintDetail,
                       ) ?? false
                     }
@@ -861,18 +863,17 @@ export default function LayoutProperties({
               ))}
             </>
           )}
-          {!selectionCount && !footprint && !track && !via && !graphic && !zone && (
-            <PropertySection title="Board">
-              <NumberField
-                {...field}
-                label="Board thickness (mm)"
-                value={board.thickness}
-                min={0.1}
-                max={20}
-                onCommit={(thickness) => onCommit({ ...board, thickness })}
-              />
-            </PropertySection>
-          )}
+          {showEmptyState &&
+            !selectionCount &&
+            !footprint &&
+            !track &&
+            !via &&
+            !graphic &&
+            !zone && (
+              <PropertiesEmptyState icon={CircuitBoard}>
+                Select an object to view its properties.
+              </PropertiesEmptyState>
+            )}
           {selectionCount > 1 && !rectangle && (
             <PropertySection title="Selection">
               <PropertyRow label="Items" value={selectionCount} />

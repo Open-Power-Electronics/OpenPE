@@ -1,31 +1,22 @@
 # OpenPE
 
-**OpenPE · Electrical Engineering Studio** is a local desktop workbench for power electronics.
+**OpenPE · Electrical Engineering Studio** is a local workbench for power electronics, with Agent conversations on the left and editable designs on the right.
 
 ![OpenPE Home with the Signal E logo](assets/home.png)
 
 ## What you can do
 
-- Edit schematics and native KiCad Source, with shared project undo.
-- Manually place and route PCBs, run bounded ERC/DRC and inspect boards in 3D.
-- Draw rectangle, circle or polygon sketches on the Model canvas, extrude solids, select edges for fillet or chamfer and combine bodies. Codex and Claude Code can export the analytical STEP through `enclosure.exportStep`.
-- Run supported SPICE transients and steady PCB temperature analysis.
-- Work on independent projects, recover pending drafts and compare local Git versions.
-- Use Codex or Claude Code with scoped live project tools, or DeepSeek Harness and Pi with reviewed proposals. Cursor supports CLI detection only.
+- Edit native KiCad schematics and Source, manually place and route PCBs, and run ERC/DRC.
+- Inspect boards in 3D and create Model CAD solids with sketches, extrusion, holes, fillets, chamfers and Boolean operations.
+- Run supported SPICE transients and steady PCB thermal analysis.
+- Keep independent projects and conversations, recover drafts and compare local Git history.
+- Work with Codex or Claude Code through scoped project tools, or review proposals from DeepSeek Harness and Pi. Cursor supports CLI detection only.
 
-Home contains nine curated projects under Example and a fixed EMC Flyback entry under Recent during Preview. File > Recent / Example opens the same ten native KiCad projects. Keep required `circuits/`, `models/`, `footprints/` and `symbols/` assets with a saved project. Completed solver records remain directly under `spice/` and `thermal/` as `<native-stem>.*` files, separate from design data.
-
-`examples/` contains exactly ten complete project directories using `examples/<circuit-name>/<circuit-name>.kicad_*`, including `examples/emc-flyback/emc-flyback.kicad_pro`. A project has only the supporting directories it uses: custom `.kicad_mod` packages in `footprints/` and `.kicad_sym` libraries in `symbols/` with their library tables, reviewed controller references in `datasheets/`, and the SPICE `.lib` files in `circuits/` and STEP files in `models/` that preparation copies from pinned sources. [Examples](docs/EXAMPLES.md) owns the layout; shared metadata and pinned originals live in `resources/example-catalog/`.
-
-EMC Flyback's aluminium base, side walls and transparent drilled cover are editable Model CAD solids built with the same box and through-hole tools available to any project. File > Export can write these solids as an OpenSCAD `.scad` model; OpenPE never reads that file back. Source lists the current project directory using its actual filenames and edits ordinary text files.
-
-The bundled **AI PCB Layout** plugin supplies the [power-pcb-design workflow](https://github.com/ChengminLi/AI-PCB-layout) by Chengmin Li and Xiao Yang, under CC BY 4.0. It is installed and enabled by default; manage it in Plugins > Marketplace and ask the Agent to review a board. Guidance and engineering review gates operate within the available OpenPE tools.
-
-The nine Example controllers include offline [reviewed datasheet JSON](docs/DATASHEETS.md). Source shows the actual `datasheets/parameters.json` and local PDFs; reviewed Agent data is matched to the current controller. Optional original PDFs use `npm run datasheets:download` and `npm run datasheets:check`.
+Start with nine curated Example projects or EMC Flyback under Recent. The bundled [AI PCB Layout](docs/PLUGINS.md#ai-pcb-layout) plugin provides design guidance and board review.
 
 ## Get started
 
-Use **Windows x64**, **Node.js 24** and npm. Install Git for version history. Agent CLIs require separate installation and configuration; manual editing and simulation work without an Agent.
+Requires **Windows x64**, **Node.js 24** and npm. Install Git for version history. Agent CLIs are configured separately; manual editing and simulation work without an Agent.
 
 ```sh
 npm ci
@@ -34,62 +25,54 @@ npm run build
 npm start
 ```
 
-`npm ci` installs the pinned Electron 45 runtime. After installation with `--ignore-scripts`, run `npm run postinstall` before desktop startup.
+Setup and build may download required libraries and solver resources. If dependencies were installed with `--ignore-scripts`, run `npm run postinstall` before starting Electron.
 
-Build generates formats, verifies original Home projects, prepares portable assets, checks architecture boundaries and verifies bundled solver resources before compiling the renderer; missing resources may require network access. Packaging prepares libraries, then uses this same build sequence for solver verification. Home opens the original `examples/<file>/` directory. **Save as** creates a personal copy.
+Home opens the original projects in `examples/`. Use **Save as** to create a personal copy with its supporting assets. Designs remain native `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` file sets.
 
 ## Development
 
 ```sh
-npm run dev                 # Electron with renderer hot reload
-npm run dev -- --verbose    # Complete preparation and runtime logs
-npm run check:docs          # Documentation names, links, anchors and commands
-npm run typecheck           # Architecture boundaries and TypeScript
-npm test                    # Data/runtime tests; regenerates service formats
-npm run build:format        # Generated schemas, validators and service bundles
-npm run examples:prepare    # Verify original Home projects and portable assets
-npm run package             # Windows app in release/win-unpacked/
+npm run dev                 # Desktop app with renderer hot reload
+npm run dev -- --verbose    # Include full preparation and runtime logs
 ```
 
-`npm run dev` prints concise preparation/renderer/desktop stages, keeps warnings and errors, and hides routine request logs. Preparation failures include recent output; `--verbose` streams complete child output. `dev:web` retains ordinary Next.js logging.
+For browser UI development:
 
-Development reuses successful format/model/Home preparation when content fingerprints match `.openpe/dev-preparation-v1.json`; solver verification runs on every start, and build/package preparation remains complete. Format generation and resource preparation retain unchanged output files and timestamps. [Storage and build boundaries](docs/ARCHITECTURE.md#storage-and-build-boundaries) defines the preparation sequence and cache.
-
-`npm test` keeps each test file in its own process, with CPU count minus one workers (1–16), and starts the slowest recorded files first; timing records change only scheduling. Override the worker count with `npm test -- --test-concurrency=4`. [Verification](docs/ARCHITECTURE.md#verification) describes the runner.
-
-Run focused regressions with `npm test -- tests/<name>.test.ts`, or `node --import tsx --test tests/<name>.test.ts` after `npm run build:format` when canonical format sources changed. Focused runs do not replace the complete suite's timing record. Runtime/circuit changes also require `npm test`; focused regressions supplement the full suite. Desktop checks require explicit authorization under [AGENTS.md](AGENTS.md#verification-and-delivery).
-
-Restart after Electron or service changes; renderer reload alone does not replace host modules. Preserve unsaved work and use the existing app window for manual checks. Desktop checks and benchmarks require explicit authorization. [AGENTS.md](AGENTS.md#verification-and-delivery) defines required checks and test boundaries.
-
-The isolated `node scripts/check-home-editing-ui.mjs` and `node scripts/check-emc-editing-workflow-ui.mjs` workflows cover real project edits, cross-view undo and native Save/reopen with fixture pickers, without launching Electron or providers. Runtime and presentation checks are indexed in [Architecture](docs/ARCHITECTURE.md#verification).
-
-To enable the five real-solver unit regressions with prepared offline resources:
-
-```powershell
-npm run simulation:verify
-npm run thermal:verify
-$env:OPENPE_TEST_NGSPICE = '1'
-$env:OPENPE_TEST_THERMAL = '1'
-npm test
+```sh
+npm run examples:prepare
+npm run dev:web
 ```
 
-These cover two Buck transients, an analytical thermal slab, conforming contours and completed thermal artifact retention. Home model sweeps and mesh-refinement benchmarks are separate: see [Simulation](docs/SIMULATION.md#verification-commands) and [Thermal](docs/THERMAL.md#verification).
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. Desktop development uses the same port; run one development server at a time. Restart the app after Electron or service changes, preserving unsaved work first.
+
+| Command                    | Purpose                                               |
+| -------------------------- | ----------------------------------------------------- |
+| `npm run check:docs`       | Check documentation names, links and commands         |
+| `npm run typecheck`        | Check architecture boundaries and TypeScript          |
+| `npm test`                 | Run data/runtime tests and regenerate service formats |
+| `npm run build:format`     | Generate schemas, validators and service bundles      |
+| `npm run examples:prepare` | Verify Home projects and prepare portable assets      |
+| `npm run build`            | Prepare resources and build the renderer              |
+| `npm run package`          | Build the Windows app in `release/win-unpacked/`      |
+
+See [verification](docs/ARCHITECTURE.md#verification) for focused tests and opt-in checks. [Engineering rules](AGENTS.md#verification-and-delivery) define required validation and authorization for desktop checks.
 
 ## Scope
 
-OpenPE is a preview targeting bounded KiCad 10 content. [ERC/DRC coverage](docs/DESIGN-RULES.md), supported circuits and models define the limits; complete KiCad compatibility, arbitrary model import and manufacturing qualification are outside the current scope. Refill and check exported copper in KiCad before manufacturing.
+OpenPE is a preview supporting a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Refill and check exported copper in KiCad before manufacturing.
 
-Model CAD supports bounded sketch extrusion, box/cylinder solids, local-Z holes, fillet/chamfer on selected analytic base edges and two-body union/difference/intersection. Retired enclosure data is rejected; EMC Flyback uses editable Model CAD solids. Arbitrary CAD programs, general mesh import, imported/Boolean topology editing and whole-assembly simulation remain outside its scope. Thermal FEM estimates board temperature under its material, pad-heat and cooling assumptions; it does not predict package junction temperature or EMC emissions. [EMC Flyback verification](docs/EMC-FLYBACK.md) describes its behavioural transient, offline models and comparison limits.
-
-Product copy, application-owned protocol and storage identifiers use **OpenPE** / `openpe`. The default application data directory is `%APPDATA%\OpenPE` on Windows; `OPENPE_DATA_DIR` overrides it. User projects remain native KiCad file sets. OpenPE accepts only current names, application formats and host contracts; former-brand aliases, older application records and incomplete settings are unsupported and are not migrated.
+Simulation support depends on the documented circuits and models. Thermal analysis estimates PCB temperature under stated material and cooling assumptions, not package junction temperature or EMC emissions. See the feature documents below for coverage and limits.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) · [Source diagram](assets/architecture.drawio) · [Core](docs/CORE.md) · [API](docs/API.md)
-- [Native format](docs/FORMAT.md) · [Layout and Model](docs/LAYOUT.md) · [ERC/DRC](docs/DESIGN-RULES.md) · [Version history](docs/VERSION-HISTORY.md)
-- [Simulation](docs/SIMULATION.md) · [Thermal FEM](docs/THERMAL.md) · [EMC Flyback verification](docs/EMC-FLYBACK.md)
-- [Examples](docs/EXAMPLES.md) · [Datasheets](docs/DATASHEETS.md) · [Libraries and licenses](docs/LIBRARIES.md)
-- [Plugins](docs/PLUGINS.md) · [Design](DESIGN.md) · [Engineering](AGENTS.md)
+| Topic               | Documents                                                                                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product and UI      | [Design](DESIGN.md) · [Layout and Model](docs/LAYOUT.md) · [ERC/DRC](docs/DESIGN-RULES.md)                                                            |
+| Files and history   | [Native format](docs/FORMAT.md) · [Version history](docs/VERSION-HISTORY.md)                                                                          |
+| Simulation          | [SPICE](docs/SIMULATION.md) · [Thermal FEM](docs/THERMAL.md) · [EMC Flyback](docs/EMC-FLYBACK.md)                                                     |
+| Examples and assets | [Examples](docs/EXAMPLES.md) · [Datasheets](docs/DATASHEETS.md) · [Libraries and licenses](docs/LIBRARIES.md)                                         |
+| Internals           | [Architecture](docs/ARCHITECTURE.md) · [Diagram](assets/architecture.drawio) · [Core](docs/CORE.md) · [API](docs/API.md) · [Plugins](docs/PLUGINS.md) |
+| Contributing        | [Engineering contract](AGENTS.md)                                                                                                                     |
 
 ## License
 

@@ -1748,7 +1748,7 @@ try {
       );
       assert.equal(
         await properties
-          .getByRole('switch', { name: 'Include in simulation', exact: true })
+          .getByRole('switch', { name: 'Include in SPICE simulation', exact: true })
           .isDisabled(),
         true,
       );
@@ -2467,7 +2467,7 @@ try {
     );
 
   await run('Wire clicks never add transient probes', async (t) => {
-    await t.button('Simulation').click();
+    await t.button('SPICE Simulation').click();
     await t.page.getByRole('region', { name: 'Simulation settings', exact: true }).waitFor();
     // Opening the analysis panel requests a deferred fit before editing starts.
     await t.page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
@@ -2598,7 +2598,7 @@ try {
     'Explicit Sim.Params inspection restores Properties from the Simulation sidebar',
     async (t) => {
       await t.click(await t.glyph(`annotation-field-${first.ref}-Sim.Params`));
-      await t.button('Simulation').click();
+      await t.button('SPICE Simulation').click();
       const settings = t.page.getByRole('region', { name: 'Simulation settings', exact: true });
       await settings.waitFor();
       await t.page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
@@ -2614,7 +2614,7 @@ try {
         true,
         'The ordinary Properties sidebar contains the field inspector.',
       );
-      assert.equal(await t.button('Simulation').getAttribute('aria-pressed'), 'false');
+      assert.equal(await t.button('SPICE Simulation').getAttribute('aria-pressed'), 'false');
       await t.expectClean();
       await input.click();
       await input.fill('temp=40');
@@ -2630,7 +2630,7 @@ try {
 
   await run('Simulation keeps ordinary component Properties suppressed', async (t) => {
     await t.click(first);
-    await t.button('Simulation').click();
+    await t.button('SPICE Simulation').click();
     await t.page.getByRole('region', { name: 'Simulation settings', exact: true }).waitFor();
     await t.page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
     await t.canvas.focus();

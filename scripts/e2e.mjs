@@ -1924,64 +1924,32 @@ try {
       await caption.getByRole('button', { name: 'Forward', exact: true }).click();
       await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
       assert.equal(
-        await caption.getByRole('button', { name: 'Toggle sidebar', exact: true }).isDisabled(),
-        true,
+        await caption.getByRole('button', { name: 'Toggle sidebar', exact: true }).count(),
+        0,
       );
       assert.equal(await page.locator('.home-sidebar').isVisible(), true);
       await caption.getByRole('button', { name: 'Back', exact: true }).click();
       const conversation = page.locator('.chat-panel:not([hidden])');
       const separator = page.getByRole('separator', { name: 'Resize conversation and schematic' });
-      await separator.focus();
-      await page.keyboard.press('ArrowRight');
-      const conversationWidth = (await conversation.boundingBox()).width;
-      const editorWidth = (await page.locator('.editor').boundingBox()).width;
+      const toggle = conversation.getByRole('button', { name: 'Toggle sidebar', exact: true });
       const draft = await conversation.locator('textarea').inputValue();
       await conversation
         .locator('textarea')
         .fill('Keep this draft while the conversation is collapsed.');
-      const canvasTransform = await page.getByTestId('schematic-canvas').evaluate((el) => {
-        const { a, d, e, f } = el.getScreenCTM();
-        return { a, d, e, f };
-      });
-      const zoomLabel = await page.locator('.zoom-controls > span').innerText();
-      const editorBefore = await page.locator('.editor').boundingBox();
-      const verifyResizeFrames = await watchCanvasResizeFrames(page);
-      await caption.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
-      assert.equal(await page.locator('.nav-rail').isVisible(), true);
+      const dockWidth = (await page.locator('.nav-rail').boundingBox()).width;
+      await toggle.click();
+      assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
       assert.equal(await conversation.isVisible(), false);
-      assert.equal(await page.locator('.workspace-divider').isVisible(), false);
-      assert.ok(
-        (await page.locator('.editor').boundingBox()).width > editorWidth + conversationWidth - 12,
-        'Collapsing the conversation expands the schematic while preserving the navigation dock.',
-      );
-      const checkCanvasTransform = async () => {
-        await page.waitForFunction((before) => {
-          const matrix = document.querySelector('[data-testid="schematic-canvas"]').getScreenCTM();
-          return ['a', 'd', 'e', 'f'].every((key) => Math.abs(matrix[key] - before[key]) < 0.01);
-        }, canvasTransform);
-        assert.equal(await page.locator('.zoom-controls > span').innerText(), zoomLabel);
-      };
-      await checkCanvasTransform();
-      const editorAfter = await page.locator('.editor').boundingBox();
-      assert.ok(
-        Math.abs(editorAfter.x + editorAfter.width - editorBefore.x - editorBefore.width) < 1,
-      );
-      assert.equal(editorAfter.y, editorBefore.y);
-      assert.equal(editorAfter.height, editorBefore.height);
-      const rightInset =
-        (await page.evaluate(() => innerWidth)) - editorAfter.x - editorAfter.width;
-      const dock = await page.locator('.nav-rail').boundingBox();
-      assert.ok(
-        Math.abs(editorAfter.x - dock.x - dock.width - rightInset) < 1,
-        'The collapsed editor has equal insets after the navigation dock and at the right edge.',
-      );
-      await caption.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
-      assert.equal(await page.locator('.nav-rail').isVisible(), true);
+      assert.equal(await separator.isVisible(), false);
+      assert.ok(Math.abs((await page.locator('.nav-rail').boundingBox()).width - dockWidth) < 1);
+      await page
+        .locator('.nav-rail')
+        .getByRole('button', { name: 'Toggle sidebar', exact: true })
+        .click();
       assert.equal(await conversation.isVisible(), true);
       assert.equal(await separator.isVisible(), true);
-      assert.ok(Math.abs((await conversation.boundingBox()).width - conversationWidth) < 1);
-      await checkCanvasTransform();
-      await verifyResizeFrames();
+      assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
+      assert.ok(Math.abs((await page.locator('.nav-rail').boundingBox()).width - dockWidth) < 1);
       assert.equal(
         await conversation.locator('textarea').inputValue(),
         'Keep this draft while the conversation is collapsed.',
@@ -2332,17 +2300,15 @@ try {
     await chooseEffort(page, 'Low');
     await page.setViewportSize({ width: 1120, height: 760 });
     await capture('test-results/desktop-compact.png');
-    const messageCount = await page.locator('.message').count();
-    await page.getByRole('button', { name: 'Clear current conversation', exact: true }).click();
-    await capture('test-results/dialog-clear-conversation.png');
-    await page.keyboard.press('Escape');
-    assert.equal(await page.locator('.message').count(), messageCount);
     await page.getByRole('button', { name: 'Source', exact: true }).click();
-    const beforeClear = await readSnapshotFromNative(page);
-    await page.getByRole('button', { name: 'Clear current conversation', exact: true }).click();
-    await page.getByRole('button', { name: 'Clear conversation', exact: true }).click();
-    assert.equal(await page.locator('.message').count(), 0);
-    assert.equal(await readSnapshotFromNative(page), beforeClear);
+    const beforeConversation = await readSnapshotFromNative(page);
+    await page
+      .locator('.project-navigation > span')
+      .first()
+      .locator('.project-folder > button')
+      .click();
+    assert.equal(await page.locator('.chat-panel:not([hidden]) .message').count(), 0);
+    assert.equal(await readSnapshotFromNative(page), beforeConversation);
     await page.getByRole('button', { name: 'Schematic', exact: true }).click();
     await closeCurrentProject(page);
     await page.getByRole('button', { name: 'New project', exact: true }).click();

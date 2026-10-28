@@ -1,3 +1,4 @@
+import { exportCanvasImage } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -399,7 +400,7 @@ try {
       }, index);
     const modelCanvas = page.locator('.pcb-model-canvas canvas');
     const before = await modelCanvas.screenshot();
-    await button('Export image').click();
+    await exportCanvasImage(page);
     const baseModelExport = await page.evaluate(() => window.exportedImage.dataUrl);
     const meshColors = () =>
       page.evaluate(() => {
@@ -446,7 +447,7 @@ try {
         ? selectedColors[0].color[1] > baseColors[0].color[1]
         : selectedColors[0].color[1] < baseColors[0].color[1],
     );
-    await button('Export image').click();
+    await exportCanvasImage(page);
     assert.deepEqual(
       await pixels(await page.evaluate(() => window.exportedImage.dataUrl)),
       await pixels(baseModelExport),

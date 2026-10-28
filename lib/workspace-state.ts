@@ -20,6 +20,7 @@ export const defaultAgentPreferences: AgentPreferences = {
 };
 export type DocumentState = {
   id: string;
+  pinned?: true;
   source: string;
   sourceDraft: string | null;
   dirty: boolean;
@@ -97,6 +98,8 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
     )
       throw new Error('Invalid or duplicate project ID.');
     ids.add(doc.id);
+    if (doc.pinned !== undefined && doc.pinned !== true)
+      throw new Error('Invalid saved project pin state.');
     if (typeof doc.source !== 'string') throw new Error('Invalid project source.');
     const project = recoveryProjectSummary(doc.source);
     if (doc.exampleKey !== undefined && doc.exampleKey !== null && !validExampleKey(doc.exampleKey))
@@ -142,6 +145,7 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
     }
     return {
       id: doc.id,
+      ...(doc.pinned === true ? { pinned: true as const } : {}),
       ...(exampleKey !== undefined ? { exampleKey: exampleKey as string | null } : {}),
       ...(doc.localExample !== undefined ? { localExample: doc.localExample as boolean } : {}),
       ...(doc.activeSchematicId !== undefined

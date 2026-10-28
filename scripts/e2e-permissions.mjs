@@ -104,7 +104,11 @@ try {
   await projectHistory(page, 'Undo');
   assert.equal(await source(), initial);
   await send('330uF');
-  await panel().getByRole('button', { name: 'New conversation', exact: true }).click();
+  await page
+    .locator('.project-navigation > span')
+    .first()
+    .locator('.project-folder > button')
+    .click();
   await finish();
   assert.ok(
     (await source()).includes('330uF'),
@@ -136,7 +140,11 @@ try {
     /Auto/,
   );
   await page.setViewportSize({ width: 1120, height: 760 });
-  await panel().getByRole('button', { name: 'New conversation', exact: true }).click();
+  await page
+    .locator('.project-navigation > span')
+    .first()
+    .locator('.project-folder > button')
+    .click();
   await page.waitForTimeout(5600);
   await panel().getByRole('combobox', { name: 'Agent permissions', exact: true }).click();
   const box = await page.getByRole('listbox').boundingBox();

@@ -12,13 +12,15 @@ const bundle = await build({
       import PartProperties from './components/PartProperties';
       window.propertyRenderCount=0; window.propertySaves=[]; window.propertyAcceptSaves=true;
       function Fixture(){
+        const [spiceAvailable,setSpiceAvailable]=useState(true);
+        window.setPropertySpiceAvailable=setSpiceAvailable;
         const [part,setPart]=useState({id:'first-part',libId:'Device:R',ref:'R1',value:'1k',x:0,y:0,rotation:0,
           fields:{Footprint:'',Note:'original'},raw:['symbol',['property','"Raw field"','"raw original"']]});
         window.updatePropertyPart=(patch)=>setPart(current=>({...current,...patch}));
         const onSave=useCallback((ref,value,fields,included)=>{
           window.propertySaves.push({id:part.id,ref,value,fields,included}); return window.propertyAcceptSaves;
         },[part.id]);
-        return <div className="panel"><PartProperties part={part} onSave={onSave}/></div>;
+        return <div className="panel"><PartProperties part={part} spiceAvailable={spiceAvailable} onSave={onSave}/></div>;
       }
       createRoot(document.getElementById('root')).render(<Fixture/>);`,
     resolveDir: process.cwd(),
@@ -126,7 +128,9 @@ try {
     'Simulation participation changes invalidate the form.',
   );
   assert.equal(
-    await page.getByRole('switch', { name: 'Include in simulation' }).getAttribute('aria-checked'),
+    await page
+      .getByRole('switch', { name: 'Include in SPICE simulation' })
+      .getAttribute('aria-checked'),
     'false',
   );
   await value.fill('5k');
@@ -140,7 +144,7 @@ try {
     undefined,
     'Value-only edits leave the accepted participation setting unchanged.',
   );
-  const participation = page.getByRole('switch', { name: 'Include in simulation' });
+  const participation = page.getByRole('switch', { name: 'Include in SPICE simulation' });
   const error = page.getByRole('alert');
   await value.fill('');
   const beforeInvalid = await page.evaluate(() => window.propertySaves.length);
@@ -184,6 +188,16 @@ try {
   assert.equal(retried.length, rejected.length + 1);
   assert.equal(retried.at(-1).included, true);
   assert.equal(await error.count(), 0);
+  await value.fill('retained SPICE draft');
+  const beforePluginVisibility = await page.evaluate(() => window.propertySaves.length);
+  await page.evaluate(() => window.setPropertySpiceAvailable(false));
+  await participation.waitFor({ state: 'detached' });
+  assert.equal(await page.locator('.property-simulation').count(), 0);
+  assert.equal(await value.inputValue(), 'retained SPICE draft');
+  await page.evaluate(() => window.setPropertySpiceAvailable(true));
+  await participation.waitFor();
+  assert.equal(await value.inputValue(), 'retained SPICE draft');
+  assert.equal(await page.evaluate(() => window.propertySaves.length), beforePluginVisibility);
   assert.deepEqual(errors, []);
   console.log(
     'PartProperties retention verified: live pose drafts, complete associations, stable ID, current native fields and accepted participation with failure/retry.',

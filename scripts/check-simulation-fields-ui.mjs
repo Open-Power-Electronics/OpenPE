@@ -91,7 +91,7 @@ try {
   );
   assert.equal(await page.evaluate(() => JSON.stringify(window.fieldState.doc)), initialDocument);
   assert.equal(await page.evaluate(() => window.fieldState.commits), 0);
-  await page.getByRole('button', { name: 'Simulation', exact: true }).click();
+  await page.getByRole('button', { name: 'SPICE Simulation', exact: true }).click();
   await field.waitFor({ state: 'visible' });
   const pinTargets = page.locator('[data-probe-pin]');
   assert.ok((await pinTargets.count()) > 0, 'Pin probe targets remain available');
@@ -122,7 +122,7 @@ try {
   assert.equal(await page.evaluate(() => window.fieldState.commits), 0);
   await page.getByRole('button', { name: 'Interaction', exact: true }).click();
   await assertInvisiblePin('Interaction selection does not draw terminal rings');
-  await page.getByRole('button', { name: 'Simulation', exact: true }).click();
+  await page.getByRole('button', { name: 'SPICE Simulation', exact: true }).click();
   const state = () =>
     page.evaluate(() => {
       const { doc, selection, commits } = window.fieldState;
@@ -147,7 +147,7 @@ try {
   assert.equal((await state()).commits, 1, 'Interaction mode can move parameter text');
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   assert.deepEqual(await coordinates(), originalAt);
-  await page.getByRole('button', { name: 'Simulation', exact: true }).click();
+  await page.getByRole('button', { name: 'SPICE Simulation', exact: true }).click();
   assert.equal(await field.textContent(), text);
   const bounds = await field.boundingBox();
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
@@ -168,7 +168,7 @@ try {
   assert.deepEqual(moved.wires, original.wires);
   await page.getByRole('button', { name: 'Interaction', exact: true }).click();
   await field.waitFor({ state: 'visible' });
-  await page.getByRole('button', { name: 'Simulation', exact: true }).click();
+  await page.getByRole('button', { name: 'SPICE Simulation', exact: true }).click();
   assert.deepEqual(await coordinates(), movedAt, 'mode changes preserve the moved position');
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   assert.deepEqual(await coordinates(), originalAt);

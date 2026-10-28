@@ -1,6 +1,6 @@
 'use client';
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, CircuitBoard, Check, Plus, CheckCheck, Trash2 } from 'lucide-react';
+import { ArrowUpRight, CircuitBoard, Check, CheckCheck } from 'lucide-react';
 import { circuitFingerprint, type Circuit } from '@/lib/circuit';
 import type { PCB } from '@/lib/pcb';
 import { layoutAnnotationContext } from '@/lib/pcb-annotations';
@@ -9,7 +9,7 @@ import type { Message } from '@/lib/chat-sessions';
 import { agentName } from '@/lib/agent-providers';
 import { api } from '@/lib/bridge';
 import { extractProposal, type Operation } from '@/lib/proposals';
-import Select from './Select';
+import SidebarToggle from './SidebarToggle';
 import AgentLogo from './AgentLogo';
 import AgentComposer from './AgentComposer';
 import AnnotationAttachments from './AnnotationAttachments';
@@ -70,12 +70,11 @@ export default function Chat({
   onApply,
   active,
   sessionId,
-  sessionOptions,
-  onSelectSession,
-  onNewSession,
+  conversationTitle,
+  sidebarVisible,
+  onToggleSidebar,
   input,
   setInput,
-  onClear,
   onRunningChange,
   annotations,
   setAnnotations,
@@ -100,12 +99,11 @@ export default function Chat({
   onApply: (ops: Operation[], basis?: string) => boolean;
   active: boolean;
   sessionId: string;
-  sessionOptions: { value: string; label: string }[];
-  onSelectSession: (id: string) => void;
-  onNewSession: () => void;
+  conversationTitle: string;
+  sidebarVisible?: boolean;
+  onToggleSidebar?: () => void;
   input: string;
   setInput: (value: string) => void;
-  onClear: () => void;
   onRunningChange: (id: string, running: boolean) => void;
   annotations: AgentAnnotation[];
   setAnnotations: (annotations: AgentAnnotation[]) => void;
@@ -542,31 +540,11 @@ export default function Chat({
     <aside className="chat-panel" hidden={!active}>
       <div className="chat-header">
         <div className="session-picker">
-          <Select
-            label="Session"
-            value={sessionId}
-            options={sessionOptions}
-            onChange={onSelectSession}
-            compact
-          />
+          <span className="session-title">{conversationTitle}</span>
         </div>
-        <button
-          className="icon-button"
-          aria-label="Clear current conversation"
-          title="Clear conversation"
-          disabled={busy || !messages.length}
-          onClick={onClear}
-        >
-          <Trash2 size={15} />
-        </button>
-        <button
-          className="icon-button"
-          aria-label="New conversation"
-          title="New conversation"
-          onClick={onNewSession}
-        >
-          <Plus size={17} />
-        </button>
+        {onToggleSidebar && (
+          <SidebarToggle side="left" visible={Boolean(sidebarVisible)} onToggle={onToggleSidebar} />
+        )}
       </div>
       <div
         ref={scroll}

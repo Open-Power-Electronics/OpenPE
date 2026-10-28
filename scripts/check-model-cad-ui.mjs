@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import {
   chooseModelTool,
@@ -82,7 +83,7 @@ const bundle = await build({
     contents: `import React,{useRef,useState,useSyncExternalStore}from'react';
 import{createRoot}from'react-dom/client';import*as THREE from'three';
 import Preview from'./components/PCBModelPreview';
-import RightSidebarToggle from'./components/RightSidebarToggle';
+import SidebarToggle from'./components/SidebarToggle';
 import{ProjectCore}from'./core/project-core';import{registerProjectCapabilities}from'./core/register-project';
 import{createCapabilityHost}from'./api/capabilities';import{registerWorkbenchCapabilities}from'./lib/workbench-capabilities';
 import{modelCadFromProject,newModelCadObject}from'./lib/model-cad';import{serializeProject}from'./lib/project';import{prepareModelCadObjects}from'./components/model-cad-preparation';
@@ -104,7 +105,7 @@ grid={grid} gridSpacing={gridSpacing}
 modelCad={modelCadFromProject(snapshot.project)}
 revision={String(snapshot.revision)} undoDepth={snapshot.undoDepth} redoDepth={snapshot.redoDepth}
 sourcePending={snapshot.sourceDraft!==null} capabilityHost={host} active={active} viewState={view}
-sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)} historyAction={<button type="button" className="tool-button" aria-label="Version history"/>} sidebarAction={<div className="editor-tool-group editor-view-controls"><RightSidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div>}/></div></div>};
+sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)} historyAction={<button type="button" className="tool-button" aria-label="Version history"/>} sidebarAction={<div className="editor-tool-group editor-view-controls"><SidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div>}/></div></div>};
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -1315,7 +1316,7 @@ try {
   const fitState = await state();
   const fitNative = await page.evaluate(() => window.cad.core.getNativeFiles());
   const fitCamera = async () => {
-    await button('Fit 3D board').click();
+    await runCanvasAction(page, 'Fit 3D board');
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     );
@@ -1380,7 +1381,7 @@ try {
     await page.getByRole('checkbox', { name, exact: true }).setChecked(displayBeforeFit[index]);
   await page.keyboard.press('Escape');
 
-  await button('Fit 3D board').click();
+  await runCanvasAction(page, 'Fit 3D board');
   await preview.screenshot({ path: 'test-results/model-cad-tools-ui.png' });
   await clickSolid(first.id, { x: 5, y: 0, z: null });
   await inspector.waitFor();

@@ -277,6 +277,31 @@ try {
   const fileMenu = page.getByRole('menu', { name: 'Project file actions', exact: true });
   await fileMenu.waitFor();
   assert.equal(await projects().getByRole('button').count(), 3, 'Right-click only opens the menu.');
+  const projectOrder = () =>
+    page
+      .locator('.project-session-group')
+      .evaluateAll((groups) => groups.map((group) => group.dataset.projectId));
+  const originalOrder = await projectOrder();
+  await fileMenu.getByRole('menuitem', { name: 'Pin', exact: true }).click();
+  await page
+    .locator(`[data-project-id="${newProjectId}"] .project-folder[data-pinned="true"]`)
+    .waitFor();
+  assert.deepEqual(await projectOrder(), [
+    newProjectId,
+    ...originalOrder.filter((id) => id !== newProjectId),
+  ]);
+  assert.match(
+    await page.locator('.project-navigation [aria-current="page"]').getAttribute('aria-label'),
+    /^Project A,/,
+    'Pinning another project preserves the active editor.',
+  );
+  await page.locator(`[data-project-id="${newProjectId}"] button`).click({ button: 'right' });
+  await fileMenu.getByRole('menuitem', { name: 'Unpin', exact: true }).click();
+  await page
+    .locator(`[data-project-id="${newProjectId}"] .project-folder:not([data-pinned])`)
+    .waitFor();
+  assert.deepEqual(await projectOrder(), originalOrder);
+  await page.locator(`[data-project-id="${newProjectId}"] button`).click({ button: 'right' });
   await fileMenu.getByRole('menuitem', { name: 'Close project', exact: true }).click();
   await page.waitForFunction(
     () => document.querySelectorAll('.project-navigation button').length === 2,

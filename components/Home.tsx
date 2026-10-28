@@ -14,7 +14,7 @@ import SettingsMenu from './SettingsMenu';
 import AgentPicker, { type AgentPickerProps } from './AgentPicker';
 import ProjectNavigation, {
   type ProjectNavigationItem,
-  type ProjectFileAction,
+  type ProjectAction,
 } from './ProjectNavigation';
 import type { Circuit } from '@/lib/circuit';
 
@@ -47,7 +47,7 @@ export default function Home({
   onOpen: () => void;
   onExample: (id: ExampleId) => void;
   onResume: (id: string) => void;
-  onProjectAction: (id: string, action: ProjectFileAction) => void;
+  onProjectAction: (id: string, action: ProjectAction) => void;
   onSettings: () => void;
   onAbout: () => void;
   onPlugins: () => void;

@@ -4,7 +4,20 @@ import { flushSync } from 'react-dom';
 import { isOwnedCircuit } from '@/lib/immutable-project';
 import type { RuleCheckFocus } from '@/lib/design-rule-checks';
 import RuleCheckMarker from './RuleCheckMarker';
-import { ImageDown, Maximize, Minus, Plus } from 'lucide-react';
+import CanvasContextMenu from './CanvasContextMenu';
+import {
+  ImageDown,
+  Maximize,
+  Minus,
+  Plus,
+  Move,
+  RotateCw,
+  Scan,
+  SquareDashed,
+  SlidersHorizontal,
+  Trash2,
+  X,
+} from 'lucide-react';
 import CanvasAnnotations, {
   type AnnotationMode,
   type CanvasAnnotationsHandle,
@@ -1839,6 +1852,109 @@ export default function Canvas({
         onMode={setAnnotationMode}
         onExit={() => setTool('select')}
       />
+      <CanvasContextMenu
+        target={svg}
+        active={active}
+        identity={doc}
+        onError={(message) => onNotify?.(message)}
+        onOpen={(target) => {
+          if (
+            !editable ||
+            editingBlocked ||
+            pickupRef.current ||
+            dragRef.current ||
+            wireDraftRef.current
+          )
+            return;
+          const id =
+            target instanceof Element
+              ? target.closest<SVGElement>('[data-selection-id]')?.dataset.selectionId
+              : undefined;
+          if (id && selectableIds.has(id) && !selection.includes(id)) onSelection([id]);
+        }}
+        actions={[
+          { id: 'fit', label: 'Fit to canvas', icon: Maximize, run: fit },
+          { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(0.8) },
+          { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
+          {
+            id: 'export',
+            label: 'Export image',
+            icon: ImageDown,
+            disabled: exporting,
+            run: exportImage,
+          },
+          {
+            id: 'select-all',
+            label: 'Select all',
+            icon: Scan,
+            separated: true,
+            disabled: !editable || editingBlocked,
+            run: () => onSelection([...selectableIds]),
+          },
+          {
+            id: 'clear-selection',
+            label: 'Clear selection',
+            icon: SquareDashed,
+            disabled: !selection.length,
+            run: () => onSelection([]),
+          },
+          {
+            id: 'properties',
+            label: 'Properties',
+            icon: SlidersHorizontal,
+            separated: true,
+            disabled: !editable || editingBlocked || !selection.length || !onProperties,
+            run: () => {
+              const id = selection.filter((id) => selectableIds.has(id)).at(-1);
+              if (id) onProperties?.(id);
+            },
+          },
+          {
+            id: 'move',
+            label: 'Move',
+            icon: Move,
+            disabled: !editable || editingBlocked || !selection.length,
+            run: () => beginPickup(false, false),
+          },
+          {
+            id: 'drag',
+            label: 'Drag with connections',
+            icon: Move,
+            disabled: !editable || editingBlocked || !selection.length,
+            run: () => beginPickup(true, false),
+          },
+          {
+            id: 'rotate',
+            label: 'Rotate selection',
+            icon: RotateCw,
+            disabled: !editable || editingBlocked || !selection.length,
+            run: () => {
+              const ids = selection.filter((id) => selectableIds.has(id));
+              if (ids.length) onCommit(transformSelection(doc, ids, 'rotate'));
+            },
+          },
+          {
+            id: 'delete',
+            label: 'Delete selection',
+            icon: Trash2,
+            destructive: true,
+            disabled: !editable || editingBlocked || !selection.length || !onDelete,
+            run: () => onDelete?.(selection.filter((id) => selectableIds.has(id))),
+          },
+          {
+            id: 'cancel',
+            label: 'Cancel tool',
+            icon: X,
+            disabled: tool === 'select',
+            run: () => {
+              cancelGesture();
+              updateWireDraft(null);
+              pendingWire.current = null;
+              setTool('select');
+            },
+          },
+        ]}
+      />
       <div className="zoom-controls">
         <button aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1.2)}>
           <Minus size={15} />
@@ -1855,14 +1971,6 @@ export default function Canvas({
           onClick={fit}
         >
           <Maximize size={15} />
-        </button>
-        <button
-          aria-label="Export image"
-          title="Export image"
-          disabled={exporting}
-          onClick={() => void exportImage()}
-        >
-          <ImageDown size={15} />
         </button>
       </div>
     </div>

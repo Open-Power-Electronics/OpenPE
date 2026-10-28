@@ -24,7 +24,7 @@ function fixture() {
   const cad = add(20, { modelCadId: 'saved-cad' });
   const component = add(10, {});
   component.parent.userData.footprintId = 'component';
-  const board = add(0, {});
+  const board = add(0, { modelBoard: true });
   const ray = (bottom = false) => {
     scene.updateMatrixWorld(true);
     return new THREE.Raycaster(
@@ -81,6 +81,7 @@ test('hidden ancestors and disabled selection categories cannot expose objects b
       {
         cad: null,
         footprint: null,
+        board: false,
       },
       'Disabling CAD selection does not make its opaque solid transparent to component picking.',
     );
@@ -89,6 +90,7 @@ test('hidden ancestors and disabled selection categories cannot expose objects b
     assert.deepEqual(modelPickResult(f.ray(), { cad: false, components: false }), {
       cad: null,
       footprint: null,
+      board: false,
     });
     f.component.parent.visible = false;
     assert.equal(
@@ -102,6 +104,7 @@ test('hidden ancestors and disabled selection categories cannot expose objects b
       {
         cad: null,
         footprint: null,
+        board: false,
       },
       'The PCB underside occludes all more distant objects when inspecting from below.',
     );
@@ -166,8 +169,46 @@ test('separate rays never reuse a previous target or camera direction', () => {
     );
     const second = modelPickResult(secondRay.intersectObject(f.scene, true), all);
     assert.equal(first.cad?.id, 'saved-cad');
-    assert.deepEqual(second, { cad: null, footprint: null });
+    assert.deepEqual(second, { cad: null, footprint: null, board: false });
     assert.equal(modelPickResult(f.ray(), all).cad?.id, 'saved-cad');
+  } finally {
+    f.dispose();
+  }
+});
+
+test('board picking follows visible physical surfaces without selecting through components or CAD', () => {
+  const f = fixture();
+  const options = { ...all, board: true };
+  try {
+    assert.equal(
+      modelPickResult(f.ray(), options).board,
+      false,
+      'A CAD preview occludes the board.',
+    );
+    f.preview.parent.visible = false;
+    assert.equal(modelPickResult(f.ray(), options).board, false, 'Saved CAD occludes the board.');
+    f.cad.parent.visible = false;
+    assert.equal(modelPickResult(f.ray(), options).board, false, 'A component occludes the board.');
+    assert.equal(
+      modelPickResult(f.ray(), { cad: false, components: false, board: true }).board,
+      false,
+      'Disabled component selection does not enable picking through it.',
+    );
+    f.component.parent.visible = false;
+    const exposed = modelPickResult(f.ray(), options);
+    assert.deepEqual(exposed, { cad: null, footprint: null, board: true });
+    assert.equal(
+      modelPickResult(f.ray(true), options).board,
+      true,
+      'The underside is also a board surface.',
+    );
+    assert.equal(modelPickResult(f.ray(), { ...options, board: false }).board, false);
+    f.board.parent.visible = false;
+    assert.equal(
+      modelPickResult(f.ray(), options).board,
+      false,
+      'Hidden board ancestors exclude their geometry.',
+    );
   } finally {
     f.dispose();
   }

@@ -10,6 +10,7 @@ export default function NavigationButton({
   accessibleLabel = label,
   hasMenu = false,
   menuOpen = false,
+  nativeTitle = true,
 }: {
   icon: LucideIcon;
   label: string;
@@ -20,6 +21,7 @@ export default function NavigationButton({
   accessibleLabel?: string;
   hasMenu?: boolean;
   menuOpen?: boolean;
+  nativeTitle?: boolean;
 }) {
   const className = `navigation-button ${compact ? 'rail-button' : 'home-nav-item'}${active ? ' active' : ''}`;
   const content = (
@@ -33,7 +35,7 @@ export default function NavigationButton({
     <button
       type="button"
       className={className}
-      title={compact ? label : undefined}
+      title={compact && nativeTitle ? label : undefined}
       aria-description={label}
       aria-label={accessibleLabel}
       aria-current={active ? 'page' : undefined}
@@ -47,7 +49,7 @@ export default function NavigationButton({
     <span
       className={className}
       role="img"
-      title={compact ? label : undefined}
+      title={compact && nativeTitle ? label : undefined}
       aria-description={label}
       aria-label={accessibleLabel}
       aria-current={active ? 'page' : undefined}

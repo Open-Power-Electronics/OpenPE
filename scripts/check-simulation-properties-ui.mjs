@@ -42,7 +42,7 @@ const bundle = await build({
           <button onClick={() => core.undo()}>Undo</button>
           <button onClick={() => setCore(new ProjectCore(parseProject(snapshot.source)))}>Reopen</button>
           <div className="panel"><PartProperties key={part.id + ':' + snapshot.project.id}
-            part={part} onSave={(reference, value, fields, includeInSimulation) => {
+            part={part} spiceAvailable onSave={(reference, value, fields, includeInSimulation) => {
               core.execute('part.properties', {
                 schematicId: snapshot.project.schematic.id, partId: part.id,
                 reference, value,
@@ -342,11 +342,13 @@ try {
 
   // Participation stays independent of the native disclosure for pointer and keyboard input.
   const participation = page.getByRole('switch', {
-    name: 'Include in simulation',
+    name: 'Include in SPICE simulation',
     exact: true,
   });
   const waitForParticipation = (checked) =>
-    page.getByRole('switch', { name: 'Include in simulation', exact: true, checked }).waitFor();
+    page
+      .getByRole('switch', { name: 'Include in SPICE simulation', exact: true, checked })
+      .waitFor();
   const beforeParticipation = await state();
   assert.equal(await participation.getAttribute('aria-checked'), 'true');
   assert.equal(await disclosure.getAttribute('open'), '');

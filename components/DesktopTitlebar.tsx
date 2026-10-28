@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, PanelLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import Select, { type SelectOption } from './Select';
 import useRetainedElements from './useRetainedElements';
 
@@ -36,24 +36,20 @@ export default function DesktopTitlebar({
   menus = [],
   onBack,
   onForward,
-  onToggleSidebar,
-  sidebarVisible = true,
 }: {
   menus?: TitlebarMenu[];
   onBack?: () => void;
   onForward?: () => void;
-  onToggleSidebar?: () => void;
-  sidebarVisible?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(window.openpe?.titleBarOverlay === true);
   }, []);
-  const actions = useRef({ menus, onBack, onForward, onToggleSidebar });
+  const actions = useRef({ menus, onBack, onForward });
   // Every committed parent render refreshes actions, even when its menu labels
   // and retained drawing agree. Abandoned renders cannot replace live guards.
   useLayoutEffect(() => {
-    actions.current = { menus, onBack, onForward, onToggleSidebar };
+    actions.current = { menus, onBack, onForward };
   });
   const runMenu = useCallback((label: string, value: string) => {
     const menu = actions.current.menus.find((menu) => menu.label === label);
@@ -61,10 +57,8 @@ export default function DesktopTitlebar({
   }, []);
   const goBack = useCallback(() => actions.current.onBack?.(), []);
   const goForward = useCallback(() => actions.current.onForward?.(), []);
-  const toggleSidebar = useCallback(() => actions.current.onToggleSidebar?.(), []);
   const canBack = Boolean(onBack);
   const canForward = Boolean(onForward);
-  const canToggleSidebar = Boolean(onToggleSidebar);
   const navigation = useMemo(
     () =>
       visible && (
@@ -75,27 +69,9 @@ export default function DesktopTitlebar({
           <button aria-label="Forward" title="Forward" disabled={!canForward} onClick={goForward}>
             <ArrowRight size={15} />
           </button>
-          <button
-            aria-label="Toggle sidebar"
-            title="Toggle sidebar"
-            aria-pressed={sidebarVisible}
-            disabled={!canToggleSidebar}
-            onClick={toggleSidebar}
-          >
-            <PanelLeft size={15} />
-          </button>
         </nav>
       ),
-    [
-      visible,
-      canBack,
-      canForward,
-      canToggleSidebar,
-      sidebarVisible,
-      goBack,
-      goForward,
-      toggleSidebar,
-    ],
+    [visible, canBack, canForward, goBack, goForward],
   );
   // Only presentation enters the retained element cache. An already-open menu
   // resolves its current action by slot/index instead of retaining old closures.

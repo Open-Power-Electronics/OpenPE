@@ -88,7 +88,7 @@ try {
       },
     });
   });
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   const settings = page.getByRole('region', { name: 'Simulation settings' });
   await settings.waitFor();
   await button('Run').click();
@@ -113,7 +113,7 @@ try {
   assert.equal(await cursorB.getAttribute('aria-valuenow'), '0');
   await cursorB.press('End');
   assert.equal(await cursorB.getAttribute('aria-valuenow'), initialB);
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   await page.getByLabel('Duration (ms)', { exact: true }).fill('0');
   assert.equal(await cursor.count(), 1, 'Changing settings retains completed waveforms.');
   assert.equal(await cursor.getAttribute('aria-valuenow'), '0');

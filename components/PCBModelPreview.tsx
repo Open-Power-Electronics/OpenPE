@@ -1,4 +1,7 @@
 'use client';
+import CanvasContextMenu from './CanvasContextMenu';
+import PropertiesEmptyState from './PropertiesEmptyState';
+import { NumberField } from './LayoutPropertyFields';
 import { modelReferenceKey } from '@/lib/example-model-paths';
 import {
   memo,
@@ -14,6 +17,7 @@ import {
 import {
   Maximize,
   ImageDown,
+  SquareDashed,
   MousePointer2,
   MessageSquareText,
   Box,
@@ -160,6 +164,8 @@ function PCBModelPreview({
   listAction,
   historyAction,
   sidebarAction,
+  onBoardThicknessChange,
+  onModeChange,
   capabilityHost,
   revision = '',
   sourcePending = false,
@@ -171,6 +177,8 @@ function PCBModelPreview({
   onToggleSidebar,
 }: {
   board: PCB;
+  onBoardThicknessChange?: (board: PCB, thickness: number) => boolean;
+  onModeChange?: (mode: string) => void;
   schematic?: Circuit;
   viewState?: RefObject<PCB3DViewState | null>;
   active?: boolean;
@@ -245,6 +253,8 @@ function PCBModelPreview({
   const surface = useRef<HTMLElement>(null);
   const darkCanvas = useCanvasBrightness(surface);
   const [selection, setSelection] = useState<string[]>([]);
+  const [boardSelected, setBoardSelected] = useState(false);
+  useEffect(() => setBoardSelected(false), [board.id]);
   const selectionRef = useRef({ ids: selection, dark: darkCanvas });
   selectionRef.current = { ids: selection, dark: darkCanvas };
   const highlightModels = useRef(() => {});
@@ -342,7 +352,10 @@ function PCBModelPreview({
     },
     onInteraction: (selectedId) => {
       setAnnotating(false);
-      if (selectedId) setSelection([]);
+      if (selectedId) {
+        setSelection([]);
+        setBoardSelected(false);
+      }
     },
     onCameraInteraction: () => setAnnotating(false),
     onAlignSketchView,
@@ -350,6 +363,25 @@ function PCBModelPreview({
   });
   const cadRef = useRef(cad);
   cadRef.current = cad;
+  const mode = annotating
+    ? 'Annotation mode'
+    : cad.pan
+      ? 'Pan'
+      : cad.tool
+        ? {
+            box: 'Place box',
+            cylinder: 'Place cylinder',
+            move: 'Move selection',
+            hole: 'Drill through hole',
+            sketch: cad.sketchPhase === 'plane' ? 'Choose sketch plane' : 'Draw sketch',
+            chamfer: 'Chamfer edges',
+            fillet: 'Fillet edges',
+            boolean: 'Boolean operation',
+          }[cad.tool]
+        : 'Interaction mode';
+  useLayoutEffect(() => {
+    if (active) onModeChange?.(mode);
+  }, [active, mode, onModeChange]);
   const cadState = useRef({
     modelCad,
     preview: cad.preview,
@@ -394,6 +426,7 @@ function PCBModelPreview({
     placementPointer.current = null;
     if (!cad.applySelectionFilters(next)) return;
     if (!next.bodies) {
+      setBoardSelected(false);
       setSelection([]);
     }
     setSelectionFilters(next);
@@ -415,6 +448,7 @@ function PCBModelPreview({
   const pickInteraction = useRef<(_: { x: number; y: number }) => ModelPickResult>(() => ({
     cad: null,
     footprint: null,
+    board: false,
   }));
   const cadPoint = useRef<(_: { x: number; y: number }) => { x: number; y: number } | null>(
     () => null,
@@ -512,6 +546,7 @@ function PCBModelPreview({
     // Text uses a transparent texture plane; print it after the translucent mask.
     silkGroup.renderOrder = 2;
     silkGroup.visible = displayRef.current.silkscreenVisible;
+    silkGroup.userData.modelBoard = true;
     group.add(silkGroup);
     const components = new THREE.Group();
     orderAssembly(components);
@@ -691,6 +726,7 @@ function PCBModelPreview({
         new THREE.MeshStandardMaterial({ color: 0xb6ad7b, roughness: 0.8 }),
       );
       laminate.position.z = -board.thickness / 2;
+      laminate.userData.modelBoard = true;
       group.add(laminate);
       await yieldBuild();
       const surface = async (polygons: Polygon[], z: number, color: number, pour = false) => {
@@ -711,6 +747,7 @@ function PCBModelPreview({
           }),
         );
         mesh.position.z = z;
+        mesh.userData.modelBoard = true;
         group.add(mesh);
         await yieldBuild();
       };
@@ -772,6 +809,7 @@ function PCBModelPreview({
         // apertures, drills and higher silkscreen/component surfaces untouched.
         coating.position.z = (side === 'front' ? 1 : -1) * (board.thickness / 2 + 0.02);
         coating.renderOrder = 1;
+        coating.userData.modelBoard = true;
         group.add(coating);
         await yieldBuild();
         const silk = silkGraphics.filter(
@@ -1287,7 +1325,8 @@ function PCBModelPreview({
         );
       };
       const pickAt = (point: { x: number; y: number }, options: ModelPickOptions) => {
-        if (!options.cad && !options.components) return modelPickResult([], options);
+        if (!options.cad && !options.components && !options.board)
+          return modelPickResult([], options);
         pointRay(point);
         return modelPickResult(raycaster.intersectObject(group, true), options);
       };
@@ -1335,6 +1374,7 @@ function PCBModelPreview({
         pickAt(point, {
           cad: cadPickEnabled(),
           components: modelsSelectableRef.current,
+          board: modelsSelectableRef.current,
         });
       cadPoint.current = (point) => {
         pointRay(point);
@@ -1671,7 +1711,7 @@ function PCBModelPreview({
       pickCad.current = () => null;
       pickCadEdge.current = () => null;
       pickUnselectedCadEdge.current = () => null;
-      pickInteraction.current = () => ({ cad: null, footprint: null });
+      pickInteraction.current = () => ({ cad: null, footprint: null, board: false });
       cadPoint.current = () => null;
       applyDisplay.current = () => {};
       applyProjection.current = () => {};
@@ -1872,7 +1912,9 @@ function PCBModelPreview({
                   return;
                 }
               }
+              if (cad.selectionBlocked) return;
               const picked = pickInteraction.current(point);
+              setBoardSelected(false);
               const hit = picked.cad;
               if (hit) {
                 const edgeId = pickCadEdge.current(point, hit.id);
@@ -1908,6 +1950,12 @@ function PCBModelPreview({
               }
               cad.select(null);
               if (!modelsSelectable) return;
+              if (picked.board && !picked.footprint) {
+                setSelection([]);
+                setBoardSelected(true);
+                showProperties();
+                return;
+              }
               const id = picked.footprint;
               setSelection((previous) =>
                 applySelection(previous, id ? [id] : [], selectionMode(e)),
@@ -1969,13 +2017,17 @@ function PCBModelPreview({
                 return;
               }
               if (active && !hasOpenOverlay() && cad.keyDown(e)) {
-                if (e.key === 'Escape') setSelection([]);
+                if (e.key === 'Escape') {
+                  setSelection([]);
+                  setBoardSelected(false);
+                }
                 e.preventDefault();
                 return;
               }
               if (e.key === 'Escape' && active && !hasOpenOverlay()) {
                 e.preventDefault();
                 setSelection([]);
+                setBoardSelected(false);
               }
             }}
           />
@@ -1992,6 +2044,85 @@ function PCBModelPreview({
               onSelection={setSelection}
             />
           )}
+          <CanvasContextMenu
+            target={host}
+            active={active}
+            identity={revision || board}
+            onError={setExportStatus}
+            actions={[
+              {
+                id: 'fit',
+                label: 'Fit 3D board',
+                icon: Maximize,
+                disabled: !ready || failed,
+                run: () => fit.current(),
+              },
+              {
+                id: 'actual-size',
+                label: 'Actual size (100%)',
+                icon: Maximize,
+                disabled: !ready || failed,
+                run: () => zoom.current(null),
+              },
+              {
+                id: 'zoom-in',
+                label: 'Zoom in',
+                icon: Plus,
+                disabled: !ready || failed,
+                run: () => zoom.current(1.2),
+              },
+              {
+                id: 'zoom-out',
+                label: 'Zoom out',
+                icon: Minus,
+                disabled: !ready || failed,
+                run: () => zoom.current(1 / 1.2),
+              },
+              {
+                id: 'export',
+                label: 'Export image',
+                icon: ImageDown,
+                disabled: !ready || exporting || failed,
+                run: async () => {
+                  setExporting(true);
+                  setExportStatus('');
+                  try {
+                    await exportPNG.current();
+                  } catch (error) {
+                    setExportStatus((error as Error).message);
+                  } finally {
+                    setExporting(false);
+                  }
+                },
+              },
+              {
+                id: 'isometric',
+                label: 'Isometric view',
+                icon: Box,
+                separated: true,
+                disabled: !ready || failed,
+                run: () => orient.current('isometric'),
+              },
+              {
+                id: 'top',
+                label: 'Top view',
+                icon: Box,
+                disabled: !ready || failed,
+                run: () => orient.current('top'),
+              },
+              {
+                id: 'clear-selection',
+                label: 'Clear selection',
+                icon: SquareDashed,
+                separated: true,
+                disabled: (!selection.length && !boardSelected) || Boolean(cad.tool),
+                run: () => {
+                  setSelection([]);
+                  setBoardSelected(false);
+                },
+              },
+            ]}
+          />
           <div className="zoom-controls" role="group" aria-label="3D zoom controls">
             <button
               aria-label="Zoom out"
@@ -2013,33 +2144,6 @@ function PCBModelPreview({
               onClick={() => zoom.current(1.2)}
             >
               <Plus size={15} />
-            </button>
-            <i />
-            <button
-              aria-label="Fit 3D board"
-              title="Fit board"
-              disabled={!ready || failed}
-              onClick={() => fit.current()}
-            >
-              <Maximize size={15} />
-            </button>
-            <button
-              aria-label="Export image"
-              title="Export image"
-              disabled={!ready || exporting || failed}
-              onClick={async () => {
-                setExporting(true);
-                setExportStatus('');
-                try {
-                  await exportPNG.current();
-                } catch (e) {
-                  setExportStatus((e as Error).message);
-                } finally {
-                  setExporting(false);
-                }
-              }}
-            >
-              <ImageDown size={15} />
             </button>
           </div>
           {exportStatus && (
@@ -2094,7 +2198,36 @@ function PCBModelPreview({
             onOpenChange={setPropertiesExpanded}
           >
             {cad.panel}
-            {!cad.inspecting && (
+            <section
+              className="model-properties-content"
+              aria-label="Board properties"
+              hidden={!boardSelected || cad.inspecting}
+            >
+              <div className="model-properties-body">
+                <h3 className="model-properties-title">Board</h3>
+                <NumberField
+                  label="Board thickness (mm)"
+                  value={board.thickness}
+                  min={0.1}
+                  max={20}
+                  active={
+                    active &&
+                    boardSelected &&
+                    sidebarVisible &&
+                    propertiesExpanded &&
+                    !sourcePending &&
+                    !annotating &&
+                    !cad.tool &&
+                    ready &&
+                    !failed &&
+                    !cad.selectionBlocked
+                  }
+                  disabled={!onBoardThicknessChange}
+                  onCommit={(thickness) => onBoardThicknessChange?.(board, thickness) ?? false}
+                />
+              </div>
+            </section>
+            {!cad.inspecting && !boardSelected && (
               <section
                 className="model-properties-content"
                 aria-label={selectedFootprint ? 'Component properties' : 'Model properties'}
@@ -2147,10 +2280,9 @@ function PCBModelPreview({
                       ))}
                     </>
                   ) : (
-                    <div className="model-properties-empty">
-                      <Box size={28} aria-hidden="true" />
-                      <p>Select an element to view its properties.</p>
-                    </div>
+                    <PropertiesEmptyState icon={Box}>
+                      Select an element to view its properties.
+                    </PropertiesEmptyState>
                   )}
                 </div>
               </section>

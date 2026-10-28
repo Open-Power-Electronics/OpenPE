@@ -387,7 +387,7 @@ export default function SimulationDialog({
     const part = project.schematic.parts.find((p) => p.id === probe.id);
     if (part && !participatesInSimulation(part)) {
       setProbeMessage(
-        'This component is excluded from simulation. Enable Include in simulation in Properties to inspect it.',
+        'This component is excluded from simulation. Enable Include in SPICE simulation in Properties to inspect it.',
       );
       return;
     }

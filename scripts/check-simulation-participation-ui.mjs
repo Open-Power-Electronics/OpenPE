@@ -126,7 +126,10 @@ try {
   const button = (name) => page.getByRole('button', { name, exact: true });
   await page.getByTestId('schematic-canvas').waitFor();
   await button('Add component').click();
-  const participation = page.getByRole('switch', { name: 'Include in simulation', exact: true });
+  const participation = page.getByRole('switch', {
+    name: 'Include in SPICE simulation',
+    exact: true,
+  });
   const simulation = page.locator('.part-properties > .property-simulation');
   const assertParticipationHeader = async (included) => {
     await participation.waitFor();
@@ -138,7 +141,7 @@ try {
     );
     assert.equal(await simulation.locator('.property-field').count(), 0);
     const heading = simulation.locator('.property-simulation-heading');
-    const title = heading.getByText('Simulation', { exact: true });
+    const title = heading.getByText('SPICE Simulation', { exact: true });
     assert.equal(await heading.getByRole('switch').count(), 1);
     const [titleBounds, switchBounds, headingBounds] = await Promise.all([
       title.boundingBox(),
@@ -228,7 +231,7 @@ try {
     .first()
     .dblclick();
   await assertParticipationHeader(true);
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   await page
     .getByTestId('schematic-canvas')
     .locator(`[data-selection-id="${part.id}"]`)
@@ -236,7 +239,7 @@ try {
     .click();
   await page
     .getByText(
-      'This component is excluded from simulation. Enable Include in simulation in Properties to inspect it.',
+      'This component is excluded from simulation. Enable Include in SPICE simulation in Properties to inspect it.',
       { exact: true },
     )
     .waitFor();

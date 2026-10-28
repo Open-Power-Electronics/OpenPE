@@ -90,7 +90,7 @@ import {
   saveAnnotation,
 } from '@/lib/schematic-edit';
 import Select from './Select';
-import RightSidebarToggle from './RightSidebarToggle';
+import SidebarToggle from './SidebarToggle';
 import PluginLogo from './PluginLogo';
 import EditorDisplayDrawer from './EditorDisplayDrawer';
 import SchematicSelectionFilters from './SchematicSelectionFilters';
@@ -103,7 +103,12 @@ import Canvas, {
 import CanvasCoordinates, { createCanvasCoordinates } from './CanvasCoordinates';
 import type { Agent } from './Chat';
 import ConversationSession from './ConversationSession';
-import { createSession, sessionTitle, type ChatSession } from '@/lib/chat-sessions';
+import {
+  createSession,
+  updateSession,
+  type SessionAction,
+  type ChatSession,
+} from '@/lib/chat-sessions';
 import type { AgentCapabilities, ReasoningEffort } from '@/lib/chat-stream';
 import PartIdentity from './PartIdentity';
 import Logo from './Logo';
@@ -141,6 +146,7 @@ import WorkspaceDivider from './WorkspaceDivider';
 import type { useAppearance } from './AppearanceSettings';
 import SettingsMenu from './SettingsMenu';
 import PartsList from './PartsList';
+import PropertiesEmptyState from './PropertiesEmptyState';
 import ConfirmationDialog, { type ConfirmationKind } from './ConfirmationDialog';
 import type { FootprintDetail } from './LibraryChooser';
 import PartProperties from './PartProperties';
@@ -166,6 +172,7 @@ import { child, children, parseSExpr, val, type SExpr } from '@/lib/sexpr';
 import ProjectNavigation, {
   type ProjectNavigationItem,
   type ProjectFileAction,
+  type ProjectAction,
 } from './ProjectNavigation';
 import { emptyWorkspaceProjects } from './WorkspacePresentation';
 import SchematicFileTabs from './SchematicFileTabs';
@@ -268,6 +275,8 @@ export default function Workbench({
   projects = emptyWorkspaceProjects,
   getProjects,
   onSelectProject,
+  onNewProjectSession,
+  onProjectSessionAction,
   onSelectFile,
   onSelectExample,
   onAddProject,
@@ -292,7 +301,9 @@ export default function Workbench({
   initialNotice?: string;
   projects?: readonly ProjectNavigationItem[];
   getProjects?: () => ProjectNavigationItem[];
-  onSelectProject: (id: string) => void;
+  onSelectProject: (id: string, sessionId?: string) => void;
+  onNewProjectSession: (id: string) => void;
+  onProjectSessionAction: (projectId: string, sessionId: string, action: SessionAction) => void;
   onSelectFile: (fileId: string) => void;
   onSelectExample: (key: string) => boolean;
   onAddProject: (
@@ -305,7 +316,7 @@ export default function Workbench({
     openKey?: string,
   ) => Promise<void>;
   onCloseProject: (id: string) => Promise<boolean>;
-  onProjectAction: (id: string, action: ProjectFileAction) => void;
+  onProjectAction: (id: string, action: ProjectAction) => void;
   onDocumentChange: (id: string, state: DocumentUpdate) => void;
   registerController: (id: string, controller: DocumentController | null) => void;
   preferences: AgentPreferences;
@@ -411,6 +422,7 @@ export default function Workbench({
   const [explicitPropertiesId, setExplicitPropertiesId] = useState<string | null>(null);
   const [propertiesDismissed, setPropertiesDismissed] = useState(false);
   const [tool, setTool] = useState<Tool>('select');
+  const [modelMode, setModelMode] = useState('Interaction mode');
   const moveRequestSequence = useRef(0);
   const [schematicMoveMode, setSchematicMoveMode] = useState<'move' | 'drag' | null>(null);
   const [schematicMoveRequest, setSchematicMoveRequest] = useState<SchematicMoveRequest | null>(
@@ -545,6 +557,7 @@ export default function Workbench({
   const pcb3DView = useRef<PCB3DViewState | null>(null);
   const layoutAgentContext = useRef<Record<string, unknown> | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const toggleSidebar = useCallback(() => setSidebarVisible((value) => !value), []);
   const [rightSidebarVisible, setRightSidebarVisible] = useState(true);
   const showRightSidebar = useCallback(() => setRightSidebarVisible(true), []);
   const toggleRightSidebar = useCallback(() => setRightSidebarVisible((value) => !value), []);
@@ -1134,7 +1147,19 @@ export default function Workbench({
       };
     };
     registerController(documentId, {
-      activate: () => setScreen('workspace'),
+      activate: (sessionId) => {
+        setScreen('workspace');
+        if (sessionId) {
+          setActiveSessionId(sessionId);
+          setSidebarVisible(true);
+        }
+      },
+      sessionAction: (id, action) => applySessionAction(id, action),
+      newConversation: () => {
+        newChatSession();
+        setSidebarVisible(true);
+        setScreen('workspace');
+      },
       snapshot,
       notify,
       fileAction: (action) => fileActionRef.current(action),
@@ -2478,10 +2503,15 @@ export default function Workbench({
     () => (doc ? { doc, pcb: project?.pcb, pcbSchematic: project?.schematic } : undefined),
     [doc, project?.pcb, project?.schematic],
   );
-  const chatSessionOptions = useMemo(
-    () => sessions.map((item) => ({ value: item.id, label: sessionTitle(item) })),
-    [sessions],
-  );
+  const applySessionAction = useEditorAction((id: string, action: SessionAction) => {
+    if (runningSessions[id] && (action === 'archive' || action === 'delete')) {
+      notify('Stop the conversation before archiving or deleting it.');
+      return;
+    }
+    const next = updateSession({ sessions, activeSessionId }, id, action);
+    setSessions(next.sessions);
+    setActiveSessionId(next.activeSessionId);
+  });
   const chatCapabilities = useMemo<AgentCapabilities>(
     () => ({
       query: (name, input, options) =>
@@ -2503,17 +2533,6 @@ export default function Workbench({
   const setChatModel = useEditorAction((value: string) =>
     setModels((current) => ({ ...current, [provider]: value })),
   );
-  const clearChatSession = useEditorAction((id: string) => {
-    if (!sessions.find((session) => session.id === id)?.messages.length) return;
-    setConfirmError('');
-    setConfirmation({
-      kind: 'clear',
-      action: () =>
-        setSessions((items) =>
-          items.map((item) => (item.id === id ? { ...item, messages: [] } : item)),
-        ),
-    });
-  });
   const modelAnnotationProps = useMemo(
     () => ({
       disabled: sourcePending,
@@ -2546,7 +2565,7 @@ export default function Workbench({
         role="group"
         aria-label="View controls"
       >
-        <RightSidebarToggle
+        <SidebarToggle
           visible={ordinarySidebarVisible}
           onToggle={toggleCurrentRightSidebar}
           className="editor-sidebar-toggle"
@@ -3011,7 +3030,9 @@ export default function Workbench({
       fields: Record<string, string>,
       includeInSimulation?: boolean,
     ) =>
-      canEditProperties() && part?.id === id
+      canEditProperties() &&
+      part?.id === id &&
+      (includeInSimulation === undefined || spiceAvailable)
         ? saveFields(ref, value, fields, id, includeInSimulation)
         : false,
   );
@@ -3023,6 +3044,21 @@ export default function Workbench({
         : false,
     [propertiesPartId, saveCurrentPartProperties],
   );
+  const saveModelBoardThickness = useEditorAction((basis: PCB, thickness: number) => {
+    const snapshot = core.getSnapshot();
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      view !== '3d' ||
+      modal ||
+      confirmation ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked !== null ||
+      snapshot.project?.pcb !== basis
+    )
+      return false;
+    return commitBoard({ ...basis, thickness });
+  });
   const saveLayoutPartProperties = useEditorAction(
     (
       schematicBasis: Circuit,
@@ -3030,7 +3066,6 @@ export default function Workbench({
       ref: string,
       value: string,
       fields: Record<string, string>,
-      includeInSimulation?: boolean,
       footprintDetail?: FootprintDetail,
     ) => {
       const snapshot = core.getSnapshot();
@@ -3049,15 +3084,7 @@ export default function Workbench({
         !snapshot.project.pcb?.footprints.some((footprint) => footprint.symbolId === partId)
       )
         return false;
-      return saveFields(
-        ref,
-        value,
-        fields,
-        partId,
-        includeInSimulation,
-        schematicBasis,
-        footprintDetail,
-      );
+      return saveFields(ref, value, fields, partId, undefined, schematicBasis, footprintDetail);
     },
   );
   return (
@@ -3067,10 +3094,6 @@ export default function Workbench({
         onBack={navigation.index > 0 ? () => navigateHistory(-1) : undefined}
         onForward={
           navigation.index < navigation.entries.length - 1 ? () => navigateHistory(1) : undefined
-        }
-        sidebarVisible={screen === 'workspace' && Boolean(doc) && sidebarVisible}
-        onToggleSidebar={
-          screen === 'workspace' && doc ? () => setSidebarVisible((value) => !value) : undefined
         }
       />
       <main className={'app-shell' + (sidebarVisible ? '' : ' sidebar-hidden')}>
@@ -3086,10 +3109,7 @@ export default function Workbench({
             onNew={(brief) => newFile(undefined, brief)}
             onOpen={() => void open()}
             onExample={(id) => newFile(id)}
-            onResume={(id) => {
-              if (id === documentId) setScreen('workspace');
-              onSelectProject(id);
-            }}
+            onResume={onNewProjectSession}
             onSettings={() => setModal('settings')}
             onAbout={() => setModal('about')}
             onPlugins={openPlugins}
@@ -3122,16 +3142,27 @@ export default function Workbench({
         {doc && (
           <div className="workspace" hidden={screen !== 'workspace'}>
             <nav className="nav-rail" aria-label="Workspace navigation">
+              {!sidebarVisible && (
+                <SidebarToggle
+                  side="left"
+                  visible={false}
+                  onToggle={toggleSidebar}
+                  className="conversation-restore"
+                />
+              )}
               {workspaceNavigationActions}
               <ProjectNavigation
                 projects={projects}
                 active={active && screen === 'workspace'}
                 activeId={documentId}
                 onAction={onProjectAction}
-                onSelect={(id) => {
-                  if (id === documentId) setScreen('workspace');
-                  else onSelectProject(id);
+                onSessionAction={onProjectSessionAction}
+                activeSessionId={activeSessionId}
+                onSelectSession={(id, sessionId) => {
+                  setSidebarVisible(true);
+                  onSelectProject(id, sessionId);
                 }}
+                onSelect={onNewProjectSession}
               />
               {workspaceNavigationSettings}
             </nav>
@@ -3144,10 +3175,8 @@ export default function Workbench({
                 setSessions={setSessions}
                 getDesign={getChatDesign}
                 annotationDesign={session.annotations?.length ? chatAnnotationDesign : undefined}
-                sessionOptions={chatSessionOptions}
-                onSelectSession={setActiveSessionId}
-                onNewSession={newChatSession}
-                onClearSession={clearChatSession}
+                sidebarVisible={sidebarVisible}
+                onToggleSidebar={toggleSidebar}
                 getWorkspaceContext={readChatContext}
                 capabilities={chatCapabilities}
                 agents={agents}
@@ -3289,7 +3318,7 @@ export default function Workbench({
                         aria-label="Plugins"
                       >
                         <ToolButton
-                          label="Simulation"
+                          label="SPICE Simulation"
                           active={simulationEnabled}
                           disabled={sourcePending}
                           onClick={() => {
@@ -3480,6 +3509,7 @@ export default function Workbench({
                                   <>
                                     <PartProperties
                                       active={propertiesActive}
+                                      spiceAvailable={spiceAvailable}
                                       onRequestSave={requestPropertiesSave}
                                       capabilityHost={capabilityHost}
                                       key={part.id}
@@ -3657,16 +3687,13 @@ export default function Workbench({
                         </aside>
                       ) : (
                         <section className="schematic-properties-empty">
-                          <div className="schematic-properties-placeholder">
-                            <Cpu size={28} aria-hidden="true" />
-                            <p>
-                              {simulationEnabled
-                                ? 'Close simulation to inspect component properties.'
-                                : tool === 'annotate'
-                                  ? 'Exit annotation mode to inspect component properties.'
-                                  : 'Select a component to view its properties.'}
-                            </p>
-                          </div>
+                          <PropertiesEmptyState icon={Cpu}>
+                            {simulationEnabled
+                              ? 'Close simulation to inspect component properties.'
+                              : tool === 'annotate'
+                                ? 'Exit annotation mode to inspect component properties.'
+                                : 'Select a component to view its properties.'}
+                          </PropertiesEmptyState>
                         </section>
                       )}
                     </EditorDisplayDrawer>
@@ -3792,6 +3819,8 @@ export default function Workbench({
                             !confirmation
                           }
                           board={project.pcb}
+                          onBoardThicknessChange={saveModelBoardThickness}
+                          onModeChange={setModelMode}
                           schematic={project.schematic}
                           grid={grid}
                           gridSpacing={modelGridSpacing}
@@ -3890,7 +3919,9 @@ export default function Workbench({
                 active={active && screen === 'workspace'}
                 mode={
                   view === '3d'
-                    ? 'Model view'
+                    ? project?.pcb
+                      ? modelMode
+                      : 'Interaction mode'
                     : schematicMoveMode
                       ? schematicMoveMode === 'drag'
                         ? 'Click to place · Keep connections'
@@ -3997,10 +4028,10 @@ export default function Workbench({
                 projects={projects}
                 active={active && screen === 'plugins'}
                 onAction={onProjectAction}
-                onSelect={(id) => {
-                  if (id === documentId) setScreen('workspace');
-                  else onSelectProject(id);
-                }}
+                onSessionAction={onProjectSessionAction}
+                activeSessionId={activeSessionId}
+                onSelectSession={(id, sessionId) => onSelectProject(id, sessionId)}
+                onSelect={onNewProjectSession}
               />
               <div className="rail-spacer" />
               <AgentPicker
@@ -4179,7 +4210,6 @@ export default function Workbench({
         {confirmation && (
           <ConfirmationDialog
             key={confirmation.kind}
-            kind={confirmation.kind}
             documentTitle={project?.name ?? project?.schematic.title}
             busy={confirmBusy}
             error={confirmError}

@@ -6,6 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { appendSchematic, createProject, serializeProject } from '../lib/project';
 import { createPart, emptyCircuit } from '../lib/circuit';
+import { restoreWorkspace as restoreServiceWorkspace } from '../server/workspace-format.mjs';
 import { createSession } from '../lib/chat-sessions';
 import {
   defaultAgentPreferences,
@@ -482,4 +483,69 @@ test('multi-project recovery validates every project before atomic writes and re
   } finally {
     await service.close();
   }
+});
+
+test('renderer and service recovery preserve conversation flags and reject an archived active session', () => {
+  const doc = document('Conversation state');
+  const archived = {
+    ...createSession('Archived draft'),
+    pinned: true as const,
+    archived: true as const,
+  };
+  doc.sessions.push(archived);
+  const state = {
+    version: 2,
+    documents: [doc],
+    activeDocumentId: doc.id,
+    ...defaultAgentPreferences,
+  };
+  for (const restore of [restoreWorkspace, restoreServiceWorkspace]) {
+    assert.deepEqual(restore(JSON.parse(JSON.stringify(state))), state);
+    assert.throws(
+      () => restore({ ...state, documents: [{ ...doc, activeSessionId: archived.id }] }),
+      /cannot be archived/,
+    );
+    assert.throws(
+      () =>
+        restore({
+          ...state,
+          documents: [{ ...doc, sessions: [doc.sessions[0], { ...archived, pinned: false }] }],
+        }),
+      /Invalid saved sessions/,
+    );
+  }
+});
+
+test('renderer and service retain project pins independently of documents and conversation pins', () => {
+  const a = document('A');
+  const b = { ...document('B'), pinned: true as const };
+  b.sessions[0].pinned = true;
+  b.sourceDraft = '{pending';
+  const state = {
+    version: 2,
+    documents: [a, b],
+    activeDocumentId: a.id,
+    ...defaultAgentPreferences,
+  };
+  const before = structuredClone(state);
+  for (const restore of [restoreWorkspace, restoreServiceWorkspace]) {
+    const restored = restore(JSON.parse(JSON.stringify(state)));
+    assert.deepEqual(restored, state);
+    assert.equal(restored.activeDocumentId, a.id);
+    assert.equal(restored.documents[1].dirty, false);
+    assert.equal(restored.documents[1].sessions[0].pinned, true);
+    assert.equal(restored.documents[1].sourceDraft, '{pending');
+    assert.deepEqual(
+      restored.documents.map((item) => item.id),
+      [a.id, b.id],
+    );
+    const { pinned: _pinned, ...unpinned } = b;
+    assert.deepEqual(restore({ ...state, documents: [a, unpinned] }).documents, [a, unpinned]);
+    for (const pinned of [false, null, 1, 'true', {}])
+      assert.throws(
+        () => restore({ ...state, documents: [a, { ...b, pinned }] }),
+        /Invalid saved project pin state/,
+      );
+  }
+  assert.deepEqual(state, before, 'Recovery validation does not mutate caller-owned data.');
 });

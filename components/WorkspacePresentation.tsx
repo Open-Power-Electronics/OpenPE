@@ -20,6 +20,8 @@ export function createWorkspacePresentation() {
   const projectListeners = new Set<() => void>();
   const statusListeners = new Set<() => void>();
   return {
+    // Retained snapshots must not retain methods from a replaced renderer module.
+    implementation: createWorkspacePresentation,
     getProjects: () => projects,
     getDraftStatus: () => draftStatus,
     subscribeProjects: (listener: () => void) => {
@@ -37,12 +39,23 @@ export function createWorkspacePresentation() {
           (item, index) =>
             item.id === next[index].id &&
             item.title === next[index].title &&
-            item.unsaved === next[index].unsaved,
+            item.unsaved === next[index].unsaved &&
+            item.pinned === next[index].pinned &&
+            JSON.stringify(item.sessions) === JSON.stringify(next[index].sessions),
         )
       )
         return;
       projects = Object.freeze(
-        next.map(({ id, title, unsaved }) => Object.freeze({ id, title, unsaved })),
+        next.map((item) =>
+          Object.freeze({
+            ...item,
+            ...(item.sessions && {
+              sessions: Object.freeze(
+                item.sessions.map((session) => Object.freeze({ ...session })),
+              ),
+            }),
+          }),
+        ),
       );
       projectListeners.forEach((listener) => listener());
     },

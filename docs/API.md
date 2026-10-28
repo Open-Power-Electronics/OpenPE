@@ -158,7 +158,7 @@ Owner is `core`; editing commands declare mutation `document`. `schematic.place`
 | `schematic.wire`       | command / P  | `{schematicId, points:Point[]}`                                                                                  | `EditResult`; commits all route legs and deliberate segment splits once. 2–30,000 points.                                                                     |
 | `schematic.annotation` | command / O  | `{schematicId, text:string, position:Point, id?:string}`                                                         | `EditResult`; creates/updates a schematic annotation. This is design text, not an Agent screenshot attachment.                                                |
 | `part.properties`      | command / O  | `{schematicId, partId, reference?:string, value?:string, fields?:FieldRow[], position?:Point, rotation?:number}` | `EditResult`; resolves stable ID, shares reference/value/fields across units and applies value-linked simulation rules.                                       |
-| `part.participation`   | command / O  | `{schematicId, partId, included:boolean}`                                                                        | `EditResult`; updates Include in simulation independently of plugin installation and physical connectivity.                                                   |
+| `part.participation`   | command / O  | `{schematicId, partId, included:boolean}`                                                                        | `EditResult`; updates Include in SPICE simulation independently of plugin installation and physical connectivity.                                             |
 
 ```ts
 type Operation =

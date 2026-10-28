@@ -183,7 +183,7 @@ See [VERSION-HISTORY.md](VERSION-HISTORY.md).
 Simulation source/load components are visible to the right of the connectors,
 with named-rail connections and no Footprint assignment or PCB packages.
 Unassigned components render as Virtual; physical/virtual classification is
-independent of model support and Include in simulation.
+independent of model support and Include in SPICE simulation.
 
 Original TI simulation models live in separate ignored `circuits/` sidecars;
 their notices remain in shared source and packaged license records. Native project

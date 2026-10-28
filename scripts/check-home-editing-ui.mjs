@@ -482,7 +482,10 @@ try {
           const panel = page.getByRole('dialog', { name: 'Parts list', exact: true });
           await panel.getByRole('textbox', { name: 'Search parts', exact: true }).fill(part.ref);
           await panel.getByRole('button', { name: 'Edit ' + part.ref, exact: true }).click();
-          const toggle = page.getByRole('switch', { name: 'Include in simulation', exact: true });
+          const toggle = page.getByRole('switch', {
+            name: 'Include in SPICE simulation',
+            exact: true,
+          });
           assert.equal(await toggle.getAttribute('aria-checked'), String(!included));
           await toggle.click();
           assert.equal(await toggle.getAttribute('aria-checked'), String(included));

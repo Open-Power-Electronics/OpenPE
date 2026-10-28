@@ -11,14 +11,14 @@ import {
 import { createPortal } from 'react-dom';
 import Workbench from './Workbench';
 import { createWorkspacePresentation, WorkspacePresentationContext } from './WorkspacePresentation';
-import type { ProjectFileAction, ProjectNavigationItem } from './ProjectNavigation';
+import type { ProjectAction, ProjectFileAction, ProjectNavigationItem } from './ProjectNavigation';
 import { useAppearance } from './AppearanceSettings';
 import DesktopTitlebar from './DesktopTitlebar';
 import Logo from './Logo';
 import { api, writeWorkspaceRecovery } from '@/lib/bridge';
 import { importDocument, projectFilename, type Project } from '@/lib/project';
 import { createProjectAdmissions } from '@/lib/project-admission';
-import { createSession } from '@/lib/chat-sessions';
+import { createSession, sessionTitle, type SessionAction } from '@/lib/chat-sessions';
 import { validExampleKey } from '@/lib/workspace-example';
 import { WorkspaceCloseReview, type CloseChoice, type CloseSnapshot } from '@/lib/workspace-close';
 import {
@@ -30,9 +30,14 @@ import {
   type WorkspaceState,
 } from '@/lib/workspace-state';
 
-export type DocumentUpdate = Omit<DocumentState, 'id'> & { title: string; unsaved: boolean };
+export type DocumentUpdate = Omit<DocumentState, 'id' | 'pinned'> & {
+  title: string;
+  unsaved: boolean;
+};
 export type DocumentController = {
-  activate: () => void;
+  activate: (sessionId?: string) => void;
+  newConversation: () => void;
+  sessionAction: (id: string, action: SessionAction) => void;
   snapshot: () => CloseSnapshot & {
     dirty: boolean;
     activeSchematicId?: string;
@@ -107,8 +112,17 @@ export default function DesktopWorkspace() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [draftStatus, setDraftStatus] = useState('');
-  const [presentation] = useState(createWorkspacePresentation);
+  const [presentation, setPresentation] = useState(createWorkspacePresentation);
   useLayoutEffect(() => {
+    // Refresh presentation code without resetting documents, drafts or editors.
+    // Fast Refresh retains useState values, including their closed-over methods.
+    if (presentation.implementation !== createWorkspacePresentation) {
+      const current = createWorkspacePresentation();
+      current.publishProjects(projects);
+      current.publishDraftStatus(draftStatus);
+      setPresentation(current);
+      return;
+    }
     presentation.publishProjects(projects);
     presentation.publishDraftStatus(draftStatus);
   }, [presentation, projects, draftStatus]);
@@ -134,10 +148,31 @@ export default function DesktopWorkspace() {
           (item, index) =>
             item.id === next[index].state.id &&
             item.title === next[index].title &&
-            item.unsaved === next[index].unsaved,
+            item.unsaved === next[index].unsaved &&
+            item.pinned === next[index].state.pinned &&
+            JSON.stringify(item.sessions) ===
+              JSON.stringify(
+                next[index].state.sessions.map((session) => ({
+                  id: session.id,
+                  title: sessionTitle(session),
+                  pinned: session.pinned,
+                  archived: session.archived,
+                })),
+              ),
         )
           ? current
-          : next.map((item) => ({ id: item.state.id, title: item.title, unsaved: item.unsaved })),
+          : next.map((item) => ({
+              id: item.state.id,
+              title: item.title,
+              unsaved: item.unsaved,
+              pinned: item.state.pinned,
+              sessions: item.state.sessions.map((session) => ({
+                id: session.id,
+                title: sessionTitle(session),
+                pinned: session.pinned,
+                archived: session.archived,
+              })),
+            })),
       );
     },
     [initialProjects],
@@ -146,19 +181,54 @@ export default function DesktopWorkspace() {
     (id: string) => documentsRef.current.find((item) => item.state.id === id)?.state,
     [],
   );
-  const selectDocument = useCallback((id: string) => {
-    if (!documentsRef.current.some((item) => item.state.id === id) || closing.current) return;
+  const selectDocument = useCallback((id: string, sessionId?: string) => {
+    if (
+      !documentsRef.current.some(
+        (item) =>
+          item.state.id === id &&
+          (!sessionId || item.state.sessions.some((session) => session.id === sessionId)),
+      ) ||
+      closing.current
+    )
+      return;
     const fromNavigation = document.activeElement?.closest('.project-navigation');
     activeRef.current = id;
     setActiveId(id);
-    controllers.current.get(id)?.activate();
+    controllers.current.get(id)?.activate(sessionId);
     if (fromNavigation)
       requestAnimationFrame(() => {
         document
-          .querySelector<HTMLElement>(`[data-project-id="${id}"] button`)
+          .querySelector<HTMLElement>(
+            sessionId
+              ? `[data-project-id="${id}"] [data-session-id="${sessionId}"]`
+              : `[data-project-id="${id}"] button`,
+          )
           ?.focus({ preventScroll: true });
       });
   }, []);
+  const newProjectConversation = useCallback(
+    (id: string) => {
+      if (closing.current || !documentsRef.current.some((item) => item.state.id === id)) return;
+      selectDocument(id);
+      controllers.current.get(id)?.newConversation();
+    },
+    [selectDocument],
+  );
+  const projectSessionAction = useCallback(
+    (projectId: string, sessionId: string, action: SessionAction) => {
+      if (
+        closing.current ||
+        !documentsRef.current.some(
+          (item) =>
+            item.state.id === projectId &&
+            item.state.sessions.some((session) => session.id === sessionId),
+        )
+      )
+        return;
+      controllers.current.get(projectId)?.sessionAction(sessionId, action);
+    },
+    [],
+  );
   const persist = useCallback((items = documentsRef.current, selected = activeRef.current) => {
     if (!window.openpe) return Promise.resolve();
     const state: WorkspaceState = {
@@ -474,8 +544,23 @@ export default function DesktopWorkspace() {
     [selectDocument],
   );
   const requestDocumentAction = useCallback(
-    (id: string, action: ProjectFileAction) => {
+    (id: string, action: ProjectAction) => {
       if (closing.current || quit.current) return;
+      if (action === 'pin' || action === 'unpin') {
+        const target = documentsRef.current.find((item) => item.state.id === id);
+        const pinned = action === 'pin';
+        if (!target || Boolean(target.state.pinned) === pinned) return;
+        updateDocuments(
+          documentsRef.current.map((item) => {
+            if (item !== target) return item;
+            const state = { ...item.state };
+            if (pinned) state.pinned = true;
+            else delete state.pinned;
+            return { ...item, state };
+          }),
+        );
+        return;
+      }
       if (action === 'reveal') {
         if (revealing.current.has(id)) return;
         const notify = (message: string) =>
@@ -524,7 +609,7 @@ export default function DesktopWorkspace() {
         selectDocument(id);
       controller.fileAction(action);
     },
-    [selectDocument],
+    [selectDocument, updateDocuments],
   );
   useEffect(
     () =>
@@ -633,6 +718,8 @@ export default function DesktopWorkspace() {
               initialNotice={item?.notice}
               getProjects={getProjects}
               onSelectProject={selectDocument}
+              onNewProjectSession={newProjectConversation}
+              onProjectSessionAction={projectSessionAction}
               onSelectExample={selectExample}
               onSelectFile={selectFile}
               onAddProject={addDocument}

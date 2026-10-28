@@ -23,7 +23,7 @@ const bundle = await build({
           <button onClick={() => setRef('V101')}>Pulse</button>
           <button onClick={() => setProject(parseProject(serializeProject(project)))}>Reopen</button>
           <button onClick={() => {setProject(history.at(-1)); setHistory(h => h.slice(0,-1));}}>Undo</button>
-          <div className="panel"><PartProperties key={part.id} part={part} onSave={(ref, value, fields) => {
+          <div className="panel"><PartProperties key={part.id} part={part} spiceAvailable onSave={(ref, value, fields) => {
             const next = structuredClone(project);
             Object.assign(next.schematic.parts.find(p => p.id === part.id), {ref, value, fields});
             setHistory(h => [...h, project]); setProject(next); return true;

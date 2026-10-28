@@ -902,7 +902,7 @@ try {
           (node) => node.textContent === 'Retry 3D preview',
         ),
         disabled: Object.fromEntries(
-          ['Fit 3D board', 'Zoom in', 'Place box', 'Drill through hole'].map((name) => [
+          ['Zoom in', 'Place box', 'Drill through hole'].map((name) => [
             name,
             preview?.querySelector(`button[aria-label="${name}"]`)?.disabled ?? null,
           ]),
@@ -927,8 +927,8 @@ try {
     const preview = [...document.querySelectorAll('[aria-label="3D board preview"]')].find(
       (node) => node.getClientRects().length,
     );
-    const fit = preview?.querySelector('button[aria-label="Fit 3D board"]');
-    return fit && !fit.disabled;
+    const zoom = preview?.querySelector('button[aria-label="Zoom in"]');
+    return zoom && !zoom.disabled;
   });
   assert.equal(await button('Drill through hole').isEnabled(), true);
   // The following standoff commit clears only this undone Source edit's redo;

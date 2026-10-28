@@ -31,8 +31,12 @@ import {
   Trash2,
   Pentagon,
   PaintBucket,
+  Scan,
+  SquareDashed,
   X,
 } from 'lucide-react';
+import CanvasContextMenu from './CanvasContextMenu';
+import PropertiesEmptyState from './PropertiesEmptyState';
 import { type Circuit, type Point, uid } from '@/lib/circuit';
 import { defaultLayoutGridSpacing } from '@/lib/layout-grid';
 import {
@@ -4656,6 +4660,81 @@ function LayoutEditor({
               );
             }}
           </LayoutCameraScaleRender>
+          <CanvasContextMenu
+            target={svg}
+            active={active}
+            identity={pcb}
+            onError={setError}
+            actions={[
+              {
+                id: 'fit-board',
+                label: 'Fit board to canvas',
+                icon: Maximize,
+                run: () => fit('board'),
+              },
+              { id: 'fit-all', label: 'Fit all objects', icon: Maximize, run: () => fit('all') },
+              {
+                id: 'actual-size',
+                label: 'Actual size (100%)',
+                icon: Maximize,
+                run: () => zoom(size.width / (view.width * pixelsPerMM)),
+              },
+              { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(1 / 1.2) },
+              { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
+              {
+                id: 'export',
+                label: 'Export image',
+                icon: ImageDown,
+                disabled: exporting,
+                run: exportImage,
+              },
+              {
+                id: 'select-all',
+                label: 'Select all',
+                icon: Scan,
+                separated: true,
+                disabled: tool !== 'select' || Boolean(onAnalysisProbe),
+                run: () => {
+                  cancelGesture();
+                  setSelection(allVisibleSelections());
+                  setInspectedPadId('');
+                },
+              },
+              {
+                id: 'clear-selection',
+                label: 'Clear selection',
+                icon: SquareDashed,
+                disabled: !selection.length,
+                run: () => {
+                  setSelection([]);
+                  setInspectedPadId('');
+                },
+              },
+              {
+                id: 'rotate',
+                label: 'Rotate selection',
+                icon: RotateCw,
+                disabled:
+                  tool !== 'select' ||
+                  !selection.length ||
+                  Boolean(onAnalysisProbe) ||
+                  Boolean(drag || trackDrag),
+                run: () => rotate(90, selection),
+              },
+              {
+                id: 'delete',
+                label: 'Delete selection',
+                icon: Trash2,
+                destructive: true,
+                disabled:
+                  tool !== 'select' ||
+                  !selection.length ||
+                  Boolean(onAnalysisProbe) ||
+                  Boolean(drag || trackDrag),
+                run: () => remove(selection),
+              },
+            ]}
+          />
           <div className="zoom-controls">
             <button aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1.2)}>
               <Minus size={15} />
@@ -4675,14 +4754,6 @@ function LayoutEditor({
             <i />
             <button aria-label="Fit board to canvas" title="Fit board" onClick={() => fit('board')}>
               <Maximize size={15} />
-            </button>
-            <button
-              aria-label="Export image"
-              title="Export image"
-              disabled={exporting}
-              onClick={() => void exportImage()}
-            >
-              <ImageDown size={15} />
             </button>
           </div>
         </div>
@@ -4728,6 +4799,7 @@ function LayoutEditor({
                         padOwner={inspectedFootprint}
                         rectangle={selectedRectangle}
                         selectionCount={selection.length}
+                        showEmptyState={tool === 'select' || tool === 'hand'}
                         snap={snap}
                         onCommit={commit}
                         onFootprint={updateFootprint}
@@ -4815,10 +4887,9 @@ function LayoutEditor({
               </RetainedLayoutProperties>
             )}
             {!propertiesShown && (
-              <div className="schematic-properties-placeholder">
-                <Cpu size={28} aria-hidden="true" />
-                <p>Select an object to view its properties.</p>
-              </div>
+              <PropertiesEmptyState icon={Cpu}>
+                Select an object to view its properties.
+              </PropertiesEmptyState>
             )}
           </EditorDisplayDrawer>
           {appearancePanelContent}

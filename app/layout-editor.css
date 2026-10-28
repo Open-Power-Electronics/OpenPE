@@ -229,7 +229,12 @@
   min-width: 0;
   min-height: 0;
 }
+.model-properties-content[hidden] {
+  display: none;
+}
 .model-properties-body {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: 12px;
@@ -277,21 +282,6 @@
   margin: 0 0 12px;
   font-size: var(--font-caption);
   overflow-wrap: anywhere;
-  color: var(--muted);
-  line-height: 1.6;
-}
-.model-properties-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px 12px;
-  color: var(--soft);
-  text-align: center;
-  font-size: var(--font-small);
-}
-.model-properties-empty p {
-  margin: 0;
   color: var(--muted);
   line-height: 1.6;
 }

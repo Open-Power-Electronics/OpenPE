@@ -59,7 +59,7 @@ Equal X/Y millimetre scaling and the current SVG transform govern pointers,
 hit geometry, annotations and export. 100% uses CSS 96 px/in, not monitor
 calibration. Resize retains scale. Space/Home and Fit board use closed Edge.Cuts;
 Ctrl/Cmd+Home fits visible objects. These camera bindings remain available during
-thermal probing. Middle/right drag pans; right-click opens no context menu.
+thermal probing. Middle/right drag pans; a stationary right click opens canvas actions without changing design geometry.
 The status bar reports absolute mm, zoom and a scale bar. Horizontal-only wheel
 input does not zoom; bounded zoom
 retains its pointer/centre anchor, and pan retains tool world coordinates.
@@ -162,7 +162,9 @@ restricts them to that layer. Equal-distance point picks follow the visible stac
 Properties uses shared labelled rows and sections for footprints, pads, tracks,
 vias, board graphics/text/dimensions, zones, rule areas and board settings.
 Linked footprints share Schematic's symbol identity, editable Reference/Value,
-field table, Footprint chooser and Simulation section. PCB pose and side follow
+field table and Footprint chooser. SPICE controls belong only to Schematic's
+installed and enabled SPICE Simulation plugin; Layout retains their underlying
+native attributes without showing a simulation section or participation switch. PCB pose and side follow
 the shared form, with a fixed deletion footer. Empty inspection uses the same
 icon and placeholder layout. Other object fields retain their labelled sections.
 Controls share typography, spacing and surfaces with 12 px content insets.
@@ -483,7 +485,7 @@ stale fills in the same transaction. Refill/check in KiCad before manufacturing.
 
 Model uses bounded STEP parsing/Three.js without installed KiCad. It renders
 board thickness, closed edges/cutouts, drills, outer copper, pads, silk and
-available packages in mm. Neutral fallback bodies are estimates; late real
+available packages in mm. Clicking visible laminate, copper, mask or silk selects the board in Model and exposes its thickness field; Layout empty Properties has no thickness setting. Component/CAD occlusion and the body filter govern board picking. The field uses the existing validated PCB replacement transaction with the exact current board and Source/close guards, retaining its draft while hidden. Native thickness, 3D geometry and whole-project undo stay in agreement. Neutral fallback bodies are estimates; late real
 models replace them without camera movement. Filled silk and mask artwork retain
 their native stroke as well as their interior; closed strokes keep their inner
 clearance. Text retains linked values and transforms using bounded textures with
@@ -720,6 +722,8 @@ Element annotations share Interaction's geometry colour, contrast, widths and
 opacity, without an extra blue bounds box. Their drag rectangles share the
 directional selection paint. Numbered pins and comments remain available;
 explicit rectangle/freehand annotations retain their blue region marks.
+
+Schematic, Layout and Model expose Export image through the canvas context menu, alongside view-specific camera and selection commands. The bottom-right controls retain zoom; Schematic and Layout also retain Fit, while Model exposes Fit through its context menu and Space. Right dragging never opens the menu; stale/deactivated menus cannot execute.
 
 Native PNG export preserves live selection/camera/destination and omits controls,
 selection paint, annotations and gestures. Longest side is capped at 4096 px:

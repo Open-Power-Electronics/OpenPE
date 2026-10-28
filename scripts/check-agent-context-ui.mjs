@@ -212,7 +212,7 @@ try {
     context.ui.presentation.drawings.some((drawing) => drawing.label === 'PCB layout editor'),
   );
   await button('Schematic').click();
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   await button('Run').click();
   await button('Stop').waitFor({ state: 'hidden' });
   const target = project.schematic.parts.find((part) => part.ref === 'J3');
@@ -257,7 +257,7 @@ try {
   assert.equal(context.simulation.waveformsVisible, false);
   assert.equal(context.simulation.result.status, 'completed');
   const completedConfig = context.simulation.config;
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   await page.getByLabel('Input voltage (V)', { exact: true }).fill('18');
   context = await send('Edited setup keeps the previous result configuration');
   assert.equal(context.simulation.config.voltage, 18);

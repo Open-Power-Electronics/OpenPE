@@ -30,7 +30,6 @@ const bundle = await build({
       const doc = emptyCircuit();
       const ids = ['first-session', 'second-session'];
       const agents = [{id:'codex',available:true,supportsEffort:true}];
-      const options = ids.map((value,index)=>({value,label:'Session '+(index+1)}));
       const ignore = () => {};
       function Fixture() {
         const [active,setActive] = useState(ids[0]);
@@ -45,9 +44,9 @@ const bundle = await build({
           approvalMode="auto" setApprovalMode={ignore} model="" setModel={ignore}
           messages={sessions[id].messages} setMessages={value=>update(id,'messages',value)}
           onSettings={ignore} onApply={()=>{setApplied(value=>value+1);return true;}}
-          active={active===id} sessionId={id} sessionOptions={options} onSelectSession={setActive}
-          onNewSession={ignore} input={sessions[id].draft} setInput={value=>update(id,'draft',value)}
-          onClear={()=>update(id,'messages',[])} onRunningChange={ignore}
+          active={active===id} sessionId={id} conversationTitle={'Session '+id}
+          input={sessions[id].draft} setInput={value=>update(id,'draft',value)}
+          onRunningChange={ignore}
           annotations={[]} setAnnotations={ignore}/>)}</main></>;
       }
       createRoot(document.getElementById('root')).render(<Fixture/>);`,

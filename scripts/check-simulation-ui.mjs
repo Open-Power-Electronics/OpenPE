@@ -222,7 +222,7 @@ try {
   const composer = page.getByPlaceholder('Work with Codex', { exact: true });
   await composer.fill('Keep this Agent draft while probing.');
   async function openSimulation() {
-    if (!(await settings.isVisible())) await button('Simulation').click();
+    if (!(await settings.isVisible())) await button('SPICE Simulation').click();
   }
   const sourceSnapshot = () =>
     page.evaluate(() => {
@@ -307,7 +307,7 @@ try {
   await openSimulation();
   await assertSidebarWidth(ordinarySidebarWidth, 'Simulation keeps the ordinary sidebar width.');
   await assertCameraRetained(retainedCamera, 'Opening Simulation preserves the current camera');
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   await assertCameraRetained(
     retainedCamera,
     'Clicking Simulation again preserves the current camera',
@@ -576,7 +576,7 @@ try {
   await clickCanvasTarget(inductor, { clickCount: 2 });
   assert.equal(await properties.isVisible(), false, 'Double-clicking keeps Properties hidden.');
   assert.equal(await settings.isVisible(), true, 'Simulation settings remain resident.');
-  await button('Simulation').click();
+  await button('SPICE Simulation').click();
   assert.equal(
     await settings.isVisible(),
     true,
@@ -759,7 +759,7 @@ try {
   assert.equal(await dock.count(), 1, 'Mode switching keeps waveforms visible.');
   await button('Close simulation settings').click();
   assert.equal(await dock.count(), 0, 'Closing the window exits simulation and hides waveforms.');
-  assert.equal(await button('Simulation').getAttribute('aria-pressed'), 'false');
+  assert.equal(await button('SPICE Simulation').getAttribute('aria-pressed'), 'false');
   await canvas.press('Space');
   // Fit is intentionally deferred until canvas resize settles.
   await page.waitForTimeout(120);
@@ -1094,7 +1094,7 @@ try {
         ?.getAttribute('aria-checked') === 'false',
   );
   await button('Return to workspace').click();
-  assert.equal(await button('Simulation').count(), 0);
+  assert.equal(await button('SPICE Simulation').count(), 0);
   assert.equal(await settings.count(), 0);
   assert.equal(await dock.count(), 0);
   assert.deepEqual(
@@ -1111,7 +1111,7 @@ try {
         ?.getAttribute('aria-checked') === 'true',
   );
   await button('Return to workspace').click();
-  await button('Simulation').waitFor();
+  await button('SPICE Simulation').waitFor();
   await openSimulation();
   await settings.waitFor();
   assert.deepEqual(errors, []);

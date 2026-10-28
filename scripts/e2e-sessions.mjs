@@ -67,8 +67,7 @@ try {
   const visible = () => page.locator('.chat-panel:visible');
   const input = () => visible().getByLabel('Message your agent', { exact: true });
   const select = async (name) => {
-    await visible().getByRole('combobox', { name: 'Session', exact: true }).click();
-    await page.getByRole('option', { name, exact: true }).click();
+    await page.locator('.project-navigation').getByRole('button', { name, exact: true }).click();
   };
   const send = async (prompt) => {
     await input().fill(prompt);
@@ -85,7 +84,11 @@ try {
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   const source = await readNativeFiles(page);
   await send('First session prompt');
-  await visible().getByRole('button', { name: 'New conversation', exact: true }).click();
+  await page
+    .locator('.project-navigation > span')
+    .first()
+    .locator('.project-folder > button')
+    .click();
   assert.equal(await page.getByRole('dialog').count(), 0);
   assert.equal(await input().inputValue(), '');
   assert.equal(await visible().locator('.message').count(), 0);
@@ -102,7 +105,11 @@ try {
   assert.equal(await input().inputValue(), 'Second draft');
   await send('Second session prompt');
   await finish();
-  await visible().getByRole('button', { name: 'New conversation', exact: true }).click();
+  await page
+    .locator('.project-navigation > span')
+    .first()
+    .locator('.project-folder > button')
+    .click();
   await input().fill('Keep this unsent draft');
   await select('First session prompt');
   await send('Follow up in first');
@@ -145,13 +152,8 @@ try {
   await select('Second session prompt');
   assert.equal(await visible().locator('.message').count(), 2);
   await page.setViewportSize({ width: 1120, height: 760 });
-  await visible().getByRole('combobox', { name: 'Session', exact: true }).click();
   const header = await visible().locator('.chat-header').boundingBox();
   assert.ok(header.height <= 60, 'Session titles stay on one line in compact windows.');
-  const menu = await page.getByRole('listbox').boundingBox();
-  assert.ok(
-    menu.x >= 0 && menu.y >= 0 && menu.x + menu.width <= 1120 && menu.y + menu.height <= 760,
-  );
   await application.evaluate(async ({ BrowserWindow }) => {
     await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined, {
       stayHidden: true,

@@ -1,3 +1,8 @@
+import {
+  runCanvasAction,
+  exportCanvasImage,
+  openCanvasContextMenu,
+} from './canvas-context-menu-test-helpers.mjs';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -124,7 +129,7 @@ try {
   const nativeBaseline = await readNativeFiles(page);
   await button('Schematic').click();
   await page.getByTestId('part-R1').click();
-  await button('Export image').click();
+  await exportCanvasImage(page);
   await page.getByText('Exported schematic.png', { exact: true }).waitFor();
   const schematicImage = await page.evaluate(() => window.exportedImages[0]);
   assert.ok(schematicImage.width > 100 && schematicImage.height > 100);
@@ -722,7 +727,7 @@ try {
   assert.ok(Math.abs(movedPin.y - pin.y - 20) < 2);
   await canvas.press('Delete');
   await canvas.press('r');
-  await button('Export image').click();
+  await exportCanvasImage(page);
   await page.waitForFunction(() => window.exportedImages.length === 2);
   const pannedImage = await page.evaluate(() => window.exportedImages[1]);
   await writeFile(
@@ -756,34 +761,42 @@ try {
   await page.evaluate(() => {
     window.imageExportMode = 'cancel';
   });
-  await button('Export image').click();
+  await exportCanvasImage(page);
   await page.waitForFunction(() => window.exportedImages.length === 3);
   await page.evaluate(() => {
     window.imageExportMode = 'error';
   });
-  await button('Export image').click();
+  await exportCanvasImage(page);
   await page.getByText('Simulated PNG save failure.', { exact: true }).waitFor();
   await page.evaluate(() => {
     window.imageExportMode = undefined;
   });
   assert.equal(
-    await button('Export image').isEnabled(),
+    await (
+      await openCanvasContextMenu(page)
+    )
+      .getByRole('menuitem', { name: 'Export image', exact: true })
+      .isEnabled(),
     true,
     'Failed/cancelled saves release export state.',
   );
+  await page.keyboard.press('Escape');
   await button('Source').click();
   assert.deepEqual(await readNativeFiles(page), nativeBaseline);
   await button('Schematic').click();
   // Pending annotations are session-local, and survive project switches and recovery.
-  await button('New conversation').click();
+  await page
+    .locator('.project-navigation > span')
+    .first()
+    .locator('.project-folder > button')
+    .click();
   assert.equal(await page.locator('.annotation-pin').count(), 0);
-  await page.getByRole('combobox', { name: 'Session', exact: true }).click();
-  await page.getByRole('option').first().click();
+  await page.locator('.project-navigation .project-session').last().click();
   await button('Annotation mode').click();
   assert.equal(await page.locator('.annotation-pin').count(), 4);
   await page.locator('.nav-rail').getByRole('button', { name: 'New project', exact: true }).click();
   assert.equal(await page.getByLabel('Pending annotations', { exact: true }).count(), 0);
-  await page.locator('.project-navigation button').first().click();
+  await page.locator('.project-navigation .project-session').first().click();
   await page.getByLabel('Pending annotations', { exact: true }).waitFor();
   await page.waitForTimeout(900);
   await mount();
@@ -1025,7 +1038,11 @@ try {
     retainedZoom,
     'Model retains zoom through view switches.',
   );
-  await objectZoom.getByRole('button', { name: 'Fit 3D board', exact: true }).click();
+  assert.equal(
+    await objectZoom.getByRole('button', { name: 'Fit 3D board', exact: true }).count(),
+    0,
+  );
+  await runCanvasAction(page, 'Fit 3D board');
   assert.equal(
     await page
       .getByRole('group', { name: 'Model tools' })

@@ -1,5 +1,5 @@
 import { memo, useCallback, type ComponentProps, type Dispatch, type SetStateAction } from 'react';
-import type { ChatSession } from '@/lib/chat-sessions';
+import { sessionTitle, type ChatSession } from '@/lib/chat-sessions';
 import type { AgentAnnotation } from '@/lib/agent-annotations';
 import Chat, { type ChatDesign } from './Chat';
 
@@ -10,18 +10,17 @@ type Props = Omit<
   | 'pcb'
   | 'pcbSchematic'
   | 'sessionId'
+  | 'conversationTitle'
   | 'input'
   | 'annotations'
   | 'messages'
   | 'setInput'
   | 'setAnnotations'
   | 'setMessages'
-  | 'onClear'
   | 'getDesign'
 > & {
   session: ChatSession;
   setSessions: Dispatch<SetStateAction<ChatSession[]>>;
-  onClearSession: (id: string) => void;
   getDesign: () => ChatDesign;
   annotationDesign?: ChatDesign;
 };
@@ -31,7 +30,6 @@ const emptyAnnotations: AgentAnnotation[] = [];
 export default memo(function ConversationSession({
   session,
   setSessions,
-  onClearSession,
   getDesign,
   annotationDesign,
   ...props
@@ -60,7 +58,6 @@ export default memo(function ConversationSession({
       ),
     [id, setSessions],
   );
-  const onClear = useCallback(() => onClearSession(id), [id, onClearSession]);
   const design = annotationDesign ?? getDesign();
   return (
     <Chat
@@ -68,13 +65,13 @@ export default memo(function ConversationSession({
       {...design}
       getDesign={getDesign}
       sessionId={id}
+      conversationTitle={sessionTitle(session)}
       input={session.draft}
       annotations={session.annotations ?? emptyAnnotations}
       messages={session.messages}
       setInput={setInput}
       setAnnotations={setAnnotations}
       setMessages={setMessages}
-      onClear={onClear}
     />
   );
 });

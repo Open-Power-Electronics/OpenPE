@@ -10,7 +10,7 @@ const bundle = await build({
     contents: `import React,{StrictMode,Suspense,startTransition,useLayoutEffect,useState} from 'react';import{createRoot}from'react-dom/client';import{flushSync}from'react-dom';
       import Titlebar from './components/DesktopTitlebar';
       window.openpe={titleBarOverlay:false};window.titlebarCalls=[];window.titlebarCounts={menus:{},navigation:0};window.titlebarSuspended=0;
-      const initial={native:false,phase:'A',valid:true,back:true,forward:false,toggle:true,sidebar:true,file:['New','Save'],view:['Schematic','Layout'],edit:['Undo'],help:['About'],suspend:false};
+      const initial={native:false,phase:'A',valid:true,back:true,forward:false,file:['New','Save'],view:['Schematic','Layout'],edit:['Undo'],help:['About'],suspend:false};
       const never=new Promise(()=>{});
       function Pause({state}){if(state.suspend){window.titlebarSuspended++;throw never}return null}
       function Fixture(){const[state,setState]=useState(initial);
@@ -22,8 +22,7 @@ const bundle = await build({
         const action=name=>()=>{window.titlebarCalls.push({name,phase:state.phase,allowed:state.valid})};
         const menus=[['File',state.file],['Edit',state.edit],['View',state.view],['Help',state.help]].map(([label,items])=>({label,items:items.map(item=>typeof item==='string'?{label:item,run:action(item)}:{label:item.label,items:item.items.map(label=>({label,run:action(label)}))})}));
         return <Suspense fallback={<span>Waiting</span>}><Titlebar key={String(state.native)} menus={menus}
-          onBack={state.back?action('Back'):undefined} onForward={state.forward?action('Forward'):undefined}
-          onToggleSidebar={state.toggle?action('Toggle'):undefined} sidebarVisible={state.sidebar}/><Pause state={state}/></Suspense>;
+          onBack={state.back?action('Back'):undefined} onForward={state.forward?action('Forward'):undefined}/><Pause state={state}/></Suspense>;
       }
       createRoot(document.getElementById('root')).render(<StrictMode><Fixture/></StrictMode>);`,
     resolveDir: process.cwd(),
@@ -99,8 +98,8 @@ try {
   await settle();
   assert.equal(await button('Back').isEnabled(), true);
   assert.equal(await button('Forward').isDisabled(), true);
-  assert.equal(await button('Toggle sidebar').getAttribute('aria-pressed'), 'true');
-  for (const name of ['Back', 'Forward', 'Toggle sidebar']) {
+  assert.equal(await button('Toggle sidebar').count(), 0);
+  for (const name of ['Back', 'Forward']) {
     assert.equal(await button(name).innerText(), '');
     assert.equal(await button(name).getAttribute('title'), name, `${name} explains its icon.`);
   }
@@ -235,8 +234,6 @@ try {
   );
   await button('Back').click();
   assert.equal((await lastCall()).phase, 'CURRENT');
-  await button('Toggle sidebar').click();
-  assert.equal((await lastCall()).phase, 'CURRENT');
   assert.equal(
     await page.evaluate(
       () =>
@@ -264,14 +261,10 @@ try {
     help: ['Documentation'],
     back: false,
     forward: true,
-    toggle: false,
-    sidebar: false,
   });
   assert.equal(await menu('Edit').isDisabled(), true);
   assert.equal(await button('Back').isDisabled(), true);
   assert.equal(await button('Forward').isEnabled(), true);
-  assert.equal(await button('Toggle sidebar').isDisabled(), true);
-  assert.equal(await button('Toggle sidebar').getAttribute('aria-pressed'), 'false');
   await menu('Help').click();
   assert.equal(await page.getByRole('option', { name: 'Documentation', exact: true }).count(), 1);
   await page.keyboard.press('Escape');

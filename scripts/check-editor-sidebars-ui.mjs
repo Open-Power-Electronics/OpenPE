@@ -581,7 +581,7 @@ try {
   };
   await assertWindowActions(
     page.getByRole('group', { name: 'Schematic tools', exact: true }),
-    'Simulation',
+    'SPICE Simulation',
     'Electrical rules (ERC)',
   );
   await assertEditorViewControls(page, 'Schematic');
@@ -655,7 +655,7 @@ try {
       };
     });
   const schematicEmptyPropertiesStyle = await emptyPropertiesStyle(
-    schematicSidebar.locator('.schematic-properties-placeholder'),
+    schematicSidebar.locator('.properties-empty-state:visible'),
   );
   for (const name of ['Selection', 'Visualization']) {
     assert.equal(
@@ -932,7 +932,7 @@ try {
   await sidebar.waitFor();
   await checkDrawerSharing(sidebar, canvas, true);
   assert.deepEqual(
-    await emptyPropertiesStyle(sidebar.locator('.schematic-properties-placeholder')),
+    await emptyPropertiesStyle(sidebar.locator('.properties-empty-state:visible')),
     schematicEmptyPropertiesStyle,
     'Empty Layout Properties shares Schematic icon, spacing and text treatment.',
   );
@@ -1045,6 +1045,14 @@ try {
     .getByRole('textbox', { name: 'Component reference', exact: true })
     .waitFor();
   await layoutProperties.getByRole('textbox', { name: 'Component value', exact: true }).waitFor();
+  assert.equal(await layoutProperties.locator('.property-simulation').count(), 0);
+  assert.equal(
+    await layoutProperties
+      .getByRole('switch', { name: 'Include in SPICE simulation', exact: true })
+      .count(),
+    0,
+    'SPICE participation belongs only to Schematic plugin controls.',
+  );
   assert.equal(
     await layoutProperties
       .getByRole('button', { name: 'Browse footprints', exact: true })
@@ -1408,7 +1416,11 @@ try {
       name: 'Layout properties',
       exact: true,
     });
-    await boardProperties.getByLabel('Board thickness (mm)', { exact: true }).waitFor();
+    await boardProperties.locator('.properties-empty-state:visible').waitFor();
+    assert.equal(
+      await boardProperties.getByLabel('Board thickness (mm)', { exact: true }).count(),
+      0,
+    );
     await checkDrawerSharing(sidebar, canvas);
     await category('Points').scrollIntoViewIfNeeded();
     const [pointBounds, sidebarBounds] = await Promise.all([
@@ -1428,7 +1440,11 @@ try {
     await rightToggle.click();
     await sidebar.waitFor({ state: 'hidden' });
     await rightToggle.click();
-    await boardProperties.getByLabel('Board thickness (mm)', { exact: true }).waitFor();
+    await boardProperties.locator('.properties-empty-state:visible').waitFor();
+    assert.equal(
+      await boardProperties.getByLabel('Board thickness (mm)', { exact: true }).count(),
+      0,
+    );
     await tab('Layers').scrollIntoViewIfNeeded();
     if (viewport.width === 900) await button('Toggle sidebar').click();
   }

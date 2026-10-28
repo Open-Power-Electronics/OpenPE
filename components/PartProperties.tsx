@@ -35,9 +35,12 @@ function PartProperties({
   onRequestSave,
   capabilityHost,
   active = true,
+  spiceAvailable = false,
 }: {
   part: Part;
   active?: boolean;
+  /** Schematic-only controls owned by the installed and enabled SPICE plugin. */
+  spiceAvailable?: boolean;
   onRequestSave?: (saveAs: boolean) => void;
   capabilityHost?: CapabilityHost;
   onSave: (
@@ -50,7 +53,8 @@ function PartProperties({
 }) {
   const fields = partFields(part);
   const valueOwnsParams = part.value === '${SIM.PARAMS}' && !!fields['Sim.Params'];
-  const visibleRow = (row: FieldRow) => !(valueOwnsParams && row.name === 'Sim.Params');
+  const visibleRow = (row: FieldRow) =>
+    !['LCSC', 'MPN'].includes(row.name) && !(valueOwnsParams && row.name === 'Sim.Params');
   const fieldsKey = JSON.stringify(fields);
   const included = participatesInSimulation(part);
   const snapshot = JSON.stringify([
@@ -93,6 +97,7 @@ function PartProperties({
     footprintDetail?: FootprintDetail,
   ): boolean {
     if (!active || composing.current || basis !== snapshot) return false;
+    if (participation !== included && !spiceAvailable) return false;
     try {
       const change = preparePartProperties(part, ref, value, draftRows);
       if (
@@ -119,18 +124,18 @@ function PartProperties({
   const simulationHeading = (
     <>
       {hasSimulationFields && <ChevronRight size={15} aria-hidden="true" />}
-      <span>Simulation</span>
+      <span>SPICE Simulation</span>
       <button
         type="button"
         role="switch"
         className="appearance-toggle simulation-participation"
-        aria-label="Include in simulation"
+        aria-label="Include in SPICE simulation"
         aria-checked={includeInSimulation}
-        disabled={!active}
+        disabled={!active || !spiceAvailable}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (!active) return;
+          if (!active || !spiceAvailable) return;
           const next = !includeInSimulation;
           if (save(rows, next)) setIncludeInSimulation(next);
         }}
@@ -288,16 +293,17 @@ function PartProperties({
           <Plus size={15} />
           Add field
         </button>
-        {hasSimulationFields ? (
-          <details className="property-simulation">
-            <summary className="property-simulation-heading">{simulationHeading}</summary>
-            <div className="property-fields">{renderFields(true)}</div>
-          </details>
-        ) : (
-          <div className="property-simulation">
-            <div className="property-simulation-heading">{simulationHeading}</div>
-          </div>
-        )}
+        {spiceAvailable &&
+          (hasSimulationFields ? (
+            <details className="property-simulation">
+              <summary className="property-simulation-heading">{simulationHeading}</summary>
+              <div className="property-fields">{renderFields(true)}</div>
+            </details>
+          ) : (
+            <div className="property-simulation">
+              <div className="property-simulation-heading">{simulationHeading}</div>
+            </div>
+          ))}
         {error && (
           <p className="dialog-error" role="alert">
             {error}
@@ -336,6 +342,7 @@ export default memo(
     previous.onSave === next.onSave &&
     previous.onRequestSave === next.onRequestSave &&
     previous.active === next.active &&
+    previous.spiceAvailable === next.spiceAvailable &&
     previous.capabilityHost === next.capabilityHost &&
     previous.part.id === next.part.id &&
     previous.part.libId === next.part.libId &&
