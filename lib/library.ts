@@ -233,8 +233,21 @@ export function singleSimulationParameter(params: string) {
 
 export function displayPartValue(part: Part) {
   // KiCad's simulation placeholder refers to the stored field, not a literal value.
-  const params = partFields(part)['Sim.Params'];
+  const fields = partFields(part);
+  const params = fields['Sim.Params'];
   const value = params ? (singleSimulationParameter(params)?.value ?? params) : '';
+  // Newly placed waveform sources retain the library's generic Value. Present
+  // their stored parameters when no separate native parameter caption exists.
+  if (
+    params &&
+    fields['Sim.Device'] === 'V' &&
+    ['PULSE', 'SIN'].includes(fields['Sim.Type']) &&
+    part.value === part.libId.split(':').at(-1) &&
+    fields['OpenPE.ModelSource'] !== 'external' &&
+    (fields['OpenPE.ModelSource'] === 'basic' || !fields['Sim.Library']?.trim()) &&
+    !extraSymbolAnnotations(part).some((field) => field.name === 'Sim.Params')
+  )
+    return params;
   return value ? part.value.replaceAll('${SIM.PARAMS}', value) : part.value;
 }
 

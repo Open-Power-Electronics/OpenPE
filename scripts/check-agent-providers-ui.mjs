@@ -179,7 +179,6 @@ try {
   assert.equal(await modelPicker.innerText(), originalModels.deepseek);
 
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
   await settings.getByRole('tab', { name: 'Agents', exact: true }).click();
   assert.equal(await settings.locator('.connection-item').count(), 5);
@@ -265,7 +264,6 @@ try {
 
   const setTheme = async (theme) => {
     await button('Settings').click();
-    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
     await settings
       .getByRole('radiogroup', { name: 'Theme', exact: true })
       .getByRole('radio', { name: theme, exact: true })
@@ -340,20 +338,25 @@ try {
       assert.equal(await menu.count(), 0);
 
       await button('Settings').click();
-      const settingsMenu = page.getByRole('menu', { name: 'OpenPE menu', exact: true });
-      assert.equal(await settingsMenu.getByRole('menuitem').count(), 2);
-      await assertPopupBounds(settingsMenu);
-      await captureMenu(`settings-menu-${suffix}`);
-      await page.keyboard.press('End');
-      assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'About OpenPE');
-      await page.keyboard.press('Home');
-      assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Settings');
+      await settings.waitFor();
+      for (const name of ['Reset appearance', 'Copy appearance', 'Export appearance'])
+        assert.equal(await settings.getByRole('button', { name, exact: true }).count(), 0);
+      assert.equal(await button('Settings').getAttribute('aria-haspopup'), null);
+      assert.equal(await page.getByRole('menu', { name: 'OpenPE menu', exact: true }).count(), 0);
+      await assertPopupBounds(settings);
+      await page.screenshot({ path: `test-results/openpe-settings-${suffix}.png` });
       await page.keyboard.press('Escape');
-      assert.equal(await settingsMenu.count(), 0);
+      assert.equal(await settings.count(), 0);
       assert.equal(
         await button('Settings').evaluate((element) => document.activeElement === element),
         true,
       );
+      for (const key of ['Enter', 'Space']) {
+        await button('Settings').press(key);
+        await settings.waitFor();
+        await page.keyboard.press('Escape');
+        assert.equal(await settings.count(), 0);
+      }
     }
   }
   assert.deepEqual(errors, []);

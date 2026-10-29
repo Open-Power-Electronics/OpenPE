@@ -17,8 +17,8 @@ const bundle = await build({
         const [part,setPart]=useState({id:'first-part',libId:'Device:R',ref:'R1',value:'1k',x:0,y:0,rotation:0,
           fields:{Footprint:'',Note:'original'},raw:['symbol',['property','"Raw field"','"raw original"']]});
         window.updatePropertyPart=(patch)=>setPart(current=>({...current,...patch}));
-        const onSave=useCallback((ref,value,fields,included)=>{
-          window.propertySaves.push({id:part.id,ref,value,fields,included}); return window.propertyAcceptSaves;
+        const onSave=useCallback((ref,value,fields)=>{
+          window.propertySaves.push({id:part.id,ref,value,fields}); return window.propertyAcceptSaves;
         },[part.id]);
         return <div className="panel"><PartProperties part={part} spiceAvailable={spiceAvailable} onSave={onSave}/></div>;
       }
@@ -123,15 +123,16 @@ try {
     'Native raw association changes invalidate the form.',
   );
   assert.equal(await page.getByLabel('Raw field', { exact: true }).inputValue(), 'new raw source');
+  await value.fill('retained participation draft');
   await invalidates(
     { excludeFromSimulation: true },
     'Simulation participation changes invalidate the form.',
   );
+  assert.equal(await value.inputValue(), 'retained participation draft');
   assert.equal(
-    await page
-      .getByRole('switch', { name: 'Include in SPICE simulation' })
-      .getAttribute('aria-checked'),
-    'false',
+    await page.getByRole('switch').count(),
+    0,
+    'Properties has no participation switch.',
   );
   await value.fill('5k');
   await value.press('Enter');
@@ -139,68 +140,41 @@ try {
   assert.equal(saves.at(-1).id, 'second-part');
   assert.equal(saves.at(-1).value, '5k');
   assert.equal(saves.at(-1).fields['Raw field'], 'new raw source');
-  assert.equal(
-    saves.at(-1).included,
-    undefined,
-    'Value-only edits leave the accepted participation setting unchanged.',
-  );
-  const participation = page.getByRole('switch', { name: 'Include in SPICE simulation' });
   const error = page.getByRole('alert');
   await value.fill('');
   const beforeInvalid = await page.evaluate(() => window.propertySaves.length);
-  await participation.click();
-  assert.equal(
-    await participation.getAttribute('aria-checked'),
-    'false',
-    'Invalid property drafts cannot change the immediate participation setting.',
-  );
-  assert.equal(await value.inputValue(), '', 'Rejected participation retains the invalid draft.');
+  await value.press('Enter');
+  assert.equal(await value.inputValue(), '', 'Invalid drafts remain retryable.');
   assert.equal(await error.isVisible(), true);
-  assert.equal(
-    await page.evaluate(() => window.propertySaves.length),
-    beforeInvalid,
-    'Invalid drafts fail before calling the host.',
-  );
+  assert.equal(await page.evaluate(() => window.propertySaves.length), beforeInvalid);
   await value.press('Escape');
   await page.evaluate(() => {
     window.propertyAcceptSaves = false;
   });
-  await participation.click();
-  assert.equal(
-    await participation.getAttribute('aria-checked'),
-    'false',
-    'A rejected host commit leaves the switch at the accepted setting.',
-  );
+  await value.fill('6k');
+  await value.press('Enter');
+  assert.equal(await value.inputValue(), '6k', 'A rejected host commit retains its draft.');
   assert.equal(await error.isVisible(), true);
-  const rejected = await page.evaluate(() => window.propertySaves);
-  assert.equal(rejected.length, beforeInvalid + 1);
-  assert.equal(rejected.at(-1).included, true);
   await page.evaluate(() => {
     window.propertyAcceptSaves = true;
   });
-  await participation.click();
-  assert.equal(
-    await participation.getAttribute('aria-checked'),
-    'true',
-    'Retry requests and displays the original intended setting after acceptance.',
-  );
-  const retried = await page.evaluate(() => window.propertySaves);
-  assert.equal(retried.length, rejected.length + 1);
-  assert.equal(retried.at(-1).included, true);
-  assert.equal(await error.count(), 0);
+  await value.focus();
+  await value.press('Enter');
+  assert.equal(await error.count(), 0, 'The same rejected draft can be retried.');
   await value.fill('retained SPICE draft');
   const beforePluginVisibility = await page.evaluate(() => window.propertySaves.length);
   await page.evaluate(() => window.setPropertySpiceAvailable(false));
-  await participation.waitFor({ state: 'detached' });
+  await settle();
   assert.equal(await page.locator('.property-simulation').count(), 0);
   assert.equal(await value.inputValue(), 'retained SPICE draft');
   await page.evaluate(() => window.setPropertySpiceAvailable(true));
-  await participation.waitFor();
+  await settle();
+  assert.equal(await page.getByRole('switch').count(), 0);
   assert.equal(await value.inputValue(), 'retained SPICE draft');
   assert.equal(await page.evaluate(() => window.propertySaves.length), beforePluginVisibility);
   assert.deepEqual(errors, []);
   console.log(
-    'PartProperties retention verified: live pose drafts, complete associations, stable ID, current native fields and accepted participation with failure/retry.',
+    'PartProperties retention verified: live pose drafts, complete associations, stable ID, current native fields and property failure/retry.',
   );
 } finally {
   await browser.close();

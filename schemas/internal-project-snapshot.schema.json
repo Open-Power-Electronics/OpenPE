@@ -2598,9 +2598,28 @@
               "type": "string",
               "maxLength": 4096
             },
+            "initialCurrent": {
+              "type": "string",
+              "maxLength": 4096
+            },
             "coupling": {
               "type": "string",
               "maxLength": 4096
+            },
+            "modelSource": {
+              "type": "string",
+              "enum": [
+                "basic",
+                "external"
+              ]
+            },
+            "sourceType": {
+              "type": "string",
+              "enum": [
+                "DC",
+                "PULSE",
+                "SIN"
+              ]
             },
             "excluded": {
               "type": "boolean"
@@ -2674,7 +2693,10 @@
                   "enum": [
                     "OpenPE.SeriesResistance",
                     "OpenPE.InitialVoltage",
-                    "OpenPE.Coupling"
+                    "OpenPE.InitialCurrent",
+                    "OpenPE.Coupling",
+                    "OpenPE.ModelSource",
+                    "OpenPE.SourceType"
                   ]
                 }
               }

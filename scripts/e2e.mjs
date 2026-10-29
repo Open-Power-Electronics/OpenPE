@@ -6,6 +6,7 @@ import {
 import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 import { tsImport } from 'tsx/esm/api';
+const { defaultAppearance } = await tsImport('../lib/appearance.ts', import.meta.url);
 const { switchingStageSource } = await tsImport(
   '../tests/fixtures/switching-stage.ts',
   import.meta.url,
@@ -470,7 +471,6 @@ async function checkAppearance(page) {
   assert.equal(await brief.evaluate((el) => getComputedStyle(el).boxShadow), 'none');
   assert.deepEqual(await composerStyle(), unfocusedStyle, 'Focus adds no border or halo.');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   const choose = async (label, value) => {
     if (label === 'Motion' || label === 'Source indentation') {
@@ -579,7 +579,6 @@ async function checkAppearance(page) {
       document.documentElement.dataset.sourceWhitespace === 'guides',
   );
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await page.emulateMedia({ colorScheme: 'dark' });
   await choose('Theme', 'System');
   await page.emulateMedia({ colorScheme: 'light' });
@@ -606,7 +605,6 @@ async function checkAppearance(page) {
 }
 async function checkAdvancedAppearance(page) {
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   const choose = async (name, label) => {
     await chooseSelect(page, dialog.getByRole('combobox', { name, exact: true }), label);
@@ -750,34 +748,21 @@ async function checkAdvancedAppearance(page) {
   await page.waitForFunction(() => document.documentElement.dataset.fullWidth === 'true');
   assert.equal(await css('--content-size'), '24px');
   assert.equal(await css('--surface'), '#f2f4f8');
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
-  await dialog.getByRole('button', { name: 'Reset appearance', exact: true }).click();
-  await page.waitForFunction(
-    () =>
-      document.documentElement.style.getPropertyValue('--surface') === '' &&
-      document.documentElement.dataset.smartPunctuation === 'false',
-  );
-  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await waitForAsync(page, async () => {
+  // Restore the isolated fixture's preferences for subsequent checks.
+  await page.evaluate(async (appearance) => {
     const c = await window.openpe.connection();
-    const a = await (
-      await fetch(c.base + '/api/appearance', {
-        headers: { 'X-OpenPE-Token': c.token },
-        cache: 'no-store',
-      })
-    ).json();
-    return (
-      a.uiSize === null &&
-      a.contentSize === null &&
-      !a.fullWidth &&
-      !a.smartPunctuation &&
-      a.contrast === 60
-    );
-  });
+    const response = await fetch(c.base + '/api/appearance', {
+      method: 'POST',
+      headers: { 'X-OpenPE-Token': c.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(appearance),
+    });
+    if (!response.ok) throw new Error('Could not restore fixture appearance.');
+  }, defaultAppearance);
+  await page.reload();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(() => document.documentElement.dataset.smartPunctuation === 'false');
   console.log(
-    'PASS: custom colors/fonts, independent modes, motion override, smart typing, translucent/full-width layouts, persistence and reset.',
+    'PASS: custom colors/fonts, independent modes, motion override, smart typing, translucent/full-width layouts and persistence.',
   );
 }
 async function checkGrid(page) {
@@ -845,7 +830,6 @@ async function checkComposerLayout(page) {
   const model = page.getByRole('combobox', { name: 'Choose model', exact: true });
   const textSize = async (label) => {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
     await settings.getByRole('combobox', { name: 'Text size', exact: true }).click();
     await settings.getByRole('option', { name: label, exact: true }).click();
@@ -1067,8 +1051,6 @@ async function checkDialogs(page) {
     const fromHome = name === 'connections';
     if (fromHome) await page.getByRole('button', { name: 'Home', exact: true }).click();
     await page.getByRole('button', { name: button, exact: true }).click();
-    if (button === 'Settings')
-      await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
     await dialog.waitFor();
     await checkFit();
     await page.keyboard.press('Control+s');
@@ -2119,7 +2101,6 @@ try {
     await page.getByRole('button', { name: 'Schematic', exact: true }).click();
     await page.getByRole('button', { name: 'Home', exact: true }).click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
     await page.getByRole('dialog').waitFor();
     await page.getByRole('tab', { name: 'Agents', exact: true }).click();
     await page

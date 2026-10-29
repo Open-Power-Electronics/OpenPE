@@ -149,7 +149,6 @@ try {
   const queuedAnnotations = () => state.documents[0].sessions[0].annotations ?? [];
   const chooseTheme = async (theme) => {
     await button('Settings').click();
-    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
     await page.getByRole('radio', { name: theme, exact: true }).check();
     await button('Done').click();
   };
@@ -831,7 +830,6 @@ try {
   await button('Annotation mode').click();
   assert.equal(await page.locator('.annotation-pin').count(), 4);
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await button('Done').click();
   await page.setViewportSize({ width: 1000, height: 680 });

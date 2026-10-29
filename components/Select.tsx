@@ -31,6 +31,7 @@ export default function Select({
   popupClassName = '',
   popupMaxHeight,
   popupPlacement = 'bottom',
+  popupMatchWidth,
 }: {
   label: string;
   hint?: string;
@@ -49,6 +50,7 @@ export default function Select({
   popupClassName?: string;
   popupMaxHeight?: number;
   popupPlacement?: 'bottom' | 'right';
+  popupMatchWidth?: 'trigger' | 'parent';
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -58,7 +60,12 @@ export default function Select({
   const [active, setActive] = useState(0);
   const [submenu, setSubmenu] = useState<number | null>(null);
   const [childActive, setChildActive] = useState(0);
-  const [position, setPosition] = useState({ left: 0, top: 0, maxHeight: 300 });
+  const [position, setPosition] = useState({
+    left: 0,
+    top: 0,
+    maxHeight: 300,
+    width: undefined as number | undefined,
+  });
   const [childPosition, setChildPosition] = useState({ left: 8, top: 8, maxHeight: 300 });
   const chosen = options.findIndex((option) => option.value === value);
   const selectionLabel = options[chosen]?.label || placeholder;
@@ -76,11 +83,22 @@ export default function Select({
   }
   function show() {
     if (disabled || !enabled) return;
-    const rect = trigger.current!.getBoundingClientRect();
+    const rect = (
+      popupMatchWidth === 'parent' ? trigger.current!.parentElement! : trigger.current!
+    ).getBoundingClientRect();
     setPosition({
       left: 8,
       top: rect.bottom + 6,
       maxHeight: Math.min(window.innerHeight - 16, popupMaxHeight ?? Infinity),
+      width: popupMatchWidth
+        ? Math.min(
+            (popupMatchWidth === 'parent'
+              ? trigger.current!.parentElement!
+              : trigger.current!
+            ).getBoundingClientRect().width,
+            window.innerWidth - 16,
+          )
+        : undefined,
     });
     setActive(Math.max(0, chosen));
     setSubmenu(null);
@@ -106,9 +124,16 @@ export default function Select({
   useLayoutEffect(() => {
     if (!open || !enabled || !trigger.current || !popup.current) return;
     const place = () => {
-      const rect = trigger.current!.getBoundingClientRect();
+      const rect = (
+        popupMatchWidth === 'parent' ? trigger.current!.parentElement! : trigger.current!
+      ).getBoundingClientRect();
       const menu = popup.current!;
-      const width = menu.getBoundingClientRect().width;
+      const anchor =
+        popupMatchWidth === 'parent' ? trigger.current!.parentElement! : trigger.current!;
+      const matchedWidth = popupMatchWidth
+        ? Math.min(anchor.getBoundingClientRect().width, window.innerWidth - 16)
+        : undefined;
+      const width = matchedWidth ?? menu.getBoundingClientRect().width;
       const height = Math.min(
         menu.scrollHeight + menu.offsetHeight - menu.clientHeight,
         popupMaxHeight ?? Infinity,
@@ -131,16 +156,22 @@ export default function Select({
         Math.min(right ? rect.right + 8 : rect.left, window.innerWidth - width - 8),
       );
       setPosition((current) =>
-        current.top === top && current.left === left && current.maxHeight === maxHeight
+        current.top === top &&
+        current.left === left &&
+        current.maxHeight === maxHeight &&
+        current.width === matchedWidth
           ? current
-          : { left, top, maxHeight },
+          : { left, top, maxHeight, width: matchedWidth },
       );
     };
     place();
     const observer = new ResizeObserver(place);
     observer.observe(popup.current);
+    observer.observe(
+      popupMatchWidth === 'parent' ? trigger.current.parentElement! : trigger.current,
+    );
     return () => observer.disconnect();
-  }, [open, enabled, options, popupMaxHeight, popupPlacement]);
+  }, [open, enabled, options, popupMaxHeight, popupPlacement, popupMatchWidth]);
   useLayoutEffect(() => {
     if (!childOpen || submenu === null || !popup.current || !childPopup.current) return;
     const parent = popup.current;

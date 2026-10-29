@@ -45,6 +45,7 @@ import {
 } from '@/context/agent-thermal-context';
 import Select from './Select';
 import ThermalField from './ThermalField';
+import AnalysisComponents from './AnalysisComponents';
 import type { ThermalLayoutPresentation } from './ThermalLayoutResults';
 import styles from './ThermalSimulation.module.css';
 
@@ -61,14 +62,14 @@ type Session = {
   error: string;
 };
 const fields = [
-  ['ambientC', 'Ambient (°C)'],
-  ['top', 'Front convection (W/m²·K)'],
-  ['bottom', 'Back convection (W/m²·K)'],
-  ['edge', 'Edge convection (W/m²·K)'],
-  ['dielectricConductivity', 'Dielectric conductivity (W/m·K)'],
-  ['copperConductivity', 'Copper conductivity (W/m·K)'],
-  ['viaPlatingMm', 'Via plating (mm)'],
-  ['meshSizeMm', 'Mesh size (mm)'],
+  ['ambientC', 'Ambient', '°C'],
+  ['top', 'Front convection', 'W/m²·K'],
+  ['bottom', 'Back convection', 'W/m²·K'],
+  ['edge', 'Edge convection', 'W/m²·K'],
+  ['dielectricConductivity', 'Dielectric conductivity', 'W/m·K'],
+  ['copperConductivity', 'Copper conductivity', 'W/m·K'],
+  ['viaPlatingMm', 'Via plating', 'mm'],
+  ['meshSizeMm', 'Mesh size', 'mm'],
 ] as const;
 const formatted = (value: number) => Number(value.toPrecision(6)).toString();
 const temperature = (value: number) => `${value.toFixed(2)} °C`;
@@ -100,6 +101,7 @@ export default function ThermalSimulation({
   agentContextRef,
   docked = false,
   onPresentationChange,
+  onLocateFootprint,
 }: {
   project: Project;
   fileId?: string;
@@ -111,9 +113,23 @@ export default function ThermalSimulation({
   agentContextRef?: RefObject<(() => AgentThermalContext) | null>;
   docked?: boolean;
   onPresentationChange?: (presentation: ThermalLayoutPresentation | null) => void;
+  onLocateFootprint?: (footprintId: string) => boolean;
 }) {
   const [localHost] = useState(createCapabilityHost);
   const host = capabilityHost ?? localHost;
+  const composing = useRef(false);
+  const componentDisclosures = useRef<ReadonlySet<string>>(new Set());
+  const components = useMemo(
+    () =>
+      (project.pcb?.footprints ?? []).map((footprint) => {
+        const part = project.schematic.parts.find((part) => part.id === footprint.symbolId);
+        return {
+          id: footprint.id,
+          reference: footprint.reference || part?.ref || footprint.id.slice(0, 8),
+        };
+      }),
+    [project.pcb?.footprints, project.schematic.parts],
+  );
   const source = useMemo(() => serializeProject(project), [project]);
   const initial = useMemo(
     () =>
@@ -699,6 +715,7 @@ export default function ThermalSimulation({
       .catch((error) => update({ error: (error as Error).message }));
   }
   function applyDrafts() {
+    if (!origin.current.visible || origin.current.sourcePending || composing.current) return;
     try {
       execute('thermal.configure', { config: parsedDrafts() });
     } catch (error) {
@@ -721,32 +738,67 @@ export default function ThermalSimulation({
       }
     }
   }
-  function field(key: string, label: string) {
-    return (
+  function field(key: string, label: string, unit: string, collapsed = false, inputOnly = false) {
+    const input = (
+      <input
+        type="text"
+        className={styles.input}
+        inputMode="decimal"
+        aria-label={`${label} (${unit})`}
+        title={drafts[key]}
+        value={drafts[key] ?? ''}
+        disabled={
+          !visible ||
+          sourcePending ||
+          collapsed ||
+          session.status === 'running' ||
+          (key.startsWith('power:') && heatInput === 'spice')
+        }
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={() => {
+          composing.current = false;
+        }}
+        onChange={(event) => {
+          if (!visible || sourcePending || collapsed || session.status === 'running') return;
+          configurationEdited.current = true;
+          cancelLookup();
+          cancelSpiceImport();
+          setDrafts((previous) => ({ ...previous, [key]: event.target.value }));
+        }}
+        onBlur={applyDrafts}
+        onKeyDown={(event) => {
+          if (
+            composing.current ||
+            event.nativeEvent.isComposing ||
+            event.nativeEvent.keyCode === 229
+          ) {
+            event.stopPropagation();
+            return;
+          }
+          if (event.key === 'Enter') {
+            event.currentTarget.blur();
+            event.stopPropagation();
+          }
+        }}
+      />
+    );
+    const Control = inputOnly ? 'label' : 'span';
+    const control = (
+      <Control className={styles.unitInput} data-compact={inputOnly || undefined}>
+        {input}
+        <span className={styles.unit} aria-hidden="true">
+          {unit}
+        </span>
+      </Control>
+    );
+    return inputOnly ? (
+      control
+    ) : (
       <label className={styles.field} key={key}>
         <span>{label}</span>
-        <input
-          type="text"
-          inputMode="decimal"
-          aria-label={label}
-          value={drafts[key] ?? ''}
-          disabled={
-            session.status === 'running' || (key.startsWith('power:') && heatInput === 'spice')
-          }
-          onChange={(event) => {
-            configurationEdited.current = true;
-            cancelLookup();
-            cancelSpiceImport();
-            setDrafts((previous) => ({ ...previous, [key]: event.target.value }));
-          }}
-          onBlur={applyDrafts}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-              event.stopPropagation();
-            }
-          }}
-        />
+        {control}
       </label>
     );
   }
@@ -1044,9 +1096,9 @@ export default function ThermalSimulation({
           </div>
         )}
         <div className={styles.fields}>
-          {fields.map(([key, label]) => field(key, label))}
+          {fields.map(([key, label, unit]) => field(key, label, unit))}
           {project.pcb?.layers.map((layer, index) =>
-            field(`copper:${index}`, `${layer} thickness (mm)`),
+            field(`copper:${index}`, `${layer} thickness`, 'mm'),
           )}
         </div>
         <h3>Heat into board</h3>
@@ -1088,14 +1140,18 @@ export default function ThermalSimulation({
             </button>
           )}
         </div>
-        <div className={styles.fields}>
-          {project.pcb?.footprints.map((footprint) =>
-            field(
-              `power:${footprint.id}`,
-              `${footprint.reference || project.schematic.parts.find((part) => part.id === footprint.symbolId)?.ref || footprint.id.slice(0, 8)} (W)`,
-            ),
-          )}
-        </div>
+        <AnalysisComponents
+          items={components}
+          visible={visible}
+          locateDisabled={sourcePending}
+          onLocate={onLocateFootprint}
+          locateDescription="Highlight in PCB Layout"
+          composingRef={composing}
+          disclosureRef={componentDisclosures}
+          renderControl={(item, collapsed) =>
+            field(`power:${item.id}`, item.reference, 'W', collapsed, true)
+          }
+        />
       </div>
       <footer className={styles.footer}>
         {error && (

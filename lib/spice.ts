@@ -1,5 +1,10 @@
 import { pinPositions, libraries, type Circuit, type Part, type Point } from './circuit';
-import { partFields, unitGraphics } from './library';
+import { displayPartValue, partFields, unitGraphics } from './library';
+import {
+  assertSimulationModelConfiguration,
+  effectiveSimulationModelFields,
+} from './simulation-model-source';
+import { primitiveInitialCondition } from './simulation-initial-conditions';
 import { child, children, val } from './sexpr';
 import { onWire, samePoint } from './wiring';
 import { tiPart, tiDcdcParts } from './ti-dcdc';
@@ -92,11 +97,16 @@ const supported = new Set([
 ]);
 
 export function simulationSupportError(d: Circuit): string {
+  try {
+    for (const p of simulationParts(d)) assertSimulationModelConfiguration(p);
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Invalid simulation model configuration.';
+  }
   if (isEmcFlyback(d)) return emcFlybackSupportError(d);
   if (isModelBuck(d)) return modelBuckSupportError(d);
   if (exampleSimulationProfile(d)) return exampleSimulationSupportError(d);
   for (const p of simulationParts(d)) {
-    const model = partFields(p)['Sim.Library'];
+    const model = effectiveSimulationModelFields(p, partFields(p), {})['Sim.Library'];
     if (model)
       return `${p.ref}: external model "${model}" is not included or supported. This schematic cannot be simulated here. Use a supported OpenPE simulation circuit.`;
     if (!supported.has(p.libId))
@@ -287,6 +297,7 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
   ];
   if (Object.keys(c).length !== fields.length || Object.keys(c).some((k) => !fields.includes(k)))
     throw new Error('Unknown or missing transient settings.');
+  for (const p of simulationParts(d)) assertSimulationModelConfiguration(p);
   if (isEmcFlyback(d)) return buildEmcFlybackSpice(d, c);
   if (exampleSimulationProfile(d)) return buildExampleSpice(d, c);
   for (const [key, lo, hi] of [
@@ -333,7 +344,9 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
       );
     if (
       [
-        ...Object.keys(partFields(p)),
+        ...Object.keys(effectiveSimulationModelFields(p, partFields(p), {})).filter(
+          (key) => partFields(p)['OpenPE.ModelSource'] !== 'basic' || key !== 'Sim.Params',
+        ),
         ...children(d.libraries[p.libId], 'property').map((property) => val(property)),
       ].some((k) => /^spice|^sim[._]/i.test(k))
     )
@@ -386,6 +399,7 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
     vendor ? 'OpenPE TI LM2596 transient' : 'OpenPE ideal switching transient',
     '.options reltol=0.001 abstol=1e-9',
   ];
+  let explicitInitialConditions = false;
   const adjacency = new Map<string, Set<string>>();
   const connect = (a: string, b: string) => {
     for (const [x, y] of [
@@ -425,9 +439,14 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
       const measured = !!vendor && kind !== 'L';
       const internal = `sense${i + 1}`;
       if (measured) lines.push(`VSENSE${i + 1} ${positive} ${internal} 0`);
+      const initial =
+        kind === 'C' || kind === 'L'
+          ? primitiveInitialCondition(kind, partFields(p), p.ref)
+          : undefined;
+      if (initial !== undefined) explicitInitialConditions = true;
       lines.push(
         kind
-          ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(p.value, kind)}`
+          ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(partFields(p)['OpenPE.ModelSource'] === 'basic' ? displayPartValue(p) : p.value, kind)}${initial === undefined ? '' : ` IC=${initial}`}`
           : `${name} ${measured ? internal : positive} ${a} OPENPE_DIODE`,
       );
       currentTraces.push({
@@ -521,7 +540,13 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
         unit: 'A',
         vector: 'i(vsensesw)',
         targets: [{ kind: 'current', id: sw.id }],
-        dissipation: { positivePin: '2', negativePin: '3', positiveNode: drain, negativeNode: switching, method: 'switch' },
+        dissipation: {
+          positivePin: '2',
+          negativePin: '3',
+          positiveNode: drain,
+          negativeNode: switching,
+          method: 'switch',
+        },
       },
       {
         label: `I(${pwm!.ref}) · into PWM source`,
@@ -541,7 +566,7 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
     'set wr_singlescale',
     'set wr_vecnames',
     'set numdgt=15',
-    `tran ${sampleStep} ${c.stop} 0 ${c.step}`,
+    `tran ${sampleStep} ${c.stop} 0 ${c.step}${explicitInitialConditions ? ' uic' : ''}`,
     ...(vendor ? ['linearize'] : []),
     `wrdata waveforms.txt ${vectors}`,
     'quit',

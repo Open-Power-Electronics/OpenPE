@@ -40,10 +40,13 @@ def tracks(board):
                   for t in board.GetTracks())
 
 assert tracks(before) == tracks(after), 'Copper tracks, vias, UUIDs or locks changed.'
-def footprints(board):
-    return sorted((f.m_Uuid.AsString(), f.GetReference(), f.GetValue(), point(f.GetPosition()),
+def footprints(board, source_values=False):
+    def nominal(f):
+        ref = f.GetReference()
+        return f.GetValue().split()[0] if source_values and ref[:1] in ('R', 'C', 'L') and ref[1:].isdigit() else f.GetValue()
+    return sorted((f.m_Uuid.AsString(), f.GetReference(), nominal(f), point(f.GetPosition()),
                    f.GetOrientationDegrees(), f.GetLayer()) for f in board.GetFootprints())
-assert footprints(before) == footprints(after), 'Footprint positions/identity changed.'
+assert footprints(before, source_values=True) == footprints(after), 'Footprint positions/identity or nominal values changed.'
 
 def pads(board):
     groups = {}

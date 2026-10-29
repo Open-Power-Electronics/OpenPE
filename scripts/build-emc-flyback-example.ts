@@ -16,6 +16,7 @@ import { KICAD_SCHEMATIC_VERSION } from '../lib/kicad-version';
 import { MODEL_CAD_EXTENSION } from '../lib/model-cad';
 import { arrangeExampleText } from '../lib/example-layout';
 import { emcFlybackModelCad } from './emc-flyback-model-cad';
+import { emcFlybackPassiveValue, prepareEmcFlybackValues } from './emc-flyback-values';
 import { homeExampleNativePath } from '../lib/home-examples';
 import { writeHomeExampleNativeFiles, writeExampleFile as writeFile } from './example-native-files';
 
@@ -138,6 +139,16 @@ function preparePCB(source: string) {
       property.push(...structuredClone(label.slice(3)));
       fp.splice(fp.indexOf(label), 1);
     }
+    const nativeValue = children(fp, 'property').find((node) => val(node) === 'Value')!;
+    const cleaned = emcFlybackPassiveValue(val(reference, 2), val(nativeValue, 2));
+    nativeValue[2] = quote(cleaned.value);
+    if (cleaned.specifications)
+      fp.push([
+        'property',
+        quote('Specifications'),
+        quote(cleaned.specifications),
+        ['uuid', quote(stable(`specifications:${val(reference, 2)}`))],
+      ]);
     // The old format stores these non-graphical fields without positions.
     // Keep them in the native export as hidden fields at the footprint origin.
     for (const property of children(fp, 'property'))
@@ -243,6 +254,7 @@ project.id = stable('project');
 project.name = 'EMC Flyback';
 project.schematic.title = 'EMC Flyback';
 child(project.schematic.original!, 'version')![1] = KICAD_SCHEMATIC_VERSION;
+prepareEmcFlybackValues(project.schematic);
 arrangeExampleText(project.schematic, 'emc-flyback-demo');
 const pcbSource = preparePCB(
   stableUpgrade(await readFile(`${conversion}/emc_flyback.kicad_pcb`, 'utf8')),
@@ -258,7 +270,7 @@ project.extensions['org.openpe.emc-flyback-example'] = {
   license: 'CC-BY-4.0',
   attribution: 'Chengmin Li and AI-PCB-layout contributors; KiCad library contributors',
   changes:
-    'Native KiCad 7 board normalized to supported KiCad 10 records. Electrical and PCB geometry, UUIDs, nets, field values and libraries are retained; instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the hidden MECH1/MECH2 model instances, whose references and transforms are retained. Original source files are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
+    'Native KiCad 7 board normalized to supported KiCad 10 records. Electrical and PCB geometry, UUIDs, nets and libraries are retained. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the hidden MECH1/MECH2 model instances, whose references and transforms are retained. Original source files are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
 };
 const filename = path.basename(homeExampleNativePath('emc-flyback-demo'));
 const stem = filename.replace(/\.kicad_pro$/, '');

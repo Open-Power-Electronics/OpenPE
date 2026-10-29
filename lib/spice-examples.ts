@@ -1,3 +1,15 @@
+import { numericSimulationParameters as parameters } from './simulation-parameters';
+import { simulationSourceValues, simulationSourceExpression } from './simulation-source-parameters';
+import { primitiveInitialCondition } from './simulation-initial-conditions';
+import {
+  assertSimulationModelConfiguration,
+  effectiveSimulationModelFields,
+} from './simulation-model-source';
+import {
+  simulationNumberLiteral as literal,
+  simulationNumber as exampleNumber,
+  simulationParameterValue,
+} from './simulation-parameters';
 import { libraries, type Circuit, type Part } from './circuit';
 import { partFields, unitGraphics } from './library';
 import { child, children, val } from './sexpr';
@@ -53,13 +65,21 @@ function signature(d: Circuit, p: Part) {
     .sort()
     .join('|');
 }
-function fields(d: Circuit, p: Part): Record<string, string> {
-  return {
-    ...Object.fromEntries(
-      children(d.libraries[p.libId] ?? [], 'property').map((v) => [val(v), val(v, 2)]),
-    ),
-    ...partFields(p),
-  };
+function fields(
+  d: Circuit,
+  p: Part,
+  reviewedDefaults?: Record<string, string>,
+): Record<string, string> {
+  return effectiveSimulationModelFields(
+    p,
+    {
+      ...Object.fromEntries(
+        children(d.libraries[p.libId] ?? [], 'property').map((v) => [val(v), val(v, 2)]),
+      ),
+      ...partFields(p),
+    },
+    reviewedDefaults,
+  );
 }
 export function exampleSimulationProfile(d: Circuit) {
   const original = profiles.find(
@@ -164,47 +184,6 @@ export function exampleTransient(d: Circuit): TransientConfig {
     step: profile.step,
   };
 }
-// A closed numeric grammar: no renderer expressions, directives or model paths are emitted.
-const literal = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:meg|[fpnumkgtµμ])?';
-function exampleNumber(text: string) {
-  if (!new RegExp(`^${literal}$`, 'i').test(text.trim()))
-    throw new Error('Use a finite numeric simulation value.');
-  const match = text.trim().match(/^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(.*)$/i)!;
-  const suffix = match[2].toLowerCase();
-  const scales: Record<string, number> = {
-    f: 1e-15,
-    p: 1e-12,
-    n: 1e-9,
-    u: 1e-6,
-    µ: 1e-6,
-    μ: 1e-6,
-    m: 1e-3,
-    k: 1e3,
-    meg: 1e6,
-    g: 1e9,
-    t: 1e12,
-  };
-  const number = Number(match[1]) * (scales[suffix] ?? 1);
-  if (!Number.isFinite(number) || Math.abs(number) > 1e12)
-    throw new Error('Simulation value is out of range.');
-  return number;
-}
-function parameters(text: string, keys: string[]) {
-  const result: Record<string, number> = {};
-  let rest = text.trim();
-  const regex = new RegExp(`^([a-z][a-z0-9]*)\\s*=\\s*(${literal})(?:\\s+|$)`, 'i');
-  while (rest) {
-    const match = rest.match(regex),
-      key = match?.[1].toLowerCase();
-    if (!match || !key || !keys.includes(key) || Object.hasOwn(result, key))
-      throw new Error(
-        'Unsupported simulation parameter. Only the documented numeric parameters are accepted.',
-      );
-    result[key] = exampleNumber(match[2]);
-    rest = rest.slice(match[0].length);
-  }
-  return result;
-}
 function modelParameters(text: string, expected: string) {
   // This exact upstream legacy selector is metadata, not a subcircuit parameter.
   if (expected === 'type="X" model="OPAMP" lib=""') {
@@ -240,57 +219,32 @@ function passive(d: Circuit, p: Part, def: Pick<Definition, 'kind'>) {
 function seriesResistance(d: Circuit, p: Part) {
   const text = fields(d, p)['OpenPE.SeriesResistance'];
   if (text === undefined) return 0;
-  const resistance = exampleNumber(text);
-  if (resistance < 0 || resistance > 10)
-    throw new Error(`${p.ref}: series resistance must be between 0 and 10 ohms.`);
-  return resistance;
+  return simulationParameterValue('OpenPE.SeriesResistance', text, p.ref);
 }
 function initialVoltage(d: Circuit, p: Part) {
   const text = fields(d, p)['OpenPE.InitialVoltage'];
   if (text === undefined) return undefined;
-  const voltage = exampleNumber(text);
-  if (Math.abs(voltage) > 1000)
-    throw new Error(`${p.ref}: initial voltage must be within ±1000 V.`);
-  return voltage;
+  return simulationParameterValue('OpenPE.InitialVoltage', text, p.ref);
 }
 function magneticValues(d: Circuit, p: Part) {
   // Preserve the intended SI literal rather than serializing floating-point
   // multiplication noise (100u must compile as 0.0001).
   const inductance = String(Number(Number(passive(d, p, { kind: 'L' })).toPrecision(15)));
-  const coupling = exampleNumber(fields(d, p)['OpenPE.Coupling'] ?? '');
-  if (coupling <= 0 || coupling > 1)
-    throw new Error(`${p.ref}: coupling must be greater than 0 and at most 1.`);
+  const coupling = simulationParameterValue(
+    'OpenPE.Coupling',
+    fields(d, p)['OpenPE.Coupling'] ?? '',
+    p.ref,
+  );
   return { inductance, coupling };
 }
-function source(d: Circuit, p: Part, def: Definition) {
+function source(d: Circuit, p: Part) {
   const f = fields(d, p),
-    type = (def.sim as Record<string, string>)['Sim.Type'];
-  if (type === 'DC') {
-    const v = f['Sim.Params'] ? parameters(f['Sim.Params'], ['dc']).dc : exampleNumber(p.value);
-    if (!Number.isFinite(v) || Math.abs(v) > 10000)
-      throw new Error(`${p.ref}: invalid source voltage.`);
-    return `DC ${v}`;
-  }
-  const keys =
-    type === 'PULSE'
-      ? ['y1', 'y2', 'td', 'tr', 'tf', 'tw', 'per']
-      : ['dc', 'ampl', 'f', 'td', 'theta', 'phase', 'ac'];
-  const values = parameters(f['Sim.Params'] || '', keys);
-  if (type === 'PULSE') {
-    if (
-      keys.some((key) => values[key] === undefined) ||
-      ['td', 'tr', 'tf', 'tw'].some((key) => values[key] < 0) ||
-      values.per <= 0
-    )
-      throw new Error(`${p.ref}: invalid PULSE parameters.`);
-    return `PULSE(${keys.map((key) => values[key]).join(' ')})`;
-  }
-  if (values.ampl === undefined || !(values.f > 0) || (values.td ?? 0) < 0)
-    throw new Error(`${p.ref}: invalid SIN parameters.`);
-  return `SIN(${[values.dc ?? 0, values.ampl, values.f, values.td ?? 0, values.theta ?? 0, values.phase ?? 0].join(' ')})`;
+    type = f['Sim.Type'];
+  return simulationSourceExpression(type, f['Sim.Params'] || '', p.value, p.ref);
 }
 function validate(d: Circuit, profile: Profile) {
   for (const p of simulationParts(d)) {
+    assertSimulationModelConfiguration(p);
     const def = profile.parts.find((v) => v.ref === p.ref)!;
     if (def.kind === 'unsupported')
       throw new Error(`${p.ref}: no allowlisted library model for ${p.libId}.`);
@@ -310,17 +264,42 @@ function validate(d: Circuit, profile: Profile) {
       throw new Error(`${p.ref}: unsupported electrical pin definitions.`);
     if (profile.id.startsWith('reference-') && def.kind === 'X' && p.value !== def.value)
       throw new Error(`${p.ref}: restore the allowlisted controller identity before simulating.`);
-    const sim = fields(d, p),
-      expected = def.sim as Record<string, string>;
+    const defaults = def.sim as Record<string, string>;
+    const sim = fields(d, p, defaults),
+      expected =
+        partFields(p)['OpenPE.ModelSource'] === 'basic'
+          ? effectiveSimulationModelFields(
+              p,
+              {
+                ...defaults,
+                'OpenPE.ModelSource': 'basic',
+                ...(partFields(p)['OpenPE.SourceType']
+                  ? { 'OpenPE.SourceType': partFields(p)['OpenPE.SourceType'] }
+                  : {}),
+              },
+              defaults,
+            )
+          : defaults;
     for (const key of new Set([...Object.keys(sim), ...Object.keys(expected)])) {
-      if (/^spice|^sim[._]/i.test(key) && key !== 'Sim.Params' && sim[key] !== expected[key])
+      if (
+        /^spice|^sim[._]/i.test(key) &&
+        key !== 'Sim.Params' &&
+        !(
+          key === 'Sim.Type' &&
+          def.kind === 'V' &&
+          partFields(p)['OpenPE.SourceType'] &&
+          !sim['Sim.Library']
+        ) &&
+        sim[key] !== expected[key]
+      )
         throw new Error(`${p.ref}: unsupported simulation field or pin assignment ${key}.`);
     }
     if (['R', 'C', 'L'].includes(def.kind)) {
       passive(d, p, def);
       seriesResistance(d, p);
-      if (def.kind === 'C') initialVoltage(d, p);
-    } else if (def.kind === 'V') source(d, p, def);
+      if (def.kind === 'C' || def.kind === 'L')
+        primitiveInitialCondition(def.kind, fields(d, p), p.ref);
+    } else if (def.kind === 'V') source(d, p);
     else if (def.kind === 'T') magneticValues(d, p);
     else {
       const actualParameters = modelParameters(
@@ -352,17 +331,25 @@ function validate(d: Circuit, profile: Profile) {
       throw new Error('This official chip profile requires one input voltage source.');
     const sourcePart = d.parts.find((p) => p.ref === sourceDefinitions[0].ref)!;
     const f = fields(d, sourcePart),
-      dc = f['Sim.Type'] === 'DC';
-    const values = parameters(
+      type = f['Sim.Type'];
+    const values = simulationSourceValues(
+      type,
       f['Sim.Params'] || '',
-      dc ? ['dc'] : ['y1', 'y2', 'td', 'tr', 'tf', 'tw', 'per'],
+      sourcePart.value,
+      sourcePart.ref,
     );
-    const voltage = dc ? values.dc : values.y2;
+    const voltage =
+      type === 'DC'
+        ? values.dc
+        : type === 'PULSE'
+          ? values.y2
+          : (values.dc ?? 0) + Math.abs(values.ampl);
     if (
       !Number.isFinite(voltage) ||
       voltage < profile.input.minimum ||
       voltage > profile.input.maximum ||
-      (!dc && values.y1 !== 0)
+      (type === 'PULSE' && values.y1 !== 0) ||
+      (type === 'SIN' && (values.dc ?? 0) - Math.abs(values.ampl) < 0)
     )
       throw new Error(
         `Use ${profile.input.minimum}–${profile.input.maximum} V at the chip input; a startup pulse must start at 0 V.`,
@@ -478,6 +465,7 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
     '.model OPENPE_DEFAULT_M VDMOS',
     '.model OPENPE_BOOST_D D(Is=1u N=1.05 Rs=0.02)',
   ];
+  let explicitInitialConditions = false;
   const currents: SpiceTrace[] = [];
   const identifiers = new Map<string, string>();
   d.parts.forEach((p, i) => {
@@ -526,7 +514,7 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
     }
     let body = '';
     if (['R', 'C', 'L'].includes(def.kind)) body = passiveBody;
-    else if (def.kind === 'V') body = source(d, p, def);
+    else if (def.kind === 'V') body = source(d, p);
     else {
       const f = fields(d, p),
         expected = def.sim as Record<string, string>;
@@ -540,9 +528,12 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
           .map(([key, value]) => `${key}=${value}`)
           .join(' ');
     }
-    if (profile.id.startsWith('reference-') && def.kind === 'C') {
-      const voltage = initialVoltage(d, p);
-      if (voltage !== undefined) body += ` IC=${voltage}`;
+    if (def.kind === 'C' || def.kind === 'L') {
+      const initial = primitiveInitialCondition(def.kind, fields(d, p), p.ref);
+      if (initial !== undefined) {
+        body += ` IC=${initial}`;
+        explicitInitialConditions = true;
+      }
     }
     lines.push(`${name} ${ns.join(' ')} ${body}`);
     if (def.kind !== 'X')
@@ -605,7 +596,7 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
     'set wr_singlescale',
     'set wr_vecnames',
     'set numdgt=15',
-    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${profile.initialConditions ? ' uic' : ''}`,
+    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${profile.initialConditions || explicitInitialConditions ? ' uic' : ''}`,
     'linearize',
     `wrdata waveforms.txt ${vectors}`,
     'quit',

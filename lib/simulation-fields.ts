@@ -8,7 +8,10 @@ export const simulationFieldNames = {
   parameters: 'Sim.Params',
   seriesResistance: 'OpenPE.SeriesResistance',
   initialVoltage: 'OpenPE.InitialVoltage',
+  initialCurrent: 'OpenPE.InitialCurrent',
   coupling: 'OpenPE.Coupling',
+  modelSource: 'OpenPE.ModelSource',
+  sourceType: 'OpenPE.SourceType',
 } as const;
 
 const nativeSimulationFields = new Set<string>(Object.values(simulationFieldNames));

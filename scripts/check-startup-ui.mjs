@@ -330,7 +330,6 @@ try {
     'Recovering a project does not fetch Home example data.',
   );
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   const loadingSettings = page.getByRole('dialog', { name: 'Settings', exact: true });
   await loadingSettings.getByRole('status').waitFor();
   assert.ok(
@@ -341,7 +340,6 @@ try {
   await loadingSettings.waitFor({ state: 'hidden' });
   releaseSettings();
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await page.getByRole('tab', { name: 'Appearance', exact: true }).waitFor();
   await button('Done').click();
   await button('Plugins').click();

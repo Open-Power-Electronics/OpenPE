@@ -64,6 +64,7 @@ const bundle = await build({
           <div ref={waveforms} className="simulation-host" style={{height:440}} hidden={!visible || !open}/>
         </div><div ref={settings} className="simulation-settings-host" hidden={!visible}/></div>
         <SimulationDialog project={project} settingsHost={settings} waveformHost={waveforms} visible={visible} sourcePending={pending}
+          onParticipationChange={()=>true}
           probe={probe} onWaveformVisibilityChange={setOpen} agentContextRef={context}
           onStoreModels={()=>{window.simulationModelStores++;return true;}}/></>;}
     createRoot(document.getElementById('root')).render(<Fixture/>);`,
@@ -141,10 +142,13 @@ try {
     );
   }
   await settings.waitFor();
+  const participation = settings.getByRole('switch').first();
+  assert.equal(await participation.isEnabled(), true);
   await button('Probe output').click();
   await dock.waitFor();
   await button('Run').click();
   const first = await started(1);
+  assert.equal(await participation.isDisabled(), true, 'Running blocks participation edits.');
   event(first.res, samples(0, 201));
   await dock.locator('.simulation-trace').waitFor();
   assert.equal(
@@ -194,6 +198,7 @@ try {
   const partialDisplay = await display();
   await button('Stop').click();
   await button('Run').waitFor();
+  assert.equal(await participation.isEnabled(), true, 'Stop restores participation editing.');
   await dock.getByText('Stopped · Partial results', { exact: true }).waitFor();
   await disconnected(first);
   assert.deepEqual(
@@ -344,6 +349,12 @@ try {
   await dock.locator('.simulation-trace').waitFor();
   await button('Toggle pending Source').click();
   await disconnected(sixth);
+  await button('Run').waitFor();
+  assert.equal(
+    await participation.isDisabled(),
+    true,
+    'Pending Source blocks participation edits.',
+  );
   await dock.waitFor({ state: 'detached' });
   const invalidated = await page.evaluate(() => window.readSimulationContext());
   assert.equal(invalidated.status, 'blocked');

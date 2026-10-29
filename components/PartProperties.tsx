@@ -1,62 +1,174 @@
 'use client';
-import { lazy, memo, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, FolderSearch, Plus, Trash2 } from 'lucide-react';
-import { type Part } from '@/lib/circuit';
+import { type Part, type Circuit } from '@/lib/circuit';
 import { displayPartValue, partFields } from '@/lib/library';
-import { preparePartProperties, type FieldRow } from '@/lib/part-properties';
-import { participatesInSimulation } from '@/lib/simulation-participation';
+import {
+  preparePartProperties,
+  simulationSourceProperties,
+  type FieldRow,
+} from '@/lib/part-properties';
 import { isSimulationField } from '@/lib/simulation-fields';
+import { storagePrimitive, initialConditionField } from '@/lib/simulation-initial-conditions';
+import {
+  simulationLibraryForPath,
+  simulationLibraryPath,
+  simulationComponentPresentation,
+} from '@/lib/simulation-model-presentation';
 import type { FootprintDetail } from './LibraryChooser';
 import DeferredDialog from './DeferredDialog';
+import Select from './Select';
 import type { CapabilityHost } from '@/api/capabilities';
+import type { SpiceModelDeclaration } from '@/lib/bridge';
+import {
+  simulationModelSource,
+  basicSimulationAvailable,
+  basicSimulationKind,
+} from '@/lib/simulation-model-source';
+import {
+  externalModelBinding,
+  externalModelBindingFields,
+  validateExternalModelMapping,
+} from '@/lib/simulation-model-binding';
+
+import { prepareSourceConversion } from '@/lib/simulation-source-conversion';
+import type { SimulationSourceType } from '@/lib/simulation-source-parameters';
 
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 
+function withModelFields(
+  rows: PropertyRow[],
+  fields: Record<string, string | undefined>,
+): PropertyRow[] {
+  const seen = new Set(rows.map((row) => row.name));
+  const next = rows.flatMap((row) =>
+    !Object.hasOwn(fields, row.name)
+      ? [row]
+      : fields[row.name] === undefined
+        ? []
+        : [{ ...row, value: fields[row.name]! }],
+  );
+  for (const [name, value] of Object.entries(fields))
+    if (value !== undefined && !seen.has(name))
+      next.push({ name, value, simulation: true, label: name.replace(/^Sim\./, '') });
+  return next;
+}
+
 const simulationParameterLabels = new Map([
-  ['OpenPE.SeriesResistance', 'Series resistance (Ω)'],
   ['OpenPE.InitialVoltage', 'Initial voltage (V)'],
-  ['OpenPE.Coupling', 'Coupling (unitless)'],
+  ['OpenPE.InitialCurrent', 'Initial current (A)'],
 ]);
-type PropertyRow = FieldRow & { simulation: boolean; label?: string };
+const simulationParameterUnits = new Map([
+  ['OpenPE.InitialVoltage', 'V'],
+  ['OpenPE.InitialCurrent', 'A'],
+]);
+type PropertyRow = FieldRow & {
+  simulation: boolean;
+  label?: string;
+  unit?: string;
+  optional?: boolean;
+  edited?: boolean;
+};
+
+function displayedSimulationValue(row: PropertyRow): string {
+  return row.name === 'Sim.Name' ? row.value.replace(/^OPENPE_(?:DERIVED_)?/i, '') : row.value;
+}
 
 function propertyRows(part: Part): PropertyRow[] {
+  const source = simulationSourceProperties(part);
+  const primitive = storagePrimitive(part);
   // Keep the editing group stable until a name change is committed.
-  return Object.entries({ Footprint: '', ...partFields(part) }).map(([name, value]) => ({
-    name,
-    value,
-    simulation: isSimulationField(name),
-    label: simulationParameterLabels.get(name),
-  }));
+  const rows: PropertyRow[] = Object.entries({ Footprint: '', ...partFields(part) }).map(
+    ([name, value]) => ({
+      name,
+      value,
+      simulation: isSimulationField(name),
+      label:
+        simulationParameterLabels.get(name) ??
+        (/^Sim\./i.test(name) ? name.replace(/^Sim\./i, '') : undefined),
+    }),
+  );
+  if (primitive) {
+    const name = initialConditionField(primitive);
+    const initial = rows.find((row) => row.name === name);
+    if (initial) initial.optional = true;
+    else
+      rows.push({
+        name,
+        value: '',
+        simulation: true,
+        optional: true,
+        label: simulationParameterLabels.get(name),
+      });
+  }
+  if (!source) return rows;
+  const sourceRows: PropertyRow[] = source.rows.map((row) => ({ ...row, simulation: true }));
+  return rows.some((row) => row.name === 'Sim.Params')
+    ? rows.flatMap((row) => (row.name === 'Sim.Params' ? sourceRows : [row]))
+    : [...rows, ...sourceRows];
 }
 
 function PartProperties({
   part,
+  circuit,
   onSave,
   onRequestSave,
   capabilityHost,
   active = true,
   spiceAvailable = false,
+  fileId,
+  getRevision,
 }: {
   part: Part;
+  circuit?: Circuit;
   active?: boolean;
   /** Schematic-only controls owned by the installed and enabled SPICE plugin. */
   spiceAvailable?: boolean;
+  fileId?: string;
+  getRevision?: () => number;
   onRequestSave?: (saveAs: boolean) => void;
   capabilityHost?: CapabilityHost;
   onSave: (
     ref: string,
     value: string,
     fields: Record<string, string>,
-    includeInSimulation?: boolean,
     footprintDetail?: FootprintDetail,
   ) => boolean;
 }) {
   const fields = partFields(part);
+  const presentation = useMemo(
+    () =>
+      spiceAvailable
+        ? simulationComponentPresentation(part, circuit)
+        : { model: '', basicModel: '', initial: '' },
+    [part, circuit, spiceAvailable],
+  );
   const valueOwnsParams = part.value === '${SIM.PARAMS}' && !!fields['Sim.Params'];
   const visibleRow = (row: FieldRow) =>
-    !['LCSC', 'MPN'].includes(row.name) && !(valueOwnsParams && row.name === 'Sim.Params');
+    ![
+      'LCSC',
+      'MPN',
+      'Sim.Device',
+      'Sim.Type',
+      'Sim.Pins',
+      'Sim.Name',
+      'Sim.Library',
+      'OpenPE.ModelSource',
+      'OpenPE.SourceType',
+      'OpenPE.SeriesResistance',
+      'OpenPE.Coupling',
+    ].includes(row.name) &&
+    !(
+      externalModel &&
+      (row.sourceKey ||
+        (simulationParameterLabels.has(row.name) &&
+          !(row.name === 'OpenPE.InitialVoltage' && rowFields['Sim.Device'] === 'C') &&
+          !(row.name === 'OpenPE.InitialCurrent' && rowFields['Sim.Device'] === 'L')))
+    ) &&
+    (row.name !== 'OpenPE.InitialVoltage' || storagePrimitive(part) === 'C') &&
+    (row.name !== 'OpenPE.InitialCurrent' || storagePrimitive(part) === 'L') &&
+    !(valueOwnsParams && row.name === 'Sim.Params' && !row.sourceKey);
   const fieldsKey = JSON.stringify(fields);
-  const included = participatesInSimulation(part);
   const snapshot = JSON.stringify([
     part.id,
     part.libId,
@@ -64,25 +176,50 @@ function PartProperties({
     part.ref,
     part.value,
     fieldsKey,
-    included,
   ]);
   const [basis, setBasis] = useState(snapshot);
-  const [includeInSimulation, setIncludeInSimulation] = useState(included);
   const [ref, setRef] = useState(part.ref),
     [value, setValue] = useState(() => displayPartValue(part));
   const [rows, setRows] = useState(() => propertyRows(part));
+  const libraryIndex = rows.findIndex((row) => row.name === 'Sim.Library');
+  const rowFields = Object.fromEntries(
+    rows.filter((row) => !row.sourceKey).map((row) => [row.name, row.value]),
+  );
+  const externalModel = simulationModelSource(rowFields) === 'external';
+  const basicAvailable = basicSimulationAvailable(part);
+  const libraryPath = simulationLibraryPath(rowFields['Sim.Library'] || '');
+  const externalName = rowFields['Sim.Name'] || '';
+  const [catalog, setCatalog] = useState<{
+    path: string;
+    models: SpiceModelDeclaration[];
+    issues: string[];
+  } | null>(null);
+  const [mapping, setMapping] = useState<{
+    declaration: SpiceModelDeclaration;
+    binding: ReturnType<typeof externalModelBinding>;
+    choices: Record<string, string>;
+    snapshot: string;
+    revision: number | undefined;
+  } | null>(null);
+  const declarations = catalog?.path === libraryPath ? catalog.models : [];
   const [picker, setPicker] = useState(false),
     [error, setError] = useState('');
+  const [modelBrowsing, setModelBrowsing] = useState(false);
+  const modelBrowseButton = useRef<HTMLButtonElement>(null);
+  const modelBrowseRequest = useRef(0);
   const composing = useRef(false);
-  const hasSimulationFields = rows.some((row) => row.simulation && visibleRow(row));
   const update = (i: number, key: 'name' | 'value', text: string) =>
-    active && setRows((r) => r.map((row, j) => (j === i ? { ...row, [key]: text } : row)));
+    active &&
+    setRows((r) =>
+      r.map((row, j) =>
+        j === i ? { ...row, [key]: text, edited: key === 'value' ? true : row.edited } : row,
+      ),
+    );
   function reset() {
     setBasis(snapshot);
     setRef(part.ref);
     setValue(displayPartValue(part));
     setRows(propertyRows(part));
-    setIncludeInSimulation(included);
     setError('');
   }
   useLayoutEffect(() => {
@@ -90,30 +227,30 @@ function PartProperties({
   }, [snapshot]);
   useLayoutEffect(() => {
     if (!active) setPicker(false);
-  }, [active]);
-  function save(
-    draftRows = rows,
-    participation = includeInSimulation,
-    footprintDetail?: FootprintDetail,
-  ): boolean {
+  }, [active, spiceAvailable]);
+  useLayoutEffect(() => {
+    setCatalog(null);
+    setMapping(null);
+  }, [part.id, fileId]);
+  useLayoutEffect(() => {
+    setModelBrowsing(false);
+    return () => {
+      modelBrowseRequest.current++;
+    };
+  }, [active, spiceAvailable, fileId, snapshot]);
+  function save(draftRows = rows, footprintDetail?: FootprintDetail): boolean {
     if (!active || composing.current || basis !== snapshot) return false;
-    if (participation !== included && !spiceAvailable) return false;
     try {
       const change = preparePartProperties(part, ref, value, draftRows);
-      if (
-        (change || participation !== included) &&
-        !onSave(
-          change?.ref ?? part.ref,
-          change?.value ?? part.value,
-          change?.fields ?? fields,
-          participation !== included ? participation : undefined,
-          footprintDetail,
-        )
-      ) {
+      if (change && !onSave(change.ref, change.value, change.fields, footprintDetail)) {
         setError('The change could not be applied. Check the reference and field values.');
         return false;
       }
       setError('');
+      if (draftRows.some((row) => row.optional && !row.value && row.edited))
+        setRows(
+          draftRows.map((row) => (row.optional && !row.value ? { ...row, edited: false } : row)),
+        );
       return true;
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Invalid property values.');
@@ -121,39 +258,311 @@ function PartProperties({
     }
   }
 
-  const simulationHeading = (
-    <>
-      {hasSimulationFields && <ChevronRight size={15} aria-hidden="true" />}
-      <span>SPICE Simulation</span>
-      <button
-        type="button"
-        role="switch"
-        className="appearance-toggle simulation-participation"
-        aria-label="Include in SPICE simulation"
-        aria-checked={includeInSimulation}
-        disabled={!active || !spiceAvailable}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!active || !spiceAvailable) return;
-          const next = !includeInSimulation;
-          if (save(rows, next)) setIncludeInSimulation(next);
-        }}
-      >
-        <span aria-hidden="true" />
-      </button>
-    </>
-  );
+  async function browseModel(i: number) {
+    if (!active || !spiceAvailable || modelBrowsing || composing.current) return;
+    if (!fileId || !window.openpe) {
+      setError('Use the desktop app to browse model files.');
+      return;
+    }
+    if (typeof window.openpe.chooseSpiceModel !== 'function') {
+      setError('Restart OpenPE to load the native SPICE model picker.');
+      return;
+    }
+    const request = ++modelBrowseRequest.current;
+    const revision = getRevision?.();
+    setModelBrowsing(true);
+    try {
+      const result = await window.openpe.chooseSpiceModel(fileId, libraryPath || undefined);
+      if (request !== modelBrowseRequest.current || !result) return;
+      if (getRevision?.() !== revision) {
+        setError('The project changed. Choose the SPICE model again.');
+        return;
+      }
+      if (
+        typeof result.path !== 'string' ||
+        !Array.isArray(result.models) ||
+        !Array.isArray(result.issues)
+      )
+        throw new Error('Restart OpenPE to load SPICE model inspection.');
+      const library = simulationLibraryForPath(result.path, rows[i]?.value ?? '');
+      setCatalog({
+        path: simulationLibraryPath(library),
+        models: result.models,
+        issues: result.issues,
+      });
+      const sameFile = library === rowFields['Sim.Library'];
+      const next = withModelFields(rows, {
+        'Sim.Library': library,
+        'OpenPE.ModelSource':
+          rowFields['OpenPE.ModelSource'] ??
+          (sameFile ? undefined : externalModel || !basicAvailable ? 'external' : 'basic'),
+        'Sim.Name': sameFile ? rowFields['Sim.Name'] : undefined,
+      });
+      setMapping(null);
+      setRows(next);
+      save(next);
+    } catch (reason) {
+      if (request === modelBrowseRequest.current)
+        setError(reason instanceof Error ? reason.message : 'Could not choose a model file.');
+    } finally {
+      if (request === modelBrowseRequest.current) setModelBrowsing(false);
+    }
+  }
+
+  function parameterValue(row: PropertyRow) {
+    if (row.value || row.edited || !row.optional) return row.value;
+    const implicit = row.sourceKey ? '0' : presentation.initial;
+    return implicit && Number.isFinite(Number(implicit)) ? implicit : '';
+  }
+
+  function selectModel(selection: string) {
+    if (!active || !spiceAvailable || modelBrowsing || composing.current || basis !== snapshot)
+      return;
+    if (selection.startsWith('source:')) {
+      try {
+        const change = prepareSourceConversion(
+          part,
+          ref,
+          value,
+          rows,
+          selection.slice(7) as SimulationSourceType,
+        );
+        if (change && !onSave(change.ref, change.value, change.fields))
+          throw new Error('The source change could not be applied.');
+        setMapping(null);
+        setError('');
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Invalid source model.');
+      }
+      return;
+    }
+    if (selection === 'intrinsic') {
+      if (!basicAvailable) return;
+      setMapping(null);
+      const next = withModelFields(rows, { 'OpenPE.ModelSource': 'basic' });
+      setRows(next);
+      save(next);
+      return;
+    }
+    if (!selection.startsWith('external:') || !libraryPath) return;
+    const name = selection.slice('external:'.length);
+    const declaration = declarations.find((model) => model.name === name);
+    if (name === externalName) {
+      const next = withModelFields(rows, { 'OpenPE.ModelSource': 'external' });
+      setMapping(null);
+      setRows(next);
+      save(next);
+      return;
+    }
+    if (!declaration || !circuit) {
+      setError('Choose the model file again.');
+      return;
+    }
+    try {
+      const binding = externalModelBinding(circuit, part, declaration);
+      if (!binding.compatible)
+        throw new Error(binding.reason || 'This model is incompatible with the component.');
+      if (!binding.mapping) {
+        setMapping({
+          declaration,
+          binding,
+          choices: { ...binding.suggested },
+          snapshot,
+          revision: getRevision?.(),
+        });
+        setError('');
+        return;
+      }
+      const next = withModelFields(rows, {
+        'OpenPE.ModelSource': 'external',
+        ...externalModelBindingFields(circuit, part, declaration, binding.mapping),
+      });
+      setMapping(null);
+      setRows(next);
+      save(next);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Invalid model mapping.');
+    }
+  }
+
+  function applyMapping() {
+    if (!mapping || !circuit || !active || !spiceAvailable || composing.current) return;
+    if (mapping.snapshot !== snapshot || mapping.revision !== getRevision?.()) {
+      setError('The component changed. Select the model again.');
+      return;
+    }
+    try {
+      validateExternalModelMapping(mapping.binding, mapping.choices);
+      const next = withModelFields(rows, {
+        'OpenPE.ModelSource': 'external',
+        ...externalModelBindingFields(circuit, part, mapping.declaration, mapping.choices),
+      });
+      setRows(next);
+      if (save(next)) setMapping(null);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Invalid model mapping.');
+    }
+  }
+
+  function modelOptionLabel(name: string) {
+    return name.replace(/^OPENPE_(?:DERIVED_)?/i, '');
+  }
+
+  function modelOptionDisabled(declaration: SpiceModelDeclaration) {
+    if (!circuit) return false;
+    try {
+      return !externalModelBinding(circuit, part, declaration).compatible;
+    } catch {
+      return true;
+    }
+  }
+
+  function modelSelector() {
+    const currentBuiltin = !externalModel && !basicAvailable && !rowFields['OpenPE.ModelSource'];
+    const voltageSource = basicSimulationKind(part) === 'V';
+    const sourceType = rowFields['OpenPE.SourceType'] || simulationSourceProperties(part)?.type;
+    const selection = mapping
+      ? `external:${mapping.declaration.name}`
+      : currentBuiltin
+        ? 'current'
+        : !externalModel && basicAvailable
+          ? voltageSource
+            ? 'source:' + sourceType
+            : 'intrinsic'
+          : externalName && libraryPath
+            ? `external:${externalName}`
+            : '';
+    const choices = [
+      ...(voltageSource
+        ? ['DC', 'PULSE', 'SIN'].map((type) => ({
+            value: 'source:' + type,
+            label: type + ' voltage source',
+            disabled: false,
+          }))
+        : basicAvailable
+          ? [{ value: 'intrinsic', label: presentation.basicModel, disabled: false }]
+          : []),
+      ...(currentBuiltin
+        ? [{ value: 'current', label: presentation.basicModel, disabled: true }]
+        : []),
+      ...(externalName && libraryPath && !declarations.some((model) => model.name === externalName)
+        ? [
+            {
+              value: 'external:' + externalName,
+              label: modelOptionLabel(externalName),
+              disabled: false,
+            },
+          ]
+        : []),
+      ...declarations.map((model) => ({
+        value: 'external:' + model.name,
+        label: modelOptionLabel(model.name),
+        disabled: modelOptionDisabled(model),
+      })),
+    ].sort((a, b) => Number(b.value === selection) - Number(a.value === selection));
+    return (
+      <>
+        <div className="property-model-choice">
+          <Select
+            label="Simulation model"
+            value={selection}
+            placeholder="Choose model"
+            active={active && spiceAvailable && !modelBrowsing}
+            options={choices
+              .filter((choice) => !choice.disabled || choice.value === selection)
+              .map(({ value, label }) => ({ value, label }))}
+            onChange={selectModel}
+            popupClassName="property-model-menu"
+            popupMatchWidth="parent"
+            popupMaxHeight={240}
+          />
+          <button
+            ref={modelBrowseButton}
+            type="button"
+            className="icon-button"
+            aria-label="Browse SPICE models"
+            title="Choose model file"
+            disabled={!active || !spiceAvailable || modelBrowsing}
+            aria-busy={modelBrowsing}
+            onClick={() => void browseModel(libraryIndex)}
+          >
+            <FolderSearch size={17} />
+          </button>
+        </div>
+        {catalog?.path === libraryPath && catalog.issues.length > 0 && (
+          <span
+            className="property-model-file"
+            role="status"
+            title={catalog.issues.join(' ').slice(0, 2048)}
+          >
+            {catalog.issues.length} unavailable {catalog.issues.length === 1 ? 'model' : 'models'}
+          </span>
+        )}
+        {mapping && (
+          <details className="property-model-mapping" open>
+            <summary>Pins</summary>
+            {mapping.binding.terminals.map((terminal) => (
+              <label key={terminal}>
+                {terminal}
+                <select
+                  autoFocus={terminal === mapping.binding.terminals[0]}
+                  aria-label={`Map ${terminal}`}
+                  value={mapping.choices[terminal] || ''}
+                  disabled={!active || !spiceAvailable}
+                  onChange={(event) =>
+                    setMapping(
+                      (current) =>
+                        current && {
+                          ...current,
+                          choices: { ...current.choices, [terminal]: event.target.value },
+                        },
+                    )
+                  }
+                >
+                  <option value="">Choose pin</option>
+                  {mapping.binding.symbolPins.map((pin) => (
+                    <option key={pin.number} value={pin.number}>
+                      {pin.number} · {pin.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <div className="property-model-mapping-actions">
+              <button type="button" onClick={applyMapping} disabled={!active || !spiceAvailable}>
+                Apply model
+              </button>
+              <button
+                type="button"
+                disabled={!active || !spiceAvailable}
+                onClick={() => {
+                  if (!composing.current) setMapping(null);
+                }}
+              >
+                Cancel mapping
+              </button>
+            </div>
+          </details>
+        )}
+      </>
+    );
+  }
 
   function renderFields(simulation: boolean) {
-    return rows.map(
-      (row, i) =>
+    const displayedRows = rows.map((row, i) => ({ row, i }));
+    return displayedRows.map(
+      ({ row, i }) =>
         row.simulation === simulation &&
         visibleRow(row) && (
-          <div className="property-field" key={i}>
-            {row.label ? (
-              <span className="property-parameter-name" aria-description={row.label}>
-                {row.label}
+          <div
+            className={`property-field${simulation ? ' property-simulation-field' : ''}${simulation && row.name === 'Sim.Library' ? ' property-simulation-library' : ''}${simulationParameterLabels.has(row.name) || row.sourceKey ? ' property-simulation-parameter' : ''}`}
+            key={i}
+          >
+            {simulation && row.name === 'Sim.Library' ? null : simulation || row.label ? (
+              <span className="property-parameter-name" aria-description={row.label || row.name}>
+                {simulationParameterLabels.has(row.name) || row.sourceKey
+                  ? row.label?.replace(/ \([^)]*\)$/, '')
+                  : row.label || row.name}
               </span>
             ) : (
               <input
@@ -167,18 +576,61 @@ function PartProperties({
                 onChange={(e) => update(i, 'name', e.target.value)}
               />
             )}
-            <input
-              className="property-field-value"
-              aria-label={row.label || row.name || `Field ${i + 1} value`}
-              aria-description={row.value}
-              placeholder={
-                row.name === 'Footprint' ? 'Unassigned' : row.fresh ? 'Value' : undefined
-              }
-              value={row.value}
-              disabled={!active}
-              onChange={(e) => update(i, 'value', e.target.value)}
-            />
-            {row.name === 'Footprint' ? (
+            {simulationParameterLabels.has(row.name) || row.sourceKey ? (
+              <div className="property-simulation-value">
+                <input
+                  className="property-field-value"
+                  aria-label={row.label || row.name}
+                  value={parameterValue(row)}
+                  placeholder={
+                    row.optional
+                      ? row.sourceKey
+                        ? '0'
+                        : presentation.initial
+                      : row.sourceKey
+                        ? 'Value'
+                        : undefined
+                  }
+                  title={
+                    row.optional && !row.value
+                      ? row.sourceKey
+                        ? '0'
+                        : presentation.initial === 'Computed'
+                          ? 'Calculated from the circuit operating point.'
+                          : presentation.initial
+                      : undefined
+                  }
+                  disabled={!active || !spiceAvailable}
+                  onChange={(event) => update(i, 'value', event.target.value)}
+                />
+                {(row.unit || simulationParameterUnits.get(row.name)) && (
+                  <span className="property-simulation-unit" aria-hidden="true">
+                    {row.unit || simulationParameterUnits.get(row.name)}
+                  </span>
+                )}
+              </div>
+            ) : simulation ? (
+              <span
+                className="property-readonly-value"
+                aria-label={row.label || row.name}
+                title={displayedSimulationValue(row)}
+              >
+                {displayedSimulationValue(row) || '—'}
+              </span>
+            ) : (
+              <input
+                className={`property-field-value${['Datasheet', 'Description'].includes(row.name) ? ' property-field-prose' : ''}`}
+                aria-label={row.label || row.name || `Field ${i + 1} value`}
+                aria-description={row.value}
+                placeholder={
+                  row.name === 'Footprint' ? 'Unassigned' : row.fresh ? 'Value' : undefined
+                }
+                value={row.value}
+                disabled={!active}
+                onChange={(e) => update(i, 'value', e.target.value)}
+              />
+            )}
+            {simulation ? null : row.name === 'Footprint' ? (
               <button
                 type="button"
                 className="icon-button"
@@ -226,6 +678,7 @@ function PartProperties({
         }}
         onKeyDown={(event) => {
           if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+            event.preventDefault();
             event.stopPropagation();
             return;
           }
@@ -267,6 +720,7 @@ function PartProperties({
             Value
             <input
               aria-label="Component value"
+              readOnly={spiceAvailable && rows.some((row) => row.sourceKey)}
               value={value}
               disabled={!active}
               onChange={(e) => {
@@ -275,13 +729,7 @@ function PartProperties({
             />
           </label>
         </div>
-        <div className="property-fields">
-          <div className="property-field-heading">
-            <span>Field</span>
-            <span>Value</span>
-          </div>
-          {renderFields(false)}
-        </div>
+        <div className="property-fields">{renderFields(false)}</div>
         <button
           type="button"
           className="property-add-field"
@@ -293,17 +741,16 @@ function PartProperties({
           <Plus size={15} />
           Add field
         </button>
-        {spiceAvailable &&
-          (hasSimulationFields ? (
-            <details className="property-simulation">
-              <summary className="property-simulation-heading">{simulationHeading}</summary>
-              <div className="property-fields">{renderFields(true)}</div>
-            </details>
-          ) : (
-            <div className="property-simulation">
-              <div className="property-simulation-heading">{simulationHeading}</div>
-            </div>
-          ))}
+        {spiceAvailable && (
+          <details className="property-simulation">
+            <summary className="property-simulation-heading">
+              <ChevronRight size={15} aria-hidden="true" />
+              <span>SPICE Simulation</span>
+            </summary>
+            {modelSelector()}
+            <div className="property-fields">{renderFields(true)}</div>
+          </details>
+        )}
         {error && (
           <p className="dialog-error" role="alert">
             {error}
@@ -324,7 +771,7 @@ function PartProperties({
                 i >= 0
                   ? rows.map((row, j) => (j === i ? { ...row, value: detail.id } : row))
                   : [...rows, { name: 'Footprint', value: detail.id, simulation: false }];
-              if (save(next, includeInSimulation, detail)) setRows(next);
+              if (save(next, detail)) setRows(next);
               setPicker(false);
             }}
           />
@@ -340,9 +787,12 @@ export default memo(
   PartProperties,
   (previous, next) =>
     previous.onSave === next.onSave &&
+    previous.circuit === next.circuit &&
     previous.onRequestSave === next.onRequestSave &&
     previous.active === next.active &&
     previous.spiceAvailable === next.spiceAvailable &&
+    previous.fileId === next.fileId &&
+    previous.getRevision === next.getRevision &&
     previous.capabilityHost === next.capabilityHost &&
     previous.part.id === next.part.id &&
     previous.part.libId === next.part.libId &&

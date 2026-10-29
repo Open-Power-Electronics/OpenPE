@@ -11,12 +11,17 @@ import {
   simulationSpiceNets,
 } from '../lib/spice';
 import profile from '../lib/emc-flyback-simulation.json';
+import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
 
 const source = readFileSync(
   'resources/example-catalog/sources/emc-flyback/design/emc_flyback.kicad_sch',
   'utf8',
 );
-const fixture = () => parseCircuit(source);
+const fixture = () => {
+  const circuit = parseCircuit(source);
+  prepareEmcFlybackValues(circuit);
+  return circuit;
+};
 test('the actual KiCad 10 Home template compiles every declared dissipative terminal vector', () => {
   const project = parseProject(readFileSync('lib/emc-flyback-example.json', 'utf8'));
   const before = JSON.stringify(project),

@@ -6652,7 +6652,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "100u 50V"
+    (property "Value" "100u"
       (at 137.16 55.88 0)
       (show_name no)
       (do_not_autoplace no)
@@ -6723,7 +6723,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C4")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "50V"
+      (at 134.62 54.61 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Connector_Generic:Conn_01x02")
     (at 111.76 59.69 0)
@@ -7260,7 +7266,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "4.7u 50V"
+    (property "Value" "4.7u"
       (at 151.13 55.88 0)
       (show_name no)
       (do_not_autoplace no)
@@ -7331,7 +7337,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C5")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "50V"
+      (at 148.59 54.61 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 88.9 180.34 0)
@@ -8716,7 +8728,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "1n C0G"
+    (property "Value" "1n"
       (at 111.76 187.96 0)
       (show_name no)
       (do_not_autoplace no)
@@ -8787,7 +8799,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C10")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "C0G"
+      (at 109.22 186.69 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Connector_Generic:Conn_01x02")
     (at 264.16 86.36 0)
@@ -9623,7 +9641,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "100p 2kV C0G"
+    (property "Value" "100p"
       (at 261.62 96.52 0)
       (show_name no)
       (do_not_autoplace no)
@@ -9694,7 +9712,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C16")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "2kV C0G"
+      (at 259.08 95.25 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:R")
     (at 213.36 101.6 90)
@@ -9859,7 +9883,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "10n 1kV"
+    (property "Value" "10n"
       (at 101.6 55.88 0)
       (show_name no)
       (do_not_autoplace no)
@@ -9930,7 +9954,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C2")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1kV"
+      (at 99.06 54.61 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:VOUT")
     (at 195.58 139.7 0)
@@ -10797,7 +10827,7 @@
         (font
           (size 1.27 1.27))
         (justify right)))
-    (property "Value" "22n 100V"
+    (property "Value" "22n"
       (at 194.31 54.61 0)
       (show_name no)
       (do_not_autoplace no)
@@ -10868,7 +10898,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C15")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "100V"
+      (at 195.58 52.07 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:VBUS")
     (at 190.5 45.72 0)
@@ -11380,7 +11416,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "2.2mH WE-CMB"
+    (property "Value" "2.2mH"
       (at 71.12 57.79 0)
       (show_name no)
       (do_not_autoplace no)
@@ -11454,7 +11490,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "L1")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "WE-CMB"
+      (at 71.12 53.34 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 162.56 58.42 0)
@@ -11642,7 +11684,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "22u 25V"
+    (property "Value" "22u"
       (at 331.47 76.2 0)
       (show_name no)
       (do_not_autoplace no)
@@ -11713,7 +11755,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C20")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "25V"
+      (at 328.93 74.93 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 322.58 106.68 0)
@@ -11789,7 +11837,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "4.7u 50V"
+    (property "Value" "4.7u"
       (at 165.1 55.88 0)
       (show_name no)
       (do_not_autoplace no)
@@ -11860,7 +11908,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C6")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "50V"
+      (at 162.56 54.61 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 93.98 165.1 0)
@@ -12264,7 +12318,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "0.15R 2512"
+    (property "Value" "0.15R"
       (at 243.84 114.3 0)
       (show_name no)
       (do_not_autoplace no)
@@ -12335,7 +12389,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "R4")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "2512"
+      (at 241.3 113.03 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:LED")
     (at 370.84 85.09 90)
@@ -12557,7 +12617,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "1n 2kV"
+    (property "Value" "1n"
       (at 320.04 120.14 90)
       (show_name no)
       (do_not_autoplace no)
@@ -12627,7 +12687,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C14")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "2kV"
+      (at 325.12 116.84 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:D_Schottky")
     (at 284.48 81.28 180)
@@ -12792,7 +12858,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "470u 25V"
+    (property "Value" "470u"
       (at 303.53 78.74 0)
       (show_name no)
       (do_not_autoplace no)
@@ -12863,7 +12929,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C18")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "25V"
+      (at 300.99 74.93 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 86.36 58.42 0)
@@ -13082,7 +13154,7 @@
         (font
           (size 1.27 1.27))
         (justify right)))
-    (property "Value" "10n 1kV"
+    (property "Value" "10n"
       (at 96.52 66.04 0)
       (show_name no)
       (do_not_autoplace no)
@@ -13153,7 +13225,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C3")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1kV"
+      (at 99.06 64.77 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Connector:TestPoint")
     (at 81.28 111.76 0)
@@ -13952,7 +14030,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "10u 25V"
+    (property "Value" "10u"
       (at 71.12 149.86 0)
       (show_name no)
       (do_not_autoplace no)
@@ -14023,7 +14101,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C8")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "25V"
+      (at 68.58 148.59 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:R")
     (at 215.9 52.07 180)
@@ -14043,7 +14127,7 @@
         (font
           (size 1.27 1.27))
         (justify right)))
-    (property "Value" "4.7k 1W"
+    (property "Value" "4.7k"
       (at 214.63 57.15 0)
       (show_name no)
       (do_not_autoplace no)
@@ -14114,7 +14198,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "R10")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1W"
+      (at 215.9 52.07 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Connector_Generic:Conn_01x01")
     (at 22.86 50.8 180)
@@ -14277,7 +14367,7 @@
         (font
           (size 1.27 1.27))
         (justify right)))
-    (property "Value" "4.7k 1W"
+    (property "Value" "4.7k"
       (at 203.2 54.61 0)
       (show_name no)
       (do_not_autoplace no)
@@ -14348,7 +14438,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "R9")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1W"
+      (at 205.74 52.07 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Connector_Generic:Conn_01x01")
     (at 22.86 66.04 180)
@@ -14551,7 +14647,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "10uH 3.3A"
+    (property "Value" "10uH"
       (at 124.46 54.1 90)
       (show_name no)
       (do_not_autoplace no)
@@ -14621,7 +14717,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "L2")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "3.3A"
+      (at 124.46 50.8 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:C")
     (at 322.58 176.53 90)
@@ -14640,7 +14742,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "10n 1kV"
+    (property "Value" "10n"
       (at 322.58 181.1 90)
       (show_name no)
       (do_not_autoplace no)
@@ -14710,7 +14812,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C24")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1kV"
+      (at 322.58 176.53 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:R")
     (at 165.1 74.93 0)
@@ -15149,7 +15257,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "100p 2kV"
+    (property "Value" "100p"
       (at 290.83 65.53 90)
       (show_name no)
       (do_not_autoplace no)
@@ -15219,7 +15327,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C17")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "2kV"
+      (at 292.1 60.96 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:D_Schottky")
     (at 53.34 50.8 180)
@@ -15328,7 +15442,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "1k 1206"
+    (property "Value" "1k"
       (at 359.41 76.2 0)
       (show_name no)
       (do_not_autoplace no)
@@ -15399,7 +15513,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "R13")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1206"
+      (at 356.87 74.93 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Regulator_Controller:UC3845_SOIC8")
     (at 127 167.64 0)
@@ -16374,7 +16494,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "1n 2kV"
+    (property "Value" "1n"
       (at 322.58 170.94 90)
       (show_name no)
       (do_not_autoplace no)
@@ -16444,7 +16564,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C23")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "2kV"
+      (at 322.58 166.37 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "EMC_Demo:CHASSIS")
     (at 106.68 64.77 0)
@@ -16576,7 +16702,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "470u 25V"
+    (property "Value" "470u"
       (at 318.77 77.47 0)
       (show_name no)
       (do_not_autoplace no)
@@ -16647,7 +16773,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C19")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "25V"
+      (at 314.96 74.93 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:C")
     (at 342.9 74.93 0)
@@ -16667,7 +16799,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "22u 25V"
+    (property "Value" "22u"
       (at 345.44 76.2 0)
       (show_name no)
       (do_not_autoplace no)
@@ -16738,7 +16870,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C21")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "25V"
+      (at 342.9 74.93 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:C")
     (at 86.36 54.61 0)
@@ -16758,7 +16896,7 @@
         (font
           (size 1.27 1.27))
         (justify left)))
-    (property "Value" "1u 50V"
+    (property "Value" "1u"
       (at 88.9 55.88 0)
       (show_name no)
       (do_not_autoplace no)
@@ -16829,7 +16967,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "C1")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "50V"
+      (at 86.36 54.61 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:R")
     (at 220.98 162.56 0)
@@ -17323,7 +17467,7 @@
         (font
           (size 1.27 1.27))
         (justify right)))
-    (property "Value" "4.7k 1W"
+    (property "Value" "4.7k"
       (at 233.68 57.15 0)
       (show_name no)
       (do_not_autoplace no)
@@ -17394,7 +17538,13 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "R20")
-          (unit 1)))))
+          (unit 1))))
+    (property "Specifications" "1W"
+      (at 226.06 52.07 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
   (symbol
     (lib_id "Device:R")
     (at 203.2 146.05 0)

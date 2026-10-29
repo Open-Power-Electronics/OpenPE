@@ -1,6 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { ArrowRight, Blocks, FolderPlus, FolderOpen, Home as HomeIcon } from 'lucide-react';
+import {
+  ArrowRight,
+  Blocks,
+  FolderPlus,
+  FolderOpen,
+  Home as HomeIcon,
+  Settings,
+} from 'lucide-react';
 import {
   homeExampleCatalog,
   homeExampleSections,
@@ -10,7 +17,6 @@ import ExamplePreview from './ExamplePreview';
 import HomeHeroBackdrop from './HomeHeroBackdrop';
 import AgentComposer, { type AgentComposerProps } from './AgentComposer';
 import NavigationButton from './NavigationButton';
-import SettingsMenu from './SettingsMenu';
 import AgentPicker, { type AgentPickerProps } from './AgentPicker';
 import ProjectNavigation, {
   type ProjectNavigationItem,
@@ -33,7 +39,6 @@ export default function Home({
   onResume,
   onProjectAction,
   onSettings,
-  onAbout,
   onPlugins,
   composer,
   agentPicker,
@@ -49,7 +54,6 @@ export default function Home({
   onResume: (id: string) => void;
   onProjectAction: (id: string, action: ProjectAction) => void;
   onSettings: () => void;
-  onAbout: () => void;
   onPlugins: () => void;
   agentPicker: AgentPickerProps;
   composer: Pick<
@@ -109,7 +113,7 @@ export default function Home({
         />
         <div className="rail-spacer" />
         <AgentPicker {...agentPicker} compact />
-        <SettingsMenu active={active} onSettings={onSettings} onAbout={onAbout} />
+        <NavigationButton compact icon={Settings} label="Settings" onClick={onSettings} />
       </nav>
       <section className="home-surface" aria-label="Welcome to OpenPE">
         <div className="home-content">

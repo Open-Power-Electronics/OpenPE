@@ -5,6 +5,7 @@ import { parseCircuit, pinPositions } from '../lib/circuit';
 import { partFields, unitGraphics } from '../lib/library';
 import { child, children, val } from '../lib/sexpr';
 import { spiceNets } from '../lib/spice';
+import { prepareEmcFlybackValues } from './emc-flyback-values';
 
 // Build-time electrical signatures only. The original native files remain the
 // independent import source; no source content is discarded by this generator.
@@ -29,6 +30,7 @@ const verify = (path: string, bytes: string) => {
 };
 verify('design/emc_flyback.kicad_sch', source);
 const d = parseCircuit(source);
+prepareEmcFlybackValues(d);
 const nets = spiceNets(d, ['PGND', 'SGND']);
 const groups = new Map<string, string[]>();
 const parts = d.parts.map((p) => {

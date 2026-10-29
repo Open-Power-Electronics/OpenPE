@@ -1,4 +1,10 @@
 import type { HistoryPage } from './project-history';
+export type SpiceModelDeclaration = {
+  name: string;
+  kind: 'model' | 'subcircuit';
+  device?: string;
+  pins: string[];
+};
 import type {
   ProjectDirectoryListing,
   ProjectFilePreview,
@@ -26,6 +32,10 @@ declare global {
       releaseFile(fileId: string): Promise<void>;
       revealFile(fileId: string): Promise<{ status: 'revealed' | 'needs-save' }>;
       projectDirectory(fileId: string): Promise<ProjectDirectoryListing>;
+      chooseSpiceModel(
+        fileId: string,
+        currentLibrary?: string,
+      ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
       projectFilePreview(options: { fileId: string; id: string }): Promise<ProjectFilePreview>;
       projectFilePdf(options: { fileId: string; id: string }): Promise<ProjectFilePdf>;
       projectFileWrite(options: ProjectFileWrite): Promise<ProjectFilePreview>;

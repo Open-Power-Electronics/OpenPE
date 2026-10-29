@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { CircuitBoard } from 'lucide-react';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import type { Circuit } from '@/lib/circuit';
@@ -28,6 +28,7 @@ import {
 } from './LayoutPropertyFields';
 
 type Props = {
+  actions?: ReactNode;
   board: PCB;
   schematic: Circuit;
   active: boolean;
@@ -94,6 +95,7 @@ export default function LayoutProperties({
   onRectangle,
   onError,
   onInspectFootprint,
+  actions,
 }: Props) {
   const field = { active, resetKey };
   const ownedNets = isOwnedProjectNode(board.nets) ? board.nets : null;
@@ -382,13 +384,17 @@ export default function LayoutProperties({
             <>
               {part ? (
                 <>
-                  <PartIdentity part={part} library={schematic.libraries[part.libId]} />
+                  <PartIdentity
+                    part={part}
+                    library={schematic.libraries[part.libId]}
+                    actions={actions}
+                  />
                   <PartProperties
                     part={part}
                     active={active && !!onSavePartProperties}
                     capabilityHost={capabilityHost}
                     onRequestSave={onRequestSave}
-                    onSave={(ref, value, fields, _includeInSimulation, footprintDetail) =>
+                    onSave={(ref, value, fields, footprintDetail) =>
                       onSavePartProperties?.(
                         schematic,
                         part.id,
@@ -402,7 +408,7 @@ export default function LayoutProperties({
                 </>
               ) : (
                 <>
-                  <FootprintIdentity footprint={footprint} />
+                  <FootprintIdentity footprint={footprint} actions={actions} />
                   <div className="layout-property-section">
                     <div className="property-primary layout-property-primary">
                       <TextField

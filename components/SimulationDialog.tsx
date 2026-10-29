@@ -15,6 +15,7 @@ import {
 } from '@/lib/spice';
 import { createPortal } from 'react-dom';
 import SimulationWaveforms from './SimulationWaveforms';
+import AnalysisComponents from './AnalysisComponents';
 import { tiPart } from '@/lib/ti-dcdc';
 import { type ProbeTarget, spiceNets } from '@/lib/spice';
 import { validatedSimulationResult } from '@/lib/waveform';
@@ -24,6 +25,7 @@ import { isModelBuck } from '@/lib/spice-buck';
 import { exampleSimulationProfile } from '@/lib/spice-examples';
 import { isEmcFlyback } from '@/lib/spice-emc-flyback';
 import { participatesInSimulation, simulationParts } from '@/lib/simulation-participation';
+import { symbolRole } from '@/lib/symbol-role';
 import { validateSimulationModels, type SimulationModelReference } from '@/lib/simulation-models';
 import { circuitFingerprint } from '@/lib/circuit';
 import {
@@ -63,6 +65,8 @@ export default function SimulationDialog({
   fileId,
   agentContextRef,
   capabilityHost,
+  onParticipationChange,
+  onLocatePart,
 }: {
   project: Project;
   settingsHost: RefObject<HTMLDivElement | null>;
@@ -76,9 +80,12 @@ export default function SimulationDialog({
   fileId?: string;
   agentContextRef?: RefObject<(() => AgentSimulationContext) | null>;
   capabilityHost?: CapabilityHost;
+  onParticipationChange?: (partId: string, included: boolean) => boolean;
+  onLocatePart?: (partId: string) => boolean;
 }) {
   const [localCapabilityHost] = useState(createCapabilityHost);
   const host = capabilityHost ?? localCapabilityHost;
+  const participationComposing = useRef(false);
   const capabilityAdapter = useRef<SimulationCapabilityAdapter | null>(null);
   const renderWaiters = useRef<
     {
@@ -110,6 +117,19 @@ export default function SimulationDialog({
   const supportError = useMemo(
     () => simulationSupportError(project.schematic),
     [project.schematic],
+  );
+  const components = useMemo(
+    () =>
+      [
+        ...new Map(
+          project.schematic.parts
+            .filter(
+              (part) => symbolRole(project.schematic.libraries[part.libId], part) !== 'marker',
+            )
+            .map((part) => [part.ref, part]),
+        ).values(),
+      ].map((part) => ({ id: part.id, reference: part.ref, part })),
+    [project.schematic.parts, project.schematic.libraries],
   );
   const [selection, setSelection] = useState(initial);
   const vendor = tiPart(
@@ -387,7 +407,7 @@ export default function SimulationDialog({
     const part = project.schematic.parts.find((p) => p.id === probe.id);
     if (part && !participatesInSimulation(part)) {
       setProbeMessage(
-        'This component is excluded from simulation. Enable Include in SPICE simulation in Properties to inspect it.',
+        'This component is excluded from simulation. Enable it under Components in SPICE Simulation to inspect it.',
       );
       return;
     }
@@ -849,6 +869,56 @@ export default function SimulationDialog({
                   {formatted(initial.step * 1000000)} µs)
                 </button>
               )}
+              <AnalysisComponents
+                items={components}
+                visible={visible}
+                locateDisabled={sourcePending}
+                onLocate={onLocatePart}
+                locateDescription="Highlight in schematic"
+                composingRef={participationComposing}
+                renderControl={({ part }, collapsed) => (
+                  <button
+                    type="button"
+                    role="switch"
+                    className="appearance-toggle simulation-participation"
+                    aria-label={`Include ${part.ref} in SPICE simulation`}
+                    aria-checked={participatesInSimulation(part)}
+                    disabled={
+                      !visible || collapsed || running || sourcePending || !onParticipationChange
+                    }
+                    onKeyDown={(event) => {
+                      if (
+                        participationComposing.current ||
+                        event.nativeEvent.isComposing ||
+                        event.nativeEvent.keyCode === 229
+                      ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }
+                    }}
+                    onClick={() => {
+                      if (
+                        !visible ||
+                        collapsed ||
+                        running ||
+                        sourcePending ||
+                        participationComposing.current ||
+                        !onParticipationChange
+                      )
+                        return;
+                      try {
+                        if (!onParticipationChange(part.id, !participatesInSimulation(part)))
+                          throw new Error('The component could not be updated. Try again.');
+                        setError('');
+                      } catch (failure) {
+                        setError((failure as Error).message);
+                      }
+                    }}
+                  >
+                    <span aria-hidden="true" />
+                  </button>
+                )}
+              />
             </div>
             <footer className="simulation-settings-footer">
               {settingsError && (

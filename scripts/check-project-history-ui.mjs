@@ -352,7 +352,6 @@ try {
   assert.equal(await page.evaluate(() => window.testHistory.creates.length), 1);
   await button('Close dialog').click();
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await button('Done').click();
   await button('Version history').click();

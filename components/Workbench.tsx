@@ -44,6 +44,7 @@ import {
   Plus,
   Redo2,
   RotateCw,
+  Settings,
   SlidersHorizontal,
   ShieldCheck,
   Tag,
@@ -147,7 +148,6 @@ import DesktopTitlebar, {
 } from './DesktopTitlebar';
 import WorkspaceDivider from './WorkspaceDivider';
 import type { useAppearance } from './AppearanceSettings';
-import SettingsMenu from './SettingsMenu';
 import PartsList from './PartsList';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import ConfirmationDialog, { type ConfirmationKind } from './ConfirmationDialog';
@@ -481,6 +481,7 @@ export default function Workbench({
     [],
   );
   const thermalAgentContext = useRef<(() => AgentThermalContext) | null>(null);
+  const thermalLocateRef = useRef<((footprintId: string) => boolean) | null>(null);
   useEffect(() => {
     if (!thermalAvailable) setThermalEnabled(false);
   }, [thermalAvailable]);
@@ -1817,7 +1818,6 @@ export default function Workbench({
     value: string,
     fields: Record<string, string>,
     partId = selected,
-    includeInSimulation?: boolean,
     sourceCircuit: Circuit | null = doc,
     footprintDetail?: FootprintDetail,
   ) {
@@ -1829,7 +1829,6 @@ export default function Workbench({
       p.ref = ref;
       p.value = value;
       p.fields = structuredClone(fields);
-      if (includeInSimulation !== undefined) p.excludeFromSimulation = !includeInSimulation;
       if (p.raw)
         p.raw = p.raw.filter(
           (n) =>
@@ -2025,6 +2024,22 @@ export default function Workbench({
     !sourcePending &&
     !coreSnapshot.editingBlocked;
   const canEditProperties = () => propertiesActive && current.current === doc;
+  const propertiesDeleteAction = !inspectedField ? (
+    <button
+      type="button"
+      className="icon-button property-delete-action"
+      aria-label="Delete object"
+      title="Delete object"
+      data-edit-action
+      disabled={
+        !propertiesActive || (!inspectedPartId && selection.every((id) => !!selectedField(id)))
+      }
+      onClick={() => remove(inspectedPartId ? [inspectedPartId] : selection)}
+    >
+      <Trash2 size={16} />
+    </button>
+  ) : undefined;
+
   function saveNetName(value: string): boolean {
     if (!canEditProperties() || !doc || !label) return false;
     if (!value.trim()) {
@@ -2620,6 +2635,21 @@ export default function Workbench({
       ) : null,
     [currentThermalPresentation],
   );
+  const locateThermalComponent = useEditorAction((id: string) => {
+    const snapshot = core.getSnapshot();
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      !thermalVisible ||
+      modal ||
+      confirmation ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked ||
+      snapshot.project?.pcb !== project?.pcb
+    )
+      return false;
+    return thermalLocateRef.current?.(id) ?? false;
+  });
   const thermalPanel = useMemo(
     () =>
       thermalAvailable && thermalOpened && project ? (
@@ -2634,6 +2664,7 @@ export default function Workbench({
             agentContextRef={thermalAgentContext}
             docked
             onPresentationChange={setThermalPresentation}
+            onLocateFootprint={locateThermalComponent}
             onClose={closeThermal}
           />
         </Suspense>
@@ -2650,6 +2681,7 @@ export default function Workbench({
       spiceAvailable,
       capabilityHost,
       closeThermal,
+      locateThermalComponent,
     ],
   );
   const thermalAction = useMemo(
@@ -3001,7 +3033,6 @@ export default function Workbench({
     [openWorkspaceHome, createWorkspaceProject, openWorkspaceProject, openWorkspacePlugins],
   );
   const openWorkspaceSettings = useCallback(() => setModal('settings'), []);
-  const openWorkspaceAbout = useCallback(() => setModal('about'), []);
   const providerBusy = Boolean(runningSessions[activeSessionId]);
   const workspaceNavigationSettings = useMemo(
     () => (
@@ -3014,22 +3045,15 @@ export default function Workbench({
           onChange={setProvider}
           disabled={providerBusy}
         />
-        <SettingsMenu
-          active={active}
-          onSettings={openWorkspaceSettings}
-          onAbout={openWorkspaceAbout}
+        <NavigationButton
+          compact
+          icon={Settings}
+          label="Settings"
+          onClick={openWorkspaceSettings}
         />
       </>
     ),
-    [
-      provider,
-      agents,
-      setProvider,
-      providerBusy,
-      active,
-      openWorkspaceSettings,
-      openWorkspaceAbout,
-    ],
+    [provider, agents, setProvider, providerBusy, active, openWorkspaceSettings],
   );
   const requestPropertiesSave = useEditorAction((saveAs: boolean) => {
     // The property commit has already advanced Core beyond this render's doc.
@@ -3037,25 +3061,14 @@ export default function Workbench({
     void save(saveAs);
   });
   const saveCurrentPartProperties = useEditorAction(
-    (
-      id: string,
-      ref: string,
-      value: string,
-      fields: Record<string, string>,
-      includeInSimulation?: boolean,
-    ) =>
-      canEditProperties() &&
-      part?.id === id &&
-      (includeInSimulation === undefined || spiceAvailable)
-        ? saveFields(ref, value, fields, id, includeInSimulation)
-        : false,
+    (id: string, ref: string, value: string, fields: Record<string, string>) =>
+      canEditProperties() && part?.id === id ? saveFields(ref, value, fields, id) : false,
   );
   const propertiesPartId = part?.id;
+  const getPropertiesRevision = useCallback(() => core.getSnapshot().revision, [core]);
   const saveSelectedPartProperties = useCallback(
-    (ref: string, value: string, fields: Record<string, string>, includeInSimulation?: boolean) =>
-      propertiesPartId
-        ? saveCurrentPartProperties(propertiesPartId, ref, value, fields, includeInSimulation)
-        : false,
+    (ref: string, value: string, fields: Record<string, string>) =>
+      propertiesPartId ? saveCurrentPartProperties(propertiesPartId, ref, value, fields) : false,
     [propertiesPartId, saveCurrentPartProperties],
   );
   const saveModelBoardThickness = useEditorAction((basis: PCB, thickness: number) => {
@@ -3098,7 +3111,7 @@ export default function Workbench({
         !snapshot.project.pcb?.footprints.some((footprint) => footprint.symbolId === partId)
       )
         return false;
-      return saveFields(ref, value, fields, partId, undefined, schematicBasis, footprintDetail);
+      return saveFields(ref, value, fields, partId, schematicBasis, footprintDetail);
     },
   );
   return (
@@ -3125,7 +3138,6 @@ export default function Workbench({
             onExample={(id) => newFile(id)}
             onResume={onNewProjectSession}
             onSettings={() => setModal('settings')}
-            onAbout={() => setModal('about')}
             onPlugins={openPlugins}
             agentPicker={{
               provider,
@@ -3492,9 +3504,18 @@ export default function Workbench({
                           key={inspectedField ? activeSelection : selected}
                         >
                           <div className="inspector-body">
+                            {!part && (
+                              <div className="property-object-actions">
+                                {propertiesDeleteAction}
+                              </div>
+                            )}
                             {part ? (
                               <>
-                                <PartIdentity part={part} library={doc.libraries[part.libId]} />
+                                <PartIdentity
+                                  part={part}
+                                  library={doc.libraries[part.libId]}
+                                  actions={propertiesDeleteAction}
+                                />
                                 {inspectedField && fieldPosition && activeSelection ? (
                                   <FieldProperties
                                     active={propertiesActive}
@@ -3534,8 +3555,11 @@ export default function Workbench({
                                 ) : (
                                   <>
                                     <PartProperties
+                                      circuit={doc}
                                       active={propertiesActive}
                                       spiceAvailable={spiceAvailable}
+                                      fileId={fileId}
+                                      getRevision={getPropertiesRevision}
                                       onRequestSave={requestPropertiesSave}
                                       capabilityHost={capabilityHost}
                                       key={part.id}
@@ -3694,22 +3718,6 @@ export default function Workbench({
                               </div>
                             )}
                           </div>
-                          {!inspectedField && (
-                            <div className="inspector-footer">
-                              <button
-                                className="delete-button"
-                                onClick={() =>
-                                  remove(inspectedPartId ? [inspectedPartId] : selection)
-                                }
-                                disabled={
-                                  !propertiesActive ||
-                                  (!inspectedPartId && selection.every((id) => !!selectedField(id)))
-                                }
-                              >
-                                <Trash2 size={14} /> Delete object
-                              </button>
-                            </div>
-                          )}
                         </aside>
                       ) : (
                         <section className="schematic-properties-empty">
@@ -3808,6 +3816,7 @@ export default function Workbench({
                         analysisDrawing={thermalDrawing}
                         analysisReadout={thermalReadout}
                         analysisPanel={layoutAnalysisPanelMount}
+                        analysisLocateRef={thermalLocateRef}
                         onAnalysisProbe={
                           currentThermalPresentation?.probing
                             ? currentThermalPresentation.probeAt
@@ -4088,10 +4097,11 @@ export default function Workbench({
                 onChange={setProvider}
                 disabled={Boolean(runningSessions[activeSessionId])}
               />
-              <SettingsMenu
-                active={active}
-                onSettings={() => setModal('settings')}
-                onAbout={() => setModal('about')}
+              <NavigationButton
+                compact
+                icon={Settings}
+                label="Settings"
+                onClick={() => setModal('settings')}
               />
             </nav>
             <Suspense fallback={<p role="status">Loading plugins…</p>}>
@@ -4191,6 +4201,46 @@ export default function Workbench({
               }}
               settingsHost={simulationSettingsHost}
               sourcePending={sourcePending}
+              onLocatePart={(id) => {
+                const snapshot = core.getSnapshot();
+                if (
+                  !active ||
+                  screen !== 'workspace' ||
+                  !simulationVisible ||
+                  modal ||
+                  confirmation ||
+                  snapshot.sourceDraft !== null ||
+                  snapshot.editingBlocked ||
+                  snapshot.revision !== coreSnapshot.revision ||
+                  activeSchematicRef.current !== simulationProject.schematic.id ||
+                  !doc ||
+                  !selectableSchematicIds(doc, layers, selectionFilters).has(id)
+                )
+                  return false;
+                setSelected(id);
+                setTool('select');
+                queueSchematicNavigation('select', id, true);
+                return true;
+              }}
+              onParticipationChange={(partId, included) => {
+                const snapshot = core.getSnapshot();
+                if (
+                  !active ||
+                  screen !== 'workspace' ||
+                  !simulationVisible ||
+                  modal ||
+                  confirmation ||
+                  snapshot.revision !== coreSnapshot.revision ||
+                  activeSchematicRef.current !== simulationProject.schematic.id
+                )
+                  return false;
+                core.execute(
+                  'part.participation',
+                  { schematicId: simulationProject.schematic.id, partId, included },
+                  { expectedRevision: String(coreSnapshot.revision) },
+                );
+                return true;
+              }}
               probe={probe}
               waveformHost={waveformHost}
               onWaveformVisibilityChange={setWaveformRequested}

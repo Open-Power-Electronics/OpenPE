@@ -693,8 +693,11 @@ function singleSimulationParameter(params) {
   return match ? { prefix: match[1], value: match[2], suffix: match[3] } : null;
 }
 function displayPartValue(part) {
-  const params = partFields(part)["Sim.Params"];
+  const fields = partFields(part);
+  const params = fields["Sim.Params"];
   const value = params ? singleSimulationParameter(params)?.value ?? params : "";
+  if (params && fields["Sim.Device"] === "V" && ["PULSE", "SIN"].includes(fields["Sim.Type"]) && part.value === part.libId.split(":").at(-1) && fields["OpenPE.ModelSource"] !== "external" && (fields["OpenPE.ModelSource"] === "basic" || !fields["Sim.Library"]?.trim()) && !extraSymbolAnnotations(part).some((field) => field.name === "Sim.Params"))
+    return params;
   return value ? part.value.replaceAll("${SIM.PARAMS}", value) : part.value;
 }
 var ownedExtraAnnotations = /* @__PURE__ */ new WeakMap();

@@ -18,6 +18,40 @@ import { modelCadFromProject, MODEL_CAD_NATIVE_VARIABLE } from '../lib/model-cad
 import { arrangeExampleText } from '../lib/example-layout';
 import { parseCircuit } from '../lib/circuit';
 import { buildSpiceDeck } from '../lib/spice';
+import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
+import { partFields } from '../lib/library';
+
+test('EMC native passive values separate specifications and retain them through native round trips', () => {
+  const project = createHomeExample('emc-flyback-demo');
+  const original = parseCircuit(
+    readFileSync(
+      'resources/example-catalog/sources/emc-flyback/design/emc_flyback.kicad_sch',
+      'utf8',
+    ),
+  );
+  const native = projectNativeFiles(project, 'emc-flyback.kicad_pro');
+  const reopened = projectFromNativeFiles(native);
+  const board = parseSExpr(native.files.find((file) => file.name.endsWith('.kicad_pcb'))!.source);
+  for (const before of original.parts.filter((part) => /^[RCL]\d+$/.test(part.ref))) {
+    const [nominal, ...details] = before.value.split(/\s+/);
+    const after = reopened.schematic.parts.find((part) => part.ref === before.ref)!;
+    assert.equal(after.value, nominal, before.ref);
+    if (details.length)
+      assert.equal(partFields(after).Specifications, details.join(' '), before.ref);
+    const footprint = children(board, 'footprint').find((fp) =>
+      children(fp, 'property').some(
+        (field) => val(field) === 'Reference' && val(field, 2) === before.ref,
+      ),
+    )!;
+    const field = (name: string) =>
+      children(footprint, 'property').find((node) => val(node) === name);
+    assert.equal(val(field('Value'), 2), nominal, before.ref);
+    if (details.length)
+      assert.equal(val(field('Specifications'), 2), details.join(' '), before.ref);
+  }
+  assert.equal(reopened.schematic.parts.find((part) => part.ref === 'L2')!.value, '10uH');
+  assert.equal(simulationSupportError(reopened.schematic), '');
+});
 
 test('EMC annotation layout changes only instance field placement and preserves the full SPICE deck', () => {
   const circuit = parseCircuit(
@@ -26,6 +60,7 @@ test('EMC annotation layout changes only instance field placement and preserves 
       'utf8',
     ),
   );
+  prepareEmcFlybackValues(circuit);
   const before = structuredClone(circuit);
   const deck = buildSpiceDeck(circuit, defaultTransient(circuit));
   arrangeExampleText(circuit, 'emc-flyback-demo');

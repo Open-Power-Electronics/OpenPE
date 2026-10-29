@@ -1747,10 +1747,8 @@ try {
         'Both part fields and component geometry visibly disable while Source is pending.',
       );
       assert.equal(
-        await properties
-          .getByRole('switch', { name: 'Include in SPICE simulation', exact: true })
-          .isDisabled(),
-        true,
+        await properties.getByRole('switch', { name: /^Include .*in SPICE simulation$/ }).count(),
+        0,
       );
       for (const name of ['Browse footprints', 'Add field', 'Delete object'])
         assert.equal(
@@ -2657,7 +2655,10 @@ try {
       const input = t.inspector().getByLabel('Component reference', { exact: true });
       await input.waitFor();
       assert.equal(await input.inputValue(), first.ref);
-      await t.inspector().getByRole('button', { name: 'Delete object', exact: true }).click();
+      await t
+        .inspector()
+        .getByRole('button', { name: 'Delete object', exact: true })
+        .press('Enter');
       const next = await t.currentProject();
       assert.equal(
         next.schematic.parts.some((part) => part.id === first.id),

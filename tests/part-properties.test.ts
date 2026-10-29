@@ -2,9 +2,130 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exampleProject } from '../lib/project-example';
 import { displayPartValue, partFields } from '../lib/library';
-import { preparePartProperties, type FieldRow } from '../lib/part-properties';
+import {
+  preparePartProperties,
+  simulationSourceProperties,
+  type FieldRow,
+} from '../lib/part-properties';
 import { createExample } from '../lib/examples';
 import { exportKiCad, importDocument, parseProject, serializeProject } from '../lib/project';
+import { createHomeExample } from '../lib/create-home-example';
+import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+
+test('source controls edit DC literals, bound DC values and pulse parameters without changing model mappings', () => {
+  const buck = createExample('kicad-buck');
+  const home = createHomeExample('reference-lm2598-to220-7-buck');
+  for (const [project, ref, key, input] of [
+    [buck, 'V102', 'dc', '18'],
+    [buck, 'V101', 'y2', '10'],
+    [home, 'V1', 'dc', '25'],
+  ] as const) {
+    const part = project.schematic.parts.find((part) => part.ref === ref)!;
+    const fields = partFields(part),
+      source = simulationSourceProperties(part)!;
+    const rows = [
+      ...Object.entries(fields)
+        .filter(([name]) => name !== 'Sim.Params')
+        .map(([name, value]) => ({ name, value })),
+      ...source.rows,
+    ];
+    assert.equal(preparePartProperties(part, part.ref, displayPartValue(part), rows), null);
+    const editedRows = rows.map((row) =>
+      'sourceKey' in row && row.sourceKey === key ? { ...row, value: input } : row,
+    );
+    const change = preparePartProperties(part, part.ref, displayPartValue(part), editedRows)!;
+    const edited = structuredClone(project);
+    Object.assign(
+      edited.schematic.parts.find((p) => p.id === part.id)!,
+      change,
+    );
+    for (const name of ['Sim.Device', 'Sim.Type', 'Sim.Pins'])
+      assert.equal(change.fields[name], fields[name]);
+    if (ref === 'V102') assert.equal(change.fields['Sim.Params'], undefined);
+    if (part.value === '${SIM.PARAMS}') assert.equal(change.value, part.value);
+    const reopened = importDocument(exportKiCad(edited, 'schematic'));
+    assert.equal(
+      partFields(reopened.schematic.parts.find((p) => p.ref === ref)!)['Sim.Params'],
+      change.fields['Sim.Params'],
+    );
+    const deck = buildSpiceDeck(edited.schematic, defaultTransient(edited.schematic));
+    assert.match(deck.netlist, key === 'dc' ? new RegExp(`DC ${input}($|\\s)`) : /PULSE\(0 10 /);
+    assert.throws(() =>
+      preparePartProperties(
+        part,
+        part.ref,
+        displayPartValue(part),
+        editedRows.map((row) =>
+          'sourceKey' in row && row.sourceKey === key ? { ...row, value: 'NaN' } : row,
+        ),
+      ),
+    );
+  }
+});
+
+test('numeric simulation Properties share compiler limits and retain engineering notation', () => {
+  const part = exampleProject().schematic.parts[0];
+  const current = partFields(part);
+  const before = structuredClone(part);
+  for (const [name, accepted, rejected] of [
+    ['OpenPE.SeriesResistance', '100m', ['-1', '10.01', 'NaN', '50m Ω']],
+    ['OpenPE.InitialVoltage', '-5', ['1001', '-1001', 'Infinity', '5V']],
+    ['OpenPE.Coupling', '0.99', ['0', '-0.1', '1.01', '1e999']],
+  ] as const) {
+    const rows = (value: string) =>
+      Object.entries({ ...current, [name]: value }).map(([name, value]) => ({ name, value }));
+    assert.equal(
+      preparePartProperties(part, part.ref, displayPartValue(part), rows(accepted))!.fields[name],
+      accepted,
+    );
+    for (const value of ['', '.control', '{value}', ...rejected])
+      assert.throws(
+        () => preparePartProperties(part, part.ref, displayPartValue(part), rows(value)),
+        Error,
+        `${name}: ${value}`,
+      );
+  }
+  assert.deepEqual(
+    part,
+    before,
+    'Preparing edits and validation failures never mutate accepted data.',
+  );
+});
+
+test('SIN source edits retain omitted defaults and reject invalid frequency and delay', () => {
+  const original = createExample('kicad-buck').schematic.parts.find((part) => part.ref === 'V102')!;
+  const part = {
+    ...original,
+    value: 'VSIN',
+    fields: { ...partFields(original), 'Sim.Type': 'SIN', 'Sim.Params': ' ampl=1 f=50 ' },
+  };
+  const source = simulationSourceProperties(part)!;
+  const rows = [
+    ...Object.entries(partFields(part))
+      .filter(([name]) => name !== 'Sim.Params')
+      .map(([name, value]) => ({ name, value })),
+    ...source.rows,
+  ];
+  assert.equal(preparePartProperties(part, part.ref, part.value, rows), null);
+  const frequency = rows.map((row) =>
+    'sourceKey' in row && row.sourceKey === 'f' ? { ...row, value: '60' } : row,
+  );
+  const changed = preparePartProperties(part, part.ref, part.value, frequency)!;
+  assert.equal(changed.fields['Sim.Params'], 'ampl=1 f=60');
+  for (const [key, value] of [
+    ['f', '0'],
+    ['td', '-1'],
+    ['ampl', '.include'],
+  ])
+    assert.throws(() =>
+      preparePartProperties(
+        part,
+        part.ref,
+        part.value,
+        rows.map((row) => ('sourceKey' in row && row.sourceKey === key ? { ...row, value } : row)),
+      ),
+    );
+});
 
 test('property blur skips unchanged and empty new rows, while preserving fields and input data', () => {
   const part = exampleProject().schematic.parts[0];

@@ -1,12 +1,18 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Footprint } from '@/lib/pcb';
 import { pcbPadPath } from '@/lib/pcb-geometry';
 import PCBGraphic from './PCBGraphic';
 
 /** Board-only packages have no schematic symbol; preview their actual local geometry. */
-export default function FootprintIdentity({ footprint }: { footprint: Footprint }) {
+export default function FootprintIdentity({
+  footprint,
+  actions,
+}: {
+  footprint: Footprint;
+  actions?: ReactNode;
+}) {
   const drawing = useRef<SVGGElement>(null);
   const [viewBox, setViewBox] = useState('-2 -2 4 4');
   useLayoutEffect(() => {
@@ -79,8 +85,9 @@ export default function FootprintIdentity({ footprint }: { footprint: Footprint 
       </div>
       <div>
         <strong aria-description={reference}>{reference}</strong>
-        <span aria-description={footprint.libraryId}>{footprint.libraryId.split(':').at(-1)}</span>
+        <span aria-description={footprint.value}>{footprint.value}</span>
       </div>
+      {actions}
     </div>
   );
 }

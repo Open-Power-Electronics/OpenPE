@@ -62,11 +62,17 @@ export async function checkInspectorResize(page, inspector) {
       const header = section
         .querySelector(':scope > .editor-display-drawer-header')
         .getBoundingClientRect();
-      const footer = element.querySelector('.inspector-footer').getBoundingClientRect();
-      return header.top >= panel.top && footer.bottom <= panel.bottom && footer.top > header.bottom;
+      const identity = element.querySelector('.inspector-symbol').getBoundingClientRect();
+      const action = element.querySelector('.property-delete-action').getBoundingClientRect();
+      return (
+        header.top >= panel.top &&
+        action.top >= identity.top &&
+        action.bottom <= identity.bottom &&
+        action.right <= identity.right
+      );
     }),
     true,
-    'Docked inspector headers and deletion footers remain visible while the body scrolls.',
+    'Docked Properties keeps deletion at the component identity upper right.',
   );
   await handle.dblclick();
   assert.ok(Math.abs((await dock.boundingBox()).width - initial.width) < 2);

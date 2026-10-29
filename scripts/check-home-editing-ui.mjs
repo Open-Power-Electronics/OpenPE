@@ -478,12 +478,9 @@ try {
       if (entry.id === 'reference-lm2596-to220-5-buck') {
         for (const [index, included] of [false, true].entries()) {
           await button('Schematic').click();
-          await button('Parts list').click();
-          const panel = page.getByRole('dialog', { name: 'Parts list', exact: true });
-          await panel.getByRole('textbox', { name: 'Search parts', exact: true }).fill(part.ref);
-          await panel.getByRole('button', { name: 'Edit ' + part.ref, exact: true }).click();
+          await button('SPICE Simulation').click();
           const toggle = page.getByRole('switch', {
-            name: 'Include in SPICE simulation',
+            name: 'Include ' + part.ref + ' in SPICE simulation',
             exact: true,
           });
           assert.equal(await toggle.getAttribute('aria-checked'), String(!included));

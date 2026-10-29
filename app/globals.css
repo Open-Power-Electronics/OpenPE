@@ -544,12 +544,6 @@ p {
   display: flex;
   align-items: center;
 }
-.inspector-symbol svg {
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--line-soft);
-  color: var(--symbol);
-}
 .inspector-symbol > div {
   display: flex;
   flex-direction: column;
@@ -576,17 +570,6 @@ p {
   padding: 7px 8px;
   font-family: Consolas, 'Microsoft YaHei', monospace;
   font-size: var(--font-control);
-}
-.delete-button {
-  width: 100%;
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  padding: 8px 0;
-  border-top: 1px solid var(--line);
-}
-.delete-button kbd {
-  margin-left: auto;
 }
 .wire-properties {
   padding: 20px 0;
@@ -787,11 +770,6 @@ button:where(:hover:not(:disabled)) {
   border-color: var(--line);
   backdrop-filter: none;
 }
-.inspector-symbol svg {
-  border-radius: 1px;
-  border-color: var(--line);
-  background: var(--panel);
-}
 .inspector-symbol strong {
   color: var(--text);
 }
@@ -883,8 +861,7 @@ button:where(:hover:not(:disabled)) {
   color: var(--brand-ink);
 }
 .message.error .message-text,
-.proposal-invalid,
-.delete-button {
+.proposal-invalid {
   color: var(--error);
 }
 .connection-icon.claude {

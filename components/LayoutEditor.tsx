@@ -14,6 +14,7 @@ import {
   type Ref,
   type RefObject,
   type ComponentProps,
+  type CSSProperties,
 } from 'react';
 import {
   CircleDot,
@@ -204,6 +205,7 @@ type RouteLeg = {
   previous: { points: Point[]; waypoints: number[] };
 };
 type Props = {
+  analysisLocateRef?: RefObject<((footprintId: string) => boolean) | null>;
   ruleFocus?: RuleCheckFocus | null;
   capabilityHost?: CapabilityHost;
   board?: PCB;
@@ -262,6 +264,7 @@ function fittedView(
 
 /** Two-layer PCB drawing. All content changes pass through the project transaction owner. */
 function LayoutEditor({
+  analysisLocateRef,
   ruleFocus,
   board,
   schematic,
@@ -1431,6 +1434,44 @@ function LayoutEditor({
     if (next === 'zone') setInspector(true);
     svg.current?.focus({ preventScroll: true });
   }
+  useLayoutEffect(() => {
+    if (!analysisLocateRef) return;
+    const locate = (id: string) => {
+      if (
+        !active ||
+        !visible ||
+        annotationDisabled ||
+        latestBoard.current !== pcb ||
+        hasOpenOverlay()
+      )
+        return false;
+      const footprint = pcb.footprints.find((item) => item.id === id);
+      if (!footprint || !pcbSelectionEligible(pcb, { kind: 'footprint', id }, filters))
+        return false;
+      const bounds = pcbFootprintBodyBounds(pcb, footprint, layers);
+      if (!bounds) return false;
+      activate('select');
+      setInspector(false);
+      setInspectedPadId('');
+      setSelection([{ kind: 'footprint', id }]);
+      const diameter =
+        2 *
+          Math.hypot(
+            Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX)),
+            Math.max(Math.abs(bounds.minY), Math.abs(bounds.maxY)),
+          ) +
+        4;
+      setView((current) => {
+        const width = Math.max(8, diameter, diameter * ratio, Math.min(current.width, 50));
+        return { x: footprint.x - width / 2, y: footprint.y - width / ratio / 2, width };
+      });
+      return true;
+    };
+    analysisLocateRef.current = locate;
+    return () => {
+      if (analysisLocateRef.current === locate) analysisLocateRef.current = null;
+    };
+  });
   function releasePointer() {
     const id = pointer.current;
     const panning = pan.current;
@@ -4008,7 +4049,15 @@ function LayoutEditor({
           </ul>
         </details>
       )}
-      <div className="layout-main">
+      <div
+        className="layout-main"
+        style={
+          {
+            '--layout-sidebar-width':
+              sidebarSize.width === undefined ? undefined : `${sidebarSize.width}px`,
+          } as CSSProperties
+        }
+      >
         <div
           ref={host}
           className={`canvas-wrap layout-canvas tool-${tool}${onAnalysisProbe ? ' is-analysis-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
@@ -4763,7 +4812,6 @@ function LayoutEditor({
           className="layout-sidebar editor-sidebar-sections"
           aria-label="Layout sidebar"
           hidden={!sidebarVisible}
-          style={{ width: sidebarSize.width }}
         >
           <EditorDisplayDrawer
             label="Properties"
@@ -4786,6 +4834,29 @@ function LayoutEditor({
                   >
                     <div className="layout-inspector-content" key={propertiesSubject}>
                       <LayoutProperties
+                        actions={
+                          selectedFootprint && !inspectedPad ? (
+                            <button
+                              type="button"
+                              className="icon-button property-delete-action"
+                              aria-label="Delete object"
+                              title="Delete object"
+                              data-edit-action
+                              disabled={
+                                !propertiesActive ||
+                                tool !== 'select' ||
+                                !!drag ||
+                                !!trackDrag ||
+                                !!marquee
+                              }
+                              onClick={() =>
+                                remove([{ kind: 'footprint', id: selectedFootprint.id }])
+                              }
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          ) : undefined
+                        }
                         board={pcb}
                         schematic={schematic}
                         active={propertiesActive}
@@ -4865,23 +4936,6 @@ function LayoutEditor({
                         </>
                       )}
                     </div>
-                    {selectedFootprint && !inspectedPad && (
-                      <div className="inspector-footer">
-                        <button
-                          className="delete-button"
-                          disabled={
-                            !propertiesActive ||
-                            tool !== 'select' ||
-                            !!drag ||
-                            !!trackDrag ||
-                            !!marquee
-                          }
-                          onClick={() => remove([{ kind: 'footprint', id: selectedFootprint.id }])}
-                        >
-                          <Trash2 size={14} /> Delete object
-                        </button>
-                      </div>
-                    )}
                   </aside>
                 )}
               </RetainedLayoutProperties>

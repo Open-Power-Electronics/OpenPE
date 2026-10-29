@@ -155,8 +155,8 @@ export default function DesktopWorkspace() {
                 next[index].state.sessions.map((session) => ({
                   id: session.id,
                   title: sessionTitle(session),
-                  pinned: session.pinned,
-                  archived: session.archived,
+                  ...(session.pinned ? { pinned: true as const } : {}),
+                  ...(session.archived ? { archived: true as const } : {}),
                 })),
               ),
         )
@@ -165,12 +165,12 @@ export default function DesktopWorkspace() {
               id: item.state.id,
               title: item.title,
               unsaved: item.unsaved,
-              pinned: item.state.pinned,
+              ...(item.state.pinned ? { pinned: true as const } : {}),
               sessions: item.state.sessions.map((session) => ({
                 id: session.id,
                 title: sessionTitle(session),
-                pinned: session.pinned,
-                archived: session.archived,
+                ...(session.pinned ? { pinned: true as const } : {}),
+                ...(session.archived ? { archived: true as const } : {}),
               })),
             })),
       );

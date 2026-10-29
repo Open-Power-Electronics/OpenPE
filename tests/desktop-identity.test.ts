@@ -11,12 +11,18 @@ const directorySource = readFileSync(
   new URL('../electron/project-directory.cjs', import.meta.url),
   'utf8',
 );
+const spicePickerSource = readFileSync(
+  new URL('../electron/spice-model-picker.cjs', import.meta.url),
+  'utf8',
+);
 
 test('desktop preload forwards every operation to a registered main channel and releases close listeners', async () => {
   const mainChannels = new Set(
-    [...[mainSource, directorySource].join('\n').matchAll(/ipcMain\.handle\(\s*'([^']+)'/g)].map(
-      (match) => match[1],
-    ),
+    [
+      ...[mainSource, directorySource, spicePickerSource]
+        .join('\n')
+        .matchAll(/ipcMain\.handle\(\s*'([^']+)'/g),
+    ].map((match) => match[1]),
   );
   const closeChannels = [...mainSource.matchAll(/win\.webContents\.send\(\s*'([^']+)'/g)].map(
     (match) => match[1],
@@ -62,6 +68,7 @@ test('desktop preload forwards every operation to a registered main channel and 
     ['releaseFile', 'release-file', ['opaque-project-id']],
     ['revealFile', 'reveal-file', ['opaque-project-id']],
     ['projectDirectory', 'project-directory', ['opaque-project-id']],
+    ['chooseSpiceModel', 'choose-spice-model', ['opaque-project-id', 'circuits/controller.lib']],
     [
       'projectFilePreview',
       'project-file-preview',
@@ -169,6 +176,7 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
             './native-project.cjs',
             './workspace-recovery.cjs',
             './project-directory.cjs',
+            './spice-model-picker.cjs',
           ].includes(specifier),
           `Unexpected bootstrap dependency: ${specifier}`,
         );

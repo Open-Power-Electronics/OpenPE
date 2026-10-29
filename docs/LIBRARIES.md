@@ -40,8 +40,10 @@ reference/value/fields; import/round trips check references and units.
 
 New `Connector`/`Connector_*` symbols default to simulation-excluded; other
 placements honour upstream defaults. The chooser only places components.
-Properties or `part.participation` edits `simulation.excluded`, exported as
-`exclude_from_sim`, independently of model support or plugin state.
+The SPICE settings Components list or `part.participation` edits
+`simulation.excluded`, exported as `exclude_from_sim`, independently of model
+support. The list requires the enabled plugin; Core/Source edits remain available
+independently of plugin state.
 
 A nonblank assigned Footprint determines physical styling and PCB participation
 through `lib/symbol-role.ts`. Instance assignment overrides library defaults;

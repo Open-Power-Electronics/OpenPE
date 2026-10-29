@@ -53,6 +53,8 @@
   z-index: 5;
 }
 .layout-main {
+  --layout-sidebar-min-width: min(224px, calc(100% - 160px));
+  --layout-sidebar-max-width: min(480px, calc(100% - 160px));
   display: flex;
   flex: 1;
   min-width: 0;
@@ -66,10 +68,10 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  width: var(--editor-sidebar-default-width, 280px);
-  max-width: min(480px, calc(100% - 160px));
+  width: var(--layout-sidebar-width, var(--editor-sidebar-default-width, 300px));
+  max-width: var(--layout-sidebar-max-width);
   flex-shrink: 0;
-  min-width: min(224px, calc(100% - 160px));
+  min-width: var(--layout-sidebar-min-width);
   min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--line);
@@ -212,7 +214,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  width: var(--editor-sidebar-default-width, 280px);
+  width: var(--editor-sidebar-default-width, 300px);
   min-width: min(280px, calc(100% - 160px));
   max-width: min(480px, calc(100% - 160px));
   min-height: 0;

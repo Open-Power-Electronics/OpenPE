@@ -6,6 +6,12 @@ snapshots are private IPC, recovery, fixture and history data; never publish the
 as a design format or give them a KiCad extension. See the
 [KiCad file documentation](https://dev-docs.kicad.org/en/file-formats/).
 
+Component simulation data retains optional `initialVoltage` and `initialCurrent` strings in the canonical component record, represented natively by `OpenPE.InitialVoltage` and `OpenPE.InitialCurrent`. Unset values remain absent; inspection does not write defaults.
+
+Model selection retains optional canonical `simulation.modelSource` (`basic` or `external`) as native `OpenPE.ModelSource`, independently of the saved external Sim.Library/Sim.Name/Sim.Pins. An absent override follows the current native library binding. Selecting an intrinsic model preserves external settings, and undo/save/recovery retain both. Declaration catalogs and model bodies are not native fields.
+
+Voltage-source waveform selection stores optional canonical simulation.sourceType (DC, PULSE or SIN) as native OpenPE.SourceType. It applies to the active intrinsic source independently of inactive external Device/Type/Pins and uses the existing Sim.Params/Value storage; native symbol IDs, geometry and connectivity stay unchanged.
+
 ## Document ownership
 
 `ProjectCore` owns validated models, Source drafts, revisions and whole-project

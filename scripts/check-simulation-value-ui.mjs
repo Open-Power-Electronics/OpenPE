@@ -21,6 +21,7 @@ const bundle = await build({
         return <>
           <button onClick={() => setRef('R101')}>Resistor</button>
           <button onClick={() => setRef('V101')}>Pulse</button>
+          <button onClick={() => setRef('V102')}>DC source</button>
           <button onClick={() => setProject(parseProject(serializeProject(project)))}>Reopen</button>
           <button onClick={() => {setProject(history.at(-1)); setHistory(h => h.slice(0,-1));}}>Undo</button>
           <div className="panel"><PartProperties key={part.id} part={part} spiceAvailable onSave={(ref, value, fields) => {
@@ -64,9 +65,10 @@ try {
   await value.waitFor();
   assert.equal(await value.inputValue(), '5');
   await page.locator('summary').click();
-  assert.equal(await page.getByLabel('Sim.Params', { exact: true }).count(), 0);
-  assert.equal(await page.getByLabel('Sim.Device', { exact: true }).inputValue(), 'R');
-  assert.equal(await page.getByLabel('Sim.Pins', { exact: true }).inputValue(), '1=+ 2=-');
+  assert.equal(await page.getByLabel('Params', { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel('Device', { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel('Pins', { exact: true }).count(), 0);
+  assert.equal(await page.locator('details.property-simulation input').count(), 0);
   const state = () => page.evaluate(() => window.valueState);
   const original = await state();
   await value.focus();
@@ -96,12 +98,52 @@ try {
   await page.screenshot({ path: 'test-results/simulation-value.png' });
   await page.getByRole('button', { name: 'Pulse', exact: true }).click();
   await page.locator('summary').click();
-  const params = page.getByLabel('Sim.Params', { exact: true });
-  await params.waitFor();
-  assert.match(await params.inputValue(), /y1=0 y2=15/);
+  const pulsed = page.getByLabel('Pulsed voltage (V)', { exact: true });
+  await pulsed.waitFor();
+  assert.equal(await pulsed.inputValue(), '15');
+  assert.equal(await value.isEditable(), false, 'The source has one editable parameter owner.');
+  const pulseOriginal = await state();
+  await pulsed.fill('10');
+  await pulsed.press('Enter');
+  assert.ok((await state()).source.includes('y2=10'));
+  assert.equal((await state()).commits, 1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.deepEqual(await state(), pulseOriginal);
+  const period = page.getByLabel('Period (s)', { exact: true });
+  await period.fill('0');
+  await period.press('Enter');
+  await page.getByRole('alert').waitFor();
+  assert.deepEqual(await state(), pulseOriginal);
+  assert.equal(await period.inputValue(), '0');
+  await period.press('Escape');
+  assert.equal(await period.inputValue(), '50u');
+  await page.screenshot({ path: 'test-results/simulation-source-pulse.png' });
+  await page.getByRole('button', { name: 'DC source', exact: true }).click();
+  await page.locator('summary').click();
+  const voltage = page.getByLabel('Voltage (V)', { exact: true });
+  assert.equal(await voltage.inputValue(), '12');
+  assert.equal(await page.getByLabel('Type', { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel('Device', { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel('Pins', { exact: true }).count(), 0);
+  const dcOriginal = await state();
+  await voltage.focus();
+  await voltage.press('Tab');
+  assert.deepEqual(await state(), dcOriginal);
+  await voltage.dispatchEvent('compositionstart');
+  await voltage.fill('18');
+  await voltage.press('Enter');
+  assert.deepEqual(await state(), dcOriginal);
+  await voltage.dispatchEvent('compositionend');
+  await voltage.press('Enter');
+  assert.equal((await state()).commits, 1);
+  await page.getByRole('button', { name: 'Reopen', exact: true }).click();
+  assert.equal(await voltage.inputValue(), '18');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  assert.deepEqual(await state(), dcOriginal);
+  await page.screenshot({ path: 'test-results/simulation-source-dc.png' });
   assert.deepEqual(errors, []);
   console.log(
-    'Single value editing, no-op blur, JSON reopen, undo, invalid drafts and independent source parameters passed.',
+    'Single value editing, editable DC/PULSE source parameters, no-op blur, reopen, undo, invalid drafts and IME passed.',
   );
 } finally {
   await browser.close();

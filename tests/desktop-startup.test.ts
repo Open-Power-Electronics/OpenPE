@@ -98,6 +98,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     './native-project.cjs': {},
     './workspace-recovery.cjs': { registerWorkspaceRecovery: () => {} },
     './project-directory.cjs': { registerProjectDirectory: () => ({}) },
+    './spice-model-picker.cjs': { registerSpiceModelPicker: () => {} },
   };
   // Redirect the bootstrap's module loading to isolated host adapters. Execute
   // its real window events and IPC handlers without Electron, disk or network I/O.

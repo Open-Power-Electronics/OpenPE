@@ -176,7 +176,10 @@ var simulationFieldNames = {
   parameters: "Sim.Params",
   seriesResistance: "OpenPE.SeriesResistance",
   initialVoltage: "OpenPE.InitialVoltage",
-  coupling: "OpenPE.Coupling"
+  initialCurrent: "OpenPE.InitialCurrent",
+  coupling: "OpenPE.Coupling",
+  modelSource: "OpenPE.ModelSource",
+  sourceType: "OpenPE.SourceType"
 };
 var nativeSimulationFields = new Set(Object.values(simulationFieldNames));
 

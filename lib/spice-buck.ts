@@ -1,4 +1,9 @@
 import type { Circuit, Part } from './circuit';
+import { primitiveInitialCondition } from './simulation-initial-conditions';
+import {
+  assertSimulationModelConfiguration,
+  effectiveSimulationModelFields,
+} from './simulation-model-source';
 import { partFields, unitGraphics } from './library';
 import { child, children, val } from './sexpr';
 import {
@@ -10,6 +15,11 @@ import {
 } from './spice';
 import bundled from './buck-simulation.json';
 import { participatesInSimulation, simulationParts } from './simulation-participation';
+import {
+  simulationSourceExpression,
+  simulationSourceValues,
+  sourceParameterSpecs,
+} from './simulation-source-parameters';
 
 const BUCK_MOSFET = 'Transistor_FET:IRF540N';
 const BUCK_DC = 'Simulation_SPICE:VDC';
@@ -36,12 +46,23 @@ const defaults: Record<string, { device: string; type?: string; roles: string[] 
 };
 
 function fields(d: Circuit, p: Part) {
-  return {
-    ...Object.fromEntries(
-      children(d.libraries[p.libId], 'property').map((v) => [val(v), val(v, 2)]),
-    ),
-    ...partFields(p),
-  };
+  const basic = defaults[p.libId];
+  return effectiveSimulationModelFields(
+    p,
+    {
+      ...Object.fromEntries(
+        children(d.libraries[p.libId], 'property').map((v) => [val(v), val(v, 2)]),
+      ),
+      ...partFields(p),
+    },
+    basic
+      ? {
+          'Sim.Device': basic.device,
+          ...(basic.type ? { 'Sim.Type': basic.type } : {}),
+          'Sim.Pins': basic.roles.map((role, i) => `${i + 1}=${role}`).join(' '),
+        }
+      : undefined,
+  );
 }
 function parameters(text: string, allowed: string[]) {
   const result: Record<string, number> = {};
@@ -93,6 +114,7 @@ export function buckPinMap(d: Circuit, p: Part) {
 export function modelBuckSupportError(d: Circuit) {
   try {
     for (const p of simulationParts(d)) {
+      assertSimulationModelConfiguration(p);
       const expected = defaults[p.libId];
       if (!expected || !pins[p.libId])
         throw new Error(`${p.ref}: no supported model for ${p.libId}.`);
@@ -127,14 +149,18 @@ export function modelBuckSupportError(d: Circuit) {
         throw new Error(`${p.ref}: unsupported model name.`);
       if (
         (f['Sim.Device'] && f['Sim.Device'] !== expected.device) ||
-        (f['Sim.Type'] && f['Sim.Type'] !== expected.type)
+        (f['Sim.Type'] &&
+          f['Sim.Type'] !== expected.type &&
+          !(p.libId === BUCK_DC && partFields(p)['OpenPE.SourceType']))
       )
         throw new Error(`${p.ref}: unsupported simulation device or type.`);
       const kind = p.libId.match(/^Device:([RCL])$/)?.[1];
       const allowed = kind
         ? [kind.toLowerCase()]
         : p.libId === BUCK_DC
-          ? ['dc']
+          ? sourceParameterSpecs[f['Sim.Type'] as keyof typeof sourceParameterSpecs].map(
+              (spec) => spec.key,
+            )
           : p.libId === BUCK_PULSE
             ? ['y1', 'y2', 'td', 'tr', 'tf', 'tw', 'per']
             : [];
@@ -184,7 +210,16 @@ export function modelBuckDefaults(d: Circuit): TransientConfig {
   let outputId = '',
     currentId = '';
   try {
-    if (dc) voltage = parameters(fields(d, dc)['Sim.Params'] || '', ['dc']).dc ?? number(dc.value);
+    if (dc) {
+      const f = fields(d, dc),
+        v = simulationSourceValues(f['Sim.Type'], f['Sim.Params'] || '', dc.value, dc.ref);
+      voltage =
+        f['Sim.Type'] === 'DC'
+          ? v.dc
+          : f['Sim.Type'] === 'PULSE'
+            ? v.y2
+            : (v.dc ?? 0) + Math.abs(v.ampl);
+    }
     if (pulse) {
       const v = pulseParameters(d, pulse);
       frequency = 1 / v.per;
@@ -265,8 +300,25 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
   const output = get(c.outputId, 'Device:C'),
     inductor = get(c.currentId, 'Device:L');
   // Electrical values come only from the validated schematic snapshot.
-  const inputVoltage = parameters(fields(d, dc)['Sim.Params'] || '', ['dc']).dc ?? number(dc.value);
-  if (inputVoltage <= 0 || inputVoltage > 1000)
+  const inputFields = fields(d, dc),
+    inputValues = simulationSourceValues(
+      inputFields['Sim.Type'],
+      inputFields['Sim.Params'] || '',
+      dc.value,
+      dc.ref,
+    );
+  const inputVoltage =
+    inputFields['Sim.Type'] === 'DC'
+      ? inputValues.dc
+      : inputFields['Sim.Type'] === 'PULSE'
+        ? inputValues.y2
+        : (inputValues.dc ?? 0) + Math.abs(inputValues.ampl);
+  if (
+    inputVoltage <= 0 ||
+    inputVoltage > 1000 ||
+    (inputFields['Sim.Type'] === 'PULSE' && (inputValues.y1 < 0 || inputValues.y1 > 1000)) ||
+    (inputFields['Sim.Type'] === 'SIN' && (inputValues.dc ?? 0) - Math.abs(inputValues.ampl) < 0)
+  )
     throw new Error('DC source voltage must be between 0 and 1000 V.');
   const pulseValues = pulseParameters(d, pulse);
   const period = pulseValues.per,
@@ -284,6 +336,7 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
     bundled.definition,
     '.model OPENPE_DEMO_D D',
   ];
+  let explicitInitialConditions = false;
   const currents: SpiceTrace[] = [];
   const connected = new Map<string, Set<string>>();
   const link = (a: string, b: string) => {
@@ -312,7 +365,12 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
       const value = params[kind.toLowerCase()] ?? passiveValue(p.value, kind);
       if (value <= 0) throw new Error(`${p.ref}: ${kind} must be positive.`);
       if (kind !== 'L') vector = `@${name.toLowerCase()}[i]`;
-      lines.push(`${name} ${a('+')} ${a('-')} ${value}`);
+      const initial =
+        kind === 'C' || kind === 'L' ? primitiveInitialCondition(kind, f, p.ref) : undefined;
+      if (initial !== undefined) explicitInitialConditions = true;
+      lines.push(
+        `${name} ${a('+')} ${a('-')} ${value}${initial === undefined ? '' : ` IC=${initial}`}`,
+      );
       direction = `pin ${map.get('+')} → ${map.get('-')}`;
       if (p.id === inductor.id) inductorVector = vector;
     } else if (p.libId === BUCK_MOSFET || p.libId === 'Simulation_SPICE:D') {
@@ -330,7 +388,7 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
     } else {
       lines.push(
         p.libId === BUCK_DC
-          ? `${name} ${a('+')} ${a('-')} DC ${inputVoltage}`
+          ? `${name} ${a('+')} ${a('-')} ${simulationSourceExpression(inputFields['Sim.Type'], inputFields['Sim.Params'] || '', dc.value, dc.ref)}`
           : `${name} ${a('+')} ${a('-')} PULSE(${pulseValues.y1} ${pulseValues.y2} ${pulseValues.td} ${pulseValues.tr} ${pulseValues.tf} ${width} ${period})`,
       );
       direction = 'into source';
@@ -390,7 +448,7 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
     'set wr_singlescale',
     'set wr_vecnames',
     'set numdgt=15',
-    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}`,
+    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}${explicitInitialConditions ? ' uic' : ''}`,
     `wrdata waveforms.txt ${vectors}`,
     'quit',
     '.endc',

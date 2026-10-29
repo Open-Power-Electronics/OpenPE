@@ -594,7 +594,10 @@ component.properties.simulation = object(
     parameters: text,
     seriesResistance: text,
     initialVoltage: text,
+    initialCurrent: text,
     coupling: text,
+    modelSource: { type: 'string', enum: ['basic', 'external'] },
+    sourceType: { type: 'string', enum: ['DC', 'PULSE', 'SIN'] },
     excluded: { type: 'boolean' },
     nativeOrder: { type: 'integer', minimum: 0, maximum: 2000 },
     fields: {
@@ -614,7 +617,10 @@ component.properties.simulation = object(
     'parameters',
     'seriesResistance',
     'initialVoltage',
+    'initialCurrent',
     'coupling',
+    'modelSource',
+    'sourceType',
     'excluded',
     'nativeOrder',
     'fields',
@@ -626,7 +632,18 @@ component.properties.fields.propertyNames = {
   allOf: [
     component.properties.fields.propertyNames,
     { not: { pattern: '^Sim[.]' } },
-    { not: { enum: ['OpenPE.SeriesResistance', 'OpenPE.InitialVoltage', 'OpenPE.Coupling'] } },
+    {
+      not: {
+        enum: [
+          'OpenPE.SeriesResistance',
+          'OpenPE.InitialVoltage',
+          'OpenPE.InitialCurrent',
+          'OpenPE.Coupling',
+          'OpenPE.ModelSource',
+          'OpenPE.SourceType',
+        ],
+      },
+    },
   ],
 };
 component.properties.fieldOrder = { ...array(text, 100), uniqueItems: true };

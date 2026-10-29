@@ -19,8 +19,7 @@ import {
 } from '@/lib/appearance';
 import Select from './Select';
 import { api } from '@/lib/bridge';
-import { downloadText } from '@/lib/download';
-import { Check, ChevronDown, Copy, Download, RotateCcw } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 
 function ModePreview({ mode }: { mode: Appearance['theme'] }) {
   return (
@@ -284,7 +283,6 @@ export default function AppearanceSettings({
 }) {
   const { appearance, update, error, ready, resolvedTheme } = settings;
   const [editingMode, setEditingMode] = useState<'light' | 'dark' | null>(null);
-  const [transferStatus, setTransferStatus] = useState('');
   const target = appearance.separateModes ? (editingMode ?? resolvedTheme) : 'shared';
   const profile = appearance.profiles[target];
   const colors = profileColors(profile, target === 'shared' ? resolvedTheme : target);
@@ -326,16 +324,6 @@ export default function AppearanceSettings({
         />
       </div>
     );
-  }
-  async function transfer(copy: boolean) {
-    try {
-      const text = JSON.stringify(appearance, null, 2);
-      if (copy) await navigator.clipboard.writeText(text);
-      else downloadText(text, 'openpe-appearance.json', 'application/json');
-      setTransferStatus(copy ? 'Appearance copied.' : 'Appearance export requested.');
-    } catch {
-      setTransferStatus('Could not export appearance. Try again.');
-    }
   }
   return (
     <section className="appearance-settings" aria-labelledby="appearance-heading">
@@ -561,38 +549,6 @@ export default function AppearanceSettings({
           </div>
         </div>
       </details>
-      <div className="appearance-actions">
-        <button
-          className="dialog-button quiet"
-          disabled={!ready}
-          onClick={() => update(structuredClone(defaultAppearance))}
-        >
-          <RotateCcw size={14} /> Reset appearance
-        </button>
-        <button
-          className="icon-button"
-          disabled={!ready}
-          aria-label="Copy appearance"
-          title="Copy appearance"
-          onClick={() => void transfer(true)}
-        >
-          <Copy size={16} />
-        </button>
-        <button
-          className="icon-button"
-          disabled={!ready}
-          aria-label="Export appearance"
-          title="Export appearance"
-          onClick={() => void transfer(false)}
-        >
-          <Download size={16} />
-        </button>
-      </div>
-      {transferStatus && (
-        <p className="appearance-transfer-status" role="status">
-          {transferStatus}
-        </p>
-      )}
       {error && (
         <p className="dialog-error" role="alert">
           {error}

@@ -1,5 +1,10 @@
 import { pinPositions, type Circuit, type Part } from './circuit';
 import { partFields, unitGraphics } from './library';
+import { primitiveInitialCondition } from './simulation-initial-conditions';
+import {
+  assertSimulationModelConfiguration,
+  effectiveSimulationModelFields,
+} from './simulation-model-source';
 import { child, children, val } from './sexpr';
 import {
   passiveValue,
@@ -11,12 +16,13 @@ import {
 import { transientOutputStep, validateTransientTiming } from './spice-timing';
 import profile from './emc-flyback-simulation.json';
 import { emcFlybackControl } from './emc-flyback-control';
+import { emcFlybackCapacitorEsr, emcFlybackInitialNodeGroups } from './emc-flyback-initial-state';
 
 export const emcFlybackLoadOhms = 100;
 
 export const isEmcFlyback = (d: Circuit) =>
   d.parts.some((p) => p.libId === 'EMC_Demo:Wurth_750311591');
-const resistors = [
+export const emcFlybackResistors = [
   'R2',
   'R3',
   'R4',
@@ -31,7 +37,7 @@ const resistors = [
   'R18',
   'R19',
 ];
-const capacitors = [
+export const emcFlybackCapacitors = [
   'C4',
   'C5',
   'C6',
@@ -46,6 +52,8 @@ const capacitors = [
   'C21',
   'C22',
 ];
+const resistors = emcFlybackResistors;
+const capacitors = emcFlybackCapacitors;
 const configurable = new Set([...resistors, ...capacitors]);
 const zeroNames = ['PGND', 'SGND'];
 
@@ -82,9 +90,20 @@ function validate(d: Circuit) {
     const p = matches[0];
     if (matches.length !== 1 || p.libId !== expected.libId || (p.unit || 1) !== 1)
       throw new Error(`${expected.ref}: restore the bundled EMC Flyback symbol and reference.`);
+    assertSimulationModelConfiguration(p);
+    if (partFields(p)['OpenPE.ModelSource'] === 'basic' && !configurable.has(p.ref))
+      throw new Error(`${p.ref}: no basic model is included for this omitted EMC Flyback device.`);
     if (p.excludeFromSimulation)
       throw new Error(
         `${p.ref}: this bounded EMC Flyback model requires the original simulation participation.`,
+      );
+    const initial = partFields(p);
+    if (
+      initial['OpenPE.InitialCurrent'] !== undefined ||
+      (initial['OpenPE.InitialVoltage'] !== undefined && !capacitors.includes(p.ref))
+    )
+      throw new Error(
+        `${p.ref}: initial conditions are not supported for this omitted EMC Flyback device.`,
       );
     const pins = unitGraphics(d.libraries[p.libId], p.unit || 1).flatMap((s) => children(s, 'pin'));
     const signature = pins
@@ -101,15 +120,21 @@ function validate(d: Circuit) {
     if (signature !== expected.pins)
       throw new Error(`${p.ref}: modified electrical pin definitions are not supported.`);
     const simulation = Object.fromEntries(
-      Object.entries({
-        ...Object.fromEntries(
-          children(d.libraries[p.libId], 'property').map((property) => [
-            val(property),
-            val(property, 2),
-          ]),
+      Object.entries(
+        effectiveSimulationModelFields(
+          p,
+          {
+            ...Object.fromEntries(
+              children(d.libraries[p.libId], 'property').map((property) => [
+                val(property),
+                val(property, 2),
+              ]),
+            ),
+            ...partFields(p),
+          },
+          expected.simulation as Record<string, string>,
         ),
-        ...partFields(p),
-      }).filter(([key]) => /^spice|^sim[._]/i.test(key)),
+      ).filter(([key]) => /^spice|^sim[._]/i.test(key)),
     );
     if (JSON.stringify(simulation) !== JSON.stringify(expected.simulation))
       throw new Error(`${p.ref}: custom simulation fields are not supported by EMC Flyback.`);
@@ -221,22 +246,17 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
       },
     });
   }
-  const esr: Record<string, number> = {
-    C4: 0.3,
-    C5: 0.005,
-    C6: 0.005,
-    C18: 0.06,
-    C19: 0.06,
-    C20: 0.003,
-    C21: 0.003,
-  };
+  const esr = emcFlybackCapacitorEsr;
   for (const ref of capacitors) {
     const a = node(ref, '1'),
       b = node(ref, '2'),
       r = esr[ref];
     addNodes(a, b);
     if (r) lines.push(`RESR_${ref} ${a} emc_${ref} ${r}`);
-    lines.push(`${ref} ${r ? `emc_${ref}` : a} ${b} ${value(part(ref), 'C')}`);
+    const initial = primitiveInitialCondition('C', partFields(part(ref)), ref);
+    lines.push(
+      `${ref} ${r ? `emc_${ref}` : a} ${b} ${value(part(ref), 'C')}${initial === undefined ? '' : ` IC=${initial}`}`,
+    );
     currents.push({
       label: `I(${ref}) · pin 1 → 2`,
       unit: 'A',
@@ -287,10 +307,9 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
     `XU4 ${node('U4', '1')} ${node('U4', '2')} ${node('U4', '4')} ${node('U4', '3')} LTV817`,
     `RLOAD ${out} 0 ${emcFlybackLoadOhms}`,
     `ILOAD ${out} 0 PULSE(0.5 0 2m 10u 10u 2m 1)`,
-    `.ic V(${out})=12.23 V(${bus})=24 V(${node('C15', '1')})=64 V(${node('U1', '8')})=5 V(${node('U1', '1')})=3.05 V(${node('U4', '1')})=10.44 V(${node('U3', '1')})=9.4 V(${node('C22', '1')})=9.4 V(${node('U3', '2')})=2.495`,
-    `.ic ${Object.keys(esr)
-      .map((ref) => `V(emc_${ref})=${['C4', 'C5', 'C6'].includes(ref) ? 24 : 12.23}`)
-      .join(' ')}`,
+    ...emcFlybackInitialNodeGroups(node).map(
+      (group) => `.ic ${group.map(([name, value]) => `V(${name})=${value}`).join(' ')}`,
+    ),
   );
   currents.push(
     {

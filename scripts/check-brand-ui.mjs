@@ -184,7 +184,6 @@ try {
     const button = (name) => page.getByRole('button', { name, exact: true });
     async function theme(name) {
       await button('Settings').click();
-      await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
       const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
       await dialog
         .getByRole('radiogroup', { name: 'Theme', exact: true })
@@ -225,12 +224,23 @@ try {
     console.log('Reference Home responsive grid check passed.');
 
     await button('Settings').click();
-    await page.getByRole('menuitem', { name: 'About OpenPE', exact: true }).click();
-    const about = page.getByRole('dialog', { name: 'About OpenPE', exact: true });
-    await about.getByRole('heading', { name: 'OpenPE', exact: true }).waitFor();
-    await about.getByText('Electrical Engineering Studio', { exact: true }).waitFor();
+    const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+    await settings.waitFor();
+    assert.equal(await button('Settings').getAttribute('aria-haspopup'), null);
+    assert.equal(await page.getByRole('menu', { name: 'OpenPE menu', exact: true }).count(), 0);
     await page.keyboard.press('Escape');
-    console.log('Reference Home About check passed.');
+    assert.equal(
+      await button('Settings').evaluate((element) => element === document.activeElement),
+      true,
+    );
+    await button('Settings').focus();
+    await page.keyboard.press('Enter');
+    await settings.waitFor();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Space');
+    await settings.waitFor();
+    await page.keyboard.press('Escape');
+    console.log('Reference Home direct Settings pointer, keyboard and focus checks passed.');
 
     const brief = 'Create a low-pass filter';
     await home.getByRole('textbox', { name: 'Describe your circuit', exact: true }).fill(brief);
@@ -317,7 +327,7 @@ try {
     );
     assert.deepEqual(errors, []);
     console.log(
-      'OpenPE Home: fixed Recent EMC Flyback, original nine Example entries, light/dark/compact layouts, branding, motion, About, brief handoff and all ten schematic/Layout entries passed.',
+      'OpenPE Home: fixed Recent EMC Flyback, original nine Example entries, light/dark/compact layouts, branding, motion, direct Settings, brief handoff and all ten schematic/Layout entries passed.',
     );
   }
 } finally {

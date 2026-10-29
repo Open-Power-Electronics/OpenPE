@@ -250,7 +250,10 @@ var simulationFieldNames = {
   parameters: "Sim.Params",
   seriesResistance: "OpenPE.SeriesResistance",
   initialVoltage: "OpenPE.InitialVoltage",
-  coupling: "OpenPE.Coupling"
+  initialCurrent: "OpenPE.InitialCurrent",
+  coupling: "OpenPE.Coupling",
+  modelSource: "OpenPE.ModelSource",
+  sourceType: "OpenPE.SourceType"
 };
 var nativeSimulationFields = new Set(Object.values(simulationFieldNames));
 
@@ -1298,6 +1301,49 @@ function partFields(part) {
     return { ...fields3 };
   }
   return fields3;
+}
+function singleSimulationParameter(params) {
+  const match = /^(\s*[a-zA-Z][\w.]*\s*=\s*)([^\s=]+)(\s*)$/.exec(params);
+  return match ? { prefix: match[1], value: match[2], suffix: match[3] } : null;
+}
+function displayPartValue(part) {
+  const fields3 = partFields(part);
+  const params = fields3["Sim.Params"];
+  const value2 = params ? singleSimulationParameter(params)?.value ?? params : "";
+  if (params && fields3["Sim.Device"] === "V" && ["PULSE", "SIN"].includes(fields3["Sim.Type"]) && part.value === part.libId.split(":").at(-1) && fields3["OpenPE.ModelSource"] !== "external" && (fields3["OpenPE.ModelSource"] === "basic" || !fields3["Sim.Library"]?.trim()) && !extraSymbolAnnotations(part).some((field) => field.name === "Sim.Params"))
+    return params;
+  return value2 ? part.value.replaceAll("${SIM.PARAMS}", value2) : part.value;
+}
+var ownedExtraAnnotations = /* @__PURE__ */ new WeakMap();
+function extraSymbolAnnotations(part) {
+  const owned = isOwnedProjectNode(part);
+  const cached = owned ? ownedExtraAnnotations.get(part) : void 0;
+  if (cached) return cached.map((field) => ({ ...field }));
+  const original = child(part.raw || [], "at");
+  const annotations = children(part.raw || [], "property").flatMap((field) => {
+    const name = val(field), text = part.fields?.[name] ?? val(field, 2);
+    const effects = child(field, "effects") || [];
+    const hidden = (node) => node.includes("hide") || val(child(node, "hide")) === "yes";
+    const at = child(field, "at");
+    if (["Reference", "Value"].includes(name) || !text || !at || hidden(field) || hidden(effects))
+      return [];
+    const justify = child(effects, "justify");
+    return [
+      {
+        name,
+        text,
+        x: num(at) + part.x - num(original),
+        y: num(at, 2) + part.y - num(original, 2),
+        rotation: num(at, 3),
+        anchor: justify?.includes("left") ? "start" : justify?.includes("right") ? "end" : "middle"
+      }
+    ];
+  });
+  if (owned) {
+    ownedExtraAnnotations.set(part, annotations);
+    return annotations.map((field) => ({ ...field }));
+  }
+  return annotations;
 }
 
 // lib/kicad-starter-symbols.json
@@ -9289,23 +9335,6 @@ function pinPositions(part, library) {
   if (owned && points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)))
     ownedPartPins.set(part, { library, points: points.map((point) => ({ ...point })) });
   return points;
-}
-
-// lib/spice-timing.ts
-function validateTransientTiming(config) {
-  const { stop, step } = config;
-  if (typeof stop !== "number" || !Number.isFinite(stop) || stop <= 0)
-    throw new Error("Duration must be a finite number greater than 0 ms.");
-  if (typeof step !== "number" || !Number.isFinite(step) || step <= 0)
-    throw new Error("Max. time step must be a finite number greater than 0 \xB5s.");
-}
-function transientOutputStep({ stop, step }) {
-  const ratio = stop / step;
-  if (!Number.isFinite(ratio)) return step;
-  const nearest = Math.round(ratio);
-  const roundingError = Math.min(0.25, 4 * Number.EPSILON * Math.max(1, ratio));
-  if (nearest >= 1 && Math.abs(ratio - nearest) <= roundingError) return Math.min(step, stop);
-  return Math.min(step, stop / Math.max(1, Math.ceil(ratio)));
 }
 
 // lib/example-simulation.json
@@ -17620,6 +17649,214 @@ var reference_simulation_default = {
   ]
 };
 
+// lib/simulation-model-source.ts
+var definitions = [...example_simulation_default.profiles, ...reference_simulation_default.profiles].flatMap((profile) => profile.parts);
+function simulationModelSource(fields3) {
+  const mode = fields3["OpenPE.ModelSource"];
+  if (mode !== void 0 && mode !== "basic" && mode !== "external")
+    throw new Error("Use basic or external for the simulation model source.");
+  return mode ?? (fields3["Sim.Library"]?.trim() ? "external" : "basic");
+}
+function basicSimulationKind(part) {
+  if ([
+    "Device:R",
+    "Device:R_Small",
+    "Device:C",
+    "Device:C_Small",
+    "Device:C_Polarized",
+    "Device:L",
+    "Device:L_Small",
+    "Device:L_Iron"
+  ].includes(part.libId)) {
+    const kind = part.libId.split(":")[1][0];
+    return kind;
+  }
+  const definition = definitions.find(
+    (candidate) => candidate.libId === part.libId && (["R", "C", "L", "V"].includes(candidate.kind) || ["D", "Q", "M"].includes(candidate.kind) && !candidate.modelId && !candidate.modelName)
+  );
+  return definition ? definition.kind : null;
+}
+function basicSimulationAvailable(part) {
+  return basicSimulationKind(part) !== null;
+}
+function assertSimulationModelConfiguration(part, fields3 = partFields(part)) {
+  const explicit = fields3["OpenPE.ModelSource"];
+  simulationModelSource(fields3);
+  if (fields3["OpenPE.SourceType"] !== void 0 && (basicSimulationKind(part) !== "V" || !["DC", "PULSE", "SIN"].includes(fields3["OpenPE.SourceType"])))
+    throw new Error(`${part.ref}: unsupported voltage source type.`);
+  if (explicit === "basic" && !basicSimulationAvailable(part))
+    throw new Error(`${part.ref}: no basic simulation model is available for this component.`);
+  if (explicit === "external" && (!fields3["Sim.Library"]?.trim() || !fields3["Sim.Name"]?.trim()))
+    throw new Error(`${part.ref}: choose an external model file and model name before running.`);
+  if (explicit === "external" && !["C", "L"].includes(basicSimulationKind(part) ?? "") && (fields3["OpenPE.InitialVoltage"] !== void 0 || fields3["OpenPE.InitialCurrent"] !== void 0))
+    throw new Error(
+      `${part.ref}: primitive initial conditions are not supported by this external model.`
+    );
+}
+function effectiveSimulationModelFields(part, fields3, reviewedDefaults) {
+  simulationModelSource(fields3);
+  const result = { ...fields3 };
+  if (simulationModelSource(fields3) === "basic" && basicSimulationKind(part) === "V" && fields3["OpenPE.SourceType"])
+    result["Sim.Type"] = fields3["OpenPE.SourceType"];
+  if (fields3["OpenPE.ModelSource"] !== "basic") return result;
+  if (!basicSimulationAvailable(part)) return result;
+  for (const name of ["Sim.Library", "Sim.Name", "Sim.Device", "Sim.Type", "Sim.Pins"])
+    delete result[name];
+  const kind = basicSimulationKind(part);
+  const definition = definitions.find(
+    (candidate) => candidate.libId === part.libId && candidate.kind === kind
+  );
+  const defaults2 = reviewedDefaults ?? definition?.sim ?? (["R", "C", "L"].includes(kind) ? { "Sim.Device": kind, "Sim.Type": "=", "Sim.Pins": "1=+ 2=-" } : {});
+  for (const name of ["Sim.Device", "Sim.Type", "Sim.Pins"])
+    if (defaults2[name] !== void 0) result[name] = defaults2[name];
+  if (kind === "V" && fields3["OpenPE.SourceType"]) result["Sim.Type"] = fields3["OpenPE.SourceType"];
+  return result;
+}
+
+// lib/simulation-parameters.ts
+var simulationNumberLiteral = "[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:meg|[fpnumkgt\xB5\u03BC])?";
+function simulationNumber(text) {
+  if (!new RegExp(`^${simulationNumberLiteral}$`, "i").test(text.trim()))
+    throw new Error("Use a finite numeric simulation value.");
+  const match = text.trim().match(/^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(.*)$/i);
+  const scales = {
+    f: 1e-15,
+    p: 1e-12,
+    n: 1e-9,
+    u: 1e-6,
+    \u00B5: 1e-6,
+    \u03BC: 1e-6,
+    m: 1e-3,
+    k: 1e3,
+    meg: 1e6,
+    g: 1e9,
+    t: 1e12
+  };
+  const number3 = Number(match[1]) * (scales[match[2].toLowerCase()] ?? 1);
+  if (!Number.isFinite(number3) || Math.abs(number3) > 1e12)
+    throw new Error("Simulation value is out of range.");
+  return number3;
+}
+function simulationParameterEntries(text, keys2) {
+  const result = [];
+  let rest = text.trim();
+  const regex = new RegExp(`^([a-z][a-z0-9]*)\\s*=\\s*(${simulationNumberLiteral})(?:\\s+|$)`, "i");
+  while (rest) {
+    const match = rest.match(regex), key = match?.[1].toLowerCase();
+    if (!match || !key || !keys2.includes(key) || result.some((entry) => entry.key === key))
+      throw new Error(
+        "Unsupported simulation parameter. Only the documented numeric parameters are accepted."
+      );
+    simulationNumber(match[2]);
+    result.push({ key, value: match[2] });
+    rest = rest.slice(match[0].length);
+  }
+  return result;
+}
+function numericSimulationParameters(text, keys2) {
+  return Object.fromEntries(
+    simulationParameterEntries(text, keys2).map(({ key, value: value2 }) => [key, simulationNumber(value2)])
+  );
+}
+var editableSimulationParameters = [
+  simulationFieldNames.seriesResistance,
+  simulationFieldNames.initialVoltage,
+  simulationFieldNames.initialCurrent,
+  simulationFieldNames.coupling
+];
+function simulationParameterValue(name, text, reference = "") {
+  const number3 = simulationNumber(text);
+  const prefix = reference ? `${reference}: ` : "";
+  if (name === simulationFieldNames.seriesResistance && (number3 < 0 || number3 > 10))
+    throw new Error(`${prefix}series resistance must be between 0 and 10 ohms.`);
+  if (name === simulationFieldNames.initialVoltage && Math.abs(number3) > 1e3)
+    throw new Error(`${prefix}initial voltage must be within \xB11000 V.`);
+  if (name === simulationFieldNames.coupling && (number3 <= 0 || number3 > 1))
+    throw new Error(`${prefix}coupling must be greater than 0 and at most 1.`);
+  return number3;
+}
+
+// lib/simulation-initial-conditions.ts
+function initialConditionField(kind) {
+  return kind === "C" ? "OpenPE.InitialVoltage" : "OpenPE.InitialCurrent";
+}
+function primitiveInitialCondition(kind, fields3, reference) {
+  const name = initialConditionField(kind);
+  const other = initialConditionField(kind === "C" ? "L" : "C");
+  if (fields3[other] !== void 0)
+    throw new Error(
+      `${reference}: use ${kind === "C" ? "initial voltage for a capacitor" : "initial current for an inductor"}.`
+    );
+  return fields3[name] === void 0 ? void 0 : simulationParameterValue(name, fields3[name], reference);
+}
+
+// lib/spice-timing.ts
+function validateTransientTiming(config) {
+  const { stop, step } = config;
+  if (typeof stop !== "number" || !Number.isFinite(stop) || stop <= 0)
+    throw new Error("Duration must be a finite number greater than 0 ms.");
+  if (typeof step !== "number" || !Number.isFinite(step) || step <= 0)
+    throw new Error("Max. time step must be a finite number greater than 0 \xB5s.");
+}
+function transientOutputStep({ stop, step }) {
+  const ratio = stop / step;
+  if (!Number.isFinite(ratio)) return step;
+  const nearest = Math.round(ratio);
+  const roundingError = Math.min(0.25, 4 * Number.EPSILON * Math.max(1, ratio));
+  if (nearest >= 1 && Math.abs(ratio - nearest) <= roundingError) return Math.min(step, stop);
+  return Math.min(step, stop / Math.max(1, Math.ceil(ratio)));
+}
+
+// lib/simulation-source-parameters.ts
+var sourceParameterSpecs = {
+  DC: [{ key: "dc", label: "Voltage", unit: "V", required: true }],
+  PULSE: [
+    { key: "y1", label: "Initial voltage", unit: "V", required: true },
+    { key: "y2", label: "Pulsed voltage", unit: "V", required: true },
+    { key: "td", label: "Delay", unit: "s", required: true },
+    { key: "tr", label: "Rise time", unit: "s", required: true },
+    { key: "tf", label: "Fall time", unit: "s", required: true },
+    { key: "tw", label: "Pulse width", unit: "s", required: true },
+    { key: "per", label: "Period", unit: "s", required: true }
+  ],
+  SIN: [
+    { key: "dc", label: "Offset", unit: "V", required: false },
+    { key: "ampl", label: "Amplitude", unit: "V", required: true },
+    { key: "f", label: "Frequency", unit: "Hz", required: true },
+    { key: "td", label: "Delay", unit: "s", required: false },
+    { key: "theta", label: "Damping", unit: "1/s", required: false },
+    { key: "phase", label: "Phase", unit: "\xB0", required: false },
+    { key: "ac", label: "AC magnitude", unit: "V", required: false }
+  ]
+};
+function simulationSourceExpression(type, text, value2, reference) {
+  const values = simulationSourceValues(type, text, value2, reference);
+  if (type === "DC") return `DC ${values.dc}`;
+  if (type === "PULSE")
+    return `PULSE(${["y1", "y2", "td", "tr", "tf", "tw", "per"].map((key) => values[key]).join(" ")})`;
+  return `SIN(${[values.dc ?? 0, values.ampl, values.f, values.td ?? 0, values.theta ?? 0, values.phase ?? 0].join(" ")})`;
+}
+function simulationSourceValues(type, text, literalValue, reference) {
+  if (!Object.hasOwn(sourceParameterSpecs, type))
+    throw new Error(`${reference}: unsupported source type.`);
+  const values = numericSimulationParameters(
+    text,
+    sourceParameterSpecs[type].map((spec) => spec.key)
+  );
+  if (type === "DC") {
+    const dc = text ? values.dc : numericSimulationParameters(`dc=${literalValue}`, ["dc"]).dc;
+    if (!Number.isFinite(dc) || Math.abs(dc) > 1e4)
+      throw new Error(`${reference}: invalid source voltage.`);
+    return { dc };
+  }
+  if (type === "PULSE") {
+    if (sourceParameterSpecs.PULSE.some(({ key }) => values[key] === void 0) || ["td", "tr", "tf", "tw"].some((key) => values[key] < 0) || values.per <= 0)
+      throw new Error(`${reference}: invalid PULSE parameters.`);
+  } else if (values.ampl === void 0 || !(values.f > 0) || (values.td ?? 0) < 0)
+    throw new Error(`${reference}: invalid SIN parameters.`);
+  return values;
+}
+
 // lib/spice-examples.ts
 var profiles = [...example_simulation_default.profiles, ...reference_simulation_default.profiles];
 function signature(d, p) {
@@ -17633,13 +17870,17 @@ function signature(d, p) {
     ])
   ).sort().join("|");
 }
-function fields(d, p) {
-  return {
-    ...Object.fromEntries(
-      children(d.libraries[p.libId] ?? [], "property").map((v) => [val(v), val(v, 2)])
-    ),
-    ...partFields(p)
-  };
+function fields(d, p, reviewedDefaults) {
+  return effectiveSimulationModelFields(
+    p,
+    {
+      ...Object.fromEntries(
+        children(d.libraries[p.libId] ?? [], "property").map((v) => [val(v), val(v, 2)])
+      ),
+      ...partFields(p)
+    },
+    reviewedDefaults
+  );
 }
 function exampleSimulationProfile(d) {
   const original = profiles.find(
@@ -17736,51 +17977,12 @@ function exampleTransient(d) {
     step: profile.step
   };
 }
-var literal = "[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:meg|[fpnumkgt\xB5\u03BC])?";
-function exampleNumber(text) {
-  if (!new RegExp(`^${literal}$`, "i").test(text.trim()))
-    throw new Error("Use a finite numeric simulation value.");
-  const match = text.trim().match(/^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(.*)$/i);
-  const suffix = match[2].toLowerCase();
-  const scales = {
-    f: 1e-15,
-    p: 1e-12,
-    n: 1e-9,
-    u: 1e-6,
-    \u00B5: 1e-6,
-    \u03BC: 1e-6,
-    m: 1e-3,
-    k: 1e3,
-    meg: 1e6,
-    g: 1e9,
-    t: 1e12
-  };
-  const number3 = Number(match[1]) * (scales[suffix] ?? 1);
-  if (!Number.isFinite(number3) || Math.abs(number3) > 1e12)
-    throw new Error("Simulation value is out of range.");
-  return number3;
-}
-function parameters(text, keys2) {
-  const result = {};
-  let rest = text.trim();
-  const regex = new RegExp(`^([a-z][a-z0-9]*)\\s*=\\s*(${literal})(?:\\s+|$)`, "i");
-  while (rest) {
-    const match = rest.match(regex), key = match?.[1].toLowerCase();
-    if (!match || !key || !keys2.includes(key) || Object.hasOwn(result, key))
-      throw new Error(
-        "Unsupported simulation parameter. Only the documented numeric parameters are accepted."
-      );
-    result[key] = exampleNumber(match[2]);
-    rest = rest.slice(match[0].length);
-  }
-  return result;
-}
 function modelParameters(text, expected) {
   if (expected === 'type="X" model="OPAMP" lib=""') {
     if (text !== expected) throw new Error("Unsupported legacy model selector.");
     return {};
   }
-  return parameters(
+  return numericSimulationParameters(
     text,
     [...expected.matchAll(/([a-z][a-z0-9]*)\s*=/gi)].map((v) => v[1].toLowerCase())
   );
@@ -17789,17 +17991,17 @@ function passive(d, p, def) {
   const text = (fields(d, p)["Sim.Params"] || p.value).trim();
   const load = text.match(
     new RegExp(
-      `^r\\s*=\\s*'time\\s*>\\s*(${literal})\\s*\\?\\s*(${literal})\\s*:\\s*(${literal})'$`,
+      `^r\\s*=\\s*'time\\s*>\\s*(${simulationNumberLiteral})\\s*\\?\\s*(${simulationNumberLiteral})\\s*:\\s*(${simulationNumberLiteral})'$`,
       "i"
     )
   );
   if (load && def.kind === "R") {
-    const [time, high, low] = load.slice(1).map(exampleNumber);
+    const [time, high, low] = load.slice(1).map(simulationNumber);
     if (time < 0 || high <= 0 || low <= 0)
       throw new Error(`${p.ref}: load resistance must be positive.`);
     return `r={time > ${time} ? ${high} : ${low}}`;
   }
-  const input = text.includes("=") ? parameters(text, [def.kind.toLowerCase()])[def.kind.toLowerCase()] : exampleNumber(text.replace(/(?:ohms?|Ω|[FH])$/i, ""));
+  const input = text.includes("=") ? numericSimulationParameters(text, [def.kind.toLowerCase()])[def.kind.toLowerCase()] : simulationNumber(text.replace(/(?:ohms?|Ω|[FH])$/i, ""));
   if (!Number.isFinite(input) || input <= 0)
     throw new Error(`${p.ref}: passive value must be positive.`);
   return String(input);
@@ -17807,47 +18009,29 @@ function passive(d, p, def) {
 function seriesResistance(d, p) {
   const text = fields(d, p)["OpenPE.SeriesResistance"];
   if (text === void 0) return 0;
-  const resistance = exampleNumber(text);
-  if (resistance < 0 || resistance > 10)
-    throw new Error(`${p.ref}: series resistance must be between 0 and 10 ohms.`);
-  return resistance;
+  return simulationParameterValue("OpenPE.SeriesResistance", text, p.ref);
 }
 function initialVoltage(d, p) {
   const text = fields(d, p)["OpenPE.InitialVoltage"];
   if (text === void 0) return void 0;
-  const voltage = exampleNumber(text);
-  if (Math.abs(voltage) > 1e3)
-    throw new Error(`${p.ref}: initial voltage must be within \xB11000 V.`);
-  return voltage;
+  return simulationParameterValue("OpenPE.InitialVoltage", text, p.ref);
 }
 function magneticValues(d, p) {
   const inductance = String(Number(Number(passive(d, p, { kind: "L" })).toPrecision(15)));
-  const coupling = exampleNumber(fields(d, p)["OpenPE.Coupling"] ?? "");
-  if (coupling <= 0 || coupling > 1)
-    throw new Error(`${p.ref}: coupling must be greater than 0 and at most 1.`);
+  const coupling = simulationParameterValue(
+    "OpenPE.Coupling",
+    fields(d, p)["OpenPE.Coupling"] ?? "",
+    p.ref
+  );
   return { inductance, coupling };
 }
-function source(d, p, def) {
-  const f = fields(d, p), type = def.sim["Sim.Type"];
-  if (type === "DC") {
-    const v = f["Sim.Params"] ? parameters(f["Sim.Params"], ["dc"]).dc : exampleNumber(p.value);
-    if (!Number.isFinite(v) || Math.abs(v) > 1e4)
-      throw new Error(`${p.ref}: invalid source voltage.`);
-    return `DC ${v}`;
-  }
-  const keys2 = type === "PULSE" ? ["y1", "y2", "td", "tr", "tf", "tw", "per"] : ["dc", "ampl", "f", "td", "theta", "phase", "ac"];
-  const values = parameters(f["Sim.Params"] || "", keys2);
-  if (type === "PULSE") {
-    if (keys2.some((key) => values[key] === void 0) || ["td", "tr", "tf", "tw"].some((key) => values[key] < 0) || values.per <= 0)
-      throw new Error(`${p.ref}: invalid PULSE parameters.`);
-    return `PULSE(${keys2.map((key) => values[key]).join(" ")})`;
-  }
-  if (values.ampl === void 0 || !(values.f > 0) || (values.td ?? 0) < 0)
-    throw new Error(`${p.ref}: invalid SIN parameters.`);
-  return `SIN(${[values.dc ?? 0, values.ampl, values.f, values.td ?? 0, values.theta ?? 0, values.phase ?? 0].join(" ")})`;
+function source(d, p) {
+  const f = fields(d, p), type = f["Sim.Type"];
+  return simulationSourceExpression(type, f["Sim.Params"] || "", p.value, p.ref);
 }
 function validate(d, profile) {
   for (const p of simulationParts(d)) {
+    assertSimulationModelConfiguration(p);
     const def = profile.parts.find((v) => v.ref === p.ref);
     if (def.kind === "unsupported")
       throw new Error(`${p.ref}: no allowlisted library model for ${p.libId}.`);
@@ -17863,16 +18047,26 @@ function validate(d, profile) {
       throw new Error(`${p.ref}: unsupported electrical pin definitions.`);
     if (profile.id.startsWith("reference-") && def.kind === "X" && p.value !== def.value)
       throw new Error(`${p.ref}: restore the allowlisted controller identity before simulating.`);
-    const sim = fields(d, p), expected = def.sim;
+    const defaults2 = def.sim;
+    const sim = fields(d, p, defaults2), expected = partFields(p)["OpenPE.ModelSource"] === "basic" ? effectiveSimulationModelFields(
+      p,
+      {
+        ...defaults2,
+        "OpenPE.ModelSource": "basic",
+        ...partFields(p)["OpenPE.SourceType"] ? { "OpenPE.SourceType": partFields(p)["OpenPE.SourceType"] } : {}
+      },
+      defaults2
+    ) : defaults2;
     for (const key of /* @__PURE__ */ new Set([...Object.keys(sim), ...Object.keys(expected)])) {
-      if (/^spice|^sim[._]/i.test(key) && key !== "Sim.Params" && sim[key] !== expected[key])
+      if (/^spice|^sim[._]/i.test(key) && key !== "Sim.Params" && !(key === "Sim.Type" && def.kind === "V" && partFields(p)["OpenPE.SourceType"] && !sim["Sim.Library"]) && sim[key] !== expected[key])
         throw new Error(`${p.ref}: unsupported simulation field or pin assignment ${key}.`);
     }
     if (["R", "C", "L"].includes(def.kind)) {
       passive(d, p, def);
       seriesResistance(d, p);
-      if (def.kind === "C") initialVoltage(d, p);
-    } else if (def.kind === "V") source(d, p, def);
+      if (def.kind === "C" || def.kind === "L")
+        primitiveInitialCondition(def.kind, fields(d, p), p.ref);
+    } else if (def.kind === "V") source(d, p);
     else if (def.kind === "T") magneticValues(d, p);
     else {
       const actualParameters = modelParameters(
@@ -17901,13 +18095,15 @@ function validate(d, profile) {
     if (sourceDefinitions.length !== 1)
       throw new Error("This official chip profile requires one input voltage source.");
     const sourcePart = d.parts.find((p) => p.ref === sourceDefinitions[0].ref);
-    const f = fields(d, sourcePart), dc = f["Sim.Type"] === "DC";
-    const values = parameters(
+    const f = fields(d, sourcePart), type = f["Sim.Type"];
+    const values = simulationSourceValues(
+      type,
       f["Sim.Params"] || "",
-      dc ? ["dc"] : ["y1", "y2", "td", "tr", "tf", "tw", "per"]
+      sourcePart.value,
+      sourcePart.ref
     );
-    const voltage = dc ? values.dc : values.y2;
-    if (!Number.isFinite(voltage) || voltage < profile.input.minimum || voltage > profile.input.maximum || !dc && values.y1 !== 0)
+    const voltage = type === "DC" ? values.dc : type === "PULSE" ? values.y2 : (values.dc ?? 0) + Math.abs(values.ampl);
+    if (!Number.isFinite(voltage) || voltage < profile.input.minimum || voltage > profile.input.maximum || type === "PULSE" && values.y1 !== 0 || type === "SIN" && (values.dc ?? 0) - Math.abs(values.ampl) < 0)
       throw new Error(
         `Use ${profile.input.minimum}\u2013${profile.input.maximum} V at the chip input; a startup pulse must start at 0 V.`
       );
@@ -17993,6 +18189,7 @@ function buildExampleSpice(d, c) {
     ".model OPENPE_DEFAULT_M VDMOS",
     ".model OPENPE_BOOST_D D(Is=1u N=1.05 Rs=0.02)"
   ];
+  let explicitInitialConditions = false;
   const currents = [];
   const identifiers = /* @__PURE__ */ new Map();
   d.parts.forEach((p, i) => {
@@ -18036,16 +18233,19 @@ function buildExampleSpice(d, c) {
     }
     let body = "";
     if (["R", "C", "L"].includes(def.kind)) body = passiveBody;
-    else if (def.kind === "V") body = source(d, p, def);
+    else if (def.kind === "V") body = source(d, p);
     else {
       const f = fields(d, p), expected2 = def.sim;
       const params = modelParameters(f["Sim.Params"] || "", expected2["Sim.Params"] || "");
       body = def.modelName || (def.kind === "Q" ? `OPENPE_DEFAULT_${f["Sim.Device"]}` : `OPENPE_DEFAULT_${def.kind}`);
       body += " " + Object.entries(params).map(([key, value2]) => `${key}=${value2}`).join(" ");
     }
-    if (profile.id.startsWith("reference-") && def.kind === "C") {
-      const voltage = initialVoltage(d, p);
-      if (voltage !== void 0) body += ` IC=${voltage}`;
+    if (def.kind === "C" || def.kind === "L") {
+      const initial = primitiveInitialCondition(def.kind, fields(d, p), p.ref);
+      if (initial !== void 0) {
+        body += ` IC=${initial}`;
+        explicitInitialConditions = true;
+      }
     }
     lines.push(`${name} ${ns.join(" ")} ${body}`);
     if (def.kind !== "X")
@@ -18097,7 +18297,7 @@ function buildExampleSpice(d, c) {
     "set wr_singlescale",
     "set wr_vecnames",
     "set numdgt=15",
-    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${profile.initialConditions ? " uic" : ""}`,
+    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${profile.initialConditions || explicitInitialConditions ? " uic" : ""}`,
     "linearize",
     `wrdata waveforms.txt ${vectors}`,
     "quit",
@@ -18162,14 +18362,23 @@ var defaults = {
   "power:GND": { device: "", roles: ["0"] }
 };
 function fields2(d, p) {
-  return {
-    ...Object.fromEntries(
-      children(d.libraries[p.libId], "property").map((v) => [val(v), val(v, 2)])
-    ),
-    ...partFields(p)
-  };
+  const basic = defaults[p.libId];
+  return effectiveSimulationModelFields(
+    p,
+    {
+      ...Object.fromEntries(
+        children(d.libraries[p.libId], "property").map((v) => [val(v), val(v, 2)])
+      ),
+      ...partFields(p)
+    },
+    basic ? {
+      "Sim.Device": basic.device,
+      ...basic.type ? { "Sim.Type": basic.type } : {},
+      "Sim.Pins": basic.roles.map((role, i) => `${i + 1}=${role}`).join(" ")
+    } : void 0
+  );
 }
-function parameters2(text, allowed) {
+function parameters(text, allowed) {
   const result = {};
   for (const item of text.trim().split(/\s+/).filter(Boolean)) {
     const match = item.match(
@@ -18210,6 +18419,7 @@ function buckPinMap(d, p) {
 function modelBuckSupportError(d) {
   try {
     for (const p of simulationParts(d)) {
+      assertSimulationModelConfiguration(p);
       const expected = defaults[p.libId];
       if (!expected || !pins[p.libId])
         throw new Error(`${p.ref}: no supported model for ${p.libId}.`);
@@ -18235,11 +18445,13 @@ function modelBuckSupportError(d) {
         );
       if (f["Sim.Name"] && (p.libId !== BUCK_MOSFET || f["Sim.Name"] !== "IRF540N"))
         throw new Error(`${p.ref}: unsupported model name.`);
-      if (f["Sim.Device"] && f["Sim.Device"] !== expected.device || f["Sim.Type"] && f["Sim.Type"] !== expected.type)
+      if (f["Sim.Device"] && f["Sim.Device"] !== expected.device || f["Sim.Type"] && f["Sim.Type"] !== expected.type && !(p.libId === BUCK_DC && partFields(p)["OpenPE.SourceType"]))
         throw new Error(`${p.ref}: unsupported simulation device or type.`);
       const kind = p.libId.match(/^Device:([RCL])$/)?.[1];
-      const allowed = kind ? [kind.toLowerCase()] : p.libId === BUCK_DC ? ["dc"] : p.libId === BUCK_PULSE ? ["y1", "y2", "td", "tr", "tf", "tw", "per"] : [];
-      parameters2(f["Sim.Params"] || "", allowed);
+      const allowed = kind ? [kind.toLowerCase()] : p.libId === BUCK_DC ? sourceParameterSpecs[f["Sim.Type"]].map(
+        (spec) => spec.key
+      ) : p.libId === BUCK_PULSE ? ["y1", "y2", "td", "tr", "tf", "tw", "per"] : [];
+      parameters(f["Sim.Params"] || "", allowed);
       buckPinMap(d, p);
     }
     return "";
@@ -18248,7 +18460,7 @@ function modelBuckSupportError(d) {
   }
 }
 function pulseParameters(d, p) {
-  const values = parameters2(fields2(d, p)["Sim.Params"] || "", [
+  const values = parameters(fields2(d, p)["Sim.Params"] || "", [
     "y1",
     "y2",
     "td",
@@ -18269,7 +18481,10 @@ function modelBuckDefaults(d) {
   let voltage = 12, frequency = 2e4, duty = 50;
   let outputId = "", currentId = "";
   try {
-    if (dc) voltage = parameters2(fields2(d, dc)["Sim.Params"] || "", ["dc"]).dc ?? number2(dc.value);
+    if (dc) {
+      const f = fields2(d, dc), v = simulationSourceValues(f["Sim.Type"], f["Sim.Params"] || "", dc.value, dc.ref);
+      voltage = f["Sim.Type"] === "DC" ? v.dc : f["Sim.Type"] === "PULSE" ? v.y2 : (v.dc ?? 0) + Math.abs(v.ampl);
+    }
     if (pulse) {
       const v = pulseParameters(d, pulse);
       frequency = 1 / v.per;
@@ -18342,8 +18557,14 @@ function buildModelBuck(d, c) {
   };
   const dc = get(c.inputId, BUCK_DC), pulse = get(c.pwmId, BUCK_PULSE), sw = get(c.switchId, BUCK_MOSFET);
   const output = get(c.outputId, "Device:C"), inductor = get(c.currentId, "Device:L");
-  const inputVoltage = parameters2(fields2(d, dc)["Sim.Params"] || "", ["dc"]).dc ?? number2(dc.value);
-  if (inputVoltage <= 0 || inputVoltage > 1e3)
+  const inputFields = fields2(d, dc), inputValues = simulationSourceValues(
+    inputFields["Sim.Type"],
+    inputFields["Sim.Params"] || "",
+    dc.value,
+    dc.ref
+  );
+  const inputVoltage = inputFields["Sim.Type"] === "DC" ? inputValues.dc : inputFields["Sim.Type"] === "PULSE" ? inputValues.y2 : (inputValues.dc ?? 0) + Math.abs(inputValues.ampl);
+  if (inputVoltage <= 0 || inputVoltage > 1e3 || inputFields["Sim.Type"] === "PULSE" && (inputValues.y1 < 0 || inputValues.y1 > 1e3) || inputFields["Sim.Type"] === "SIN" && (inputValues.dc ?? 0) - Math.abs(inputValues.ampl) < 0)
     throw new Error("DC source voltage must be between 0 and 1000 V.");
   const pulseValues = pulseParameters(d, pulse);
   const period = pulseValues.per, width = pulseValues.tw;
@@ -18360,6 +18581,7 @@ function buildModelBuck(d, c) {
     buck_simulation_default.definition,
     ".model OPENPE_DEMO_D D"
   ];
+  let explicitInitialConditions = false;
   const currents = [];
   const connected = /* @__PURE__ */ new Map();
   const link = (a, b) => {
@@ -18382,11 +18604,15 @@ function buildModelBuck(d, c) {
     const name = `${kind || (p.libId === BUCK_MOSFET ? "M" : p.libId === "Simulation_SPICE:D" ? "D" : "V")}${i + 1}`;
     let vector2 = `i(${name.toLowerCase()})`, direction = "";
     if (kind) {
-      const f = fields2(d, p), params = parameters2(f["Sim.Params"] || "", [kind.toLowerCase()]);
+      const f = fields2(d, p), params = parameters(f["Sim.Params"] || "", [kind.toLowerCase()]);
       const value2 = params[kind.toLowerCase()] ?? passiveValue(p.value, kind);
       if (value2 <= 0) throw new Error(`${p.ref}: ${kind} must be positive.`);
       if (kind !== "L") vector2 = `@${name.toLowerCase()}[i]`;
-      lines.push(`${name} ${a("+")} ${a("-")} ${value2}`);
+      const initial = kind === "C" || kind === "L" ? primitiveInitialCondition(kind, f, p.ref) : void 0;
+      if (initial !== void 0) explicitInitialConditions = true;
+      lines.push(
+        `${name} ${a("+")} ${a("-")} ${value2}${initial === void 0 ? "" : ` IC=${initial}`}`
+      );
       direction = `pin ${map2.get("+")} \u2192 ${map2.get("-")}`;
       if (p.id === inductor.id) inductorVector = vector2;
     } else if (p.libId === BUCK_MOSFET || p.libId === "Simulation_SPICE:D") {
@@ -18399,7 +18625,7 @@ function buildModelBuck(d, c) {
       direction = `pin ${map2.get(positive)} \u2192 ${map2.get(negative)}`;
     } else {
       lines.push(
-        p.libId === BUCK_DC ? `${name} ${a("+")} ${a("-")} DC ${inputVoltage}` : `${name} ${a("+")} ${a("-")} PULSE(${pulseValues.y1} ${pulseValues.y2} ${pulseValues.td} ${pulseValues.tr} ${pulseValues.tf} ${width} ${period})`
+        p.libId === BUCK_DC ? `${name} ${a("+")} ${a("-")} ${simulationSourceExpression(inputFields["Sim.Type"], inputFields["Sim.Params"] || "", dc.value, dc.ref)}` : `${name} ${a("+")} ${a("-")} PULSE(${pulseValues.y1} ${pulseValues.y2} ${pulseValues.td} ${pulseValues.tr} ${pulseValues.tf} ${width} ${period})`
       );
       direction = "into source";
     }
@@ -18452,7 +18678,7 @@ function buildModelBuck(d, c) {
     "set wr_singlescale",
     "set wr_vecnames",
     "set numdgt=15",
-    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}`,
+    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}${explicitInitialConditions ? " uic" : ""}`,
     `wrdata waveforms.txt ${vectors}`,
     "quit",
     ".endc",
@@ -18511,7 +18737,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "L1",
       libId: "Device:Filter_EMI_CommonMode",
-      value: "2.2mH WE-CMB",
+      value: "2.2mH",
       simulation: {},
       pins: '["1",["-5.08","2.54","0"],["2.54"],"passive"]|["2",["5.08","2.54","180"],["2.54"],"passive"]|["3",["-5.08","-2.54","0"],["2.54"],"passive"]|["4",["5.08","-2.54","180"],["2.54"],"passive"]'
     },
@@ -18532,21 +18758,21 @@ var emc_flyback_simulation_default = {
     {
       ref: "C1",
       libId: "Device:C",
-      value: "1u 50V",
+      value: "1u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C2",
       libId: "Device:C",
-      value: "10n 1kV",
+      value: "10n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C3",
       libId: "Device:C",
-      value: "10n 1kV",
+      value: "10n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -18560,7 +18786,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "L2",
       libId: "Device:L",
-      value: "10uH 3.3A",
+      value: "10uH",
       simulation: {},
       pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
     },
@@ -18574,21 +18800,21 @@ var emc_flyback_simulation_default = {
     {
       ref: "C4",
       libId: "Device:C_Polarized",
-      value: "100u 50V",
+      value: "100u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C5",
       libId: "Device:C",
-      value: "4.7u 50V",
+      value: "4.7u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C6",
       libId: "Device:C",
-      value: "4.7u 50V",
+      value: "4.7u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -18623,7 +18849,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "C8",
       libId: "Device:C",
-      value: "10u 25V",
+      value: "10u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -18651,7 +18877,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "C10",
       libId: "Device:C",
-      value: "1n C0G",
+      value: "1n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -18686,7 +18912,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "R4",
       libId: "Device:R",
-      value: "0.15R 2512",
+      value: "0.15R",
       simulation: {},
       pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
     },
@@ -18749,7 +18975,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "C14",
       libId: "Device:C",
-      value: "1n 2kV",
+      value: "1n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -18773,28 +18999,28 @@ var emc_flyback_simulation_default = {
     {
       ref: "C15",
       libId: "Device:C",
-      value: "22n 100V",
+      value: "22n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "R9",
       libId: "Device:R",
-      value: "4.7k 1W",
+      value: "4.7k",
       simulation: {},
       pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
     },
     {
       ref: "R10",
       libId: "Device:R",
-      value: "4.7k 1W",
+      value: "4.7k",
       simulation: {},
       pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
     },
     {
       ref: "R20",
       libId: "Device:R",
-      value: "4.7k 1W",
+      value: "4.7k",
       simulation: {},
       pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
     },
@@ -18808,7 +19034,7 @@ var emc_flyback_simulation_default = {
     {
       ref: "C16",
       libId: "Device:C",
-      value: "100p 2kV C0G",
+      value: "100p",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -18843,42 +19069,42 @@ var emc_flyback_simulation_default = {
     {
       ref: "C17",
       libId: "Device:C",
-      value: "100p 2kV",
+      value: "100p",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C18",
       libId: "Device:C_Polarized",
-      value: "470u 25V",
+      value: "470u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C19",
       libId: "Device:C_Polarized",
-      value: "470u 25V",
+      value: "470u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C20",
       libId: "Device:C",
-      value: "22u 25V",
+      value: "22u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C21",
       libId: "Device:C",
-      value: "22u 25V",
+      value: "22u",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "R13",
       libId: "Device:R",
-      value: "1k 1206",
+      value: "1k",
       simulation: {},
       pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
     },
@@ -18983,14 +19209,14 @@ var emc_flyback_simulation_default = {
     {
       ref: "C23",
       libId: "Device:C",
-      value: "1n 2kV",
+      value: "1n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
     {
       ref: "C24",
       libId: "Device:C",
-      value: "10n 1kV",
+      value: "10n",
       simulation: {},
       pins: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]'
     },
@@ -19514,10 +19740,40 @@ var emc_flyback_simulation_default = {
 // lib/emc-flyback-control.ts
 var emcFlybackControl = "* EMC_flyback_control.lib\n* Behavioural models for the control loop of the EMC demo flyback (rev B board):\n*   UC3845B  current-mode PWM controller   (U1)\n*   TL431B   shunt reference / error amp   (U3)\n*   LTV817   optocoupler                   (U4)\n* Only B-sources, F-sources, R, C and D are used, so the same file runs in LTspice and ngspice.\n* Global parameters used (define them on the schematic): CTR, FOPTO, RDIV\n*\n* ======================================================================= UC3845B\n* Pin order = datasheet pins 1..8: COMP FB ISENSE RTCT GND OUT VCC VREF\n* What is modelled:\n*  - 5 V reference, UVLO (on above 8.4 V)\n*  - oscillator: RT/CT charged from VREF via RT, discharged with 8.3 mA between 2.8 V (peak) and 1.2 V (valley)\n*  - toggle flip-flop (UC3845 = half the oscillator frequency, max. duty < 50 %)\n*  - PWM latch: set by the oscillator, reset when V(ISENSE) > (V(COMP)-1.4 V)/3, clamped at 1.0 V\n*  - ~70 ns current-sense-to-output delay, totem-pole output VOH = VCC-1.5 V, 4 ohm, ~15 ns edges\n*  - error amplifier: with FB grounded the COMP pin is pulled high by a 0.8 mA source (datasheet typ.),\n*    VOH 5.5 V; it can sink up to 6 mA. The internal 2R/R divider that feeds the current-sense comparator\n*    loads COMP with (V(COMP)-1.4 V)/RDIV (RDIV is not given in the datasheet: an assumption, default 30k)\n.subckt UC3845B COMP FB ISENSE RTCT GN OUT VCC VREF\n* reference + UVLO\nBon en GN V=u(V(VCC,GN)-8.4)\nBref vr GN V=5*V(en,GN)\nRref vr VREF 2\n* oscillator latch d = 1 while discharging\nBd dd GN V=u(V(RTCT,GN)-2.8) + u(V(RTCT,GN)-1.2)*(1-u(V(RTCT,GN)-2.8))*u(V(d,GN)-0.5)\nRd dd d 1k\nCd d GN 1p\nBdis RTCT GN I=8.3m*u(V(d,GN)-0.5)\n* toggle flip-flop (master m, slave q), clocked by d\nBm mm GN V=u(V(d,GN)-0.5)*(1-u(V(q,GN)-0.5)) + (1-u(V(d,GN)-0.5))*u(V(m,GN)-0.5)\nRm mm m 1k\nCm m GN 1p\nBq qq GN V=u(V(d,GN)-0.5)*u(V(q,GN)-0.5) + (1-u(V(d,GN)-0.5))*u(V(m,GN)-0.5)\nRq qq q 1k\nCq q GN 1p\n* error amplifier (inverting input FB, internal 2.5 V reference), current-limited output\nBtg tg GN V=min(5.5, max(0.1, 2.5 + 1e4*(2.5-V(FB,GN))))\nBea GN COMP I=min(0.8m, max(-6m, (V(tg,GN)-V(COMP,GN))/100))\nBdiv COMP GN I=max(0, V(COMP,GN)-1.4)/{RDIV}\nRfb FB GN 100Meg\nRcp COMP GN 10Meg\n* current-sense comparator (threshold (Vcomp-1.4)/3, 1 V clamp) with ~70 ns delay\nBth th GN V=min(1, max(0, (V(COMP,GN)-1.4)/3))\nBcmp cc GN V=u(V(ISENSE,GN)-V(th,GN))\nRc cc c 1k\nCc c GN 100p\nRis ISENSE GN 10Meg\n* PWM latch: set while the oscillator discharges, reset by the comparator\nBl ll GN V=u(V(d,GN)-0.5) + (1-u(V(d,GN)-0.5))*(1-u(V(c,GN)-0.5))*u(V(l,GN)-0.5)\nRl ll l 1k\nCl l GN 1p\n* output stage (blanked during discharge, enabled after 1 us so the DC operating point starts with Q1 off)\nBo oo GN V=(V(VCC,GN)-1.5)*(1-u(V(d,GN)-0.5))*u(V(l,GN)-0.5)*u(V(q,GN)-0.5)*V(en,GN)*u(time-1u)\nRo oo o 1k\nCo o GN 15p\nBdrv od GN V=V(o,GN)\nRout od OUT 4\n.ends UC3845B\n*\n* ======================================================================= TL431B\n* Pins: K A REF. Vref = 2.495 V, open-loop gain 60 dB with a 1.5 kHz pole, cathode current >= 0,\n* needs V(K,A) > ~1.5 V, 0.3 mA quiescent current.\n.subckt TL431B K A REF\nBx xe A V=min(30, max(-1, 1000*(V(REF,A)-2.495)))\nRx xe x 1k\nCx x A 106n\nBk K A I=(1m*max(V(x,A),0)+0.3m)*(1-exp(-max(V(K,A)-1.0,0)/0.3))\nRr REF A 50Meg\n.ends TL431B\n*\n* ======================================================================= LTV817\n* Pins: A K C E. LED (Vf ~1.1 V at 1 mA) -> collector current = CTR * I_LED with a single pole FOPTO,\n* soft saturation below ~0.3 V V(C,E).\n.subckt LTV817 A K C E\nVs A a1 0\nD1 a1 K LEDIR\nF1 E fi Vs 1\nRfi fi E 1k\nCfi fi E {1/(6.2832*1k*FOPTO)}\nBc C E I={CTR}*V(fi,E)/1k*(1-exp(-max(V(C,E),0)/0.15))\nCce C E 10p\n.model LEDIR D(Is=1.5e-13 N=1.8 Rs=2 Cjo=30p)\n.ends LTV817\n";
 
+// lib/emc-flyback-initial-state.ts
+var emcFlybackCapacitorEsr = {
+  C4: 0.3,
+  C5: 5e-3,
+  C6: 5e-3,
+  C18: 0.06,
+  C19: 0.06,
+  C20: 3e-3,
+  C21: 3e-3
+};
+function emcFlybackInitialNodeGroups(node) {
+  return [
+    [
+      [node("D3", "1"), 12.23],
+      [node("T1", "1"), 24],
+      [node("C15", "1"), 64],
+      [node("U1", "8"), 5],
+      [node("U1", "1"), 3.05],
+      [node("U4", "1"), 10.44],
+      [node("U3", "1"), 9.4],
+      [node("C22", "1"), 9.4],
+      [node("U3", "2"), 2.495]
+    ],
+    Object.keys(emcFlybackCapacitorEsr).map((ref) => [
+      `emc_${ref}`,
+      ["C4", "C5", "C6"].includes(ref) ? 24 : 12.23
+    ])
+  ];
+}
+
 // lib/spice-emc-flyback.ts
 var emcFlybackLoadOhms = 100;
 var isEmcFlyback = (d) => d.parts.some((p) => p.libId === "EMC_Demo:Wurth_750311591");
-var resistors = [
+var emcFlybackResistors = [
   "R2",
   "R3",
   "R4",
@@ -19532,7 +19788,7 @@ var resistors = [
   "R18",
   "R19"
 ];
-var capacitors = [
+var emcFlybackCapacitors = [
   "C4",
   "C5",
   "C6",
@@ -19547,6 +19803,8 @@ var capacitors = [
   "C21",
   "C22"
 ];
+var resistors = emcFlybackResistors;
+var capacitors = emcFlybackCapacitors;
 var configurable = /* @__PURE__ */ new Set([...resistors, ...capacitors]);
 var zeroNames = ["PGND", "SGND"];
 function emcFlybackDefaults() {
@@ -19577,9 +19835,17 @@ function validate2(d) {
     const p = matches[0];
     if (matches.length !== 1 || p.libId !== expected.libId || (p.unit || 1) !== 1)
       throw new Error(`${expected.ref}: restore the bundled EMC Flyback symbol and reference.`);
+    assertSimulationModelConfiguration(p);
+    if (partFields(p)["OpenPE.ModelSource"] === "basic" && !configurable.has(p.ref))
+      throw new Error(`${p.ref}: no basic model is included for this omitted EMC Flyback device.`);
     if (p.excludeFromSimulation)
       throw new Error(
         `${p.ref}: this bounded EMC Flyback model requires the original simulation participation.`
+      );
+    const initial = partFields(p);
+    if (initial["OpenPE.InitialCurrent"] !== void 0 || initial["OpenPE.InitialVoltage"] !== void 0 && !capacitors.includes(p.ref))
+      throw new Error(
+        `${p.ref}: initial conditions are not supported for this omitted EMC Flyback device.`
       );
     const pins2 = unitGraphics(d.libraries[p.libId], p.unit || 1).flatMap((s) => children(s, "pin"));
     const signature2 = pins2.map(
@@ -19593,15 +19859,21 @@ function validate2(d) {
     if (signature2 !== expected.pins)
       throw new Error(`${p.ref}: modified electrical pin definitions are not supported.`);
     const simulation = Object.fromEntries(
-      Object.entries({
-        ...Object.fromEntries(
-          children(d.libraries[p.libId], "property").map((property) => [
-            val(property),
-            val(property, 2)
-          ])
-        ),
-        ...partFields(p)
-      }).filter(([key]) => /^spice|^sim[._]/i.test(key))
+      Object.entries(
+        effectiveSimulationModelFields(
+          p,
+          {
+            ...Object.fromEntries(
+              children(d.libraries[p.libId], "property").map((property) => [
+                val(property),
+                val(property, 2)
+              ])
+            ),
+            ...partFields(p)
+          },
+          expected.simulation
+        )
+      ).filter(([key]) => /^spice|^sim[._]/i.test(key))
     );
     if (JSON.stringify(simulation) !== JSON.stringify(expected.simulation))
       throw new Error(`${p.ref}: custom simulation fields are not supported by EMC Flyback.`);
@@ -19690,20 +19962,15 @@ function buildEmcFlybackSpice(d, c) {
       }
     });
   }
-  const esr = {
-    C4: 0.3,
-    C5: 5e-3,
-    C6: 5e-3,
-    C18: 0.06,
-    C19: 0.06,
-    C20: 3e-3,
-    C21: 3e-3
-  };
+  const esr = emcFlybackCapacitorEsr;
   for (const ref of capacitors) {
     const a = node(ref, "1"), b = node(ref, "2"), r = esr[ref];
     addNodes(a, b);
     if (r) lines.push(`RESR_${ref} ${a} emc_${ref} ${r}`);
-    lines.push(`${ref} ${r ? `emc_${ref}` : a} ${b} ${value(part(ref), "C")}`);
+    const initial = primitiveInitialCondition("C", partFields(part(ref)), ref);
+    lines.push(
+      `${ref} ${r ? `emc_${ref}` : a} ${b} ${value(part(ref), "C")}${initial === void 0 ? "" : ` IC=${initial}`}`
+    );
     currents.push({
       label: `I(${ref}) \xB7 pin 1 \u2192 2`,
       unit: "A",
@@ -19748,8 +20015,9 @@ function buildEmcFlybackSpice(d, c) {
     `XU4 ${node("U4", "1")} ${node("U4", "2")} ${node("U4", "4")} ${node("U4", "3")} LTV817`,
     `RLOAD ${out} 0 ${emcFlybackLoadOhms}`,
     `ILOAD ${out} 0 PULSE(0.5 0 2m 10u 10u 2m 1)`,
-    `.ic V(${out})=12.23 V(${bus})=24 V(${node("C15", "1")})=64 V(${node("U1", "8")})=5 V(${node("U1", "1")})=3.05 V(${node("U4", "1")})=10.44 V(${node("U3", "1")})=9.4 V(${node("C22", "1")})=9.4 V(${node("U3", "2")})=2.495`,
-    `.ic ${Object.keys(esr).map((ref) => `V(emc_${ref})=${["C4", "C5", "C6"].includes(ref) ? 24 : 12.23}`).join(" ")}`
+    ...emcFlybackInitialNodeGroups(node).map(
+      (group) => `.ic ${group.map(([name, value2]) => `V(${name})=${value2}`).join(" ")}`
+    )
   );
   currents.push(
     {
@@ -19864,11 +20132,16 @@ var supported = /* @__PURE__ */ new Set([
   ...tiDcdcParts.map((p) => p.id)
 ]);
 function simulationSupportError(d) {
+  try {
+    for (const p of simulationParts(d)) assertSimulationModelConfiguration(p);
+  } catch (error) {
+    return error instanceof Error ? error.message : "Invalid simulation model configuration.";
+  }
   if (isEmcFlyback(d)) return emcFlybackSupportError(d);
   if (isModelBuck(d)) return modelBuckSupportError(d);
   if (exampleSimulationProfile(d)) return exampleSimulationSupportError(d);
   for (const p of simulationParts(d)) {
-    const model = partFields(p)["Sim.Library"];
+    const model = effectiveSimulationModelFields(p, partFields(p), {})["Sim.Library"];
     if (model)
       return `${p.ref}: external model "${model}" is not included or supported. This schematic cannot be simulated here. Use a supported OpenPE simulation circuit.`;
     if (!supported.has(p.libId))
@@ -19953,13 +20226,13 @@ function spiceNets(d, groundNames = []) {
   });
   const pins2 = /* @__PURE__ */ new Map();
   for (const p of d.parts) {
-    const definitions = unitGraphics(d.libraries[p.libId], p.unit || 1).flatMap(
+    const definitions2 = unitGraphics(d.libraries[p.libId], p.unit || 1).flatMap(
       (s) => children(s, "pin")
     );
     const positions = pinPositions(p, d.libraries[p.libId]);
     pins2.set(
       p.id,
-      new Map(definitions.map((pin, i) => [val(child(pin, "number")), add(positions[i])]))
+      new Map(definitions2.map((pin, i) => [val(child(pin, "number")), add(positions[i])]))
     );
   }
   const labels = d.labels.map((l) => add(l));
@@ -20043,6 +20316,7 @@ function buildSpiceDeck(d, input) {
   ];
   if (Object.keys(c).length !== fields3.length || Object.keys(c).some((k) => !fields3.includes(k)))
     throw new Error("Unknown or missing transient settings.");
+  for (const p of simulationParts(d)) assertSimulationModelConfiguration(p);
   if (isEmcFlyback(d)) return buildEmcFlybackSpice(d, c);
   if (exampleSimulationProfile(d)) return buildExampleSpice(d, c);
   for (const [key, lo, hi] of [
@@ -20077,7 +20351,9 @@ function buildSpiceDeck(d, input) {
         `${p.ref}: modified pin definitions are not supported by this simulation model.`
       );
     if ([
-      ...Object.keys(partFields(p)),
+      ...Object.keys(effectiveSimulationModelFields(p, partFields(p), {})).filter(
+        (key) => partFields(p)["OpenPE.ModelSource"] !== "basic" || key !== "Sim.Params"
+      ),
       ...children(d.libraries[p.libId], "property").map((property) => val(property))
     ].some((k) => /^spice|^sim[._]/i.test(k)))
       throw new Error(
@@ -20113,6 +20389,7 @@ function buildSpiceDeck(d, input) {
     vendor ? "OpenPE TI LM2596 transient" : "OpenPE ideal switching transient",
     ".options reltol=0.001 abstol=1e-9"
   ];
+  let explicitInitialConditions = false;
   const adjacency = /* @__PURE__ */ new Map();
   const connect = (a, b) => {
     for (const [x, y] of [
@@ -20142,8 +20419,10 @@ function buildSpiceDeck(d, input) {
       const measured = !!vendor && kind !== "L";
       const internal = `sense${i + 1}`;
       if (measured) lines.push(`VSENSE${i + 1} ${positive} ${internal} 0`);
+      const initial = kind === "C" || kind === "L" ? primitiveInitialCondition(kind, partFields(p), p.ref) : void 0;
+      if (initial !== void 0) explicitInitialConditions = true;
       lines.push(
-        kind ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(p.value, kind)}` : `${name} ${measured ? internal : positive} ${a} OPENPE_DIODE`
+        kind ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(partFields(p)["OpenPE.ModelSource"] === "basic" ? displayPartValue(p) : p.value, kind)}${initial === void 0 ? "" : ` IC=${initial}`}` : `${name} ${measured ? internal : positive} ${a} OPENPE_DIODE`
       );
       currentTraces.push({
         label: `I(${p.ref}) \xB7 pin ${kind ? "1 \u2192 2" : "2 \u2192 1"}`,
@@ -20231,7 +20510,13 @@ function buildSpiceDeck(d, input) {
         unit: "A",
         vector: "i(vsensesw)",
         targets: [{ kind: "current", id: sw.id }],
-        dissipation: { positivePin: "2", negativePin: "3", positiveNode: drain, negativeNode: switching, method: "switch" }
+        dissipation: {
+          positivePin: "2",
+          negativePin: "3",
+          positiveNode: drain,
+          negativeNode: switching,
+          method: "switch"
+        }
       },
       {
         label: `I(${pwm.ref}) \xB7 into PWM source`,
@@ -20250,7 +20535,7 @@ function buildSpiceDeck(d, input) {
     "set wr_singlescale",
     "set wr_vecnames",
     "set numdgt=15",
-    `tran ${sampleStep} ${c.stop} 0 ${c.step}`,
+    `tran ${sampleStep} ${c.stop} 0 ${c.step}${explicitInitialConditions ? " uic" : ""}`,
     ...vendor ? ["linearize"] : [],
     `wrdata waveforms.txt ${vectors}`,
     "quit",

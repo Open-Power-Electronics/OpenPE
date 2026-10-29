@@ -49,6 +49,26 @@ export default function EditorDisplayDrawer({
       onCompositionEndCapture={() => {
         composing.current = false;
       }}
+      onClickCapture={(event) => {
+        if (
+          composing.current &&
+          event.target instanceof Element &&
+          event.target.closest('[data-edit-action]')
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      onKeyDownCapture={(event) => {
+        if (
+          (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) &&
+          event.target instanceof Element &&
+          event.target.closest('[data-edit-action]')
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onKeyDown={(event) => {
         const isComposing =
           composing.current || event.nativeEvent.isComposing || event.keyCode === 229;

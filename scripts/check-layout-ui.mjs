@@ -750,7 +750,6 @@ try {
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/layout-light.png' });
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await button('Done').click();
   const pixelsPerMM = await canvas.evaluate((svg) => svg.getScreenCTM().a);

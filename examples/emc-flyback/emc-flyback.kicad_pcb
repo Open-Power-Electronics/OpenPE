@@ -1162,7 +1162,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "10n 1kV"
+    (property "Value" "10n"
       (at 0 1.85 270)
       (layer "F.Fab")
       (hide yes)
@@ -1318,7 +1318,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1kV"
+      (uuid "205a3a7e-b3d8-5fed-ab0a-3654adf72e3b")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "EMC_Demo:Jack_4mm_RA_Cliff_FCR7350"
     (layer "F.Cu")
     (uuid "2341594a-d4fb-407a-900a-ed214eb548c5")
@@ -1769,7 +1777,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "1k 1206"
+    (property "Value" "1k"
       (at 0 1.82 90)
       (layer "F.Fab")
       (hide yes)
@@ -1925,7 +1933,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1206"
+      (uuid "f7330180-606d-5e52-aedb-17eb1a2e220d")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "TestPoint:TestPoint_Keystone_5000-5004_Miniature"
     (layer "F.Cu")
     (uuid "3647b7cf-bb8d-4744-bf39-3f2cef60c560")
@@ -3128,7 +3144,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "4.7u 50V"
+    (property "Value" "4.7u"
       (at 0 2.3 180)
       (layer "F.Fab")
       (hide yes)
@@ -3284,7 +3300,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "50V"
+      (uuid "9c661244-5eee-5de1-ac7f-db9dd7b5c0f7")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu")
     (uuid "55413d5d-98ab-4703-8298-ca7b7c3eacae")
@@ -3900,7 +3924,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "4.7k 1W"
+    (property "Value" "4.7k"
       (at 0 2.62 90)
       (layer "F.Fab")
       (hide yes)
@@ -4047,7 +4071,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1W"
+      (uuid "9eb8ca54-cc3a-58e1-a947-10ed0355bbaa")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Diode_SMD:D_SMC"
     (layer "F.Cu")
     (uuid "68b31b89-3e8f-4f00-adf3-c08290913553")
@@ -4460,7 +4492,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "100u 50V"
+    (property "Value" "100u"
       (at 0 6.2 0)
       (layer "F.Fab")
       (hide yes)
@@ -4801,7 +4833,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "50V"
+      (uuid "42c6d2d9-3439-57dc-a4d9-cb583bb1189e")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu")
     (uuid "6c600bfb-f6c9-4c33-a6b7-987ab83f988c")
@@ -4987,7 +5027,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "100p 2kV C0G"
+    (property "Value" "100p"
       (at 0 1.85 90)
       (layer "F.Fab")
       (hide yes)
@@ -5143,7 +5183,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "2kV C0G"
+      (uuid "3a13ae7b-77b0-5cd8-a294-46cd61b66ac6")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
     (layer "F.Cu")
     (uuid "6e0751ee-a370-4ef4-a5cb-afacf58546ac")
@@ -5371,7 +5419,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "22u 25V"
+    (property "Value" "22u"
       (at 0 2.3 90)
       (layer "F.Fab")
       (hide yes)
@@ -5527,7 +5575,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "25V"
+      (uuid "be1838f9-170a-5add-a0c4-c3420f559bac")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu")
     (uuid "70f682bc-ae8b-4bf9-a2bf-17bc5e2e4bc9")
@@ -6028,7 +6084,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "4.7k 1W"
+    (property "Value" "4.7k"
       (at 0 2.62 90)
       (layer "F.Fab")
       (hide yes)
@@ -6175,7 +6231,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1W"
+      (uuid "76cc3757-7544-57c5-a2cd-e25c752ac2df")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "EMC_Demo:L_CommonMode_Wuerth_WE-CMB-S_744822222"
     (layer "F.Cu")
     (uuid "7eb005c5-2b7e-463f-be42-40f75a59255a")
@@ -6189,7 +6253,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "2.2mH WE-CMB"
+    (property "Value" "2.2mH"
       (at 3.85 8 270)
       (layer "F.Fab")
       (hide yes)
@@ -6300,7 +6364,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "WE-CMB"
+      (uuid "b33632f3-d7fa-5fcc-a2c7-0ba0222e3dc2")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "TestPoint:TestPoint_Keystone_5000-5004_Miniature"
     (layer "F.Cu")
     (uuid "80210b11-736c-4234-9652-cf81a46db169")
@@ -6536,7 +6608,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "22n 100V"
+    (property "Value" "22n"
       (at 0 1.68 0)
       (layer "F.Fab")
       (hide yes)
@@ -6692,7 +6764,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "100V"
+      (uuid "7232de01-a53c-5886-a906-c729198e250c")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
     (layer "F.Cu")
     (uuid "898b32f4-5e10-4628-90c9-0efbcb9148f0")
@@ -6920,7 +7000,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "4.7u 50V"
+    (property "Value" "4.7u"
       (at 0 2.3 180)
       (layer "F.Fab")
       (hide yes)
@@ -7076,7 +7156,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "50V"
+      (uuid "d1c75a33-21f8-5f9a-a8d7-a2a5bfe44132")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Capacitor_SMD:CP_Elec_10x10"
     (layer "F.Cu")
     (uuid "8f293d19-bb61-4c53-8d97-d1558378d88f")
@@ -7091,7 +7179,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "470u 25V"
+    (property "Value" "470u"
       (at 0 6.2 270)
       (layer "F.Fab")
       (hide yes)
@@ -7432,7 +7520,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "25V"
+      (uuid "9ad047e9-2ae6-5e72-ac53-e6096224d532")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical"
     (layer "F.Cu")
     (uuid "921a7ed9-bac8-4c2f-a694-a9a90007e2e7")
@@ -7879,7 +7975,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "470u 25V"
+    (property "Value" "470u"
       (at 0 6.2 180)
       (layer "F.Fab")
       (hide yes)
@@ -8220,7 +8316,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "25V"
+      (uuid "25dc5a3d-5f7e-58a4-a0bf-1c5ea9502c8c")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Inductor_SMD:L_Bourns-SRN8040_8x8.15mm"
     (layer "F.Cu")
     (uuid "9a0cbfa3-223c-494b-98c7-02caf752a1ad")
@@ -8235,7 +8339,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "10uH 3.3A"
+    (property "Value" "10uH"
       (at 0.17 5.23 0)
       (layer "F.Fab")
       (hide yes)
@@ -8425,7 +8529,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 90))))
+        (xyz 0 0 90)))
+    (property "Specifications" "3.3A"
+      (uuid "2bccd9df-0a61-5252-aafe-4173bfff55d4")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Capacitor_SMD:C_1206_3216Metric"
     (layer "F.Cu")
     (uuid "9b01f03d-d891-4f3b-9647-29e637a9d14c")
@@ -8440,7 +8552,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "1n 2kV"
+    (property "Value" "1n"
       (at 0 1.85 90)
       (layer "F.Fab")
       (hide yes)
@@ -8596,7 +8708,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "2kV"
+      (uuid "9c19c9d3-15aa-5b80-a154-cf4d73e36c00")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_0805_2012Metric"
     (layer "F.Cu")
     (uuid "9e1b5613-43b9-4bf4-b404-4661eddd2fac")
@@ -9991,7 +10111,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "1u 50V"
+    (property "Value" "1u"
       (at 0 1.85 270)
       (layer "F.Fab")
       (hide yes)
@@ -10147,7 +10267,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "50V"
+      (uuid "af093c0d-7c03-5c6c-a397-0757c57f395e")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Capacitor_SMD:C_0805_2012Metric"
     (layer "F.Cu")
     (uuid "aae59be4-004c-4ed0-8e56-ed0f52dd381c")
@@ -10162,7 +10290,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "10u 25V"
+    (property "Value" "10u"
       (at 0 1.68 0)
       (layer "F.Fab")
       (hide yes)
@@ -10318,7 +10446,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "25V"
+      (uuid "cd88435d-7710-5700-a903-b2ae18181e02")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Capacitor_SMD:C_1210_3225Metric"
     (layer "F.Cu")
     (uuid "ad967a5f-1bdd-4ebe-8cf2-9619ad8340e6")
@@ -10333,7 +10469,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "22u 25V"
+    (property "Value" "22u"
       (at 0 2.3 90)
       (layer "F.Fab")
       (hide yes)
@@ -10489,7 +10625,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "25V"
+      (uuid "777dbaa5-01c1-5c38-a4e2-efbfe5dfeb62")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "EMC_Demo:Wurth_750311591_EFD25"
     (layer "F.Cu")
     (uuid "af60e44c-171a-435b-a8c8-a66e7b322b76")
@@ -11087,7 +11231,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "100p 2kV"
+    (property "Value" "100p"
       (at 0 1.85 0)
       (layer "F.Fab")
       (hide yes)
@@ -11243,7 +11387,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "2kV"
+      (uuid "b4d2bcd4-1e3c-58c5-a721-a20d2aa05e0d")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu")
     (uuid "b76c59b2-998d-4334-a859-2056b50232ca")
@@ -12554,7 +12706,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "1n 2kV"
+    (property "Value" "1n"
       (at 0 1.85 0)
       (layer "F.Fab")
       (hide yes)
@@ -12710,7 +12862,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "2kV"
+      (uuid "3a95821a-7d73-574e-a2cb-a1c3b85afb13")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_2512_6332Metric"
     (layer "F.Cu")
     (uuid "ca60b71d-2e7c-4945-9194-922eb19abf07")
@@ -12725,7 +12885,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "0.15R 2512"
+    (property "Value" "0.15R"
       (at 0 2.62 90)
       (layer "F.Fab")
       (hide yes)
@@ -12881,7 +13041,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "2512"
+      (uuid "2dfa7b43-cb5e-570f-a0e0-c7e8a0de9344")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Resistor_SMD:R_1206_3216Metric"
     (layer "F.Cu")
     (uuid "cbad48e5-73b9-46e1-a6f7-9b81a46c282a")
@@ -13969,7 +14137,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "10n 1kV"
+    (property "Value" "10n"
       (at 0 1.85 270)
       (layer "F.Fab")
       (hide yes)
@@ -14125,7 +14293,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1kV"
+      (uuid "60a50234-d3e0-564c-ae9b-8cd217573d54")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Capacitor_SMD:C_1206_3216Metric"
     (layer "F.Cu")
     (uuid "dd9bcc39-aed3-421a-b864-e3f44aab244f")
@@ -14140,7 +14316,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "10n 1kV"
+    (property "Value" "10n"
       (at 0 1.85 0)
       (layer "F.Fab")
       (hide yes)
@@ -14296,7 +14472,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1kV"
+      (uuid "97514ce3-e8df-53c2-aa45-87d18db10b98")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "TestPoint:TestPoint_Keystone_5000-5004_Miniature"
     (layer "F.Cu")
     (uuid "df492cca-5318-4f95-90a4-da521625eac0")
@@ -14599,7 +14783,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "4.7k 1W"
+    (property "Value" "4.7k"
       (at 0 2.62 90)
       (layer "F.Fab")
       (hide yes)
@@ -14746,7 +14930,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "1W"
+      (uuid "2533c0dc-6935-56f6-affd-50a2b5360c94")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "Capacitor_SMD:C_0603_1608Metric"
     (layer "F.Cu")
     (uuid "e8c981cf-bbbd-46fa-bf4b-8742e7132950")
@@ -15462,7 +15654,7 @@
         (font
           (size 0.9 0.9)
           (thickness 0.15))))
-    (property "Value" "1n C0G"
+    (property "Value" "1n"
       (at 0 1.43 0)
       (layer "F.Fab")
       (hide yes)
@@ -15618,7 +15810,15 @@
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 0))))
+        (xyz 0 0 0)))
+    (property "Specifications" "C0G"
+      (uuid "a8a4c4fe-3510-5f3f-ab69-616e034556da")
+      (at 0 0 0)
+      (layer "F.Fab")
+      (effects
+        (font
+          (size 1 1))
+        (hide yes))))
   (footprint "MountingHole:MountingHole_3.2mm_M3"
     (layer "F.Cu")
     (uuid "f4e3f1e1-72f9-4a38-81e2-cb2a2583ec64")

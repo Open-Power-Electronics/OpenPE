@@ -78,6 +78,7 @@ test('simulation settings reject retired canonical fields and duplicate sources 
   const settings = [
     ['seriesResistance', 'OpenPE.SeriesResistance'],
     ['initialVoltage', 'OpenPE.InitialVoltage'],
+    ['initialCurrent', 'OpenPE.InitialCurrent'],
     ['coupling', 'OpenPE.Coupling'],
   ] as const;
   for (const [key, name] of settings) {

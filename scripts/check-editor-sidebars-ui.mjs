@@ -669,8 +669,8 @@ try {
     .getByRole('button', { name: 'Resize properties width', exact: true })
     .press('Home');
   assert.ok(
-    Math.abs((await schematicSidebar.boundingBox()).width - 280) <= 1,
-    'Compact Schematic Selection is checked at the minimum sidebar width.',
+    Math.abs((await schematicSidebar.boundingBox()).width - 300) <= 1,
+    'Compact Schematic Selection is checked at the default sidebar width.',
   );
   const schematicFontStep = await page.evaluate(() => {
     const previous = document.documentElement.style.getPropertyValue('--font-step');
@@ -899,10 +899,53 @@ try {
           'borderRadius',
           'backgroundColor',
         ]),
-        footer: styles(element.querySelector('.inspector-footer'), ['padding', 'borderTopWidth']),
+        deleteAction: styles(identity.querySelector('.property-delete-action'), [
+          'width',
+          'height',
+          'color',
+        ]),
       };
     });
   const schematicComponentPropertiesStyle = await componentPropertiesStyle(properties);
+  const objectDelete = properties.getByRole('button', { name: 'Delete object', exact: true });
+  assert.equal(await properties.locator('.inspector-footer').count(), 0);
+  assert.equal(
+    await objectDelete.evaluate((element) => {
+      const action = element.getBoundingClientRect(),
+        identity = element.closest('.inspector-symbol').getBoundingClientRect();
+      return (
+        action.top >= identity.top &&
+        action.bottom <= identity.bottom &&
+        action.right <= identity.right &&
+        action.left > identity.left + identity.width / 2
+      );
+    }),
+    true,
+    'Delete is at the upper right of the component identity, outside the drawer title.',
+  );
+  const inputValue = properties.getByRole('textbox', { name: 'Component value', exact: true });
+  const valueBeforeIME = await inputValue.inputValue();
+  await inputValue.focus();
+  await inputValue.dispatchEvent('compositionstart');
+  await objectDelete.click();
+  assert.equal(
+    await inputValue.inputValue(),
+    valueBeforeIME,
+    'Deletion cannot interrupt input composition.',
+  );
+  await inputValue.dispatchEvent('compositionend');
+  const blockedIME = await objectDelete.evaluate((element) => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      keyCode: 229,
+      bubbles: true,
+      cancelable: true,
+    });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  assert.equal(blockedIME, true);
+
   const assertEqualColumns = async (group, count, name) => {
     const fields = await group.evaluate((element) =>
       Array.from(element.children).map((field) => {
@@ -975,27 +1018,27 @@ try {
     await page.mouse.down();
     await page.mouse.move(x - distance, y, { steps: 6 });
   };
-  await expectLayoutWidth(280);
+  await expectLayoutWidth(300);
   await layoutResize.press('ArrowLeft');
-  await expectLayoutWidth(296);
+  await expectLayoutWidth(316);
   await layoutResize.press('ArrowRight');
-  await expectLayoutWidth(280);
+  await expectLayoutWidth(300);
   await dragLayoutWidth(48);
   await page.mouse.up();
-  await expectLayoutWidth(328);
+  await expectLayoutWidth(348);
   await rightToggle.click();
   await sidebar.waitFor({ state: 'hidden' });
   await rightToggle.click();
   await sidebar.waitFor();
-  await expectLayoutWidth(328);
+  await expectLayoutWidth(348);
   await button('Schematic').click();
   await button('Layout').click();
-  await expectLayoutWidth(328);
+  await expectLayoutWidth(348);
   await dragLayoutWidth(40);
-  await expectLayoutWidth(368);
+  await expectLayoutWidth(388);
   await page.keyboard.press('Escape');
   await page.mouse.up();
-  await expectLayoutWidth(328);
+  await expectLayoutWidth(348);
   assert.equal(await sidebar.isVisible(), true, 'Escape cancels resizing without hiding the dock.');
   const combinedWidth = (await canvas.boundingBox()).width + (await sidebar.boundingBox()).width;
   await dragLayoutWidth(650);
@@ -1005,10 +1048,10 @@ try {
   for (let index = 0; index < 20; index++) await layoutResize.press('ArrowRight');
   await expectLayoutWidth(224);
   await layoutResize.dblclick();
-  await expectLayoutWidth(280);
+  await expectLayoutWidth(300);
   await layoutResize.press('ArrowLeft');
   await layoutResize.press('Home');
-  await expectLayoutWidth(280);
+  await expectLayoutWidth(300);
   await clean();
   const resistorFootprint = fixture.pcb.footprints.find(
     (footprint) =>
@@ -1039,7 +1082,7 @@ try {
   assert.deepEqual(
     await componentPropertiesStyle(layoutProperties),
     schematicComponentPropertiesStyle,
-    'Linked Layout Properties shares Schematic identity, Footprint field and fixed footer layout.',
+    'Linked Layout Properties shares Schematic identity, Footprint field and component delete action.',
   );
   await layoutProperties
     .getByRole('textbox', { name: 'Component reference', exact: true })
@@ -1047,9 +1090,7 @@ try {
   await layoutProperties.getByRole('textbox', { name: 'Component value', exact: true }).waitFor();
   assert.equal(await layoutProperties.locator('.property-simulation').count(), 0);
   assert.equal(
-    await layoutProperties
-      .getByRole('switch', { name: 'Include in SPICE simulation', exact: true })
-      .count(),
+    await layoutProperties.getByRole('switch', { name: /^Include .*in SPICE simulation$/ }).count(),
     0,
     'SPICE participation belongs only to Schematic plugin controls.',
   );
@@ -1460,7 +1501,6 @@ try {
   await clean();
   await button('Layout').click();
   await button('Settings').click();
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await button('Done').click();
   if (await button('Dismiss notification').isVisible())

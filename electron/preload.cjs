@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('openpe', {
   releaseFile: (fileId) => ipcRenderer.invoke('openpe:release-file', fileId),
   revealFile: (fileId) => ipcRenderer.invoke('openpe:reveal-file', fileId),
   projectDirectory: (fileId) => ipcRenderer.invoke('openpe:project-directory', fileId),
+  chooseSpiceModel: (fileId, currentLibrary) =>
+    ipcRenderer.invoke('openpe:choose-spice-model', fileId, currentLibrary),
   projectFilePreview: (options) => ipcRenderer.invoke('openpe:project-file-preview', options),
   projectFilePdf: (options) => ipcRenderer.invoke('openpe:project-file-pdf', options),
   projectFileWrite: (options) => ipcRenderer.invoke('openpe:project-file-write', options),

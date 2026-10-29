@@ -9,6 +9,7 @@ const { createEnclosureExport } = require('./enclosure-export.cjs');
 const { readNativeProject } = require('./native-project.cjs');
 const { registerWorkspaceRecovery } = require('./workspace-recovery.cjs');
 const { registerProjectDirectory } = require('./project-directory.cjs');
+const { registerSpiceModelPicker } = require('./spice-model-picker.cjs');
 const fileGrants = new FileGrants();
 let win,
   service,
@@ -142,6 +143,13 @@ app.whenReady().then(async () => {
     ipcMain,
     authorize: trusted,
     grants: fileGrants,
+  });
+  registerSpiceModelPicker({
+    ipcMain,
+    authorize: trusted,
+    grants: fileGrants,
+    dialog,
+    getWindow: () => win,
   });
   // Save destinations come from native pickers or the fixed managed-example grant.
   let pendingFile = null;
