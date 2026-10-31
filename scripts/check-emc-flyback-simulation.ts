@@ -1,20 +1,25 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
-import { parseProject, projectNativeFiles } from '../lib/project';
+import { projectFromNativeFiles, serializeProject } from '../lib/project';
 import {
   buildSpiceDeck,
   defaultTransient,
   simulationSupportError,
   type SpiceDeck,
+  passiveValue,
 } from '../lib/spice';
 import { runSimulation } from '../server/spice.mjs';
+import { projectSimulationModels } from '../server/project-models.mjs';
+import { readProjectModelFile } from '../server/project-model-files.mjs';
 import { validatedSimulationResult } from '../lib/waveform';
 import { spiceVectorName } from '../server/spice-raw.mjs';
-import { emcFlybackLoadOhms } from '../lib/spice-emc-flyback';
+import { partFields } from '../lib/library';
+import { simulationSourceValues } from '../lib/simulation-source-parameters';
 
 type MeasurementWindow = {
   startS: number;
@@ -26,6 +31,8 @@ type MeasurementWindow = {
 };
 type FullMeasurements = {
   rows: number;
+  drainPeakV: number;
+  fullRunDrainPeakV: number;
   final: MeasurementWindow;
   beforeStep: MeasurementWindow;
   lightLoad: MeasurementWindow;
@@ -37,7 +44,7 @@ async function measureFullOutput(file: string, current: SpiceDeck): Promise<Full
   const selected = [
     'time',
     current.traces[0].vector,
-    'i(vvin)',
+    'i(v1)',
     `v(${q.positiveNode})`,
     `v(${q.negativeNode})`,
     'i(lpri)',
@@ -61,6 +68,9 @@ async function measureFullOutput(file: string, current: SpiceDeck): Promise<Full
   let columns: number[] | undefined,
     previousTime = -1,
     previous: number[] | undefined,
+    previousDrain: number | undefined,
+    drainPeakV = -Infinity,
+    fullRunDrainPeakV = -Infinity,
     rows = 0;
   try {
     for await (const line of lines) {
@@ -86,9 +96,21 @@ async function measureFullOutput(file: string, current: SpiceDeck): Promise<Full
         sample.every(Number.isFinite) && time > previousTime,
         'Invalid completed exported samples.',
       );
+      const drain = sample[3];
+      const finalStart = current.stop * 0.8;
+      fullRunDrainPeakV = Math.max(fullRunDrainPeakV, drain);
+      if (time >= finalStart) {
+        drainPeakV = Math.max(drainPeakV, drain);
+        if (previousDrain !== undefined && previousTime < finalStart)
+          drainPeakV = Math.max(
+            drainPeakV,
+            previousDrain +
+              ((drain - previousDrain) * (finalStart - previousTime)) / (time - previousTime),
+          );
+      }
       const values = [
         vout,
-        -24 * sample[2],
+        -inputVoltage * sample[2],
         (vout * vout) / emcFlybackLoadOhms + vout * (time >= 0.00201 && time <= 0.00401 ? 0 : 0.5),
         sample[3] - sample[4],
         sample[5],
@@ -113,6 +135,7 @@ async function measureFullOutput(file: string, current: SpiceDeck): Promise<Full
         }
       previousTime = time;
       previous = values;
+      previousDrain = drain;
       rows++;
     }
   } finally {
@@ -124,13 +147,32 @@ async function measureFullOutput(file: string, current: SpiceDeck): Promise<Full
     assert.ok(window.segments > 1);
     window.means = window.means.map((area) => area / (window.endS - window.startS));
   }
-  return { rows, beforeStep: windows[0], lightLoad: windows[1], final: windows[2] };
+  return {
+    rows,
+    drainPeakV,
+    fullRunDrainPeakV,
+    beforeStep: windows[0],
+    lightLoad: windows[1],
+    final: windows[2],
+  };
 }
 
 // Offline, real bundled ngspice check; never invokes Electron or fetches models.
-const snapshot = await readFile('lib/emc-flyback-example.json', 'utf8');
-const project = parseProject(snapshot);
-const source = projectNativeFiles(project).files.find((file) =>
+const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
+const nativePath = path.resolve('examples/emc-flyback/emc-flyback.kicad_pro');
+const native = await readNativeProject(nativePath);
+const project = projectFromNativeFiles(native);
+const snapshot = serializeProject(project);
+const load = project.schematic.parts.find((part) => part.ref === 'R22')!;
+const emcFlybackLoadOhms = passiveValue(load.value, 'R');
+const supply = project.schematic.parts.find((part) => part.ref === 'V1')!;
+const inputVoltage = simulationSourceValues(
+  'DC',
+  partFields(supply)['Sim.Params'],
+  supply.value,
+  supply.ref,
+).dc;
+const source = native.files.find((file: { name: string }) =>
   file.name.endsWith('.kicad_sch'),
 )!.source;
 const circuit = project.schematic;
@@ -139,11 +181,23 @@ const config = defaultTransient(circuit),
   deck = buildSpiceDeck(circuit, config);
 const started = Date.now();
 let full: FullMeasurements | undefined;
+const projectModels = projectSimulationModels(
+  project,
+  async () => {
+    throw new Error('The offline EMC Flyback check requires project-local model files.');
+  },
+  {
+    read: (_grant: string, model: { id: string; sha256: string; file: string }) =>
+      readProjectModelFile(nativePath, model),
+    write: async () => {},
+  },
+  'isolated-native-verification',
+);
 const result = validatedSimulationResult(
   await runSimulation(
     deck,
     new AbortController().signal,
-    undefined,
+    projectModels.store,
     undefined,
     undefined,
     {
@@ -157,6 +211,7 @@ const result = validatedSimulationResult(
   deck,
 );
 assert.ok(full);
+assert.deepEqual(await readNativeProject(nativePath), native, 'Simulation preserves native files.');
 const voltage = result.traces.find((t) => t.vector === deck.traces[0].vector)!;
 const mean = (start: number, end: number) => {
   let area = 0,
@@ -184,26 +239,9 @@ const beforeStep = mean(0.0016, 0.00199),
   lightLoad = mean(0.0036, 0.00399),
   final = mean(config.stop - 0.0004, config.stop);
 // The upstream .meas named Vds_max actually measures V(drain) to ground.
-// These final-20% bounds align with the export parser's whole extrema
-// buckets, so the retained maximum is exact for the linearized export.
-const rowBudget = Math.min(200000, Math.floor(1100000 / (deck.traces.length + 1)));
-const displayBuckets = Math.max(
-  1,
-  Math.min(2000, Math.floor(rowBudget / (2 * deck.traces.length + 2))),
-);
-assert.ok(
-  full.rows <= rowBudget || Number.isInteger(displayBuckets * 0.8),
-  'The exported drain-peak measurement requires whole retained extrema buckets.',
-);
-const drainVector = `v(${deck.traces.find((trace) => trace.vector === '@mq1[id]')!.dissipation!.positiveNode})`;
-const drain = result.traces.find((trace) => trace.vector === drainVector)!;
-let drainPeakV = -Infinity,
-  fullRunDrainPeakV = -Infinity;
-for (let i = 0; i < result.time.length; i++) {
-  fullRunDrainPeakV = Math.max(fullRunDrainPeakV, drain.values[i]);
-  if (result.time[i] >= full.final.startS && result.time[i] <= full.final.endS)
-    drainPeakV = Math.max(drainPeakV, drain.values[i]);
-}
+// Read every linearized export row; display reduction and trace-count-dependent
+// extrema buckets must not determine the measurement interval or its peak.
+const { drainPeakV, fullRunDrainPeakV } = full;
 assert.ok(Number.isFinite(drainPeakV));
 const upstreamText = await readFile(
   'resources/example-catalog/sources/emc-flyback/simulation/README.md',
@@ -238,8 +276,7 @@ const measurements = {
   drainMeasurement: {
     reference: 'The ASC .meas Vds_max measures V(drain) relative to simulator ground.',
     method:
-      'Linearized-export per-trace extrema retained exactly over complete final-window reduction buckets.',
-    displayBuckets,
+      'Every linearized-export drain-to-ground sample, with interpolation at the final-window boundary, before display reduction.',
     fullRunDrainPeakV,
     modelDrainSourcePeakV: full.final.maximums[3],
     note: 'The differential model-pin drain-source peak is reported separately and is not the same measurement as the upstream 66 V reference.',
@@ -258,6 +295,11 @@ const measurements = {
 const destination = 'test-results/emc-flyback-simulation';
 await mkdir(destination, { recursive: true });
 await writeFile(`${destination}/circuit.cir`, deck.netlist);
+for (const [index, id] of (deck.modelIds ?? []).entries())
+  await writeFile(
+    `${destination}/example-model-${index}.lib`,
+    await projectModels.store(id, new AbortController().signal),
+  );
 await writeFile(`${destination}/result.json`, JSON.stringify(result));
 const summary = {
   solver: result.version,

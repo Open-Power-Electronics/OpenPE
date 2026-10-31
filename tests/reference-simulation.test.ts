@@ -60,7 +60,7 @@ for (const entry of referenceExamples)
     );
     assert.equal(loads.length, entry.id.includes('lm25017') ? 2 : 1);
     for (const load of loads) {
-      assert.equal(load.value, '100', 'Every Home output resistor is 100 ohms.');
+      assert.equal(load.value, entry.id.includes('tps61046') ? '1000' : '100');
       assert.equal(spiceNets(d).node(load, '2'), '0');
     }
     const upstream = manifest.examples.find((e) => e.id === entry.id)!;
@@ -99,11 +99,16 @@ for (const entry of referenceExamples)
     const config = defaultTransient(d);
     assert.equal(
       config.stop,
-      entry.modelId === 'reference-lm27761' ? 0.005 : 0.01,
-      'Home examples request 5 ms for LM27761 and 10 ms for the other profiles.',
+      ['reference-tps61046', 'reference-lm27761'].includes(entry.modelId) ? 0.002 : 0.01,
+      'Home timing follows the declared model scenario.',
     );
     assert.equal(config.step, entry.modelId === 'reference-lm5001' ? 1e-8 : 2e-7);
     const deck = buildSpiceDeck(d, config);
+    assert.match(
+      deck.netlist,
+      /^\.options itl4=50 reltol=0\.005 method=gear(?: |$)/m,
+      'All reference model bindings share the same integration and convergence policy.',
+    );
     assert.deepEqual(serviceDeck(d, config), deck);
     assert.deepEqual(deck.modelIds, [entry.modelId]);
     assert.equal(serializeProject(project), before);

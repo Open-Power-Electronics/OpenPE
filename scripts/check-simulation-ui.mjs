@@ -665,10 +665,9 @@ try {
   assert.equal(await page.getByTestId('part-L1').count(), 1);
   const cursor = dock.getByRole('slider', { name: /cursor A$/ }).first();
   const cursorB = dock.getByRole('slider', { name: /cursor B$/ }).first();
-  assert.equal(await dock.getByRole('slider').count(), 0);
-  await dock.getByRole('button', { name: 'Cursor A', exact: true }).click();
+  assert.equal(await cursor.count(), 1);
   assert.equal(await cursorB.count(), 0);
-  await dock.getByRole('button', { name: 'Cursor B', exact: true }).click();
+  await dock.getByRole('button', { name: 'Add second cursor', exact: true }).click();
   await cursor.focus();
   await cursor.press('End');
   assert.equal(await cursor.getAttribute('aria-valuenow'), '0.002');

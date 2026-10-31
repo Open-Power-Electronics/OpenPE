@@ -8,6 +8,13 @@ import { ProjectCore } from '../core/project-core';
 import { createPart, emptyCircuit } from '../lib/circuit';
 import { createProject } from '../lib/project';
 import { partFields } from '../lib/library';
+import { externalModelBindingFields } from '../lib/simulation-model-binding';
+import { buildSpiceDeck, defaultTransient, simulationSupportError } from '../lib/spice';
+import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
+import {
+  simulationLibraryPath,
+  simulationLibraryDeclaration,
+} from '../lib/simulation-model-presentation';
 import {
   projectFromNativeFiles,
   projectNativeFiles,
@@ -26,6 +33,94 @@ const externalModels = [{ name: 'vendor', kind: 'subcircuit', pins: ['1', '2'] }
 const internalModels = [
   { name: 'LM2596_TRANS', kind: 'subcircuit', pins: ['1', '2', '3', '4', '5'] },
 ];
+
+test('every external model in the ten actual Home schematics is declared in its mapped project library', async () => {
+  const { readNativeProject } = require('../electron/native-project.cjs');
+  let checked = 0;
+  for (const entry of homeExampleCatalog) {
+    const filename = path.resolve(homeExampleNativePath(entry.id));
+    const project = projectFromNativeFiles(await readNativeProject(filename));
+    for (const part of project.schematic.parts) {
+      const fields = partFields(part);
+      const library = fields['Sim.Library'];
+      if (!library) continue;
+      const file = path.resolve(path.dirname(filename), simulationLibraryPath(library));
+      const catalog = await readSpiceModelFile(file);
+      if (entry.file !== 'emc-flyback')
+        assert.equal(
+          catalog.models.length,
+          1,
+          `${entry.file}: auxiliary definitions must stay hidden.`,
+        );
+      assert.ok(
+        simulationLibraryDeclaration(library, fields['Sim.Name'], catalog.models),
+        `${entry.file}/${part.ref}: ${fields['Sim.Name']} must be declared in ${path.basename(file)}`,
+      );
+      if (entry.file === 'emc-flyback' && catalog.models.length === 1)
+        assert.equal(path.basename(file, '.lib'), catalog.models[0].name);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 16, 'The nine Home controllers and seven EMC bindings must be checked.');
+});
+
+test('EMC native component bindings open their actual project library and preserve the compiled pin mapping', async () => {
+  const { readNativeProject } = require('../electron/native-project.cjs');
+  const filename = path.resolve('examples/emc-flyback/emc-flyback.kicad_pro');
+  const project = projectFromNativeFiles(await readNativeProject(filename));
+  const assignments = {
+    Q1: ['EMC_IRF520N', 'EMC_IRF520N', '2=D 1=G 3=S'],
+    D2: ['EMC_ES2D', 'EMC_ES2D', '2=A 1=K'],
+    D3: ['EMC_SS510C', 'EMC_SS510C', '2=A 1=K'],
+    D7: ['EMC_SS510C', 'EMC_SS510C', '2=A 1=K'],
+    U1: ['EMC_flyback_control', 'UC3845B', '1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8'],
+    U3: ['EMC_flyback_control', 'TL431B', '1=1 3=2 2=3'],
+    U4: ['EMC_flyback_control', 'LTV817', '1=1 2=2 4=3 3=4'],
+  };
+  const grants = new FileGrants();
+  const fileId = grants.create(filename);
+  let handler: (...args: any[]) => Promise<any>;
+  let expectedPath = '';
+  registerSpiceModelPicker({
+    ipcMain: {
+      handle: (_name: string, invoke: typeof handler) => {
+        handler = invoke;
+      },
+    },
+    authorize: () => {},
+    grants,
+    getWindow: () => ({}),
+    dialog: {
+      showOpenDialog: async (_window: unknown, options: { defaultPath: string }) => {
+        assert.equal(options.defaultPath, expectedPath);
+        return { canceled: false, filePaths: [expectedPath] };
+      },
+    },
+  });
+  const deck = buildSpiceDeck(project.schematic, defaultTransient(project.schematic));
+  for (const [ref, [library, name, pins]] of Object.entries(assignments)) {
+    const part = project.schematic.parts.find((part) => part.ref === ref)!;
+    const fields = partFields(part);
+    assert.equal(fields['Sim.Library'], `circuits/${library}.lib`);
+    assert.equal(fields['Sim.Name'], name);
+    assert.equal(fields['Sim.Pins'], pins);
+    expectedPath = path.resolve(path.dirname(filename), fields['Sim.Library']);
+    const result = await handler!({}, fileId, fields['Sim.Library']);
+    assert.equal(result.path, fields['Sim.Library']);
+    const declaration = result.models.find((model: { name: string }) => model.name === name);
+    assert.ok(declaration, `${ref}: assigned declaration must be available in Choose model`);
+    const binding = externalModelBindingFields(project.schematic, part, declaration);
+    assert.equal(binding['Sim.Pins'], pins);
+    assert.equal(binding['Sim.Device'], fields['Sim.Device']);
+    part.fields = Object.fromEntries(
+      Object.entries({ ...fields, ...binding }).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    );
+  }
+  assert.equal(simulationSupportError(project.schematic), '');
+  assert.deepEqual(buildSpiceDeck(project.schematic, defaultTransient(project.schematic)), deck);
+});
 
 test('declaration discovery lists actual model names and subcircuit ports without exposing local definitions or controls', () => {
   const source = `\uFEFF* UTF-8 library\n.include never-read.lib\n.MODEL 1N4148 D(Is=2n)\n+ Rs=.2\n.subckt amplifier IN+ IN- V+ V- OUT\n+ PARAMS: GAIN=100k\n.model local NPN(Bf=100)\n.subckt nested 1 2\nR1 1 2 1k\n.ends nested\n.ends amplifier\n.control\n.model ignored NMOS\n.endc\n.model switcher VDMOS(Kp=10)\n`;
@@ -70,6 +165,51 @@ test('declaration discovery rejects ambiguous, malformed, binary and oversized l
     /Invalid SPICE model/,
   );
   assert.throws(() => spiceModelDeclarations(Buffer.alloc(MAX_MODEL_BYTES + 1, 0x20)), /2 MiB/);
+});
+
+test('device entry discovery hides referenced helpers while preserving independent devices and local scope', () => {
+  const source = `
+.subckt AMP IN OUT
+Xgain IN OUT helper PARAMS: GAIN=2
+Dclamp IN OUT local
+.model local D(Is=1n)
+.ends AMP
+.subckt HELPER A B
+Q1 A B 0 core
+.ends HELPER
+.model core NPN(Bf=100)
+.model local D(Is=2n)
+.subckt OTHER A B C
+R1 A B 1k
+.ends OTHER
+.model independent D(Is=3n)
+`;
+  assert.deepEqual(
+    spiceModelDeclarations(Buffer.from(source)).models.map((model: { name: string }) => model.name),
+    ['AMP', 'local', 'OTHER', 'independent'],
+  );
+  const nested =
+    '.subckt main A B\nX1 A B nested\n.subckt nested A B\nD1 A B global\n.ends nested\n.ends main\n.model global D\n';
+  assert.deepEqual(
+    spiceModelDeclarations(Buffer.from(nested)).models.map((model: { name: string }) => model.name),
+    ['main'],
+  );
+  const cycle = '.subckt one A B\nX1 A B two\n.ends one\n.subckt two A B\nX1 A B one\n.ends two\n';
+  assert.deepEqual(spiceModelDeclarations(Buffer.from(cycle)).models, []);
+});
+
+test('reviewed LM5001 entries hide unused vendor helpers and remain independent of library filenames', async () => {
+  const bytes = await readFile('examples/lm5001-soic8-boost/circuits/LM5001.lib');
+  assert.deepEqual(
+    spiceModelDeclarations(bytes).models.map((model: { name: string }) => model.name),
+    ['LM5001_TRANS'],
+  );
+  assert.ok(
+    spiceModelDeclarations(
+      Buffer.from('.subckt BUF_BASIC_GEN A Y\n.ends BUF_BASIC_GEN\n'),
+    ).models.some((model: { name: string }) => model.name === 'BUF_BASIC_GEN'),
+    'Unreviewed standalone declarations cannot be hidden merely because their names resemble vendor helpers.',
+  );
 });
 
 test('vendor 8-bit comment bytes remain opaque and only completely identical duplicate definitions are deduplicated', () => {
@@ -197,6 +337,8 @@ async function fixture(t: TestContext) {
     calls,
     invoke: (fileId: unknown = id, currentLibrary?: unknown) =>
       handlers.get('openpe:choose-spice-model')!({}, fileId, currentLibrary),
+    inspect: (library: unknown, fileId: unknown = id) =>
+      handlers.get('openpe:inspect-spice-model')!({}, fileId, library),
     select: (next: typeof choose) => {
       choose = next;
     },
@@ -205,6 +347,72 @@ async function fixture(t: TestContext) {
     },
   };
 }
+
+test('automatic inspection lists the current project library without a picker or file writes', async (t) => {
+  const f = await fixture(t);
+  const before = await readFile(f.internal);
+  assert.deepEqual(await f.inspect('circuits/LM2596-5.lib'), {
+    path: 'circuits/LM2596-5.lib',
+    models: internalModels,
+    issues: [],
+  });
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(await readFile(f.internal), before);
+  assert.equal(await f.inspect(f.external), null, 'Absolute references require native selection.');
+  assert.equal(await f.inspect('circuits/LM2596-5.lib', f.grants.create()), null);
+  for (const invalid of [
+    '../vendor.lib',
+    'circuits/../vendor.lib',
+    'circuits/LM2596-5.txt',
+    '//host/vendor.lib',
+    {},
+    null,
+  ])
+    await assert.rejects(f.inspect(invalid));
+  await assert.rejects(f.inspect('circuits/missing.lib'), /not available/);
+  await writeFile(f.internal, Buffer.alloc(MAX_MODEL_BYTES + 1, 32));
+  await assert.rejects(f.inspect('circuits/LM2596-5.lib'), /2 MiB/);
+  await writeFile(f.internal, before);
+  const replaced = f.inspect('circuits/LM2596-5.lib');
+  f.grants.assign(f.id, path.join(f.project, 'replacement.kicad_pro'));
+  await assert.rejects(replaced, /location changed|observation expired/);
+  f.grants.assign(f.id, f.projectFile);
+  const untrusted = f.inspect('circuits/LM2596-5.lib');
+  f.authorize(false);
+  await assert.rejects(untrusted, /Unauthorized/);
+  f.authorize(true);
+  f.authorize(false);
+  await assert.rejects(f.inspect('circuits/LM2596-5.lib'), /Unauthorized/);
+  f.authorize(true);
+  f.grants.release(f.id);
+  await assert.rejects(f.inspect('circuits/LM2596-5.lib'), /grant/);
+});
+
+test('automatic EMC library inspection returns all three top-level controller models', async () => {
+  const grants = new FileGrants();
+  const fileId = grants.create(path.resolve('examples/emc-flyback/emc-flyback.kicad_pro'));
+  const handlers = new Map<string, (...args: any[]) => any>();
+  registerSpiceModelPicker({
+    ipcMain: { handle: (name: string, handler: any) => handlers.set(name, handler) },
+    authorize: () => {},
+    grants,
+    dialog: {
+      showOpenDialog: () => {
+        throw new Error('No picker should open.');
+      },
+    },
+    getWindow: () => null,
+  });
+  const result = await handlers.get('openpe:inspect-spice-model')!(
+    {},
+    fileId,
+    'circuits/EMC_flyback_control.lib',
+  );
+  assert.deepEqual(
+    result.models.map((model: { name: string }) => model.name),
+    ['UC3845B', 'TL431B', 'LTV817'],
+  );
+});
 
 test('native SPICE picker selects external files and preserves project-relative circuit identities without copying bytes', async (t) => {
   const f = await fixture(t);

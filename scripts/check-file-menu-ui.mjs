@@ -5,6 +5,10 @@ import assert from 'node:assert/strict';
 import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import { fillSource, fillNativeProject, readNativeFiles } from './source-editor-test-helpers.mjs';
 import { parseProject, projectNativeFiles } from '../server/project-format.mjs';
+const orderedNativeFiles = (bundle) => ({
+  ...bundle,
+  files: bundle.files.toSorted((a, b) => a.name.localeCompare(b.name)),
+});
 
 // Isolated renderer: native save/export boundaries are mocked; no Electron or file writes.
 await mkdir('test-results', { recursive: true });
@@ -47,6 +51,8 @@ try {
           },
           connection: async () => ({ base: 'http://localhost', token: 'test' }),
           newFile: async () => 'fixture-grant',
+          listExamples: async () => ({ entries: [], warnings: [] }),
+          projectDirectory: async () => ({ entries: [], truncated: false }),
           releaseFile: async () => {},
           setDirty: async () => {},
           onCloseRequested: () => () => {},
@@ -54,12 +60,12 @@ try {
             window.fileCalls.saves.push(options);
             return { name: options.saveAs ? 'copy.kicad_pro' : 'saved.kicad_pro' };
           },
-          exportKiCad: async (options) => {
+          exportProject: async (options) => {
             window.fileCalls.exports.push(options);
             if (window.fileCalls.exportOutcome === 'cancel') return null;
             if (window.fileCalls.exportOutcome === 'error')
               throw new Error('Export fixture failed');
-            return { name: 'export.kicad_sch' };
+            return { name: 'export-bom.csv', format: options.format };
           },
         };
       },
@@ -86,7 +92,7 @@ try {
             provider: 'codex',
             effort: 'low',
             approvalMode: 'review',
-            models: {},
+            models: { codex: '', claude: '', deepseek: '', pi: '', cursor: '' },
           },
         });
       if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
@@ -104,7 +110,13 @@ try {
     for (const path of ['app/globals.css', 'app/workspace.css'])
       await page.addStyleTag({ content: await readFile(path, 'utf8') });
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    await page.getByTestId('schematic-canvas').waitFor();
+    await page
+      .getByTestId('schematic-canvas')
+      .waitFor({ timeout: 30000 })
+      .catch(async (error) => {
+        console.error({ errors, screen: await page.locator('body').innerText() });
+        throw error;
+      });
     const fileMenu = page.getByRole('combobox', { name: 'File', exact: true });
     assert.equal(await fileMenu.count(), 1, 'File is available with or without a native caption.');
     for (const name of ['Save', 'Save as', 'Export'])
@@ -135,20 +147,41 @@ try {
     await page.getByRole('button', { name: 'Source', exact: true }).click();
     const exportBaseline = await readNativeFiles(page);
     await page.getByRole('button', { name: 'Schematic', exact: true }).click();
-    await fileMenuAction(page, 'Export');
+    await fileMenu.click();
+    await fileMenu.press('End');
+    await fileMenu.press('ArrowUp');
+    await fileMenu.press('ArrowRight');
+    const formats = page.getByRole('listbox', { name: 'Export', exact: true });
+    await formats.waitFor();
+    assert.deepEqual(await formats.getByRole('option').allTextContents(), [
+      'Gerbers',
+      'JLCPCB',
+      'BOM',
+      'CPL',
+    ]);
+    await fileMenu.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+    assert.equal(await page.evaluate(() => window.fileCalls.exports.length), 0);
+    await fileMenu.press('Escape');
+    assert.equal(await formats.count(), 0, 'Escape returns to the File menu.');
+    await fileMenu.press('ArrowRight');
+    await formats.waitFor();
+    await page.screenshot({
+      path: `test-results/file-menu-formats-${titleBarOverlay ? 'caption' : 'fallback'}.png`,
+    });
+    await fileMenu.press('b');
+    await fileMenu.press('Enter');
     const panel = page.getByRole('dialog', { name: 'Export', exact: true });
     await page.waitForFunction(() => window.fileCalls.exports.length === 1);
     assert.equal(await panel.count(), 0, 'Export goes straight to the native bridge.');
-    assert.equal(
-      await page.evaluate(() => window.fileCalls.exports[0].schematicId),
-      JSON.parse(source).schematic.id,
-    );
+    assert.equal(await page.evaluate(() => window.fileCalls.exports[0].format), 'bom');
     assert.deepEqual(
-      projectNativeFiles(
-        parseProject(await page.evaluate(() => window.fileCalls.exports[0].source)),
-        'copy.kicad_pro',
+      orderedNativeFiles(
+        projectNativeFiles(
+          parseProject(await page.evaluate(() => window.fileCalls.exports[0].source)),
+          'copy.kicad_pro',
+        ),
       ),
-      exportBaseline,
+      orderedNativeFiles(exportBaseline),
     );
     assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
     await page.screenshot({
@@ -158,13 +191,13 @@ try {
     await page.evaluate(() => {
       window.fileCalls.exportOutcome = 'cancel';
     });
-    await fileMenuAction(page, 'Export');
+    await fileMenuAction(page, ['Export', 'BOM']);
     await page.waitForFunction(() => window.fileCalls.exports.length === 2);
     assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
     await page.evaluate(() => {
       window.fileCalls.exportOutcome = 'error';
     });
-    await fileMenuAction(page, 'Export');
+    await fileMenuAction(page, ['Export', 'BOM']);
     await page.getByRole('status').filter({ hasText: 'Export fixture failed' }).waitFor();
     await page.evaluate(() => {
       window.fileCalls.exportOutcome = 'success';
@@ -173,7 +206,7 @@ try {
     const changed = parseProject(source);
     changed.schematic.title = 'Edited before export';
     await fillNativeProject(page, changed);
-    await fileMenuAction(page, 'Export');
+    await fileMenuAction(page, ['Export', 'BOM']);
     await page.waitForFunction(() => window.fileCalls.exports.length === 4);
     assert.equal(
       parseProject(await page.evaluate(() => window.fileCalls.exports[3].source)).schematic.title,
@@ -190,7 +223,7 @@ try {
       .getByRole('status')
       .filter({ hasText: 'Fix the source errors before saving' })
       .waitFor();
-    await fileMenuAction(page, 'Export');
+    await fileMenuAction(page, ['Export', 'BOM']);
     await page
       .getByRole('status')
       .filter({ hasText: 'Fix the source errors before exporting' })

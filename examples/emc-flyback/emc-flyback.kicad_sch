@@ -12,8 +12,8 @@
   (polyline
     (pts
       (xy 12.7 22.86)
-      (xy 177.8 22.86)
-      (xy 177.8 99.06)
+      (xy 179.07 22.86)
+      (xy 179.07 99.06)
       (xy 12.7 99.06)
       (xy 12.7 22.86))
     (stroke
@@ -24,22 +24,9 @@
     (uuid "1086693a-7d08-40be-999e-c202f3fb9d7d"))
   (polyline
     (pts
-      (xy 12.7 205.74)
-      (xy 299.72 205.74)
-      (xy 299.72 250.01)
-      (xy 12.7 250.01)
-      (xy 12.7 205.74))
-    (stroke
-      (width 0.15)
-      (type dash))
-    (fill
-      (type none))
-    (uuid "17e80f77-7e62-4766-b2dc-c453821417b6"))
-  (polyline
-    (pts
       (xy 12.7 101.6)
-      (xy 177.8 101.6)
-      (xy 177.8 121.92)
+      (xy 179.07 101.6)
+      (xy 179.07 121.92)
       (xy 12.7 121.92)
       (xy 12.7 101.6))
     (stroke
@@ -51,8 +38,8 @@
   (polyline
     (pts
       (xy 12.7 124.46)
-      (xy 177.8 124.46)
-      (xy 177.8 200.66)
+      (xy 179.07 124.46)
+      (xy 179.07 200.66)
       (xy 12.7 200.66)
       (xy 12.7 124.46))
     (stroke
@@ -63,11 +50,11 @@
     (uuid "7473832d-5dc5-47bc-9d58-88a35352ba6d"))
   (polyline
     (pts
-      (xy 182.88 22.86)
+      (xy 181.61 22.86)
       (xy 398.78 22.86)
       (xy 398.78 121.92)
-      (xy 182.88 121.92)
-      (xy 182.88 22.86))
+      (xy 181.61 121.92)
+      (xy 181.61 22.86))
     (stroke
       (width 0.15)
       (type dash))
@@ -76,11 +63,11 @@
     (uuid "8a7019e2-c857-454c-b3ad-403b80149493"))
   (polyline
     (pts
-      (xy 182.88 124.46)
-      (xy 284.48 124.46)
-      (xy 284.48 200.66)
-      (xy 182.88 200.66)
-      (xy 182.88 124.46))
+      (xy 181.61 124.46)
+      (xy 285.75 124.46)
+      (xy 285.75 200.66)
+      (xy 181.61 200.66)
+      (xy 181.61 124.46))
     (stroke
       (width 0.15)
       (type dash))
@@ -89,26 +76,17 @@
     (uuid "a36c5800-1500-4d96-a3ce-d4e668e5ed1b"))
   (polyline
     (pts
-      (xy 289.56 124.46)
+      (xy 288.29 124.46)
       (xy 398.78 124.46)
       (xy 398.78 200.66)
-      (xy 289.56 200.66)
-      (xy 289.56 124.46))
+      (xy 288.29 200.66)
+      (xy 288.29 124.46))
     (stroke
       (width 0.15)
       (type dash))
     (fill
       (type none))
     (uuid "cd418da6-d581-4f64-b096-10b7b70b373d"))
-  (text "C10 (1n C0G): CL10C102JB8NNNC"
-    (exclude_from_sim no)
-    (at 86.36 229.09 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C163508.pdf"))
-    (uuid "0242bc4a-3914-46e2-8a47-97e0666eb544"))
   (text "R12/C17 = DNP output-diode snubber; D3 || D7"
     (exclude_from_sim no)
     (at 337.82 104.14 0)
@@ -117,24 +95,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "0410f5e3-e920-42e6-bffc-d9cafc4aebe1"))
-  (text "C20,C21 (22u 25V): CL32A226KAJNNNE"
-    (exclude_from_sim no)
-    (at 157.48 245.83 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C52306.pdf"))
-    (uuid "05216aa4-6170-44ef-b054-0825491c99dd"))
-  (text "Q1 (IRF520NPBF): IRF520NPBF"
-    (exclude_from_sim no)
-    (at 157.48 217.93 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.infineon.com/dgdl/Infineon-IRF520N-DataSheet-v01_01-EN.pdf"))
-    (uuid "0897b344-4a4a-4594-ac77-0b0d85c6fe44"))
   (text "fosc = 1.72/(R2*C10) = 307 kHz, fsw = 154 kHz; Ilim = 1V/R4 = 6.7 A"
     (exclude_from_sim no)
     (at 20.32 132.08 0)
@@ -143,24 +103,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "096e08e5-eec1-4d7c-b73a-928ce76910da"))
-  (text "YPS (Pri-sec Y-cap): PZ254V-12-4P"
-    (exclude_from_sim no)
-    (at 228.6 231.88 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C492419.pdf"))
-    (uuid "0a6155be-5090-42e1-89fd-ec6c0b54c195"))
-  (text "C16,C17 (100p 2kV C0G): TCC1206COG101J202DT"
-    (exclude_from_sim no)
-    (at 157.48 234.67 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C2833637.pdf"))
-    (uuid "0c4c3c92-54af-4fda-9b53-2377c1553eac"))
   (text "CHASSIS = aluminium plate / earth"
     (exclude_from_sim no)
     (at 337.82 111.76 0)
@@ -169,123 +111,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "0de45c40-a15a-49dd-8cae-7fcd6338efee"))
-  (text "R2 (5.6k): 0603WAF5601T5E"
-    (exclude_from_sim no)
-    (at 86.36 226.3 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C23189.pdf"))
-    (uuid "0e256fc8-752d-4a1e-9b5b-a9cc9e76c5c7"))
-  (text "7. DATASHEETS  (click a line to open the datasheet; symbol properties also hold 'Datasheet' and 'Product page')"
-    (exclude_from_sim no)
-    (at 15.24 210.82 0)
-    (effects
-      (font
-        (size 2 2)
-        (bold yes))
-      (justify left bottom))
-    (uuid "110f77d1-7eee-4861-89ad-298ef00d2f8c"))
-  (text "C15 (22n 100V): CC0805KRX7R0BB223"
-    (exclude_from_sim no)
-    (at 157.48 229.09 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C107137.pdf"))
-    (uuid "125ec3e1-c397-441c-b592-9d6a0ce9b8f1"))
-  (text "C8 (10u 25V): CL21A106KAYNNNE"
-    (exclude_from_sim no)
-    (at 86.36 220.72 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C15850.pdf"))
-    (uuid "1458abd8-f6d2-4f9d-9637-d4899464a666"))
-  (text "D1,D3,D7 (SS510C): SS510C"
-    (exclude_from_sim no)
-    (at 15.24 223.51 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C19229.pdf"))
-    (uuid "1c1eda65-acde-4176-85ab-4a36bbffd6e2"))
-  (text "J2,J4 (VIN- 0V): Cliff FCR7350B"
-    (exclude_from_sim no)
-    (at 15.24 217.93 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.cliffuk.co.uk/products/testleads/sockets/fcr7350.pdf"))
-    (uuid "1ededd78-3c35-4ca4-bf99-2fc122de7bc8"))
-  (text "U3 (TL431AIDBZR): TL431AIDBZR"
-    (exclude_from_sim no)
-    (at 228.6 223.51 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.ti.com/lit/ds/symlink/tl431.pdf"))
-    (uuid "282ed546-7ef9-4ea5-be18-94d072179238"))
-  (text "R13 (1k 1206): 1206W4F1001T5E"
-    (exclude_from_sim no)
-    (at 157.48 248.62 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C4410.pdf"))
-    (uuid "2cf89a2a-f683-4bbc-a5f6-406bcf5f2a61"))
-  (text "R11 (47R): 0805W8F470JT5E"
-    (exclude_from_sim no)
-    (at 157.48 237.46 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C17714.pdf"))
-    (uuid "34357a35-dc4d-4ce4-afa1-48c9d2b51294"))
-  (text "C4 (100u 50V): MVK 50V100 M 10*10"
-    (exclude_from_sim no)
-    (at 15.24 240.25 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C165627.pdf"))
-    (uuid "38cdf0cb-50e6-4359-b826-f43329a660b5"))
-  (text "C13 (220p): CL10B221KB8NNNC"
-    (exclude_from_sim no)
-    (at 86.36 237.46 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C1603.pdf"))
-    (uuid "3f23f352-4beb-49d4-91ce-dd56df14013e"))
-  (text "L1 (2.2mH WE-CMB): Wurth 744822222"
-    (exclude_from_sim no)
-    (at 15.24 226.3 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.we-online.com/components/products/datasheet/744822222.pdf"))
-    (uuid "4390f668-3253-4e96-bcab-f4dff4c389b5"))
-  (text "T1 (750311591): Wurth 750311591"
-    (exclude_from_sim no)
-    (at 157.48 223.51 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.we-online.com/components/products/datasheet/750311591.pdf"))
-    (uuid "4a146595-f362-4342-b1b9-b1059e1349ee"))
   (text "Grounds: PGND = primary, SGND = secondary,"
     (exclude_from_sim no)
     (at 337.82 107.95 0)
@@ -303,42 +128,6 @@
         (bold yes))
       (justify left bottom))
     (uuid "4de83072-047f-4d11-9fc5-b5cc14cb4148"))
-  (text "R4 (0.15R 2512): HoLR2512-150mR-1%"
-    (exclude_from_sim no)
-    (at 86.36 240.25 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C500726.pdf"))
-    (uuid "51a51655-ff17-44cd-a208-90033740ce34"))
-  (text "C18,C19 (470u 25V): RVT1E471M1010"
-    (exclude_from_sim no)
-    (at 157.48 243.04 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C72518.pdf"))
-    (uuid "520a1f34-e7a9-4d84-a070-2d18020eb250"))
-  (text "C22 (47n): CL10B473KB8NNNC"
-    (exclude_from_sim no)
-    (at 228.6 226.3 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C1622.pdf"))
-    (uuid "58df1aad-5a0f-4c5b-b766-8133f2f5133c"))
-  (text "C5,C6 (4.7u 50V): CL32B475KBUYNNE"
-    (exclude_from_sim no)
-    (at 15.24 243.04 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C170099.pdf"))
-    (uuid "5fa69f5f-77de-4e74-8f6d-c6260076e57f"))
   (text "2. UC3845 CONTROLLER"
     (exclude_from_sim no)
     (at 15.24 129.54 0)
@@ -348,33 +137,6 @@
         (bold yes))
       (justify left bottom))
     (uuid "66c7212b-a987-4b9d-9080-62efa6ff1b0e"))
-  (text "R1,R8,+2 (10k): 0603WAF1002T5E"
-    (exclude_from_sim no)
-    (at 15.24 245.83 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C25804.pdf"))
-    (uuid "699e39e4-4a4f-4038-92dd-6379342de134"))
-  (text "J1,J3 (VIN+ 24V): Cliff FCR7350R"
-    (exclude_from_sim no)
-    (at 15.24 215.14 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.cliffuk.co.uk/products/testleads/sockets/fcr7350.pdf"))
-    (uuid "6a69d6f0-ad68-4261-89d4-35df073406ec"))
-  (text "C12 (1n): CL10B102KB8NNNC"
-    (exclude_from_sim no)
-    (at 86.36 231.88 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C1588.pdf"))
-    (uuid "71a79c9b-aaee-4207-97b9-ed007c1993de"))
   (text "1. INPUT + SWITCHABLE EMI FILTER   (J1/J2 to the two 5 uH LISNs)"
     (exclude_from_sim no)
     (at 15.24 27.94 0)
@@ -384,24 +146,6 @@
         (bold yes))
       (justify left bottom))
     (uuid "71c76f4f-ce97-40f8-811d-9a2e6b015157"))
-  (text "U4 (LTV-817S): LTV-817S"
-    (exclude_from_sim no)
-    (at 228.6 229.09 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C189217.pdf"))
-    (uuid "783cd9b8-4a97-4a41-865a-f64be6d42d7c"))
-  (text "U1 (UC3845B): UC3845BD1013TR"
-    (exclude_from_sim no)
-    (at 86.36 223.51 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.st.com/resource/en/datasheet/uc3842b.pdf"))
-    (uuid "7f2fc67d-8e78-47e9-918d-e4c1ee7fda8d"))
   (text "Vout = 2.495 V x (1 + R15/R16) = 12.2 V"
     (exclude_from_sim no)
     (at 190.5 132.08 0)
@@ -419,42 +163,6 @@
         (bold yes))
       (justify left bottom))
     (uuid "87110524-0904-49ec-879b-d53b664c345c"))
-  (text "C2,C3,C24 (10n 1kV): CC1206KKX7RCBB103"
-    (exclude_from_sim no)
-    (at 15.24 234.67 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C107192.pdf"))
-    (uuid "92540715-be4b-46b6-97f1-e06c0df7e0a5"))
-  (text "D6 (GREEN): KT-0805G"
-    (exclude_from_sim no)
-    (at 228.6 217.93 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C2297.pdf"))
-    (uuid "97cb1a21-a494-4a05-a437-b84f217d1518"))
-  (text "R15 (39k): 0603WAF3902T5E"
-    (exclude_from_sim no)
-    (at 228.6 220.72 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C23153.pdf"))
-    (uuid "9810cc78-c335-49d1-9be1-e5543aad9512"))
-  (text "R14 (4.7k): 0603WAF4701T5E"
-    (exclude_from_sim no)
-    (at 228.6 215.14 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C23162.pdf"))
-    (uuid "9e277f9a-7c55-4f63-80c1-b9d9e695b283"))
   (text "3. FLYBACK POWER STAGE + OUTPUT   (T1 Wurth 750311591, fsw 154 kHz)"
     (exclude_from_sim no)
     (at 185.42 27.94 0)
@@ -464,87 +172,6 @@
         (bold yes))
       (justify left bottom))
     (uuid "9e6b4ea1-5ead-4d64-927b-3c34a0c87563"))
-  (text "RG,CASE (Rg select): PZ254V-12-6P"
-    (exclude_from_sim no)
-    (at 86.36 243.04 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C492420.pdf"))
-    (uuid "9f7eda3e-2f75-4e07-b47b-77568e8b2c9c"))
-  (text "CM1,CM2,+4 (CM bypass +): PZ254V-11-02P"
-    (exclude_from_sim no)
-    (at 15.24 229.09 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C492401.pdf"))
-    (uuid "9f9bb95b-f7d1-4f1b-9066-4e74719cabf7"))
-  (text "D5 (RED): NCD0805R1"
-    (exclude_from_sim no)
-    (at 15.24 248.62 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C84256.pdf"))
-    (uuid "a045faf5-4517-4972-bcda-fab06bef7278"))
-  (text "C7,C9,C11 (100n): CC0603KRX7R9BB104"
-    (exclude_from_sim no)
-    (at 86.36 217.93 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C14663.pdf"))
-    (uuid "a292ef83-8e64-461a-a77a-d3cc7b9197a2"))
-  (text "R6 (22R): 0805W8F220JT5E"
-    (exclude_from_sim no)
-    (at 86.36 248.62 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C17561.pdf"))
-    (uuid "a384045a-006f-439b-884e-1113f7a6071b"))
-  (text "C14,C23 (1n 2kV): CC1206KKX7RDBB102"
-    (exclude_from_sim no)
-    (at 157.48 220.72 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C23631.pdf"))
-    (uuid "adf4779b-977c-4477-8451-065b598fe2e8"))
-  (text "R3,R17,R18 (1k): 0603WAF1001T5E"
-    (exclude_from_sim no)
-    (at 86.36 234.67 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C21190.pdf"))
-    (uuid "ae47e014-b02e-4bf1-8c55-423295501228"))
-  (text "R9,R10,R20 (4.7k 1W): 25121WJ0472T4E"
-    (exclude_from_sim no)
-    (at 157.48 231.88 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C71872.pdf"))
-    (uuid "afa16708-1b29-4a33-b204-d00eb70e3847"))
-  (text "D2 (ES2D): ES2D"
-    (exclude_from_sim no)
-    (at 157.48 226.3 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C364267.pdf"))
-    (uuid "b96e0cde-8c86-4bd4-b169-10c284df88c3"))
   (text "YPS: 1-2 = 1nF, 3-4 = 10nF pri-sec Y-cap"
     (exclude_from_sim no)
     (at 297.18 135.89 0)
@@ -553,15 +180,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "b9752f82-861f-489d-9ad5-34a255c3fa0b"))
-  (text "F1 (2A/30V PTC): BSMD1812-200-30V"
-    (exclude_from_sim no)
-    (at 15.24 220.72 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C960026.pdf"))
-    (uuid "bf62566f-dc88-4e84-841e-5fa30e695fcc"))
   (text "SGCH = SGND to chassis (earthed output)"
     (exclude_from_sim no)
     (at 297.18 132.08 0)
@@ -595,42 +213,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "cf3aa592-805d-4748-b5f4-4e85550dbfc4"))
-  (text "J5 (CHASSIS): Cliff FCR7350G"
-    (exclude_from_sim no)
-    (at 228.6 234.67 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.cliffuk.co.uk/products/testleads/sockets/fcr7350.pdf"))
-    (uuid "d0208840-ed4e-42ac-80f5-1258a2adeeb1"))
-  (text "U2 (L78L12ACUTR): L78L12ACUTR"
-    (exclude_from_sim no)
-    (at 86.36 215.14 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.st.com/resource/en/datasheet/l78l.pdf"))
-    (uuid "d3a7cde8-162c-478b-b985-d2bc4c840503"))
-  (text "R12 (10R): 1206W4F100JT5E"
-    (exclude_from_sim no)
-    (at 157.48 240.25 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C17903.pdf"))
-    (uuid "d8a449bf-d029-4258-8a45-62d77c2e96f6"))
-  (text "R5 (4.7R): 0805W8F470KT5E"
-    (exclude_from_sim no)
-    (at 86.36 245.83 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C17675.pdf"))
-    (uuid "dd08a72b-4898-4287-bc27-a1e56fea57ce"))
   (text "CM1+CM2 fitted = CM choke bypassed   YCAP = Y-caps to chassis   DM = DM choke bypassed"
     (exclude_from_sim no)
     (at 20.32 30.48 0)
@@ -639,33 +221,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "ddbd2231-2181-42af-ab36-91025eaf3c99"))
-  (text "PGND1,PGND2,+2 (PGND): Keystone 5001"
-    (exclude_from_sim no)
-    (at 228.6 240.25 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C238122.pdf"))
-    (uuid "e0616859-27ca-4e28-b82a-b75f976fbeb8"))
-  (text "C1 (1u 50V): CL31B105KBHNNNE"
-    (exclude_from_sim no)
-    (at 15.24 231.88 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C1848.pdf"))
-    (uuid "e1e73d64-4ac5-4408-a2e5-7753c1c4f50e"))
-  (text "DRAIN,GATE,+4 (SW): Keystone 5002"
-    (exclude_from_sim no)
-    (at 228.6 237.46 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C238123.pdf"))
-    (uuid "e4829138-bb56-484c-96b2-2bdeb9f878c8"))
   (text "Q1 on the PCB bottom, tab on the Al case floor (Sil-Pad 400, ~30 pF tab-to-case)"
     (exclude_from_sim no)
     (at 190.5 38.1 0)
@@ -674,24 +229,6 @@
         (size 1.4 1.4))
       (justify left bottom))
     (uuid "e6262749-8a46-40d6-a519-c3bbf519820e"))
-  (text "R7 (100R): 0805W8F1000T5E"
-    (exclude_from_sim no)
-    (at 157.48 215.14 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://www.lcsc.com/datasheet/C17408.pdf"))
-    (uuid "e8e147ff-2bd0-4b4b-a082-392c474fb05f"))
-  (text "L2 (10uH 3.3A): SWPA8040S100MT"
-    (exclude_from_sim no)
-    (at 15.24 237.46 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom)
-      (href "https://jlcpcb.com/partdetail/Sunlord-SWPA8040S100MT/C37429"))
-    (uuid "fe19ee1a-09f8-4715-83c4-7a5a09cb1fc0"))
   (sheet_instances
     (path "/"
       (page "1")))
@@ -4436,6 +3973,323 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Simulation_SPICE:VDC"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0.0254))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "V"
+        (at 2.54 2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "1"
+        (at 2.54 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Voltage source, DC"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Pins" "1=+ 2=-"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Type" "DC"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Device" "V"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "ki_keywords" "simulation"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "VDC_0_0"
+        (polyline
+          (pts
+            (xy -1.27 0.254)
+            (xy 1.27 0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy -0.762 -0.254)
+            (xy -1.27 -0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 0.254 -0.254)
+            (xy -0.254 -0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 1.27 -0.254)
+            (xy 0.762 -0.254))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (text "+"
+          (at 0 1.905 0)
+          (effects
+            (font
+              (size 1.27 1.27)))))
+      (symbol "VDC_0_1"
+        (circle
+          (center 0 0)
+          (radius 2.54)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background))))
+      (symbol "VDC_1_1"
+        (pin passive line
+          (at 0 5.08 270)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -5.08 90)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "Simulation_SPICE:IPULSE"
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0.0254))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "I"
+        (at 2.54 2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Value" "IPULSE"
+        (at 2.54 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Current source, pulse"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Pins" "1=+ 2=-"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Device" "I"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "Sim.Type" "PULSE"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Sim.Params" "y1=0 y2=1 td=2n tr=2n tf=2n tw=50n per=100n"
+        (at 2.54 -2.54 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))
+          (justify left)))
+      (property "ki_keywords" "simulation"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "IPULSE_0_0"
+        (polyline
+          (pts
+            (xy -2.032 -0.762)
+            (xy -1.397 -0.762)
+            (xy -1.143 0.762)
+            (xy -0.127 0.762)
+            (xy 0.127 -0.762)
+            (xy 1.143 -0.762)
+            (xy 1.397 0.762)
+            (xy 2.032 0.762))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
+      (symbol "IPULSE_0_1"
+        (polyline
+          (pts
+            (xy -0.254 1.778)
+            (xy 0 1.27)
+            (xy 0.254 1.778))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (polyline
+          (pts
+            (xy 0 1.27)
+            (xy 0 2.286))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none)))
+        (circle
+          (center 0 0)
+          (radius 2.54)
+          (stroke
+            (width 0.254)
+            (type default))
+          (fill
+            (type background))))
+      (symbol "IPULSE_1_1"
+        (pin passive line
+          (at 0 5.08 270)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27)))))
+        (pin passive line
+          (at 0 -5.08 90)
+          (length 2.54)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "2"
+            (effects
+              (font
+                (size 1.27 1.27))))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -7854,7 +7708,27 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D2")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_ES2D.lib"
+      (at 234.95 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "EMC_ES2D"
+      (at 234.95 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "D"
+      (at 234.95 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "2=A 1=K"
+      (at 234.95 62.23 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "Connector_Generic:Conn_02x03_Odd_Even")
     (at 195.58 101.6 0)
@@ -11109,7 +10983,27 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "U4")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_flyback_control.lib"
+      (at 241.3 157.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "LTV817"
+      (at 241.3 157.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "SUBCKT"
+      (at 241.3 157.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "1=1 2=2 4=3 3=4"
+      (at 241.3 157.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "Connector:TestPoint")
     (at 93.98 111.76 0)
@@ -12298,7 +12192,27 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D3")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_SS510C.lib"
+      (at 284.48 71.12 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "EMC_SS510C"
+      (at 284.48 71.12 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "D"
+      (at 284.48 71.12 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "2=A 1=K"
+      (at 284.48 71.12 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "Device:R")
     (at 241.3 113.03 0)
@@ -12782,7 +12696,27 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D7")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_SS510C.lib"
+      (at 284.48 81.28 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "EMC_SS510C"
+      (at 284.48 81.28 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "D"
+      (at 284.48 81.28 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "2=A 1=K"
+      (at 284.48 81.28 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 334.01 116.84 0)
@@ -15622,7 +15556,27 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "U1")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_flyback_control.lib"
+      (at 127 167.64 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "UC3845B"
+      (at 127 167.64 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "SUBCKT"
+      (at 127 167.64 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8"
+      (at 127 167.64 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "EMC_Demo:VBUS")
     (at 25.4 142.24 0)
@@ -16030,7 +15984,32 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "Q1")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_IRF520N.lib"
+      (at 238.76 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "EMC_IRF520N"
+      (at 238.76 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "NMOS"
+      (at 238.76 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Type" "VDMOS"
+      (at 238.76 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "2=D 1=G 3=S"
+      (at 238.76 101.6 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "Connector:TestPoint")
     (at 55.88 111.76 0)
@@ -17157,7 +17136,27 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "U3")
-          (unit 1)))))
+          (unit 1))))
+    (property "Sim.Library" "circuits/EMC_flyback_control.lib"
+      (at 238.76 185.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Name" "TL431B"
+      (at 238.76 185.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "SUBCKT"
+      (at 238.76 185.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "1=1 3=2 2=3"
+      (at 238.76 185.42 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
   (symbol
     (lib_id "EMC_Demo:VBUS")
     (at 172.72 48.26 0)
@@ -17635,4 +17634,456 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "R15")
-          (unit 1))))))
+          (unit 1)))))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "871ad373-3c4f-5149-a94c-7834e6e1cdd2")
+    (pts
+      (xy 40.64 -5.08)
+      (xy 40.64 -10.16)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "237589a1-8761-577c-a05f-537182d4de19")
+    (pts
+      (xy 40.64 5.08)
+      (xy 40.64 10.16)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "3af0f033-467c-521b-a4d7-6893ef18d371")
+    (pts
+      (xy 116.84 -3.81)
+      (xy 116.84 -8.89)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "1ad152a0-5d3b-5370-a275-72521a8fbb40")
+    (pts
+      (xy 116.84 3.81)
+      (xy 116.84 8.89)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "4db14d98-7a72-57d7-af7c-f4005ed40d7f")
+    (pts
+      (xy 193.04 -5.08)
+      (xy 193.04 -10.16)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "47cb4cef-2104-56f3-a908-007a72bbe726")
+    (pts
+      (xy 193.04 5.08)
+      (xy 193.04 10.16)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "acad891a-2610-5b61-a04a-afb6bbafdb86")
+    (pts
+      (xy 269.24 -3.81)
+      (xy 269.24 -8.89)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "301e9a4a-bb70-509c-a338-5183ff3d126e")
+    (pts
+      (xy 269.24 3.81)
+      (xy 269.24 8.89)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "a8191369-e103-5d9a-a20d-df36e4d2a2fb")
+    (pts
+      (xy 345.44 -5.08)
+      (xy 345.44 -10.16)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "27ff4e57-d55e-5a7c-ad59-c2ff45b69bcd")
+    (pts
+      (xy 345.44 5.08)
+      (xy 345.44 10.16)))
+  (label "EMC_VIN"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "578ef72a-f6ae-5524-a619-bbc61130c1bb")
+    (at 40.64 -10.16 0))
+  (label "PGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "a169ea1b-9c00-59b2-a525-090684299a0e")
+    (at 40.64 10.16 0))
+  (label "EMC_VIN"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "e6930bea-d0cb-59de-a2f2-7465d0b7bf30")
+    (at 116.84 -8.89 0))
+  (label "VBUS"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "b3d1a717-ba56-59b2-a291-724099d4d2b6")
+    (at 116.84 8.89 0))
+  (label "VCC"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "54b60186-657b-5486-adb4-12d0821f4571")
+    (at 193.04 -10.16 0))
+  (label "PGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "459a1d11-ee9f-5437-a6c0-6b647f36062c")
+    (at 193.04 10.16 0))
+  (label "VOUT"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "b796facf-818c-5e87-a868-232e37069cfb")
+    (at 269.24 -8.89 0))
+  (label "SGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "a5f00fc6-bc96-582a-a34b-88045db39087")
+    (at 269.24 8.89 0))
+  (label "VOUT"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "2ed8b3e6-111d-57b1-a0e7-1935a0c7158d")
+    (at 345.44 -10.16 0))
+  (label "SGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "8d0cb438-37c2-5f67-a273-7123dc2c98ba")
+    (at 345.44 10.16 0))
+  (symbol
+    (lib_id "Simulation_SPICE:VDC")
+    (at 40.64 0 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "7a0e2cd1-c449-52d4-a873-6d12f9693e8d")
+    (property "Reference" "V1"
+      (at 44.45 -1.2 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "${SIM.PARAMS}"
+      (at 44.45 1.4 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "V1")
+          (unit 1))))
+    (property "Footprint" ""
+      (at 40.64 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Description" "Input supply"
+      (at 40.64 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "V"
+      (at 40.64 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Type" "DC"
+      (at 40.64 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 40.64 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Params" "dc=24"
+      (at 40.64 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
+  (symbol
+    (lib_id "Device:R")
+    (at 116.84 0 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "3b32ae7c-f458-5a35-a4d1-9b4438d48bd4")
+    (property "Reference" "R21"
+      (at 119.126 -1.2 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "10m"
+      (at 119.126 1.4 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "R21")
+          (unit 1))))
+    (property "Footprint" ""
+      (at 116.84 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Description" "Input source resistance"
+      (at 116.84 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
+  (symbol
+    (lib_id "Simulation_SPICE:VDC")
+    (at 193.04 0 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "a5cb120e-1911-5554-ae71-a87318453683")
+    (property "Reference" "V2"
+      (at 196.85 -1.2 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "${SIM.PARAMS}"
+      (at 196.85 1.4 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "V2")
+          (unit 1))))
+    (property "Footprint" ""
+      (at 193.04 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Description" "Ideal controller supply"
+      (at 193.04 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "V"
+      (at 193.04 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Type" "DC"
+      (at 193.04 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 193.04 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Params" "dc=12"
+      (at 193.04 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
+  (symbol
+    (lib_id "Device:R")
+    (at 269.24 0 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "7bcfa89e-a8c7-52dc-a5a9-5c16b64f8eae")
+    (property "Reference" "R22"
+      (at 271.526 -1.2 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "100"
+      (at 271.526 1.4 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "R22")
+          (unit 1))))
+    (property "Footprint" ""
+      (at 269.24 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Description" "Output load"
+      (at 269.24 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
+  (symbol
+    (lib_id "Simulation_SPICE:IPULSE")
+    (at 345.44 0 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom no)
+    (on_board no)
+    (dnp no)
+    (uuid "b1e42c26-7387-5249-ab66-50a2bb261fd7")
+    (property "Reference" "I1"
+      (at 349.25 -1.2 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (property "Value" "${SIM.PARAMS}"
+      (at 349.25 1.4 0)
+      (effects
+        (font
+          (size 1.27 1.27))
+        (justify left)))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "I1")
+          (unit 1))))
+    (property "Footprint" ""
+      (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Description" "Output load step"
+      (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Device" "I"
+      (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Type" "PULSE"
+      (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Pins" "1=+ 2=-"
+      (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide))
+    (property "Sim.Params" "y1=0.5 y2=0 td=2m tr=10u tf=10u tw=2m per=1"
+      (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)) hide)))
+  (text "SIMULATION TESTBENCH (virtual)"
+    (at 15.24 -24.13 0)
+    (effects
+      (font
+        (size 2 2) bold)
+      (justify left bottom))
+    (uuid "4558958c-94f8-5d55-a2e8-a3619c972ec6"))
+  (text "Input supply"
+    (at 30.48 -13.97 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "1ff857ea-02d0-519c-a682-eb23594a2b89"))
+  (text "Input source resistance"
+    (at 106.68 -13.97 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "e845b346-42c0-50d1-a182-2d6f9ceef66f"))
+  (text "Ideal controller supply"
+    (at 182.88 -13.97 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "e51d6a2e-2ac7-53ff-acd5-f977cf5c965a"))
+  (text "Output load"
+    (at 259.08 -13.97 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "9a63af09-a610-5506-a02d-375d94ff1ae8"))
+  (text "Output load step"
+    (at 335.28 -13.97 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "e8a4c1cf-2c47-5c89-a826-c9d424131b30"))
+  (polyline
+    (pts
+      (xy 12.7 -30.48)
+      (xy 398.78 -30.48)
+      (xy 398.78 20.32)
+      (xy 12.7 20.32)
+      (xy 12.7 -30.48))
+    (stroke
+      (width 0.15)
+      (type dash))
+    (fill
+      (type none))
+    (uuid "31711852-5094-5e1d-a109-31362da6e883"))
+  (text "V1/R21 feed VBUS after EMI/protection; V2 supplies controller VCC"
+    (at 20.32 -19.05 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "7cdb9b8b-5a43-5195-aaaf-b8abdc16922f")))

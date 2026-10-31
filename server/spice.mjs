@@ -17,6 +17,12 @@ import { readNativeSpiceDissipation, readWaveforms } from './spice-waveforms.mjs
 import { adaptSpiceModels } from './spice-model-adapters.mjs';
 export { parseWaveforms } from './spice-waveforms.mjs';
 import { spiceFailure, publicSpiceFailure } from './spice-errors.mjs';
+import {
+  spiceConvergenceDecks,
+  runSpiceAttempts,
+  convergenceProgress,
+  convergencePolicy,
+} from './spice-convergence.mjs';
 
 const exec = promisify(execFile);
 const completedResults = createSpiceResultCache();
@@ -78,6 +84,7 @@ export async function prepareSimulation(deck, signal, modelStore, root) {
   // Adapt only verified, pinned vendor models in this private solver deck.
   // Include the derived deck in the identity before looking up completed results.
   deck = adaptSpiceModels(deck, modelBytes);
+  const decks = spiceConvergenceDecks(deck);
   // Revalidate model files before reuse, including missing/changed files beside a grant.
   // Probe targets are rebound through the current compiler after loading. They
   // describe editor objects, not solver inputs, and must not invalidate samples
@@ -89,7 +96,15 @@ export async function prepareSimulation(deck, signal, modelStore, root) {
       ...(original.modelIds || []),
     ])
       identity.update(id).update(modelBytes.get(id));
-    return identity.update(JSON.stringify([deck.netlist, deck.compatibility])).digest('hex');
+    return identity
+      .update(
+        JSON.stringify([
+          convergencePolicy,
+          decks.map(({ netlist }) => netlist),
+          deck.compatibility,
+        ]),
+      )
+      .digest('hex');
   };
   const key = finishIdentity(
     createHash('sha256').update(
@@ -121,6 +136,7 @@ export async function prepareSimulation(deck, signal, modelStore, root) {
   return {
     solver,
     deck,
+    decks,
     modelBytes,
     key,
     identity: { identityVersion: 2, solverSha256 },
@@ -167,68 +183,98 @@ export async function runSimulation(
     for (const [index, id] of (deck.modelIds || []).entries())
       await writeFile(path.join(directory, `example-model-${index}.lib`), modelBytes.get(id));
     const runtime = spiceRuntime(root);
-    await writeFile(path.join(directory, 'circuit.cir'), liveSpiceNetlist(deck), 'utf8');
-    const log = await new Promise((resolve, reject) => {
-      const child = spawn(
-        solver.executable,
-        [
-          '-n',
-          ...(deck.modelId || deck.compatibility
-            ? ['-D', `ngbehavior=${deck.compatibility || 'ps'}`]
-            : []),
-          '-b',
-          'circuit.cir',
-        ],
-        {
-          cwd: directory,
-          env: runtime.env,
-          windowsHide: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
-      let output = '',
-        failure = '',
-        solverFailed = false;
-      const stop = (reason) => {
-        failure ||= reason;
-        child.kill();
-      };
-      const cancel = () => stop('Simulation cancelled.');
-      const samples = onSamples
-        ? createSpiceRawReader(path.join(directory, 'waveforms.raw'), deck, onSamples)
-        : null;
-      const samplePoll = setInterval(() => {
-        void samples?.poll().catch((error) => stop(error.message));
-      }, 200);
-      signal.addEventListener('abort', cancel, { once: true });
-      if (signal.aborted) cancel();
-      const capture = (chunk) => {
-        solverFailed ||=
-          /simulation\(s\) aborted|timestep too small|fatal error|error on line/i.test(
-            output.slice(-256) + chunk.toString(),
+    const attempt = await runSpiceAttempts(
+      prepared.decks,
+      signal,
+      async (candidate, index) => {
+        deck = candidate;
+        if (index) {
+          for (const name of ['waveforms.raw', 'waveforms.txt'])
+            await rm(path.join(directory, name), { force: true });
+        }
+        await writeFile(path.join(directory, 'circuit.cir'), liveSpiceNetlist(deck), 'utf8');
+        return new Promise((resolve, reject) => {
+          const child = spawn(
+            solver.executable,
+            [
+              '-n',
+              ...(deck.modelId || deck.compatibility
+                ? ['-D', `ngbehavior=${deck.compatibility || 'ps'}`]
+                : []),
+              '-b',
+              'circuit.cir',
+            ],
+            {
+              cwd: directory,
+              env: runtime.env,
+              windowsHide: true,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            },
           );
-        output += chunk.toString();
-        if (output.length > 128000) {
-          output = output.slice(-128000);
-        }
-      };
-      child.stdout.on('data', capture);
-      child.stderr.on('data', capture);
-      child.on('error', (error) => {
-        failure ||= error.message;
-      });
-      child.on('close', async (code) => {
-        clearInterval(samplePoll);
-        signal.removeEventListener('abort', cancel);
-        try {
-          await samples?.close();
-        } catch (error) {
-          failure ||= error.message;
-        }
-        if (failure || code !== 0 || solverFailed) reject(spiceFailure(output, failure));
-        else resolve(output);
-      });
-    });
+          let output = '',
+            failure = '',
+            failureCode,
+            solverFailed = false;
+          const stop = (reason, code) => {
+            failureCode ||= code;
+            failure ||= reason;
+            child.kill();
+          };
+          const cancel = () => stop('Simulation cancelled.');
+          const inspect =
+            index === 0 && prepared.decks.length > 1 ? convergenceProgress(deck) : undefined;
+          const samples =
+            onSamples || inspect
+              ? createSpiceRawReader(
+                  path.join(directory, 'waveforms.raw'),
+                  deck,
+                  onSamples || (async () => {}),
+                  inspect,
+                )
+              : null;
+          const samplePoll = setInterval(() => {
+            void samples?.poll().catch((error) => stop(error.message, error.code));
+          }, 200);
+          signal.addEventListener('abort', cancel, { once: true });
+          if (signal.aborted) cancel();
+          const capture = (chunk) => {
+            solverFailed ||=
+              /simulation\(s\) aborted|timestep too small|fatal error|error on line/i.test(
+                output.slice(-256) + chunk.toString(),
+              );
+            output += chunk.toString();
+            if (output.length > 128000) {
+              output = output.slice(-128000);
+            }
+          };
+          child.stdout.on('data', capture);
+          child.stderr.on('data', capture);
+          child.on('error', (error) => {
+            failure ||= error.message;
+          });
+          child.on('close', async (code) => {
+            clearInterval(samplePoll);
+            signal.removeEventListener('abort', cancel);
+            try {
+              await samples?.close();
+            } catch (error) {
+              failure ||= error.message;
+            }
+            if (failure || code !== 0 || solverFailed)
+              reject(
+                Object.assign(
+                  spiceFailure(output, failure),
+                  failureCode ? { code: failureCode } : {},
+                ),
+              );
+            else resolve(output);
+          });
+        });
+      },
+      () => onSamples?.({ reset: true }),
+    );
+    deck = attempt.deck;
+    const log = attempt.log;
     if (signal.aborted) throw new Error('Simulation cancelled.');
     const file = path.join(directory, 'waveforms.txt');
     await stat(file).catch(() => {
@@ -276,16 +322,23 @@ export function registerSpice(
   plugins,
   resultFiles,
   resultLoader = findSimulationResult,
+  examplesRoot,
 ) {
-  const modelStore = dataDir ? createSimulationModelStore(dataDir, modelFetcher) : undefined;
+  const modelStore = dataDir
+    ? createSimulationModelStore(dataDir, modelFetcher, examplesRoot)
+    : undefined;
   const offlineModelStore = dataDir
-    ? createSimulationModelStore(dataDir, async () => {
-        const error = new Error(
-          'The referenced simulation model file is missing. Restore the referenced model folder, or prepare the example files with npm run simulation:download-examples. Run does not download referenced models.',
-        );
-        error.code = 'OPENPE_MODEL_FILES_MISSING';
-        throw error;
-      })
+    ? createSimulationModelStore(
+        dataDir,
+        async () => {
+          const error = new Error(
+            'The referenced simulation model file is missing. Restore the referenced model folder, or prepare the example files with npm run simulation:download-examples. Run does not download referenced models.',
+          );
+          error.code = 'OPENPE_MODEL_FILES_MISSING';
+          throw error;
+        },
+        examplesRoot,
+      )
     : undefined;
   let active = null;
   const detections = new Set();
@@ -446,7 +499,12 @@ export function registerSpice(
         control.signal,
         projectModels.store,
         streaming
-          ? (samples) => sendSpiceEvent(res, { type: 'samples', ...samples }, control.signal)
+          ? (samples) =>
+              sendSpiceEvent(
+                res,
+                samples.reset ? { type: 'retry' } : { type: 'samples', ...samples },
+                control.signal,
+              )
           : undefined,
         projectResults,
         config,

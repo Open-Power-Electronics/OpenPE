@@ -162,7 +162,7 @@ export function registerWorkbenchPluginCapabilities(host: CapabilityHost) {
       kind: 'query',
       plugin: PCB_DESIGN_PLUGIN_ID,
       description:
-        'Read the AI PCB Layout workflow (default) or a named offline engineering reference. Read workflow first for scope, review gates and document IDs. Guidance does not run checks or edit the project.',
+        'Read the PE Layout Skill workflow (default) or a named offline engineering reference. Read workflow first for scope, review gates and document IDs. Guidance does not run checks or edit the project.',
       inputSchema: {
         type: 'object',
         properties: { document: { enum: [...pcbDesignDocuments] } },

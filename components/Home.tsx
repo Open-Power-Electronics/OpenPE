@@ -8,11 +8,7 @@ import {
   Home as HomeIcon,
   Settings,
 } from 'lucide-react';
-import {
-  homeExampleCatalog,
-  homeExampleSections,
-  type HomeExampleId as ExampleId,
-} from '@/lib/home-examples';
+import { homeExampleCatalog, type HomeExampleId as ExampleId } from '@/lib/home-examples';
 import ExamplePreview from './ExamplePreview';
 import HomeHeroBackdrop from './HomeHeroBackdrop';
 import AgentComposer, { type AgentComposerProps } from './AgentComposer';
@@ -23,12 +19,14 @@ import ProjectNavigation, {
   type ProjectAction,
 } from './ProjectNavigation';
 import type { Circuit } from '@/lib/circuit';
+import type { useExampleList } from './useExampleList';
 
 // Preview circuits are read-only and separate from fresh project instances.
 const previewCache = new Map<ExampleId, Circuit>();
 
 export default function Home({
   active,
+  exampleList,
   brief,
   setBrief,
   projects,
@@ -44,6 +42,7 @@ export default function Home({
   agentPicker,
 }: {
   active: boolean;
+  exampleList: ReturnType<typeof useExampleList>;
   brief: string;
   setBrief: (value: string) => void;
   projects: readonly ProjectNavigationItem[];
@@ -72,6 +71,7 @@ export default function Home({
 }) {
   const [previews, setPreviews] = useState(() => new Map(previewCache));
   const [previewError, setPreviewError] = useState('');
+  const { sections, error: discoveryError } = exampleList;
   useEffect(() => {
     if (!active || previewError) return;
     const next = homeExampleCatalog.find((entry) => !previews.has(entry.id));
@@ -143,6 +143,7 @@ export default function Home({
                 </button>
               </p>
             )}
+            {discoveryError && <p role="alert">{discoveryError}</p>}
             <AgentComposer
               {...composer}
               className="home-composer"
@@ -154,10 +155,15 @@ export default function Home({
               onSubmit={() => onNew(brief.trim())}
             />
           </div>
-          {homeExampleSections.map((section) => (
+          {sections.map((section) => (
             <section key={section.id} className="home-examples" aria-labelledby={section.id}>
               <div className="home-section-heading">
                 <h2 id={section.id}>{section.title}</h2>
+                {section.id === 'example-heading' && (
+                  <button className="secondary" onClick={exampleList.refresh}>
+                    Refresh examples
+                  </button>
+                )}
               </div>
               <div className="home-example-list">
                 {section.examples.map((example) => (

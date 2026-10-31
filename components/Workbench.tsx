@@ -1,4 +1,5 @@
 'use client';
+import { NumberField } from './LayoutPropertyFields';
 import {
   lazy,
   memo,
@@ -28,7 +29,8 @@ import {
 import { registerProviderPluginCapabilities } from '@/lib/provider-plugin-capabilities';
 import { registerLibraryCapabilities } from '@/lib/library-capabilities';
 import type { AgentThermalContext } from '@/context/agent-thermal-context';
-import ThermalField from './ThermalField';
+import ThermalField, { ThermalFieldMarkers } from './ThermalField';
+import ThermalComponentHighlight from './ThermalComponentHighlight';
 import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalLayoutResults';
 import {
   AlertCircle,
@@ -36,7 +38,7 @@ import {
   Cpu,
   FolderPlus,
   FolderOpen,
-  GitCommitHorizontal,
+  GitBranch,
   MessageSquareText,
   Home as HomeIcon,
   List,
@@ -62,12 +64,12 @@ import {
   type Point,
 } from '@/lib/circuit';
 import { api } from '@/lib/bridge';
-import { downloadText } from '@/lib/download';
+import { downloadBytes, downloadText } from '@/lib/download';
+import { projectExportFormats, type ProjectExportFormat } from '@/lib/export-formats';
 import {
   importDocument,
   parseProject,
   serializeProject,
-  exportKiCad,
   projectNativeFiles,
   projectFilename,
   projectFromNativeFiles,
@@ -122,7 +124,7 @@ import EditorStatusBar from './EditorStatusBar';
 const LayoutEditor = lazy(() => import('./LayoutEditor'));
 import type { PCB3DViewState } from './PCBModelPreview';
 const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
-import { type PCB } from '@/lib/pcb';
+import { type PCB, type Footprint } from '@/lib/pcb';
 import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
 import SchematicLayers from './SchematicLayers';
 import { visibleSchematicIds } from '@/lib/schematic-view';
@@ -134,11 +136,8 @@ import { gridSpacingOptions } from '@/lib/schematic-layers';
 import { layoutGridSpacingOptions } from '@/lib/layout-grid';
 import AgentPicker from './AgentPicker';
 import Home from './Home';
-import {
-  homeExampleCatalog,
-  homeExampleSections,
-  type HomeExampleId as ExampleId,
-} from '@/lib/home-examples';
+import { useExampleList } from './useExampleList';
+import { homeExampleCatalog, type HomeExampleId as ExampleId } from '@/lib/home-examples';
 import { hasOpenOverlay } from './Dialog';
 import DeferredDialog from './DeferredDialog';
 import DesktopTitlebar, {
@@ -197,7 +196,7 @@ const SimulationDialog = lazy(() => import('./SimulationDialog'));
 const ThermalSimulation = lazy(() => import('./ThermalSimulation'));
 const RuleCheckPanel = lazy(() => import('./RuleCheckPanel'));
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
-const ProjectHistoryDialog = lazy(() => import('./ProjectHistoryDialog'));
+const ProjectHistoryView = lazy(() => import('./ProjectHistoryView'));
 const PluginsPage = lazy(() => import('./PluginsPage'));
 const SettingsDialog = lazy(() => import('./SettingsDialog'));
 const AboutDialog = lazy(() => import('./AboutDialog'));
@@ -205,6 +204,10 @@ const SchematicCanvas = memo(Canvas);
 const RetainedLayoutEditor = memo(LayoutEditor);
 const RetainedModelPreview = memo(PCBModelPreview);
 const RetainedSourceEditor = memo(SourceEditor);
+const RetainedProjectHistory = memo(
+  ProjectHistoryView,
+  (previous, next) => !previous.visible && !next.visible,
+);
 const emptySelection: string[] = [];
 const emptyAnnotations: AgentAnnotation[] = [];
 
@@ -234,7 +237,7 @@ const RetainedSchematicToolbar = memo(
   // not build toolbar JSX; revealing always receives current props/actions.
   (previous, next) => !previous.visible && !next.visible,
 );
-type Modal = 'power' | 'library' | 'settings' | 'about' | 'parts' | 'history' | 'annotation' | null;
+type Modal = 'power' | 'library' | 'settings' | 'about' | 'parts' | 'annotation' | 'history' | null;
 type Confirmation = {
   kind: ConfirmationKind;
   action: (saveFirst?: boolean) => void | Promise<void>;
@@ -401,6 +404,7 @@ export default function Workbench({
   const [screen, setScreen] = useState<'home' | 'workspace' | 'plugins'>(
     initialState ? 'workspace' : 'home',
   );
+  const exampleList = useExampleList(active, screen);
   const beforePlugins = useRef<'home' | 'workspace'>(initialState ? 'workspace' : 'home');
   const [homeBrief, setHomeBrief] = useState('');
   function openPlugins() {
@@ -473,6 +477,7 @@ export default function Workbench({
   const [thermalPresentation, setThermalPresentation] = useState<ThermalLayoutPresentation | null>(
     null,
   );
+  const [thermalSelectedFootprint, setThermalSelectedFootprint] = useState<Footprint | null>(null);
   const [layoutAnalysisPanelTarget, setLayoutAnalysisPanelTarget] = useState<HTMLDivElement | null>(
     null,
   );
@@ -518,7 +523,6 @@ export default function Workbench({
   const [partsSize, setPartsSize] = useState<InspectorSize>({});
   const [schematicVisualizationOpen, setSchematicVisualizationOpen] = useState(true);
   const [selectionFilters, setSelectionFilters] = useState(defaultSchematicSelectionFilters);
-  const [historySize, setHistorySize] = useState<InspectorSize>({});
   const [hasNativeTitlebar, setHasNativeTitlebar] = useState(true);
   useEffect(() => {
     setHasNativeTitlebar(window.openpe?.titleBarOverlay === true);
@@ -543,6 +547,8 @@ export default function Workbench({
   const [view, setView] = useState<EditorView>(sourceDraft !== null ? 'source' : 'canvas');
   // Source stays mounted after first use, retaining its text history across views.
   const [sourceOpened, setSourceOpened] = useState(sourceDraft !== null);
+  const [gitOpened, setGitOpened] = useState(false);
+  const [gitDestination, setGitDestination] = useState(0);
   const sourceVisible = active && screen === 'workspace' && view === 'source';
   const retainedNativeSource = useRef<ReturnType<ProjectCore['getNativeFiles']>>({
     entry: '',
@@ -674,19 +680,15 @@ export default function Workbench({
     setRuleFocus(null);
   }, []);
   const openRuleChecks = useEditorAction((kind: 'erc' | 'drc') => {
-    if (rulesOpen === kind) {
-      closeRuleChecks();
-      return;
-    }
     setModal(null);
     setPropertiesDismissed(true);
     setRulesOpen(kind);
     setRuleFocus(null);
+    void runRuleChecks(kind);
   });
-  async function runRuleChecks(settings?: PCBDesignRuleConfig) {
-    const kind = rulesOpen;
+  async function runRuleChecks(kind: 'erc' | 'drc', settings?: PCBDesignRuleConfig) {
     const snapshot = core.getSnapshot();
-    if (!kind || !snapshot.project || !doc || ruleWork.current) return;
+    if (!snapshot.project || !doc || ruleWork.current) return;
     if (snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
     const config = settings ?? drcSettings;
     if (kind === 'drc') setDRCSettings(config);
@@ -1310,6 +1312,16 @@ export default function Workbench({
     setView(next);
     return true;
   }
+  async function openProjectHistory(signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    const intent = cancelPendingNavigation();
+    if (!(await applySource(signal))) return false;
+    signal?.throwIfAborted();
+    if (intent !== navigationIntent.current) return false;
+    setGitOpened(true);
+    setModal('history');
+    return true;
+  }
   async function selectSchematic(id: string, signal?: AbortSignal) {
     if (id === doc?.id && view === 'canvas') return;
     const intent = cancelPendingNavigation();
@@ -1383,7 +1395,6 @@ export default function Workbench({
       setSelection([]);
       setSelected(null);
       setTool('select');
-      setModal(null);
       notify('Version restored. Save to write it to disk.');
     } finally {
       if (sourcePreparation.current === control) sourcePreparation.current = null;
@@ -1538,6 +1549,7 @@ export default function Workbench({
           saveAs,
         });
         if (!result) return 'cancelled';
+        if (saveAs) setGitDestination((current) => current + 1);
         savedName = result.name;
         setFilename(result.name);
         setLocalExample(result.localExample ?? (saveAs ? false : localExample));
@@ -1569,7 +1581,10 @@ export default function Workbench({
       saveBusy.current = false;
     }
   }
-  async function exportFile(signal?: AbortSignal): Promise<'exported' | 'cancelled' | Error> {
+  async function exportFile(
+    format: ProjectExportFormat,
+    signal?: AbortSignal,
+  ): Promise<'exported' | 'cancelled' | Error> {
     if (!project || !doc || exportBusy.current)
       return new Error('A project export is not available.');
     exportBusy.current = true;
@@ -1579,35 +1594,21 @@ export default function Workbench({
       if (!applied) throw new Error('Fix the source errors before exporting.');
       const snapshot = await completeLayout(applied);
       signal?.throwIfAborted();
-      const schematic = findSchematic(snapshot, doc.id) ?? snapshot.schematic;
       const exportSource = serializeProject(snapshot);
-      const exportName = schematic.id !== snapshot.schematic.id ? schematic.title : filename;
-      let kind: 'schematic' | 'pcb' | 'scad' = 'schematic';
       if (window.openpe) {
-        const result = await window.openpe.exportKiCad({
+        const result = await window.openpe.exportProject({
           source: exportSource,
-          name: exportName,
-          schematicId: schematic.id,
+          name: filename,
+          format,
         });
         if (!result) return 'cancelled';
-        kind =
-          result.kind ?? (result.name.toLowerCase().endsWith('.kicad_pcb') ? 'pcb' : 'schematic');
       } else {
-        kind = view === 'layout' || view === '3d' ? 'pcb' : 'schematic';
-        const content = exportKiCad(snapshot, kind, schematic.id);
-        downloadText(
-          content,
-          exportName.replace(/\.(?:openpe\.json|kicad_pro)$/i, '') +
-            (kind === 'pcb' ? '.kicad_pcb' : '.kicad_sch'),
-        );
+        const { exportProjectFile } = await import('@/lib/manufacturing-export');
+        signal?.throwIfAborted();
+        const output = exportProjectFile(snapshot, format, filename);
+        downloadBytes(output.bytes, output.name, output.mime);
       }
-      notify(
-        kind === 'pcb'
-          ? 'Exported KiCad PCB. Refill zones and check connectivity in KiCad.'
-          : kind === 'scad'
-            ? 'Exported OpenSCAD model'
-            : 'Exported KiCad schematic',
-      );
+      notify(`Exported ${projectExportFormats.find((entry) => entry.id === format)!.label}`);
       return 'exported';
     } catch (e) {
       notify((e as Error).message);
@@ -1760,7 +1761,7 @@ export default function Workbench({
         await enterDocument(
           createNext,
           example
-            ? homeExampleCatalog.find((entry) => entry.id === example)!.title
+            ? (homeExampleCatalog.find((entry) => entry.id === example)?.title ?? 'KiCad project')
             : DEFAULT_PROJECT_FILENAME,
           false,
           brief,
@@ -2200,11 +2201,14 @@ export default function Workbench({
         setModal(null);
         showRightSidebar();
         setSchematicVisualizationOpen(true);
+      } else if (panel === 'history') {
+        if (!(await openProjectHistory(signal)))
+          throw new Error('Apply valid Source edits before opening Git.');
       } else setModal(panel);
     },
     save,
-    export: async (signal) => {
-      const result = await exportFile(signal);
+    export: async (format, signal) => {
+      const result = await exportFile(format, signal);
       if (result instanceof Error) throw result;
       return result;
     },
@@ -2360,7 +2364,7 @@ export default function Workbench({
             void open();
           },
         },
-        ...homeExampleSections.map((section, index) => ({
+        ...exampleList.sections.map((section, index) => ({
           label: section.title,
           separatorBefore: index === 0,
           items: section.examples.map((example) => ({
@@ -2383,12 +2387,25 @@ export default function Workbench({
                   void save(true);
                 },
               },
-              {
-                label: 'Export',
-                run: () => {
-                  void exportFile();
-                },
-              },
+              ...(project?.pcb
+                ? [
+                    {
+                      label: 'Export',
+                      items: projectExportFormats
+                        .filter((format) =>
+                          format.id === 'scad'
+                            ? Boolean(project?.pcb && modelCadFromProject(project)?.objects.length)
+                            : Boolean(project?.pcb),
+                        )
+                        .map((format) => ({
+                          label: format.label,
+                          run: () => {
+                            void exportFile(format.id);
+                          },
+                        })),
+                    },
+                  ]
+                : []),
               { label: 'Close project', run: requestProjectClose, separatorBefore: true },
             ]
           : []),
@@ -2526,6 +2543,7 @@ export default function Workbench({
     if (!project || !doc) throw new Error('Open a schematic before sending a message.');
     return { doc, pcb: project.pcb, pcbSchematic: project.schematic };
   }, []);
+  const getChatNativeFiles = useCallback(() => core.getNativeFiles(), [core]);
   const chatAnnotationDesign = useMemo(
     () => (doc ? { doc, pcb: project?.pcb, pcbSchematic: project?.schematic } : undefined),
     [doc, project?.pcb, project?.schematic],
@@ -2572,15 +2590,6 @@ export default function Workbench({
     }),
     [sourcePending, activeSessionId, annotations, onAnnotationsChange, onAnnotationAdd],
   );
-  const openHistory = useCallback(() => setModal('history'), []);
-  const historyAction = useMemo(
-    () => (
-      <ToolButton label="Version history" active={modal === 'history'} onClick={openHistory}>
-        <GitCommitHorizontal size={17} />
-      </ToolButton>
-    ),
-    [modal, openHistory],
-  );
   const openThermal = useEditorAction(() => {
     void capabilityHost
       .execute(thermalEnabled ? 'thermal.hide' : 'thermal.show')
@@ -2609,17 +2618,17 @@ export default function Workbench({
     thermalVisible &&
     !sourcePending &&
     thermalPresentation?.project === project &&
-    thermalPresentation.fileId === fileId &&
-    thermalPresentation.shown
+    thermalPresentation.fileId === fileId
       ? thermalPresentation
       : null;
   const thermalDrawing = useMemo(
     () =>
-      currentThermalPresentation ? (
+      currentThermalPresentation?.shown ? (
         <ThermalField
           result={currentThermalPresentation.result}
           surface={currentThermalPresentation.surface}
           probe={currentThermalPresentation.probe}
+          markersShown={false}
         />
       ) : null,
     [currentThermalPresentation],
@@ -2629,12 +2638,46 @@ export default function Workbench({
       currentThermalPresentation ? (
         <ThermalLayoutResults
           result={currentThermalPresentation.result}
-          surface={currentThermalPresentation.surface}
+          controls={currentThermalPresentation.controls}
+          project={currentThermalPresentation.project}
+          resultConfig={currentThermalPresentation.resultConfig}
+          onLocateFootprint={currentThermalPresentation.onLocateFootprint}
           probe={currentThermalPresentation.probe}
+          surface={currentThermalPresentation.surface}
+          selectedFootprint={
+            currentThermalPresentation.shown &&
+            thermalSelectedFootprint?.side === currentThermalPresentation.surface &&
+            currentThermalPresentation.project.pcb?.footprints.includes(thermalSelectedFootprint)
+              ? thermalSelectedFootprint
+              : null
+          }
         />
       ) : null,
-    [currentThermalPresentation],
+    [currentThermalPresentation, thermalSelectedFootprint],
   );
+  const thermalComponentDetail = useMemo(() => {
+    if (!currentThermalPresentation?.shown) return undefined;
+    const presentation = currentThermalPresentation;
+    return (
+      footprint: import('@/lib/pcb').Footprint,
+      layers: import('@/lib/pcb-display').PCBDisplay,
+      scale: number,
+    ) => (
+      <ThermalComponentHighlight
+        presentation={presentation}
+        footprint={footprint}
+        layers={layers}
+        scale={scale}
+      />
+    );
+  }, [currentThermalPresentation]);
+  const thermalMarkers = useMemo(() => {
+    if (!currentThermalPresentation?.shown) return undefined;
+    const { result, surface, probe } = currentThermalPresentation;
+    return (scale: number) => (
+      <ThermalFieldMarkers result={result} surface={surface} probe={probe} scale={scale} />
+    );
+  }, [currentThermalPresentation]);
   const locateThermalComponent = useEditorAction((id: string) => {
     const snapshot = core.getSnapshot();
     if (
@@ -2711,6 +2754,15 @@ export default function Workbench({
           sourcePending || Boolean(coreSnapshot.editingBlocked) || (kind === 'drc' && !project?.pcb)
         }
         onClick={() => openRuleChecks(kind)}
+        onKeyDown={(event) => {
+          if (
+            (event.key === 'Enter' || event.key === ' ') &&
+            (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
       >
         <ShieldCheck size={17} aria-hidden="true" />
       </button>
@@ -2759,16 +2811,6 @@ export default function Workbench({
         .writeText(activeSourceFile?.source ?? '')
         .then(() => notify('File source copied'))
         .catch(() => notify('Clipboard access is unavailable.')),
-  );
-  const sourceHistoryAction = useMemo(
-    () => (
-      <span className="editor-tool-group">
-        <ToolButton label="Version history" onClick={openHistory}>
-          <GitCommitHorizontal size={17} />
-        </ToolButton>
-      </span>
-    ),
-    [openHistory],
   );
   const gridDensityControl = useMemo(
     () => (
@@ -2833,21 +2875,35 @@ export default function Workbench({
     setPropertiesDismissed(true);
     setModal('parts');
   });
-  const partsListAction = useMemo(
+  const openHistory = useEditorAction(() => openProjectHistory());
+  const projectWindowActions = useMemo(
     () => (
-      <button
-        type="button"
-        className={`tool-button${modal === 'parts' ? ' active' : ''}`}
-        aria-label="Parts list"
-        title="Parts list"
-        aria-haspopup="dialog"
-        aria-expanded={modal === 'parts'}
-        onClick={openPartsList}
-      >
-        <List size={17} aria-hidden="true" />
-      </button>
+      <>
+        <button
+          type="button"
+          className={`tool-button${modal === 'parts' ? ' active' : ''}`}
+          aria-label="Parts list"
+          title="Parts list"
+          aria-haspopup="dialog"
+          aria-expanded={modal === 'parts'}
+          onClick={openPartsList}
+        >
+          <List size={17} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={`tool-button${modal === 'history' ? ' active' : ''}`}
+          aria-label="Git"
+          title="Git"
+          aria-haspopup="dialog"
+          aria-expanded={modal === 'history'}
+          onClick={openHistory}
+        >
+          <GitBranch size={17} aria-hidden="true" />
+        </button>
+      </>
     ),
-    [modal, openPartsList],
+    [modal, openPartsList, openHistory],
   );
   const activateSchematicTool = useEditorAction(async (next: Tool) => {
     if (!(await changeView('canvas'))) return;
@@ -2948,6 +3004,9 @@ export default function Workbench({
     [schematicCanvasView, tool, openSchematicLibrary, activateSchematicWire, placeSchematicMarker],
   );
   const selectEditorView = useEditorAction(changeView);
+  const closeHistory = useCallback(() => setModal(null), []);
+  const saveHistoryProject = useEditorAction(() => save());
+  const restoreHistoryProject = useEditorAction(restoreProjectVersion);
   const runHeaderFileAction = useEditorAction((value: string) =>
     runTitlebarMenuAction(titlebarMenus[0].items, value),
   );
@@ -3127,6 +3186,7 @@ export default function Workbench({
         {appHeader}
         {screen === 'home' && (
           <Home
+            exampleList={exampleList}
             active={active}
             brief={homeBrief}
             setBrief={setHomeBrief}
@@ -3200,6 +3260,7 @@ export default function Workbench({
                 session={session}
                 setSessions={setSessions}
                 getDesign={getChatDesign}
+                getNativeFiles={getChatNativeFiles}
                 annotationDesign={session.annotations?.length ? chatAnnotationDesign : undefined}
                 sidebarVisible={sidebarVisible}
                 onToggleSidebar={toggleSidebar}
@@ -3376,20 +3437,7 @@ export default function Workbench({
                       aria-label="Analysis and display"
                     >
                       {ruleActions.erc}
-                      {partsListAction}
-                      <button
-                        className={'tool-button ' + (modal === 'history' ? 'active' : '')}
-                        aria-label="Version history"
-                        title="Version history"
-                        aria-haspopup="dialog"
-                        aria-expanded={modal === 'history'}
-                        onClick={() => {
-                          setPropertiesDismissed(true);
-                          setModal('history');
-                        }}
-                      >
-                        <GitCommitHorizontal size={17} />
-                      </button>
+                      {projectWindowActions}
                       {rightSidebarAction}
                     </div>
                   </div>
@@ -3568,70 +3616,30 @@ export default function Workbench({
                                     />
                                     <div className="geometry-fields component-geometry">
                                       {(['x', 'y', 'rotation'] as const).map((key) => (
-                                        <label key={key}>
-                                          {key === 'rotation'
-                                            ? 'Rotation (°)'
-                                            : `${key.toUpperCase()} (mm)`}
-                                          <input
-                                            aria-label={
-                                              key === 'rotation'
-                                                ? 'Component rotation'
-                                                : `Component ${key.toUpperCase()} position`
-                                            }
-                                            type="number"
-                                            step={key === 'rotation' ? 'any' : '1.27'}
-                                            min={key === 'rotation' ? -360 : -100000}
-                                            max={key === 'rotation' ? 360 : 100000}
-                                            defaultValue={fmt(part[key])}
-                                            key={part[key]}
-                                            disabled={!propertiesActive}
-                                            onBlur={(e) => {
-                                              if (!canEditProperties()) return;
-                                              if (e.currentTarget.value === fmt(part[key])) return;
-                                              e.currentTarget.value = fmt(
-                                                patchGeometry(key, e.currentTarget.value).value,
-                                              );
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (
-                                                !propertiesActive ||
-                                                e.nativeEvent.isComposing ||
-                                                e.nativeEvent.keyCode === 229
-                                              ) {
-                                                e.stopPropagation();
-                                                return;
-                                              }
-                                              if (
-                                                (e.ctrlKey || e.metaKey) &&
-                                                e.key.toLowerCase() === 's'
-                                              ) {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                if (!canEditProperties()) return;
-                                                const result = patchGeometry(
-                                                  key,
-                                                  e.currentTarget.value,
-                                                );
-                                                if (result.success) {
-                                                  e.currentTarget.value = fmt(result.value);
-                                                  requestPropertiesSave(e.shiftKey);
-                                                }
-                                                return;
-                                              }
-                                              if (e.key === 'Escape') {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                e.currentTarget.value = fmt(part[key]);
-                                                e.currentTarget.blur();
-                                              }
-                                              if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                e.currentTarget.blur();
-                                              }
-                                            }}
-                                          />
-                                        </label>
+                                        <NumberField
+                                          key={part.id + key}
+                                          label={
+                                            key === 'rotation'
+                                              ? 'Rotation (°)'
+                                              : key.toUpperCase() + ' (mm)'
+                                          }
+                                          accessibleLabel={
+                                            key === 'rotation'
+                                              ? 'Component rotation'
+                                              : 'Component ' + key.toUpperCase() + ' position'
+                                          }
+                                          value={part[key]}
+                                          format={fmt}
+                                          step={key === 'rotation' ? 'any' : '1.27'}
+                                          min={key === 'rotation' ? -360 : -100000}
+                                          max={key === 'rotation' ? 360 : 100000}
+                                          active={propertiesActive}
+                                          onCommit={(value) =>
+                                            canEditProperties() &&
+                                            patchGeometry(key, String(value)).success
+                                          }
+                                          onRequestSave={requestPropertiesSave}
+                                        />
                                       ))}
                                     </div>
                                   </>
@@ -3810,10 +3818,20 @@ export default function Workbench({
                         onRequestSave={requestPropertiesSave}
                         syncStatus={layoutSyncStatus}
                         toolbarRef={layoutPanelsAnchor}
-                        listAction={partsListAction}
+                        listAction={projectWindowActions}
                         undoAction={undoAction}
                         analysisAction={thermalAction}
                         analysisDrawing={thermalDrawing}
+                        analysisComponentSurface={currentThermalPresentation?.surface}
+                        analysisComponentDetail={thermalComponentDetail}
+                        analysisMarkers={thermalMarkers}
+                        onAnalysisComponentChange={setThermalSelectedFootprint}
+                        analysisOutlineSurface={
+                          currentThermalPresentation?.shown &&
+                          currentThermalPresentation.outlinesShown
+                            ? currentThermalPresentation.surface
+                            : undefined
+                        }
                         analysisReadout={thermalReadout}
                         analysisPanel={layoutAnalysisPanelMount}
                         analysisLocateRef={thermalLocateRef}
@@ -3822,7 +3840,6 @@ export default function Workbench({
                             ? currentThermalPresentation.probeAt
                             : undefined
                         }
-                        historyAction={historyAction}
                         sidebarAction={project.pcb ? rightSidebarAction : undefined}
                         ruleAction={ruleActions.drc}
                         annotationSessionId={activeSessionId}
@@ -3861,8 +3878,7 @@ export default function Workbench({
                           gridSpacing={modelGridSpacing}
                           viewState={pcb3DView}
                           toolbarRef={objectPanelsAnchor}
-                          listAction={partsListAction}
-                          historyAction={historyAction}
+                          listAction={projectWindowActions}
                           sidebarAction={rightSidebarAction}
                           annotationProps={modelAnnotationProps}
                           modelCad={modelCad}
@@ -3886,14 +3902,7 @@ export default function Workbench({
                             role="group"
                             aria-label="3D display"
                           >
-                            {partsListAction}
-                            <ToolButton
-                              label="Version history"
-                              active={modal === 'history'}
-                              onClick={() => setModal('history')}
-                            >
-                              <GitCommitHorizontal size={17} />
-                            </ToolButton>
+                            {projectWindowActions}
                           </div>
                         </div>
                         <div className="pcb-3d-empty">
@@ -3911,7 +3920,7 @@ export default function Workbench({
                     <Suspense fallback={<p role="status">Loading source editor…</p>}>
                       <RetainedSourceEditor
                         visible={sourceVisible}
-                        listAction={partsListAction}
+                        listAction={projectWindowActions}
                         active={
                           active &&
                           screen === 'workspace' &&
@@ -3919,7 +3928,6 @@ export default function Workbench({
                           !modal &&
                           !confirmation
                         }
-                        trailingAction={sourceHistoryAction}
                         status={
                           diskObservationSelected && directoryObservation.selectedPending
                             ? 'Unsaved changes'
@@ -3948,6 +3956,21 @@ export default function Workbench({
                     </Suspense>
                   )}
                 </div>
+                {gitOpened && project && (
+                  <Suspense fallback={null}>
+                    <RetainedProjectHistory
+                      key={`${fileId}:${filename}:${gitDestination}`}
+                      visible={active && screen === 'workspace' && modal === 'history'}
+                      onClose={closeHistory}
+                      capabilityHost={capabilityHost}
+                      fileId={fileId}
+                      source={source}
+                      sourcePending={sourcePending || Boolean(coreSnapshot.editingBlocked)}
+                      onSave={saveHistoryProject}
+                      onRestore={restoreHistoryProject}
+                    />
+                  </Suspense>
+                )}
               </div>
               <EditorStatusBar
                 hidden={view !== 'canvas' && view !== '3d'}
@@ -4164,30 +4187,6 @@ export default function Workbench({
             onClose={() => setModal(null)}
           />
         )}
-        {modal === 'history' && project && active && (
-          <DeferredDialog
-            title="Version history"
-            onClose={() => {
-              cancelPendingNavigation();
-              setModal(null);
-            }}
-          >
-            <ProjectHistoryDialog
-              capabilityHost={capabilityHost}
-              size={historySize}
-              onResize={setHistorySize}
-              fileId={fileId}
-              source={source}
-              sourcePending={sourcePending}
-              onSave={() => save()}
-              onClose={() => {
-                cancelPendingNavigation();
-                setModal(null);
-              }}
-              onRestore={restoreProjectVersion}
-            />
-          </DeferredDialog>
-        )}
         {spiceAvailable && simulationProject && (
           <Suspense fallback={null}>
             <SimulationDialog
@@ -4284,7 +4283,7 @@ export default function Workbench({
                 blockedReason={coreSnapshot.editingBlocked ?? ''}
                 drcSettings={drcSettings}
                 onDRCSettingsChange={setDRCSettings}
-                onRun={(settings) => void runRuleChecks(settings)}
+                onRun={(settings) => void runRuleChecks(rulesOpen, settings)}
                 onSelectIssue={locateRuleIssue}
                 onClose={closeRuleChecks}
                 size={rulePanelSize}

@@ -24,7 +24,12 @@ export function solderMaskOpenings(board: PCB, side: 'front' | 'back') {
   const openings: Polygon[] = board.footprints.flatMap((footprint) =>
     footprint.pads
       .filter((pad) => padHasMaskOpening(footprint, pad, side))
-      .flatMap((pad) => offsetPolygons([padPolygon(footprint, pad)], pad.solderMaskMargin ?? 0)),
+      .flatMap((pad) =>
+        offsetPolygons(
+          [padPolygon(footprint, pad)],
+          pad.solderMaskMargin ?? footprint.solderMaskMargin ?? 0,
+        ),
+      ),
   );
   openings.push(
     ...board.vias.map((via) => ({ outer: circlePolygon(via, via.diameter / 2), holes: [] })),

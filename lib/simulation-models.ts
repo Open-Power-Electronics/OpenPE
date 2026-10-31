@@ -1,7 +1,8 @@
 import { tiModels, referenceModels } from './ti-dcdc';
 import exampleModels from '../resources/example-models-lock.json';
+import emcFlybackModels from '../resources/emc-flyback-models-lock.json';
 
-/** Portable references to separate immutable official model files. */
+/** Portable references to separate immutable pinned model files. */
 export type SimulationModelReference = { id: string; sha256: string; file: string };
 export const simulationModelDefinitions = [
   ...tiModels.map((model) => ({
@@ -19,6 +20,7 @@ export const simulationModelDefinitions = [
     sha256: model.sha256,
     file: `circuits/${model.file.replace(/\.[^.]+$/, '.lib')}`,
   })),
+  ...emcFlybackModels.models,
 ];
 const definitionsByFile = new Map<string, SimulationModelReference>();
 const caseInsensitiveFiles = new Set<string>();

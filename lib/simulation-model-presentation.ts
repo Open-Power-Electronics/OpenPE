@@ -43,6 +43,23 @@ export function simulationLibraryForPath(file: string, current: string): string 
   return [...libraryFiles].find(([, path]) => path === file)?.[0] ?? file;
 }
 
+/** The reviewed adjustable derivative is prepared from this exact source declaration. */
+export function simulationLibraryModelName(library: string, name: string): string {
+  return library === lm2596AdjustableDerivedModel.library &&
+    name === lm2596AdjustableDerivedModel.subcircuit
+    ? lm2596AdjustableDerivedModel.sourceSubcircuit
+    : name;
+}
+
+export function simulationLibraryDeclaration<T extends { name: string }>(
+  library: string,
+  name: string,
+  declarations: readonly T[],
+): T | undefined {
+  const expected = simulationLibraryModelName(library, name);
+  return declarations.find((declaration) => declaration.name === expected);
+}
+
 export function simulationComponentPresentation(part: Part, circuit?: Circuit) {
   const stored = partFields(part);
   const basicAvailable = basicSimulationAvailable(part);
@@ -57,6 +74,8 @@ export function simulationComponentPresentation(part: Part, circuit?: Circuit) {
   else if (fields['Sim.Device'] === 'R' || /^Device:R(?:_|$)/.test(part.libId)) model = 'ngspice R';
   else if (fields['Sim.Device'] === 'V')
     model = fields['Sim.Type'] ? `${fields['Sim.Type']} voltage source` : 'Voltage source';
+  else if (fields['Sim.Device'] === 'I')
+    model = fields['Sim.Type'] ? `${fields['Sim.Type']} current source` : 'Current source';
   if (circuit) {
     if (isEmcFlyback(circuit)) {
       if (emcFlybackCapacitors.includes(part.ref)) {
@@ -79,6 +98,7 @@ export function simulationComponentPresentation(part: Part, circuit?: Circuit) {
           initial = 'Unavailable';
         }
       } else if (emcFlybackResistors.includes(part.ref)) model = 'ngspice R';
+      else if (['V1', 'V2', 'I1'].includes(part.ref)) initial = 'Computed';
       else {
         model =
           (

@@ -23,6 +23,17 @@ export const sourceParameterSpecs = {
 } as const;
 export type SimulationSourceType = keyof typeof sourceParameterSpecs;
 
+export function simulationSourceParameterSpecs(type: SimulationSourceType, device: string) {
+  return sourceParameterSpecs[type].map((spec) => ({
+    ...spec,
+    label:
+      device === 'I'
+        ? spec.label.replace(/voltage/i, (word) => (word === 'Voltage' ? 'Current' : 'current'))
+        : spec.label,
+    unit: device === 'I' && spec.unit === 'V' ? 'A' : spec.unit,
+  }));
+}
+
 export function simulationSourceExpression(
   type: string,
   text: string,
@@ -52,7 +63,7 @@ export function simulationSourceValues(
     // DC sources may store their literal in Value instead of Sim.Params.
     const dc = text ? values.dc : numericSimulationParameters(`dc=${literalValue}`, ['dc']).dc;
     if (!Number.isFinite(dc) || Math.abs(dc) > 10000)
-      throw new Error(`${reference}: invalid source voltage.`);
+      throw new Error(`${reference}: invalid DC source level.`);
     return { dc };
   }
   if (type === 'PULSE') {

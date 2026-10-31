@@ -244,10 +244,14 @@ try {
   });
   const drawing = page.locator('.layout-main .layout-canvas');
   const nativeWidth = (await nativeSidebar.boundingBox()).width;
-  assert.ok(Math.abs(nativeWidth - 280) <= 1, 'The native Layout sidebar starts at 280 px.');
+  assert.ok(Math.abs(nativeWidth - 300) <= 1, 'The native Layout sidebar starts at 300 px.');
   const nativeDrawingWidth = (await drawing.boundingBox()).width;
   await page.getByRole('button', { name: 'Thermal FEM', exact: true }).click();
   const panel = page.getByRole('region', { name: 'Thermal FEM', exact: true });
+  const heatInput = page.getByRole('combobox', { name: 'Thermal heat input', exact: true });
+  await heatInput.press('ArrowDown');
+  await heatInput.press('Home');
+  await heatInput.press('Enter');
   await panel.waitFor();
   const expectThermalWidth = async (expected, drawingWidth) => {
     await page.waitForFunction((expected) => {
@@ -512,6 +516,93 @@ try {
   });
   await field.waitFor();
   await layoutTemperature.waitFor();
+  assert.equal(await layoutTemperature.evaluate((card) => !!card.closest('.canvas-wrap')), true);
+  assert.equal(await panel.getByText('Minimum', { exact: false }).count(), 0);
+  assert.match(
+    await layoutTemperature.innerText(),
+    /Minimum[\s\S]*Maximum[\s\S]*Mean[\s\S]*Power into board/,
+  );
+  assert.equal(await layoutTemperature.locator('summary').count(), 0);
+  assert.equal(await layoutTemperature.getByText('Hottest components', { exact: true }).count(), 0);
+  const heatList = layoutTemperature.getByRole('list', { name: 'Hottest components' });
+  await heatList.waitFor({ state: 'attached' });
+  assert.equal(
+    await heatList.getByRole('listitem').count(),
+    0,
+    'Unresolved fixture pad areas cannot enter a temperature ranking.',
+  );
+  assert.match(await layoutTemperature.innerText(), /Pad temperatures unavailable/);
+  const componentHighlight = layout.locator('[data-thermal-component-highlight]');
+  await componentHighlight.waitFor();
+  assert.equal(
+    await componentHighlight.getAttribute('data-thermal-component-highlight'),
+    targetFootprint.id,
+  );
+  assert.equal(await componentHighlight.getAttribute('aria-label'), 'Selected component U1');
+  const selectedReadout = layoutTemperature.locator('[data-thermal-component-readout]');
+  await selectedReadout.waitFor();
+  assert.equal(
+    await selectedReadout.getAttribute('data-thermal-component-readout'),
+    targetFootprint.id,
+  );
+  assert.match(await selectedReadout.innerText(), /U1[\s\S]*Unavailable/);
+  assert.equal(await componentHighlight.locator('text').count(), 0);
+  const resistor = project.pcb.footprints.find(
+    (footprint) =>
+      footprint.reference === 'R1' ||
+      project.schematic.parts.find((part) => part.id === footprint.symbolId)?.ref === 'R1',
+  );
+  await componentList.getByRole('button', { name: 'Locate R1', exact: true }).press('Enter');
+  await page.waitForFunction(
+    (id) =>
+      document
+        .querySelector('[data-thermal-component-highlight]')
+        ?.getAttribute('data-thermal-component-highlight') === id,
+    resistor.id,
+  );
+  assert.match(await selectedReadout.innerText(), /R1[\s\S]*[\d.]+ °C/);
+  const componentClick = await layout
+    .locator(`[data-footprint-body="${resistor.id}"]`)
+    .evaluate((body) => {
+      const point = body.ownerSVGElement.createSVGPoint();
+      point.x = Number(body.getAttribute('x')) + Number(body.getAttribute('width')) / 2;
+      point.y = Number(body.getAttribute('y')) + Number(body.getAttribute('height')) / 2;
+      const screen = point.matrixTransform(body.getScreenCTM());
+      return { x: screen.x, y: screen.y };
+    });
+  await layout.focus();
+  await layout.press('Escape');
+  await componentHighlight.waitFor({ state: 'detached' });
+  await selectedReadout.waitFor({ state: 'detached' });
+  await page.mouse.click(componentClick.x, componentClick.y);
+  await componentHighlight.waitFor();
+  assert.equal(
+    await componentHighlight.getAttribute('data-thermal-component-highlight'),
+    resistor.id,
+  );
+  await selectedReadout.waitFor();
+  assert.match(await selectedReadout.innerText(), /R1[\s\S]*[\d.]+ °C/);
+  assert.equal(
+    await selectedReadout.evaluate(
+      (readout) => !!readout.closest('[aria-label="Layout board temperature"]'),
+    ),
+    true,
+  );
+  const inspectionCamera = await layout.getAttribute('viewBox');
+  await page.mouse.move(componentClick.x, componentClick.y);
+  await page.mouse.down();
+  await page.mouse.move(componentClick.x + 24, componentClick.y + 12);
+  await page.mouse.up();
+  assert.equal(await layout.getAttribute('viewBox'), inspectionCamera);
+  await page.screenshot({ path: 'test-results/thermal-component-inspection.png' });
+  const cardBox = await layoutTemperature.boundingBox();
+  const drawingBox = await layout.boundingBox();
+  assert.ok(
+    cardBox.x >= drawingBox.x && cardBox.x + cardBox.width <= drawingBox.x + drawingBox.width,
+  );
+  assert.ok(
+    cardBox.y >= drawingBox.y && cardBox.y + cardBox.height <= drawingBox.y + drawingBox.height,
+  );
   assert.equal(runRequests, 1);
   assert.equal(await field.getAttribute('data-thermal-surface'), 'front');
   const raster = field.locator('[data-thermal-raster]');
@@ -525,19 +616,65 @@ try {
     'The solved field occupies its real PCB bounds inside the existing Layout canvas.',
   );
   assert.equal(
-    await panel
+    await page
       .getByRole('button', { name: 'Show temperature in Layout', exact: true })
       .getAttribute('aria-pressed'),
     'true',
   );
+  await layout.focus();
+  await layout.press('Home');
   const viewWithField = await layout.getAttribute('viewBox');
   const frontPaint = await raster.getAttribute('href');
+  const outlines = layout.locator('[data-thermal-component-outlines]');
+  const outlineToggle = layoutTemperature.getByRole('button', {
+    name: 'Show component outlines',
+    exact: true,
+  });
+  await outlines.waitFor();
+  assert.equal(await outlineToggle.getAttribute('aria-pressed'), 'true');
+  assert.equal(await outlines.getAttribute('data-thermal-outline-surface'), 'front');
+  const frontFootprint = outlines.locator('[data-thermal-outline-footprint]').first();
+  await frontFootprint.waitFor();
+  const drawnId = await frontFootprint.getAttribute('data-thermal-outline-footprint');
+  const nativeFootprint = project.pcb.footprints.find((item) => item.id === drawnId);
+  assert.equal(
+    await frontFootprint.getAttribute('transform'),
+    `translate(${nativeFootprint.x} ${nativeFootprint.y}) rotate(${-nativeFootprint.rotation})`,
+  );
+  await outlineToggle.click();
+  await outlines.waitFor({ state: 'detached' });
+  await componentHighlight.waitFor();
+  assert.equal(
+    await raster.getAttribute('href'),
+    frontPaint,
+    'Outline visibility never rebuilds the temperature raster.',
+  );
+  assert.equal(await layout.getAttribute('viewBox'), viewWithField);
+  assert.equal(runRequests, 1);
+  await outlineToggle.focus();
+  assert.equal(
+    await outlineToggle.evaluate((button) => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        bubbles: true,
+        cancelable: true,
+      });
+      button.dispatchEvent(event);
+      return event.defaultPrevented;
+    }),
+    true,
+  );
+  assert.equal(await outlineToggle.getAttribute('aria-pressed'), 'false');
+  await outlineToggle.press('Space');
+  await outlines.waitFor();
+  await page.screenshot({ path: 'test-results/thermal-component-outlines-front.png' });
   assert.match(frontPaint, /^data:image\/png;base64,/);
   assert.equal(
-    await field.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest'),
+    await layout.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest'),
     '2',
   );
-  const surface = panel.getByRole('combobox', { name: 'Thermal surface', exact: true });
+  const surface = page.getByRole('combobox', { name: 'Thermal surface', exact: true });
   await surface.scrollIntoViewIfNeeded();
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
@@ -555,11 +692,28 @@ try {
     frontPaint,
     'Changing surface draws the corresponding solver temperatures.',
   );
+  assert.equal(await outlines.getAttribute('data-thermal-outline-surface'), 'back');
   assert.equal(
-    await field.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest'),
+    await outlines.locator('[data-thermal-outline-footprint]').count(),
+    project.pcb.footprints.filter(
+      (footprint) =>
+        footprint.side === 'back' &&
+        footprint.graphics.some(
+          (graphic) =>
+            ['B.Fab', 'B.SilkS'].includes(graphic.layer) &&
+            !['text', 'dimension'].includes(graphic.kind),
+        ),
+    ).length,
+  );
+  assert.equal(
+    await layout.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest'),
     '6',
   );
-  await panel.getByRole('button', { name: 'Export temperature map', exact: true }).click();
+  assert.equal(
+    await page.getByRole('button', { name: 'Export temperature map', exact: true }).count(),
+    0,
+  );
+  await page.evaluate(() => window.thermalWorkbenchHost().execute('thermal.exportImage'));
   await page.waitForFunction(() => window.thermalExports.length === 1);
   assert.equal(
     await page.evaluate(async () => {
@@ -589,12 +743,32 @@ try {
     viewWithField,
     'Changing surface preserves the Layout camera.',
   );
-  const showTemperature = panel.getByRole('button', {
+  const showTemperature = page.getByRole('button', {
     name: 'Show temperature in Layout',
     exact: true,
   });
-  await showTemperature.click();
+  await showTemperature.focus();
+  assert.equal(
+    await showTemperature.evaluate((button) => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        bubbles: true,
+        cancelable: true,
+      });
+      button.dispatchEvent(event);
+      return event.defaultPrevented;
+    }),
+    true,
+  );
+  assert.equal(await showTemperature.getAttribute('aria-pressed'), 'true');
+  await showTemperature.press('Space');
   await field.waitFor({ state: 'detached' });
+  assert.equal(
+    await layoutTemperature.isVisible(),
+    true,
+    'The result card remains usable with the field hidden.',
+  );
   assert.equal(await showTemperature.getAttribute('aria-pressed'), 'false');
   assert.equal(await layout.getAttribute('viewBox'), viewWithField);
   assert.equal(
@@ -603,42 +777,53 @@ try {
   );
   await showTemperature.click();
   await field.waitFor();
-  const probe = panel.getByRole('button', { name: 'Probe Layout temperature', exact: true });
+  const probe = page.getByRole('button', { name: 'Probe Layout temperature', exact: true });
   assert.equal(await probe.getAttribute('aria-pressed'), 'false');
   await probe.click();
   assert.equal(await probe.getAttribute('aria-pressed'), 'true');
-  const target = savedThermal.result.points[4];
+  const target = savedThermal.result.points[6];
   const projectedTarget = await layout.evaluate((svg, point) => {
     const local = svg.createSVGPoint();
     // Stay a little inside the mesh so the polygon receives the pointer.
-    local.x = point.x + 0.25;
-    local.y = point.y + 0.25;
+    local.x = point.x - 0.25;
+    local.y = point.y - 0.25;
     const screen = local.matrixTransform(svg.getScreenCTM());
     return { x: screen.x, y: screen.y };
   }, target);
   await page.mouse.click(projectedTarget.x, projectedTarget.y);
   await waitForAsync(
     page,
-    async () => (await window.thermalWorkbenchHost().query('thermal.status')).probe?.node === 4,
+    async () => (await window.thermalWorkbenchHost().query('thermal.status')).probe?.node === 6,
   );
   const probed = await page.evaluate(() => window.thermalWorkbenchHost().query('thermal.status'));
   assert.deepEqual(
     probed.probe,
-    { ...target, node: 4 },
+    { ...target, node: 6 },
     'Canvas probing reports the exact real node on the chosen surface.',
   );
-  assert.equal(await field.locator('[data-thermal-probe]').getAttribute('data-thermal-probe'), '4');
-  assert.match(await layoutTemperature.innerText(), /Node/);
-  assert.ok(
-    (await layoutTemperature.innerText()).includes(target.temperatureC.toFixed(2)),
-    'Layout readout shows the probed temperature.',
+  assert.equal(
+    await layout.locator('[data-thermal-probe]').getAttribute('data-thermal-probe'),
+    '6',
   );
+  assert.ok(
+    (await layoutTemperature.locator('[data-thermal-probe-readout]').innerText()).includes(
+      target.temperatureC.toFixed(2),
+    ),
+    'The upper-left result card shows the probed temperature.',
+  );
+  assert.equal(await layout.locator('[data-thermal-probe] text').count(), 0);
+  assert.doesNotMatch(
+    await layoutTemperature.locator('[data-thermal-probe-readout]').innerText(),
+    /Node|mm/,
+  );
+  const probeSize = await layout.locator('[data-thermal-probe] > circle').boundingBox();
   assert.equal(
     await layout.getAttribute('viewBox'),
     viewWithField,
     'Probing preserves the Layout camera.',
   );
-  await layout.hover({ position: { x: 30, y: 30 } });
+  const canvasBox = await layout.boundingBox();
+  await layout.hover({ position: { x: canvasBox.width * 0.75, y: canvasBox.height * 0.75 } });
   await page.mouse.wheel(0, -140);
   await page.waitForFunction(
     (before) =>
@@ -646,6 +831,11 @@ try {
     viewWithField,
   );
   const navigatedView = await layout.getAttribute('viewBox');
+  const zoomedProbeSize = await layout.locator('[data-thermal-probe] > circle').boundingBox();
+  assert.ok(
+    Math.abs(probeSize.width - zoomedProbeSize.width) < 0.1,
+    'Probe markers retain their screen size while zooming.',
+  );
   await page.getByRole('button', { name: 'Schematic', exact: true }).click();
   await page.getByTestId('schematic-canvas').waitFor();
   await page.getByRole('button', { name: 'Layout', exact: true }).click();

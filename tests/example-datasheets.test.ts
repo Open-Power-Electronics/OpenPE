@@ -8,9 +8,18 @@ import {
   loadDatasheetCatalog,
   downloadDatasheet,
   verifyDatasheet,
+  loadSupplementalDatasheets,
 } from '../scripts/example-datasheets.mjs';
 
 const catalog = await loadDatasheetCatalog();
+
+test('all EMC ICs have distinct pinned PDFs matching the fitted native identities', async () => {
+  const supplemental = await loadSupplementalDatasheets();
+  assert.deepEqual(supplemental.map(({ record }) => record.ic.reference), ['U2', 'U3', 'U4']);
+  assert.deepEqual(supplemental.map(({ record }) => record.datasheet.filename),
+    ['l78l12.pdf', 'tl431.pdf', 'ltv817s.pdf']);
+  assert.equal(supplemental[2].record.ic.schematic_value, 'LTV-817S');
+});
 
 async function temporaryDirectory(t: TestContext) {
   const parent = path.resolve('test-results');
@@ -33,10 +42,10 @@ function smallPdfRecord() {
 }
 
 test('every Home example has schema-valid metadata bound to its actual controller', () => {
-  assert.equal(catalog.length, 9);
+  assert.equal(catalog.length, 10);
   assert.equal(
     catalog.reduce((sum, { record }) => sum + Object.keys(record.parameters).length, 0),
-    132,
+    145,
   );
   const byFamily = Object.fromEntries(catalog.map(({ record }) => [record.ic.family, record]));
   assert.equal(byFamily.LM2735.ic.schematic_value, 'LM2735Y');
@@ -49,6 +58,11 @@ test('every Home example has schema-valid metadata bound to its actual controlle
   assert.equal(byFamily.LM27761.parameters.output_current.values.max, 0.25);
   assert.equal(byFamily.LM27761.parameters.output_current_absolute_maximum.values.max, 0.3);
   assert.ok(!Object.hasOwn(byFamily.LMR70503.parameters, 'feedback_reference_voltage'));
+  assert.equal(byFamily.UC3845B.ic.manufacturer, 'STMicroelectronics');
+  assert.equal(byFamily.UC3845B.parameters.maximum_duty_cycle.values.max, 0.5);
+  assert.equal(byFamily.UC3845B.parameters.undervoltage_start_threshold.values.typ, 8.4);
+  assert.equal(byFamily.UC3845B.parameters.oscillator_frequency.values.typ, 52000);
+  assert.ok(!Object.hasOwn(byFamily.UC3845B.parameters, 'input_voltage'));
 });
 
 test('schema rejects wrong units, rating categories, unknown fields and empty quantities', () => {

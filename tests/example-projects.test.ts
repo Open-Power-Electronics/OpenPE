@@ -1,20 +1,109 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  writeFile,
+  mkdir,
+  rm,
+  unlink,
+  symlink,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { ExampleProjects } from '../server/example-projects.mjs';
 import { ProjectHistory } from '../server/project-history.mjs';
-import { parseProject, projectNativeFiles, serializeProject } from '../lib/project';
+import {
+  createProject,
+  parseProject,
+  projectFromNativeFiles,
+  projectNativeFiles,
+  serializeProject,
+} from '../lib/project';
+import { switchingStageFixture } from './fixtures/switching-stage';
+import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import { validExampleKey } from '../lib/workspace-example';
 import { defaultExamples } from '../lib/default-examples';
 import { homeExampleCatalog } from '../lib/home-examples';
 const { FileGrants } = createRequire(import.meta.url)('../electron/file-grants.cjs');
+const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
 const { createProjectDirectoryReader } = createRequire(import.meta.url)(
   '../electron/project-directory.cjs',
 );
 
 const noHistory = () => ({ ensureExampleInitial: async () => {} });
+
+test('dropped projects are discovered without catalog registration and use ordinary native import and simulation', async (t) => {
+  const { root, grants } = await fixture(t);
+  let histories = 0;
+  const history = {
+    ensureExampleInitial: async () => {
+      histories++;
+    },
+  };
+  const examples = new ExampleProjects(root, grants, history);
+  const before = await examples.list();
+  const directory = path.join(root, 'Customer 电源');
+  await mkdir(directory);
+  const project = createProject(switchingStageFixture());
+  const bundle = projectNativeFiles(project, 'Power supply.kicad_pro');
+  for (const file of bundle.files) await writeFile(path.join(directory, file.name), file.source);
+  const listed = await examples.list();
+  const added = listed.entries.filter(
+    (entry: { id: string }) => !before.entries.some((old: { id: string }) => old.id === entry.id),
+  );
+  assert.equal(added.length, 1);
+  assert.equal(added[0].title, 'Power supply');
+  assert.match(added[0].id, /^local-[a-f0-9]{64}$/);
+  assert.equal(histories, 0, 'Discovery does not create histories or grants.');
+  const key = `example:${added[0].id}`;
+  assert.equal(validExampleKey(key), true);
+  assert.deepEqual(await examples.list(), listed);
+  // Clean recovery resolves the stable opaque identity without a prior list call.
+  const recovered = new ExampleProjects(root, grants, history);
+  const opened = await recovered.openDefault(key);
+  const direct = projectFromNativeFiles(
+    await readNativeProject(path.join(directory, bundle.entry)),
+  );
+  const imported = parseProject(opened.source);
+  assert.equal(serializeProject(imported), serializeProject(direct));
+  assert.deepEqual(
+    buildSpiceDeck(imported.schematic, defaultTransient(imported.schematic)),
+    buildSpiceDeck(direct.schematic, defaultTransient(direct.schematic)),
+  );
+  assert.equal(histories, 1);
+  await unlink(path.join(directory, bundle.entry));
+  assert.equal(
+    (await examples.list()).entries.some((entry: { id: string }) => entry.id === added[0].id),
+    false,
+  );
+  await assert.rejects(recovered.openDefault(key), /unavailable/);
+});
+
+test('discovery rejects linked roots, ignores linked projects and does not turn renderer keys into paths', async (t) => {
+  const { root, temporary, grants } = await fixture(t);
+  const link = path.join(temporary, 'linked-examples');
+  try {
+    await symlink(root, link, 'junction');
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes((error as NodeJS.ErrnoException).code!)) {
+      t.skip('Directory links are unavailable.');
+      return;
+    }
+    throw error;
+  }
+  await assert.rejects(new ExampleProjects(link, grants, noHistory()).list(), /regular|unlinked/);
+  const nested = path.join(root, 'linked-project');
+  await symlink(temporary, nested, 'junction');
+  const examples = new ExampleProjects(root, grants, noHistory());
+  assert.ok(
+    (await examples.list()).warnings.some((warning: string) => warning.includes('linked-project')),
+  );
+  assert.throws(() => examples.openDefault('example:local-../../escape'), /Unknown/);
+  await assert.rejects(examples.openDefault(`example:local-${'0'.repeat(64)}`), /unavailable/);
+});
 async function fixture(t: TestContext, entries = defaultExamples().slice(0, 1)) {
   const temporary = await mkdtemp(path.join(tmpdir(), 'openpe-original-examples-'));
   t.after(() => rm(temporary, { recursive: true, force: true }));
@@ -83,7 +172,7 @@ test('Source lists original example names, nested documents, PDF, SCAD and empty
   const scad = '// Original editable source\ncube([12, 20, 30]);\n';
   await writeFile(path.join(directory, 'emc-flyback.scad'), scad);
   await writeFile(path.join(directory, 'datasheets/controller.pdf'), '%PDF-1.7\n%%EOF\n');
-  await writeFile(path.join(directory, 'datasheets/parameters.json'), '{"voltage":24}');
+  await writeFile(path.join(directory, 'datasheets/user-notes.json'), '{"voltage":24}');
   const examples = new ExampleProjects(root, grants, noHistory());
   const opened = await examples.openDefault(entries[0].key);
   assert.equal(grants.get(opened.fileId), file);
@@ -95,7 +184,7 @@ test('Source lists original example names, nested documents, PDF, SCAD and empty
     'emc-flyback.kicad_pcb',
     'emc-flyback.scad',
     'datasheets/controller.pdf',
-    'datasheets/parameters.json',
+    'datasheets/user-notes.json',
     'notes/empty',
   ])
     assert.ok(

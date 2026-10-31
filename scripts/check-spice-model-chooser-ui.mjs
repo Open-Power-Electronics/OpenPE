@@ -2,6 +2,24 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+
+const require = createRequire(import.meta.url);
+const { readNativeProject } = require('../electron/native-project.cjs');
+const { readSpiceModelFile } = require('../electron/spice-model-picker.cjs');
+const emcFiles = await readNativeProject(
+  path.resolve('examples/emc-flyback/emc-flyback.kicad_pro'),
+);
+const emcModels = await readSpiceModelFile(
+  path.resolve('examples/emc-flyback/circuits/EMC_flyback_control.lib'),
+);
+const lm5001Files = await readNativeProject(
+  path.resolve('examples/lm5001-soic8-boost/lm5001-soic8-boost.kicad_pro'),
+);
+const lm5001Models = await readSpiceModelFile(
+  path.resolve('examples/lm5001-soic8-boost/circuits/LM5001.lib'),
+);
 
 // Isolated renderer and real Core; native dialogs and declaration discovery are mocked.
 const bundle = await build({
@@ -14,6 +32,9 @@ const bundle = await build({
       import {createPart, emptyCircuit, libraries} from './lib/circuit';
       import {partFields,createLibraryPart} from './lib/library';
       import {createProject} from './lib/project';
+      import {projectFromNativeFiles} from './lib/kicad-project';
+      const emcProject=projectFromNativeFiles(${JSON.stringify(emcFiles)});
+      const lm5001Project=projectFromNativeFiles(${JSON.stringify(lm5001Files)});
       const circuit = emptyCircuit();
       const initial = createPart(circuit, 'R', 0, 0);
       initial.fields = {...partFields(initial), Description:'Retained device metadata',
@@ -29,9 +50,15 @@ const bundle = await build({
       window.modelPickerMode='file';
       window.modelPickedPath='circuits/vendor.lib';
       window.modelIssues=[];
+      window.modelInspectionResult=null;
+      window.modelInspectionCalls=[];
       window.modelCatalog=[{name:'RES_A',kind:'subcircuit',pins:['+','-']},
         {name:'RES_B',kind:'subcircuit',pins:['+','-']}];
-      window.openpe={chooseSpiceModel:async (fileId,currentLibrary)=>{
+      window.openpe={inspectSpiceModel:async(fileId,library)=>{
+        window.modelInspectionCalls.push({fileId,library});
+        if(window.modelInspectionMode==='delayed')return new Promise(resolve=>{window.resolveModelInspection=resolve;});
+        return window.modelInspectionResult;
+      },chooseSpiceModel:async (fileId,currentLibrary)=>{
         window.modelPickerCalls.push({fileId,currentLibrary});
         if(window.modelPickerMode==='cancel') return null;
         if(window.modelPickerMode==='failure') throw new Error('Picker failed');
@@ -67,7 +94,16 @@ const bundle = await build({
           circuit={snapshot.project.schematic} active={active} spiceAvailable={spice}
           fileId={fileId||undefined} getRevision={getRevision} onSave={save}/></div>;
       }
-      createRoot(document.getElementById('root')).render(<Fixture/>);
+      const root=createRoot(document.getElementById('root'));
+      window.openEmcModelFixture=(reference,active=true,spice=true)=>root.render(<PartProperties key={'emc:'+active+':'+spice}
+        part={emcProject.schematic.parts.find(part=>part.ref===reference)} circuit={emcProject.schematic}
+        active={active} spiceAvailable={spice} fileId="emc-grant" getRevision={()=>0}
+        onSave={()=>{throw new Error('Inspection must never edit the component.');}}/>);
+      window.openLmModelFixture=()=>root.render(<PartProperties key="lm5001"
+        part={lm5001Project.schematic.parts.find(part=>part.ref==='U1')} circuit={lm5001Project.schematic}
+        spiceAvailable fileId="lm5001-grant" getRevision={()=>0}
+        onSave={()=>{throw new Error('Inspection must never edit the component.');}}/>);
+      root.render(<Fixture/>);
     `,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -85,7 +121,10 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 760, height: 800 } });
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+    console.error(error.message);
+  });
   await page.route('http://localhost/**', (route) =>
     route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
   );
@@ -98,6 +137,8 @@ try {
   const field = (name) => page.getByLabel(name, { exact: true });
   const browse = page.getByRole('button', { name: 'Browse SPICE models', exact: true });
   const model = page.getByRole('combobox', { name: 'Simulation model', exact: true });
+  const fileModels = model;
+  const filePopup = page.getByRole('listbox', { name: 'Simulation model', exact: true });
   const section = page.locator('details.property-simulation');
   const reference = field('Component reference');
   const externalFile = 'C:\\SPICE models\\Vendor\\long-controller-transient-library-name.lib';
@@ -127,6 +168,13 @@ try {
   const ensureOpen = async () => {
     if ((await section.getAttribute('open')) === null) await section.locator('summary').click();
   };
+  const reopen = async () => {
+    const previous = await section.elementHandle();
+    await page.evaluate(() => window.reopenModelProperties());
+    await page.waitForFunction((element) => !element.isConnected, previous);
+    await previous.dispose();
+    await ensureOpen();
+  };
   const undoTo = async (depth) => {
     while ((await state()).undoDepth > depth) {
       const previous = (await state()).undoDepth;
@@ -142,7 +190,7 @@ try {
   const popup = page.getByRole('listbox', { name: 'Simulation model', exact: true });
   const pick = async (label) => {
     if (!(await popup.isVisible())) await model.click();
-    await popup.getByRole('option', { name: label, exact: true }).click();
+    await popup.getByRole('option', { name: new RegExp('^' + label + '(?:$| )') }).click();
   };
   const open = async (path = 'circuits/vendor.lib', models = resistanceCatalog) => {
     await choose('file', path, models);
@@ -150,6 +198,14 @@ try {
     await idle();
   };
   assert.equal(await model.textContent(), 'RES_A');
+  assert.equal(await fileModels.isDisabled(), false, 'Intrinsic models remain available.');
+  const library = page.getByLabel('Model library', { exact: true });
+  assert.equal(await library.inputValue(), 'vendor.lib');
+  assert.equal(await library.getAttribute('readonly'), '');
+  assert.equal(await library.getAttribute('title'), 'circuits/vendor.lib');
+  const pathBounds = await library.boundingBox();
+  const modelBounds = await model.boundingBox();
+  assert.ok(pathBounds.y + pathBounds.height < modelBounds.y);
   assert.equal(await model.evaluate((element) => element.tagName), 'BUTTON');
   const count = await page.evaluate(() => window.modelPickerCalls.length);
   await pick('ngspice R');
@@ -166,6 +222,65 @@ try {
   await undoTo(0);
   await open();
   assert.equal((await state()).source, original.source);
+  assert.equal(await page.getByLabel('Model library', { exact: true }).inputValue(), 'vendor.lib');
+  assert.equal(
+    await page.locator('.property-model-file[role="status"]').textContent(),
+    '2 models · 2 compatible',
+  );
+  await open('circuits/vendor.lib', [resistanceCatalog[1]]);
+  assert.equal(
+    (await state()).source,
+    original.source,
+    'Inspecting a library missing its assigned name cannot commit a replacement.',
+  );
+  assert.match(await page.getByRole('alert').textContent(), /does not contain model "RES_A"/);
+  assert.equal(await model.textContent(), 'Choose model from file');
+  await model.click();
+  assert.equal(await popup.getByRole('option', { name: 'RES_A', exact: true }).count(), 0);
+  await model.press('Escape');
+  await open();
+  await open('circuits/vendor.lib', [
+    { name: 'RES_A', kind: 'model', device: 'UNSUPPORTED', pins: [] },
+  ]);
+  await fileModels.click();
+  assert.equal(await filePopup.getByRole('option').count(), 2);
+  assert.doesNotMatch(
+    await filePopup.textContent(),
+    /Incompatible|no supported pin|terminals|pins/,
+  );
+  assert.equal(await filePopup.locator('small').count(), 0);
+  const unavailable = filePopup.getByRole('option', { name: 'RES_A', exact: true });
+  assert.equal(await unavailable.getAttribute('aria-disabled'), 'true');
+  assert.match(await unavailable.getAttribute('class'), /\bmuted\b/);
+  const unavailableColour = await unavailable
+    .locator('strong')
+    .evaluate((element) => getComputedStyle(element).color);
+  const availableColour = await filePopup
+    .getByRole('option', { name: 'ngspice R', exact: true })
+    .locator('strong')
+    .evaluate((element) => getComputedStyle(element).color);
+  assert.notEqual(unavailableColour, availableColour, 'Unavailable models remain visible in grey.');
+  await mkdir('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/spice-file-models-incompatible.png' });
+  await fileModels.press('Enter');
+  assert.equal((await state()).source, original.source);
+  await unavailable.click({ force: true });
+  assert.equal(await page.getByRole('alert').count(), 0);
+  assert.equal((await state()).source, original.source);
+  await model.press('Escape');
+  await open();
+  await open('circuits/empty.lib', []);
+  assert.equal(await fileModels.textContent(), 'No models found');
+  assert.equal(await fileModels.isDisabled(), false, 'Intrinsic models remain available.');
+  await undoTo(0);
+  await open('circuits/RES_A.lib', [resistanceCatalog[0]]);
+  assert.equal((await state()).fields['Sim.Name'], undefined);
+  assert.equal(await page.getByLabel('Model library', { exact: true }).inputValue(), 'RES_A.lib');
+  await pick('RES_A');
+  assert.equal((await state()).fields['Sim.Library'], 'circuits/RES_A.lib');
+  assert.equal((await state()).fields['Sim.Name'], 'RES_A');
+  await undoTo(0);
+  await open();
   assert.deepEqual((await page.evaluate(() => window.modelPickerCalls)).at(-1), {
     fileId: 'project-grant',
     currentLibrary: 'circuits/vendor.lib',
@@ -177,10 +292,26 @@ try {
   assert.equal(await model.evaluate((element) => document.activeElement === element), true);
   await open(externalFile);
   assert.equal((await state()).fields['Sim.Name'], undefined);
-  await pick('RES_B');
+  const beforeFileChoice = await state();
+  await fileModels.click();
+  assert.equal(await filePopup.getByRole('option').count(), 3);
+  assert.equal(
+    await page.getByLabel('Model library', { exact: true }).inputValue(),
+    'long-controller-transient-library-name.lib',
+  );
+  assert.equal(await library.getAttribute('title'), externalFile);
+  assert.equal(await page.getByRole('combobox').count(), 1);
+  await page.screenshot({ path: 'test-results/spice-file-models.png' });
+  await fileModels.dispatchEvent('compositionstart');
+  await filePopup.getByRole('option', { name: 'RES_B', exact: true }).click();
+  assert.deepEqual(await state(), beforeFileChoice);
+  await fileModels.dispatchEvent('compositionend');
+  await fileModels.press('ArrowDown');
+  await fileModels.press('End');
+  await fileModels.press('Enter');
+  assert.equal((await state()).fields['Sim.Name'], 'RES_B');
   assert.equal((await state()).undoDepth, 2);
-  await page.evaluate(() => window.reopenModelProperties());
-  await ensureOpen();
+  await reopen();
   assert.equal(await model.textContent(), 'RES_B');
   await mkdir('test-results', { recursive: true });
   await page.screenshot({
@@ -276,8 +407,7 @@ try {
   await pick('SIN voltage source');
   assert.equal(await field('Frequency (Hz)').isVisible(), true);
   assert.equal(await field('Amplitude (V)').inputValue(), '12');
-  await page.evaluate(() => window.reopenModelProperties());
-  await ensureOpen();
+  await reopen();
   assert.equal(await model.textContent(), 'SIN voltage source');
   await pick('DC voltage source');
   assert.equal(await field('Voltage (V)').inputValue(), '12');
@@ -290,7 +420,9 @@ try {
   const assertMenuWidth = async () => {
     const bounds = await page.evaluate(() => {
       const menu = document.querySelector('.property-model-menu').getBoundingClientRect();
-      const control = document.querySelector('.property-model-choice').getBoundingClientRect();
+      const control = document
+        .querySelector('.property-file-models .select-trigger')
+        .getBoundingClientRect();
       return {
         width: menu.width,
         controlWidth: control.width,
@@ -312,7 +444,8 @@ try {
       () =>
         Math.abs(
           document.querySelector('.property-model-menu').getBoundingClientRect().width -
-            document.querySelector('.property-model-choice').getBoundingClientRect().width,
+            document.querySelector('.property-file-models .select-trigger').getBoundingClientRect()
+              .width,
         ) < 1,
     );
     await assertMenuWidth();
@@ -323,6 +456,76 @@ try {
   await model.click();
   await page.screenshot({ path: 'test-results/spice-model-menu-dark.png', animations: 'disabled' });
   await model.press('Escape');
+  await page.evaluate((result) => {
+    document.documentElement.dataset.theme = 'light';
+    window.modelInspectionResult = { path: 'circuits/EMC_flyback_control.lib', ...result };
+  }, emcModels);
+  const beforeAutomatic = await page.evaluate(() => window.modelPickerCalls.length);
+  for (const [reference, name] of [
+    ['U1', 'UC3845B'],
+    ['U4', 'LTV817'],
+  ]) {
+    await page.evaluate((reference) => window.openEmcModelFixture(reference), reference);
+    await ensureOpen();
+    await page.waitForFunction(
+      () =>
+        document.querySelector('.property-model-file')?.textContent === '3 models · 1 compatible',
+    );
+    await ensureOpen();
+    assert.equal(await model.textContent(), name);
+    await model.click();
+    assert.equal(await popup.getByRole('option').count(), 3);
+    assert.equal(await popup.locator('.select-option.muted').count(), 2);
+    assert.equal(await popup.locator('[aria-disabled="true"]').count(), 2);
+    assert.equal(await popup.locator('small').count(), 0);
+    await page.screenshot({ path: `test-results/spice-model-auto-${reference}.png` });
+    await model.press('Escape');
+  }
+  assert.equal(await page.evaluate(() => window.modelPickerCalls.length), beforeAutomatic);
+  await page.evaluate((models) => {
+    window.modelInspectionResult = { path: 'circuits/LM5001.lib', ...models };
+    window.openLmModelFixture();
+  }, lm5001Models);
+  await page.waitForFunction(
+    () => document.querySelector('.property-model-file')?.textContent === '1 model · 1 compatible',
+  );
+  await ensureOpen();
+  assert.equal(await model.textContent(), 'LM5001_TRANS');
+  await model.click();
+  assert.equal(await popup.getByRole('option').count(), 1);
+  assert.equal(await popup.textContent(), 'LM5001_TRANS');
+  await page.screenshot({ path: 'test-results/spice-model-lm5001-device.png' });
+  await model.press('Escape');
+  await page.evaluate((models) => {
+    window.modelInspectionResult = { path: 'circuits/EMC_flyback_control.lib', ...models };
+  }, emcModels);
+  const inspections = await page.evaluate(() => window.modelInspectionCalls.length);
+  for (const [active, spice] of [
+    [false, true],
+    [true, false],
+  ]) {
+    await page.evaluate(({ active, spice }) => window.openEmcModelFixture('U1', active, spice), {
+      active,
+      spice,
+    });
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    assert.equal(await page.evaluate(() => window.modelInspectionCalls.length), inspections);
+  }
+  await page.evaluate(() => {
+    window.modelInspectionMode = 'delayed';
+    window.openEmcModelFixture('U1');
+  });
+  await page.waitForFunction(() => typeof window.resolveModelInspection === 'function');
+  await page.evaluate(() => window.openEmcModelFixture('U4', false));
+  await page.evaluate(() => window.resolveModelInspection(window.modelInspectionResult));
+  await ensureOpen();
+  assert.equal(
+    await page.locator('.property-model-file').count(),
+    0,
+    'Late inspection cannot populate another component.',
+  );
   assert.deepEqual(errors, []);
   console.log(
     'Themed model dropdown, source DC/PULSE/SIN conversion, parameter adaptation, geometry-preserving Core edits, undo/reopen, external models, pin mapping, keyboard/IME and stale origins passed.',

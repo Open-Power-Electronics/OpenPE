@@ -10064,7 +10064,7 @@
     "files": [
       {
         "name": "lm25017-wson8-flybuck.kicad_pro",
-        "source": "{\n  \"meta\": {\n    \"filename\": \"lm25017-wson8-flybuck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM25017.lib\\\"]\"\n  }\n}\n"
+        "source": "{\n  \"meta\": {\n    \"filename\": \"lm25017-wson8-flybuck.kicad_pro\",\n    \"version\": 1\n  },\n  \"text_variables\": {\n    \"OPENPE_PROJECT_NAME\": \"LM25017 Fly-Buck\",\n    \"OPENPE_SIMULATION_MODELS\": \"[\\\"circuits/LM25017.lib\\\"]\"\n  }\n}\n"
       },
       {
         "name": "footprints/lm25017-wson8-flybuck.pretty/L_Wurth_WE-DD-7345straight.kicad_mod",

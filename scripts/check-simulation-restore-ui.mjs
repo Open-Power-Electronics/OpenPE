@@ -89,6 +89,18 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
+    window.savedResultStages = [];
+    new MutationObserver(() => {
+      const stage = document
+        .querySelector('[data-saved-result-loading]')
+        ?.getAttribute('data-saved-result-loading');
+      if (stage) window.savedResultStages.push(stage);
+    }).observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-saved-result-loading'],
+    });
     window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
   });
   let runs = 0,
@@ -156,6 +168,11 @@ try {
     if (url.pathname === '/api/simulation/result') {
       const body = route.request().postDataJSON();
       lookups.push(body);
+      assert.equal(
+        await page.locator('[data-saved-result-loading="reading"]').isVisible(),
+        true,
+        'Loading UI paints before the saved-result request.',
+      );
       if (hold) {
         held.push({ route, body });
         return;
@@ -234,6 +251,18 @@ try {
     );
   };
   const assertLookupBlocksRun = async () => {
+    await page
+      .locator('.simulation-settings-footer')
+      .getByRole('progressbar', { name: 'Loading saved SPICE results…', exact: true })
+      .waitFor();
+    assert.equal(await page.locator('.simulation-settings-body').getAttribute('aria-busy'), 'true');
+    const loadingBox = await page.locator('[data-saved-result-loading]').boundingBox();
+    const runBox = await page.getByRole('button', { name: 'Run', exact: true }).boundingBox();
+    assert.ok(loadingBox.x + loadingBox.width <= runBox.x, 'Loading progress sits left of Run.');
+    assert.ok(
+      Math.abs(loadingBox.y + loadingBox.height / 2 - runBox.y - runBox.height / 2) < 2,
+      'Loading progress shares the Run row.',
+    );
     assert.equal(
       await page.getByRole('button', { name: 'Run', exact: true }).isDisabled(),
       true,
@@ -251,6 +280,8 @@ try {
 
   await complete();
   await assertPlot();
+  assert.equal(await page.locator('[data-saved-result-loading]').count(), 0);
+  assert.ok((await page.evaluate(() => window.savedResultStages)).includes('preparing'));
   assert.equal(lookups.length, 1);
   assert.equal('config' in lookups[0], false, 'Pristine settings discover saved timing.');
   assert.equal(runs, 0, 'Opening settings restores a result without Run.');

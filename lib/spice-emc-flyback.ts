@@ -14,11 +14,10 @@ import {
   type TransientConfig,
 } from './spice';
 import { transientOutputStep, validateTransientTiming } from './spice-timing';
+import { simulationSourceExpression } from './simulation-source-parameters';
 import profile from './emc-flyback-simulation.json';
-import { emcFlybackControl } from './emc-flyback-control';
+import models from '../resources/emc-flyback-models-lock.json';
 import { emcFlybackCapacitorEsr, emcFlybackInitialNodeGroups } from './emc-flyback-initial-state';
-
-export const emcFlybackLoadOhms = 100;
 
 export const isEmcFlyback = (d: Circuit) =>
   d.parts.some((p) => p.libId === 'EMC_Demo:Wurth_750311591');
@@ -36,6 +35,8 @@ export const emcFlybackResistors = [
   'R17',
   'R18',
   'R19',
+  'R21',
+  'R22',
 ];
 export const emcFlybackCapacitors = [
   'C4',
@@ -54,8 +55,23 @@ export const emcFlybackCapacitors = [
 ];
 const resistors = emcFlybackResistors;
 const capacitors = emcFlybackCapacitors;
-const configurable = new Set([...resistors, ...capacitors]);
+const sources = new Set(['V1', 'V2', 'I1']);
+const virtualResistors = new Set(['R21', 'R22']);
+const configurable = new Set([...resistors, ...capacitors, ...sources]);
 const zeroNames = ['PGND', 'SGND'];
+
+function sourceFields(part: Part) {
+  return effectiveSimulationModelFields(part, partFields(part));
+}
+function sourceExpression(part: Part) {
+  const fields = sourceFields(part);
+  return simulationSourceExpression(
+    fields['Sim.Type'],
+    fields['Sim.Params'] || '',
+    part.value,
+    part.ref,
+  );
+}
 
 export function emcFlybackDefaults(): TransientConfig {
   return {
@@ -136,9 +152,18 @@ function validate(d: Circuit) {
         ),
       ).filter(([key]) => /^spice|^sim[._]/i.test(key)),
     );
-    if (JSON.stringify(simulation) !== JSON.stringify(expected.simulation))
+    if (
+      [...new Set([...Object.keys(simulation), ...Object.keys(expected.simulation)])].some(
+        (key) =>
+          !(sources.has(p.ref) && ['Sim.Params', 'Sim.Type'].includes(key)) &&
+          simulation[key] !== (expected.simulation as Record<string, string>)[key],
+      )
+    )
       throw new Error(`${p.ref}: custom simulation fields are not supported by EMC Flyback.`);
-    if (configurable.has(p.ref)) {
+    if ((sources.has(p.ref) || virtualResistors.has(p.ref)) && partFields(p).Footprint?.trim())
+      throw new Error(`${p.ref}: the external simulation testbench must remain virtual.`);
+    if (sources.has(p.ref)) sourceExpression(p);
+    else if (configurable.has(p.ref)) {
       if (
         /[\r\n]/.test(p.value) ||
         p.value.trim().replace(/^\S+/, '') !== expected.value.trim().replace(/^\S+/, '')
@@ -209,7 +234,7 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
     )
   )
     throw new Error(
-      'Electrical settings follow the EMC Flyback schematic and bounded 24 V bench. Only Duration and Max. time step can be changed.',
+      'Electrical settings follow the EMC Flyback schematic testbench. Only Duration and Max. time step can be changed here.',
     );
   validateTransientTiming(c);
   const part = (ref: string) => d.parts.find((p) => p.ref === ref)!;
@@ -219,10 +244,7 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
     'OpenPE EMC Flyback closed-loop behavioural transient',
     '.options reltol=0.001 abstol=1e-9 gmin=1e-10',
     '.param CTR=1 FOPTO=20k RDIV=30k',
-    emcFlybackControl,
-    '.model EMC_IRF520N VDMOS(Vto=3.6 Kp=6 lambda=0.03 Rd=0.11 Rs=0.025 Rg=2.5 Cgdmax=600p Cgdmin=25p a=0.5 Cgs=300p Cjo=260p M=0.55 Vj=0.8 Is=2e-12 Rb=0.02 N=1.1 Tt=60n)',
-    '.model EMC_ES2D D(Is=1e-9 N=1.8 Rs=0.05 Cjo=20p M=0.4 Tt=20n BV=200 Ibv=5u)',
-    '.model EMC_SS510C D(Is=5e-5 N=1.1 Rs=0.02 Cjo=300p M=0.5 BV=100 Ibv=50u)',
+    ...models.models.map((_, index) => `.include example-model-${index}.lib`),
   ];
   const currents: SpiceTrace[] = [];
   const addNodes = (...ns: string[]) => ns.forEach((n) => nodes.add(n));
@@ -237,13 +259,17 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
       unit: 'A',
       vector: `@${ref.toLowerCase()}[i]`,
       targets: [{ kind: 'current', id: p.id }],
-      dissipation: {
-        positivePin: '1',
-        negativePin: '2',
-        positiveNode: a,
-        negativeNode: b,
-        method: 'resistor',
-      },
+      ...(!virtualResistors.has(ref)
+        ? {
+            dissipation: {
+              positivePin: '1',
+              negativePin: '2',
+              positiveNode: a,
+              negativeNode: b,
+              method: 'resistor',
+            },
+          }
+        : {}),
     });
   }
   const esr = emcFlybackCapacitorEsr;
@@ -283,6 +309,20 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
       },
     });
   }
+  for (const ref of sources) {
+    const p = part(ref),
+      a = node(ref, '1'),
+      b = node(ref, '2');
+    addNodes(a, b);
+    lines.push(`${ref} ${a} ${b} ${sourceExpression(p)}`);
+    if (ref.startsWith('V'))
+      currents.push({
+        label: `I(${ref}) · pin 1 → 2`,
+        unit: 'A',
+        vector: `i(${ref.toLowerCase()})`,
+        targets: [{ kind: 'current', id: p.id }],
+      });
+  }
   const bus = node('T1', '1'),
     drain = node('Q1', '2'),
     gate = node('Q1', '1'),
@@ -291,9 +331,6 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
     out = node('D3', '1');
   addNodes(bus, drain, gate, cs, sec, out);
   lines.push(
-    `VVIN emc_vin 0 24`,
-    `RVIN emc_vin ${bus} 0.01`,
-    `VVCC ${node('U1', '7')} 0 12`,
     `VRG ${node('RG', '1')} ${node('RG', '2')} 0`,
     `RPRI ${bus} emc_pri 0.015`,
     `LPRI emc_pri ${drain} 8u`,
@@ -305,8 +342,6 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
     `XU1 ${Array.from({ length: 8 }, (_, i) => node('U1', String(i + 1))).join(' ')} UC3845B`,
     `XU3 ${node('U3', '1')} ${node('U3', '3')} ${node('U3', '2')} TL431B`,
     `XU4 ${node('U4', '1')} ${node('U4', '2')} ${node('U4', '4')} ${node('U4', '3')} LTV817`,
-    `RLOAD ${out} 0 ${emcFlybackLoadOhms}`,
-    `ILOAD ${out} 0 PULSE(0.5 0 2m 10u 10u 2m 1)`,
     ...emcFlybackInitialNodeGroups(node).map(
       (group) => `.ic ${group.map(([name, value]) => `V(${name})=${value}`).join(' ')}`,
     ),
@@ -331,7 +366,6 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
       vector: 'i(lpri)',
       targets: [{ kind: 'current', id: part('T1').id }],
     },
-    { label: 'I(VIN) · into the source', unit: 'A', vector: 'i(vvin)' },
   );
   const traces: SpiceTrace[] = [];
   for (const entry of nets.probeNodes()) {
@@ -366,13 +400,14 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
     '',
   );
   return {
+    modelIds: models.models.map((model) => model.id),
     netlist: lines.join('\n'),
     traces,
     stop: c.stop,
     assumptions: [
       'Pinned AI-PCB-layout EMC Flyback closed-loop behavioural bench: fitted IRF520N, generic ES2D/SS510C and behavioural UC3845B/TL431/LTV817; these are approximate non-vendor models.',
-      '24 V is applied at VBUS after the omitted input EMI/protection network; L78L12 is an ideal 12 V supply. RG selects R5 (4.7 ohm); drain snubber, indicators, output bleeder, auxiliary winding, case and common-mode/Y-cap paths are omitted. PGND and SGND share simulator ground only.',
-      `T1 uses 8 uH primary, 1.5 turns ratio, coupling 0.9747 and fixed winding/ESR parasitics from the upstream bench. The external load is ${emcFlybackLoadOhms} ohm plus a 0.5 A step off at 2 ms and back on at 4 ms; initial conditions approximate steady state.`,
+      'Visible virtual V1/R21 feed VBUS after the omitted input EMI/protection network; V2 supplies the controller VCC instead of modeling L78L12 regulation. RG selects R5; drain snubber, indicators, output bleeder, auxiliary winding, case and common-mode/Y-cap paths are omitted. PGND and SGND share simulator ground only.',
+      'T1 uses 8 uH primary, 1.5 turns ratio, coupling 0.9747 and fixed winding/ESR parasitics from the upstream bench. Visible R22 and I1 define the output load. Source waveforms, source resistance and output resistance follow the current schematic; initial conditions approximate steady state. External testbench losses are excluded from PCB heat.',
       'Current values and supported R/C values follow the current native schematic. Q1 heat uses the fitted model drain-source current and its internal source voltage, excluding the series 10 nH source parasitic, gate, controller, transformer and omitted-device losses.',
       'The model supports electrical trends and a bounded board heat-source estimate; it does not predict conducted EMC, junction/case temperature, complete board losses or production safety.',
     ],

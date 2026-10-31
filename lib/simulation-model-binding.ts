@@ -222,16 +222,23 @@ export function externalModelBinding(
     if (!native['+']) native['+'] = '1';
     if (!native['-']) native['-'] = '2';
   }
-  for (const terminal of terminals) {
+  for (const [index, terminal] of terminals.entries()) {
     const role = semanticRole(terminal);
     const exact = /^\d+$/.test(terminal) ? pins.find((pin) => pin.number === terminal) : undefined;
     const named = pins.filter(
       (pin) => pin.name && pin.name !== '~' && semanticRole(pin.name) === role,
     );
+    const storedTerminal =
+      declaration.kind === 'subcircuit' &&
+      partFields(part)['Sim.Device'] === 'SUBCKT' &&
+      partFields(part)['Sim.Name'] === declaration.name
+        ? native[String(index + 1)]
+        : undefined;
     const number =
-      declaration.kind === 'subcircuit' && /^\d+$/.test(terminal)
+      storedTerminal ??
+      (declaration.kind === 'subcircuit' && /^\d+$/.test(terminal)
         ? exact?.number
-        : native[role] || exact?.number || (named.length === 1 ? named[0].number : undefined);
+        : native[role] || exact?.number || (named.length === 1 ? named[0].number : undefined));
     if (number) suggested[terminal] = number;
   }
   const missing = terminals.filter((terminal) => !suggested[terminal]);

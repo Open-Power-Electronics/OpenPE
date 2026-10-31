@@ -1,4 +1,5 @@
 'use client';
+import QuantityInput from './QuantityInput';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Focus, RotateCcw, X } from 'lucide-react';
@@ -432,8 +433,9 @@ export default function ModelCadSketchPanel({
               />
             </label>
             <label>
-              <span>{normalAxis} position (mm)</span>
-              <input
+              <span>{normalAxis} position</span>
+              <QuantityInput
+                unit={'mm'}
                 aria-label="Sketch plane offset (mm)"
                 inputMode="decimal"
                 value={offsets[plane]}
@@ -441,8 +443,8 @@ export default function ModelCadSketchPanel({
                 onFocus={() => {
                   focusOffset.current = offsets[plane];
                 }}
-                onChange={(event) => {
-                  setOffsets((previous) => ({ ...previous, [plane]: event.target.value }));
+                onValueChange={(inputValue) => {
+                  setOffsets((previous) => ({ ...previous, [plane]: inputValue }));
                   setError('');
                 }}
               />
@@ -479,8 +481,9 @@ export default function ModelCadSketchPanel({
         ) : phase === 'extrude' ? (
           <div className={styles.fields}>
             <label>
-              <span>Distance (mm)</span>
-              <input
+              <span>Distance</span>
+              <QuantityInput
+                unit={'mm'}
                 aria-label="Extrusion distance (mm)"
                 inputMode="decimal"
                 value={depth}
@@ -488,8 +491,8 @@ export default function ModelCadSketchPanel({
                 onFocus={() => {
                   focusDepth.current = depth;
                 }}
-                onChange={(event) => {
-                  setDepth(event.target.value);
+                onValueChange={(inputValue) => {
+                  setDepth(inputValue);
                   setError('');
                 }}
               />

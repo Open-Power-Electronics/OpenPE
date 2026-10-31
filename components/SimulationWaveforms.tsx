@@ -11,8 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  BetweenVerticalEnd,
-  BetweenVerticalStart,
+  createLucideIcon,
   Link2,
   Maximize,
   Plus,
@@ -54,7 +53,22 @@ import {
   type WaveformHistory,
 } from '@/lib/waveform-view';
 const formatted = (v: number) => Number(v.toPrecision(5)).toString();
-type CursorPair = [number, number | null];
+type CursorPair = [number | null, number | null];
+
+const SecondCursorIcon = createLucideIcon('SecondCursor', [
+  ['path', { d: 'M5 3v18m-2-3h4', key: 'first-cursor' }],
+  ['path', { d: 'M14 12v9m-2-3h4', key: 'second-cursor' }],
+  ['path', { d: 'M14 3v6m-3-3h6', key: 'add' }],
+]);
+
+function minorGridTicks(axis: WaveformAxis, majorTicks: number[], divisions: number) {
+  if (axis.step !== undefined) return [];
+  const major = new Set(majorTicks);
+  return waveformTicks({
+    ...axis,
+    step: niceWaveformStep(axis.max - axis.min, divisions) / 2,
+  }).filter((value) => !major.has(value));
+}
 
 function scaleFor(value: number) {
   const magnitude = Math.abs(value);
@@ -106,6 +120,7 @@ function Waveform({
     axis: 'time' | 'value',
     value: WaveformAxis,
     anchor: RefObject<HTMLElement | null>,
+    point: { x: number; y: number },
   ) => void;
   cursors: CursorPair;
   visibleCursors: [boolean, boolean];
@@ -200,10 +215,10 @@ function Waveform({
     const high =
       valueAxis?.max ?? (max < 0 && max + pad > 0 ? 0 : Math.ceil((max + pad) / step) * step);
     const axis = valueAxis ?? { min: low, max: high };
-    const ticks = waveformTicks(
-      axis,
-      Math.max(2, Math.min(4, Math.floor((size.height - 50) / 28))),
-    );
+    const divisions = Math.max(2, Math.min(4, Math.floor((size.height - 50) / 28)));
+    const ticks = waveformTicks(axis, divisions);
+    const timeDivisions = size.width < 480 ? 2 : 4;
+    const timeTicks = waveformTicks(timeAxis, timeDivisions);
     const left = 60,
       right = Math.max(left + 1, size.width - 22),
       top = valueHeight + 12,
@@ -216,6 +231,8 @@ function Waveform({
       min,
       max,
       ticks,
+      minorTicks: minorGridTicks(axis, ticks, divisions),
+      minorTimeTicks: minorGridTicks(timeAxis, timeTicks, timeDivisions),
       left,
       right,
       top,
@@ -224,7 +241,7 @@ function Waveform({
       y,
       axis,
       timeX,
-      timeTicks: waveformTicks(timeAxis, size.width < 480 ? 2 : 4),
+      timeTicks,
       timeAt: (x: number) => timeAxis.min + ((x - left) / (right - left)) * span,
       valueAt: (y: number) => high - ((y - top) / (bottom - top)) * (high - low),
       scale: scaleFor(Math.max(Math.abs(low), Math.abs(high))),
@@ -250,7 +267,7 @@ function Waveform({
       presentationRef.current.traces[trace.vector] = {
         time: timeAxis,
         values: plot.axis,
-        cursors: cursorTimes,
+        cursors: [cursorTimes[0] ?? result.time[end], cursorTimes[1]],
       };
   });
   function nearestCursor(x: number) {
@@ -258,6 +275,20 @@ function Waveform({
     if (a === null) return b === null ? null : 1;
     if (b === null) return 0;
     return Math.abs(x - plot.x(a)) <= Math.abs(x - plot.x(b)) ? 0 : 1;
+  }
+  function openAxis(
+    axis: 'time' | 'value',
+    target: SVGGElement,
+    pointer?: { clientX: number; clientY: number },
+  ) {
+    const owner = waveformRef.current?.getBoundingClientRect();
+    if (!owner) return;
+    target.focus();
+    const bounds = target.getBoundingClientRect();
+    onAxis(axis, axis === 'time' ? timeAxis : plot.axis, waveformRef, {
+      x: (pointer?.clientX ?? bounds.left + bounds.width / 2) - owner.left,
+      y: (pointer?.clientY ?? bounds.top + bounds.height / 2) - owner.top,
+    });
   }
   const scaledView = (factor: number) => {
     const time = zoomWaveformAxis(timeAxis, factor, {
@@ -556,6 +587,45 @@ function Waveform({
             />
           </clipPath>
         </defs>
+        <g aria-hidden="true" pointerEvents="none" clipPath={`url(#${clipId})`}>
+          {plot.minorTicks.map((value) => (
+            <path
+              key={`value:${value}`}
+              className="simulation-grid simulation-grid-minor simulation-grid-value"
+              d={`M${plot.left} ${plot.y(value)}H${plot.right}`}
+            />
+          ))}
+          {plot.minorTimeTicks.map((time) => (
+            <path
+              key={`time:${time}`}
+              className="simulation-grid simulation-grid-minor simulation-grid-time"
+              d={`M${plot.timeX(time)} ${plot.top}V${plot.bottom}`}
+            />
+          ))}
+        </g>
+        {plot.minorTicks.map((value) => (
+          <text
+            key={`value-label:${value}`}
+            className="simulation-tick-minor simulation-tick-value"
+            x={plot.left - 10}
+            y={plot.y(value) + 4}
+            textAnchor="end"
+          >
+            {Number((value / plot.scale.factor).toPrecision(4))}
+            {value === 0 ? '' : plot.scale.prefix}
+          </text>
+        ))}
+        {plot.minorTimeTicks.map((time) => (
+          <text
+            key={`time-label:${time}`}
+            className="simulation-tick-minor simulation-tick-time"
+            x={plot.timeX(time)}
+            y={size.height - 8}
+            textAnchor="middle"
+          >
+            {Number((time / plot.timeScale.factor).toPrecision(4))}
+          </text>
+        ))}
         {plot.ticks.map((value, i) => (
           <g key={i}>
             <path
@@ -669,19 +739,17 @@ function Waveform({
             className="simulation-axis-control"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
-              event.currentTarget.focus();
-              onAxis(axis, axis === 'time' ? timeAxis : plot.axis, waveformRef);
+              openAxis(axis, event.currentTarget, event);
             }}
             onContextMenu={(event) => {
               event.preventDefault();
-              event.currentTarget.focus();
-              onAxis(axis, axis === 'time' ? timeAxis : plot.axis, waveformRef);
+              openAxis(axis, event.currentTarget, event);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 event.stopPropagation();
-                onAxis(axis, axis === 'time' ? timeAxis : plot.axis, waveformRef);
+                openAxis(axis, event.currentTarget);
               }
             }}
           >
@@ -754,6 +822,7 @@ export default function SimulationWaveforms({
     title: string;
     origin: string;
     anchor: RefObject<HTMLElement | null>;
+    point: { x: number; y: number };
   } | null>(null);
   function changeViewState(vector: string, next: WaveformView) {
     setHistories((previous) => ({
@@ -778,8 +847,8 @@ export default function SimulationWaveforms({
     linked: boolean;
     shared: CursorPair;
     traces: Record<string, CursorPair>;
-  }>({ linked: true, shared: [0, null], traces: {} });
-  const [visibleCursors, setVisibleCursors] = useState<[boolean, boolean]>([false, false]);
+  }>({ linked: true, shared: [null, 0], traces: {} });
+  const [visibleCursors, setVisibleCursors] = useState<[boolean, boolean]>([true, false]);
   const [layout, setLayout] = useState('auto');
   useLayoutEffect(() => {
     if (!presentationRef) return;
@@ -979,27 +1048,16 @@ export default function SimulationWaveforms({
         )}
         {result && (
           <div className="simulation-result-controls" role="group" aria-label="Waveform controls">
-            {([BetweenVerticalStart, BetweenVerticalEnd] as const).map((Icon, which) => (
-              <button
-                key={which}
-                type="button"
-                className="icon-button simulation-cursor-toggle"
-                aria-label={`Cursor ${which === 0 ? 'A' : 'B'}`}
-                title={`Cursor ${which === 0 ? 'A' : 'B'}`}
-                aria-pressed={visibleCursors[which]}
-                aria-description={`${visibleCursors[which] ? 'Hide' : 'Show'} cursor ${which === 0 ? 'A' : 'B'}`}
-                onClick={() =>
-                  changePresentation({
-                    visibleCursors:
-                      which === 0
-                        ? [!visibleCursors[0], visibleCursors[1]]
-                        : [visibleCursors[0], !visibleCursors[1]],
-                  })
-                }
-              >
-                <Icon size={17} aria-hidden="true" />
-              </button>
-            ))}
+            <button
+              type="button"
+              className="icon-button simulation-cursor-toggle"
+              aria-label={visibleCursors[1] ? 'Remove second cursor' : 'Add second cursor'}
+              title={visibleCursors[1] ? 'Remove second cursor' : 'Add second cursor'}
+              aria-pressed={visibleCursors[1]}
+              onClick={() => changePresentation({ visibleCursors: [true, !visibleCursors[1]] })}
+            >
+              <SecondCursorIcon size={17} aria-hidden="true" />
+            </button>
             <button
               type="button"
               className="icon-button simulation-link"
@@ -1222,10 +1280,11 @@ export default function SimulationWaveforms({
                                 values: { ...view.values, [trace.vector]: values },
                               });
                           }}
-                          onAxis={(axis, value, anchor) =>
+                          onAxis={(axis, value, anchor, point) =>
                             setAxisDialog({
                               origin: trace.vector,
                               anchor,
+                              point,
                               vector: axis === 'time' ? null : trace.vector,
                               axis: value,
                               unit: axis === 'time' ? 's' : trace.unit,
@@ -1253,6 +1312,7 @@ export default function SimulationWaveforms({
         <WaveformAxisDialog
           key={`${axisDialog.origin}:${axisDialog.vector ?? 'time'}`}
           anchorRef={axisDialog.anchor}
+          anchorPoint={axisDialog.point}
           title={axisDialog.title}
           axis={axisDialog.axis}
           unit={axisDialog.unit}

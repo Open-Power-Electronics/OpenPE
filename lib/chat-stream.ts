@@ -1,3 +1,5 @@
+import { withoutSessionTitle } from './session-title';
+
 export type ChatTimings = {
   connectionMs?: number;
   clientFirstTextMs?: number;
@@ -77,7 +79,7 @@ export async function resolveAgentCapability(
   const expectedRevision = args.expectedRevision ?? revision?.current;
   if (!expectedRevision)
     throw new Error(
-      'Query project.snapshot to read the current project revision before executing a command.',
+      'Query core.state to read the current project revision before executing a command.',
     );
   signal?.throwIfAborted();
   if (approvalMode === 'auto')
@@ -167,8 +169,12 @@ export async function readChatEvents(
 
 // Hide even an unfinished proposal fence while text is arriving.
 export function responseText(text: string) {
-  return text
+  if (text.trim() === '```') return '';
+  return withoutSessionTitle(text)
     .replace(/```openpe\b[\s\S]*?(?:```|$)/g, '')
-    .replace(/(^|\n)[ \t]{0,3}(?:`{1,2}|```(?:o|op|ope|open|openp|openpe))$/, '$1')
+    .replace(
+      /(^|\n)[ \t]{0,3}(?:`{1,2}|```(?:o|op|ope|open|openp|openpe|openpe_|openpe_s|openpe_se|openpe_ses|openpe_sess|openpe_sessi|openpe_sessio|openpe_session))$/,
+      '$1',
+    )
     .trim();
 }

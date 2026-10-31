@@ -1,5 +1,6 @@
 'use client';
-import { lazy, memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import QuantityInput from './QuantityInput';
+import { lazy, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, FolderSearch, Plus, Trash2 } from 'lucide-react';
 import { type Part, type Circuit } from '@/lib/circuit';
 import { displayPartValue, partFields } from '@/lib/library';
@@ -13,6 +14,8 @@ import { storagePrimitive, initialConditionField } from '@/lib/simulation-initia
 import {
   simulationLibraryForPath,
   simulationLibraryPath,
+  simulationLibraryDeclaration,
+  simulationLibraryModelName,
   simulationComponentPresentation,
 } from '@/lib/simulation-model-presentation';
 import type { FootprintDetail } from './LibraryChooser';
@@ -188,6 +191,7 @@ function PartProperties({
   const externalModel = simulationModelSource(rowFields) === 'external';
   const basicAvailable = basicSimulationAvailable(part);
   const libraryPath = simulationLibraryPath(rowFields['Sim.Library'] || '');
+  const libraryFilename = libraryPath.split(/[\\/]/).at(-1) || '';
   const externalName = rowFields['Sim.Name'] || '';
   const [catalog, setCatalog] = useState<{
     path: string;
@@ -238,6 +242,48 @@ function PartProperties({
       modelBrowseRequest.current++;
     };
   }, [active, spiceAvailable, fileId, snapshot]);
+  useEffect(() => {
+    if (
+      !active ||
+      !spiceAvailable ||
+      !fileId ||
+      !libraryPath ||
+      catalog?.path === libraryPath ||
+      !window.openpe
+    )
+      return;
+    let cancelled = false;
+    const revision = getRevision?.();
+    async function inspect() {
+      try {
+        if (typeof window.openpe?.inspectSpiceModel !== 'function')
+          throw new Error('Restart OpenPE to load automatic SPICE model inspection.');
+        const result = await window.openpe.inspectSpiceModel(fileId!, libraryPath);
+        if (cancelled || getRevision?.() !== revision || !result) return;
+        if (
+          result.path !== libraryPath ||
+          !Array.isArray(result.models) ||
+          !Array.isArray(result.issues)
+        )
+          throw new Error('Invalid SPICE model inspection.');
+        setCatalog(result);
+        if (
+          externalName &&
+          !simulationLibraryDeclaration(rowFields['Sim.Library'] || '', externalName, result.models)
+        )
+          setError(
+            `This library does not contain model "${simulationLibraryModelName(rowFields['Sim.Library'] || '', externalName)}". Choose a matching model.`,
+          );
+      } catch (reason) {
+        if (!cancelled && getRevision?.() === revision)
+          setError(reason instanceof Error ? reason.message : 'Could not inspect the model file.');
+      }
+    }
+    void inspect();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, spiceAvailable, fileId, part.id, libraryPath, snapshot, catalog]);
   function save(draftRows = rows, footprintDetail?: FootprintDetail): boolean {
     if (!active || composing.current || basis !== snapshot) return false;
     try {
@@ -291,6 +337,16 @@ function PartProperties({
         issues: result.issues,
       });
       const sameFile = library === rowFields['Sim.Library'];
+      if (
+        sameFile &&
+        externalName &&
+        !simulationLibraryDeclaration(library, externalName, result.models)
+      ) {
+        setMapping(null);
+        throw new Error(
+          `This library does not contain model "${simulationLibraryModelName(library, externalName)}". Choose a matching model.`,
+        );
+      }
       const next = withModelFields(rows, {
         'Sim.Library': library,
         'OpenPE.ModelSource':
@@ -346,12 +402,30 @@ function PartProperties({
     }
     if (!selection.startsWith('external:') || !libraryPath) return;
     const name = selection.slice('external:'.length);
-    const declaration = declarations.find((model) => model.name === name);
+    const declaration = simulationLibraryDeclaration(
+      rowFields['Sim.Library'] || '',
+      name,
+      declarations,
+    );
+    if (declaration && modelOptionDisabled(declaration)) return;
+    if (catalog?.path === libraryPath && !declaration) {
+      setError('This model is not declared in the selected library. Choose a matching model.');
+      return;
+    }
     if (name === externalName) {
-      const next = withModelFields(rows, { 'OpenPE.ModelSource': 'external' });
-      setMapping(null);
-      setRows(next);
-      save(next);
+      try {
+        if (declaration && circuit) {
+          const binding = externalModelBinding(circuit, part, declaration);
+          if (!binding.compatible)
+            throw new Error(binding.reason || 'This model is incompatible with the component.');
+        }
+        const next = withModelFields(rows, { 'OpenPE.ModelSource': 'external' });
+        setMapping(null);
+        setRows(next);
+        save(next);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Invalid model declaration.');
+      }
       return;
     }
     if (!declaration || !circuit) {
@@ -408,35 +482,41 @@ function PartProperties({
     return name.replace(/^OPENPE_(?:DERIVED_)?/i, '');
   }
 
-  function modelOptionDisabled(declaration: SpiceModelDeclaration) {
-    if (!circuit) return false;
+  function modelOptionIssue(declaration: SpiceModelDeclaration) {
+    if (!circuit) return 'Component terminals are unavailable.';
     try {
-      return !externalModelBinding(circuit, part, declaration).compatible;
-    } catch {
-      return true;
+      const binding = externalModelBinding(circuit, part, declaration);
+      return binding.compatible ? '' : binding.reason || 'Incompatible with this component.';
+    } catch (reason) {
+      return reason instanceof Error ? reason.message : 'Invalid model declaration.';
     }
+  }
+
+  function modelOptionDisabled(declaration: SpiceModelDeclaration) {
+    return !!modelOptionIssue(declaration);
   }
 
   function modelSelector() {
     const currentBuiltin = !externalModel && !basicAvailable && !rowFields['OpenPE.ModelSource'];
-    const voltageSource = basicSimulationKind(part) === 'V';
+    const sourceDevice = basicSimulationKind(part);
+    const waveformSource = sourceDevice === 'V' || sourceDevice === 'I';
     const sourceType = rowFields['OpenPE.SourceType'] || simulationSourceProperties(part)?.type;
     const selection = mapping
       ? `external:${mapping.declaration.name}`
       : currentBuiltin
         ? 'current'
         : !externalModel && basicAvailable
-          ? voltageSource
+          ? waveformSource
             ? 'source:' + sourceType
             : 'intrinsic'
           : externalName && libraryPath
             ? `external:${externalName}`
             : '';
     const choices = [
-      ...(voltageSource
+      ...(waveformSource
         ? ['DC', 'PULSE', 'SIN'].map((type) => ({
             value: 'source:' + type,
-            label: type + ' voltage source',
+            label: type + (sourceDevice === 'I' ? ' current source' : ' voltage source'),
             disabled: false,
           }))
         : basicAvailable
@@ -445,7 +525,11 @@ function PartProperties({
       ...(currentBuiltin
         ? [{ value: 'current', label: presentation.basicModel, disabled: true }]
         : []),
-      ...(externalName && libraryPath && !declarations.some((model) => model.name === externalName)
+      ...(externalName &&
+      libraryPath &&
+      (catalog?.path !== libraryPath ||
+        simulationLibraryDeclaration(rowFields['Sim.Library'] || '', externalName, declarations)) &&
+      !declarations.some((model) => model.name === externalName)
         ? [
             {
               value: 'external:' + externalName,
@@ -454,40 +538,70 @@ function PartProperties({
             },
           ]
         : []),
-      ...declarations.map((model) => ({
-        value: 'external:' + model.name,
-        label: modelOptionLabel(model.name),
-        disabled: modelOptionDisabled(model),
-      })),
+      ...declarations.map((model) => {
+        const issue = modelOptionIssue(model);
+        return {
+          value: 'external:' + model.name,
+          label: modelOptionLabel(model.name),
+          disabled: !!issue,
+          muted: !!issue,
+        };
+      }),
     ].sort((a, b) => Number(b.value === selection) - Number(a.value === selection));
     return (
       <>
-        <div className="property-model-choice">
+        <div className="property-file-models">
+          <span>File</span>
+          <div className="property-model-choice">
+            <input
+              className="property-model-path"
+              aria-label="Model library"
+              value={libraryFilename}
+              title={libraryPath}
+              placeholder="Choose model file"
+              readOnly
+            />
+            <button
+              ref={modelBrowseButton}
+              type="button"
+              className="icon-button"
+              aria-label="Browse SPICE models"
+              title="Choose model file"
+              disabled={!active || !spiceAvailable || modelBrowsing}
+              aria-busy={modelBrowsing}
+              onClick={() => void browseModel(libraryIndex)}
+            >
+              <FolderSearch size={17} />
+            </button>
+          </div>
+        </div>
+        {catalog?.path === libraryPath && (
+          <span className="property-model-file" role="status">
+            {`${declarations.length} ${declarations.length === 1 ? 'model' : 'models'} · ${declarations.filter((model) => !modelOptionDisabled(model)).length} compatible`}
+          </span>
+        )}
+        <div className="property-file-models">
+          <span>Model</span>
           <Select
             label="Simulation model"
             value={selection}
-            placeholder="Choose model"
+            placeholder={
+              catalog?.path !== libraryPath
+                ? libraryPath
+                  ? 'Browse file to list models'
+                  : 'Choose model'
+                : declarations.length
+                  ? 'Choose model from file'
+                  : 'No models found'
+            }
             active={active && spiceAvailable && !modelBrowsing}
-            options={choices
-              .filter((choice) => !choice.disabled || choice.value === selection)
-              .map(({ value, label }) => ({ value, label }))}
+            disabled={!choices.length}
+            options={choices}
             onChange={selectModel}
             popupClassName="property-model-menu"
-            popupMatchWidth="parent"
+            popupMatchWidth="trigger"
             popupMaxHeight={240}
           />
-          <button
-            ref={modelBrowseButton}
-            type="button"
-            className="icon-button"
-            aria-label="Browse SPICE models"
-            title="Choose model file"
-            disabled={!active || !spiceAvailable || modelBrowsing}
-            aria-busy={modelBrowsing}
-            onClick={() => void browseModel(libraryIndex)}
-          >
-            <FolderSearch size={17} />
-          </button>
         </div>
         {catalog?.path === libraryPath && catalog.issues.length > 0 && (
           <span
@@ -578,7 +692,9 @@ function PartProperties({
             )}
             {simulationParameterLabels.has(row.name) || row.sourceKey ? (
               <div className="property-simulation-value">
-                <input
+                <QuantityInput
+                  unit={row.unit || simulationParameterUnits.get(row.name)}
+                  autoScale
                   className="property-field-value"
                   aria-label={row.label || row.name}
                   value={parameterValue(row)}
@@ -601,13 +717,8 @@ function PartProperties({
                       : undefined
                   }
                   disabled={!active || !spiceAvailable}
-                  onChange={(event) => update(i, 'value', event.target.value)}
+                  onValueChange={(inputValue) => update(i, 'value', inputValue)}
                 />
-                {(row.unit || simulationParameterUnits.get(row.name)) && (
-                  <span className="property-simulation-unit" aria-hidden="true">
-                    {row.unit || simulationParameterUnits.get(row.name)}
-                  </span>
-                )}
               </div>
             ) : simulation ? (
               <span

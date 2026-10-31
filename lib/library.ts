@@ -240,7 +240,7 @@ export function displayPartValue(part: Part) {
   // their stored parameters when no separate native parameter caption exists.
   if (
     params &&
-    fields['Sim.Device'] === 'V' &&
+    ['V', 'I'].includes(fields['Sim.Device']) &&
     ['PULSE', 'SIN'].includes(fields['Sim.Type']) &&
     part.value === part.libId.split(':').at(-1) &&
     fields['OpenPE.ModelSource'] !== 'external' &&

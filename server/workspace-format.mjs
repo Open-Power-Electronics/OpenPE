@@ -551,7 +551,7 @@ var tiDcdcParts = tiModels.flatMap(
 // lib/workspace-example.ts
 var exampleKeys = new Set(homeExampleCatalog.map((entry) => `example:${entry.id}`));
 function validExampleKey(value) {
-  return typeof value === "string" && exampleKeys.has(value);
+  return typeof value === "string" && (exampleKeys.has(value) || /^example:local-[a-f0-9]{64}$/.test(value));
 }
 function retiredExampleFolderNames() {
   const current = new Set(homeExampleCatalog.map((entry) => entry.title));

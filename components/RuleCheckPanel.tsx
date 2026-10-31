@@ -1,4 +1,5 @@
 'use client';
+import QuantityInput from './QuantityInput';
 
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, LocateFixed, Play, RefreshCw } from 'lucide-react';
@@ -129,7 +130,7 @@ export default function RuleCheckPanel({
       busy={busy}
       resizable
       resizeCorner="bottom-right"
-      minWidth={320}
+      minWidth={400}
       size={size}
       onResize={onResize}
       footer={
@@ -162,7 +163,8 @@ export default function RuleCheckPanel({
             {limitFields.map(([key, label]) => (
               <label key={key}>
                 <span>{label}</span>
-                <input
+                <QuantityInput
+                  unit={'mm'}
                   type="number"
                   min="0"
                   max="1000"
@@ -170,8 +172,8 @@ export default function RuleCheckPanel({
                   aria-label={`${label} (mm)`}
                   aria-invalid={!validLimit(drafts[key])}
                   value={drafts[key]}
-                  onChange={(event) =>
-                    setDrafts((current) => ({ ...current, [key]: event.target.value }))
+                  onValueChange={(inputValue) =>
+                    setDrafts((current) => ({ ...current, [key]: inputValue }))
                   }
                   onBlur={() => {
                     if (limits && limitsChanged) onDRCSettingsChange?.(limits);

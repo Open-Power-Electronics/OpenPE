@@ -2059,7 +2059,7 @@
         "position": { "x": 106.68, "y": 19.05 },
         "symbol": "Device:R",
         "reference": "R3",
-        "value": "100",
+        "value": "1000",
         "fieldLayout": {
           "Reference": [
             ["at","108.966","17.85","0"],
@@ -5273,7 +5273,7 @@
       },
       "topology": "Boost",
       "package": "BGA-6",
-      "changes": "Input schematic imported with embedded source symbols and explicit TI model pin assignments. Terminal assemblies and virtual sources/output loads form evenly spaced columns spanning the lower circuit. All virtual output loads are 100 ohms. Virtual components have no Footprint and use 2.54 mm source leads with load leads extended to matching rail-label and official triangular-GND levels; completed electrical values and series resistance are recorded in simulation provenance. Reference and Value instance text is arranged clear of symbols and wiring. Board-edge copper-zone boundaries are clipped to a 0.5 mm board inset; internal partitions, local zones, expert PCB placement and routed copper are retained. TPS61046 enabled copper zones are explicitly refilled with the shared OpenPE fill operation and a 0.25 mm minimum clearance. Printing settings omitted. No ERC/DRC or production qualification is added.",
+      "changes": "Input schematic imported with embedded source symbols and explicit TI model pin assignments. Terminal assemblies and virtual sources/output loads form evenly spaced columns spanning the lower circuit. All virtual output loads are 1000 ohms. Virtual components have no Footprint and use 2.54 mm source leads with load leads extended to matching rail-label and official triangular-GND levels; completed electrical values and series resistance are recorded in simulation provenance. Reference and Value instance text is arranged clear of symbols and wiring. Board-edge copper-zone boundaries are clipped to a 0.5 mm board inset; internal partitions, local zones, expert PCB placement and routed copper are retained. TPS61046 enabled copper zones are explicitly refilled with the shared OpenPE fill operation and a 0.25 mm minimum clearance. Printing settings omitted. No ERC/DRC or production qualification is added.",
       "simulation": {
         "modelId": "reference-tps61046",
         "originalIdentity": "Regulator_Switching:TPS61099x",

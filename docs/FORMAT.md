@@ -10,7 +10,7 @@ Component simulation data retains optional `initialVoltage` and `initialCurrent`
 
 Model selection retains optional canonical `simulation.modelSource` (`basic` or `external`) as native `OpenPE.ModelSource`, independently of the saved external Sim.Library/Sim.Name/Sim.Pins. An absent override follows the current native library binding. Selecting an intrinsic model preserves external settings, and undo/save/recovery retain both. Declaration catalogs and model bodies are not native fields.
 
-Voltage-source waveform selection stores optional canonical simulation.sourceType (DC, PULSE or SIN) as native OpenPE.SourceType. It applies to the active intrinsic source independently of inactive external Device/Type/Pins and uses the existing Sim.Params/Value storage; native symbol IDs, geometry and connectivity stay unchanged.
+Voltage-source and EMC IPULSE current-source waveform selection stores optional canonical simulation.sourceType (DC, PULSE or SIN) as native OpenPE.SourceType. It applies to the active intrinsic source independently of inactive external Device/Type/Pins and uses the existing Sim.Params/Value storage; native symbol IDs, geometry and connectivity stay unchanged.
 
 ## Document ownership
 
@@ -51,6 +51,15 @@ links and finite unfilled Notes polylines. Polylines are read-only on canvas and
 editable in Source. Native track locks map to optional `locked: true`; unlocked
 tracks omit it. Private snapshots use their explicit canonical lock state;
 serialization synchronizes it with retained native text.
+Footprint and graphic locks also map to optional `locked: true` and block
+geometric edits until unlocked in Source. Pad pin-function/type metadata,
+non-rendered footprint properties and unit records survive edits. Footprint
+mask/paste margins are retained; pad mask overrides take precedence over the
+footprint default. Multi-layer zones have one editable instance per layer;
+the first retains the native UUID and later instances use deterministic UUIDs.
+Clean files retain their exact original bytes; a PCB edit writes equivalent
+single-layer zones with their original per-layer fills and rules. Disabled
+placement-rule metadata is preserved; enabled placement rules remain unsupported.
 Via locks and zone names remain metadata. The EMC generator uses the official
 KiCad upgrader and exact custom-pad/keepout decomposition; pinned inputs remain
 unchanged.
@@ -131,8 +140,8 @@ selection does not apply drafts. Recovery stores drafts separately from
 validated content. Display decorations never change copied/stored text or dirty
 state; preserve Save forwarding, IME and Escape then Tab navigation.
 
-Source shows the actual `datasheets/parameters.json` and any local PDF under
-the project directory. There is no synthetic reference group. Reviewed Agent
+Source shows actual local PDFs under the project directory. OpenPE does not
+create a separate datasheet JSON file in a native project. There is no synthetic reference group. Reviewed Agent
 data remains separately matched to the validated controller; see the
 [datasheet contract](DATASHEETS.md).
 
@@ -172,9 +181,14 @@ Update baseline/grant only after success. Cancellation/failure preserves work.
 Valid Source may already have committed before a picker is cancelled; that edit
 remains undoable. Invalid Source blocks the picker/write.
 
-Export applies valid Source and writes a separate native schematic/board without
-changing the save destination/baseline. When the project has a PCB and Model CAD
-solids, the picker also offers an OpenSCAD model. Its millimetre text uses native PCB
+Export applies valid Source and writes independent manufacturing/exchange files without
+changing the save destination/baseline. Native KiCad project files use Save/Save as.
+The requested output is compiled before the picker and published as one atomic
+file replacement; archives contain generated files only and are never extracted
+into the project. Open project sources and linked destinations are protected.
+Gerbers (including drill files) and JLCPCB are ZIP archives; BOM and
+CPL are separate CSV outputs. See [manufacturing export](#manufacturing-export).
+When the project has a PCB and Model CAD solids, Export also offers an OpenSCAD model. Its millimetre text uses native PCB
 X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, through holes, Boolean
 recipes, material colours and opacity; circles are faceted with `$fn = 96`.
 Fillets and chamfers have no OpenSCAD equivalent, so they reject the export without
@@ -189,6 +203,53 @@ Home examples open the original `examples/<file>/<file>.kicad_pro` directly,
 retaining all disk filenames. History remains private outside the project;
 see [Version history](VERSION-HISTORY.md).
 
+## Manufacturing export
+
+`lib/manufacturing-export.ts` compiles the current complete native PCB backing,
+including retained assembly flags and setup. It does not run a solver, refill
+zones, perform DRC, change geometry or acquire a project destination.
+
+- Gerber X2 uses metric 6.6 coordinates for two/four copper layers, front/back
+  mask, paste and silk, and Edge.Cuts. Lines, arcs, circular/oval/rectangular/
+  rounded/chamfered pads and saved zone contours are plotted independently of
+  view visibility. Arc direction follows the upward-Y output plane. Separate
+  metric Excellon files contain plated and non-plated round through drills,
+  including via drills and rotated pad drill offsets.
+- Require a closed unambiguous board outline and saved fills for every enabled
+  non-keepout zone. Keepouts and disabled fills contribute no plotted area.
+  Native board-level via tenting and pad/footprint/board mask/paste margins apply.
+- Reject unused-layer removal, nonzero minimum mask web, enabled via covering/
+  plugging/capping/filling, margins on chamfered pads, elliptical pad apertures,
+  dashed artwork, dimensions, font faces/knockout, formatted/unresolved text
+  and characters outside the pinned U+0020–U+03FF stroke glyph subset on
+  manufacturing layers. Unsupported output never silently omits geometry.
+  Empty mask/paste apertures from negative margins are omitted.
+- BOM groups identical value/package/explicit LCSC-number records; CSV fields
+  retain quotes, commas and line breaks. DNP and board-only footprints are
+  excluded; BOM and position exclusions remain independent. No supplier part
+  is guessed. Invalid nonblank LCSC numbers fail explicitly.
+- Placement CSV uses native footprint origins, native X and negated native Y
+  in millimetres, Top/Bottom and counterclockwise degrees. Gerber/drill share
+  that origin and orientation; back-side parts receive no extra reflection.
+  Package-specific centroid offsets and supplier rotation corrections are not
+  inferred. Review placement against the supplier preview before ordering.
+- JLCPCB ZIP includes Gerber/drill plus matching-format BOM/placement CSV and
+  coordinate/coverage notes. This is a manufacturing handoff, not an editable
+  Altium/EasyEDA project or manufacturing qualification.
+
+The [Gerber specification](https://www.ucamco.com/en/guest/downloads/gerber-format),
+[JLCPCB BOM](https://jlcpcb.com/help/article/bill-of-materials-for-pcb-assembly)
+and [placement requirements](https://jlcpcb.com/help/article/pick-place-file-for-pcb-assembly)
+define the external syntax/column meanings. `lib/export-zip.ts` emits deterministic
+UTF-8, uncompressed ZIP entries with CRC-32, bounded to 128 leaf names and 96 MiB;
+each Gerber layer is bounded to 32 MiB. No archive paths or imported ZIP contents
+are accepted. Browser downloads compile the same output as the desktop adapter.
+
+Newstroke glyph data is derived from the pinned KiCad 10.0.0 source under
+`resources/third-party-source/newstroke-10.0.0/`; `scripts/build-manufacturing-font.mjs`
+verifies the source SHA-256 before generating `lib/manufacturing-font.json`.
+The CC0 font notice is available through Third-party licenses.
+
 ## Verification
 
 Source test helpers read selected text through Copy and complete file sets
@@ -198,6 +259,7 @@ S-expressions. Helpers retain encoding/selection and edit existing files only.
 | Check                                                                                                        | Scope                                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/native-project-files.test.ts`, `tests/native-save.test.ts`, `tests/native-save-participation.test.ts` | File-set bounds, writes, exact backing and simulation flags                                                                       |
+| `tests/manufacturing-export.test.ts`, `tests/native-export.test.ts`                                          | Gerber/drill/CSV/ZIP geometry and syntax, output bounds, format pickers, source protection and cancellation                       |
 | `tests/example-native-libraries.test.ts`                                                                     | Home custom-library Source, project naming, Save as references and edited package preservation                                    |
 | `tests/project-directory.test.ts`, `node scripts/check-project-directory-ui.mjs`                             | Grant-bound directory observations, read limits, stale/linked files, empty folders, read-only previews and native draft retention |
 | `node scripts/check-native-source-ui.mjs`                                                                    | Isolated native file selection, per-file history, Apply/validation/undo                                                           |

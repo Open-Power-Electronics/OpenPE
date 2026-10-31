@@ -25,7 +25,9 @@ export default function Dialog({
   className = '',
   anchorRef,
   modal = true,
+  open = true,
   anchorPlacement = 'below',
+  anchorPoint,
   resizable = false,
   size: preferredSize,
   onResize,
@@ -45,7 +47,9 @@ export default function Dialog({
   className?: string;
   anchorRef?: RefObject<HTMLElement | null>;
   modal?: boolean;
-  anchorPlacement?: 'below' | 'inside' | 'above';
+  open?: boolean;
+  anchorPlacement?: 'below' | 'inside' | 'above' | 'near';
+  anchorPoint?: { x: number; y: number };
   resizable?: boolean;
   minWidth?: number;
   resizeCorner?: 'bottom-right';
@@ -127,6 +131,7 @@ export default function Dialog({
     return { left, right, top, bottom };
   }
   useLayoutEffect(() => {
+    if (!open) return;
     const dialog = ref.current!;
     const previous = document.activeElement as HTMLElement | null;
     if (modal) dialog.showModal();
@@ -141,7 +146,7 @@ export default function Dialog({
       dialog.close();
       if (restoreFocus && previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [modal]);
+  }, [modal, open]);
   useLayoutEffect(() => {
     if (!resizeCorner) return;
     const place = () => placeResizeOrigin(true);
@@ -149,19 +154,30 @@ export default function Dialog({
     return () => window.removeEventListener('resize', place);
   }, [resizeCorner]);
   useLayoutEffect(() => {
-    if (modal) return;
+    if (modal || !open) return;
     const dismiss = (event: PointerEvent) => {
       if (!busy && !ref.current?.contains(event.target as Node)) onClose();
     };
     document.addEventListener('pointerdown', dismiss);
     return () => document.removeEventListener('pointerdown', dismiss);
-  }, [modal, busy, onClose]);
+  }, [modal, open, busy, onClose]);
   useLayoutEffect(() => {
     if (!anchorRef) return;
     const dialog = ref.current!;
     const place = () => {
       const anchor = anchorRef.current?.getBoundingClientRect();
       if (!anchor) return;
+      if (anchorPlacement === 'near') {
+        dialog.style.maxWidth = `${window.innerWidth - 16}px`;
+        dialog.style.maxHeight = `${window.innerHeight - 16}px`;
+        const x = anchor.left + (anchorPoint?.x ?? anchor.width / 2);
+        const y = anchor.top + (anchorPoint?.y ?? anchor.height / 2);
+        const { width, height } = dialog.getBoundingClientRect();
+        const top = y + 8 + height <= window.innerHeight - 8 ? y + 8 : y - height - 8;
+        dialog.style.left = `${Math.max(8, Math.min(x + 8, window.innerWidth - width - 8))}px`;
+        dialog.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
+        return;
+      }
       if (resizable) {
         const { left, right, top, bottom } = resizeArea();
         dialog.style.maxWidth = `${Math.max(0, right - left)}px`;
@@ -196,7 +212,7 @@ export default function Dialog({
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [anchorRef, anchorPlacement, resizable, size.width, size.height]);
+  }, [anchorRef, anchorPlacement, anchorPoint, resizable, size.width, size.height]);
   return createPortal(
     <dialog
       ref={ref}

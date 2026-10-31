@@ -171,18 +171,24 @@ try {
   await application.evaluate(({ dialog }) => {
     dialog.showSaveDialog = async () => ({ canceled: true });
   });
-  await fileMenuAction(page, 'Export');
+  await fileMenuAction(page, ['Export', 'BOM']);
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 1);
   const exportDir = path.join(dir, 'exports');
   await mkdir(exportDir);
-  for (const extension of ['kicad_sch', 'kicad_pcb']) {
-    const destination = path.join(exportDir, 'exported.' + extension);
+  for (const [label, header] of [
+    ['BOM', 'Comment'],
+    ['CPL', 'Designator'],
+  ]) {
+    const destination = path.join(
+      exportDir,
+      label === 'BOM' ? 'bom.csv' : 'positions.csv',
+    );
     await application.evaluate(({ dialog }, file) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: file });
     }, destination);
-    await fileMenuAction(page, 'Export');
-    await toast(extension === 'kicad_pcb' ? 'Exported KiCad PCB' : 'Exported KiCad schematic');
-    assert.ok((await readFile(destination, 'utf8')).startsWith('(kicad_'));
+    await fileMenuAction(page, ['Export', label]);
+    await toast('Exported ' + label);
+    assert.ok((await readFile(destination, 'utf8')).startsWith('"' + header + '",'));
     assert.equal(
       await page.locator('.project-navigation .dirty-dot').count(),
       1,
@@ -390,7 +396,7 @@ try {
   assert.equal(await page.locator('.project-navigation').getByRole('button').count(), 0);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: native KiCad file-set save/recovery, multi-file Source validation and undo, invalid drafts, cancelled/native exports, destination retention and save/discard close review.',
+    'PASS: native KiCad file-set save/recovery, multi-file Source validation and undo, invalid drafts, cancelled/manufacturing exports, destination retention and save/discard close review.',
   );
 } catch (error) {
   const page = application.windows()[0];

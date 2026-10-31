@@ -103,6 +103,7 @@ try {
   assert.equal(await erc.getAttribute('aria-modal'), 'true');
   assert.equal(await erc.evaluate((dialog) => dialog.matches(':modal')), true);
   const initialERC = await erc.boundingBox();
+  assert.equal(Math.round(initialERC.width), 600);
   assert.ok(Math.abs(initialERC.x + initialERC.width / 2 - 640) <= 1);
   assert.ok(Math.abs(initialERC.y + initialERC.height / 2 - 425) <= 1);
   assert.equal(await erc.getByText('Not checked', { exact: true }).isVisible(), true);

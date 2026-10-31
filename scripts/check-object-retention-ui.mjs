@@ -300,10 +300,7 @@ try {
     const labels = await toolbar
       .locator('button:visible')
       .evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label')));
-    const expected =
-      mode === 'Source'
-        ? ['Parts list', 'Version history']
-        : ['Parts list', 'Version history', 'Toggle right sidebar'];
+    const expected = mode === 'Source' ? ['Parts list'] : ['Parts list', 'Toggle right sidebar'];
     assert.deepEqual(
       labels.slice(-expected.length),
       expected,

@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { ProjectHistory } from '../server/project-history.mjs';
-import { compareProjectVersions } from '../lib/project-history';
+import { compareProjectFiles } from '../lib/project-history';
+import type { KiCadProjectFiles } from '../lib/kicad-project';
 import {
   appendSchematic,
   serializeProject,
@@ -199,88 +200,80 @@ test('history operations reject overlap, preserve prior commits on invalid snaps
   }
 });
 
-test('native comparisons ignore derived net UUIDs and file-set order while retaining complete content', () => {
-  const before = {
-    nativeFiles: {
-      entry: 'circuit.kicad_pro',
-      files: [
-        { name: 'circuit.kicad_pro', source: '{"text_variables":{"NOTE":"Retain"}}' },
-        { name: 'circuit.kicad_sch', source: '(kicad_sch (title_block (title "Circuit")))' },
-        { name: 'notes.txt', source: 'Retained auxiliary text', encoding: 'latin1' },
-      ],
-    },
-    schematic: {
-      components: [
-        { id: 'r1', footprints: [{ id: 'f1', pads: [{ id: 'p1', netId: 'old-net' }] }] },
-      ],
-      nets: [{ id: 'old-net', name: 'OUT', pcb: { order: 0, tracks: [{ id: 't1', width: 0.5 }] } }],
-    },
-    extensions: { netId: 'old-net' },
-  };
-  const after = structuredClone(before);
-  after.nativeFiles.files.reverse();
-  after.schematic.nets[0].id = 'reopened-net';
-  after.schematic.components[0].footprints[0].pads[0].netId = 'reopened-net';
-  const compare = () => compareProjectVersions(JSON.stringify(before), JSON.stringify(after));
-  assert.deepEqual(compare(), { differences: [], truncated: false });
-  after.nativeFiles.files.find((file) => file.name === 'notes.txt')!.source =
-    'Edited auxiliary text';
-  assert.equal(compare().differences.length, 1, 'Native supporting file bytes remain comparable.');
-  after.nativeFiles.files = structuredClone(before.nativeFiles.files);
-  after.schematic.nets[0].pcb.tracks[0].width = 0.6;
-  assert.equal(compare().differences.length, 1, 'Copper geometry remains comparable.');
-  after.schematic.nets[0].pcb.tracks[0].width = 0.5;
-  after.schematic.nets[0].name = 'OUTPUT';
-  assert.ok(compare().differences.length > 0, 'Renaming a network remains a design difference.');
-  after.schematic.nets[0].name = 'OUT';
-  after.extensions.netId = 'reopened-net';
-  assert.equal(compare().differences.length, 1, 'Unrelated extension values are never remapped.');
-  const privateBefore = { ...before, nativeFiles: undefined };
-  const privateAfter = { ...after, nativeFiles: undefined, extensions: before.extensions };
-  assert.ok(
-    compareProjectVersions(JSON.stringify(privateBefore), JSON.stringify(privateAfter)).differences
-      .length > 0,
-    'Unbacked snapshot identities retain their exact comparison.',
+test('file comparison lists each actual native filename once and ignores packet order', () => {
+  const project = exampleProject();
+  const before = projectNativeFiles(project, 'design.kicad_pro');
+  assert.deepEqual(
+    compareProjectFiles(before, { ...before, files: [...before.files].reverse() }),
+    [],
   );
+  project.schematic.parts[0].value = '4.7k';
+  project.pcb!.thickness = 2;
+  const after = projectNativeFiles(project, 'design.kicad_pro');
+  const settings = after.files.find((file) => file.name === after.entry)!;
+  settings.source = JSON.stringify({
+    ...JSON.parse(settings.source),
+    text_variables: { NOTE: 'Native settings change' },
+  });
+  const changes = compareProjectFiles(before, after);
+  assert.deepEqual(
+    changes.map((file) => file.name),
+    ['design.kicad_pcb', 'design.kicad_pro', 'design.kicad_sch'],
+  );
+  assert.ok(changes.every((file) => file.kind === 'changed'));
+  for (const file of changes) {
+    assert.equal(
+      file.before!.source,
+      before.files.find((native) => native.name === file.name)!.source,
+    );
+    assert.equal(
+      file.after!.source,
+      after.files.find((native) => native.name === file.name)!.source,
+    );
+  }
 });
 
-test('project comparisons match stable IDs, cover PCB/extensions and bound large previews', () => {
-  const a = {
-    schematic: {
-      components: [
-        { id: 'a', reference: 'R1', value: '1k' },
-        { id: 'b', reference: 'R2', value: '2k' },
-      ],
-    },
-    pcb: { thickness: 1.6 },
-    extensions: { 'a/b~c': 1 },
+test('file comparison retains supporting bytes, encodings, empty additions and removals', () => {
+  const before: KiCadProjectFiles = {
+    entry: 'design.kicad_pro',
+    files: [
+      { name: 'design.kicad_pro', source: '{}' },
+      { name: 'symbols/device.kicad_sym', source: '(kicad_symbol_lib)' },
+      { name: 'circuits/model.lib', source: '.subckt device 1 2\n.ends\n' },
+      { name: 'notes.txt', source: 'unchanged', encoding: 'latin1' },
+    ],
   };
-  const b = structuredClone(a);
-  b.schematic.components.unshift({ id: 'c', reference: 'R3', value: '3k' });
-  b.schematic.components[1].value = '4k';
-  b.pcb.thickness = 2;
-  b.extensions['a/b~c'] = 2;
-  const comparison = compareProjectVersions(JSON.stringify(a), JSON.stringify(b));
-  assert.equal(comparison.differences.length, 4);
-  assert.ok(
-    comparison.differences.some(
-      (d) => d.path.includes('R1 (a)/value') && d.before === '"1k"' && d.after === '"4k"',
-    ),
+  const after: KiCadProjectFiles = {
+    entry: before.entry,
+    files: [
+      { name: 'notes.txt', source: 'unchanged' },
+      { name: 'design.kicad_pro', source: '{}' },
+      { name: 'circuits/model.lib', source: '.subckt device 1 2\nR1 1 2 1k\n.ends\n' },
+      { name: 'empty.txt', source: '' },
+    ],
+  };
+  const changes = compareProjectFiles(before, after);
+  assert.deepEqual(
+    changes.map(({ name, kind }) => [name, kind]),
+    [
+      ['circuits/model.lib', 'changed'],
+      ['empty.txt', 'added'],
+      ['notes.txt', 'changed'],
+      ['symbols/device.kicad_sym', 'removed'],
+    ],
   );
-  assert.ok(comparison.differences.some((d) => d.kind === 'added' && d.path.includes('R3 (c)')));
-  assert.ok(comparison.differences.some((d) => d.path === '/pcb/thickness'));
-  assert.ok(comparison.differences.some((d) => d.path === '/extensions/a~1b~0c'));
-  assert.equal(compareProjectVersions(JSON.stringify(a), JSON.stringify(b), 2).truncated, true);
-  assert.equal(compareProjectVersions(JSON.stringify(a), JSON.stringify(a)).differences.length, 0);
-  const reordered = structuredClone(a);
-  reordered.schematic.components.reverse();
-  assert.match(
-    compareProjectVersions(JSON.stringify(a), JSON.stringify(reordered)).differences[0].path,
-    /order$/,
+  assert.equal(changes[1].before, undefined);
+  assert.equal(changes[1].after!.source, '');
+  assert.equal(changes[3].after, undefined);
+  changes[0].before!.source = 'caller edit';
+  assert.notEqual(
+    before.files[2].source,
+    'caller edit',
+    'Public file results do not alias caller containers.',
   );
   assert.equal(
-    compareProjectVersions('{"extensions":{"__proto__":null}}', '{"extensions":{}}').differences[0]
-      .kind,
-    'removed',
+    before.files[0].name,
+    'design.kicad_pro',
+    'Sorting never mutates the native packet.',
   );
 });

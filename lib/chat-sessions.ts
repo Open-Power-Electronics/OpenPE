@@ -1,6 +1,7 @@
 import type { ChatOutcome, ChatTimings } from './chat-stream';
 import { validateAnnotations, type AgentAnnotation } from './agent-annotations';
 import { displayName } from './display-name';
+import { validSuggestedTitle } from './session-title';
 
 export type Message = {
   id: string;
@@ -96,6 +97,26 @@ export function sessionTitle(session: ChatSession): string {
   const message = session.messages.find((message) => message.role === 'user');
   const prompt = message?.text || message?.annotations?.[0]?.comment;
   return prompt?.trim().replace(/\s+/g, ' ').slice(0, 60) || 'New session';
+}
+
+export function applySuggestedSessionTitle(
+  sessions: ChatSession[],
+  id: string,
+  messageId: string,
+  value: string,
+): ChatSession[] {
+  const title = validSuggestedTitle(value);
+  if (!title) return sessions;
+  return sessions.map((session) =>
+    session.id === id &&
+    session.name === undefined &&
+    session.messages.some(
+      (message) =>
+        message.id === messageId && message.role === 'assistant' && message.outcome === 'completed',
+    )
+      ? { ...session, name: title }
+      : session,
+  );
 }
 
 export function restoreSessions(state: { sessions?: ChatSession[]; activeSessionId?: string }): {

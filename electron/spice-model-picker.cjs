@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { MAX_MODEL_BYTES, spiceModelDeclarations } = require('./spice-model-declarations.cjs');
+const { createProjectDirectoryReader } = require('./project-directory.cjs');
 
 const extensions = ['lib', 'mod', 'cir', 'sp', 'spice'];
 const normalize = (file) =>
@@ -88,6 +89,30 @@ async function readSpiceModelFile(file, fileSystem = fs) {
 // bodies, includes or controls are returned, copied, followed or executed.
 function registerSpiceModelPicker({ ipcMain, authorize, grants, dialog, getWindow }) {
   let picking = false;
+  ipcMain.handle('openpe:inspect-spice-model', async (event, fileId, library) => {
+    authorize(event);
+    if (typeof library !== 'string') throw new Error('Invalid current SPICE model path.');
+    const location = grants.location(fileId);
+    modelPickerDefaultPath(library, location);
+    // Automatic inspection uses only a fresh, bounded observation inside this
+    // project's grant. An absolute reference still requires native selection.
+    if (!location || path.isAbsolute(library)) return null;
+    const name = library.split(/[\\/]/).join('/');
+    const reader = createProjectDirectoryReader(grants);
+    const listing = await reader.list(fileId);
+    const entry = listing.entries.find(
+      (entry) => entry.kind === 'file' && normalize(entry.name) === normalize(name),
+    );
+    if (!entry)
+      throw new Error(
+        'The model library is not available in the project directory. Choose the file again.',
+      );
+    const result = await reader.spice(fileId, entry.id);
+    authorize(event);
+    if (grants.location(fileId) !== location)
+      throw new Error('The project location changed. Choose the model again.');
+    return { path: library, ...result };
+  });
   ipcMain.handle('openpe:choose-spice-model', async (event, fileId, currentLibrary) => {
     authorize(event);
     const location = grants.location(fileId);

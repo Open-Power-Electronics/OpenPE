@@ -37,7 +37,7 @@
     "simulation:build-models": "node --import tsx scripts/build-buck-model.ts",
     "simulation:build-examples": "node scripts/prepare-example-models.mjs && node --import tsx scripts/build-example-simulation.ts && node scripts/build-format.mjs",
     "simulation:check-examples": "node --import tsx scripts/check-example-simulations.ts",
-    "simulation:build-emc-flyback": "node --import tsx scripts/build-emc-flyback-simulation.ts && node scripts/build-format.mjs",
+    "simulation:build-emc-flyback": "node --import tsx scripts/build-emc-flyback-simulation.ts && node scripts/build-format.mjs && node --import tsx scripts/prepare-emc-flyback-models.ts",
     "simulation:check-emc-flyback": "node --import tsx scripts/check-emc-flyback-simulation.ts",
     "simulation:download-examples": "node --import tsx scripts/download-example-models.ts",
     "thermal:prepare": "node scripts/prepare-thermal.mjs",
@@ -171,6 +171,7 @@
           "opencascade-d2abb6d-source.tar.gz",
           "manifest.json",
           "README.txt",
+          "newstroke-10.0.0/**/*",
           "ngspice-47.tar.gz",
           "libsndfile-1.2.2.tar.gz",
           "libsamplerate-0.2.2.tar.gz"

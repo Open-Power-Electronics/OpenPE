@@ -92,7 +92,7 @@ test('model dropdown and model browsing preserve native fields', () => {
   }
 });
 
-test('model file browsing hides the assigned path without changing the native assignment', () => {
+test('File shows only the filename above Model and preserves the native assignment', () => {
   const { part } = fixture();
   part.fields!['Sim.Library'] = 'OpenPE:lm2596-adj-derived';
   const original = structuredClone(part);
@@ -100,7 +100,17 @@ test('model file browsing hides the assigned path without changing the native as
     createElement(PartProperties, { part, spiceAvailable: true, onSave: () => true }),
   );
   assert.match(html, /aria-label="Browse SPICE models"/);
-  assert.doesNotMatch(html, /circuits\/LM2596-5\.lib/);
+  assert.match(
+    html,
+    /<input[^>]*aria-label="Model library"[^>]*title="circuits\/LM2596-5\.lib"[^>]*readOnly=""[^>]*value="LM2596-5\.lib"/,
+  );
+  assert.match(html, /<span>File<\/span>/);
+  assert.match(html, /<span>Model<\/span>/);
+  assert.doesNotMatch(html, /Models in file/);
+  assert.equal([...html.matchAll(/role="combobox"/g)].length, 1);
+  assert.ok(
+    html.indexOf('aria-label="Model library"') < html.indexOf('aria-label="Simulation model"'),
+  );
   assert.doesNotMatch(html, /aria-label="Remove field (?:Sim\.|Series resistance)/);
   assert.doesNotMatch(html, /OpenPE:lm2596-adj-derived/);
   assert.deepEqual(part, original);
@@ -120,7 +130,8 @@ test('external model selection hides native binding metadata and retains omitted
   );
   const section = html.slice(html.indexOf('<details'));
   assert.doesNotMatch(section, /Remove field/);
-  assert.doesNotMatch(section, /Series resistance|Coupling|<input/);
+  assert.doesNotMatch(section, /Series resistance|Coupling/);
+  assert.doesNotMatch(section.replace(/<input\b[^>]*readOnly=""[^>]*>/g, ''), /<input/);
   assert.match(section, /class="select-value">LM2596_ADJ_TRANS<\/span>/);
   assert.doesNotMatch(section, /<select/);
   assert.doesNotMatch(section, /aria-label="(?:Device|Pins)"|SUBCKT|1=1 2=2/);
@@ -129,9 +140,9 @@ test('external model selection hides native binding metadata and retains omitted
   assert.deepEqual(part, original);
 });
 
-for (const [kind, field, label, otherLabel, value] of [
-  ['C', 'OpenPE.InitialVoltage', 'Initial voltage (V)', 'Initial current (A)', '2.5'],
-  ['L', 'OpenPE.InitialCurrent', 'Initial current (A)', 'Initial voltage (V)', '40m'],
+for (const [kind, field, label, otherLabel, value, display, unit] of [
+  ['C', 'OpenPE.InitialVoltage', 'Initial voltage (V)', 'Initial current (A)', '2.5', '2.5', 'V'],
+  ['L', 'OpenPE.InitialCurrent', 'Initial current (A)', 'Initial voltage (V)', '40m', '40', 'mA'],
 ] as const) {
   test(`external .MODEL ${kind} exposes its initial condition while SUBCKT hides the retained value`, () => {
     const circuit = emptyCircuit();
@@ -166,7 +177,11 @@ for (const [kind, field, label, otherLabel, value] of [
       tag.includes(`aria-label="${label}"`),
     )?.[0];
     assert.ok(input, `.MODEL ${kind} exposes ${label}.`);
-    assert.ok(input.includes(`value="${value}"`));
+    assert.ok(input.includes(`value="${display}"`));
+    const unitControl = modelHtml
+      .slice(modelHtml.indexOf(`aria-label="${label} unit"`))
+      .split('</button>')[0];
+    assert.ok(unitControl.includes(`<span class="select-value">${unit}</span>`));
     assert.doesNotMatch(input, /readOnly=|disabled=/);
     assert.ok(!modelHtml.includes(`aria-label="${otherLabel}"`));
     assert.deepEqual(part, original);

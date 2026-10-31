@@ -531,7 +531,7 @@ try {
       await group
         .getByRole('button')
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-      [rule, 'Parts list', 'Version history', 'Toggle right sidebar'],
+      [rule, 'Parts list', 'Toggle right sidebar'],
     );
     assert.equal(await group.getByRole('button', { name: plugin, exact: true }).count(), 0);
     assert.equal(await group.locator('.editor-tool-divider').count(), 0);

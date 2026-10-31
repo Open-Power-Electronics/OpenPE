@@ -65,10 +65,12 @@ test('desktop preload forwards every operation to a registered main channel and 
     ['acceptOpen', 'accept-open', []],
     ['newFile', 'new', []],
     ['openDefaultExample', 'open-default-example', ['example-id']],
+    ['listExamples', 'list-examples', []],
     ['releaseFile', 'release-file', ['opaque-project-id']],
     ['revealFile', 'reveal-file', ['opaque-project-id']],
     ['projectDirectory', 'project-directory', ['opaque-project-id']],
     ['chooseSpiceModel', 'choose-spice-model', ['opaque-project-id', 'circuits/controller.lib']],
+    ['inspectSpiceModel', 'inspect-spice-model', ['opaque-project-id', 'circuits/controller.lib']],
     [
       'projectFilePreview',
       'project-file-preview',
@@ -93,7 +95,7 @@ test('desktop preload forwards every operation to a registered main channel and 
     ['historyList', 'history-list', [options]],
     ['historyRead', 'history-read', [options]],
     ['historyCreate', 'history-create', [options]],
-    ['exportKiCad', 'export', [options]],
+    ['exportProject', 'export', [options]],
     ['exportImage', 'export-image', [options]],
     ['exportEnclosure', 'export-enclosure', [options]],
   ];

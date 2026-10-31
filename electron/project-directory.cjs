@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { isUtf8 } = require('node:buffer');
 const { nativeName } = require('./native-project.cjs');
+const { MAX_MODEL_BYTES, spiceModelDeclarations } = require('./spice-model-declarations.cjs');
 
 const maxEntries = 4096;
 const maxDepth = 12;
@@ -105,7 +106,13 @@ function createProjectDirectoryReader(grants) {
       throw new Error('The project location changed. Refresh project files.');
     return { entries, truncated };
   }
-  async function readBytes(fileId, id, limit = previewBytes, complete = false) {
+  async function readBytes(
+    fileId,
+    id,
+    limit = previewBytes,
+    complete = false,
+    limitError = 'PDF preview supports files up to 32 MiB.',
+  ) {
     const state = listings.get(fileId);
     const entry = typeof id === 'string' && state?.paths.get(id);
     if (!entry || location(fileId) !== state.file)
@@ -121,8 +128,7 @@ function createProjectDirectoryReader(grants) {
     const before = await fs.lstat(target);
     if (!before.isFile() || before.isSymbolicLink() || !sameFile(before, entry.stat))
       throw new Error('The file changed. Refresh project files and select it again.');
-    if (complete && before.size > limit)
-      throw new Error('PDF preview supports files up to 32 MiB.');
+    if (complete && before.size > limit) throw new Error(limitError);
     if (normalize(await fs.realpath(target)) !== normalize(target))
       throw new Error('Linked project files cannot be previewed.');
     const handle = await fs.open(target, 'r');
@@ -288,6 +294,18 @@ function createProjectDirectoryReader(grants) {
     read,
     pdf,
     write,
+    spice: async (fileId, id) => {
+      const { bytes, entry } = await readBytes(
+        fileId,
+        id,
+        MAX_MODEL_BYTES,
+        true,
+        'Choose a nonempty SPICE library up to 2 MiB.',
+      );
+      if (!/\.(?:lib|mod|cir|sp|spice)$/i.test(entry.name))
+        throw new Error('Select a SPICE model library.');
+      return spiceModelDeclarations(bytes);
+    },
     release: (id) => listings.delete(id),
     clear: () => listings.clear(),
   };

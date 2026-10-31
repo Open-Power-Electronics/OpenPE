@@ -7,7 +7,7 @@ export type Operation =
   | { type: 'addPart'; kind: Kind; x: number; y: number; value?: string }
   | { type: 'removePart'; ref: string };
 export function extractProposal(text: string): Operation[] | null {
-  const match = text.match(/```openpe\s*([\s\S]*?)```/);
+  const match = text.match(/```openpe(?=\s|$)\s*([\s\S]*?)```/);
   if (!match) return null;
   const parsed = JSON.parse(match[1]);
   if (!Array.isArray(parsed) || parsed.length > 100)

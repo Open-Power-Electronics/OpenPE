@@ -1,4 +1,5 @@
 'use client';
+import QuantityInput from './QuantityInput';
 
 import { useLayoutEffect, useState } from 'react';
 import { fmt, snap, type Point } from '@/lib/circuit';
@@ -120,7 +121,8 @@ export default function FieldProperties({
         {(['x', 'y'] as const).map((axis) => (
           <label key={axis}>
             {axis.toUpperCase()} (mm)
-            <input
+            <QuantityInput
+              unit={'mm'}
               aria-label={`Text ${axis.toUpperCase()} position`}
               type="number"
               step="1.27"
@@ -128,8 +130,8 @@ export default function FieldProperties({
               max={100000}
               value={coordinates[axis]}
               disabled={!active}
-              onChange={(event) => {
-                if (active) setCoordinates({ ...coordinates, [axis]: event.target.value });
+              onValueChange={(inputValue) => {
+                if (active) setCoordinates({ ...coordinates, [axis]: inputValue });
               }}
               onBlur={() => savePosition(axis)}
               onKeyDown={(event) => {

@@ -1,5 +1,5 @@
 import Ajv from 'ajv';
-import { loadDatasheetCatalog } from './example-datasheets.mjs';
+import { loadDatasheetCatalog, loadSupplementalDatasheets } from './example-datasheets.mjs';
 import standalone from 'ajv/dist/standalone/index.js';
 import { build as compile } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
@@ -11,6 +11,8 @@ import { writeGeneratedFile } from './write-generated-file.mjs';
 
 // Schema/identity validation only: runtime bundles need no PDFs or network.
 await loadDatasheetCatalog();
+await loadSupplementalDatasheets();
+await import('./build-manufacturing-font.mjs');
 
 // Service bundles share the project boundary instead of embedding another copy
 // of both validators and serializers in every consumer.
@@ -135,6 +137,7 @@ const pcbTextProperties = {
 const pcbTextOptional = ['justify', 'hidden', 'italic', 'bold', 'property'];
 const line = object(
   {
+    locked: { const: true },
     id: uuid,
     start: pcbPoint,
     end: pcbPoint,
@@ -179,7 +182,7 @@ const line = object(
       ['height', 'leaderLength'],
     ),
   },
-  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'dimension'],
+  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'dimension', 'locked'],
 );
 const zone = object(
   {
@@ -342,6 +345,10 @@ const schema = {
         id: uuid,
         symbolId: { anyOf: [uuid, { type: 'null' }] },
         libraryId: name,
+        locked: { const: true },
+        solderMaskMargin: pcbNumber,
+        solderPasteMargin: pcbNumber,
+        solderPasteMarginRatio: pcbNumber,
         ...pcbXY,
         rotation: pcbAngle,
         side: { enum: ['front', 'back'] },
@@ -374,7 +381,16 @@ const schema = {
           32,
         ),
       },
-      ['reference', 'value', 'zones', 'models'],
+      [
+        'reference',
+        'value',
+        'zones',
+        'models',
+        'locked',
+        'solderMaskMargin',
+        'solderPasteMargin',
+        'solderPasteMarginRatio',
+      ],
     ),
     pad: object(
       {
@@ -795,12 +811,27 @@ await Promise.all([
   ),
   service('lib/simulation-models.ts', 'server/simulation-model-format.mjs'),
   service('lib/ti-dcdc.ts', 'server/ti-format.mjs'),
+  build({
+    stdin: {
+      contents:
+        'import {tiModels, referenceModels} from "./lib/ti-dcdc.ts";\n' +
+        'export const reviewedModelEntries = [...tiModels, ...referenceModels].map(model => ({sha256:model.modelSha256, names:[model.subcircuit]}));',
+      resolveDir: process.cwd(),
+      loader: 'ts',
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: 'server/spice-model-entrypoints.cjs',
+    banner,
+  }),
   service('lib/agent-providers.ts', 'server/agent-provider-format.mjs'),
   service('lib/agent-annotations.ts', 'server/annotation-format.mjs'),
   build({
     stdin: {
       contents:
-        'export { default as exampleModelLock } from "./resources/example-models-lock.json";',
+        'export { default as exampleModelLock } from "./resources/example-models-lock.json";\n' +
+        'export { default as emcFlybackModelLock } from "./resources/emc-flyback-models-lock.json";',
       resolveDir: process.cwd(),
       loader: 'js',
     },
@@ -816,6 +847,8 @@ await Promise.all([
 await Promise.all([
   service('lib/appearance.ts', 'server/appearance-format.mjs'),
   service('lib/project.ts', 'server/project-format.mjs'),
+  service('lib/manufacturing-export.ts', 'server/manufacturing-format.mjs', [sharedProject]),
+  writeGeneratedFile('server/manufacturing-format.d.mts', declaration('../lib/manufacturing-export')),
   writeGeneratedFile('server/project-format.d.mts', declaration('../lib/project')),
   service('lib/library.ts', 'server/library-format.mjs', [sharedProject]),
   service('lib/spice.ts', 'server/spice-format.mjs'),

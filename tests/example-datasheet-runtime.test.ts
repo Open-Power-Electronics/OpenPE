@@ -27,19 +27,37 @@ async function example(index = 0) {
   return parseProject(await readFile(`tests/fixtures/reference/${entry.file}.json`, 'utf8'));
 }
 
+test('EMC Flyback exposes the ST controller record and rejects changed variants and packages', async () => {
+  const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+  const before = serializeProject(project);
+  const result = projectDatasheetContext(project);
+  assert.equal(result.status, 'available');
+  assert.equal(result.exampleId, 'emc-flyback-demo');
+  assert.equal(result.record!.ic.family, 'UC3845B');
+  assert.equal(result.record!.ic.manufacturer, 'STMicroelectronics');
+  assert.equal(serializeProject(project), before);
+  for (const property of ['value', 'footprint']) {
+    const changed = structuredClone(project);
+    const part = changed.schematic.parts.find((part) => part.ref === 'U1')!;
+    if (property === 'value') part.value = 'UC3843B';
+    else part.fields!.Footprint = 'Package_DIP:DIP-8_W7.62mm';
+    assert.equal(projectDatasheetContext(changed).status, 'controller-mismatch');
+    assert.equal(projectDatasheetContext(changed).record, null);
+  }
+});
+
 test('all nine controllers expose the exact reviewed JSON and sources without mutating designs or native files', async () => {
   for (let index = 0; index < manifest.examples.length; index++) {
     const project = await example(index);
     const before = serializeProject(project);
     const native = projectNativeFiles(project);
     // Native files do not acquire private example provenance or reference JSON.
-    assert.equal(projectDatasheetContext(projectFromNativeFiles(native)).status, 'not-example');
+    assert.equal(projectDatasheetContext(projectFromNativeFiles(native)).status, 'available');
     const context = projectDatasheetContext(project);
     const expected = JSON.parse(
-      await readFile(
-        `examples/${manifest.examples[index].file}/datasheets/parameters.json`,
-        'utf8',
-      ),
+      await readFile('resources/example-catalog/ic-datasheets.json', 'utf8'),
+    ).find(
+      (record: { example: { id: string } }) => record.example.id === manifest.examples[index].id,
     );
     assert.equal(context.status, 'available');
     assert.equal(context.projectId, project.id);
@@ -61,7 +79,7 @@ test('all nine controllers expose the exact reviewed JSON and sources without mu
   }
 });
 
-test('matching uses bounded provenance and actual IC variant/package; names and secondary-sheet lookalikes cannot select a record', async () => {
+test('matching uses native IC variant/package without provenance; names and secondary-sheet lookalikes cannot select a record', async () => {
   const project = await example(2);
   const controller = project.schematic.parts.find((part) => part.ref === 'U1')!;
   assert.equal(projectDatasheetContext(createProject()).status, 'not-example');
@@ -86,11 +104,16 @@ test('matching uses bounded provenance and actual IC variant/package; names and 
     changed.additionalSchematics![0].parts.push(structuredClone(controller));
     alter(changed);
     const context = projectDatasheetContext(changed);
-    assert.equal(context.status, 'controller-mismatch');
+    assert.equal(
+      context.status,
+      changed.schematic.parts.some((part) => part.id === controller.id)
+        ? 'controller-mismatch'
+        : 'not-example',
+    );
     assert.equal(context.record, null);
   }
   project.extensions = {};
-  assert.equal(projectDatasheetContext(project).status, 'not-example');
+  assert.equal(projectDatasheetContext(project).status, 'available');
 });
 
 test('workspace observations reject forged specifications, cross-project bindings and hidden extra fields in renderer and service', async () => {

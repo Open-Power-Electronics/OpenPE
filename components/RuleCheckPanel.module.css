@@ -1,5 +1,5 @@
 .panel:global(.surface-dialog) {
-  width: 420px;
+  width: 600px;
 }
 
 .panel:global(.surface-dialog) > :global(.dialog-content) {

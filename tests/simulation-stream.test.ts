@@ -233,6 +233,12 @@ test('authenticated simulation API delivers samples while the solver is still pe
         values: generated.traces.map(() => [0, 1]),
       });
       await pendingSolver;
+      await samples({ reset: true });
+      await samples({
+        offset: 0,
+        time: [0, generated.stop / 4],
+        values: generated.traces.map(() => [0, 2]),
+      });
       completed = true;
       return {
         version: 'fixture',
@@ -271,7 +277,7 @@ test('authenticated simulation API delivers samples while the solver is still pe
     assert.deepEqual(events, ['started', 'samples']);
     release();
     await reading;
-    assert.deepEqual(events, ['started', 'samples', 'result']);
+    assert.deepEqual(events, ['started', 'samples', 'retry', 'samples', 'result']);
   } finally {
     release();
     server.close();

@@ -1,3 +1,5 @@
+import QuantityInput from './QuantityInput';
+import { quantityUnitFromLabel, quantityLabel } from './quantity-units';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Select from './Select';
 
@@ -22,6 +24,9 @@ export function NumberField({
   disabled = false,
   active = true,
   resetKey = true,
+  accessibleLabel = label,
+  format = String,
+  onRequestSave,
 }: {
   label: string;
   value: number;
@@ -31,26 +36,29 @@ export function NumberField({
   disabled?: boolean;
   active?: boolean;
   resetKey?: boolean;
+  accessibleLabel?: string;
+  format?: (value: number) => string;
+  onRequestSave?: (saveAs: boolean) => void;
   onCommit: (value: number) => boolean | void;
   normalize?: (value: number) => number;
   onCancel?: () => void;
 }) {
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(format(value));
   const [invalid, setInvalid] = useState(false);
   const cancelling = useRef(false);
   const composing = useRef(false);
   useLayoutEffect(() => {
-    setDraft(String(value));
+    setDraft(format(value));
     setInvalid(false);
-  }, [value, resetKey]);
+  }, [value, resetKey, format]);
   function commit() {
     if (disabled || !active || cancelling.current || composing.current) return false;
     const number = Number(draft);
     // Accepted native values can lie outside the range offered for new edits.
     // Merely visiting the field must retain that exact accepted value.
-    if (draft.trim() && Number.isFinite(number) && number === value) {
+    if (draft === format(value) || (draft.trim() && Number.isFinite(number) && number === value)) {
       setInvalid(false);
-      setDraft(String(value));
+      setDraft(format(value));
       return true;
     }
     if (!draft.trim() || !Number.isFinite(number) || number < min || number > max) {
@@ -72,11 +80,12 @@ export function NumberField({
   }
   return (
     <label className="layout-field">
-      <span>{label}</span>
-      <input
+      <span>{quantityLabel(label)}</span>
+      <QuantityInput
+        unit={quantityUnitFromLabel(label)}
         type="number"
         disabled={disabled || !active}
-        aria-label={label}
+        aria-label={accessibleLabel}
         value={draft}
         min={min}
         max={max}
@@ -89,9 +98,9 @@ export function NumberField({
         onCompositionEnd={() => {
           composing.current = false;
         }}
-        onChange={(e) => {
+        onValueChange={(inputValue) => {
           if (!active) return;
-          setDraft(e.target.value);
+          setDraft(inputValue);
           setInvalid(false);
         }}
         onBlur={commit}
@@ -100,6 +109,10 @@ export function NumberField({
             if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || !commit()) {
               e.preventDefault();
               e.stopPropagation();
+            } else if (onRequestSave) {
+              e.preventDefault();
+              e.stopPropagation();
+              onRequestSave(e.shiftKey);
             }
             return;
           }
@@ -112,7 +125,7 @@ export function NumberField({
           if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            setDraft(String(value));
+            setDraft(format(value));
             setInvalid(false);
             if (onCancel) {
               // Focus changes blur synchronously, before this controlled draft
@@ -205,7 +218,20 @@ export function TextField({
   return (
     <label className="layout-field">
       <span>{label}</span>
-      {multiline ? <textarea {...props} rows={3} /> : <input {...props} type="text" />}
+      {multiline ? (
+        <textarea {...props} rows={3} />
+      ) : quantityUnitFromLabel(label) ? (
+        <QuantityInput
+          {...props}
+          unit={quantityUnitFromLabel(label)}
+          onValueChange={(value) => {
+            setDraft(value);
+            setInvalid(false);
+          }}
+        />
+      ) : (
+        <input {...props} type="text" />
+      )}
     </label>
   );
 }

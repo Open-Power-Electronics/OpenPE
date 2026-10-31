@@ -4,6 +4,7 @@
     "version": 1
   },
   "text_variables": {
+    "OPENPE_PROJECT_NAME": "LMR12010 Buck",
     "OPENPE_SIMULATION_MODELS": "[\"circuits/LMR12010X.lib\"]"
   }
 }

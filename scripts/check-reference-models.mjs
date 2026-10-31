@@ -2,6 +2,7 @@ import { modelReferenceKey, resolveExampleModelRelative } from '../server/librar
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import nativeProject from '../electron/native-project.cjs';
 import { createLibraryService } from '../server/libraries.mjs';
 
 const manifest = JSON.parse(
@@ -90,12 +91,10 @@ try {
           setup(plugin) {
             plugin.onLoad({ filter: /[\\/]PCBModelPreview\.tsx$/ }, async (args) => {
               const source = await readFile(args.path, 'utf8');
-              assert.ok(source.includes('renderer?.render(scene, camera);'));
+              const marker = 'const scene = new THREE.Scene();';
+              assert.equal(source.split(marker).length, 2);
               return {
-                contents: source.replace(
-                  'renderer?.render(scene, camera);',
-                  'window.modelScene=scene;renderer?.render(scene, camera);',
-                ),
+                contents: source.replace(marker, `${marker} window.modelScene=scene;`),
                 loader: 'tsx',
                 resolveDir: path.dirname(args.path),
               };
@@ -142,7 +141,8 @@ try {
       await page.addScriptTag({
         content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
       });
-      const { parseProject, serializeProject } = await import('../server/project-format.mjs');
+      const { projectFromNativeFiles, serializeProject } =
+        await import('../server/project-format.mjs');
       const projects = JSON.parse(
         await readFile('resources/example-catalog/home-manifest.json', 'utf8'),
       );
@@ -151,12 +151,9 @@ try {
       assert.equal(new Set(catalog.map((entry) => entry.id)).size, 10);
       await mkdir('test-results/reference-object', { recursive: true });
       for (const entry of catalog) {
-        const project = parseProject(
-          await readFile(
-            entry.id === 'emc-flyback-demo'
-              ? 'lib/emc-flyback-example.json'
-              : `tests/fixtures/reference/${entry.file}.json`,
-            'utf8',
+        const project = projectFromNativeFiles(
+          await nativeProject.readNativeProject(
+            path.resolve('examples', entry.file, `${entry.file}.kicad_pro`),
           ),
         );
         const source = serializeProject(project);

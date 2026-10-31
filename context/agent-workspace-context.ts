@@ -2,6 +2,7 @@ import { parseProject } from '../lib/project';
 import { projectDatasheetContext, type ProjectDatasheetContext } from '../lib/example-datasheets';
 import type { AgentSimulationContext } from './agent-simulation-context';
 import { validateAgentThermalContext, type AgentThermalContext } from './agent-thermal-context';
+export { agentPromptContext } from './agent-prompt-context';
 
 export type AgentWorkspaceContext = {
   version: 1;

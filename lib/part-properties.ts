@@ -10,6 +10,7 @@ import {
 } from './simulation-model-source';
 import {
   sourceParameterSpecs,
+  simulationSourceParameterSpecs,
   simulationSourceValues,
   type SimulationSourceType,
 } from './simulation-source-parameters';
@@ -23,8 +24,9 @@ export function simulationSourceProperties(part: Part) {
         ? effectiveSimulationModelFields(part, stored)
         : stored,
     type = fields['Sim.Type'];
-  if (fields['Sim.Device'] !== 'V' || !Object.hasOwn(sourceParameterSpecs, type)) return null;
-  const specs = sourceParameterSpecs[type as SimulationSourceType];
+  if (!['V', 'I'].includes(fields['Sim.Device']) || !Object.hasOwn(sourceParameterSpecs, type))
+    return null;
+  const specs = simulationSourceParameterSpecs(type as SimulationSourceType, fields['Sim.Device']);
   let entries;
   try {
     entries = simulationParameterEntries(
@@ -136,7 +138,7 @@ export function preparePartProperties(
   const effectiveFields = effectiveSimulationModelFields(part, fields);
   const sourceType = effectiveFields['Sim.Type'];
   if (
-    effectiveFields['Sim.Device'] === 'V' &&
+    ['V', 'I'].includes(effectiveFields['Sim.Device']) &&
     Object.hasOwn(sourceParameterSpecs, sourceType) &&
     (fields['Sim.Params'] !== current['Sim.Params'] || storedValue !== part.value)
   )

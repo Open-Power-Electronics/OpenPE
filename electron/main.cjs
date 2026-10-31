@@ -39,6 +39,7 @@ const serviceModules = Promise.all([
   import('../server/example-footprints.mjs'),
   import('../server/project-format.mjs'),
   import('../server/enclosure-step.mjs'),
+  import('../server/manufacturing-format.mjs'),
 ]);
 app.whenReady().then(async () => {
   const [
@@ -54,26 +55,25 @@ app.whenReady().then(async () => {
     {
       parseProject,
       serializeProject,
-      exportKiCad,
-      modelCadFromProject,
-      exportModelCadScad,
       projectFilename,
       projectFromNativeFiles,
       projectNativeFiles,
     },
     { createEnclosureStep },
+    { exportProjectFile, projectExportFormats },
   ] = await serviceModules;
   const modelFetcher = (url, options) =>
     net.fetch(url, { ...options, credentials: 'omit', cache: 'no-store' });
-  const modelStore = createSimulationModelStore(app.getPath('userData'), modelFetcher);
-  history = new ProjectHistory(app.getPath('userData'), fileGrants);
-  const exampleProjects = new ExampleProjects(
-    app.isPackaged
-      ? path.join(process.resourcesPath, 'examples-native')
-      : path.join(__dirname, '../examples'),
-    fileGrants,
-    history,
+  const examplesRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'examples-native')
+    : path.join(__dirname, '../examples');
+  const modelStore = createSimulationModelStore(
+    app.getPath('userData'),
+    modelFetcher,
+    examplesRoot,
   );
+  history = new ProjectHistory(app.getPath('userData'), fileGrants);
+  const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history);
   let examplePreparation;
   // Example opens join one bounded preparation before granting a file.
   // Home performs no example Git/model checks.
@@ -92,6 +92,7 @@ app.whenReady().then(async () => {
     thermalRoot: app.isPackaged ? process.resourcesPath : undefined,
     // Model downloads follow the desktop's system proxy instead of Node's direct HTTP stack.
     simulationModelFetcher: modelFetcher,
+    simulationExamplesRoot: examplesRoot,
     simulationModelFiles: {
       read: (fileId, model) => readProjectModelFile(fileGrants.get(fileId), model),
       write: (fileId, model, bytes) => writeProjectModelFile(fileGrants.get(fileId), model, bytes),
@@ -213,6 +214,12 @@ app.whenReady().then(async () => {
     trusted(event);
     return opened;
   });
+  ipcMain.handle('openpe:list-examples', async (event) => {
+    trusted(event);
+    const result = await exampleProjects.list();
+    trusted(event);
+    return result;
+  });
   ipcMain.handle('openpe:release-file', (event, fileId) => {
     trusted(event);
     projectDirectory.release(fileId);
@@ -286,17 +293,15 @@ app.whenReady().then(async () => {
   });
   const nativeExport = createNativeExport({
     parseProject,
-    exportKiCad,
-    modelCadFromProject,
-    exportModelCadScad,
-    projectFilename,
-    preparePCBFiles: prepareExampleFootprints,
+    exportProjectFile,
+    projectExportFormats,
+    fileGrants,
     atomicWrite,
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
   });
   ipcMain.handle('openpe:export', async (event, options) => {
     trusted(event);
-    return nativeExport(options);
+    return nativeExport(options, () => trusted(event));
   });
   const imageExport = createImageExport({
     atomicWrite,

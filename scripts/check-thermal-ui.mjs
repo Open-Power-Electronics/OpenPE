@@ -89,6 +89,18 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(() => {
+    window.thermalResultStages = [];
+    new MutationObserver(() => {
+      const stage = document
+        .querySelector('[data-saved-result-loading]')
+        ?.getAttribute('data-saved-result-loading');
+      if (stage) window.thermalResultStages.push(stage);
+    }).observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-saved-result-loading'],
+    });
     window.thermalExports = [];
     window.thermalAborts = 0;
     window.spiceHeatAborts = 0;
@@ -173,6 +185,11 @@ try {
     }
     if (url.pathname === '/api/thermal/result') {
       resultRequests++;
+      assert.equal(
+        await page.locator('[data-saved-result-loading="reading"]').isVisible(),
+        true,
+        'Thermal loading UI paints before the restore request.',
+      );
       assert.equal(route.request().postDataJSON().fileId, '00000000-0000-4000-8000-000000000001');
       if (holdResult) {
         heldResults.push(route);
@@ -281,15 +298,16 @@ try {
     await heatInput.press(value === 'manual' ? 'Home' : 'End');
     await heatInput.press('Enter');
   }
-  await chooseHeatInput('spice');
-  assert.equal(await page.getByRole('button', { name: 'Run', exact: true }).isDisabled(), true);
-  await page.getByRole('button', { name: 'Load SPICE heat sources', exact: true }).click();
+  assert.equal(await heatInput.innerText(), 'SPICE');
+  assert.equal(spiceRequests, 0, 'Opening Thermal does not import or solve automatically.');
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
   await waitForAsync(
     page,
     async () => !!(await window.thermalTest.host.query('thermal.status')).settings?.spiceSource,
   );
-  assert.equal(spiceRequests, 1, 'Selecting SPICE loads a completed result without solving.');
-  assert.equal(requests, 0, 'Loading SPICE heat sources never starts Thermal.');
+  await panel.getByRole('img', { name: /board temperature map/ }).waitFor();
+  assert.equal(spiceRequests, 1, 'Default Run imports verified current SPICE heat sources.');
+  assert.equal(requests, 1, 'Default Run starts Thermal after importing verified power.');
   assert.equal(
     await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).inputValue(),
     '0.75',
@@ -302,6 +320,11 @@ try {
   await page.screenshot({ path: 'test-results/thermal-spice-ui.png' });
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await panel.getByRole('img', { name: /board temperature map/ }).waitFor();
+  assert.equal(
+    spiceRequests,
+    2,
+    'Every SPICE-powered run revalidates the completed electrical record.',
+  );
   assert.equal(
     saved.config.heatSources[0].powerW,
     importedPower,
@@ -328,8 +351,9 @@ try {
   const pendingSpice = page.waitForRequest((request) =>
     request.url().endsWith('/thermal/spice-sources'),
   );
-  await page.getByRole('button', { name: 'Load SPICE heat sources', exact: true }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
   await pendingSpice;
+  const beforeCancelledImport = requests;
   await page.evaluate(() => window.thermalTest.setSpiceAvailable(false));
   await page.waitForFunction(() => window.spiceHeatAborts >= 1);
   holdSpice = false;
@@ -350,6 +374,11 @@ try {
     'Disabled SPICE discards late imports.',
   );
   assert.equal(await page.getByRole('button', { name: 'Run', exact: true }).isDisabled(), true);
+  assert.equal(
+    requests,
+    beforeCancelledImport,
+    'Plugin disable during automatic import cannot start Thermal with old powers.',
+  );
   await chooseHeatInput('manual');
   await page.evaluate(() => window.thermalTest.setSpiceAvailable(true));
   assert.equal(
@@ -393,7 +422,11 @@ try {
   assert.equal(state.result.points, undefined, 'Agent status never exposes the full mesh.');
   assert.equal(state.result.hottest.temperatureC, 70);
   assert.ok([0, 1, 2, 3].includes(state.probe.node));
-  await page.getByRole('button', { name: 'Export temperature map', exact: true }).click();
+  assert.equal(
+    await page.getByRole('button', { name: 'Export temperature map', exact: true }).count(),
+    0,
+  );
+  await page.evaluate(() => window.thermalTest.host.execute('thermal.exportImage'));
   await page.waitForFunction(() => window.thermalExports.length === 1);
   assert.equal(
     await page.evaluate(() =>
@@ -408,7 +441,9 @@ try {
   );
   await page.screenshot({ path: 'test-results/thermal-ui.png' });
 
+  assert.doesNotMatch(await panel.locator('header').innerText(), /Completed/);
   const completedRuns = requests;
+  assert.equal(await page.locator('[data-saved-result-loading]').count(), 0);
   await page.evaluate(() => window.thermalTest.remount());
   await map.waitFor();
   assert.equal(requests, completedRuns, 'Restoring a result never starts a solver.');
@@ -423,6 +458,18 @@ try {
   const pendingLookup = page.waitForRequest((request) => request.url().endsWith('/thermal/result'));
   await page.evaluate(() => window.thermalTest.remount());
   await pendingLookup;
+  await panel
+    .locator('footer')
+    .getByRole('progressbar', { name: 'Loading saved thermal results…', exact: true })
+    .waitFor();
+  const loadingBox = await page.locator('[data-saved-result-loading]').boundingBox();
+  const runBox = await page.getByRole('button', { name: 'Run', exact: true }).boundingBox();
+  assert.ok(loadingBox.x + loadingBox.width <= runBox.x, 'Thermal progress sits left of Run.');
+  assert.ok(
+    Math.abs(loadingBox.y + loadingBox.height / 2 - runBox.y - runBox.height / 2) < 2,
+    'Thermal progress shares the Run row.',
+  );
+  await page.screenshot({ path: 'test-results/thermal-loading-saved.png' });
   await page.getByRole('textbox', { name: 'Ambient (°C)', exact: true }).fill('55');
   await page.getByRole('textbox', { name: 'Ambient (°C)', exact: true }).blur();
   assert.ok(heldResults.length);
@@ -438,6 +485,13 @@ try {
     await page.getByRole('textbox', { name: 'Ambient (°C)', exact: true }).inputValue(),
     '55',
   );
+  assert.equal(
+    await page.locator('[data-saved-result-loading]').count(),
+    0,
+    'Editing cancels loading feedback together with its stale lookup.',
+  );
+  assert.ok((await page.evaluate(() => window.thermalResultStages)).includes('preparing'));
+  await chooseHeatInput('manual');
   await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).fill('1');
   await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).blur();
   await page.getByRole('textbox', { name: 'Ambient (°C)', exact: true }).fill('40');

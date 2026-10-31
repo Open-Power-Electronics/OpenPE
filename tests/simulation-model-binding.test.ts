@@ -45,6 +45,25 @@ function symbolFixture(pins: [string, string][]) {
   return { circuit, part };
 }
 
+test('reselecting a named subcircuit preserves its explicit native ordinal mapping only for that model', () => {
+  const { circuit, part } = symbolFixture([
+    ['1', '~'],
+    ['2', '~'],
+    ['3', '~'],
+  ]);
+  part.fields = { 'Sim.Device': 'SUBCKT', 'Sim.Name': 'REVIEWED', 'Sim.Pins': '3=1 1=2 2=3' };
+  const declaration: ExternalModelDeclaration = {
+    name: 'REVIEWED',
+    kind: 'subcircuit',
+    pins: ['K', 'A', 'REF'],
+  };
+  assert.equal(externalModelBindingFields(circuit, part, declaration)['Sim.Pins'], '3=1 1=2 2=3');
+  assert.equal(
+    externalModelBinding(circuit, part, { ...declaration, name: 'OTHER' }).mapping,
+    null,
+  );
+});
+
 test('primitive model mapping uses established symbol polarity and preserves other fields', () => {
   const circuit = emptyCircuit(),
     capacitor = createPart(circuit, 'C', 0, 0);

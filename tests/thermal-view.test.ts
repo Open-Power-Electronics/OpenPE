@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { ThermalResult } from '../lib/thermal';
+import type { ThermalModel, ThermalResult } from '../lib/thermal';
+import { thermalPadReadouts } from '../lib/thermal-pad-view';
 import {
   closestThermalNode,
   hottestThermalNode,
@@ -197,4 +198,112 @@ test('Agent thermal context preserves exact extrema and drops the volume mesh', 
       () => validateAgentThermalContext(value, 'board', false),
       /Invalid Agent thermal/,
     );
+});
+
+test('pad readouts integrate unequal triangle areas, keep board sides separate and reject stale fields', () => {
+  const polygon = {
+    outer: [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 0, y: 1 },
+    ],
+    holes: [],
+  };
+  const model: ThermalModel = {
+    version: 1,
+    units: 'mm',
+    boardId: 'fixture',
+    basis: result.basis,
+    config: {
+      ambientC: 25,
+      convection: { top: 10, bottom: 10, edge: 5 },
+      copperThicknessMm: [0.035, 0.035],
+      dielectricConductivity: 0.3,
+      copperConductivity: 400,
+      viaPlatingMm: 0.025,
+      meshSizeMm: 2,
+      heatSources: [],
+    },
+    board: [polygon],
+    layers: [
+      { layer: 'F.Cu', zMin: 0.965, zMax: 1, polygons: [polygon] },
+      { layer: 'B.Cu', zMin: -1, zMax: -0.965, polygons: [polygon] },
+    ],
+    dielectricLayers: [],
+    barrels: [],
+    notices: [],
+    assumptions: [],
+    sources: [
+      {
+        footprintId: 'front',
+        reference: 'R10',
+        powerW: 0.5,
+        side: 'front',
+        areaMm2: 2,
+        polygons: [polygon],
+      },
+      {
+        footprintId: 'back',
+        reference: 'Q1',
+        powerW: 1,
+        side: 'back',
+        areaMm2: 2,
+        polygons: [polygon],
+      },
+    ],
+  };
+  const field: ThermalResult = {
+    ...result,
+    points: [
+      { x: 0, y: 0, z: 1, temperatureC: 0 },
+      { x: 4, y: 0, z: 1, temperatureC: 120 },
+      { x: 0, y: 1, z: 1, temperatureC: 0 },
+      { x: 1, y: 0, z: 1, temperatureC: 0 },
+      { x: 0, y: 0, z: -1, temperatureC: 20 },
+      { x: 4, y: 0, z: -1, temperatureC: 20 },
+      { x: 0, y: 1, z: -1, temperatureC: 20 },
+    ],
+    triangles: [
+      [0, 3, 2],
+      [3, 1, 2],
+      [4, 5, 6],
+    ],
+  };
+  const before = JSON.stringify([model, field]);
+  const rows = thermalPadReadouts(model, field);
+  assert.deepEqual(
+    rows.map((row) => row.reference),
+    ['Q1', 'R10'],
+  );
+  assert.equal(rows[0].padMeanC, 20);
+  assert.equal(rows[0].padMaxC, 20);
+  assert.equal(rows[1].padMeanC, 30); // 0.5 mm² at 0 °C + 1.5 mm² at 40 °C.
+  assert.equal(rows[1].padMaxC, 120);
+  const missing = thermalPadReadouts(model, { ...field, triangles: [[4, 5, 6]] });
+  assert.equal(missing[1].padMeanC, null);
+  assert.equal(missing[1].padMaxC, null);
+  const hole = {
+    ...model,
+    sources: [
+      {
+        ...model.sources[0],
+        areaMm2: 1.5,
+        polygons: [
+          {
+            ...polygon,
+            holes: [
+              [
+                { x: 0, y: 0 },
+                { x: 1, y: 0 },
+                { x: 0, y: 1 },
+              ],
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  assert.equal(thermalPadReadouts(hole, field)[0].padMeanC, 40);
+  assert.throws(() => thermalPadReadouts(model, { ...field, basis: 'stale' }), /does not match/);
+  assert.equal(JSON.stringify([model, field]), before);
 });

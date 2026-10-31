@@ -1,5 +1,9 @@
 import type { Circuit, Part } from './circuit';
-import { primitiveInitialCondition } from './simulation-initial-conditions';
+import {
+  primitiveInitialCondition,
+  spiceInitialConditions,
+  type SpiceInitialCondition,
+} from './simulation-initial-conditions';
 import {
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
@@ -336,7 +340,7 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
     bundled.definition,
     '.model OPENPE_DEMO_D D',
   ];
-  let explicitInitialConditions = false;
+  const initialConditions: SpiceInitialCondition[] = [];
   const currents: SpiceTrace[] = [];
   const connected = new Map<string, Set<string>>();
   const link = (a: string, b: string) => {
@@ -367,7 +371,8 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
       if (kind !== 'L') vector = `@${name.toLowerCase()}[i]`;
       const initial =
         kind === 'C' || kind === 'L' ? primitiveInitialCondition(kind, f, p.ref) : undefined;
-      if (initial !== undefined) explicitInitialConditions = true;
+      if (initial !== undefined && (kind === 'C' || kind === 'L'))
+        initialConditions.push({ kind, positive: a('+'), negative: a('-'), value: initial });
       lines.push(
         `${name} ${a('+')} ${a('-')} ${value}${initial === undefined ? '' : ` IC=${initial}`}`,
       );
@@ -442,13 +447,15 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
   );
   traces.push(...currents);
   const vectors = traces.map((t) => t.vector).join(' ');
+  const initialization = spiceInitialConditions(initialConditions);
   lines.push(
+    ...initialization.lines,
     `.save ${vectors}`,
     '.control',
     'set wr_singlescale',
     'set wr_vecnames',
     'set numdgt=15',
-    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}${explicitInitialConditions ? ' uic' : ''}`,
+    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}${initialization.uic ? ' uic' : ''}`,
     `wrdata waveforms.txt ${vectors}`,
     'quit',
     '.endc',

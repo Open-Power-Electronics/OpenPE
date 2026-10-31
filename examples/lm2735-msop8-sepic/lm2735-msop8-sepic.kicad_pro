@@ -4,6 +4,7 @@
     "version": 1
   },
   "text_variables": {
+    "OPENPE_PROJECT_NAME": "LM2735 SEPIC",
     "OPENPE_SIMULATION_MODELS": "[\"circuits/LM2735Y.lib\"]"
   }
 }

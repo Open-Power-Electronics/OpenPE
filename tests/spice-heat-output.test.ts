@@ -141,7 +141,16 @@ test(
         )
         .update(JSON.stringify([deck.netlist, deck.compatibility]))
         .digest('hex');
-      assert.equal(keys[0], legacyKey);
+      assert.notEqual(
+        keys[0],
+        legacyKey,
+        'The convergence plan must invalidate single-attempt records.',
+      );
+      assert.notEqual(
+        keys[0],
+        keys[1],
+        'Heat metadata remains part of the current execution identity.',
+      );
       assert.notEqual(keys[1], legacyKey);
       assert.notEqual(keys[1], keys[2]);
       const linearizedHeatKey = createHash('sha256')

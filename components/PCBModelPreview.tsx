@@ -162,7 +162,6 @@ function PCBModelPreview({
   annotationProps,
   toolbarRef,
   listAction,
-  historyAction,
   sidebarAction,
   onBoardThicknessChange,
   onModeChange,
@@ -189,7 +188,6 @@ function PCBModelPreview({
   annotationProps?: ObjectAnnotationProps;
   toolbarRef?: RefObject<HTMLDivElement | null>;
   listAction?: ReactNode;
-  historyAction?: ReactNode;
   sidebarAction?: ReactNode;
   capabilityHost?: CapabilityHost;
   revision?: string;
@@ -1787,7 +1785,6 @@ function PCBModelPreview({
           aria-label="3D display"
         >
           {listAction}
-          {historyAction}
           {sidebarAction}
         </div>
       </div>

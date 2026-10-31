@@ -1,4 +1,11 @@
 import type { HistoryPage } from './project-history';
+import type { ProjectExportFormat } from './export-formats';
+export type DiscoveredExample = {
+  id: string;
+  title: string;
+  description: string;
+  section: 'recent' | 'examples';
+};
 export type SpiceModelDeclaration = {
   name: string;
   kind: 'model' | 'subcircuit';
@@ -22,6 +29,7 @@ declare global {
       >;
       acceptOpen(): Promise<string>;
       newFile(): Promise<string>;
+      listExamples(): Promise<{ entries: DiscoveredExample[]; warnings: string[] }>;
       openDefaultExample(key: string): Promise<{
         id: string;
         source: string;
@@ -35,6 +43,10 @@ declare global {
       chooseSpiceModel(
         fileId: string,
         currentLibrary?: string,
+      ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
+      inspectSpiceModel(
+        fileId: string,
+        library: string,
       ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
       projectFilePreview(options: { fileId: string; id: string }): Promise<ProjectFilePreview>;
       projectFilePdf(options: { fileId: string; id: string }): Promise<ProjectFilePdf>;
@@ -55,12 +67,11 @@ declare global {
         name: string;
         saveAs?: boolean;
       }): Promise<{ name: string; path: string; localExample?: boolean } | null>;
-      exportKiCad(options: {
+      exportProject(options: {
         source: string;
         name: string;
-        kind?: 'schematic' | 'pcb';
-        schematicId?: string;
-      }): Promise<{ name: string; path: string; kind?: 'schematic' | 'pcb' | 'scad' } | null>;
+        format: ProjectExportFormat;
+      }): Promise<{ name: string; format: ProjectExportFormat } | null>;
       exportImage(options: {
         dataUrl: string;
         width: number;

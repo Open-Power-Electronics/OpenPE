@@ -389,7 +389,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear"
       },
@@ -398,7 +398,7 @@
     {
       "id": "reference-tps61046-bga6-boost",
       "title": "TPS61046 Boost",
-      "stop": 0.01,
+      "stop": 0.002,
       "input": {
         "pin": "A1",
         "minimum": 1.8,
@@ -734,7 +734,7 @@
           "sim": {},
           "modelId": "",
           "modelName": "",
-          "value": "100"
+          "value": "1000"
         },
         {
           "ref": "#PWR1",
@@ -771,7 +771,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",
@@ -1258,7 +1258,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",
@@ -1955,7 +1955,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",
@@ -2488,7 +2488,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",
@@ -2499,7 +2499,7 @@
     {
       "id": "reference-lm27761-wson8-pump",
       "title": "LM27761 Charge Pump",
-      "stop": 0.005,
+      "stop": 0.002,
       "input": {
         "pin": "1",
         "minimum": 2.7,
@@ -2885,7 +2885,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",
@@ -3426,7 +3426,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",
@@ -3854,7 +3854,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9"
@@ -4412,7 +4412,7 @@
       ],
       "directives": [],
       "options": {
-        "itl4": "1000",
+        "itl4": "50",
         "reltol": "0.005",
         "method": "gear",
         "rshunt": "1e9",

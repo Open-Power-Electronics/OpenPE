@@ -54,7 +54,7 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const button = (name) => page.getByRole('button', { name, exact: true });
-  const history = page.getByRole('dialog', { name: 'Version history', exact: true });
+  const history = page.getByRole('region', { name: 'Git', exact: true });
   const selectFile = async (name) =>
     page
       .getByRole('navigation', { name: 'Project files', exact: true })
@@ -74,13 +74,17 @@ try {
   }, file);
   await button('Open project').click();
   await page.getByTestId('schematic-canvas').waitFor();
-  await button('Version history').click();
+  await button('Git').click();
   await history.getByText('No versions yet.', { exact: true }).waitFor();
-  await history.getByLabel('Version name').fill('Initial design');
-  await button('Create version').click();
+  await history.getByLabel('Commit message').fill('Initial design');
+  await button('Commit').click();
   await history.getByText('Version created.', { exact: true }).waitFor();
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
-  await button('Close dialog').click();
+  if (await history.isVisible())
+    await page
+      .getByRole('dialog', { name: 'Git', exact: true })
+      .getByRole('button', { name: 'Close dialog' })
+      .click();
   await button('Source').click();
   const first = await sourceFiles();
   assert.deepEqual(first, initialFiles, 'Opening native files preserves their original bytes.');
@@ -104,10 +108,14 @@ try {
   }
   await button('Apply').click();
   const applied = await sourceFiles();
-  await button('Version history').click();
-  await history.locator('.history-change').first().waitFor();
-  await history.getByLabel('Version name').fill('Tune resistor');
-  await button('Create version').click();
+  await button('Git').click();
+  await history
+    .getByRole('navigation', { name: 'Changed files' })
+    .getByRole('button')
+    .first()
+    .waitFor();
+  await history.getByLabel('Commit message').fill('Tune resistor');
+  await button('Commit').click();
   await history.getByText('Version created.', { exact: true }).waitFor();
   assert.deepEqual(
     await diskFiles(),
@@ -119,9 +127,12 @@ try {
     .getByRole('button')
     .filter({ hasText: 'Initial design' })
     .click();
-  await history.locator('.history-change').first().waitFor();
   await button('Restore version').click();
-  await history.waitFor({ state: 'hidden' });
+  if (await history.isVisible())
+    await page
+      .getByRole('dialog', { name: 'Git', exact: true })
+      .getByRole('button', { name: 'Close dialog' })
+      .click();
   await button('Source').click();
   assert.deepEqual(await sourceFiles(), first);
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
@@ -129,11 +140,9 @@ try {
   assert.deepEqual(await sourceFiles(), applied, 'One undo restores all three native file edits.');
   await selectFile(names[1]);
   await fillSource(page, '(kicad_sch (unfinished');
-  await button('Version history').click();
-  await history.getByLabel('Version name').fill('Invalid');
-  assert.equal(await button('Create version').isDisabled(), true);
-  assert.equal(await button('Restore version').isDisabled(), true);
-  await button('Close dialog').click();
+  await button('Git').click();
+  assert.equal(await history.isVisible(), false);
+  assert.equal(await button('Source').getAttribute('aria-pressed'), 'true');
   assert.equal(await readSource(page), '(kicad_sch (unfinished');
   await fillSource(page, applied[names[1]]);
   if (await button('Apply').isEnabled()) await button('Apply').click();
@@ -144,9 +153,9 @@ try {
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   await button('Open project').click();
   await page.getByTestId('schematic-canvas').waitFor();
-  await button('Version history').click();
-  await history.getByText('0 changes', { exact: true }).waitFor();
-  assert.equal(await history.locator('.history-entries > button').count(), 2);
+  await button('Git').click();
+  await history.getByLabel('0 changed files', { exact: true }).waitFor();
+  assert.equal(await history.locator('.history-entries > button').count(), 3);
   assert.deepEqual(errors, []);
   console.log(
     'PASS: actual Git, native KiCad grants and bytes, complete multi-file restore/undo, draft protection, explicit save and reopened history.',

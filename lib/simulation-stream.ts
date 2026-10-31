@@ -78,7 +78,11 @@ export async function readSimulationEvents(
           .join('\n');
         if (!data) continue;
         const event = JSON.parse(data);
-        if (completed || !event || !['started', 'samples', 'result', 'error'].includes(event.type))
+        if (
+          completed ||
+          !event ||
+          !['started', 'retry', 'samples', 'result', 'error'].includes(event.type)
+        )
           throw new Error('Incompatible simulation stream. Restart OpenPE.');
         if (event.type === 'error')
           throw Object.assign(

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { adaptLm2596Adjustable } from './spice-lm2596-adj.mjs';
+import { adaptLm25017 } from './spice-lm25017.mjs';
 
 const modelId = 'reference-lmr70503';
 const modelSha256 = '1d661a243a8a44cab8f6e67448dfdafcc96249dea54f35927b25283e01e7aba9';
@@ -84,6 +85,7 @@ A_DAC [state_d] [q] OPENPE_COMPAT_DAC
  */
 export function adaptSpiceModels(deck, modelBytesMap) {
   deck = adaptLm2596Adjustable(deck, modelBytesMap);
+  deck = adaptLm25017(deck, modelBytesMap);
   const ids = deck.modelIds || [];
   if (!ids.includes(modelId)) return deck;
   if (ids.filter((id) => id === modelId).length !== 1)

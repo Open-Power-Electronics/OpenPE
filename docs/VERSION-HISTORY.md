@@ -8,31 +8,45 @@ in-memory undo. [FORMAT.md](FORMAT.md) defines snapshot content;
 
 ## Creating, comparing and restoring versions
 
-Open Version history from an editor toolbar:
+Click Git immediately to the right of Parts list in the editor toolbar to open the history window while retaining the current editor mode:
 
 1. Establish a native destination with Save; Home examples already have
    one and an initial version.
-2. Name and create a version of the complete validated project. Unsaved validated
+2. Enter a message above Changes, then click Commit or press Ctrl+Enter in
+   the field to create a version of the complete validated project. Unsaved validated
    changes may be included; creation does not write native files or clear dirty
    state. An identical latest snapshot is a no-op error.
-3. Compare a version with Current project or another version. Stable IDs identify
-   additions/removals, values and order changes. Compare schematics provides
-   synchronized read-only pan/zoom/Fit with green additions, red removals and
-   amber changes; missing sheets are explicit. Structured differences also cover
-   PCB/settings/files. Comparison never applies Source or analyses connectivity.
+3. Select Worktree on the left to compare the latest version with the current
+   validated project. Selecting a version compares the next older version
+   with it, or itself for the initial version. Compare from can choose
+   any loaded version or Worktree. The right side immediately shows synchronized
+   read-only schematic pan/zoom/Fit with green additions, red removals and yellow
+   changes; missing sheets are explicit. Initial Fit measures visible drawings
+   after the window opens, including unchanged versions. Reopening the same
+   comparison retains its camera; sheets changed while hidden fit when revealed.
+   Stable IDs identify schematic additions/removals, values and order changes.
+   The upper-left Changes list compares complete current native exports by filename
+   and bytes/encoding, with A/M/D status; private snapshot fields are not file rows.
+   Worktree and the linear local version timeline appear below. Selecting a file opens read-only
+   Before/After native text with line numbers and change-region highlighting.
+   Comparison never analyses connectivity.
 4. Restore validates the complete snapshot and commits one undo edit, retaining
    destination, save baseline and conversations. Save explicitly to write it.
 
-Pending Source blocks creation/restore. Reads accept only current-format
+Opening Git uses the shared Source validation/apply gate; invalid drafts remain
+in Source. Pending Source blocks creation/restore. Reads accept only current-format
 validated snapshots. Browsing/creation never changes dirty state; restore uses
-normal baseline comparison. Lists page by 50; previews cap at 300 changed paths
-and 12,000 characters per value with truncation notices. Restoration always uses
-the full snapshot.
+normal baseline comparison. Version lists page by 50. Native file lists include
+all changed filenames in the validated file sets. Text panes show excerpts around
+the first changed region, capped at 12,000 characters and 160 lines per side, with
+explicit notices. Binary files show a read-only byte count. Restoration always
+uses the full snapshot.
 
-Native-backed comparisons order retained files by filename and match PCB nets
-by unique native name, avoiding differences from file-list order or regenerated
-private net UUIDs. Actual names/connectivity, copper order/geometry, supporting
-bytes/encodings and extensions remain significant. Panel styling belongs in
+File comparisons use complete native exports. File-list order and private PCB
+net UUIDs are not file changes when native bytes remain identical. Electrical
+names/connectivity, copper order/geometry, supporting bytes and encodings remain
+significant. Graphical schematic differences use stable schematic object IDs.
+Panel styling belongs in
 [DESIGN.md](../DESIGN.md).
 
 ## Shared history capabilities
@@ -45,7 +59,7 @@ bytes/encodings and extensions remain significant. Panel styling belongs in
 | `history.undo` / `history.redo`   | Shared in-memory history                                                             |
 | `project.save`                    | Native Save/Save as                                                                  |
 
-The panel uses shared reads/creation, then Core's internal validated restore
+The Git window uses shared reads/creation, then Core's internal validated restore
 adapter. Agents restore by reading and executing `project.replace`; no separate
 restore/comparison capability exists. Revision/review/Source/close gates follow
 [Core](CORE.md); transient capability events are not Git versions. Tools cannot
@@ -134,14 +148,15 @@ Shutdown terminates children. Missing Git/history never invalidates native files
 
 ## Verification
 
-| Check                                                                                                                                    | Scope                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `tests/project-history.test.ts`                                                                                                          | Real Git in temporary repositories: bounds, reachability, persistence, comparison and grants    |
-| `tests/example-projects.test.ts`                                                                                                         | Original native bytes/filenames, directory grants, private seeds and bounded opening/retry      |
-| `tests/project-core.test.ts`, `tests/core-integration.test.ts`                                                                           | Shared undo/revision/Source/close gates                                                         |
-| `node scripts/check-project-history-ui.mjs`, `node scripts/check-example-refresh-ui.mjs`                                                 | Mocked isolated history/recovery UI                                                             |
-| `node scripts/benchmark-startup.mjs [samples]`                                                                                           | 1–5 separate Node samples (default 3), prepared assets and real Git; no first-paint measurement |
-| `node scripts/check-desktop-startup.mjs`, `node scripts/benchmark-desktop-startup.mjs [samples] [label]`, `node scripts/e2e-history.mjs` | Opt-in isolated Electron startup/history                                                        |
+| Check                                                                                                                                    | Scope                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `tests/project-history.test.ts`                                                                                                          | Real Git in temporary repositories: bounds, reachability, persistence, comparison and grants        |
+| `tests/example-projects.test.ts`                                                                                                         | Original native bytes/filenames, directory grants, private seeds and bounded opening/retry          |
+| `tests/project-core.test.ts`, `tests/core-integration.test.ts`                                                                           | Shared undo/revision/Source/close gates                                                             |
+| `node scripts/check-project-history-ui.mjs`, `node scripts/check-example-refresh-ui.mjs`                                                 | Mocked isolated history/recovery UI                                                                 |
+| `node scripts/check-schematic-comparison-ui.mjs`                                                                                         | Native LM5001/TPS61046 comparisons: visible initial Fit, themes, retained camera and hidden changes |
+| `node scripts/benchmark-startup.mjs [samples]`                                                                                           | 1–5 separate Node samples (default 3), prepared assets and real Git; no first-paint measurement     |
+| `node scripts/check-desktop-startup.mjs`, `node scripts/benchmark-desktop-startup.mjs [samples] [label]`, `node scripts/e2e-history.mjs` | Opt-in isolated Electron startup/history                                                            |
 
 Documentation changes need static checks only. Desktop runs require explicit
 authorization; [AGENTS.md](../AGENTS.md) defines verification boundaries.

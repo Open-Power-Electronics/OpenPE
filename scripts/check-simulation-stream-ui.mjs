@@ -171,19 +171,28 @@ try {
     cursorA: await a.getAttribute('aria-valuenow'),
     cursorB: await b.getAttribute('aria-valuenow'),
   });
-  assert.equal(await dock.getByRole('slider').count(), 0, 'Live plots start without cursors.');
-  await button('Cursor A').click();
-  assert.equal(await b.count(), 0, 'Showing A does not show B.');
-  await button('Cursor B').click();
-  await a.press('End');
-  const chosen = await a.getAttribute('aria-valuenow');
-  event(first.res, samples(201, 401));
+  assert.equal(await a.count(), 1, 'Live plots start with the first cursor.');
+  assert.equal(await b.count(), 0, 'The second cursor starts hidden.');
+  assert.equal(Number(await a.getAttribute('aria-valuenow')), deck.stop / 4);
+  event(first.res, samples(201, 301));
   await page.waitForFunction(
     (time) =>
-      document.querySelector('[aria-label$="cursor B"]')?.getAttribute('aria-valuenow') ===
+      document.querySelector('[aria-label$="cursor A"]')?.getAttribute('aria-valuenow') ===
       String(time),
-    deck.stop / 2,
+    (deck.stop * 3) / 8,
   );
+  const following = await page.evaluate(() => window.readSimulationContext());
+  assert.equal(
+    following.result.traces.find((trace) => trace.selected).visibleWindow.cursors[0].time,
+    (deck.stop * 3) / 8,
+    'Agent observations match the first cursor following the latest sample.',
+  );
+  await button('Add second cursor').click();
+  assert.equal(await b.getAttribute('aria-valuenow'), '0');
+  await a.press('End');
+  const chosen = await a.getAttribute('aria-valuenow');
+  event(first.res, samples(301, 401));
+  await page.waitForFunction(() => window.readSimulationContext()?.result?.sampleCount === 401);
   assert.equal(
     await a.getAttribute('aria-valuenow'),
     chosen,
@@ -191,10 +200,28 @@ try {
   );
   assert.equal(
     Number(await b.getAttribute('aria-valuenow')),
-    deck.stop / 2,
-    'The untouched end cursor follows actual available samples.',
+    0,
+    'The second cursor stays at time zero as new samples arrive.',
   );
   await page.screenshot({ path: 'test-results/simulation-live-progress.png' });
+  event(first.res, { type: 'retry' });
+  await page.waitForFunction(() => !window.readSimulationContext()?.result);
+  assert.equal(
+    await dock.locator('.simulation-trace').count(),
+    0,
+    'Retry discards the failed attempt preview.',
+  );
+  event(first.res, samples(0, 401));
+  await page.waitForFunction(() => window.readSimulationContext()?.result?.sampleCount === 401);
+  // The newly mounted plot measures its viewport through ResizeObserver.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  assert.equal(
+    await settings.getByRole('alert').count(),
+    0,
+    'Retry accepts new samples from offset zero.',
+  );
   const partialDisplay = await display();
   await button('Stop').click();
   await button('Run').waitFor();

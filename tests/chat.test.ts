@@ -453,6 +453,14 @@ test('local SSE sends increments immediately, validates model/effort and aborts 
       body: JSON.stringify({ ...request, provider: 'codex', effort: 'unsupported' }),
     });
     assert.equal(bad.status, 400);
+    for (const requestTitle of ['yes', 1, null, {}]) {
+      const invalid = await fetch(server.base + '/api/chat', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...request, provider: 'codex', requestTitle }),
+      });
+      assert.equal(invalid.status, 400);
+    }
     for (const model of ['', '--help', 'bad\nmodel', 123, 'x'.repeat(201)]) {
       const invalid = await fetch(server.base + '/api/chat', {
         method: 'POST',
@@ -470,6 +478,7 @@ test('local SSE sends increments immediately, validates model/effort and aborts 
         provider: 'codex',
         effort: 'low',
         model: 'fixture-model',
+        requestTitle: true,
       }),
       signal: controller.signal,
     });
@@ -482,6 +491,7 @@ test('local SSE sends increments immediately, validates model/effort and aborts 
     }
     assert.equal(requestSeen.effort, 'low');
     assert.equal(requestSeen.model, 'fixture-model');
+    assert.equal(requestSeen.requestTitle, true);
     controller.abort();
     await Promise.race([
       disconnected,

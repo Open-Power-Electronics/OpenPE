@@ -10,11 +10,8 @@ import { defaultAgentPreferences, restoreWorkspace } from '../server/workspace-f
 // Real retained Workbenches and CodeMirror in a mocked headless renderer.
 // This never starts Electron, a provider, a solver or a native project write.
 const stems = ['lm2735-msop8-sepic', 'lmr12010-sot236-buck'];
-const records = await Promise.all(
-  stems.map(async (stem) =>
-    JSON.parse(await readFile(`examples/${stem}/datasheets/parameters.json`, 'utf8')),
-  ),
-);
+const reviewed = JSON.parse(await readFile('resources/example-catalog/ic-datasheets.json', 'utf8'));
+const records = stems.map((stem) => reviewed.find((record) => record.example.file === stem));
 const ids = stems.map(() => crypto.randomUUID());
 const sources = await Promise.all(
   stems.map((stem) => readFile(`tests/fixtures/reference/${stem}.json`, 'utf8')),
@@ -107,8 +104,9 @@ try {
         newFile: async () => `fixture-grant-${nextGrant++}`,
         projectDirectory: async (fileId) => ({
           entries: [
+            { name: 'notes', kind: 'directory' },
             { name: 'datasheets', kind: 'directory' },
-            { name: 'datasheets/parameters.json', kind: 'file', id: `${fileId}:parameters` },
+            { name: 'notes/review.json', kind: 'file', id: `${fileId}:parameters` },
             { name: 'datasheets/controller.pdf', kind: 'file', id: `${fileId}:pdf` },
           ],
           truncated: false,
@@ -181,11 +179,11 @@ try {
     page
       .getByRole('group', { name: 'Open projects', exact: true })
       .locator(`[data-project-id="${id}"]`)
-      .getByRole('button');
+      .getByRole('button', { name: /, Project \d+(?:,|$)/ });
   const initial = await snapshot(ids[0]);
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   assert.equal(await page.getByRole('navigation', { name: 'Generations', exact: true }).count(), 0);
-  await selectSourceFile(page, 'datasheets/parameters.json');
+  await selectSourceFile(page, 'notes/review.json');
   await waitForAsync(page, () =>
     document
       .querySelector('.source-editor-code .cm-content')
@@ -228,7 +226,7 @@ try {
   await fillSource(page, '{invalid native draft');
   const pending = await snapshot(ids[0]);
   assert.notEqual(pending.sourceDraft, null);
-  await selectSourceFile(page, 'datasheets/parameters.json');
+  await selectSourceFile(page, 'notes/review.json');
   assert.equal(await readSource(page), editedText);
   assert.equal(
     await page.getByRole('button', { name: 'Save file', exact: true }).isDisabled(),
@@ -252,13 +250,13 @@ try {
     (await page.locator('iframe.source-editor-pdf').getAttribute('src')).startsWith('blob:'),
   );
   assert.equal(await page.getByRole('button', { name: 'Copy', exact: true }).isDisabled(), true);
-  await selectSourceFile(page, 'datasheets/parameters.json');
+  await selectSourceFile(page, 'notes/review.json');
   assert.equal(await readSource(page), editedText);
 
   // Switch projects: each Source and Agent host must keep its own controller.
   await projectButton(ids[1]).click();
   await page.getByRole('button', { name: 'Source', exact: true }).click();
-  await selectSourceFile(page, 'datasheets/parameters.json');
+  await selectSourceFile(page, 'notes/review.json');
   await waitForAsync(page, () =>
     document
       .querySelector('.source-editor-code .cm-content')
@@ -274,7 +272,7 @@ try {
   assert.equal(sent.length, 1);
   assert.deepEqual(sent[0].context.workspace.icDatasheet.record, records[1]);
   await projectButton(ids[0]).click();
-  await selectSourceFile(page, 'datasheets/parameters.json');
+  await selectSourceFile(page, 'notes/review.json');
   assert.equal(await readSource(page), editedText);
   assert.equal((await snapshot(ids[0])).undoDepth, initial.undoDepth);
   const staleContext = await page.evaluate(async (id) => {

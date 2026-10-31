@@ -51,6 +51,8 @@
   --brand-soft: #ebffde;
   --brand-ink: #007106;
   --brand-surface: #f2fff2;
+  --interface-green: color-mix(in srgb, var(--brand-ink) 35%, var(--muted));
+  --interface-green-fill: color-mix(in srgb, var(--brand-ink) 45%, var(--soft));
   --send-ground: #00ff08;
   --send-ink: #202020;
   --selection-shadow: rgb(102 179 255 / 80%);

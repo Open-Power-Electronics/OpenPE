@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, CircuitBoard, Code2, Workflow } from 'lucide-react';
+import { CircuitBoard, Code2 } from 'lucide-react';
+import { ModelIcon, SchematicIcon } from './EditorIcons';
 import RevealButton from './RevealButton';
 
 export type EditorView = 'canvas' | 'layout' | '3d' | 'source';
@@ -15,7 +16,7 @@ export default function EditorViewSwitch({
   return (
     <div className="editor-view-switch" role="group" aria-label="Editor view">
       <RevealButton
-        icon={Workflow}
+        icon={SchematicIcon}
         label="Schematic"
         active={view === 'canvas'}
         onClick={() => onChange('canvas')}
@@ -27,7 +28,7 @@ export default function EditorViewSwitch({
         onClick={() => onChange('layout')}
       />
       <RevealButton
-        icon={Box}
+        icon={ModelIcon}
         label="Model"
         active={view === '3d'}
         onClick={() => onChange('3d')}

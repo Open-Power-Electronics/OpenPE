@@ -1,4 +1,6 @@
 'use client';
+import QuantityInput from './QuantityInput';
+import { quantityLabel } from './quantity-units';
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
@@ -303,14 +305,15 @@ export default function ModelCadPanel({
   function numberField(key: NumericKey, label: string, accessibleLabel = label) {
     return (
       <label key={key}>
-        <span>{label}</span>
-        <input
+        <span>{quantityLabel(label)}</span>
+        <QuantityInput
+          unit={key === 'opacity' ? '%' : key.startsWith('r') ? '°' : 'mm'}
           aria-label={accessibleLabel}
           inputMode="decimal"
           value={draft.values[key]}
           disabled={blocked || stale}
-          onChange={(event) => {
-            const value = event.target.value;
+          onValueChange={(inputValue) => {
+            const value = inputValue;
             edit(
               (previous) => ({ ...previous, values: { ...previous.values, [key]: value } }),
               key === 'x' || key === 'y',
@@ -446,14 +449,15 @@ export default function ModelCadPanel({
             <>
               {object && <div className={styles.target}>{object.name}</div>}
               <label className={styles.field}>
-                <span>Diameter (mm)</span>
-                <input
+                <span>Diameter</span>
+                <QuantityInput
+                  unit={'mm'}
                   aria-label="Hole diameter (mm)"
                   inputMode="decimal"
                   value={holeDiameter}
                   disabled={blocked}
-                  onChange={(event) => {
-                    const value = event.target.value;
+                  onValueChange={(inputValue) => {
+                    const value = inputValue;
                     setHoleDiameter(value);
                     try {
                       const next = numeric(value, 'Hole diameter');
@@ -597,13 +601,14 @@ export default function ModelCadPanel({
                           {(['x', 'y', 'diameterMm'] as const).map((key) => (
                             <label key={key}>
                               <span>{key === 'diameterMm' ? 'Diameter' : key.toUpperCase()}</span>
-                              <input
+                              <QuantityInput
+                                unit={'mm'}
                                 aria-label={`Hole ${index + 1} ${key === 'diameterMm' ? 'diameter' : key.toUpperCase()} (mm)`}
                                 inputMode="decimal"
                                 value={hole[key]}
                                 disabled={blocked || stale}
-                                onChange={(event) => {
-                                  const value = event.target.value;
+                                onValueChange={(inputValue) => {
+                                  const value = inputValue;
                                   edit((previous) => ({
                                     ...previous,
                                     holes: previous.holes.map((item) =>

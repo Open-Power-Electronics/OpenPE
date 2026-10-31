@@ -5,6 +5,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { setTimeout as delay } from 'node:timers/promises';
+import { defaultAgentPreferences } from '../server/workspace-format.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 import { setLayoutVisibility, toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 
@@ -108,7 +109,7 @@ let recovery = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: { ...defaultAgentPreferences.models },
 };
 const plugins = bundledWorkbenchCatalog();
 plugins.plugins = plugins.plugins.map((plugin) => ({ ...plugin, enabled: false }));
@@ -117,7 +118,7 @@ const bundle = await build({
   stdin: {
     contents: `import React from 'react';import {createRoot} from 'react-dom/client';
       import Workspace from './components/DesktopWorkspace';
-      window.ruleTestCores={};window.ruleTestLayoutContexts={};createRoot(document.getElementById('root')).render(<Workspace/>);`,
+      window.ruleTestCores={};window.ruleTestLayoutContexts={};window.ruleTestRuns=[];createRoot(document.getElementById('root')).render(<Workspace/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -161,10 +162,15 @@ const bundle = await build({
             'Test instrumentation observes actual Core instances.',
           );
           return {
-            contents: original.replace(
-              marker,
-              `    if(initialProject) window.ruleTestCores[initialProject.id]=this;\n${marker}`,
-            ),
+            contents: original
+              .replace(
+                'private async checkRules(id: string, args: Record<string, any>, signal?: AbortSignal) {',
+                'private async checkRules(id: string, args: Record<string, any>, signal?: AbortSignal) {\n    window.ruleTestRuns.push(id);',
+              )
+              .replace(
+                marker,
+                `    if(initialProject) window.ruleTestCores[initialProject.id]=this;\n${marker}`,
+              ),
             loader: 'ts',
             resolveDir: path.dirname(file),
           };
@@ -313,7 +319,9 @@ try {
     }, projectIds[index]);
   const selectProject = async (index) => {
     await page
-      .locator(`.project-navigation [data-project-id="${documentIds[index]}"] button:visible`)
+      .locator(
+        `.project-navigation [data-project-id="${documentIds[index]}"] button.navigation-button:visible`,
+      )
       .click();
     await settled();
   };
@@ -337,7 +345,7 @@ try {
         .map((button) => button.getAttribute('aria-label'))
         .slice(-4),
     );
-    assert.deepEqual(order, [label, 'Parts list', 'Version history', 'Toggle right sidebar']);
+    assert.deepEqual(order, [label, 'Parts list', 'Toggle right sidebar']);
     assert.equal(await panel(kind).getAttribute('aria-modal'), 'true');
     assert.equal(await panel(kind).evaluate((dialog) => dialog.matches(':modal')), true);
     const bounds = await panel(kind).boundingBox();
@@ -351,15 +359,35 @@ try {
     assert.ok(Math.abs(grip.x + grip.width - bounds.x - bounds.width) <= 2);
     assert.ok(Math.abs(grip.y + grip.height - bounds.y - bounds.height) <= 2);
   };
-  const openERC = async () => {
-    await button('Electrical rules (ERC)').click();
+  const runCount = (id) =>
+    page.evaluate((id) => window.ruleTestRuns.filter((value) => value === id).length, id);
+  const openERC = async (wait = true, keyboard = false) => {
+    const count = await runCount('schematic.erc');
+    if (keyboard) {
+      await button('Electrical rules (ERC)').focus();
+      await page.keyboard.press('Enter');
+    } else await button('Electrical rules (ERC)').click();
     await panel('ERC').waitFor();
     await assertRulePlacement('ERC', 'Electrical rules (ERC)');
+    if (wait)
+      await panel('ERC').getByText('Checking ERC…', { exact: true }).waitFor({ state: 'hidden' });
+    assert.equal(
+      await runCount('schematic.erc'),
+      count + 1,
+      'Each ERC toolbar activation runs exactly one check.',
+    );
   };
   const openDRC = async () => {
+    const count = await runCount('layout.drc');
     await button('Design rules (DRC)').click();
     await panel('DRC').waitFor();
     await assertRulePlacement('DRC', 'Design rules (DRC)');
+    await panel('DRC').getByText('Checking DRC…', { exact: true }).waitFor({ state: 'hidden' });
+    assert.equal(
+      await runCount('layout.drc'),
+      count + 1,
+      'Each DRC toolbar activation runs exactly one check.',
+    );
   };
   const unchanged = async (index, baseline, reason) =>
     assert.deepEqual(await snapshot(index), baseline, reason);
@@ -400,13 +428,36 @@ try {
   );
   assert.equal(requested.has(ercChunk), false);
   assert.equal(requested.has(drcChunk), false);
-  await openERC();
-  assert.equal(requested.has(ercChunk), false, 'Opening the panel does not run an engine.');
+  assert.equal(
+    await button('Electrical rules (ERC)').evaluate((element) => {
+      for (const key of ['Enter', ' ']) {
+        const event = new KeyboardEvent('keydown', {
+          key,
+          keyCode: 229,
+          bubbles: true,
+          cancelable: true,
+        });
+        element.dispatchEvent(event);
+        if (!event.defaultPrevented) return false;
+      }
+      return true;
+    }),
+    true,
+    'IME activation cannot open a window or run a check.',
+  );
+  assert.equal(await runCount('schematic.erc'), 0);
+  assert.equal(await panel('ERC').count(), 0);
+  await openERC(false);
+  assert.equal(
+    requested.has(ercChunk),
+    true,
+    'Clicking ERC immediately loads and runs the engine.',
+  );
+  assert.equal(Math.round((await panel('ERC').boundingBox()).width), 600);
 
   // Hold the first engine import to exercise the actual close barrier while a
   // query is pending. Availability changes may advance revision, never content.
   const beforeBarrier = await snapshot(0);
-  await button('Run ERC').click();
   await panel('ERC').getByText('Checking ERC…', { exact: true }).waitFor();
   await page.evaluate(
     (id) => window.ruleTestCores[id].setEditingBlocked('Project is closing.'),
@@ -432,6 +483,8 @@ try {
     name: /Locate issue: Q1 pin 1 .*is unconnected/,
   });
   await ercIssue.waitFor();
+  await mkdir('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/design-rules-window-erc.png' });
   assert.equal(requested.has(ercChunk), true);
   await unchanged(0, afterBarrier, 'ERC queries do not change native files, revision or undo.');
   const schematic = page.getByTestId('schematic-canvas');
@@ -522,8 +575,6 @@ try {
   // that project's report/settings and clears presentation markers.
   await selectProject(1);
   await openERC();
-  assert.equal(await panel('ERC').getByText('Not checked', { exact: true }).isVisible(), true);
-  await button('Run ERC').click();
   await clean('ERC').waitFor();
   await button('Close dialog').click();
   await button('Layout').click();
@@ -534,10 +585,10 @@ try {
   await openDRC();
   assert.equal(
     requested.has(drcChunk),
-    false,
-    'Opening DRC settings does not load its geometry engine.',
+    true,
+    'Clicking DRC immediately loads and runs its geometry engine.',
   );
-  await button('Run DRC').click();
+  assert.ok((await panel('DRC').boundingBox()).width >= 600);
   const widthIssue = panel('DRC').getByRole('button', {
     name: 'Locate issue: Track width 0.1 mm is below 0.2 mm.',
     exact: true,
@@ -547,6 +598,7 @@ try {
   });
   await widthIssue.waitFor();
   await shortIssue.waitFor();
+  await page.screenshot({ path: 'test-results/design-rules-window-drc.png' });
   assert.equal(requested.has(drcChunk), true);
   await unchanged(
     1,
@@ -660,8 +712,6 @@ try {
   await button('Close dialog').click();
   await button('Schematic').click();
   await openERC();
-  await panel('ERC').getByText('Design or limits changed. Recheck ERC.').waitFor();
-  await button('Recheck ERC').click();
   await clean('ERC').waitFor();
   await unchanged(
     1,
@@ -717,7 +767,7 @@ try {
   await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[1]);
   await settled();
   await selectProject(0);
-  await openERC();
+  await openERC(true, true);
   await ercIssue.waitFor();
   assert.equal(await schematic.locator('[data-rule-check-marker]').count(), 0);
   await button('Close dialog').click();

@@ -105,8 +105,8 @@
   },
   {
     "id": "reference-tps61046-bga6-boost",
-    "sha256": "91b017805b83c2175d135359926599067243273439b69752c29c88160583109e",
-    "bytes": 237299,
+    "sha256": "fdb6a3891f695c9d96211afd74449ce9883fb93fd7dbb8009fa4f0900069518d",
+    "bytes": 237301,
     "schematic": {
       "components": 20,
       "wires": 34
@@ -317,8 +317,8 @@
   },
   {
     "id": "reference-lm25017-wson8-flybuck",
-    "sha256": "69e4f2fa6643da11b6d5901fc699c4d5ac5a64d3881dffbbdd0b02cc7bf0a3bc",
-    "bytes": 648241,
+    "sha256": "9a597f0552768a3502d037b3cb79377ff7b572b1471442188789a09f8cd4a248",
+    "bytes": 648293,
     "schematic": {
       "components": 37,
       "wires": 73

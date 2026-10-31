@@ -332,7 +332,7 @@ test('reviewed native and view commands cannot apply a newer Source draft', asyn
   core.updateSource(JSON.stringify(replacement));
   for (const [id, input] of [
     ['project.save', {}],
-    ['project.export', {}],
+    ['project.export', { format: 'gerber' }],
     ['workbench.view', { view: 'layout' }],
     ['simulation.show', {}],
     ['versions.create', { message: 'Unreviewed' }],

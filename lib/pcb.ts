@@ -41,6 +41,7 @@ export type BoardText = {
   property?: string;
 };
 export type BoardLine = {
+  locked?: true;
   id: string;
   start: Point;
   end: Point;
@@ -121,6 +122,11 @@ export type Footprint = Point & {
   value?: string;
   zones?: BoardZone[];
   models?: FootprintModel[];
+  /** Native footprint editing lock. */
+  locked?: true;
+  solderMaskMargin?: number;
+  solderPasteMargin?: number;
+  solderPasteMarginRatio?: number;
 };
 export type BoardZone = {
   id: string;
@@ -325,7 +331,7 @@ function serializePCBContent(
   const effects = (t: BoardText) =>
     `(effects (font (size ${xy(t.size)}) (thickness ${fmt(t.thickness)})${t.italic ? ' (italic yes)' : ''}${t.bold ? ' (bold yes)' : ''})${t.justify?.length ? ` (justify ${t.justify.join(' ')})` : ''})`;
   const graphic = (g: BoardLine, prefix: 'fp' | 'gr', footprintRotation = 0): string => {
-    const tail = `(layer ${q(g.layer)}) (uuid ${q(g.id)}))`;
+    const tail = `(layer ${q(g.layer)}) (uuid ${q(g.id)})${g.locked ? ' (locked yes)' : ''})`;
     const stroke = `(stroke (width ${fmt(g.width)}) (type ${g.stroke ?? 'default'}))`;
     if (g.kind === 'text') {
       const t = g.text!;
@@ -335,7 +341,7 @@ function serializePCBContent(
       const d = g.dimension!,
         f = d.format,
         s = d.style;
-      return `(dimension (type ${d.type}) (layer ${q(g.layer)}) (uuid ${q(g.id)}) (pts (xy ${xy(g.start)}) (xy ${xy(g.end)}))${d.height === undefined ? '' : ` (height ${fmt(d.height)})`}${d.leaderLength === undefined ? '' : ` (leader_length ${fmt(d.leaderLength)})`} (format (prefix ${q(f.prefix)}) (suffix ${q(f.suffix)}) (units ${f.units}) (units_format ${f.unitsFormat}) (precision ${f.precision})${f.overrideValue === undefined ? '' : ` (override_value ${q(f.overrideValue)})`}) (style (thickness ${fmt(g.width)}) (arrow_length ${fmt(s.arrowLength)}) (text_position_mode ${s.textPositionMode})${s.arrowDirection ? ` (arrow_direction ${s.arrowDirection})` : ''}${s.extensionHeight === undefined ? '' : ` (extension_height ${fmt(s.extensionHeight)})`} (extension_offset ${fmt(s.extensionOffset)})${s.keepTextAligned === undefined ? '' : ` (keep_text_aligned ${s.keepTextAligned ? 'yes' : 'no'})`}${s.textFrame === undefined ? '' : ` (text_frame ${s.textFrame})`}) (gr_text ${q(d.caption.value)} (at ${xy(d.caption)} ${fmt(d.caption.rotation)}) (layer ${q(g.layer)}) ${effects(d.caption)}))`;
+      return `(dimension (type ${d.type}) (layer ${q(g.layer)}) (uuid ${q(g.id)})${g.locked ? ' (locked yes)' : ''} (pts (xy ${xy(g.start)}) (xy ${xy(g.end)}))${d.height === undefined ? '' : ` (height ${fmt(d.height)})`}${d.leaderLength === undefined ? '' : ` (leader_length ${fmt(d.leaderLength)})`} (format (prefix ${q(f.prefix)}) (suffix ${q(f.suffix)}) (units ${f.units}) (units_format ${f.unitsFormat}) (precision ${f.precision})${f.overrideValue === undefined ? '' : ` (override_value ${q(f.overrideValue)})`}) (style (thickness ${fmt(g.width)}) (arrow_length ${fmt(s.arrowLength)}) (text_position_mode ${s.textPositionMode})${s.arrowDirection ? ` (arrow_direction ${s.arrowDirection})` : ''}${s.extensionHeight === undefined ? '' : ` (extension_height ${fmt(s.extensionHeight)})`} (extension_offset ${fmt(s.extensionOffset)})${s.keepTextAligned === undefined ? '' : ` (keep_text_aligned ${s.keepTextAligned ? 'yes' : 'no'})`}${s.textFrame === undefined ? '' : ` (text_frame ${s.textFrame})`}) (gr_text ${q(d.caption.value)} (at ${xy(d.caption)} ${fmt(d.caption.rotation)}) (layer ${q(g.layer)}) ${effects(d.caption)}))`;
     }
     if (g.kind === 'arc')
       return `(${prefix}_arc (start ${xy(g.start)}) (mid ${xy(g.mid!)}) (end ${xy(g.end)}) ${stroke} ${tail}`;
@@ -397,7 +403,16 @@ function serializePCBContent(
         const side = f.side === 'front' ? 'F' : 'B';
         const effects = `(effects (font (size 1 1) (thickness 0.15))${f.side === 'back' ? ' (justify mirror)' : ''})`;
         lines.push(
-          `  (footprint ${q(f.libraryId)} (layer "${side}.Cu") (uuid ${q(f.id)}) (at ${xy(f)} ${fmt(f.rotation)})`,
+          `  (footprint ${q(f.libraryId)} (layer "${side}.Cu") (uuid ${q(f.id)}) (at ${xy(f)} ${fmt(f.rotation)})${f.locked ? ' (locked yes)' : ''}`,
+          ...(
+            [
+              ['solderMaskMargin', 'solder_mask_margin'],
+              ['solderPasteMargin', 'solder_paste_margin'],
+              ['solderPasteMarginRatio', 'solder_paste_margin_ratio'],
+            ] as const
+          ).flatMap(([key, native]) =>
+            f[key] === undefined ? [] : [`    (${native} ${fmt(f[key]!)})`],
+          ),
           ...(p ? [`    (path ${q('/' + schematic.id + '/' + p.id)})`] : []),
           `    (attr ${f.pads.some((pad) => pad.type === 'thru_hole') ? 'through_hole' : 'smd'})`,
           ...(!f.graphics.some((g) => g.text?.property === 'Reference')

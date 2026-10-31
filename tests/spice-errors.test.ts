@@ -47,6 +47,7 @@ test('cancellation and reader failures take precedence over convergence diagnost
     message:
       'The solver could not complete this simulation. Review the circuit and simulation settings.',
   });
+  assert.equal(spiceFailure('Error on line 4\nTimestep too small').code, undefined);
 });
 
 test('JSON and SSE simulation failures carry the same safe recovery code without solver logs', async () => {

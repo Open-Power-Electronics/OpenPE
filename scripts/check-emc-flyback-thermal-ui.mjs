@@ -442,7 +442,7 @@ try {
   );
   assert.equal(await field.getAttribute('data-thermal-surface'), 'front');
   assert.equal(
-    Number(await field.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest')),
+    Number(await layout.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest')),
     report.surfaces.front.hottest.node,
   );
   const viewWithField = await layout.getAttribute('viewBox');
@@ -513,7 +513,7 @@ try {
   };
   await screenshot('emc-flyback-layout-thermal-front.png');
 
-  const surface = panel.getByRole('combobox', { name: 'Thermal surface', exact: true });
+  const surface = page.getByRole('combobox', { name: 'Thermal surface', exact: true });
   await surface.press('ArrowDown');
   await surface.press('End');
   await surface.press('Enter');
@@ -528,7 +528,7 @@ try {
     'Back surface displays its own real solver field.',
   );
   assert.equal(
-    Number(await field.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest')),
+    Number(await layout.locator('[data-thermal-hottest]').getAttribute('data-thermal-hottest')),
     report.surfaces.back.hottest.node,
   );
   assert.equal(
@@ -546,7 +546,7 @@ try {
       'front',
   );
 
-  const probeButton = panel.getByRole('button', { name: 'Probe Layout temperature', exact: true });
+  const probeButton = page.getByRole('button', { name: 'Probe Layout temperature', exact: true });
   await probeButton.click();
   const largestTriangle = front.triangles.reduce(
     (best, triangle) => {
@@ -594,7 +594,7 @@ try {
     'The actual Layout pointer reports the closest exact saved solver node and temperature.',
   );
   assert.equal(
-    await field.locator('[data-thermal-probe]').getAttribute('data-thermal-probe'),
+    await layout.locator('[data-thermal-probe]').getAttribute('data-thermal-probe'),
     String(expectedProbe.node),
   );
   assert.ok((await legend.innerText()).includes(expectedProbe.temperatureC.toFixed(2)));
@@ -640,7 +640,11 @@ try {
     report.probe[label] = { ...expected, validatedFullWorkspaceContext: true };
   }
   await screenshot('emc-flyback-layout-thermal-large-node.png');
-  await panel.getByRole('button', { name: 'Export temperature map', exact: true }).click();
+  assert.equal(
+    await page.getByRole('button', { name: 'Export temperature map', exact: true }).count(),
+    0,
+  );
+  await page.evaluate(() => window.thermalWorkbenchHost().execute('thermal.exportImage'));
   await waitForAsync(page, () => !!document.querySelector('[data-thermal-probe]'));
   const exportDeadline = Date.now() + 45000;
   while (!nativeExports.length && Date.now() < exportDeadline) await page.waitForTimeout(100);
@@ -651,14 +655,15 @@ try {
   );
   report.exports = nativeExports;
 
-  const visibility = panel.getByRole('button', { name: 'Show temperature in Layout', exact: true });
+  const visibility = page.getByRole('button', { name: 'Show temperature in Layout', exact: true });
   await visibility.click();
   await field.waitFor({ state: 'detached' });
   assert.equal(await layout.getAttribute('viewBox'), viewWithField);
   await visibility.click();
   await field.waitFor();
   assert.equal(await layout.getAttribute('viewBox'), viewWithField);
-  await layout.hover({ position: { x: 30, y: 30 } });
+  const canvasBox = await layout.boundingBox();
+  await layout.hover({ position: { x: canvasBox.width * 0.75, y: canvasBox.height * 0.75 } });
   await page.mouse.wheel(0, -140);
   await page.waitForFunction(
     (before) =>

@@ -12,11 +12,14 @@ contextBridge.exposeInMainWorld('openpe', {
   acceptOpen: () => ipcRenderer.invoke('openpe:accept-open'),
   newFile: () => ipcRenderer.invoke('openpe:new'),
   openDefaultExample: (key) => ipcRenderer.invoke('openpe:open-default-example', key),
+  listExamples: () => ipcRenderer.invoke('openpe:list-examples'),
   releaseFile: (fileId) => ipcRenderer.invoke('openpe:release-file', fileId),
   revealFile: (fileId) => ipcRenderer.invoke('openpe:reveal-file', fileId),
   projectDirectory: (fileId) => ipcRenderer.invoke('openpe:project-directory', fileId),
   chooseSpiceModel: (fileId, currentLibrary) =>
     ipcRenderer.invoke('openpe:choose-spice-model', fileId, currentLibrary),
+  inspectSpiceModel: (fileId, library) =>
+    ipcRenderer.invoke('openpe:inspect-spice-model', fileId, library),
   projectFilePreview: (options) => ipcRenderer.invoke('openpe:project-file-preview', options),
   projectFilePdf: (options) => ipcRenderer.invoke('openpe:project-file-pdf', options),
   projectFileWrite: (options) => ipcRenderer.invoke('openpe:project-file-write', options),
@@ -31,7 +34,7 @@ contextBridge.exposeInMainWorld('openpe', {
   historyList: (options) => ipcRenderer.invoke('openpe:history-list', options),
   historyRead: (options) => ipcRenderer.invoke('openpe:history-read', options),
   historyCreate: (options) => ipcRenderer.invoke('openpe:history-create', options),
-  exportKiCad: (options) => ipcRenderer.invoke('openpe:export', options),
+  exportProject: (options) => ipcRenderer.invoke('openpe:export', options),
   exportImage: (options) => ipcRenderer.invoke('openpe:export-image', options),
   exportEnclosure: (options) => ipcRenderer.invoke('openpe:export-enclosure', options),
 });

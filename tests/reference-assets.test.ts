@@ -2,7 +2,7 @@ import { modelReferenceKey, resolveExampleModelRelative } from '../lib/example-m
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,7 +65,7 @@ test('examples contains exactly ten self-contained project folders and retains p
     assert.ok(linkedModels > 0, `${entry.file}: actual native board retains model assignments`);
   }
   for (const stem of stems)
-    assert.ok(readdirSync(`examples/${stem}/datasheets`).includes('parameters.json'));
+    assert.equal(existsSync(`examples/${stem}/datasheets/parameters.json`), false);
   for (const entry of homeExampleCatalog)
     assert.ok(readdirSync(`resources/example-catalog/sources/${entry.file}`).length > 0);
   assert.deepEqual(

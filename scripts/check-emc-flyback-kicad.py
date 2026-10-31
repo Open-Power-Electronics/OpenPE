@@ -25,10 +25,25 @@ def connections(stem, name):
     env = dict(os.environ, KICAD_CONFIG_HOME=str(OUT / 'config'))
     subprocess.run([args.cli, 'sch', 'export', 'netlist', '--format', 'kicadxml', '-o',
                     str(destination), str(stem.with_suffix('.kicad_sch'))], check=True, env=env)
-    return sorted(tuple(sorted((n.get('ref'), n.get('pin')) for n in net.findall('node')))
-                  for net in ET.parse(destination).findall('.//nets/net'))
+    return [tuple(sorted((n.get('ref'), n.get('pin')) for n in net.findall('node')))
+            for net in ET.parse(destination).findall('.//nets/net')]
 
-assert connections(original, 'original') == connections(converted, 'converted'), 'Native schematic connectivity changed.'
+bench = {'V1', 'R21', 'V2', 'R22', 'I1'}
+original_nets = connections(original, 'original')
+converted_nets = connections(converted, 'converted')
+physical_nets = [tuple(pin for pin in net if pin[0] not in bench) for net in converted_nets]
+assert sorted(original_nets) == sorted(net for net in physical_nets if net), 'Original native schematic connectivity changed.'
+def net_for(ref, pin):
+    matches = [index for index, net in enumerate(converted_nets) if (ref, pin) in net]
+    assert len(matches) == 1, f'Missing or duplicate testbench terminal {ref}.{pin}'
+    return matches[0]
+for a, b in [(('V1', '1'), ('R21', '1')), (('R21', '2'), ('T1', '1')),
+             (('V1', '2'), ('U1', '5')), (('V2', '1'), ('U1', '7')),
+             (('V2', '2'), ('U1', '5')), (('R22', '1'), ('D3', '1')),
+             (('I1', '1'), ('D3', '1')), (('R22', '2'), ('U3', '3')),
+             (('I1', '2'), ('U3', '3'))]:
+    assert net_for(*a) == net_for(*b), f'Incorrect testbench connection {a} / {b}'
+assert net_for('V1', '2') != net_for('R22', '2'), 'Native PGND and SGND must remain separate.'
 before = pcb.LoadBoard(str(original.with_suffix('.kicad_pcb')))
 after = pcb.LoadBoard(str(converted.with_suffix('.kicad_pcb')))
 point = lambda p: (p.x, p.y)

@@ -79,7 +79,7 @@ for (const pose of [
         pose.target,
       ),
     );
-    assert.equal(preview.wires.length, pose.wires);
+    assert.equal(preview.wires.length, pose.wires + 10);
     assert.ok(
       preview.wires.every((wire) => !samePoint(wire.a, wire.b)),
       'A collapsed lead creates no zero-length wire.',

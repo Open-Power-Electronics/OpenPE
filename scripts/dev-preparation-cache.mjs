@@ -29,6 +29,7 @@ const defaultPaths = [
   'resources/example-catalog',
   'tests/fixtures/reference',
   'resources/example-models-lock.json',
+  'resources/emc-flyback-models-lock.json',
   'resources/reference-models-lock.json',
   'public/licenses/ti-models.txt',
   'package.json',

@@ -2,7 +2,7 @@
 import { nativeIdentity } from './kicad-project-identity';
 import type { Circuit, Point } from './circuit';
 import type { PCB, BoardLine, BoardText, BoardZone, Footprint, Pad, BoardLayer } from './pcb';
-import { parseSExpr, child, children, val, type SExpr } from './sexpr';
+import { parseSExpr, child, children, val, quote, type SExpr } from './sexpr';
 import { footprintModels } from './pcb-models';
 
 const round = (n: number) => Number(n.toFixed(6));
@@ -27,6 +27,56 @@ function number(n: SExpr | undefined, index = 1, fallback?: number): number {
 const point = (n: SExpr | undefined): Point => ({ x: number(n), y: number(n, 2) });
 const points = (n: SExpr | undefined): Point[] =>
   n ? children(n, 'xy').map(point) : fail('Missing polygon points.');
+function nativeLocked(n: SExpr): boolean {
+  const flags = children(n, 'locked');
+  if (
+    flags.length > 1 ||
+    flags.some((flag) => flag.length !== 2 || !['yes', 'no'].includes(val(flag))) ||
+    (flags.length && n.includes('locked')) ||
+    n.filter((item) => item === 'locked').length > 1
+  )
+    fail('Invalid native editing lock.');
+  return n.includes('locked') || val(flags[0]) === 'yes';
+}
+
+/** Keep the original zone UUID on its first layer; other layer instances have
+ * deterministic identities. Clean native files retain their original bytes. */
+export function expandNativeBoardZones(root: SExpr): SExpr {
+  const copper = (child(root, 'layers') ?? [])
+    .filter(Array.isArray)
+    .map((layer) => val(layer))
+    .filter((layer) => layer.endsWith('.Cu'));
+  const expand = (container: SExpr): SExpr =>
+    container.flatMap((node): SExpr => {
+      if (!Array.isArray(node)) return [node];
+      if (node[0] === 'footprint') return [expand(node)];
+      const layers = node[0] === 'zone' ? child(node, 'layers') : undefined;
+      if (!layers) return [node];
+      if (child(node, 'layer')) fail('Zone cannot specify both layer and layers.');
+      const names = layers.slice(1).flatMap((_, index) => {
+        const name = val(layers, index + 1);
+        return name === '*.Cu' ? copper : [name];
+      });
+      const uuid = val(child(node, 'uuid'));
+      if (!uuid || !names.length || names.length > 4 || new Set(names).size !== names.length)
+        fail('Invalid multi-layer zone identity or layers.');
+      if (
+        children(node, 'filled_polygon').some((fill) => !names.includes(val(child(fill, 'layer'))))
+      )
+        fail('Filled polygon layer disagrees with its multi-layer zone.');
+      return names.map((name, index) =>
+        node.flatMap((item): SExpr => {
+          if (!Array.isArray(item)) return [item];
+          if (item[0] === 'layers') return [['layer', quote(name)]];
+          if (item[0] === 'uuid' && index)
+            return [['uuid', quote(nativeIdentity(`${uuid}:layer:${name}`))]];
+          if (item[0] === 'filled_polygon' && val(child(item, 'layer')) !== name) return [];
+          return [item];
+        }),
+      );
+    });
+  return expand(root);
+}
 function textData(n: SExpr, value: string): BoardText {
   const e = child(n, 'effects'),
     f = e && child(e, 'font');
@@ -68,7 +118,7 @@ export function parseKiCadPCB(
     unlinkedReferences: string[];
   };
 } {
-  const root = parseSExpr(source);
+  const root = expandNativeBoardZones(parseSExpr(source));
   if (root[0] !== 'kicad_pcb' || val(child(root, 'version')) !== '20260206')
     fail('Expected the pinned KiCad 10 board format.');
   allow(
@@ -123,9 +173,10 @@ export function parseKiCadPCB(
       id: id(n, key),
       layer,
       width: number(child(child(n, 'stroke') ?? [], 'width'), 1, 0),
+      ...(nativeLocked(n) ? { locked: true as const } : {}),
     };
     if (kind === 'text' || kind === 'property') {
-      allow(n, ['at', 'layer', 'uuid', 'effects', 'hide', 'unlocked'], 'text');
+      allow(n, ['at', 'layer', 'uuid', 'effects', 'hide', 'unlocked', 'locked'], 'text');
       const at = point(child(n, 'at'));
       const t = textData(n, val(n, kind === 'property' || n[0] === 'fp_text' ? 2 : 1));
       t.rotation = angle(t.rotation - footprintRotation);
@@ -135,7 +186,18 @@ export function parseKiCadPCB(
     if (kind === 'dimension') {
       allow(
         n,
-        ['type', 'layer', 'uuid', 'pts', 'height', 'leader_length', 'format', 'style', 'gr_text'],
+        [
+          'type',
+          'layer',
+          'uuid',
+          'pts',
+          'height',
+          'leader_length',
+          'format',
+          'style',
+          'gr_text',
+          'locked',
+        ],
         'dimension',
       );
       const pts = points(child(n, 'pts'));
@@ -203,7 +265,7 @@ export function parseKiCadPCB(
     }
     allow(
       n,
-      ['start', 'mid', 'end', 'center', 'pts', 'stroke', 'fill', 'layer', 'uuid'],
+      ['start', 'mid', 'end', 'center', 'pts', 'stroke', 'fill', 'layer', 'uuid', 'locked'],
       'graphic',
     );
     const stroke = val(child(child(n, 'stroke') ?? [], 'type')) as BoardLine['stroke'];
@@ -293,10 +355,7 @@ export function parseKiCadPCB(
     });
     if (!polygons.length) fail('Zone without outline.');
     const placement = child(n, 'placement');
-    if (
-      placement &&
-      (val(child(placement, 'enabled')) !== 'no' || val(child(placement, 'sheetname')))
-    )
+    if (placement && val(child(placement, 'enabled')) !== 'no')
       fail('Enabled placement rule is unsupported.');
     return {
       id: id(n, key),
@@ -339,6 +398,11 @@ export function parseKiCadPCB(
         'layer',
         'uuid',
         'at',
+        'locked',
+        'units',
+        'solder_mask_margin',
+        'solder_paste_margin',
+        'solder_paste_margin_ratio',
         'path',
         'attr',
         'sheetname',
@@ -360,6 +424,16 @@ export function parseKiCadPCB(
       ],
       'footprint',
     );
+    const locked = nativeLocked(n);
+    const units = child(n, 'units');
+    if (units) {
+      allow(units, ['unit'], 'footprint units');
+      for (const unit of children(units, 'unit')) {
+        allow(unit, ['name', 'pins'], 'footprint unit');
+        if (!child(unit, 'name') || !child(unit, 'pins'))
+          fail('Incomplete footprint unit metadata.');
+      }
+    }
     const reference = val(
         children(n, 'property').find((p) => val(p) === 'Reference'),
         2,
@@ -410,9 +484,19 @@ export function parseKiCadPCB(
           'chamfer_ratio',
           'chamfer',
           'zone_connect',
+          'pinfunction',
+          'pintype',
         ],
         'pad',
       );
+      for (const key of ['pinfunction', 'pintype']) {
+        const fields = children(p, key);
+        if (
+          fields.length > 1 ||
+          fields.some((field) => field.length !== 2 || typeof field[1] !== 'string')
+        )
+          fail(`Pad has invalid ${key} metadata.`);
+      }
       const drill = child(p, 'drill');
       if (drill) allow(drill, ['offset'], 'drill');
       if (drill && val(drill) === 'oval')
@@ -466,6 +550,7 @@ export function parseKiCadPCB(
       .filter(
         (c): c is SExpr =>
           Array.isArray(c) &&
+          !(c[0] === 'property' && !child(c, 'at') && !child(c, 'effects')) &&
           ['fp_line', 'fp_rect', 'fp_arc', 'fp_circle', 'fp_poly', 'fp_text', 'property'].includes(
             String(c[0]),
           ),
@@ -484,6 +569,16 @@ export function parseKiCadPCB(
       libraryId: val(n),
       ...at,
       rotation,
+      ...(locked ? { locked: true as const } : {}),
+      ...(child(n, 'solder_mask_margin')
+        ? { solderMaskMargin: number(child(n, 'solder_mask_margin')) }
+        : {}),
+      ...(child(n, 'solder_paste_margin')
+        ? { solderPasteMargin: number(child(n, 'solder_paste_margin')) }
+        : {}),
+      ...(child(n, 'solder_paste_margin_ratio')
+        ? { solderPasteMarginRatio: number(child(n, 'solder_paste_margin_ratio')) }
+        : {}),
       side: val(child(n, 'layer')) === 'B.Cu' ? 'back' : 'front',
       ...(!hasPins ? { reference: originalReference, value } : {}),
       pads,

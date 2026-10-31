@@ -732,17 +732,12 @@ try {
     projectFromNativeFiles(projectNativeFiles(parseProject(saved), 'layout.kicad_pro')),
     drawn,
   );
-  await button('Version history').click();
-  const history = page.getByRole('dialog', { name: 'Version history', exact: true });
+  await button('Git').click();
+  const history = page.getByRole('region', { name: 'Git', exact: true });
   await history.waitFor();
-  const historyBounds = await history.boundingBox();
-  const historyViewport = page.viewportSize();
-  assert.ok(
-    Math.abs(historyBounds.x + historyBounds.width / 2 - historyViewport.width / 2) < 2,
-    'History is centered independently of Layout tools.',
-  );
-  assert.equal(await history.getAttribute('aria-modal'), 'true');
-  await page.keyboard.press('Escape');
+  assert.equal(await button('Git').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('dialog').count(), 0);
+  await button('Layout').click();
   await button('Fit board to canvas').click();
   await page.waitForFunction(
     () => document.querySelectorAll('.project-navigation .dirty-dot').length === 0,
@@ -763,7 +758,7 @@ try {
   await page.mouse.move(100, 100);
   await page.screenshot({ path: 'test-results/layout-dark-compact.png' });
   const tools = await page.locator('.layout-toolbar').boundingBox();
-  const lastAction = await button('Version history').boundingBox();
+  const lastAction = await button('Toggle right sidebar').boundingBox();
   const gridBounds = await gridDensity.boundingBox();
   const statusBounds = await page.locator('.layout-status').boundingBox();
   assert.ok(

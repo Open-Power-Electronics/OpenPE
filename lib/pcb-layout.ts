@@ -60,6 +60,7 @@ export function padDrillPosition(footprint: Footprint, pad: Pad): Point {
 
 /** Flip through the footprint origin's horizontal board axis, preserving IDs/nets. */
 export function flipPCBFootprint(footprint: Footprint): Footprint {
+  if (footprint.locked) fail('Unlock the footprint in Source before editing.');
   const mirror = (p: Point): Point => ({ x: p.x, y: -p.y || 0 });
   const flipText = (text: BoardText): BoardText => {
     const { justify, ...rest } = text;
@@ -365,6 +366,16 @@ function selected(selection: Selection, kind: PCBSelection['kind'], id: string) 
 }
 
 export function assertPCBSelectionUnlocked(board: PCB, selection: Selection) {
+  if (
+    board.graphics.some((graphic) => graphic.locked && selected(selection, 'graphic', graphic.id))
+  )
+    fail('Unlock selected graphics in Source before editing.');
+  if (
+    board.footprints.some(
+      (footprint) => footprint.locked && selected(selection, 'footprint', footprint.id),
+    )
+  )
+    fail('Unlock selected footprints in Source before editing.');
   if (board.tracks.some((track) => track.locked && selected(selection, 'track', track.id)))
     fail('Unlock selected tracks before editing.');
 }

@@ -37,10 +37,9 @@ test('all ten original examples retain their actual native filenames and parse a
   }
   await assert.rejects(readFile('examples/emc-flyback/emc-flyback.scad'), { code: 'ENOENT' });
   const reference = homeExampleCatalog.find((entry) => entry.id !== 'emc-flyback-demo')!;
-  const parameters = JSON.parse(
-    await readFile(`examples/${reference.file}/datasheets/parameters.json`, 'utf8'),
-  );
-  assert.equal(typeof parameters, 'object');
+  await assert.rejects(readFile(`examples/${reference.file}/datasheets/parameters.json`), {
+    code: 'ENOENT',
+  });
 });
 
 test('packaging retains the original examples tree including documents and optional PDF files', async () => {
@@ -67,7 +66,6 @@ test('packaging retains the original examples tree including documents and optio
     'emc-flyback/emc-flyback.kicad_dru',
     'emc-flyback/footprints/EMC_Demo.pretty/device.kicad_mod',
     'emc-flyback/models/device.step',
-    'lm2596-to220-5-buck/datasheets/parameters.json',
     'lm2596-to220-5-buck/datasheets/controller.pdf',
   ])
     assert.ok(includes(file), file);

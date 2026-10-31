@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { LoaderCircle } from 'lucide-react';
 import type { ChatTimings } from '@/lib/chat-stream';
 
 function elapsedTime(ms: number) {
@@ -15,7 +14,11 @@ function elapsedTime(ms: number) {
 export function ChatTiming({ timings: t }: { timings: ChatTimings }) {
   if (t.clientTotalMs === undefined || !Number.isFinite(t.clientTotalMs) || t.clientTotalMs < 0)
     return null;
-  return <div className="message-timing">Worked for {elapsedTime(t.clientTotalMs)}</div>;
+  return (
+    <div className="message-timing" aria-label="Elapsed time">
+      {elapsedTime(t.clientTotalMs)}
+    </div>
+  );
 }
 export function ChatProgress({ status, startedAt }: { status: string; startedAt: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -27,11 +30,12 @@ export function ChatProgress({ status, startedAt }: { status: string; startedAt:
   }, [startedAt]);
   return (
     <div className="chat-progress">
-      <div className="running" role="status">
-        <LoaderCircle size={14} className="spin" />
+      <span className="chat-stage-text" role="status">
         {status}
-      </div>
-      <span className="chat-elapsed">{elapsedTime(elapsed)}</span>
+      </span>
+      <span className="chat-elapsed" aria-label="Elapsed time">
+        {elapsedTime(elapsed)}
+      </span>
     </div>
   );
 }

@@ -6,7 +6,7 @@ export async function assertEditorViewControls(page, selectedView) {
     await views
       .getByRole('button')
       .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-    ['Schematic', 'Layout', 'Model', 'Source'],
+    ['Schematic', 'Layout', 'Model', 'Source', 'Git'],
   );
   assert.equal(await views.locator('[aria-pressed="true"]').count(), 1);
   assert.equal(
@@ -245,7 +245,7 @@ export async function assertEditorViewControls(page, selectedView) {
   );
   assert.ok(
     geometry.widths.every((width) => width >= 44),
-    'All four view targets stay usable.',
+    'All five view targets stay usable.',
   );
   assert.ok(
     geometry.height >= 36 && geometry.height <= geometry.heightLimit,
@@ -263,12 +263,12 @@ export async function assertToolbarSidebarPlacement(toolbar) {
   const geometry = await toggle.evaluate((element) => {
     const group = element.closest('.editor-view-controls');
     const toolbar = element.closest('.editor-toolbar');
-    const history = toolbar?.querySelector('button[aria-label="Version history"]');
+    const previous = toolbar?.querySelector('button[aria-label="Parts list"]');
     const toggle = element.getBoundingClientRect();
-    const git = history?.getBoundingClientRect();
+    const previousBounds = previous?.getBoundingClientRect();
     const source = toolbar
       ?.closest('.editor')
-      ?.querySelector('.editor-view-switch button[aria-label="Source"]')
+      ?.querySelector('.editor-view-switch button[aria-label="Git"]')
       ?.getBoundingClientRect();
     const tools = toolbar?.getBoundingClientRect();
     const style = group && getComputedStyle(group);
@@ -280,11 +280,11 @@ export async function assertToolbarSidebarPlacement(toolbar) {
     return {
       grouped: Boolean(group),
       outsideDocumentBar: !element.closest('.document-bar'),
-      afterHistory: Boolean(
-        history && history.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
+      afterParts: Boolean(
+        previous && previous.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
       ),
-      gap: git && toggle.left - git.right,
-      aligned: git && Math.abs(toggle.top - git.top),
+      gap: previousBounds && toggle.left - previousBounds.right,
+      aligned: previousBounds && Math.abs(toggle.top - previousBounds.top),
       viewAligned:
         source && Math.abs(toggle.left + toggle.width / 2 - source.left - source.width / 2),
       bounded:
@@ -304,7 +304,7 @@ export async function assertToolbarSidebarPlacement(toolbar) {
           : null,
     };
   });
-  assert.equal(geometry.grouped && geometry.outsideDocumentBar && geometry.afterHistory, true);
+  assert.equal(geometry.grouped && geometry.outsideDocumentBar && geometry.afterParts, true);
   assert.equal(geometry.bounded, true, 'Dock visibility stays inside the toolbar.');
   if (geometry.viewAligned !== undefined)
     assert.ok(
@@ -313,7 +313,7 @@ export async function assertToolbarSidebarPlacement(toolbar) {
     );
   assert.ok(
     geometry.gap >= 8 && geometry.aligned <= 1,
-    'Dock visibility follows Git on the same row with clearance.',
+    'Dock visibility follows Parts list on the same row with clearance.',
   );
   assert.ok(
     geometry.border === 0 && geometry.padding === 8,

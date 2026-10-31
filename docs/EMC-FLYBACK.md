@@ -4,17 +4,17 @@ During Preview, EMC Flyback is the fixed entry in Home's Recent section. It is c
 
 ## Native conversion
 
-The official KiCad 10 upgrader converts the schematic and board. The build adapter preserves original UUIDs and deterministically identifies newly explicit fields. Its single custom rectangular pad is represented by two same-number rectangles with the identical copper union. Multi-layer keepouts become individual layer records. No electrical geometry is moved.
+The official KiCad 10 upgrader converts the schematic and board. The build adapter preserves original UUIDs and deterministically identifies newly explicit fields. Its single custom rectangular pad is represented by two same-number rectangles with the identical copper union. Multi-layer keepouts become individual layer records. Original electrical geometry is retained. The native schematic adds five virtual testbench components without moving the original circuit or changing PCB bytes.
 
 Passive R/C/L Values contain only their nominal value and unit, such as L2 = `10uH` and C4 = `100u`. The original current/voltage/power ratings, dielectric, package and series text are retained in ordinary `Specifications` fields on schematic instances and PCB footprints. Pinned originals and reference notes retain their source text. Simulation signatures use the cleaned native Values.
 
-The Home annotation layout changes only instance Reference/Value placement and alignment. Rendered glyph checks require the 228 visible fields not to overlap. Regression checks retain embedded libraries, part poses, wires, labels, PCB bytes and the complete compiled SPICE deck.
+The Home annotation layout changes only instance Reference/Value placement and alignment. Rendered glyph checks cover the 228 original visible fields; five new virtual testbench components add their own references, Values and named rails in a separate framed area above the original circuit. Panel borders use a common 2.54 mm gap in both directions; the five virtual components use equal horizontal centre spacing. Section 7, the datasheet-link note panel, is removed from the generated schematic; component Datasheet/Product page fields and pinned upstream notes remain available. Regression checks retain embedded libraries, part poses, wires, labels, PCB bytes and the complete compiled SPICE deck.
 
 `scripts/check-emc-flyback-kicad.py` independently uses KiCad 10.0.1 to compare original and converted connectivity, footprint positions/UUIDs, pad copper, all 359 tracks and 155 vias, including 124 locked tracks and 32 locked vias. These are native-conversion checks rather than ERC/DRC or manufacturing approval.
 
 ## Electrical comparison
 
-`npm run simulation:check-emc-flyback` runs the bundled ngspice 47 transient for 10 ms with a 5 ns maximum step. The Home bench applies 24 V, uses a 4.7 Ω gate resistor and CTR = 1, and supplies a **100 Ω external resistor** plus the retained 0.5 A current step. At 12 V, the resistor draws 0.12 A; the current source adds 0.5 A before 2 ms and after 4 ms. The 2–4 ms interval removes that additional current. These load definitions do not establish the measured operating voltage.
+`npm run simulation:check-emc-flyback` runs the bundled ngspice 47 transient for 10 ms with a 5 ns maximum step. The visible native bench uses V1 = 24 V, R21 = 10 mΩ source resistance, V2 = 12 V ideal controller supply, R22 = **100 Ω external load** and I1 = 0.5 A pulse load, with the original 4.7 Ω gate resistor and CTR = 1. These source/load parameters are read from the schematic; missing devices are not synthesized. At 12 V, the resistor draws 0.12 A; the current source adds 0.5 A before 2 ms and after 4 ms. The 2–4 ms interval removes that additional current. These load definitions do not establish the measured operating voltage.
 
 The behavioural controller, fitted MOSFET and generic diodes follow the pinned approximate upstream bench. Its 24.4 Ω external resistor defines a different operating point, so upstream current, loss, ripple and efficiency tolerances do not qualify the 100 Ω Home bench. The original upstream measurements remain in the pinned source files.
 

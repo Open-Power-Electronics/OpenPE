@@ -231,14 +231,14 @@ test(
     };
     objects.push(rectangle, circle, polygon);
     for (const kind of ['chamfer', 'fillet'] as const) {
-      for (const edges of [
-        ['profile:top:0'],
-        ['profile:bottom:0'],
-        ['profile:top:0', 'profile:bottom:0'],
-      ])
+      for (const [name, edges] of [
+        ['top', ['profile:top:0']],
+        ['bottom', ['profile:bottom:0']],
+        ['both', ['profile:top:0', 'profile:bottom:0']],
+      ] as const)
         objects.push({
-          ...body(`${kind}-${edges}`),
-          edgeTreatment: { kind, edges, distanceMm: 0.5 },
+          ...body(`${kind}-${name}`),
+          edgeTreatment: { kind, edges: [...edges], distanceMm: 0.5 },
         });
       for (const source of [circle, polygon])
         objects.push({
@@ -292,9 +292,10 @@ test(
       ReturnType<typeof measure> & { bytes: number; sha256: string; breps: number }
     > = {};
     try {
-      for (const object of objects) {
+      for (const [index, object] of objects.entries()) {
+        const artifact = `${directory}/${index}-${object.name.replace(/[^a-z0-9-]/gi, '-')}`;
         const source = modelCadStepGeometry(object);
-        await writeFile(`${directory}/${object.name}.geo`, source);
+        await writeFile(`${artifact}.geo`, source);
         const preview = await service.preview(object);
         const local = measure(preview.meshes),
           posed = measure(preview.meshes, object);
@@ -305,7 +306,7 @@ test(
         const project = withModelCad(fixture, { version: 1, objects: [object] });
         const bytes = await createEnclosureStep(project),
           text = bytes.toString('ascii');
-        await writeFile(`${directory}/${object.name}.step`, bytes);
+        await writeFile(`${artifact}.step`, bytes);
         const imported = occt.ReadStepFile(bytes, {
           linearUnit: 'millimeter',
           linearDeflectionType: 'bounding_box_ratio',

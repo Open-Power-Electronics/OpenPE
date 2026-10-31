@@ -4,7 +4,11 @@ import {
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
 } from './simulation-model-source';
-import { primitiveInitialCondition } from './simulation-initial-conditions';
+import {
+  primitiveInitialCondition,
+  spiceInitialConditions,
+  type SpiceInitialCondition,
+} from './simulation-initial-conditions';
 import { child, children, val } from './sexpr';
 import { onWire, samePoint } from './wiring';
 import { tiPart, tiDcdcParts } from './ti-dcdc';
@@ -216,9 +220,10 @@ export function spiceNets(d: Circuit, groundNames: readonly string[] = []) {
   });
   const names = new Map<string, number>();
   d.labels.forEach((l, i) => {
-    const previous = names.get(l.text);
+    const labelName = groundNames.includes(l.text) ? 'GND' : l.text;
+    const previous = names.get(labelName);
     if (previous !== undefined) join(labels[i], previous);
-    names.set(l.text, labels[i]);
+    names.set(labelName, labels[i]);
   });
   const grounds: number[] = [];
   for (const p of d.parts) {
@@ -399,7 +404,7 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
     vendor ? 'OpenPE TI LM2596 transient' : 'OpenPE ideal switching transient',
     '.options reltol=0.001 abstol=1e-9',
   ];
-  let explicitInitialConditions = false;
+  const initialConditions: SpiceInitialCondition[] = [];
   const adjacency = new Map<string, Set<string>>();
   const connect = (a: string, b: string) => {
     for (const [x, y] of [
@@ -443,7 +448,14 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
         kind === 'C' || kind === 'L'
           ? primitiveInitialCondition(kind, partFields(p), p.ref)
           : undefined;
-      if (initial !== undefined) explicitInitialConditions = true;
+      if (initial !== undefined && (kind === 'C' || kind === 'L'))
+        initialConditions.push({
+          kind,
+          positive: measured ? internal : positive,
+          negative: b,
+          value: initial,
+          ...(measured && positive === '0' ? { groundedSeriesNode: internal } : {}),
+        });
       lines.push(
         kind
           ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(partFields(p)['OpenPE.ModelSource'] === 'basic' ? displayPartValue(p) : p.value, kind)}${initial === undefined ? '' : ` IC=${initial}`}`
@@ -560,13 +572,15 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
   const vectors = traces.map((t) => t.vector).join(' ');
   // Include the exact end time when linearizing a vendor transient, even for nonintegral ratios.
   const sampleStep = vendor ? transientOutputStep(c) : Math.min(c.step, c.stop);
+  const initialization = spiceInitialConditions(initialConditions);
   lines.push(
+    ...initialization.lines,
     `.save ${vectors}`,
     '.control',
     'set wr_singlescale',
     'set wr_vecnames',
     'set numdgt=15',
-    `tran ${sampleStep} ${c.stop} 0 ${c.step}${explicitInitialConditions ? ' uic' : ''}`,
+    `tran ${sampleStep} ${c.stop} 0 ${c.step}${initialization.uic ? ' uic' : ''}`,
     ...(vendor ? ['linearize'] : []),
     `wrdata waveforms.txt ${vectors}`,
     'quit',

@@ -1,4 +1,5 @@
 'use client';
+import QuantityInput from './QuantityInput';
 
 import { useRef, useState } from 'react';
 import { X } from 'lucide-react';
@@ -67,8 +68,9 @@ export default function CopperFillSettings({
         }}
       >
         <label className="layout-field">
-          <span>Minimum clearance (mm)</span>
-          <input
+          <span>Minimum clearance</span>
+          <QuantityInput
+            unit={'mm'}
             type="number"
             aria-label="Minimum clearance (mm)"
             aria-description="Minimum gap to other nets. Larger zone clearances are retained."
@@ -78,7 +80,7 @@ export default function CopperFillSettings({
             step="any"
             required
             disabled={!active || busy}
-            onChange={(event) => setDraft(event.target.value)}
+            onValueChange={(inputValue) => setDraft(inputValue)}
             onKeyDown={(event) => {
               if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
                 return;

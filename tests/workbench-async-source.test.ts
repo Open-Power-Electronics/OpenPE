@@ -8,10 +8,11 @@ import {
 
 for (const [id, input, method] of [
   ['workbench.view', { view: 'layout' }, 'view'],
+  ['workbench.panel', { panel: 'history' }, 'panel'],
   ['workbench.sheet', { id: 'sheet' }, 'sheet'],
   ['workbench.panel', { panel: 'layers' }, 'panel'],
   ['project.save', {}, 'save'],
-  ['project.export', {}, 'export'],
+  ['project.export', { format: 'gerber' }, 'export'],
 ] as const) {
   test(`${id} forwards cancellation through asynchronous Source preparation`, async () => {
     const host = createCapabilityHost();

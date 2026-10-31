@@ -115,7 +115,7 @@ export function createWorkbenchPlugins(dataDir, options = {}) {
       const plugin = (await read()).find((row) => row.id === pcbDesignPluginId);
       if (!plugin?.installed || !plugin.enabled)
         throw new Error(
-          'Install and enable AI PCB Layout in Plugins > Marketplace to read PCB design guidance.',
+          'Install and enable PE Layout Skill in Plugins > Marketplace to read PCB design guidance.',
         );
     },
     subscribe(listener) {

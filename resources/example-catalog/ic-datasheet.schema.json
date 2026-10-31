@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "properties": {
     "$schema": {
-      "const": "../../../resources/example-catalog/ic-datasheet.schema.json"
+      "const": "./ic-datasheet.schema.json"
     },
     "schema_version": {
       "const": "1.0.0"
@@ -19,7 +19,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^reference-[a-z0-9-]+$"
+          "pattern": "^(reference-[a-z0-9-]+|emc-flyback-demo)$"
         },
         "file": {
           "type": "string",
@@ -31,7 +31,7 @@
           "minLength": 1
         },
         "topology": {
-          "enum": ["Buck", "Boost", "SEPIC", "Fly-Buck", "Charge pump", "Buck-Boost"]
+          "enum": ["Buck", "Boost", "SEPIC", "Fly-Buck", "Charge pump", "Buck-Boost", "Flyback"]
         }
       },
       "required": ["id", "file", "title", "topology"]
@@ -41,7 +41,7 @@
       "additionalProperties": false,
       "properties": {
         "manufacturer": {
-          "const": "Texas Instruments"
+          "enum": ["Texas Instruments", "STMicroelectronics"]
         },
         "family": {
           "enum": [
@@ -53,7 +53,8 @@
             "LM27761",
             "LMR12010",
             "LMR70503",
-            "LM2598"
+            "LM2598",
+            "UC3845B"
           ]
         },
         "reference": {
@@ -104,7 +105,7 @@
         "document_number": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^[A-Z]{4,6}[0-9]{1,3}[A-Z]?$"
+          "pattern": "^([A-Z]{4,6}[0-9]{1,3}[A-Z]?|UC3842B/3B/4B/5B)$"
         },
         "revision": {
           "type": ["string", "null"],
@@ -117,12 +118,12 @@
         "product_url": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^https://www\\.ti\\.com/product/[A-Z0-9]+$"
+          "pattern": "^https://www\\.(ti\\.com/product/[A-Z0-9]+|st\\.com/en/power-management/uc3845b\\.html)$"
         },
         "source_url": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^https://www\\.ti\\.com/lit/ds/symlink/[a-z0-9]+\\.pdf$"
+          "pattern": "^https://www\\.(ti\\.com/lit/ds/symlink/[a-z0-9]+\\.pdf|st\\.com/resource/en/datasheet/uc3842b\\.pdf)$"
         },
         "filename": {
           "type": "string",
@@ -699,13 +700,121 @@
               }
             }
           ]
+        },
+        "undervoltage_start_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "undervoltage_stop_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "current_sense_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "startup_current": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "oscillator_frequency": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Hz"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
         }
       },
-      "required": [
-        "input_voltage",
-        "operating_junction_temperature",
-        "input_voltage_absolute_maximum",
-        "junction_temperature_absolute_maximum"
+      "required": ["input_voltage_absolute_maximum", "junction_temperature_absolute_maximum"],
+      "anyOf": [
+        {
+          "required": ["input_voltage", "operating_junction_temperature"],
+          "properties": {
+            "input_voltage": {},
+            "operating_junction_temperature": {}
+          }
+        },
+        {
+          "required": [
+            "operating_ambient_temperature",
+            "oscillator_frequency",
+            "undervoltage_start_threshold",
+            "undervoltage_stop_threshold"
+          ],
+          "properties": {
+            "operating_ambient_temperature": {},
+            "oscillator_frequency": {},
+            "undervoltage_start_threshold": {},
+            "undervoltage_stop_threshold": {}
+          }
+        }
       ]
     }
   },

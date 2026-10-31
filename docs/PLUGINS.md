@@ -49,7 +49,7 @@ project aborts its owned work but cannot undo completed external writes. See
 ## Bundled workbench lifecycle
 
 SPICE Simulation (`spice-simulation@openpe`), Thermal FEM
-(`pcb-thermal@openpe`) and AI PCB Layout (`ai-pcb-layout@openpe`) are
+(`pcb-thermal@openpe`) and PE Layout Skill (`ai-pcb-layout@openpe`) are
 preinstalled/enabled. Install activates packaged resources without downloading
 code or running provider CLIs; uninstalled entries remain in Marketplace.
 
@@ -74,7 +74,7 @@ service-owned lifecycle state; stale responses cannot restore disabled UI.
 SPICE and Thermal cancellation remain independent. Their run/restore and panel
 retention rules belong in [Simulation](SIMULATION.md) and [Thermal](THERMAL.md).
 
-### AI PCB Layout
+### PE Layout Skill
 
 The [power-pcb-design workflow](https://github.com/ChengminLi/AI-PCB-layout), by
 Chengmin Li and Xiao Yang, is bundled unchanged at

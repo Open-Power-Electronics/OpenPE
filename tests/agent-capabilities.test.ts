@@ -293,10 +293,10 @@ test('commands use the submission or explicitly observed revision and never sile
     );
     await assert.rejects(
       resolveAgentCapability(request('openpe_execute', args), host, 'auto', () => {}),
-      /Query project.snapshot/,
+      /Query core.state/,
     );
     await resolveAgentCapability(
-      request('openpe_query', { name: 'project.snapshot' }),
+      request('openpe_query', { name: 'core.state' }),
       host,
       'auto',
       () => {},
@@ -354,7 +354,7 @@ test('Agent connected component drag is discoverable, reviewable and uses the sh
     const catalog = (await query('capabilities.list')) as ReturnType<typeof host.catalog>;
     const capability = catalog.find((entry) => entry.id === 'schematic.drag');
     assert.equal(capability?.available, true);
-    await query('project.snapshot');
+    await query('core.state');
     const initial = core.getSnapshot();
     const pending = await resolveAgentCapability(
       request('openpe_execute', args),

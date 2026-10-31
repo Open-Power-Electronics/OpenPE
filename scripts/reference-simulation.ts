@@ -51,7 +51,7 @@ const settings: Record<
   },
   'reference-tps61046': {
     voltage: 3.3,
-    load: 100,
+    load: 1000,
     pins: ['A1', 'C1', 'A2', 'B1', 'C2', 'B2'],
     values: { R1: '232k' },
   },
@@ -402,7 +402,7 @@ export function referenceProfile(d: Circuit, id: string, title: string, modelId:
   return {
     id,
     title,
-    stop: modelId === 'reference-lm27761' ? 0.005 : 0.01,
+    stop: ['reference-tps61046', 'reference-lm27761'].includes(modelId) ? 0.002 : 0.01,
     input: {
       pin: parts.find((p) => p.kind === 'X')!.pinOrder[terminal],
       minimum,
@@ -412,16 +412,17 @@ export function referenceProfile(d: Circuit, id: string, title: string, modelId:
     step: modelId === 'reference-lm5001' ? 1e-8 : 2e-7,
     parts,
     directives: [],
-    options:
-      modelId === 'lm2596-5'
-        ? { itl4: '1000', reltol: '0.005', method: 'gear' }
+    options: {
+      itl4: '50',
+      reltol: '0.005',
+      method: 'gear',
+      ...(modelId === 'lm2596-5'
+        ? {}
         : {
-            itl4: '1000',
-            reltol: '0.005',
-            method: 'gear',
             rshunt: '1e9',
             ...(modelId === 'reference-lmr70503' ? {} : { cshunt: '2f' }),
-          },
+          }),
+    },
     initialConditions: modelId !== 'reference-tps61046',
     magnetic: modelId === 'reference-lm25017' ? { ref: 'L1' } : undefined,
   };

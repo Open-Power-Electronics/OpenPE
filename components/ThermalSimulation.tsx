@@ -1,4 +1,5 @@
 'use client';
+import QuantityInput from './QuantityInput';
 
 import {
   useCallback,
@@ -10,7 +11,7 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import { Crosshair, Download, Eye, Play, RefreshCw, Square, X } from 'lucide-react';
+import { Crosshair, Eye, Layers2, Play, RefreshCw, Square, X } from 'lucide-react';
 import { createCapabilityHost, type CapabilityHost } from '@/api/capabilities';
 import { api } from '@/lib/bridge';
 import { saveDrawingPNG } from '@/lib/drawing-export';
@@ -46,7 +47,9 @@ import {
 import Select from './Select';
 import ThermalField from './ThermalField';
 import AnalysisComponents from './AnalysisComponents';
-import type { ThermalLayoutPresentation } from './ThermalLayoutResults';
+import SavedResultLoading, { type SavedResultLoadingStage } from './SavedResultLoading';
+import { paintAnalysisLoading } from '@/lib/analysis-loading';
+import { ThermalResultStatistics, type ThermalLayoutPresentation } from './ThermalLayoutResults';
 import styles from './ThermalSimulation.module.css';
 
 type SolverStatus = NonNullable<AgentThermalState['solver']>;
@@ -157,12 +160,17 @@ export default function ThermalSimulation({
   }));
   const current = useRef(session);
   const [drafts, setDrafts] = useState(() => draftsFor(initial));
-  const [heatInput, setHeatInput] = useState<'manual' | 'spice'>('manual');
+  const [heatInput, setHeatInput] = useState<'manual' | 'spice'>(() =>
+    spiceAvailable ? 'spice' : 'manual',
+  );
   const [layoutShown, setLayoutShown] = useState(true);
+  const [outlinesShown, setOutlinesShown] = useState(true);
   const [layoutProbing, setLayoutProbing] = useState(false);
   const heatInputRef = useRef(heatInput);
   heatInputRef.current = heatInput;
   const [importingSpice, setImportingSpice] = useState(false);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [savedResultStage, setSavedResultStage] = useState<SavedResultLoadingStage>('reading');
   const draftRef = useRef(drafts);
   draftRef.current = drafts;
   const origin = useRef({ source, sourcePending, visible, project, fileId, spiceAvailable });
@@ -227,6 +235,7 @@ export default function ThermalSimulation({
   function cancelLookup() {
     loadControl.current?.abort();
     loadControl.current = null;
+    setLoadingSaved(false);
   }
   function setDraftConfig(config: ThermalConfig, edited = true) {
     if (edited) {
@@ -248,6 +257,9 @@ export default function ThermalSimulation({
     if (config.spiceSource) {
       heatInputRef.current = 'spice';
       setHeatInput('spice');
+    } else if (!edited) {
+      heatInputRef.current = 'manual';
+      setHeatInput('manual');
     }
   }
   async function configure(input: ThermalConfigurationInput, signal: AbortSignal) {
@@ -257,7 +269,7 @@ export default function ThermalSimulation({
     const merged = { ...current.current.config, ...input.config };
     if (input.config.heatSources && !input.config.spiceSource) delete merged.spiceSource;
     const config = validateThermalConfig(merged, origin.current.project.pcb ?? undefined);
-    if (current.current.config?.spiceSource && !config.spiceSource) {
+    if (input.config.heatSources && !config.spiceSource) {
       heatInputRef.current = 'manual';
       setHeatInput('manual');
     }
@@ -281,7 +293,7 @@ export default function ThermalSimulation({
     if (spiceControl.current) return 'SPICE heat sources are already loading.';
     return true;
   }
-  async function importSpice(_input: unknown, signal: AbortSignal) {
+  async function importSpice(_input: unknown, signal: AbortSignal, onImported?: () => void) {
     const allowed = canImportSpice();
     if (allowed !== true) throw new Error(allowed);
     const active = origin.current;
@@ -319,6 +331,7 @@ export default function ThermalSimulation({
           active.project.pcb!,
         ),
       );
+      onImported?.();
       return read();
     } catch (error) {
       if (!control.signal.aborted && spiceControl.current === control) throw error;
@@ -376,14 +389,31 @@ export default function ThermalSimulation({
       throw new Error('Open Thermal in Layout and apply Source edits before running.');
     if (runControl.current) throw new Error('A thermal run is already active.');
     if (spiceControl.current) throw new Error('Wait for SPICE heat sources to finish loading.');
-    if (heatInputRef.current === 'spice' && !current.current.config?.spiceSource)
-      throw new Error('Load current SPICE heat sources before running Thermal.');
     if (heatInputRef.current === 'spice' && !active.spiceAvailable)
       throw new Error(
         'Enable SPICE Simulation or choose Manual heat input before running Thermal.',
       );
     if (detectControl.current)
       throw new Error('Solver detection is still running. Retry when detection completes.');
+    if (heatInputRef.current === 'spice') {
+      let imported = false;
+      await importSpice({}, signal, () => {
+        imported = true;
+      });
+      if (
+        !imported ||
+        signal.aborted ||
+        origin.current.source !== active.source ||
+        origin.current.fileId !== active.fileId ||
+        origin.current.sourcePending ||
+        !origin.current.visible ||
+        !origin.current.spiceAvailable ||
+        heatInputRef.current !== 'spice' ||
+        !current.current.config?.spiceSource
+      )
+        return read();
+    }
+    if (signal.aborted) return read();
     const config = parsedDrafts();
     const expected = prepareThermalModel(active.project.pcb, config).basis;
     setDraftConfig(config);
@@ -499,16 +529,14 @@ export default function ThermalSimulation({
               ? 'A thermal run is already active.'
               : spiceControl.current
                 ? 'Wait for SPICE heat sources to finish loading.'
-                : heatInputRef.current === 'spice' && !current.current.config?.spiceSource
-                  ? 'Load current SPICE heat sources before running Thermal.'
-                  : heatInputRef.current === 'spice' && !origin.current.spiceAvailable
-                    ? 'Enable SPICE Simulation or choose Manual heat input before running Thermal.'
-                    : detectControl.current
-                      ? 'Solver detection is still running. Retry when detection completes.'
-                      : current.current.solver?.available
-                        ? true
-                        : current.current.solver?.error ||
-                          'The bundled thermal solvers are not ready. Open Thermal and retry.',
+                : heatInputRef.current === 'spice' && !origin.current.spiceAvailable
+                  ? 'Enable SPICE Simulation or choose Manual heat input before running Thermal.'
+                  : detectControl.current
+                    ? 'Solver detection is still running. Retry when detection completes.'
+                    : current.current.solver?.available
+                      ? true
+                      : current.current.solver?.error ||
+                        'The bundled thermal solvers are not ready. Open Thermal and retry.',
     read,
     configure,
     canImport: canImportSpice,
@@ -517,8 +545,10 @@ export default function ThermalSimulation({
     exportImage,
     cancel: () => {
       const control = runControl.current;
+      const importing = spiceControl.current;
       control?.abort();
-      return { cancelled: !!control };
+      cancelSpiceImport();
+      return { cancelled: !!control || !!importing };
     },
     probe: async ({ point }, signal) => {
       if (signal.aborted) throw new Error('Thermal probe cancelled.');
@@ -646,13 +676,20 @@ export default function ThermalSimulation({
     }
     const control = new AbortController();
     loadControl.current = control;
+    setSavedResultStage('reading');
+    setLoadingSaved(true);
     void (async () => {
       try {
+        await paintAnalysisLoading(control.signal);
         const response = await api('thermal/result', {
           method: 'POST',
           signal: control.signal,
           body: JSON.stringify({ source: active.source, fileId, ...(config ? { config } : {}) }),
         });
+        control.signal.throwIfAborted();
+        if (loadControl.current !== control) return;
+        setSavedResultStage('preparing');
+        await paintAnalysisLoading(control.signal);
         const body = await response.json();
         if (
           control.signal.aborted ||
@@ -681,12 +718,18 @@ export default function ThermalSimulation({
         if (!control.signal.aborted && origin.current.source === active.source)
           update({ error: (failure as Error).message });
       } finally {
-        if (loadControl.current === control) loadControl.current = null;
+        if (loadControl.current === control) {
+          loadControl.current = null;
+          setLoadingSaved(false);
+        }
       }
     })();
     return () => {
       control.abort();
-      if (loadControl.current === control) loadControl.current = null;
+      if (loadControl.current === control) {
+        loadControl.current = null;
+        setLoadingSaved(false);
+      }
     };
   }, [visible, source, sourcePending, fileId, session.solver?.available]);
   useEffect(() => {
@@ -717,7 +760,11 @@ export default function ThermalSimulation({
   function applyDrafts() {
     if (!origin.current.visible || origin.current.sourcePending || composing.current) return;
     try {
-      execute('thermal.configure', { config: parsedDrafts() });
+      const config = parsedDrafts();
+      if (heatInputRef.current === 'spice' && !config.spiceSource) {
+        const { heatSources: _heatSources, ...settings } = config;
+        execute('thermal.configure', { config: settings });
+      } else execute('thermal.configure', { config });
     } catch (error) {
       update({ error: (error as Error).message });
     }
@@ -740,9 +787,9 @@ export default function ThermalSimulation({
   }
   function field(key: string, label: string, unit: string, collapsed = false, inputOnly = false) {
     const input = (
-      <input
+      <QuantityInput
+        unit={unit}
         type="text"
-        className={styles.input}
         inputMode="decimal"
         aria-label={`${label} (${unit})`}
         title={drafts[key]}
@@ -760,12 +807,12 @@ export default function ThermalSimulation({
         onCompositionEnd={() => {
           composing.current = false;
         }}
-        onChange={(event) => {
+        onValueChange={(inputValue) => {
           if (!visible || sourcePending || collapsed || session.status === 'running') return;
           configurationEdited.current = true;
           cancelLookup();
           cancelSpiceImport();
-          setDrafts((previous) => ({ ...previous, [key]: event.target.value }));
+          setDrafts((previous) => ({ ...previous, [key]: inputValue }));
         }}
         onBlur={applyDrafts}
         onKeyDown={(event) => {
@@ -784,15 +831,7 @@ export default function ThermalSimulation({
         }}
       />
     );
-    const Control = inputOnly ? 'label' : 'span';
-    const control = (
-      <Control className={styles.unitInput} data-compact={inputOnly || undefined}>
-        {input}
-        <span className={styles.unit} aria-hidden="true">
-          {unit}
-        </span>
-      </Control>
-    );
+    const control = input;
     return inputOnly ? (
       control
     ) : (
@@ -803,6 +842,15 @@ export default function ThermalSimulation({
     );
   }
   const result = !sourcePending && session.resultSource === source ? session.result : null;
+  const locateComponent = useCallback(
+    (id: string) => {
+      const footprint = origin.current.project.pcb?.footprints.find((item) => item.id === id);
+      if (!footprint || !onLocateFootprint?.(id)) return false;
+      update({ surface: footprint.side, probe: null });
+      return true;
+    },
+    [onLocateFootprint],
+  );
   const probeAt = useCallback(
     (point: { x: number; y: number } | null) => {
       if (!point) {
@@ -826,6 +874,65 @@ export default function ThermalSimulation({
     },
     [host],
   );
+  const resultControls = useMemo(
+    () => (
+      <div
+        className={styles.resultHeader}
+        onKeyDownCapture={(event) => {
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+      >
+        <strong>Board temperature</strong>
+        {onPresentationChange && (
+          <>
+            <button
+              className={`tool-button${layoutShown ? ' active' : ''}`}
+              aria-label="Show temperature in Layout"
+              title="Show temperature"
+              aria-pressed={layoutShown}
+              onClick={() => setLayoutShown((shown) => !shown)}
+            >
+              <Eye size={16} />
+            </button>
+            <button
+              className={`tool-button${outlinesShown && layoutShown ? ' active' : ''}`}
+              aria-label="Show component outlines"
+              title="Component outlines"
+              aria-pressed={outlinesShown}
+              disabled={!layoutShown}
+              onClick={() => setOutlinesShown((shown) => !shown)}
+            >
+              <Layers2 size={16} />
+            </button>
+            <button
+              className={`tool-button${layoutProbing && layoutShown ? ' active' : ''}`}
+              aria-label="Probe Layout temperature"
+              title="Probe temperature"
+              aria-pressed={layoutProbing && layoutShown}
+              disabled={!layoutShown}
+              onClick={() => setLayoutProbing((probing) => !probing)}
+            >
+              <Crosshair size={16} />
+            </button>
+          </>
+        )}
+        <Select
+          label="Thermal surface"
+          compact
+          value={session.surface}
+          options={[
+            { value: 'front', label: 'Front' },
+            { value: 'back', label: 'Back' },
+          ]}
+          onChange={(value) => update({ surface: value as ThermalSurface, probe: null })}
+        />
+      </div>
+    ),
+    [layoutShown, layoutProbing, outlinesShown, session.surface, onPresentationChange],
+  );
   useLayoutEffect(() => {
     onPresentationChange?.(
       visible && result
@@ -836,8 +943,12 @@ export default function ThermalSimulation({
             surface: session.surface,
             probe: session.probe,
             shown: layoutShown,
+            outlinesShown,
             probing: layoutShown && layoutProbing,
             probeAt,
+            controls: resultControls,
+            resultConfig: session.resultConfig,
+            onLocateFootprint: onLocateFootprint ? locateComponent : undefined,
           }
         : null,
     );
@@ -850,8 +961,13 @@ export default function ThermalSimulation({
     session.surface,
     session.probe,
     layoutShown,
+    outlinesShown,
     layoutProbing,
     probeAt,
+    resultControls,
+    session.resultConfig,
+    onLocateFootprint,
+    locateComponent,
   ]);
   useLayoutEffect(() => () => onPresentationChange?.(null), [onPresentationChange]);
   useEffect(() => {
@@ -880,11 +996,9 @@ export default function ThermalSimulation({
       ? 'Meshing and solving…'
       : session.status === 'detecting'
         ? 'Checking solvers…'
-        : session.status === 'completed'
-          ? 'Completed'
-          : session.status === 'stopped'
-            ? 'Stopped'
-            : '';
+        : session.status === 'stopped'
+          ? 'Stopped'
+          : '';
   const error = sourcePending
     ? 'Apply Source edits before running Thermal.'
     : session.error ||
@@ -914,53 +1028,10 @@ export default function ThermalSimulation({
           <X size={17} />
         </button>
       </header>
-      <div className={styles.body}>
+      <div className={styles.body} aria-busy={loadingSaved}>
         {result && mesh && bounds && (
-          <div className={styles.result}>
-            <div className={styles.resultHeader}>
-              <strong>Board temperature</strong>
-              {onPresentationChange && (
-                <>
-                  <button
-                    className={`tool-button${layoutShown ? ' active' : ''}`}
-                    aria-label="Show temperature in Layout"
-                    title="Show temperature"
-                    aria-pressed={layoutShown}
-                    onClick={() => setLayoutShown((shown) => !shown)}
-                  >
-                    <Eye size={16} />
-                  </button>
-                  <button
-                    className={`tool-button${layoutProbing && layoutShown ? ' active' : ''}`}
-                    aria-label="Probe Layout temperature"
-                    title="Probe temperature"
-                    aria-pressed={layoutProbing && layoutShown}
-                    disabled={!layoutShown}
-                    onClick={() => setLayoutProbing((probing) => !probing)}
-                  >
-                    <Crosshair size={16} />
-                  </button>
-                </>
-              )}
-              <Select
-                label="Thermal surface"
-                compact
-                value={session.surface}
-                options={[
-                  { value: 'front', label: 'Front' },
-                  { value: 'back', label: 'Back' },
-                ]}
-                onChange={(value) => update({ surface: value as ThermalSurface, probe: null })}
-              />
-              <button
-                className="tool-button"
-                aria-label="Export temperature map"
-                title="Export temperature map"
-                onClick={() => execute('thermal.exportImage')}
-              >
-                <Download size={16} />
-              </button>
-            </div>
+          <div className={styles.result} style={docked ? { display: 'none' } : undefined}>
+            {!docked && resultControls}
             <svg
               ref={svgRef}
               className={styles.map}
@@ -1067,27 +1138,7 @@ export default function ThermalSimulation({
                 </text>
               )}
             </svg>
-            <div className={styles.statistics}>
-              <span>
-                Minimum <strong>{temperature(result.statistics.minC)}</strong>
-              </span>
-              <span>
-                Maximum <strong>{temperature(result.statistics.maxC)}</strong>
-              </span>
-              <span aria-description="Arithmetic mean of finite-element node temperatures">
-                Mean <strong>{temperature(result.statistics.meanC)}</strong>
-              </span>
-              <span>
-                Power into board <strong>{formatted(result.statistics.inputPowerW)} W</strong>
-              </span>
-              <span>
-                Removed heat <strong>{formatted(result.statistics.outputPowerW)} W</strong>
-              </span>
-              <span>
-                Energy imbalance{' '}
-                <strong>{formatted(result.statistics.energyImbalanceRelative * 100)}%</strong>
-              </span>
-            </div>
+            {!docked && <ThermalResultStatistics result={result} />}
             {!mesh.triangles.length && (
               <p className="simulation-error" role="alert">
                 The result contains no triangles on this board surface.
@@ -1144,7 +1195,7 @@ export default function ThermalSimulation({
           items={components}
           visible={visible}
           locateDisabled={sourcePending}
-          onLocate={onLocateFootprint}
+          onLocate={onLocateFootprint ? locateComponent : undefined}
           locateDescription="Highlight in PCB Layout"
           composingRef={composing}
           disclosureRef={componentDisclosures}
@@ -1159,7 +1210,8 @@ export default function ThermalSimulation({
             {error}
           </p>
         )}
-        {session.status === 'running' ? (
+        {loadingSaved && <SavedResultLoading analysis="thermal" stage={savedResultStage} />}
+        {session.status === 'running' || importingSpice ? (
           <button className="dialog-button secondary" onClick={() => execute('thermal.cancel')}>
             <Square size={15} />
             Stop
@@ -1173,7 +1225,7 @@ export default function ThermalSimulation({
               !session.solver?.available ||
               session.status === 'detecting' ||
               importingSpice ||
-              (heatInput === 'spice' && (!session.config?.spiceSource || !spiceAvailable))
+              (heatInput === 'spice' && !spiceAvailable)
             }
             onClick={() => execute('thermal.run')}
           >

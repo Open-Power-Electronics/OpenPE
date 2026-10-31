@@ -112,6 +112,18 @@ try {
   await layout('3 columns × 2 rows');
   assert.equal(await page.locator('.simulation-plot-row').count(), 2);
   await fillsArea();
+  for (const plot of await page.locator('.simulation-waveform > svg').all()) {
+    assert.ok((await plot.locator('.simulation-grid-minor.simulation-grid-time').count()) > 0);
+    assert.ok((await plot.locator('.simulation-grid-minor.simulation-grid-value').count()) > 0);
+    assert.equal(
+      await plot.locator('text.simulation-tick-time').count(),
+      await plot.locator('.simulation-grid-minor.simulation-grid-time').count(),
+    );
+    assert.equal(
+      await plot.locator('text.simulation-tick-value').count(),
+      await plot.locator('.simulation-grid-minor.simulation-grid-value').count(),
+    );
+  }
   const zoomMode = page.getByRole('button', { name: 'Zoom V(net_0) region', exact: true });
   for (const [name, hint] of [
     ['Zoom in V(net_0)', 'Zoom in'],
@@ -133,43 +145,51 @@ try {
   const cursor = page.getByRole('slider', { name: 'V(net_0) cursor A' });
   const cursorB = page.getByRole('slider', { name: 'V(net_0) cursor B' });
   const chart = page.getByRole('group', { name: 'V(net_0) waveform', exact: true });
-  const toggleA = controls.getByRole('button', { name: 'Cursor A', exact: true });
-  const toggleB = controls.getByRole('button', { name: 'Cursor B', exact: true });
-  assert.equal(await toggleA.getAttribute('aria-pressed'), 'false');
+  assert.equal(await controls.getByRole('button', { name: 'Cursor A', exact: true }).count(), 0);
+  assert.equal(await controls.locator('.simulation-cursor-toggle').count(), 1);
+  const toggleB = controls.getByRole('button', { name: /^(Add|Remove) second cursor$/ });
   assert.equal(await toggleB.getAttribute('aria-pressed'), 'false');
-  assert.equal(await page.getByRole('slider').count(), 0, 'Cursors start hidden.');
+  assert.equal(await page.getByRole('slider', { name: /cursor A$/ }).count(), 6);
+  assert.equal(await cursor.getAttribute('aria-valuenow'), '0.01');
+  assert.equal(await page.getByRole('slider', { name: /cursor B$/ }).count(), 0);
   await chart.click({ position: { x: 100, y: 50 } });
   assert.equal(
     await page.getByRole('slider').count(),
-    0,
-    'Background dragging cannot create cursors.',
+    6,
+    'Background dragging cannot create a second cursor.',
   );
   await zoomMode.click();
   await chart.click({ position: { x: 100, y: 50 } });
   assert.equal(
     await page.getByRole('slider').count(),
-    0,
-    'A zoom-mode click cannot create cursors.',
+    6,
+    'A zoom-mode click cannot create a second cursor.',
   );
   await zoomMode.click();
-  await toggleB.click();
-  assert.equal(await page.getByRole('slider', { name: /cursor A$/ }).count(), 0);
+  await toggleB.press('Enter');
+  assert.equal(await toggleB.getAttribute('aria-label'), 'Remove second cursor');
+  assert.equal(await toggleB.getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('slider', { name: /cursor A$/ }).count(), 6);
   assert.equal(await page.getByRole('slider', { name: /cursor B$/ }).count(), 6);
-  await toggleB.click();
-  await toggleA.click();
+  for (const secondCursor of await page.getByRole('slider', { name: /cursor B$/ }).all())
+    assert.equal(await secondCursor.getAttribute('aria-valuenow'), '0');
+  await cursor.press('End');
+  await cursorB.press('Home');
+  await cursorB.press('ArrowRight');
+  await toggleB.press('Space');
+  assert.equal(await toggleB.getAttribute('aria-label'), 'Add second cursor');
+  assert.equal(await toggleB.getAttribute('aria-pressed'), 'false');
   assert.equal(await page.getByRole('slider', { name: /cursor A$/ }).count(), 6);
   assert.equal(await page.getByRole('slider', { name: /cursor B$/ }).count(), 0);
-  await cursor.press('End');
-  await toggleA.click();
-  assert.equal(await page.getByRole('slider').count(), 0);
-  await toggleA.click();
   assert.equal(
     await cursor.getAttribute('aria-valuenow'),
     '0.01',
-    'Showing a cursor retains its position.',
+    'Removing the second cursor preserves the first cursor.',
   );
-  await cursor.press('Home');
   await toggleB.click();
+  assert.equal(await cursorB.getAttribute('aria-valuenow'), '0.0001');
+  await cursorB.press('End');
+  await cursor.press('Home');
   assert.equal(
     await page.locator('.simulation-trace-heading strong').nth(4).innerText(),
     'I(V102)',
@@ -548,17 +568,65 @@ try {
   await otherChart.press('Control+z');
   assert.equal(await otherChart.getAttribute('data-time-min'), '0.002');
   assert.equal(Number(await chart.getAttribute('data-time-min')), zoomMin);
-  await page.getByRole('button', { name: 'V(net_0) time axis', exact: true }).click();
+  const timeAxisControl = page.getByRole('button', { name: 'V(net_0) time axis', exact: true });
+  const axisBox = await timeAxisControl.boundingBox();
+  await timeAxisControl.click({ position: { x: 35, y: 8 } });
   let axisDialog = page.getByRole('dialog', { name: 'Time axis', exact: true });
   assert.equal(await axisDialog.getAttribute('aria-modal'), 'false');
   assert.equal(await axisDialog.evaluate((el) => el.matches(':modal')), false);
-  const ownerBox = await chart.locator('..').boundingBox();
   const editorBox = await axisDialog.boundingBox();
+  const point = { x: axisBox.x + 35, y: axisBox.y + 8 };
   assert.ok(
-    editorBox.x >= ownerBox.x && editorBox.x + editorBox.width <= ownerBox.x + ownerBox.width,
+    Math.abs(editorBox.x - point.x - 8) < 2,
+    'Axis settings open beside the clicked tick instead of the chart corner.',
   );
-  assert.ok(editorBox.y >= ownerBox.y && editorBox.y < ownerBox.y + ownerBox.height);
+  assert.ok(
+    Math.min(
+      Math.abs(editorBox.y - point.y - 8),
+      Math.abs(editorBox.y + editorBox.height - point.y + 8),
+    ) < 2,
+  );
+  assert.ok(editorBox.width <= 232 && editorBox.height < 240);
+  const minimumInput = axisDialog.getByLabel('Minimum (s)', { exact: true });
+  assert.match(await minimumInput.inputValue(), /^[\d.e+-]+$/i);
+  const minimumUnit = axisDialog.getByRole('combobox', { name: 'Minimum (s) unit', exact: true });
+  await minimumUnit.click();
+  await page.getByRole('option', { name: 'µs', exact: true }).click();
+  assert.ok(Math.abs(Number(await minimumInput.inputValue()) * 1e-6 - zoomMin) < 1e-7);
+  assert.equal(
+    Number(await chart.getAttribute('data-time-min')),
+    zoomMin,
+    'Changing the display unit does not apply an axis edit.',
+  );
+  assert.ok((await minimumInput.inputValue()).length < 16, 'Engineering values stay concise.');
   await page.screenshot({ path: 'test-results/waveform-axis-local.png' });
+  for (const options of [{ isComposing: true }, { keyCode: 229 }]) {
+    await minimumInput.evaluate(
+      (input, options) =>
+        input.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+            ...options,
+          }),
+        ),
+      options,
+    );
+    assert.equal(await axisDialog.count(), 1, 'IME Enter cannot apply axis drafts.');
+  }
+  await minimumInput.dispatchEvent('compositionstart');
+  await minimumInput.press('Escape');
+  assert.equal(await axisDialog.count(), 1, 'IME Escape cannot dismiss axis drafts.');
+  await minimumInput.dispatchEvent('compositionend');
+  await minimumInput.press('Enter');
+  assert.equal(Number(await chart.getAttribute('data-time-min')), zoomMin);
+  assert.equal(
+    Number(await chart.getAttribute('data-time-max')),
+    zoomMax,
+    'Applying untouched short values preserves exact axis bounds.',
+  );
+  await timeAxisControl.press('Enter');
   await page.keyboard.press('Escape');
   assert.equal(await axisDialog.count(), 0);
   assert.equal(
@@ -587,6 +655,11 @@ try {
   await axisDialog.getByRole('button', { name: 'Apply', exact: true }).click();
   assert.equal(await chart.getAttribute('data-time-min'), '0.001');
   assert.equal(await chart.getAttribute('data-time-max'), '0.009');
+  assert.equal(
+    await chart.locator('.simulation-grid-minor.simulation-grid-time').count(),
+    0,
+    'Explicit time tick spacing determines the grid without automatic subdivisions.',
+  );
   await page.getByRole('button', { name: 'V(net_0) vertical axis', exact: true }).click();
   axisDialog = page.getByRole('dialog', { name: 'V(net_0) axis', exact: true });
   await axisDialog.getByLabel('Minimum (V)', { exact: true }).fill('-500m');
@@ -595,6 +668,7 @@ try {
   await axisDialog.getByRole('button', { name: 'Apply', exact: true }).click();
   assert.equal(await chart.getAttribute('data-value-min'), '-0.5');
   assert.equal(await chart.getAttribute('data-value-max'), '0.5');
+  assert.equal(await chart.locator('.simulation-grid-minor.simulation-grid-value').count(), 0);
   assert.notEqual(
     await page
       .getByRole('group', { name: 'V(net_1) waveform', exact: true })

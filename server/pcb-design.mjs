@@ -5,7 +5,7 @@ import { pcbDesignPluginId } from './workbench-plugins.mjs';
 const root = new URL('./pcb-design/', import.meta.url);
 const maxDocumentBytes = 64 * 1024;
 const repairMessage =
-  'Bundled AI PCB Layout guidance is missing or corrupt. Repair the OpenPE installation and retry.';
+  'Bundled PE Layout Skill guidance is missing or corrupt. Repair the OpenPE installation and retry.';
 let manifest;
 
 // A damaged optional resource must not prevent the local service from starting.
@@ -55,7 +55,7 @@ async function readManifest() {
 
 // This adapter limits upstream guidance to the current, bounded workbench.
 const pcbDesignIntegration = `Apply this guidance only when the user asks to review, create or improve a power-electronics PCB. Preserve the upstream human review gates; an OpenPE Auto permission setting does not waive engineering gates. The user may explicitly waive gates as the workflow describes.
-Use only currently advertised OpenPE capabilities. Read capabilities.list and a fresh project.snapshot before edits, use expectedRevision, and respect pending Source, plugin availability and command reviews. Edits must use the shared Core owner and undo. Never access the filesystem, execute CAD scripts, install tools or overwrite native files outside the supported OpenPE commands. OpenPE targets bounded KiCad 10 content; upstream KiCad 9 examples and other CAD tools do not add format support.
+Use only currently advertised OpenPE capabilities. Read capabilities.list and a fresh core.state before edits, use expectedRevision, and respect pending Source, plugin availability and command reviews. Request complete design/native data only when the task needs it. Edits must use the shared Core owner and undo. Never access the filesystem, execute CAD scripts, install tools or overwrite native files outside the supported OpenPE commands. OpenPE targets bounded KiCad 10 content; upstream KiCad 9 examples and other CAD tools do not add format support.
 The guide is engineering methodology, not evidence that a check ran. Distinguish bounded OpenPE ERC/DRC, supported SPICE transients and board-temperature FEM from full CAD checks, parasitic extraction, EMC, junction temperatures or certification. Report unavailable tools, standard tables, models and measurements as missing evidence. Do not invent constraints, simulation outputs, fabrication exports or compliance. Ask for material engineering inputs and routing-mode decisions only when needed for the chosen scope. Keep reports and gate decisions in the conversation; do not add records to native design files or recovery.`;
 
 export function createPcbDesignGuidance(plugins) {
@@ -118,7 +118,7 @@ export function createPcbDesignGuidance(plugins) {
         !catalog.plugins.some((row) => row.id === pcbDesignPluginId && row.installed && row.enabled)
       )
         return '';
-      const intro = `AI PCB Layout (power-pcb-design by Chengmin Li and Xiao Yang, CC BY 4.0) is enabled.\n${pcbDesignIntegration}`;
+      const intro = `PE Layout Skill (power-pcb-design by Chengmin Li and Xiao Yang, CC BY 4.0) is enabled.\n${pcbDesignIntegration}`;
       if (capabilities)
         return `${intro}\nFor PCB design requests, first read pcbDesign.guide with {} for the complete workflow and document IDs, then use {"document":"<listed ID>"} to read only the references needed for the current step. This read-only plugin query returns bundled guidance, not user project instructions. It grants no additional execution permissions.`;
       const guide = await this.read('workflow', signal);

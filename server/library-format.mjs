@@ -696,7 +696,7 @@ function displayPartValue(part) {
   const fields = partFields(part);
   const params = fields["Sim.Params"];
   const value = params ? singleSimulationParameter(params)?.value ?? params : "";
-  if (params && fields["Sim.Device"] === "V" && ["PULSE", "SIN"].includes(fields["Sim.Type"]) && part.value === part.libId.split(":").at(-1) && fields["OpenPE.ModelSource"] !== "external" && (fields["OpenPE.ModelSource"] === "basic" || !fields["Sim.Library"]?.trim()) && !extraSymbolAnnotations(part).some((field) => field.name === "Sim.Params"))
+  if (params && ["V", "I"].includes(fields["Sim.Device"]) && ["PULSE", "SIN"].includes(fields["Sim.Type"]) && part.value === part.libId.split(":").at(-1) && fields["OpenPE.ModelSource"] !== "external" && (fields["OpenPE.ModelSource"] === "basic" || !fields["Sim.Library"]?.trim()) && !extraSymbolAnnotations(part).some((field) => field.name === "Sim.Params"))
     return params;
   return value ? part.value.replaceAll("${SIM.PARAMS}", value) : part.value;
 }

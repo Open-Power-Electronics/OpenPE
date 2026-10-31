@@ -139,9 +139,9 @@ try {
   await choose('Marketplace');
   const pcbCard = category('OpenPE')
     .locator('.plugin-card')
-    .filter({ has: page.getByRole('button', { name: 'View AI PCB Layout' }) });
+    .filter({ has: page.getByRole('button', { name: 'View PE Layout Skill' }) });
   assert.equal(await pcbCard.locator('svg.plugin-logo').count(), 1);
-  await pcbCard.getByRole('button', { name: 'View AI PCB Layout' }).click();
+  await pcbCard.getByRole('button', { name: 'View PE Layout Skill' }).click();
   await page.getByText('Bundled workflow and references', { exact: true }).waitFor();
   assert.match(await page.locator('.plugin-detail').innerText(), /CC BY 4.0/);
   await page.screenshot({ path: 'test-results/plugins-pcb-design.png', animations: 'disabled' });

@@ -1,5 +1,6 @@
 import type { CapabilityHost, CapabilitySchema } from '../api/capabilities';
 import { emptyCapabilityInput } from '../api/capabilities';
+import { projectExportFormats, type ProjectExportFormat } from './export-formats';
 
 /** Native and presentation ports stay outside the document engine. Both clients
  * use these same ports; the host never accepts native paths or commands. */
@@ -18,7 +19,7 @@ export type WorkbenchCapabilityPorts = {
     signal?: AbortSignal,
   ) => void | Promise<void>;
   save: (saveAs: boolean, signal?: AbortSignal) => Promise<'saved' | 'cancelled' | Error>;
-  export: (signal?: AbortSignal) => Promise<'exported' | 'cancelled'>;
+  export: (format: ProjectExportFormat, signal?: AbortSignal) => Promise<'exported' | 'cancelled'>;
   historyList: (offset: number) => Promise<unknown>;
   historyRead: (id: string) => Promise<string>;
   historyCreate: (message: string) => Promise<unknown>;
@@ -158,10 +159,10 @@ export function registerWorkbenchCapabilities(
   );
   command(
     'project.export',
-    'Export the active schematic, PCB or Model CAD solids (OpenSCAD) through the native export picker.',
-    emptyCapabilityInput,
-    async (_, signal) => {
-      const status = await ports().export(signal);
+    'Export Gerber/drill, JLCPCB manufacturing files, BOM, pick and place or OpenSCAD through the native picker.',
+    object({ format: { enum: projectExportFormats.map((entry) => entry.id) } }),
+    async ({ format }, signal) => {
+      const status = await ports().export(format, signal);
       signal.throwIfAborted();
       return { status };
     },

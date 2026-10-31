@@ -105,50 +105,8 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.unitInput {
-  display: flex;
-  align-items: center;
+.field > :global(.quantity-input) {
   flex: 0 0 clamp(112px, 47%, 150px);
-  min-width: 0;
-  min-height: 30px;
-  padding-right: 6px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-control);
-  background: var(--field-surface);
-  cursor: text;
-}
-.unitInput[data-compact] {
-  flex-basis: 60px;
-  padding-right: 5px;
-  border-radius: 5px;
-}
-.unitInput:focus-within {
-  border-color: var(--text-strong);
-}
-.unitInput .input {
-  flex: 1;
-  width: 0;
-  min-width: 0;
-  min-height: 28px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-  color: var(--text-strong);
-  font: inherit;
-  font-family: var(--code-font);
-  font-size: var(--font-small);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.unit {
-  flex-shrink: 0;
-  color: var(--soft);
-  font-size: var(--font-caption);
-  white-space: nowrap;
-}
-.unitInput:has(input:disabled) {
-  opacity: 0.55;
 }
 .footer {
   display: flex;
@@ -192,16 +150,17 @@
 }
 .statistics {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   font-size: var(--font-caption);
 }
 .statistics span {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
-  padding: 8px;
+  padding: 6px 8px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-control);
   background: var(--panel);
@@ -218,8 +177,11 @@
   position: absolute;
   top: 12px;
   left: 12px;
-  width: min(248px, calc(100% - 24px));
-  padding: 12px;
+  width: min(252px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
   z-index: 3;
   color: var(--text);
   background: var(--surface);
@@ -227,37 +189,108 @@
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-panel);
   font-size: var(--font-small);
-  pointer-events: none;
+  pointer-events: auto;
 }
-.legendHeader,
+.layoutLegend .resultHeader {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.layoutLegend .resultHeader > [role='combobox'] {
+  flex-basis: 100%;
+}
+.layoutLegend .statistics {
+  gap: 0;
+}
+.layoutLegend .statistics span {
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.layoutLegend .statistics strong {
+  font-weight: 500;
+}
 .legendRange {
   display: flex;
   justify-content: space-between;
   gap: 8px;
 }
-.legendHeader span {
-  color: var(--muted);
-}
 .colorScale {
-  height: 8px;
-  margin: 10px 0 6px;
-  border-radius: 4px;
+  height: 5px;
+  margin: 8px 0 6px;
+  border-radius: 3px;
 }
 .legendRange {
   font-size: var(--font-small);
   font-variant-numeric: tabular-nums;
+  margin-bottom: 8px;
 }
-.layoutProbe {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 8px;
-  padding-top: 10px;
-  margin-top: 10px;
+.selectedReadout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  margin-top: 8px;
   border-top: 1px solid var(--line-soft);
+  color: var(--text-strong);
   font-variant-numeric: tabular-nums;
 }
-.layoutProbe > span:last-child {
-  grid-column: 1 / -1;
-  color: var(--muted);
+.selectedReadout strong {
+  font-weight: 600;
+}
+.selectedReadout > :first-child {
+  min-width: 0;
   overflow-wrap: anywhere;
+}
+.selectedReadout > :last-child {
+  flex-shrink: 0;
+}
+.heatPaths {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.heatPaths p {
+  margin: 8px 0;
+  font-size: var(--font-caption);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.heatPaths ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.heatPaths li + li {
+  border-top: 1px solid var(--line-soft);
+}
+.heatComponent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+.heatComponent:hover,
+.heatComponent:focus-visible {
+  background: var(--panel);
+}
+.heatComponent:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.heatComponent strong {
+  font-weight: 500;
 }

@@ -12,7 +12,7 @@
 - Keep independent projects and conversations, recover drafts and compare local Git history.
 - Work with Codex or Claude Code through scoped project tools, or review proposals from DeepSeek Harness and Pi. Cursor supports CLI detection only.
 
-Start with nine curated Example projects or EMC Flyback under Recent. The bundled [AI PCB Layout](docs/PLUGINS.md#ai-pcb-layout) plugin provides design guidance and board review.
+Start with nine curated Example projects or EMC Flyback under Recent. The bundled [PE Layout Skill](docs/PLUGINS.md#pe-layout-skill) plugin provides design guidance and board review.
 
 ## Get started
 
@@ -59,7 +59,7 @@ See [verification](docs/ARCHITECTURE.md#verification) for focused tests and opt-
 
 ## Scope
 
-OpenPE is a preview supporting a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Refill and check exported copper in KiCad before manufacturing.
+OpenPE is a preview supporting a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Save/Save as retain native KiCad projects. Export provides bounded Gerber/drill ZIP, JLCPCB manufacturing ZIP, BOM and placement CSV, plus OpenSCAD for supported CAD solids. Gerber requires a closed board outline and saved zone fills; review CAM and assembly output before manufacturing. See [manufacturing export coverage](docs/FORMAT.md#manufacturing-export).
 
 Simulation support depends on the documented circuits and models. Thermal analysis estimates PCB temperature under stated material and cooling assumptions, not package junction temperature or EMC emissions. See the feature documents below for coverage and limits.
 

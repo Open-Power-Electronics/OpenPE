@@ -1,6 +1,10 @@
 import { numericSimulationParameters as parameters } from './simulation-parameters';
 import { simulationSourceValues, simulationSourceExpression } from './simulation-source-parameters';
-import { primitiveInitialCondition } from './simulation-initial-conditions';
+import {
+  primitiveInitialCondition,
+  spiceInitialConditions,
+  type SpiceInitialCondition,
+} from './simulation-initial-conditions';
 import {
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
@@ -84,6 +88,7 @@ function fields(
 export function exampleSimulationProfile(d: Circuit) {
   const original = profiles.find(
     (profile) =>
+      !profile.id.startsWith('reference-') &&
       simulationParts(d).every((actual) =>
         profile.parts.some((p) => actual.ref === p.ref && actual.libId === p.libId),
       ) &&
@@ -101,17 +106,20 @@ export function exampleSimulationProfile(d: Circuit) {
       profile.parts.filter((def) => def.kind === 'X').map((def) => def.sim['Sim.Library']),
     ),
   );
-  const controller = simulationParts(d).find((p) =>
-    controllerLibraries.has(fields(d, p)['Sim.Library']),
+  // Recognize a disabled or mistyped known device for an explicit validation
+  // error too. Only exact reviewed bindings below can produce a runnable model.
+  const isKnownController = (p: Part, def: Definition) =>
+    def.kind === 'X' &&
+    signature(d, p) === def.signature &&
+    (fields(d, p)['Sim.Library'] === def.sim['Sim.Library'] || p.libId === def.libId);
+  const controller = d.parts.find(
+    (p) =>
+      controllerLibraries.has(fields(d, p)['Sim.Library']) ||
+      candidates.some((profile) => profile.parts.some((def) => isKnownController(p, def))),
   );
   if (!controller) return undefined;
   const base = candidates.find((profile) =>
-    profile.parts.some(
-      (def) =>
-        def.kind === 'X' &&
-        fields(d, controller)['Sim.Library'] === def.sim['Sim.Library'] &&
-        signature(d, controller) === def.signature,
-    ),
+    profile.parts.some((def) => isKnownController(controller, def)),
   );
   if (!base) return undefined;
   const known = candidates.flatMap((p) => p.parts);
@@ -130,10 +138,16 @@ export function exampleSimulationProfile(d: Circuit) {
         modelName: '',
         value: p.value,
       };
+    const binding = fields(d, p);
     const definition = known.find(
-      (def) => def.libId === p.libId && def.signature === actualSignature,
+      (def) =>
+        def.signature === actualSignature &&
+        (def.kind === 'X'
+          ? binding['Sim.Library'] === def.sim['Sim.Library'] &&
+            binding['Sim.Name'] === def.sim['Sim.Name']
+          : def.libId === p.libId),
     );
-    if (definition) return { ...definition, ref: p.ref };
+    if (definition) return { ...definition, ref: p.ref, libId: p.libId };
     const kind = /^Device:([RCL])$/.exec(p.libId)?.[1];
     if (kind && libraries[p.libId] && signature({ ...d, libraries }, p) === actualSignature)
       return {
@@ -161,7 +175,7 @@ export function exampleSimulationProfile(d: Circuit) {
       value: p.value,
     };
   });
-  if (parts.filter((p) => p.kind === 'X').length !== 1) return undefined;
+  if (parts.filter((p) => p.kind === 'X').length > 1) return undefined;
   const magnetic = parts.find((p) => p.kind === 'T');
   return {
     ...base,
@@ -247,7 +261,7 @@ function validate(d: Circuit, profile: Profile) {
     assertSimulationModelConfiguration(p);
     const def = profile.parts.find((v) => v.ref === p.ref)!;
     if (def.kind === 'unsupported')
-      throw new Error(`${p.ref}: no allowlisted library model for ${p.libId}.`);
+      throw new Error(`${p.ref}: unsupported model identity or simulation field for ${p.libId}.`);
     const signature = unitGraphics(d.libraries[p.libId], p.unit || 1)
       .flatMap((s) => children(s, 'pin'))
       .map((pin) =>
@@ -465,7 +479,7 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
     '.model OPENPE_DEFAULT_M VDMOS',
     '.model OPENPE_BOOST_D D(Is=1u N=1.05 Rs=0.02)',
   ];
-  let explicitInitialConditions = false;
+  const initialConditions: SpiceInitialCondition[] = [];
   const currents: SpiceTrace[] = [];
   const identifiers = new Map<string, string>();
   d.parts.forEach((p, i) => {
@@ -532,7 +546,15 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
       const initial = primitiveInitialCondition(def.kind, fields(d, p), p.ref);
       if (initial !== undefined) {
         body += ` IC=${initial}`;
-        explicitInitialConditions = true;
+        initialConditions.push({
+          kind: def.kind,
+          positive: ns[0],
+          negative: ns[1],
+          value: initial,
+          ...(nets.node(p, def.pinOrder[0]) === '0' && ns[0] !== '0'
+            ? { groundedSeriesNode: ns[0] }
+            : {}),
+        });
       }
     }
     lines.push(`${name} ${ns.join(' ')} ${body}`);
@@ -590,13 +612,15 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
   }
   traces.push(...currents);
   const vectors = traces.map((t) => t.vector).join(' ');
+  const initialization = spiceInitialConditions(initialConditions, profile.initialConditions);
   lines.push(
+    ...initialization.lines,
     `.save ${vectors}`,
     '.control',
     'set wr_singlescale',
     'set wr_vecnames',
     'set numdgt=15',
-    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${profile.initialConditions || explicitInitialConditions ? ' uic' : ''}`,
+    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${initialization.uic ? ' uic' : ''}`,
     'linearize',
     `wrdata waveforms.txt ${vectors}`,
     'quit',

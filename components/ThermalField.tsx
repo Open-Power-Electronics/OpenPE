@@ -13,10 +13,11 @@ type Props = {
   result: ThermalResult;
   surface: ThermalSurface;
   probe: ThermalProbe | null;
+  markersShown?: boolean;
 };
 
 /** The field uses PCB millimetres so Layout and exported maps share the same geometry. */
-function ThermalField({ result, surface, probe }: Props) {
+function ThermalField({ result, surface, probe, markersShown = true }: Props) {
   const field = useMemo(() => {
     const raster = rasterizeThermalSurface(result, surface);
     if (!raster || typeof document === 'undefined') return null;
@@ -31,13 +32,10 @@ function ThermalField({ result, surface, probe }: Props) {
     return {
       href: canvas.toDataURL('image/png'),
       bounds: raster.bounds,
-      hottest: hottestThermalNode(result, surface),
     };
   }, [result, surface]);
   if (!field) return null;
-  const { bounds, hottest } = field;
-  const radius = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 100;
-  const visibleProbe = probe && hottest && Math.abs(probe.z - hottest.z) <= 1e-6 ? probe : null;
+  const { bounds } = field;
   return (
     <g data-thermal-field="" data-thermal-surface={surface}>
       <image
@@ -50,53 +48,53 @@ function ThermalField({ result, surface, probe }: Props) {
         preserveAspectRatio="none"
         pointerEvents="none"
       />
+      {markersShown && (
+        <ThermalFieldMarkers
+          result={result}
+          surface={surface}
+          probe={probe}
+          scale={Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) / 700}
+        />
+      )}
+    </g>
+  );
+}
+
+export const ThermalFieldMarkers = memo(function ThermalFieldMarkers({
+  result,
+  surface,
+  probe,
+  scale,
+}: Omit<Props, 'markersShown'> & { scale: number }) {
+  const hottest = useMemo(() => hottestThermalNode(result, surface), [result, surface]);
+  const visibleProbe = probe && hottest && Math.abs(probe.z - hottest.z) <= 1e-6 ? probe : null;
+  return (
+    <g pointerEvents="none">
       {hottest && (
         <g
           data-thermal-hottest={hottest.node}
           pointerEvents="none"
-          transform={`translate(${hottest.x} ${hottest.y})`}
+          transform={`translate(${hottest.x} ${hottest.y}) scale(${scale})`}
           aria-label={`Hottest ${surface} surface node: ${hottest.temperatureC.toFixed(2)} °C`}
         >
-          <circle
-            r={radius}
-            fill="none"
-            stroke="#fff"
-            strokeWidth="4"
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle
-            r={radius}
-            fill="none"
-            stroke="#202020"
-            strokeWidth="1.5"
-            vectorEffect="non-scaling-stroke"
-          />
-          <path
-            d={`M${-radius * 1.6} 0H${radius * 1.6}M0 ${-radius * 1.6}V${radius * 1.6}`}
-            stroke="#202020"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
+          <path d="M0 -4L4 0 0 4 -4 0Z" fill="#202020" stroke="#fff" strokeWidth="1.5" />
         </g>
       )}
       {visibleProbe && (
         <g
           data-thermal-probe={visibleProbe.node}
-          transform={`translate(${visibleProbe.x} ${visibleProbe.y})`}
+          transform={`translate(${visibleProbe.x} ${visibleProbe.y}) scale(${scale})`}
           pointerEvents="none"
+          aria-label={`Probe ${visibleProbe.temperatureC.toFixed(2)} °C`}
+          aria-description={`Node ${visibleProbe.node}; ${visibleProbe.x}, ${visibleProbe.y}, ${visibleProbe.z} mm`}
         >
-          <circle
-            r={radius * 1.25}
-            fill="#fff"
-            stroke="#202020"
-            strokeWidth="1.5"
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle r={radius * 0.35} fill="#202020" />
+          <path d="M-8 0H-4M4 0H8M0 -8V-4M0 4V8" stroke="#fff" strokeWidth="3" />
+          <path d="M-8 0H-4M4 0H8M0 -8V-4M0 4V8" stroke="#202020" strokeWidth="1" />
+          <circle r="2" fill="#202020" stroke="#fff" strokeWidth="1" />
         </g>
       )}
     </g>
   );
-}
+});
 
 export default memo(ThermalField);

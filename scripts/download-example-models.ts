@@ -14,6 +14,7 @@ import {
   verifyProjectModelBytes,
 } from '../server/project-model-files.mjs';
 import { writeGeneratedFile } from './write-generated-file.mjs';
+import { verifyEmcFlybackModels } from './prepare-emc-flyback-models';
 
 // Resource preparation is a build operation, separate from live desktop data.
 const dataDir = path.resolve('.openpe/example-model-preparation');
@@ -63,3 +64,4 @@ for (const file of files) {
   await writeGeneratedFile(file, serializeProject(project));
   console.log(`${file}: ${ids.size} verified separate model files.`);
 }
+await verifyEmcFlybackModels();

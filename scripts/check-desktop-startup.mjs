@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -67,13 +68,23 @@ try {
     await readFile('resources/example-catalog/home-manifest.json', 'utf8'),
   );
   const catalog = [...manifest.recent, ...manifest.examples];
-  assert.equal((await readdir(path.join(profile, 'example-projects'))).length, catalog.length);
+  assert.equal((await readdir(path.join(profile, 'project-history-v1'))).length, catalog.length);
+  await assert.rejects(readdir(path.join(profile, 'example-projects')), { code: 'ENOENT' });
   for (const entry of catalog) {
-    const directory = path.join(profile, 'example-projects', entry.title);
-    assert.ok((await readFile(path.join(directory, 'history.git/refs/heads/main'), 'utf8')).trim());
-    const project = projectFromNativeFiles(
-      await nativeProject.readNativeProject(path.join(directory, 'project.kicad_pro')),
+    const directory = path.resolve('examples', entry.file);
+    const nativePath = path.join(directory, `${entry.file}.kicad_pro`);
+    const normalized = process.platform === 'win32' ? nativePath.toLowerCase() : nativePath;
+    const repository = createHash('sha256').update(normalized).digest('hex') + '.git';
+    assert.match(
+      (
+        await readFile(
+          path.join(profile, 'project-history-v1', repository, 'refs/heads/main'),
+          'utf8',
+        )
+      ).trim(),
+      /^[a-f0-9]{40}$/,
     );
+    const project = projectFromNativeFiles(await nativeProject.readNativeProject(nativePath));
     for (const model of project.simulationModels ?? [])
       assert.ok((await readFile(path.join(directory, model.file))).length);
   }

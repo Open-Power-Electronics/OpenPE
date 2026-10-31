@@ -152,7 +152,7 @@ export async function readNativeSpiceRows(file, deck, receive, signal = undefine
 
 /** Read only complete native little-endian rows. Polling never overlaps, and
  * backpressure bounds both pending work and the size of each emitted packet. */
-export function createSpiceRawReader(file, deck, receive) {
+export function createSpiceRawReader(file, deck, receive, inspect) {
   let handle,
     columns,
     offset = 0,
@@ -243,6 +243,7 @@ export function createSpiceRawReader(file, deck, receive) {
         )
           throw new Error('Invalid or non-monotonic native waveform samples.');
         previousTime = time;
+        inspect?.(time);
         accept(values);
       }
       offset += complete * rowBytes;

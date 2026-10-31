@@ -8,7 +8,7 @@ export default function PluginLogo({ id }: { id: string }) {
       viewBox="0 0 64 64"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.5"
+      strokeWidth="4"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

@@ -1,17 +1,32 @@
 'use client';
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, CircuitBoard, Check, CheckCheck } from 'lucide-react';
+import { ArrowDown, ArrowUpRight, CircuitBoard, Check, CheckCheck } from 'lucide-react';
 import { circuitFingerprint, type Circuit } from '@/lib/circuit';
 import type { PCB } from '@/lib/pcb';
 import { layoutAnnotationContext } from '@/lib/pcb-annotations';
 import type { AgentWorkspaceContext } from '@/context/agent-workspace-context';
 import type { Message } from '@/lib/chat-sessions';
+import { suggestedSessionTitle, withoutSessionTitle } from '@/lib/session-title';
+import type { KiCadProjectFiles } from '@/lib/kicad-project';
 import { agentName } from '@/lib/agent-providers';
 import { api } from '@/lib/bridge';
 import { extractProposal, type Operation } from '@/lib/proposals';
 import SidebarToggle from './SidebarToggle';
 import AgentLogo from './AgentLogo';
 import AgentComposer from './AgentComposer';
+import AgentToolCall from './AgentToolCall';
+import AgentFileChanges from './AgentFileChanges';
+import {
+  changedAgentFiles,
+  mergeAgentFileChanges,
+  type AgentFileChanges as FileChanges,
+} from '@/lib/agent-file-changes';
+import {
+  appendToolActivity,
+  toolPreview,
+  toolResultStatus,
+  type AgentToolActivity,
+} from '@/lib/agent-tool-activity';
 import AnnotationAttachments from './AnnotationAttachments';
 import {
   annotationContext,
@@ -56,6 +71,7 @@ export default function Chat({
   pcb,
   pcbSchematic,
   getDesign,
+  getNativeFiles,
   agents,
   provider,
   effort,
@@ -71,6 +87,8 @@ export default function Chat({
   active,
   sessionId,
   conversationTitle,
+  requestTitle = false,
+  onSuggestedTitle,
   sidebarVisible,
   onToggleSidebar,
   input,
@@ -85,6 +103,7 @@ export default function Chat({
   pcb?: PCB | null;
   pcbSchematic?: Circuit;
   getDesign?: () => ChatDesign;
+  getNativeFiles?: () => KiCadProjectFiles;
   agents: Agent[];
   provider: string;
   effort: ReasoningEffort;
@@ -100,6 +119,8 @@ export default function Chat({
   active: boolean;
   sessionId: string;
   conversationTitle: string;
+  requestTitle?: boolean;
+  onSuggestedTitle?: (title: string, messageId: string) => void;
   sidebarVisible?: boolean;
   onToggleSidebar?: () => void;
   input: string;
@@ -119,13 +140,15 @@ export default function Chat({
   const [liveModel, setLiveModel] = useState('');
   const [startedAt, setStartedAt] = useState(0);
   const [sendError, setSendError] = useState('');
+  const [toolCalls, setToolCalls] = useState<AgentToolActivity[]>([]);
+  const [fileChanges, setFileChanges] = useState<Record<string, FileChanges>>({});
+  const [showLatest, setShowLatest] = useState(false);
   const [commandReviews, setCommandReviews] = useState<
     {
       messageId: string;
       command: AgentCommandReview;
       host: AgentCapabilities;
       status: 'pending' | 'applying' | 'applied' | 'rejected' | 'failed' | 'cancelled';
-      error?: string;
     }[]
   >([]);
   const reviewControls = useRef(new Map<string, AbortController>());
@@ -152,7 +175,7 @@ export default function Chat({
     // Follow within the conversation only; never scroll the editor's ancestors.
     if (active && follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [messages, status, streamedText, active]);
+  }, [messages, streamedText, toolCalls, fileChanges, active]);
   useEffect(
     () => () => {
       controller.current?.abort();
@@ -162,6 +185,10 @@ export default function Chat({
   );
   useEffect(() => {
     const ids = new Set(messages.map((message) => message.id));
+    setToolCalls((items) => items.filter((item) => ids.has(item.messageId)));
+    setFileChanges((items) =>
+      Object.fromEntries(Object.entries(items).filter(([id]) => ids.has(id))),
+    );
     setCommandReviews((items) =>
       items.filter((item) => {
         if (ids.has(item.messageId)) return true;
@@ -180,6 +207,53 @@ export default function Chat({
     if (!control || control.signal.aborted) return;
     setStatus('Stopping…');
     control.abort();
+  }
+  function captureFiles(messageId: string) {
+    if (!getNativeFiles) return;
+    try {
+      return getNativeFiles();
+    } catch {
+      setFileChanges((items) => ({
+        ...items,
+        [messageId]: {
+          ...(items[messageId] ?? { files: [], truncated: false }),
+          unavailable: true,
+        },
+      }));
+    }
+  }
+  function recordFiles(messageId: string, before: KiCadProjectFiles | undefined) {
+    if (!before) return;
+    const after = captureFiles(messageId);
+    if (!after) return;
+    const changes = changedAgentFiles(before, after);
+    if (!changes.length) return;
+    setFileChanges((items) => ({
+      ...items,
+      [messageId]: mergeAgentFileChanges(
+        items[messageId] ?? { files: [], truncated: false },
+        changes,
+      ),
+    }));
+  }
+  async function executeWithFiles(
+    messageId: string,
+    host: AgentCapabilities,
+    name: string,
+    input: unknown,
+    options: Parameters<AgentCapabilities['execute']>[2],
+  ) {
+    const before = captureFiles(messageId);
+    const result = await host.execute(name, input, options);
+    if (!options?.signal?.aborted && toolResultStatus(result) !== 'cancelled')
+      recordFiles(messageId, before);
+    return result;
+  }
+  function applyProposal(messageId: string, ops: Operation[], basis?: string, apply = onApply) {
+    const before = captureFiles(messageId);
+    const applied = apply(ops, basis);
+    if (applied) recordFiles(messageId, before);
+    return applied;
   }
   async function send(resolvedEffort: ReasoningEffort | undefined) {
     if ((!input.trim() && !annotations.length) || busy || controller.current) return;
@@ -209,6 +283,8 @@ export default function Chat({
     setBusy(true);
     setStatus('Connecting…');
     const id = crypto.randomUUID();
+    if (getNativeFiles)
+      setFileChanges((items) => ({ ...items, [id]: { files: [], truncated: false } }));
     const basis = circuitFingerprint(submittedDoc);
     setMessages((m) => [
       ...m,
@@ -228,6 +304,7 @@ export default function Chat({
     setStreamedText('');
     setLiveModel('');
     follow.current = true;
+    setShowLatest(false);
     let text = '',
       failure = '',
       done = false;
@@ -251,6 +328,25 @@ export default function Chat({
       )
         return;
       handledRequests.add(event.requestId);
+      setToolCalls((items) =>
+        appendToolActivity(items, {
+          id: event.requestId,
+          messageId: id,
+          tool: event.tool,
+          name:
+            event.tool === 'openpe_observe' ? 'Project events' : event.arguments.name || event.tool,
+          status: 'running',
+          arguments: toolPreview(event.arguments),
+        }),
+      );
+      const updateTool = (update: Partial<AgentToolActivity>) => {
+        if (control.signal.aborted) return;
+        setToolCalls((items) =>
+          items.map((item) =>
+            item.messageId === id && item.id === event.requestId ? { ...item, ...update } : item,
+          ),
+        );
+      };
       const response = {
         sessionId,
         runId: event.runId,
@@ -262,7 +358,11 @@ export default function Chat({
         if (!runtime) throw new Error('The originating workbench capability host is unavailable.');
         const result = await resolveAgentCapability(
           event,
-          runtime,
+          {
+            query: (...args) => runtime.query(...args),
+            observe: (...args) => runtime.observe(...args),
+            execute: (name, input, options) => executeWithFiles(id, runtime, name, input, options),
+          },
           approvalLatest.current,
           (command) => {
             if (++reviewCount > 32)
@@ -277,6 +377,13 @@ export default function Chat({
                 'The review queue is full. Clear the conversation before requesting more reviewed commands.',
               );
             reviewSizes.current.set(command.id, bytes);
+            updateTool({
+              arguments: toolPreview({
+                name: command.name,
+                input: command.input,
+                expectedRevision: command.expectedRevision,
+              }),
+            });
             setCommandReviews((items) => [
               ...items,
               { messageId: id, command, host: runtime, status: 'pending' },
@@ -290,8 +397,17 @@ export default function Chat({
             'Capability result exceeds the response budget. Use a narrower query or page.',
           );
         payload = { ...response, result };
+        const activityStatus = toolResultStatus(result);
+        updateTool({
+          status: activityStatus,
+          result: activityStatus === 'review' ? undefined : toolPreview(result),
+        });
       } catch (error) {
         payload = { ...response, error: String((error as Error).message).slice(0, 4000) };
+        updateTool({
+          status: 'failed',
+          error: payload.error,
+        });
       }
       if (control.signal.aborted) return;
       try {
@@ -301,7 +417,7 @@ export default function Chat({
           signal: control.signal,
         });
       } catch (error) {
-        if (!control.signal.aborted) setSendError((error as Error).message);
+        updateTool({ deliveryError: `Result delivery failed: ${(error as Error).message}` });
       }
     };
     try {
@@ -316,6 +432,7 @@ export default function Chat({
         method: 'POST',
         body: JSON.stringify({
           sessionId,
+          ...(requestTitle ? { requestTitle: true } : {}),
           capabilities: Boolean(runtime),
           provider,
           prompt,
@@ -336,13 +453,15 @@ export default function Chat({
           },
           history: messages
             .filter(
-              (m) => (!m.error || m.outcome === 'cancelled') && (m.text || m.annotations?.length),
+              (m) =>
+                (!m.error || m.outcome === 'cancelled') &&
+                (withoutSessionTitle(m.text) || m.annotations?.length),
             )
             .slice(-16)
             .map((m) => ({
               role: m.role,
               text:
-                m.text +
+                withoutSessionTitle(m.text) +
                 (m.annotations?.length
                   ? '\nPrevious annotation metadata (screenshots remain in the conversation UI; not reattached): ' +
                     JSON.stringify(annotationContext(m.annotations))
@@ -387,7 +506,7 @@ export default function Chat({
       if (!done)
         throw new Error('Connection closed before the response completed. Partial text was kept.');
       if (failure) outcome = 'failed';
-      if (outcome === 'completed' && !text && !failure) {
+      if (outcome === 'completed' && !withoutSessionTitle(text) && !failure) {
         failure = 'No response content received.';
         outcome = 'failed';
       }
@@ -406,7 +525,7 @@ export default function Chat({
       if (outcome === 'completed' && !control.signal.aborted && approvalMode === 'auto') {
         try {
           const ops = extractProposal(text);
-          if (ops) applied = applyLatest.current(ops, basis);
+          if (ops) applied = applyProposal(id, ops, basis, applyLatest.current);
         } catch {
           // Invalid proposals remain visible for review and never change the schematic.
         }
@@ -428,9 +547,20 @@ export default function Chat({
             : x,
         ),
       );
+      if (requestTitle && outcome === 'completed' && !control.signal.aborted) {
+        const title = suggestedSessionTitle(text);
+        if (title) onSuggestedTitle?.(title, id);
+      }
       setBusy(false);
       setStatus('');
       setActiveId(null);
+      setToolCalls((items) =>
+        items.map((item) =>
+          item.messageId === id && item.status === 'running'
+            ? { ...item, status: 'cancelled', error: 'Tool response interrupted.' }
+            : item,
+        ),
+      );
       // EOF, provider failure and server shutdown cancel any host command still
       // awaiting a tool response. Review buttons own separate user controllers.
       control.abort();
@@ -445,21 +575,40 @@ export default function Chat({
     reviewClaims.current.add(reviewId);
     const control = new AbortController();
     reviewControls.current.set(reviewId, control);
+    const updateTool = (update: Partial<AgentToolActivity>) =>
+      setToolCalls((items) =>
+        items.map((entry) =>
+          entry.messageId === item.messageId && entry.id === reviewId
+            ? { ...entry, ...update }
+            : entry,
+        ),
+      );
+    updateTool({ status: 'applying', result: undefined });
     setCommandReviews((items) =>
       items.map((entry) =>
         entry.command.id === reviewId ? { ...entry, status: 'applying' } : entry,
       ),
     );
     try {
-      const result = await item.host.execute(item.command.name, item.command.input, {
-        expectedRevision: item.command.expectedRevision,
-        signal: control.signal,
-      });
+      const result = await executeWithFiles(
+        item.messageId,
+        item.host,
+        item.command.name,
+        item.command.input,
+        {
+          expectedRevision: item.command.expectedRevision,
+          signal: control.signal,
+        },
+      );
       const cancelled =
         !!result &&
         typeof result === 'object' &&
         'status' in result &&
         result.status === 'cancelled';
+      updateTool({
+        status: cancelled ? 'cancelled' : 'applied',
+        result: toolPreview(result),
+      });
       setCommandReviews((items) =>
         items.map((entry) =>
           entry.command.id === reviewId
@@ -468,13 +617,16 @@ export default function Chat({
         ),
       );
     } catch (error) {
+      updateTool({
+        status: 'failed',
+        error: (error as Error).message,
+      });
       setCommandReviews((items) =>
         items.map((entry) =>
           entry.command.id === reviewId
             ? {
                 ...entry,
                 status: 'failed',
-                error: (error as Error).message,
               }
             : entry,
         ),
@@ -511,7 +663,7 @@ export default function Chat({
               className="proposal-apply"
               aria-label="Apply to schematic"
               onClick={() => {
-                if (onApply(ops!, message.basis))
+                if (applyProposal(message.id, ops!, message.basis))
                   setMessages((m) =>
                     m.map((x) => (x.id === message.id ? { ...x, applied: true } : x)),
                   );
@@ -540,142 +692,147 @@ export default function Chat({
     <aside className="chat-panel" hidden={!active}>
       <div className="chat-header">
         <div className="session-picker">
-          <span className="session-title">{conversationTitle}</span>
+          <h2 className="session-title">{conversationTitle}</h2>
         </div>
         {onToggleSidebar && (
           <SidebarToggle side="left" visible={Boolean(sidebarVisible)} onToggle={onToggleSidebar} />
         )}
       </div>
-      <div
-        ref={scroll}
-        className="chat-scroll"
-        onScroll={(event) => {
-          const el = event.currentTarget;
-          follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-        }}
-      >
-        {!messages.length ? (
-          <div className="chat-welcome">
-            {[
-              'Design a 12 V to 5 V, 1 A buck converter',
-              'Build a bridge rectifier with a smoothing capacitor',
-              'Design an RC filter to smooth a 20 kHz PWM signal',
-            ].map((s) => (
-              <button key={s} className="suggestion" onClick={() => setInput(s)}>
-                <span>{s}</span>
-                <ArrowUpRight size={14} />
-              </button>
-            ))}
-          </div>
-        ) : (
-          messages.map((m) => (
-            <article key={m.id} className={`message ${m.role} ${m.error ? 'error' : ''}`}>
-              {m.id === activeId ? (
-                <ChatProgress status={status || 'Connecting…'} startedAt={startedAt} />
-              ) : m.timings ? (
-                <ChatTiming timings={m.timings} />
-              ) : null}
-              {m.role === 'assistant' && (
-                <div className="message-author">
-                  <span className="tiny-agent">
-                    <AgentLogo provider={m.provider || provider} size={14} />
-                  </span>
-                  {agentName(m.provider || provider)}
-                </div>
-              )}
-              {m.role === 'assistant' ? (
-                <AssistantResponse
-                  text={
-                    (m.id === activeId ? streamedText : m.text) ||
-                    (!busy && !m.errorText ? 'No response content.' : '')
-                  }
-                />
-              ) : m.text ? (
-                <div className="message-text">{m.text}</div>
-              ) : null}
-              {!!m.annotations?.length && <AnnotationAttachments annotations={m.annotations} />}
-              {m.errorText && (
-                <div className="message-error" role="status">
-                  {m.errorText}
-                </div>
-              )}
-              {m.role === 'assistant' && !m.error && m.id !== activeId && proposal(m)}
-              {commandReviews
-                .filter((item) => item.messageId === m.id)
-                .map((item) => (
-                  <div className="proposal" key={item.command.id}>
-                    <div className="proposal-header">
-                      <CircuitBoard size={15} aria-hidden="true" />
-                      <strong>{item.command.name}</strong>
-                      {item.status === 'pending' ? (
-                        <>
-                          <button
-                            className="proposal-apply"
-                            onClick={() => void applyCommandReview(item.command.id)}
-                            aria-label={`Apply ${item.command.name}`}
-                          >
-                            <Check size={14} aria-hidden="true" />
-                            Apply
-                          </button>
-                          <button
-                            className="proposal-apply"
-                            onClick={() => {
-                              reviewClaims.current.add(item.command.id);
-                              setCommandReviews((items) =>
-                                items.map((entry) =>
-                                  entry.command.id === item.command.id
-                                    ? { ...entry, status: 'rejected' }
-                                    : entry,
-                                ),
-                              );
-                            }}
-                          >
-                            Reject
-                          </button>
-                        </>
-                      ) : (
-                        <span className="proposal-status">
-                          {item.status === 'applying'
-                            ? 'Applying…'
-                            : item.status === 'applied'
-                              ? 'Applied'
-                              : item.status === 'cancelled'
-                                ? 'Cancelled'
-                                : item.status === 'rejected'
-                                  ? 'Rejected'
-                                  : 'Failed'}
-                        </span>
-                      )}
-                    </div>
-                    {item.command.input !== undefined && (
-                      <details>
-                        <summary>Arguments</summary>
-                        <textarea
-                          aria-label={`${item.command.name} arguments`}
-                          readOnly
-                          value={JSON.stringify(item.command.input, null, 2)}
-                          rows={8}
-                          style={{
-                            width: '100%',
-                            boxSizing: 'border-box',
-                            resize: 'vertical',
-                            fontFamily: 'ui-monospace, monospace',
-                          }}
-                        />
-                      </details>
-                    )}
-                    {item.error && (
-                      <div className="message-error" role="status">
-                        {item.error}
-                      </div>
-                    )}
-                  </div>
+      <div className="chat-body">
+        <div
+          ref={scroll}
+          className="chat-scroll"
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            setShowLatest(!follow.current);
+          }}
+        >
+          <div className="chat-transcript">
+            {!messages.length ? (
+              <div className="chat-welcome">
+                {[
+                  'Design a 12 V to 5 V, 1 A buck converter',
+                  'Build a bridge rectifier with a smoothing capacitor',
+                  'Design an RC filter to smooth a 20 kHz PWM signal',
+                ].map((s) => (
+                  <button key={s} className="suggestion" onClick={() => setInput(s)}>
+                    <span>{s}</span>
+                    <ArrowUpRight size={14} />
+                  </button>
                 ))}
-              {(m.id === activeId ? liveModel : m.model) && (
-                <div className="message-model">{m.id === activeId ? liveModel : m.model}</div>
-              )}
-            </article>
-          ))
+              </div>
+            ) : (
+              messages.map((m) => (
+                <article key={m.id} className={`message ${m.role} ${m.error ? 'error' : ''}`}>
+                  {m.role === 'assistant' && (
+                    <div className="message-author">
+                      <span className="tiny-agent">
+                        <AgentLogo provider={m.provider || provider} size={14} />
+                      </span>
+                      <span className="message-agent-name">
+                        {agentName(m.provider || provider)}
+                      </span>
+                      {m.id === activeId && (
+                        <ChatProgress
+                          status={
+                            toolCalls.some(
+                              (item) => item.messageId === m.id && item.status === 'running',
+                            )
+                              ? 'Using OpenPE tools…'
+                              : status || 'Connecting…'
+                          }
+                          startedAt={startedAt}
+                        />
+                      )}
+                      {m.id !== activeId && m.timings && <ChatTiming timings={m.timings} />}
+                    </div>
+                  )}
+                  {toolCalls.some((item) => item.messageId === m.id) && (
+                    <div className="agent-tool-list" aria-label="OpenPE tool activity">
+                      {toolCalls
+                        .filter((item) => item.messageId === m.id)
+                        .map((item) => {
+                          const review = commandReviews.find(
+                            (entry) => entry.messageId === m.id && entry.command.id === item.id,
+                          );
+                          return (
+                            <AgentToolCall
+                              key={item.id}
+                              activity={item}
+                              reviewCommand={review?.command}
+                              onApply={
+                                review?.status === 'pending'
+                                  ? () => void applyCommandReview(item.id)
+                                  : undefined
+                              }
+                              onReject={
+                                review?.status === 'pending'
+                                  ? () => {
+                                      reviewClaims.current.add(item.id);
+                                      setCommandReviews((items) =>
+                                        items.map((entry) =>
+                                          entry.command.id === item.id
+                                            ? { ...entry, status: 'rejected' }
+                                            : entry,
+                                        ),
+                                      );
+                                      setToolCalls((items) =>
+                                        items.map((entry) =>
+                                          entry.messageId === m.id && entry.id === item.id
+                                            ? { ...entry, status: 'rejected', result: undefined }
+                                            : entry,
+                                        ),
+                                      );
+                                    }
+                                  : undefined
+                              }
+                            />
+                          );
+                        })}
+                    </div>
+                  )}
+                  {m.role === 'assistant' ? (
+                    <AssistantResponse
+                      text={
+                        (m.id === activeId ? streamedText : m.text) ||
+                        (!busy && !m.errorText ? 'No response content.' : '')
+                      }
+                    />
+                  ) : m.text ? (
+                    <div className="message-text">{m.text}</div>
+                  ) : null}
+                  {!!m.annotations?.length && <AnnotationAttachments annotations={m.annotations} />}
+                  {m.errorText && (
+                    <div className="message-error" role="status">
+                      {m.errorText}
+                    </div>
+                  )}
+                  {m.role === 'assistant' && !m.error && m.id !== activeId && proposal(m)}
+                  {m.role === 'assistant' &&
+                    fileChanges[m.id] &&
+                    (m.id !== activeId ||
+                      fileChanges[m.id].files.length > 0 ||
+                      fileChanges[m.id].unavailable) && (
+                      <AgentFileChanges changes={fileChanges[m.id]} />
+                    )}
+                </article>
+              ))
+            )}
+          </div>
+        </div>
+        {showLatest && (
+          <button
+            className="chat-jump-latest"
+            onClick={() => {
+              follow.current = true;
+              setShowLatest(false);
+              if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+            }}
+          >
+            <ArrowDown size={14} aria-hidden="true" />
+            Latest messages
+          </button>
         )}
       </div>
       <div className="composer-area">

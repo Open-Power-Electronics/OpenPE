@@ -4,6 +4,7 @@ export function spiceFailure(output, reason = '') {
   let code;
   if (
     !message &&
+    !/fatal error|error on line/i.test(output) &&
     /timestep too small|transient op failed|operating point.*(?:failed|could not)/i.test(output)
   ) {
     code = 'OPENPE_SPICE_CONVERGENCE';

@@ -63,6 +63,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     '../server/example-footprints.mjs': { prepareExampleFootprints: async () => {} },
     '../server/project-format.mjs': {},
     '../server/enclosure-step.mjs': {},
+    '../server/manufacturing-format.mjs': {},
   };
   const required: Record<string, unknown> = {
     electron: {

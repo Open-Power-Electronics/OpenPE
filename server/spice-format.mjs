@@ -804,6 +804,33 @@ var example_models_lock_default = {
   ]
 };
 
+// resources/emc-flyback-models-lock.json
+var emc_flyback_models_lock_default = {
+  version: 1,
+  models: [
+    {
+      id: "emc-flyback-control",
+      file: "circuits/EMC_flyback_control.lib",
+      sha256: "a14c4f15e04f71b14516bf0c0310a340542007455366d3027be6b347e2ffd990"
+    },
+    {
+      id: "emc-flyback-irf520n",
+      file: "circuits/EMC_IRF520N.lib",
+      sha256: "18f550ce97364443584040a446fda2da0f80112e8f8a3e5e19c540db14fabf24"
+    },
+    {
+      id: "emc-flyback-es2d",
+      file: "circuits/EMC_ES2D.lib",
+      sha256: "efdb2de11b34a6ac43143733dab76c0b56fc8d9d763e2ebc7084d9d16affa1e7"
+    },
+    {
+      id: "emc-flyback-ss510c",
+      file: "circuits/EMC_SS510C.lib",
+      sha256: "f514e87c3677bd64e0b28b6ad5189f41dc790ec10812d36e1d23c69df3cc3291"
+    }
+  ]
+};
+
 // lib/simulation-models.ts
 var simulationModelDefinitions = [
   ...tiModels.map((model) => ({
@@ -820,7 +847,8 @@ var simulationModelDefinitions = [
     id: model.id,
     sha256: model.sha256,
     file: `circuits/${model.file.replace(/\.[^.]+$/, ".lib")}`
-  }))
+  })),
+  ...emc_flyback_models_lock_default.models
 ];
 var definitionsByFile = /* @__PURE__ */ new Map();
 var caseInsensitiveFiles = /* @__PURE__ */ new Set();
@@ -1310,7 +1338,7 @@ function displayPartValue(part) {
   const fields3 = partFields(part);
   const params = fields3["Sim.Params"];
   const value2 = params ? singleSimulationParameter(params)?.value ?? params : "";
-  if (params && fields3["Sim.Device"] === "V" && ["PULSE", "SIN"].includes(fields3["Sim.Type"]) && part.value === part.libId.split(":").at(-1) && fields3["OpenPE.ModelSource"] !== "external" && (fields3["OpenPE.ModelSource"] === "basic" || !fields3["Sim.Library"]?.trim()) && !extraSymbolAnnotations(part).some((field) => field.name === "Sim.Params"))
+  if (params && ["V", "I"].includes(fields3["Sim.Device"]) && ["PULSE", "SIN"].includes(fields3["Sim.Type"]) && part.value === part.libId.split(":").at(-1) && fields3["OpenPE.ModelSource"] !== "external" && (fields3["OpenPE.ModelSource"] === "basic" || !fields3["Sim.Library"]?.trim()) && !extraSymbolAnnotations(part).some((field) => field.name === "Sim.Params"))
     return params;
   return value2 ? part.value.replaceAll("${SIM.PARAMS}", value2) : part.value;
 }
@@ -5989,6 +6017,661 @@ var kicad_starter_symbols_default = {
     [
       "symbol",
       '"VDC_1_1"',
+      [
+        "pin",
+        "passive",
+        "line",
+        [
+          "at",
+          "0",
+          "5.08",
+          "270"
+        ],
+        [
+          "length",
+          "2.54"
+        ],
+        [
+          "name",
+          '""',
+          [
+            "effects",
+            [
+              "font",
+              [
+                "size",
+                "1.27",
+                "1.27"
+              ]
+            ]
+          ]
+        ],
+        [
+          "number",
+          '"1"',
+          [
+            "effects",
+            [
+              "font",
+              [
+                "size",
+                "1.27",
+                "1.27"
+              ]
+            ]
+          ]
+        ]
+      ],
+      [
+        "pin",
+        "passive",
+        "line",
+        [
+          "at",
+          "0",
+          "-5.08",
+          "90"
+        ],
+        [
+          "length",
+          "2.54"
+        ],
+        [
+          "name",
+          '""',
+          [
+            "effects",
+            [
+              "font",
+              [
+                "size",
+                "1.27",
+                "1.27"
+              ]
+            ]
+          ]
+        ],
+        [
+          "number",
+          '"2"',
+          [
+            "effects",
+            [
+              "font",
+              [
+                "size",
+                "1.27",
+                "1.27"
+              ]
+            ]
+          ]
+        ]
+      ]
+    ],
+    [
+      "embedded_fonts",
+      "no"
+    ]
+  ],
+  "Simulation_SPICE:IPULSE": [
+    "symbol",
+    '"Simulation_SPICE:IPULSE"',
+    [
+      "pin_numbers",
+      [
+        "hide",
+        "yes"
+      ]
+    ],
+    [
+      "pin_names",
+      [
+        "offset",
+        "0.0254"
+      ]
+    ],
+    [
+      "exclude_from_sim",
+      "no"
+    ],
+    [
+      "in_bom",
+      "yes"
+    ],
+    [
+      "on_board",
+      "yes"
+    ],
+    [
+      "in_pos_files",
+      "yes"
+    ],
+    [
+      "duplicate_pin_numbers_are_jumpers",
+      "no"
+    ],
+    [
+      "property",
+      '"Reference"',
+      '"I"',
+      [
+        "at",
+        "2.54",
+        "2.54",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ],
+        [
+          "justify",
+          "left"
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Value"',
+      '"IPULSE"',
+      [
+        "at",
+        "2.54",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ],
+        [
+          "justify",
+          "left"
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Footprint"',
+      '""',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Datasheet"',
+      '"https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#sec_Independent_Sources_for"',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Description"',
+      '"Current source, pulse"',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Sim.Pins"',
+      '"1=+ 2=-"',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Sim.Device"',
+      '"I"',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ],
+        [
+          "justify",
+          "left"
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Sim.Type"',
+      '"PULSE"',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"Sim.Params"',
+      '"y1=0 y2=1 td=2n tr=2n tf=2n tw=50n per=100n"',
+      [
+        "at",
+        "2.54",
+        "-2.54",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ],
+        [
+          "justify",
+          "left"
+        ]
+      ]
+    ],
+    [
+      "property",
+      '"ki_keywords"',
+      '"simulation"',
+      [
+        "at",
+        "0",
+        "0",
+        "0"
+      ],
+      [
+        "show_name",
+        "no"
+      ],
+      [
+        "do_not_autoplace",
+        "no"
+      ],
+      [
+        "hide",
+        "yes"
+      ],
+      [
+        "effects",
+        [
+          "font",
+          [
+            "size",
+            "1.27",
+            "1.27"
+          ]
+        ]
+      ]
+    ],
+    [
+      "symbol",
+      '"IPULSE_0_0"',
+      [
+        "polyline",
+        [
+          "pts",
+          [
+            "xy",
+            "-2.032",
+            "-0.762"
+          ],
+          [
+            "xy",
+            "-1.397",
+            "-0.762"
+          ],
+          [
+            "xy",
+            "-1.143",
+            "0.762"
+          ],
+          [
+            "xy",
+            "-0.127",
+            "0.762"
+          ],
+          [
+            "xy",
+            "0.127",
+            "-0.762"
+          ],
+          [
+            "xy",
+            "1.143",
+            "-0.762"
+          ],
+          [
+            "xy",
+            "1.397",
+            "0.762"
+          ],
+          [
+            "xy",
+            "2.032",
+            "0.762"
+          ]
+        ],
+        [
+          "stroke",
+          [
+            "width",
+            "0"
+          ],
+          [
+            "type",
+            "default"
+          ]
+        ],
+        [
+          "fill",
+          [
+            "type",
+            "none"
+          ]
+        ]
+      ]
+    ],
+    [
+      "symbol",
+      '"IPULSE_0_1"',
+      [
+        "polyline",
+        [
+          "pts",
+          [
+            "xy",
+            "-0.254",
+            "1.778"
+          ],
+          [
+            "xy",
+            "0",
+            "1.27"
+          ],
+          [
+            "xy",
+            "0.254",
+            "1.778"
+          ]
+        ],
+        [
+          "stroke",
+          [
+            "width",
+            "0"
+          ],
+          [
+            "type",
+            "default"
+          ]
+        ],
+        [
+          "fill",
+          [
+            "type",
+            "none"
+          ]
+        ]
+      ],
+      [
+        "polyline",
+        [
+          "pts",
+          [
+            "xy",
+            "0",
+            "1.27"
+          ],
+          [
+            "xy",
+            "0",
+            "2.286"
+          ]
+        ],
+        [
+          "stroke",
+          [
+            "width",
+            "0"
+          ],
+          [
+            "type",
+            "default"
+          ]
+        ],
+        [
+          "fill",
+          [
+            "type",
+            "none"
+          ]
+        ]
+      ],
+      [
+        "circle",
+        [
+          "center",
+          "0",
+          "0"
+        ],
+        [
+          "radius",
+          "2.54"
+        ],
+        [
+          "stroke",
+          [
+            "width",
+            "0.254"
+          ],
+          [
+            "type",
+            "default"
+          ]
+        ],
+        [
+          "fill",
+          [
+            "type",
+            "background"
+          ]
+        ]
+      ]
+    ],
+    [
+      "symbol",
+      '"IPULSE_1_1"',
       [
         "pin",
         "passive",
@@ -13615,7 +14298,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear"
       },
@@ -13624,7 +14307,7 @@ var reference_simulation_default = {
     {
       id: "reference-tps61046-bga6-boost",
       title: "TPS61046 Boost",
-      stop: 0.01,
+      stop: 2e-3,
       input: {
         pin: "A1",
         minimum: 1.8,
@@ -13960,7 +14643,7 @@ var reference_simulation_default = {
           sim: {},
           modelId: "",
           modelName: "",
-          value: "100"
+          value: "1000"
         },
         {
           ref: "#PWR1",
@@ -13997,7 +14680,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -14484,7 +15167,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -15181,7 +15864,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -15714,7 +16397,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -15725,7 +16408,7 @@ var reference_simulation_default = {
     {
       id: "reference-lm27761-wson8-pump",
       title: "LM27761 Charge Pump",
-      stop: 5e-3,
+      stop: 2e-3,
       input: {
         pin: "1",
         minimum: 2.7,
@@ -16111,7 +16794,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -16652,7 +17335,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -17080,7 +17763,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9"
@@ -17638,7 +18321,7 @@ var reference_simulation_default = {
       ],
       directives: [],
       options: {
-        itl4: "1000",
+        itl4: "50",
         reltol: "0.005",
         method: "gear",
         rshunt: "1e9",
@@ -17658,6 +18341,7 @@ function simulationModelSource(fields3) {
   return mode ?? (fields3["Sim.Library"]?.trim() ? "external" : "basic");
 }
 function basicSimulationKind(part) {
+  if (part.libId === "Simulation_SPICE:IPULSE") return "I";
   if ([
     "Device:R",
     "Device:R_Small",
@@ -17682,8 +18366,8 @@ function basicSimulationAvailable(part) {
 function assertSimulationModelConfiguration(part, fields3 = partFields(part)) {
   const explicit = fields3["OpenPE.ModelSource"];
   simulationModelSource(fields3);
-  if (fields3["OpenPE.SourceType"] !== void 0 && (basicSimulationKind(part) !== "V" || !["DC", "PULSE", "SIN"].includes(fields3["OpenPE.SourceType"])))
-    throw new Error(`${part.ref}: unsupported voltage source type.`);
+  if (fields3["OpenPE.SourceType"] !== void 0 && (!["V", "I"].includes(basicSimulationKind(part) || "") || !["DC", "PULSE", "SIN"].includes(fields3["OpenPE.SourceType"])))
+    throw new Error(`${part.ref}: unsupported source waveform.`);
   if (explicit === "basic" && !basicSimulationAvailable(part))
     throw new Error(`${part.ref}: no basic simulation model is available for this component.`);
   if (explicit === "external" && (!fields3["Sim.Library"]?.trim() || !fields3["Sim.Name"]?.trim()))
@@ -17696,7 +18380,7 @@ function assertSimulationModelConfiguration(part, fields3 = partFields(part)) {
 function effectiveSimulationModelFields(part, fields3, reviewedDefaults) {
   simulationModelSource(fields3);
   const result = { ...fields3 };
-  if (simulationModelSource(fields3) === "basic" && basicSimulationKind(part) === "V" && fields3["OpenPE.SourceType"])
+  if (simulationModelSource(fields3) === "basic" && ["V", "I"].includes(basicSimulationKind(part) || "") && fields3["OpenPE.SourceType"])
     result["Sim.Type"] = fields3["OpenPE.SourceType"];
   if (fields3["OpenPE.ModelSource"] !== "basic") return result;
   if (!basicSimulationAvailable(part)) return result;
@@ -17706,10 +18390,11 @@ function effectiveSimulationModelFields(part, fields3, reviewedDefaults) {
   const definition = definitions.find(
     (candidate) => candidate.libId === part.libId && candidate.kind === kind
   );
-  const defaults2 = reviewedDefaults ?? definition?.sim ?? (["R", "C", "L"].includes(kind) ? { "Sim.Device": kind, "Sim.Type": "=", "Sim.Pins": "1=+ 2=-" } : {});
+  const defaults2 = reviewedDefaults ?? definition?.sim ?? (kind === "I" ? { "Sim.Device": "I", "Sim.Type": "PULSE", "Sim.Pins": "1=+ 2=-" } : ["R", "C", "L"].includes(kind) ? { "Sim.Device": kind, "Sim.Type": "=", "Sim.Pins": "1=+ 2=-" } : {});
   for (const name of ["Sim.Device", "Sim.Type", "Sim.Pins"])
     if (defaults2[name] !== void 0) result[name] = defaults2[name];
-  if (kind === "V" && fields3["OpenPE.SourceType"]) result["Sim.Type"] = fields3["OpenPE.SourceType"];
+  if (["V", "I"].includes(kind) && fields3["OpenPE.SourceType"])
+    result["Sim.Type"] = fields3["OpenPE.SourceType"];
   return result;
 }
 
@@ -17789,6 +18474,35 @@ function primitiveInitialCondition(kind, fields3, reference) {
     );
   return fields3[name] === void 0 ? void 0 : simulationParameterValue(name, fields3[name], reference);
 }
+function spiceInitialConditions(conditions, skipOperatingPoint = false) {
+  if (skipOperatingPoint || conditions.some(({ kind }) => kind === "L"))
+    return { lines: [], uic: true };
+  const edges = conditions.flatMap(({ positive, negative, value: value2, groundedSeriesNode }) => [
+    { positive, negative, value: value2 },
+    ...groundedSeriesNode ? [{ positive: groundedSeriesNode, negative: "0", value: 0 }] : []
+  ]);
+  const voltages = /* @__PURE__ */ new Map([["0", 0]]);
+  let pending = edges;
+  while (pending.length) {
+    const remaining = [];
+    for (const edge of pending) {
+      const positive = voltages.get(edge.positive), negative = voltages.get(edge.negative);
+      if (positive !== void 0 && negative !== void 0) {
+        if (Math.abs(positive - negative - edge.value) > 1e-9 * Math.max(1, Math.abs(edge.value)))
+          throw new Error("Conflicting capacitor initial voltages on connected nodes.");
+      } else if (positive !== void 0) voltages.set(edge.negative, positive - edge.value);
+      else if (negative !== void 0) voltages.set(edge.positive, negative + edge.value);
+      else remaining.push(edge);
+    }
+    if (remaining.length === pending.length) return { lines: [], uic: true };
+    pending = remaining;
+  }
+  const values = [...voltages].filter(([node]) => node !== "0");
+  return {
+    lines: values.length ? [`.ic ${values.map(([node, value2]) => `v(${node})=${value2}`).join(" ")}`] : [],
+    uic: false
+  };
+}
 
 // lib/spice-timing.ts
 function validateTransientTiming(config) {
@@ -17846,7 +18560,7 @@ function simulationSourceValues(type, text, literalValue, reference) {
   if (type === "DC") {
     const dc = text ? values.dc : numericSimulationParameters(`dc=${literalValue}`, ["dc"]).dc;
     if (!Number.isFinite(dc) || Math.abs(dc) > 1e4)
-      throw new Error(`${reference}: invalid source voltage.`);
+      throw new Error(`${reference}: invalid DC source level.`);
     return { dc };
   }
   if (type === "PULSE") {
@@ -17884,7 +18598,7 @@ function fields(d, p, reviewedDefaults) {
 }
 function exampleSimulationProfile(d) {
   const original = profiles.find(
-    (profile) => simulationParts(d).every(
+    (profile) => !profile.id.startsWith("reference-") && simulationParts(d).every(
       (actual) => profile.parts.some((p) => actual.ref === p.ref && actual.libId === p.libId)
     ) && profile.parts.every(
       (p) => d.parts.some((actual) => actual.ref === p.ref && actual.libId === p.libId)
@@ -17897,14 +18611,13 @@ function exampleSimulationProfile(d) {
       (profile) => profile.parts.filter((def) => def.kind === "X").map((def) => def.sim["Sim.Library"])
     )
   );
-  const controller = simulationParts(d).find(
-    (p) => controllerLibraries.has(fields(d, p)["Sim.Library"])
+  const isKnownController = (p, def) => def.kind === "X" && signature(d, p) === def.signature && (fields(d, p)["Sim.Library"] === def.sim["Sim.Library"] || p.libId === def.libId);
+  const controller = d.parts.find(
+    (p) => controllerLibraries.has(fields(d, p)["Sim.Library"]) || candidates.some((profile) => profile.parts.some((def) => isKnownController(p, def)))
   );
   if (!controller) return void 0;
   const base = candidates.find(
-    (profile) => profile.parts.some(
-      (def) => def.kind === "X" && fields(d, controller)["Sim.Library"] === def.sim["Sim.Library"] && signature(d, controller) === def.signature
-    )
+    (profile) => profile.parts.some((def) => isKnownController(controller, def))
   );
   if (!base) return void 0;
   const known = candidates.flatMap((p) => p.parts);
@@ -17923,10 +18636,11 @@ function exampleSimulationProfile(d) {
         modelName: "",
         value: p.value
       };
+    const binding = fields(d, p);
     const definition = known.find(
-      (def) => def.libId === p.libId && def.signature === actualSignature
+      (def) => def.signature === actualSignature && (def.kind === "X" ? binding["Sim.Library"] === def.sim["Sim.Library"] && binding["Sim.Name"] === def.sim["Sim.Name"] : def.libId === p.libId)
     );
-    if (definition) return { ...definition, ref: p.ref };
+    if (definition) return { ...definition, ref: p.ref, libId: p.libId };
     const kind = /^Device:([RCL])$/.exec(p.libId)?.[1];
     if (kind && libraries[p.libId] && signature({ ...d, libraries }, p) === actualSignature)
       return {
@@ -17954,7 +18668,7 @@ function exampleSimulationProfile(d) {
       value: p.value
     };
   });
-  if (parts.filter((p) => p.kind === "X").length !== 1) return void 0;
+  if (parts.filter((p) => p.kind === "X").length > 1) return void 0;
   const magnetic = parts.find((p) => p.kind === "T");
   return {
     ...base,
@@ -18034,7 +18748,7 @@ function validate(d, profile) {
     assertSimulationModelConfiguration(p);
     const def = profile.parts.find((v) => v.ref === p.ref);
     if (def.kind === "unsupported")
-      throw new Error(`${p.ref}: no allowlisted library model for ${p.libId}.`);
+      throw new Error(`${p.ref}: unsupported model identity or simulation field for ${p.libId}.`);
     const signature2 = unitGraphics(d.libraries[p.libId], p.unit || 1).flatMap((s) => children(s, "pin")).map(
       (pin) => JSON.stringify([
         val(child(pin, "number")),
@@ -18189,7 +18903,7 @@ function buildExampleSpice(d, c) {
     ".model OPENPE_DEFAULT_M VDMOS",
     ".model OPENPE_BOOST_D D(Is=1u N=1.05 Rs=0.02)"
   ];
-  let explicitInitialConditions = false;
+  const initialConditions = [];
   const currents = [];
   const identifiers = /* @__PURE__ */ new Map();
   d.parts.forEach((p, i) => {
@@ -18244,7 +18958,13 @@ function buildExampleSpice(d, c) {
       const initial = primitiveInitialCondition(def.kind, fields(d, p), p.ref);
       if (initial !== void 0) {
         body += ` IC=${initial}`;
-        explicitInitialConditions = true;
+        initialConditions.push({
+          kind: def.kind,
+          positive: ns[0],
+          negative: ns[1],
+          value: initial,
+          ...nets.node(p, def.pinOrder[0]) === "0" && ns[0] !== "0" ? { groundedSeriesNode: ns[0] } : {}
+        });
       }
     }
     lines.push(`${name} ${ns.join(" ")} ${body}`);
@@ -18291,13 +19011,15 @@ function buildExampleSpice(d, c) {
   }
   traces.push(...currents);
   const vectors = traces.map((t) => t.vector).join(" ");
+  const initialization = spiceInitialConditions(initialConditions, profile.initialConditions);
   lines.push(
+    ...initialization.lines,
     `.save ${vectors}`,
     ".control",
     "set wr_singlescale",
     "set wr_vecnames",
     "set numdgt=15",
-    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${profile.initialConditions || explicitInitialConditions ? " uic" : ""}`,
+    `tran ${transientOutputStep(c)} ${c.stop} 0 ${c.step}${initialization.uic ? " uic" : ""}`,
     "linearize",
     `wrdata waveforms.txt ${vectors}`,
     "quit",
@@ -18581,7 +19303,7 @@ function buildModelBuck(d, c) {
     buck_simulation_default.definition,
     ".model OPENPE_DEMO_D D"
   ];
-  let explicitInitialConditions = false;
+  const initialConditions = [];
   const currents = [];
   const connected = /* @__PURE__ */ new Map();
   const link = (a, b) => {
@@ -18609,7 +19331,8 @@ function buildModelBuck(d, c) {
       if (value2 <= 0) throw new Error(`${p.ref}: ${kind} must be positive.`);
       if (kind !== "L") vector2 = `@${name.toLowerCase()}[i]`;
       const initial = kind === "C" || kind === "L" ? primitiveInitialCondition(kind, f, p.ref) : void 0;
-      if (initial !== void 0) explicitInitialConditions = true;
+      if (initial !== void 0 && (kind === "C" || kind === "L"))
+        initialConditions.push({ kind, positive: a("+"), negative: a("-"), value: initial });
       lines.push(
         `${name} ${a("+")} ${a("-")} ${value2}${initial === void 0 ? "" : ` IC=${initial}`}`
       );
@@ -18672,13 +19395,15 @@ function buildModelBuck(d, c) {
   );
   traces.push(...currents);
   const vectors = traces.map((t) => t.vector).join(" ");
+  const initialization = spiceInitialConditions(initialConditions);
   lines.push(
+    ...initialization.lines,
     `.save ${vectors}`,
     ".control",
     "set wr_singlescale",
     "set wr_vecnames",
     "set numdgt=15",
-    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}${explicitInitialConditions ? " uic" : ""}`,
+    `tran ${Math.min(c.step, c.stop)} ${c.stop} 0 ${c.step}${initialization.uic ? " uic" : ""}`,
     `wrdata waveforms.txt ${vectors}`,
     "quit",
     ".endc",
@@ -18864,7 +19589,12 @@ var emc_flyback_simulation_default = {
       ref: "U1",
       libId: "Regulator_Controller:UC3845_SOIC8",
       value: "UC3845B",
-      simulation: {},
+      simulation: {
+        "Sim.Library": "circuits/EMC_flyback_control.lib",
+        "Sim.Name": "UC3845B",
+        "Sim.Device": "SUBCKT",
+        "Sim.Pins": "1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8"
+      },
       pins: '["1",["-12.7","5.08","0"],["2.54"],"passive"]|["2",["-12.7","2.54","0"],["2.54"],"input"]|["3",["12.7","-5.08","180"],["2.54"],"input"]|["4",["-12.7","-5.08","0"],["2.54"],"passive"]|["5",["0","-10.16","90"],["2.54"],"power_in"]|["6",["12.7","5.08","180"],["2.54"],"output"]|["7",["0","10.16","270"],["2.54"],"power_in"]|["8",["-12.7","-2.54","0"],["2.54"],"power_out"]'
     },
     {
@@ -18955,7 +19685,13 @@ var emc_flyback_simulation_default = {
       ref: "Q1",
       libId: "Transistor_FET:IRF540N",
       value: "IRF520NPBF",
-      simulation: {},
+      simulation: {
+        "Sim.Library": "circuits/EMC_IRF520N.lib",
+        "Sim.Name": "EMC_IRF520N",
+        "Sim.Device": "NMOS",
+        "Sim.Type": "VDMOS",
+        "Sim.Pins": "2=D 1=G 3=S"
+      },
       pins: '["1",["-5.08","0","0"],["2.54"],"input"]|["2",["2.54","5.08","270"],["2.54"],"passive"]|["3",["2.54","-5.08","90"],["2.54"],"passive"]'
     },
     {
@@ -18992,7 +19728,9 @@ var emc_flyback_simulation_default = {
       value: "ES2D",
       simulation: {
         "Sim.Device": "D",
-        "Sim.Pins": "1=K 2=A"
+        "Sim.Pins": "2=A 1=K",
+        "Sim.Library": "circuits/EMC_ES2D.lib",
+        "Sim.Name": "EMC_ES2D"
       },
       pins: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]'
     },
@@ -19049,14 +19787,24 @@ var emc_flyback_simulation_default = {
       ref: "D3",
       libId: "Device:D_Schottky",
       value: "SS510C",
-      simulation: {},
+      simulation: {
+        "Sim.Library": "circuits/EMC_SS510C.lib",
+        "Sim.Name": "EMC_SS510C",
+        "Sim.Device": "D",
+        "Sim.Pins": "2=A 1=K"
+      },
       pins: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]'
     },
     {
       ref: "D7",
       libId: "Device:D_Schottky",
       value: "SS510C",
-      simulation: {},
+      simulation: {
+        "Sim.Library": "circuits/EMC_SS510C.lib",
+        "Sim.Name": "EMC_SS510C",
+        "Sim.Device": "D",
+        "Sim.Pins": "2=A 1=K"
+      },
       pins: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]'
     },
     {
@@ -19154,7 +19902,12 @@ var emc_flyback_simulation_default = {
       ref: "U3",
       libId: "Reference_Voltage:TL431DBZ",
       value: "TL431AIDBZR",
-      simulation: {},
+      simulation: {
+        "Sim.Library": "circuits/EMC_flyback_control.lib",
+        "Sim.Name": "TL431B",
+        "Sim.Device": "SUBCKT",
+        "Sim.Pins": "1=1 3=2 2=3"
+      },
       pins: '["1",["2.54","0","180"],["2.54"],"passive"]|["2",["0","2.54","270"],["2.54"],"passive"]|["3",["-2.54","0","0"],["2.54"],"passive"]'
     },
     {
@@ -19189,7 +19942,12 @@ var emc_flyback_simulation_default = {
       ref: "U4",
       libId: "Isolator:LTV-817S",
       value: "LTV-817S",
-      simulation: {},
+      simulation: {
+        "Sim.Library": "circuits/EMC_flyback_control.lib",
+        "Sim.Name": "LTV817",
+        "Sim.Device": "SUBCKT",
+        "Sim.Pins": "1=1 2=2 4=3 3=4"
+      },
       pins: '["1",["-7.62","2.54","0"],["2.54"],"passive"]|["2",["-7.62","-2.54","0"],["2.54"],"passive"]|["3",["7.62","-2.54","180"],["2.54"],"passive"]|["4",["7.62","2.54","180"],["2.54"],"passive"]'
     },
     {
@@ -19688,6 +20446,56 @@ var emc_flyback_simulation_default = {
       value: "CHASSIS",
       simulation: {},
       pins: '["1",["0","0","270"],["0"],"power_in"]'
+    },
+    {
+      ref: "V1",
+      libId: "Simulation_SPICE:VDC",
+      value: "${SIM.PARAMS}",
+      simulation: {
+        "Sim.Pins": "1=+ 2=-",
+        "Sim.Type": "DC",
+        "Sim.Device": "V",
+        "Sim.Params": "dc=24"
+      },
+      pins: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]'
+    },
+    {
+      ref: "R21",
+      libId: "Device:R",
+      value: "10m",
+      simulation: {},
+      pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
+    },
+    {
+      ref: "V2",
+      libId: "Simulation_SPICE:VDC",
+      value: "${SIM.PARAMS}",
+      simulation: {
+        "Sim.Pins": "1=+ 2=-",
+        "Sim.Type": "DC",
+        "Sim.Device": "V",
+        "Sim.Params": "dc=12"
+      },
+      pins: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]'
+    },
+    {
+      ref: "R22",
+      libId: "Device:R",
+      value: "100",
+      simulation: {},
+      pins: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]'
+    },
+    {
+      ref: "I1",
+      libId: "Simulation_SPICE:IPULSE",
+      value: "${SIM.PARAMS}",
+      simulation: {
+        "Sim.Pins": "1=+ 2=-",
+        "Sim.Device": "I",
+        "Sim.Type": "PULSE",
+        "Sim.Params": "y1=0.5 y2=0 td=2m tr=10u tf=10u tw=2m per=1"
+      },
+      pins: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]'
     }
   ],
   noConnectPins: [
@@ -19695,11 +20503,11 @@ var emc_flyback_simulation_default = {
     "T1.6"
   ],
   groups: [
-    "#PWR088.1|#PWR089.1|#PWR090.1|#PWR093.1|#PWR094.1|#PWR095.1|#PWR096.1|#PWR099.1|#PWR100.1|#PWR101.1|#PWR103.1|#PWR104.1|#PWR105.1|#PWR106.1|#PWR107.1|#PWR108.1|#PWR109.1|#PWR110.1|#PWR111.1|#PWR114.1|#PWR115.1|#PWR117.1|#PWR118.1|#PWR119.1|#PWR120.1|#PWR121.1|#PWR122.1|#PWR123.1|#PWR124.1|#PWR126.1|#PWR127.1|#PWR128.1|#PWR129.1|#PWR131.1|#PWR132.1|#PWR133.1|#PWR135.1|#PWR136.1|#PWR137.1|#PWR138.1|C1.2|C10.2|C11.2|C12.2|C13.2|C14.2|C18.2|C19.2|C20.2|C21.2|C23.1|C24.1|C3.2|C4.2|C5.2|C6.2|C7.2|C8.2|C9.2|CASE.2|CM2.2|D5.1|D6.1|J4.1|L1.4|PGND1.1|PGND2.1|R11.2|R13.2|R16.2|R4.2|SGCH.1|SGND.1|T1.10|T1.11|T1.12|U1.2|U1.5|U2.2|U3.3|U4.3|YPS.2|YPS.4",
+    "#PWR088.1|#PWR089.1|#PWR090.1|#PWR093.1|#PWR094.1|#PWR095.1|#PWR096.1|#PWR099.1|#PWR100.1|#PWR101.1|#PWR103.1|#PWR104.1|#PWR105.1|#PWR106.1|#PWR107.1|#PWR108.1|#PWR109.1|#PWR110.1|#PWR111.1|#PWR114.1|#PWR115.1|#PWR117.1|#PWR118.1|#PWR119.1|#PWR120.1|#PWR121.1|#PWR122.1|#PWR123.1|#PWR124.1|#PWR126.1|#PWR127.1|#PWR128.1|#PWR129.1|#PWR131.1|#PWR132.1|#PWR133.1|#PWR135.1|#PWR136.1|#PWR137.1|#PWR138.1|C1.2|C10.2|C11.2|C12.2|C13.2|C14.2|C18.2|C19.2|C20.2|C21.2|C23.1|C24.1|C3.2|C4.2|C5.2|C6.2|C7.2|C8.2|C9.2|CASE.2|CM2.2|D5.1|D6.1|I1.2|J4.1|L1.4|PGND1.1|PGND2.1|R11.2|R13.2|R16.2|R22.2|R4.2|SGCH.1|SGND.1|T1.10|T1.11|T1.12|U1.2|U1.5|U2.2|U3.3|U4.3|V1.2|V2.2|YPS.2|YPS.4",
     "#PWR091.1|#PWR102.1|#PWR130.1|#PWR134.1|#PWR139.1|CASE.4|CHAS.1|J5.1|SGCH.2|YCAP.2",
-    "#PWR092.1|#PWR097.1|#PWR098.1|#PWR113.1|C15.2|C4.1|C5.1|C6.1|C7.1|DM.2|L2.2|R1.1|R10.2|R20.2|R9.2|T1.1|T1.2|U2.3|VBUS.1",
-    "#PWR112.1|#PWR125.1|C17.2|C18.1|C19.1|C20.1|C21.1|D3.1|D7.1|J3.1|R13.1|R14.1|R15.1|R17.1|VOUT.1",
-    "#PWR116.1|C8.1|C9.1|U1.7|U2.1",
+    "#PWR092.1|#PWR097.1|#PWR098.1|#PWR113.1|C15.2|C4.1|C5.1|C6.1|C7.1|DM.2|L2.2|R1.1|R10.2|R20.2|R21.2|R9.2|T1.1|T1.2|U2.3|VBUS.1",
+    "#PWR112.1|#PWR125.1|C17.2|C18.1|C19.1|C20.1|C21.1|D3.1|D7.1|I1.1|J3.1|R13.1|R14.1|R15.1|R17.1|R22.1|VOUT.1",
+    "#PWR116.1|C8.1|C9.1|U1.7|U2.1|V2.1",
     "C1.1|C2.1|CM1.2|DM.1|L1.2|L2.1",
     "C10.1|R2.2|U1.4",
     "C11.1|R2.1|U1.8",
@@ -19728,6 +20536,7 @@ var emc_flyback_simulation_default = {
     "GATE.1|Q1.1|R5.2|R6.2|R7.2|R8.1",
     "R17.2|R18.1|U4.1",
     "R18.2|R19.1|U3.1|U4.2",
+    "R21.1|V1.1",
     "R5.1|RG.2",
     "R6.1|RG.4",
     "R7.1|RG.6",
@@ -19736,9 +20545,6 @@ var emc_flyback_simulation_default = {
     "T1.6"
   ]
 };
-
-// lib/emc-flyback-control.ts
-var emcFlybackControl = "* EMC_flyback_control.lib\n* Behavioural models for the control loop of the EMC demo flyback (rev B board):\n*   UC3845B  current-mode PWM controller   (U1)\n*   TL431B   shunt reference / error amp   (U3)\n*   LTV817   optocoupler                   (U4)\n* Only B-sources, F-sources, R, C and D are used, so the same file runs in LTspice and ngspice.\n* Global parameters used (define them on the schematic): CTR, FOPTO, RDIV\n*\n* ======================================================================= UC3845B\n* Pin order = datasheet pins 1..8: COMP FB ISENSE RTCT GND OUT VCC VREF\n* What is modelled:\n*  - 5 V reference, UVLO (on above 8.4 V)\n*  - oscillator: RT/CT charged from VREF via RT, discharged with 8.3 mA between 2.8 V (peak) and 1.2 V (valley)\n*  - toggle flip-flop (UC3845 = half the oscillator frequency, max. duty < 50 %)\n*  - PWM latch: set by the oscillator, reset when V(ISENSE) > (V(COMP)-1.4 V)/3, clamped at 1.0 V\n*  - ~70 ns current-sense-to-output delay, totem-pole output VOH = VCC-1.5 V, 4 ohm, ~15 ns edges\n*  - error amplifier: with FB grounded the COMP pin is pulled high by a 0.8 mA source (datasheet typ.),\n*    VOH 5.5 V; it can sink up to 6 mA. The internal 2R/R divider that feeds the current-sense comparator\n*    loads COMP with (V(COMP)-1.4 V)/RDIV (RDIV is not given in the datasheet: an assumption, default 30k)\n.subckt UC3845B COMP FB ISENSE RTCT GN OUT VCC VREF\n* reference + UVLO\nBon en GN V=u(V(VCC,GN)-8.4)\nBref vr GN V=5*V(en,GN)\nRref vr VREF 2\n* oscillator latch d = 1 while discharging\nBd dd GN V=u(V(RTCT,GN)-2.8) + u(V(RTCT,GN)-1.2)*(1-u(V(RTCT,GN)-2.8))*u(V(d,GN)-0.5)\nRd dd d 1k\nCd d GN 1p\nBdis RTCT GN I=8.3m*u(V(d,GN)-0.5)\n* toggle flip-flop (master m, slave q), clocked by d\nBm mm GN V=u(V(d,GN)-0.5)*(1-u(V(q,GN)-0.5)) + (1-u(V(d,GN)-0.5))*u(V(m,GN)-0.5)\nRm mm m 1k\nCm m GN 1p\nBq qq GN V=u(V(d,GN)-0.5)*u(V(q,GN)-0.5) + (1-u(V(d,GN)-0.5))*u(V(m,GN)-0.5)\nRq qq q 1k\nCq q GN 1p\n* error amplifier (inverting input FB, internal 2.5 V reference), current-limited output\nBtg tg GN V=min(5.5, max(0.1, 2.5 + 1e4*(2.5-V(FB,GN))))\nBea GN COMP I=min(0.8m, max(-6m, (V(tg,GN)-V(COMP,GN))/100))\nBdiv COMP GN I=max(0, V(COMP,GN)-1.4)/{RDIV}\nRfb FB GN 100Meg\nRcp COMP GN 10Meg\n* current-sense comparator (threshold (Vcomp-1.4)/3, 1 V clamp) with ~70 ns delay\nBth th GN V=min(1, max(0, (V(COMP,GN)-1.4)/3))\nBcmp cc GN V=u(V(ISENSE,GN)-V(th,GN))\nRc cc c 1k\nCc c GN 100p\nRis ISENSE GN 10Meg\n* PWM latch: set while the oscillator discharges, reset by the comparator\nBl ll GN V=u(V(d,GN)-0.5) + (1-u(V(d,GN)-0.5))*(1-u(V(c,GN)-0.5))*u(V(l,GN)-0.5)\nRl ll l 1k\nCl l GN 1p\n* output stage (blanked during discharge, enabled after 1 us so the DC operating point starts with Q1 off)\nBo oo GN V=(V(VCC,GN)-1.5)*(1-u(V(d,GN)-0.5))*u(V(l,GN)-0.5)*u(V(q,GN)-0.5)*V(en,GN)*u(time-1u)\nRo oo o 1k\nCo o GN 15p\nBdrv od GN V=V(o,GN)\nRout od OUT 4\n.ends UC3845B\n*\n* ======================================================================= TL431B\n* Pins: K A REF. Vref = 2.495 V, open-loop gain 60 dB with a 1.5 kHz pole, cathode current >= 0,\n* needs V(K,A) > ~1.5 V, 0.3 mA quiescent current.\n.subckt TL431B K A REF\nBx xe A V=min(30, max(-1, 1000*(V(REF,A)-2.495)))\nRx xe x 1k\nCx x A 106n\nBk K A I=(1m*max(V(x,A),0)+0.3m)*(1-exp(-max(V(K,A)-1.0,0)/0.3))\nRr REF A 50Meg\n.ends TL431B\n*\n* ======================================================================= LTV817\n* Pins: A K C E. LED (Vf ~1.1 V at 1 mA) -> collector current = CTR * I_LED with a single pole FOPTO,\n* soft saturation below ~0.3 V V(C,E).\n.subckt LTV817 A K C E\nVs A a1 0\nD1 a1 K LEDIR\nF1 E fi Vs 1\nRfi fi E 1k\nCfi fi E {1/(6.2832*1k*FOPTO)}\nBc C E I={CTR}*V(fi,E)/1k*(1-exp(-max(V(C,E),0)/0.15))\nCce C E 10p\n.model LEDIR D(Is=1.5e-13 N=1.8 Rs=2 Cjo=30p)\n.ends LTV817\n";
 
 // lib/emc-flyback-initial-state.ts
 var emcFlybackCapacitorEsr = {
@@ -19771,7 +20577,6 @@ function emcFlybackInitialNodeGroups(node) {
 }
 
 // lib/spice-emc-flyback.ts
-var emcFlybackLoadOhms = 100;
 var isEmcFlyback = (d) => d.parts.some((p) => p.libId === "EMC_Demo:Wurth_750311591");
 var emcFlybackResistors = [
   "R2",
@@ -19786,7 +20591,9 @@ var emcFlybackResistors = [
   "R16",
   "R17",
   "R18",
-  "R19"
+  "R19",
+  "R21",
+  "R22"
 ];
 var emcFlybackCapacitors = [
   "C4",
@@ -19805,8 +20612,22 @@ var emcFlybackCapacitors = [
 ];
 var resistors = emcFlybackResistors;
 var capacitors = emcFlybackCapacitors;
-var configurable = /* @__PURE__ */ new Set([...resistors, ...capacitors]);
+var sources = /* @__PURE__ */ new Set(["V1", "V2", "I1"]);
+var virtualResistors = /* @__PURE__ */ new Set(["R21", "R22"]);
+var configurable = /* @__PURE__ */ new Set([...resistors, ...capacitors, ...sources]);
 var zeroNames = ["PGND", "SGND"];
+function sourceFields(part) {
+  return effectiveSimulationModelFields(part, partFields(part));
+}
+function sourceExpression(part) {
+  const fields3 = sourceFields(part);
+  return simulationSourceExpression(
+    fields3["Sim.Type"],
+    fields3["Sim.Params"] || "",
+    part.value,
+    part.ref
+  );
+}
 function emcFlybackDefaults() {
   return {
     inputId: "",
@@ -19875,9 +20696,14 @@ function validate2(d) {
         )
       ).filter(([key]) => /^spice|^sim[._]/i.test(key))
     );
-    if (JSON.stringify(simulation) !== JSON.stringify(expected.simulation))
+    if ([.../* @__PURE__ */ new Set([...Object.keys(simulation), ...Object.keys(expected.simulation)])].some(
+      (key) => !(sources.has(p.ref) && ["Sim.Params", "Sim.Type"].includes(key)) && simulation[key] !== expected.simulation[key]
+    ))
       throw new Error(`${p.ref}: custom simulation fields are not supported by EMC Flyback.`);
-    if (configurable.has(p.ref)) {
+    if ((sources.has(p.ref) || virtualResistors.has(p.ref)) && partFields(p).Footprint?.trim())
+      throw new Error(`${p.ref}: the external simulation testbench must remain virtual.`);
+    if (sources.has(p.ref)) sourceExpression(p);
+    else if (configurable.has(p.ref)) {
       if (/[\r\n]/.test(p.value) || p.value.trim().replace(/^\S+/, "") !== expected.value.trim().replace(/^\S+/, ""))
         throw new Error(
           `${p.ref}: retain the original value rating and use a single numeric component value.`
@@ -19927,7 +20753,7 @@ function buildEmcFlybackSpice(d, c) {
     (key) => !Object.hasOwn(expected, key) || !["stop", "step"].includes(key) && c[key] !== expected[key]
   ))
     throw new Error(
-      "Electrical settings follow the EMC Flyback schematic and bounded 24 V bench. Only Duration and Max. time step can be changed."
+      "Electrical settings follow the EMC Flyback schematic testbench. Only Duration and Max. time step can be changed here."
     );
   validateTransientTiming(c);
   const part = (ref) => d.parts.find((p) => p.ref === ref);
@@ -19937,10 +20763,7 @@ function buildEmcFlybackSpice(d, c) {
     "OpenPE EMC Flyback closed-loop behavioural transient",
     ".options reltol=0.001 abstol=1e-9 gmin=1e-10",
     ".param CTR=1 FOPTO=20k RDIV=30k",
-    emcFlybackControl,
-    ".model EMC_IRF520N VDMOS(Vto=3.6 Kp=6 lambda=0.03 Rd=0.11 Rs=0.025 Rg=2.5 Cgdmax=600p Cgdmin=25p a=0.5 Cgs=300p Cjo=260p M=0.55 Vj=0.8 Is=2e-12 Rb=0.02 N=1.1 Tt=60n)",
-    ".model EMC_ES2D D(Is=1e-9 N=1.8 Rs=0.05 Cjo=20p M=0.4 Tt=20n BV=200 Ibv=5u)",
-    ".model EMC_SS510C D(Is=5e-5 N=1.1 Rs=0.02 Cjo=300p M=0.5 BV=100 Ibv=50u)"
+    ...emc_flyback_models_lock_default.models.map((_, index) => `.include example-model-${index}.lib`)
   ];
   const currents = [];
   const addNodes = (...ns) => ns.forEach((n) => nodes.add(n));
@@ -19953,13 +20776,15 @@ function buildEmcFlybackSpice(d, c) {
       unit: "A",
       vector: `@${ref.toLowerCase()}[i]`,
       targets: [{ kind: "current", id: p.id }],
-      dissipation: {
-        positivePin: "1",
-        negativePin: "2",
-        positiveNode: a,
-        negativeNode: b,
-        method: "resistor"
-      }
+      ...!virtualResistors.has(ref) ? {
+        dissipation: {
+          positivePin: "1",
+          negativePin: "2",
+          positiveNode: a,
+          negativeNode: b,
+          method: "resistor"
+        }
+      } : {}
     });
   }
   const esr = emcFlybackCapacitorEsr;
@@ -19996,12 +20821,21 @@ function buildEmcFlybackSpice(d, c) {
       }
     });
   }
+  for (const ref of sources) {
+    const p = part(ref), a = node(ref, "1"), b = node(ref, "2");
+    addNodes(a, b);
+    lines.push(`${ref} ${a} ${b} ${sourceExpression(p)}`);
+    if (ref.startsWith("V"))
+      currents.push({
+        label: `I(${ref}) \xB7 pin 1 \u2192 2`,
+        unit: "A",
+        vector: `i(${ref.toLowerCase()})`,
+        targets: [{ kind: "current", id: p.id }]
+      });
+  }
   const bus = node("T1", "1"), drain = node("Q1", "2"), gate = node("Q1", "1"), cs = node("Q1", "3"), sec = node("D3", "2"), out = node("D3", "1");
   addNodes(bus, drain, gate, cs, sec, out);
   lines.push(
-    `VVIN emc_vin 0 24`,
-    `RVIN emc_vin ${bus} 0.01`,
-    `VVCC ${node("U1", "7")} 0 12`,
     `VRG ${node("RG", "1")} ${node("RG", "2")} 0`,
     `RPRI ${bus} emc_pri 0.015`,
     `LPRI emc_pri ${drain} 8u`,
@@ -20013,8 +20847,6 @@ function buildEmcFlybackSpice(d, c) {
     `XU1 ${Array.from({ length: 8 }, (_, i) => node("U1", String(i + 1))).join(" ")} UC3845B`,
     `XU3 ${node("U3", "1")} ${node("U3", "3")} ${node("U3", "2")} TL431B`,
     `XU4 ${node("U4", "1")} ${node("U4", "2")} ${node("U4", "4")} ${node("U4", "3")} LTV817`,
-    `RLOAD ${out} 0 ${emcFlybackLoadOhms}`,
-    `ILOAD ${out} 0 PULSE(0.5 0 2m 10u 10u 2m 1)`,
     ...emcFlybackInitialNodeGroups(node).map(
       (group) => `.ic ${group.map(([name, value2]) => `V(${name})=${value2}`).join(" ")}`
     )
@@ -20038,8 +20870,7 @@ function buildEmcFlybackSpice(d, c) {
       unit: "A",
       vector: "i(lpri)",
       targets: [{ kind: "current", id: part("T1").id }]
-    },
-    { label: "I(VIN) \xB7 into the source", unit: "A", vector: "i(vvin)" }
+    }
   );
   const traces = [];
   for (const entry of nets.probeNodes()) {
@@ -20073,13 +20904,14 @@ function buildEmcFlybackSpice(d, c) {
     ""
   );
   return {
+    modelIds: emc_flyback_models_lock_default.models.map((model) => model.id),
     netlist: lines.join("\n"),
     traces,
     stop: c.stop,
     assumptions: [
       "Pinned AI-PCB-layout EMC Flyback closed-loop behavioural bench: fitted IRF520N, generic ES2D/SS510C and behavioural UC3845B/TL431/LTV817; these are approximate non-vendor models.",
-      "24 V is applied at VBUS after the omitted input EMI/protection network; L78L12 is an ideal 12 V supply. RG selects R5 (4.7 ohm); drain snubber, indicators, output bleeder, auxiliary winding, case and common-mode/Y-cap paths are omitted. PGND and SGND share simulator ground only.",
-      `T1 uses 8 uH primary, 1.5 turns ratio, coupling 0.9747 and fixed winding/ESR parasitics from the upstream bench. The external load is ${emcFlybackLoadOhms} ohm plus a 0.5 A step off at 2 ms and back on at 4 ms; initial conditions approximate steady state.`,
+      "Visible virtual V1/R21 feed VBUS after the omitted input EMI/protection network; V2 supplies the controller VCC instead of modeling L78L12 regulation. RG selects R5; drain snubber, indicators, output bleeder, auxiliary winding, case and common-mode/Y-cap paths are omitted. PGND and SGND share simulator ground only.",
+      "T1 uses 8 uH primary, 1.5 turns ratio, coupling 0.9747 and fixed winding/ESR parasitics from the upstream bench. Visible R22 and I1 define the output load. Source waveforms, source resistance and output resistance follow the current schematic; initial conditions approximate steady state. External testbench losses are excluded from PCB heat.",
       "Current values and supported R/C values follow the current native schematic. Q1 heat uses the fitted model drain-source current and its internal source voltage, excluding the series 10 nH source parasitic, gate, controller, transformer and omitted-device losses.",
       "The model supports electrical trends and a bounded board heat-source estimate; it does not predict conducted EMC, junction/case temperature, complete board losses or production safety."
     ]
@@ -20245,9 +21077,10 @@ function spiceNets(d, groundNames = []) {
   });
   const names = /* @__PURE__ */ new Map();
   d.labels.forEach((l, i) => {
-    const previous = names.get(l.text);
+    const labelName = groundNames.includes(l.text) ? "GND" : l.text;
+    const previous = names.get(labelName);
     if (previous !== void 0) join(labels[i], previous);
-    names.set(l.text, labels[i]);
+    names.set(labelName, labels[i]);
   });
   const grounds = [];
   for (const p of d.parts) {
@@ -20389,7 +21222,7 @@ function buildSpiceDeck(d, input) {
     vendor ? "OpenPE TI LM2596 transient" : "OpenPE ideal switching transient",
     ".options reltol=0.001 abstol=1e-9"
   ];
-  let explicitInitialConditions = false;
+  const initialConditions = [];
   const adjacency = /* @__PURE__ */ new Map();
   const connect = (a, b) => {
     for (const [x, y] of [
@@ -20420,7 +21253,14 @@ function buildSpiceDeck(d, input) {
       const internal = `sense${i + 1}`;
       if (measured) lines.push(`VSENSE${i + 1} ${positive} ${internal} 0`);
       const initial = kind === "C" || kind === "L" ? primitiveInitialCondition(kind, partFields(p), p.ref) : void 0;
-      if (initial !== void 0) explicitInitialConditions = true;
+      if (initial !== void 0 && (kind === "C" || kind === "L"))
+        initialConditions.push({
+          kind,
+          positive: measured ? internal : positive,
+          negative: b,
+          value: initial,
+          ...measured && positive === "0" ? { groundedSeriesNode: internal } : {}
+        });
       lines.push(
         kind ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(partFields(p)["OpenPE.ModelSource"] === "basic" ? displayPartValue(p) : p.value, kind)}${initial === void 0 ? "" : ` IC=${initial}`}` : `${name} ${measured ? internal : positive} ${a} OPENPE_DIODE`
       );
@@ -20529,13 +21369,15 @@ function buildSpiceDeck(d, input) {
     if (!traces.some((t) => t.vector === trace.vector)) traces.push(trace);
   const vectors = traces.map((t) => t.vector).join(" ");
   const sampleStep = vendor ? transientOutputStep(c) : Math.min(c.step, c.stop);
+  const initialization = spiceInitialConditions(initialConditions);
   lines.push(
+    ...initialization.lines,
     `.save ${vectors}`,
     ".control",
     "set wr_singlescale",
     "set wr_vecnames",
     "set numdgt=15",
-    `tran ${sampleStep} ${c.stop} 0 ${c.step}${explicitInitialConditions ? " uic" : ""}`,
+    `tran ${sampleStep} ${c.stop} 0 ${c.step}${initialization.uic ? " uic" : ""}`,
     ...vendor ? ["linearize"] : [],
     `wrdata waveforms.txt ${vectors}`,
     "quit",

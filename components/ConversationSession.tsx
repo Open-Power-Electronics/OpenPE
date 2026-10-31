@@ -1,5 +1,5 @@
 import { memo, useCallback, type ComponentProps, type Dispatch, type SetStateAction } from 'react';
-import { sessionTitle, type ChatSession } from '@/lib/chat-sessions';
+import { applySuggestedSessionTitle, sessionTitle, type ChatSession } from '@/lib/chat-sessions';
 import type { AgentAnnotation } from '@/lib/agent-annotations';
 import Chat, { type ChatDesign } from './Chat';
 
@@ -18,6 +18,8 @@ type Props = Omit<
   | 'setAnnotations'
   | 'setMessages'
   | 'getDesign'
+  | 'onSuggestedTitle'
+  | 'requestTitle'
 > & {
   session: ChatSession;
   setSessions: Dispatch<SetStateAction<ChatSession[]>>;
@@ -59,6 +61,12 @@ export default memo(function ConversationSession({
     [id, setSessions],
   );
   const design = annotationDesign ?? getDesign();
+  const onSuggestedTitle = useCallback(
+    (title: string, messageId: string) => {
+      setSessions((items) => applySuggestedSessionTitle(items, id, messageId, title));
+    },
+    [id, setSessions],
+  );
   return (
     <Chat
       {...props}
@@ -66,6 +74,8 @@ export default memo(function ConversationSession({
       getDesign={getDesign}
       sessionId={id}
       conversationTitle={sessionTitle(session)}
+      requestTitle={session.name === undefined}
+      onSuggestedTitle={onSuggestedTitle}
       input={session.draft}
       annotations={session.annotations ?? emptyAnnotations}
       messages={session.messages}

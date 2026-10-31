@@ -12,7 +12,12 @@ import { switchingStageFixture } from './fixtures/switching-stage';
 
 const id = 'reference-lmr70503';
 const digest = '1d661a243a8a44cab8f6e67448dfdafcc96249dea54f35927b25283e01e7aba9';
-const preparedModel = path.resolve('examples', 'models', `${id}-${digest}.lib`);
+const preparedModel = path.resolve(
+  'examples',
+  'lmr70503-bga8-buckboost',
+  'circuits',
+  'LMR70503.lib',
+);
 const deck = (): SpiceDeck => ({
   modelIds: [id],
   compatibility: 'ps',

@@ -5428,2414 +5428,2646 @@ var require_clipper = __commonJS({
 });
 
 // context/agent-workspace-context.ts
-import { parseProject } from "./project-format.mjs";
+import { parseProject as parseProject2 } from "./project-format.mjs";
 
-// examples/lm2596-to220-5-buck/datasheets/parameters.json
-var parameters_default = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lm2596-to220-5-buck",
-    file: "lm2596-to220-5-buck",
-    title: "LM2596 Buck",
-    topology: "Buck"
+// resources/example-catalog/ic-datasheets.json
+var ic_datasheets_default = [
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lm2596-to220-5-buck",
+      file: "lm2596-to220-5-buck",
+      title: "LM2596 Buck",
+      topology: "Buck"
+    },
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LM2596",
+      reference: "U1",
+      schematic_value: "LM2596T-ADJ",
+      symbol_library_id: "Regulator_Switching:LM2596T-ADJ",
+      footprint: "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
+      package: "TO-220-5",
+      datasheet_variant: "Adjustable output, TO-220-5"
+    },
+    datasheet: {
+      title: "LM2596 SIMPLE SWITCHER\xAE Power Converter 150-kHz 3-A Step-Down Voltage Regulator",
+      document_number: "SNVS124G",
+      revision: "G",
+      published_month: "2023-03",
+      product_url: "https://www.ti.com/product/LM2596",
+      source_url: "https://www.ti.com/lit/ds/symlink/lm2596.pdf",
+      filename: "lm2596.pdf",
+      sha256: "2eec90879908cf711b84d4f0c5d534c3cd12c576d25254b7019247435af4ab0f",
+      bytes: 5095029,
+      page_count: 47,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "These are physical IC datasheet specifications. The scoped OpenPE adjustable simulation derivative is not a TI-issued ADJ model; these specifications do not validate that derivative.",
+        "Output range and output current are device capabilities, not measured values for this example."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 4.5,
+          typ: null,
+          max: 40
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 5,
+          section: "7.3 Operating Conditions",
+          row: "Supply voltage"
+        }
+      },
+      output_voltage: {
+        category: "feature",
+        unit: "V",
+        values: {
+          min: 1.2,
+          typ: null,
+          max: 37
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Adjustable output range"
+        }
+      },
+      output_current: {
+        category: "feature",
+        unit: "A",
+        values: {
+          min: null,
+          typ: null,
+          max: 3
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Output load capability"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Operating temperature; interpreted as junction temperature consistently with the electrical-characteristic limits.",
+        source: {
+          page: 5,
+          section: "7.3 Operating Conditions",
+          row: "Temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: null,
+          typ: null,
+          max: 45
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 5,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Maximum supply voltage"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 5,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Maximum junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 5,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.193,
+          typ: 1.23,
+          max: 1.267
+        },
+        conditions: "Adjustable version, TJ = 25 degC; VIN = 4.5 to 40 V, ILOAD = 0.2 to 3 A; VOUT programmed for 3 V; Figure 9-13.",
+        source: {
+          page: 6,
+          section: "7.8 Electrical Characteristics - Adjustable Voltage Version",
+          row: "VFB"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 127e3,
+          typ: 15e4,
+          max: 173e3
+        },
+        conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. Frequency reduces under second-stage current limit.",
+        source: {
+          page: 7,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Oscillator frequency"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 3.6,
+          typ: 4.5,
+          max: 6.9
+        },
+        conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. No diode, inductor or capacitor on the output pin; feedback forced to 0 V (footnotes 4 and 5).",
+        source: {
+          page: 7,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Peak current limit"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 5e-3,
+          max: 0.01
+        },
+        conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. Feedback disconnected from output and tied to 12 V to force switch off (footnote 6).",
+        source: {
+          page: 7,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Operating quiescent current"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 8e-5,
+          max: 2e-4
+        },
+        conditions: "TJ = 25 degC, VIN = 40 V, ON/OFF pin = 5 V (off); footnote 7.",
+        source: {
+          page: 7,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Standby quiescent current"
+        }
+      },
+      maximum_duty_cycle: {
+        category: "electrical_characteristic",
+        unit: "1",
+        values: {
+          min: null,
+          typ: 1,
+          max: null
+        },
+        conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. Feedback forced to 0 V; footnote 5.",
+        source: {
+          page: 7,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Maximum duty cycle"
+        }
+      }
+    }
   },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LM2596",
-    reference: "U1",
-    schematic_value: "LM2596T-ADJ",
-    symbol_library_id: "Regulator_Switching:LM2596T-ADJ",
-    footprint: "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
-    package: "TO-220-5",
-    datasheet_variant: "Adjustable output, TO-220-5"
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-tps61046-bga6-boost",
+      file: "tps61046-bga6-boost",
+      title: "TPS61046 Boost",
+      topology: "Boost"
+    },
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "TPS61046",
+      reference: "U1",
+      schematic_value: "TPS61046",
+      symbol_library_id: "Reference:tps61046-bga6-boost",
+      footprint: "Package_BGA:Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC",
+      package: "BGA-6",
+      datasheet_variant: "TPS61046, 6-ball WCSP"
+    },
+    datasheet: {
+      title: "TPS61046 28-V Output Voltage Boost Converter in WCSP Package",
+      document_number: "SLVSCQ7",
+      revision: null,
+      published_month: "2015-04",
+      product_url: "https://www.ti.com/product/TPS61046",
+      source_url: "https://www.ti.com/lit/ds/symlink/tps61046.pdf",
+      filename: "tps61046.pdf",
+      sha256: "add7a1f0ea698136e45d777ba249d1877c96f2ec5f88f86d067fcb05e29bfe08",
+      bytes: 1153649,
+      page_count: 26,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "The 0.9 A typical limit is peak switch current, not guaranteed output current. Output-current capability depends on the conversion ratio and application.",
+        "The electrical table specifies 1.05 MHz typical switching frequency; the feature summary rounds this to 1 MHz.",
+        "The input operating range requires 1.8 V for startup. The feature summary permits 1.6 V after startup; that value is not the startup minimum."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 1.8,
+          typ: null,
+          max: 5.5
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "7.3 Recommended Operating Conditions",
+          row: "VIN input voltage range"
+        }
+      },
+      output_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 4.5,
+          typ: null,
+          max: 28
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "7.3 Recommended Operating Conditions",
+          row: "VOUT output voltage range"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "7.3 Recommended Operating Conditions",
+          row: "TJ"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.3,
+          typ: null,
+          max: 6
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "VIN terminal voltage"
+        }
+      },
+      switch_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.3,
+          typ: null,
+          max: 32
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "SW terminal voltage"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "TJ"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 0.779,
+          typ: 0.795,
+          max: 0.811
+        },
+        conditions: "VIN = 3.6 V, VOUT = 12 V, PWM mode, TJ = 0 to 125 degC; typical at 25 degC.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "VREF, PWM mode"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 85e4,
+          typ: 105e4,
+          max: 125e4
+        },
+        conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated. PWM mode.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "fSW"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 0.6,
+          typ: 0.9,
+          max: 1.2
+        },
+        conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "ILIM_SW"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 11e-5,
+          max: 2e-4
+        },
+        conditions: "IC enabled, no load, no switching; VIN = 1.8 to 5.5 V, VOUT = 12 V; typical at TJ = 25 degC, limits over -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "IQ_VIN"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 1e-7,
+          max: 8e-7
+        },
+        conditions: "IC disabled, VIN = 1.8 to 5.5 V, TJ up to 85 degC; typical at 25 degC.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "ISD, first temperature condition"
+        }
+      },
+      switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 0.45,
+          max: null
+        },
+        conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "Low-side MOSFET resistance"
+        }
+      },
+      startup_time: {
+        category: "electrical_characteristic",
+        unit: "s",
+        values: {
+          min: null,
+          typ: 2e-3,
+          max: 5e-3
+        },
+        conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated. VOUT rises from VIN to 12 V, effective COUT = 2.2 uF, IOUT = 0 A.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "tSTARTUP"
+        }
+      },
+      thermal_shutdown_temperature: {
+        category: "electrical_characteristic",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: 150,
+          max: null
+        },
+        conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated. Junction temperature rising.",
+        source: {
+          page: 5,
+          section: "7.5 Electrical Characteristics",
+          row: "TSD"
+        }
+      }
+    }
   },
-  datasheet: {
-    title: "LM2596 SIMPLE SWITCHER\xAE Power Converter 150-kHz 3-A Step-Down Voltage Regulator",
-    document_number: "SNVS124G",
-    revision: "G",
-    published_month: "2023-03",
-    product_url: "https://www.ti.com/product/LM2596",
-    source_url: "https://www.ti.com/lit/ds/symlink/lm2596.pdf",
-    filename: "lm2596.pdf",
-    sha256: "2eec90879908cf711b84d4f0c5d534c3cd12c576d25254b7019247435af4ab0f",
-    bytes: 5095029,
-    page_count: 47,
-    downloaded_on: "2026-10-22"
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lm2735-msop8-sepic",
+      file: "lm2735-msop8-sepic",
+      title: "LM2735 SEPIC",
+      topology: "SEPIC"
+    },
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LM2735",
+      reference: "U1",
+      schematic_value: "LM2735Y",
+      symbol_library_id: "Reference:lm2735-msop8-sepic",
+      footprint: "Package_SO:MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm",
+      package: "MSOP-8",
+      datasheet_variant: "LM2735-Y, MSOP-PowerPAD (DGN), 8 pins"
+    },
+    datasheet: {
+      title: "LM2735 520-kHz and 1.6-MHz Space-Efficient Boost and SEPIC DC/DC Regulator",
+      document_number: "SNVS485I",
+      revision: "I",
+      published_month: "2018-09",
+      product_url: "https://www.ti.com/product/LM2735",
+      source_url: "https://www.ti.com/lit/ds/symlink/lm2735.pdf",
+      filename: "lm2735.pdf",
+      sha256: "7564bb2f7164071f1c3971e935d19b47ae6a12891da12858004a9c48f907682e",
+      bytes: 1571061,
+      page_count: 61,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "The example uses LM2735Y (520 kHz typical), not LM2735X (1.6 MHz typical).",
+        "Feedback-voltage and switch-resistance entries use MSOP-PowerPAD specifications. Typical values are at TJ = 25 degC; specified limits are over the temperatures stated in each condition.",
+        "Peak switch-current limit is not an output-current rating; SEPIC output capability depends on input, output and external components."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 2.7,
+          typ: null,
+          max: 5.5
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "6.3 Recommended Operating Conditions",
+          row: "VIN"
+        }
+      },
+      output_voltage: {
+        category: "feature",
+        unit: "V",
+        values: {
+          min: 3,
+          typ: null,
+          max: 24
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Output voltage range"
+        },
+        notes: "Feature range for the regulator family; the example is a SEPIC application. It is not a guaranteed output at every conversion ratio."
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "6.3 Recommended Operating Conditions",
+          row: "Junction temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.5,
+          typ: null,
+          max: 7
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "VIN"
+        }
+      },
+      switch_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.5,
+          typ: null,
+          max: 26.5
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "SW voltage"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.22,
+          typ: 1.255,
+          max: 1.29
+        },
+        conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. MSOP-PowerPAD package.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "VFB, MSOP-PowerPAD full-temperature row"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 36e4,
+          typ: 52e4,
+          max: 68e4
+        },
+        conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "FSW, LM2735-Y"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 2.1,
+          typ: 3,
+          max: null
+        },
+        conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "ICL"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 34e-4,
+          max: 7e-3
+        },
+        conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Switching enabled.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "IQ switching, LM2735-Y"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 8e-8,
+          max: null
+        },
+        conditions: "VIN = 5 V, VEN = 0 V; typical at TJ = 25 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "IQ shutdown"
+        }
+      },
+      switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 0.17,
+          max: 0.33
+        },
+        conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. MSOP-PowerPAD package.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "RDS(ON), SOT-23 and MSOP-PowerPAD"
+        }
+      },
+      maximum_duty_cycle: {
+        category: "electrical_characteristic",
+        unit: "1",
+        values: {
+          min: 0.91,
+          typ: 0.99,
+          max: null
+        },
+        conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "DMAX, LM2735-Y"
+        }
+      },
+      soft_start_time: {
+        category: "electrical_characteristic",
+        unit: "s",
+        values: {
+          min: null,
+          typ: 4e-3,
+          max: null
+        },
+        conditions: "VIN = 5 V; typical at TJ = 25 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "SS"
+        }
+      },
+      thermal_shutdown_temperature: {
+        category: "electrical_characteristic",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: 160,
+          max: null
+        },
+        conditions: "VIN = 5 V; typical thermal shutdown threshold; it is not the permitted continuous operating temperature.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "TSD"
+        }
+      }
+    }
   },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "These are physical IC datasheet specifications. The scoped OpenPE adjustable simulation derivative is not a TI-issued ADJ model; these specifications do not validate that derivative.",
-      "Output range and output current are device capabilities, not measured values for this example."
-    ]
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lm25017-wson8-flybuck",
+      file: "lm25017-wson8-flybuck",
+      title: "LM25017 Fly-Buck",
+      topology: "Fly-Buck"
+    },
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LM25017",
+      reference: "U1",
+      schematic_value: "LM25017",
+      symbol_library_id: "Reference:lm25017-wson8-flybuck",
+      footprint: "Package_SON:WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm_ThermalVias",
+      package: "WSON-8",
+      datasheet_variant: "LM25017, WSON (NGU), 8 pins"
+    },
+    datasheet: {
+      title: "LM25017 48-V, 650-mA Constant On-Time Synchronous Buck/Fly-Buck\u2122 Regulator",
+      document_number: "SNVS951F",
+      revision: "F",
+      published_month: "2021-05",
+      product_url: "https://www.ti.com/product/LM25017",
+      source_url: "https://www.ti.com/lit/ds/symlink/lm25017.pdf",
+      filename: "lm25017.pdf",
+      sha256: "68e039d11701f352bfee8849f721ebb678771c8e374160f470484c182fc2c286",
+      bytes: 2155823,
+      page_count: 41,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "The 0.65 A feature is the integrated buck-stage capability. Available isolated secondary current depends on the Fly-Buck design and cannot be read as 0.65 A per output.",
+        "Switching frequency is resistor-programmed constant-on-time operation; 1 MHz is the feature ceiling, not a fixed oscillator frequency.",
+        "The datasheet states an adjustable output starting at 1.225 V; no universal output upper bound is extracted."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 7.5,
+          typ: null,
+          max: 48
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 5,
+          section: "6.3 Recommended Operating Conditions",
+          row: "VIN voltage"
+        }
+      },
+      output_voltage: {
+        category: "feature",
+        unit: "V",
+        values: {
+          min: 1.225,
+          typ: null,
+          max: null
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Adjustable output voltage"
+        }
+      },
+      output_current: {
+        category: "feature",
+        unit: "A",
+        values: {
+          min: null,
+          typ: null,
+          max: 0.65
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Integrated buck-stage capability"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 5,
+          section: "6.3 Recommended Operating Conditions",
+          row: "Operating junction temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.3,
+          typ: null,
+          max: 53
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 5,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "VIN to RTN"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 5,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Maximum junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -55,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 5,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.2,
+          typ: 1.225,
+          max: 1.25
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Internal comparator trip point for switch-on.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "FB regulation level"
+        }
+      },
+      switching_frequency_programmable_maximum: {
+        category: "feature",
+        unit: "Hz",
+        values: {
+          min: null,
+          typ: null,
+          max: 1e6
+        },
+        conditions: "Set by RON and the application operating point; this is not a fixed frequency or the frequency measured in the example.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Frequency adjustable ceiling"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 0.7,
+          typ: 1.02,
+          max: 1.3
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "Current limit threshold"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 175e-5,
+          max: null
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Non-switching, FB = 3 V.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "IIN operating current"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 5e-5,
+          max: 225e-6
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. UVLO = 0 V.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "IIN shutdown current"
+        }
+      },
+      switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 0.8,
+          max: 1.8
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. ITEST = 0.2 A, BST-SW = 7 V.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "Buck switch RDS(ON)"
+        }
+      },
+      synchronous_switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 0.45,
+          max: 1
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. ITEST = 0.2 A.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "Synchronous RDS(ON)"
+        }
+      },
+      thermal_shutdown_temperature: {
+        category: "electrical_characteristic",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: 165,
+          max: null
+        },
+        conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 6,
+          section: "6.5 Electrical Characteristics",
+          row: "Tsd"
+        }
+      }
+    }
   },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 4.5,
-        typ: null,
-        max: 40
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 5,
-        section: "7.3 Operating Conditions",
-        row: "Supply voltage"
-      }
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lm5001-soic8-boost",
+      file: "lm5001-soic8-boost",
+      title: "LM5001 Boost",
+      topology: "Boost"
     },
-    output_voltage: {
-      category: "feature",
-      unit: "V",
-      values: {
-        min: 1.2,
-        typ: null,
-        max: 37
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Adjustable output range"
-      }
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LM5001",
+      reference: "U1",
+      schematic_value: "LM5001",
+      symbol_library_id: "Regulator_Switching:LM5001MA",
+      footprint: "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+      package: "SOIC-8",
+      datasheet_variant: "LM5001 (non-Q1), SOIC-8"
     },
-    output_current: {
-      category: "feature",
-      unit: "A",
-      values: {
-        min: null,
-        typ: null,
-        max: 3
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Output load capability"
-      }
+    datasheet: {
+      title: "LM5001x High-Voltage Switch-Mode Regulator",
+      document_number: "SNVS484H",
+      revision: "H",
+      published_month: "2015-07",
+      product_url: "https://www.ti.com/product/LM5001",
+      source_url: "https://www.ti.com/lit/ds/symlink/lm5001.pdf",
+      filename: "lm5001.pdf",
+      sha256: "508ee28768a531b102587a1a55b5e17f5f5afc8b1828764a0867097280675742",
+      bytes: 1063924,
+      page_count: 32,
+      downloaded_on: "2026-10-22"
     },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Operating temperature; interpreted as junction temperature consistently with the electrical-characteristic limits.",
-      source: {
-        page: 5,
-        section: "7.3 Operating Conditions",
-        row: "Temperature"
-      }
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "SOIC LM5001 values are used; the shared datasheet also contains WSON and automotive LM5001-Q1 entries.",
+        "The 1 A typical current limit is peak switch current, not guaranteed boost output current.",
+        "The electrical frequency row is a specified test point at RT = 48.7 kOhm, not an extraction of the example oscillator setting.",
+        "No universal output-voltage range is extracted: boost, flyback and SEPIC applications have topology-specific limits and must respect the SW pin rating."
+      ]
     },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: null,
-        typ: null,
-        max: 45
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 3.1,
+          typ: null,
+          max: 75
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "6.3 Recommended Operating Conditions",
+          row: "VIN"
+        }
       },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 5,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Maximum supply voltage"
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "6.3 Recommended Operating Conditions",
+          row: "Operating junction temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: null,
+          typ: null,
+          max: 76
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "VIN to GND"
+        }
+      },
+      switch_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.3,
+          typ: null,
+          max: 76
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "SW to GND, steady state"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Maximum junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.241,
+          typ: 1.26,
+          max: 1.279
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Internal reference; VFB = VCOMP.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "VFB-REF"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 225e3,
+          typ: 26e4,
+          max: 295e3
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "FSW1"
+        }
+      },
+      switching_frequency_programmable_maximum: {
+        category: "feature",
+        unit: "Hz",
+        values: {
+          min: null,
+          typ: null,
+          max: 15e5
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Programmable switching frequency"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 0.8,
+          typ: 1,
+          max: 1.2
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "ILIM"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 31e-4,
+          max: 45e-4
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. VFB = 1.5 V.",
+        source: {
+          page: 4,
+          section: "6.5 Electrical Characteristics",
+          row: "Bias current IIN"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 95e-6,
+          max: 13e-5
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. VEN = 0 V.",
+        source: {
+          page: 4,
+          section: "6.5 Electrical Characteristics",
+          row: "Shutdown current IIN"
+        }
+      },
+      switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 0.49,
+          max: 0.8
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. LM5001 non-Q1; ID = 0.5 A.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "MOSFET RDS(ON) plus current-sense resistance"
+        },
+        notes: "Includes the current-sense resistance; not the MOSFET resistance alone."
+      },
+      maximum_duty_cycle: {
+        category: "electrical_characteristic",
+        unit: "1",
+        values: {
+          min: 0.8,
+          typ: 0.85,
+          max: 0.9
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "Maximum duty cycle"
+        }
+      },
+      thermal_shutdown_temperature: {
+        category: "electrical_characteristic",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: 165,
+          max: null
+        },
+        conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.5 Electrical Characteristics",
+          row: "TSD"
+        }
       }
+    }
+  },
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lm27761-wson8-pump",
+      file: "lm27761-wson8-pump",
+      title: "LM27761 Charge Pump",
+      topology: "Charge pump"
     },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LM27761",
+      reference: "U1",
+      schematic_value: "LM27761",
+      symbol_library_id: "Regulator_SwitchedCapacitor:LM27761",
+      footprint: "Package_SON:WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm",
+      package: "WSON-8",
+      datasheet_variant: "LM27761, WSON (DSG), 8 pins"
+    },
+    datasheet: {
+      title: "LM27761 Low-Noise, Regulated, Switched-Capacitor Voltage Inverter",
+      document_number: "SNVSA85D",
+      revision: "D",
+      published_month: "2025-10",
+      product_url: "https://www.ti.com/product/LM27761",
+      source_url: "https://www.ti.com/lit/ds/symlink/lm27761.pdf",
+      filename: "lm27761.pdf",
+      sha256: "0724ce35e920e1350907de9f8a70f0e40257cff907fc0c9331609cf0267a6814",
+      bytes: 2050711,
+      page_count: 27,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "Negative output limits retain their sign and are ordered numerically: -5 V minimum, -1.5 V maximum.",
+        "Recommended output current (0.25 A) is separate from the absolute-maximum continuous current (0.3 A).",
+        "The regulator is a charge-pump inverter with a following negative LDO. No numeric switch-current limit is extracted because this table does not specify one."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 2.7,
+          typ: null,
+          max: 5.5
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "5.3 Recommended Operating Conditions",
+          row: "Operating input voltage"
+        }
       },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 5,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Maximum junction temperature"
+      output_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: -5,
+          typ: null,
+          max: -1.5
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. VIN = 2.7 to 5.5 V.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "Adjustable output voltage"
+        }
+      },
+      output_current: {
+        category: "recommended_operating_condition",
+        unit: "A",
+        values: {
+          min: 0,
+          typ: null,
+          max: 0.25
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "5.3 Recommended Operating Conditions",
+          row: "Operating output current"
+        }
+      },
+      operating_ambient_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 85
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "5.3 Recommended Operating Conditions",
+          row: "Operating ambient temperature"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "5.3 Recommended Operating Conditions",
+          row: "Operating junction temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: null,
+          typ: null,
+          max: 5.8
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "5.1 Absolute Maximum Ratings",
+          row: "VIN to GND"
+        }
+      },
+      output_current_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "A",
+        values: {
+          min: null,
+          typ: null,
+          max: 0.3
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "5.1 Absolute Maximum Ratings",
+          row: "Continuous output current, CPOUT and VOUT"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "5.1 Absolute Maximum Ratings",
+          row: "TJMAX"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "5.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.202,
+          typ: 1.22,
+          max: 1.238
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "VFB"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 17e5,
+          typ: 2e6,
+          max: 23e5
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. VIN = 3.6 V instead of 5 V.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "Switching frequency"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 37e-5,
+          max: 6e-4
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. Open circuit, no load.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "Iq supply current"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 7e-6,
+          max: 12e-6
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "ISD"
+        }
+      },
+      ldo_dropout_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: null,
+          typ: 0.03,
+          max: null
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.1 A, VOUT = -5 V.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "VDO"
+        }
+      },
+      output_noise_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: null,
+          typ: 2e-5,
+          max: null
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.08 A; integrated over 10 Hz to 100 kHz.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "VN"
+        },
+        notes: "RMS noise voltage, converted from uV RMS to V RMS; not peak-to-peak ripple."
+      },
+      ldo_psrr: {
+        category: "electrical_characteristic",
+        unit: "dB",
+        values: {
+          min: null,
+          typ: 35,
+          max: null
+        },
+        conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.08 A, VCPOUT = -5 V; at 2 MHz per page 1 feature summary.",
+        source: {
+          page: 5,
+          section: "5.5 Electrical Characteristics",
+          row: "PSRR"
+        }
       }
+    }
+  },
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lmr12010-sot236-buck",
+      file: "lmr12010-sot236-buck",
+      title: "LMR12010 Buck",
+      topology: "Buck"
     },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LMR12010",
+      reference: "U1",
+      schematic_value: "LMR12010X",
+      symbol_library_id: "Reference:lmr12010-sot236-buck",
+      footprint: "Package_TO_SOT_SMD:SOT-23-6",
+      package: "SOT-23-6",
+      datasheet_variant: "LMR12010X, SOT-23-6"
+    },
+    datasheet: {
+      title: "LMR12010 3-V to 20-V, 1-A Step-Down DC/DC Switching Regulator in SOT-23",
+      document_number: "SNVS731B",
+      revision: "B",
+      published_month: "2019-06",
+      product_url: "https://www.ti.com/product/LMR12010",
+      source_url: "https://www.ti.com/lit/ds/symlink/lmr12010.pdf",
+      filename: "lmr12010.pdf",
+      sha256: "3068c8a516c2257608fed9f0cfa04a741edfa132af50f03255b2b74ffc2356cb",
+      bytes: 883441,
+      page_count: 33,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "The example uses LMR12010X (1.6 MHz typical), not LMR12010Y (3 MHz typical).",
+        "Bold min/max limits in the electrical table apply over TJ = -40 to 125 degC; typical values are at TJ = 25 degC."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 3,
+          typ: null,
+          max: 20
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "6.2 Recommended Operating Ratings",
+          row: "VIN"
+        }
       },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 5,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
+      output_voltage: {
+        category: "feature",
+        unit: "V",
+        values: {
+          min: 0.8,
+          typ: null,
+          max: 17
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Output voltage range"
+        }
+      },
+      output_current: {
+        category: "feature",
+        unit: "A",
+        values: {
+          min: null,
+          typ: null,
+          max: 1
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Output current capability"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "6.2 Recommended Operating Ratings",
+          row: "Junction temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.5,
+          typ: null,
+          max: 24
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "VIN"
+        }
+      },
+      switch_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.5,
+          typ: null,
+          max: 24
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "SW voltage"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "6.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 0.784,
+          typ: 0.8,
+          max: 0.816
+        },
+        conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "VFB"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 12e5,
+          typ: 16e5,
+          max: 19e5
+        },
+        conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "FSW, LMR12010X"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 1.2,
+          typ: 1.7,
+          max: 2.5
+        },
+        conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. VBOOST-VSW = 3 V instead of 5 V.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "ICL"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 15e-4,
+          max: 25e-4
+        },
+        conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. Switching enabled.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "IQ switching"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 3e-8,
+          max: null
+        },
+        conditions: "VIN = 5 V, VBOOST-VSW = 5 V, VEN = 0 V; typical at TJ = 25 degC.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "IQ shutdown"
+        }
+      },
+      switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 0.3,
+          max: 0.6
+        },
+        conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. VBOOST-VSW = 3 V instead of 5 V.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "RDS(ON)"
+        }
+      },
+      maximum_duty_cycle: {
+        category: "electrical_characteristic",
+        unit: "1",
+        values: {
+          min: 0.85,
+          typ: 0.92,
+          max: null
+        },
+        conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 5,
+          section: "6.3 Electrical Characteristics",
+          row: "DMAX, LMR12010X"
+        }
       }
+    }
+  },
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lmr70503-bga8-buckboost",
+      file: "lmr70503-bga8-buckboost",
+      title: "LMR70503 Buck-Boost",
+      topology: "Buck-Boost"
     },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.193,
-        typ: 1.23,
-        max: 1.267
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LMR70503",
+      reference: "U1",
+      schematic_value: "LMR70503",
+      symbol_library_id: "Reference:lmr70503-bga8-buckboost",
+      footprint: "Package_BGA:Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm",
+      package: "BGA-8",
+      datasheet_variant: "LMR70503, 8-bump thin DSBGA"
+    },
+    datasheet: {
+      title: "LMR70503 SIMPLE SWITCHER\xAE Buck-Boost Converter For Negative Output Voltage in \xB5SMD",
+      document_number: "SNVS850A",
+      revision: "A",
+      published_month: "2013-04",
+      product_url: "https://www.ti.com/product/LMR70503",
+      source_url: "https://www.ti.com/lit/ds/symlink/lmr70503.pdf",
+      filename: "lmr70503.pdf",
+      sha256: "38d5416b3118cc1aeb08861a700bd330b202f2aba27e7bd5c40ed1d41c18048a",
+      bytes: 1235215,
+      page_count: 26,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "The downloaded PDF still titles the package microSMD; its features identify the 8-bump thin DSBGA package.",
+        "VREF is a reference output loaded by RREF, not the voltage regulated at the FB pin. FB is compared to ground.",
+        "The 500 kHz typical entry describes minimum switching frequency, not a fixed switching frequency.",
+        "The 0.32 A typical limit is peak switch current, not guaranteed output current. The private simulation adapter does not establish datasheet-equivalent timing."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 2.8,
+          typ: null,
+          max: 5.5
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 3,
+          section: "Operating Ratings",
+          row: "VIN input voltage"
+        }
       },
-      conditions: "Adjustable version, TJ = 25 degC; VIN = 4.5 to 40 V, ILOAD = 0.2 to 3 A; VOUT programmed for 3 V; Figure 9-13.",
-      source: {
-        page: 6,
-        section: "7.8 Electrical Characteristics - Adjustable Voltage Version",
-        row: "VFB"
+      output_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: -5.5,
+          typ: null,
+          max: -0.9
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 3,
+          section: "Operating Ratings",
+          row: "VOUT output voltage"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 125
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 3,
+          section: "Operating Ratings",
+          row: "TJ"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -0.5,
+          typ: null,
+          max: 6
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 3,
+          section: "Absolute Maximum Ratings",
+          row: "VIN to GND"
+        }
+      },
+      output_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: -6.5,
+          typ: null,
+          max: 0.5
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 3,
+          section: "Absolute Maximum Ratings",
+          row: "VOUT to GND"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 3,
+          section: "Absolute Maximum Ratings",
+          row: "Junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 3,
+          section: "Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      reference_output_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.166,
+          typ: 1.19,
+          max: 1.214
+        },
+        conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC. RREF = 100 kOhm to GND.",
+        source: {
+          page: 3,
+          section: "Electrical Characteristics",
+          row: "VREF"
+        }
+      },
+      minimum_switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 4e5,
+          typ: 5e5,
+          max: null
+        },
+        conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 3,
+          section: "Electrical Characteristics",
+          row: "FSW-MIN"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 0.27,
+          typ: 0.32,
+          max: 0.37
+        },
+        conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC.",
+        source: {
+          page: 4,
+          section: "Electrical Characteristics",
+          row: "IPEAK-CL"
+        },
+        notes: "Internally trimmed limit; actual application peak depends on VIN, inductance and junction temperature (footnote 3)."
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 245e-6,
+          max: 3e-4
+        },
+        conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC. VIN = 5.5 V instead of 3.3 V, no switching.",
+        source: {
+          page: 3,
+          section: "Electrical Characteristics",
+          row: "IQ"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 1e-8,
+          max: 1e-6
+        },
+        conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC. VIN = 5.5 V instead of 3.3 V, EN = 0 V.",
+        source: {
+          page: 3,
+          section: "Electrical Characteristics",
+          row: "ISD"
+        }
+      },
+      switch_on_resistance: {
+        category: "electrical_characteristic",
+        unit: "Ohm",
+        values: {
+          min: null,
+          typ: 1.1,
+          max: 2
+        },
+        conditions: "VIN = 2.8 V, VOUT = -5 V, VEN = 1.8 V, TJ = 25 degC; both resistance entries use standard type and apply at 25 degC only.",
+        source: {
+          page: 3,
+          section: "Electrical Characteristics",
+          row: "RDSON"
+        }
+      },
+      thermal_shutdown_temperature: {
+        category: "electrical_characteristic",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: 165,
+          max: null
+        },
+        conditions: "Junction temperature rising; typical thermal shutdown threshold.",
+        source: {
+          page: 4,
+          section: "Electrical Characteristics",
+          row: "TSDTH-HIGH"
+        }
       }
+    }
+  },
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "reference-lm2598-to220-7-buck",
+      file: "lm2598-to220-7-buck",
+      title: "LM2598 Buck",
+      topology: "Buck"
     },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 127e3,
-        typ: 15e4,
-        max: 173e3
+    ic: {
+      manufacturer: "Texas Instruments",
+      family: "LM2598",
+      reference: "U1",
+      schematic_value: "LM2598_ADJ",
+      symbol_library_id: "Reference:lm2598-to220-7-buck",
+      footprint: "Package_TO_SOT_THT:TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical",
+      package: "TO-220-7",
+      datasheet_variant: "Adjustable output, TO-220-7"
+    },
+    datasheet: {
+      title: "LM2598 SIMPLE SWITCHER\xAE Power Converter 150-kHz 1-A Step-Down Voltage Regulator, With Features",
+      document_number: "SNVS125D",
+      revision: "D",
+      published_month: "2016-05",
+      product_url: "https://www.ti.com/product/LM2598",
+      source_url: "https://www.ti.com/lit/ds/symlink/lm2598.pdf",
+      filename: "lm2598.pdf",
+      sha256: "62f57a1c796bfcefe155e4452560b51d7516ea7dd2c386d2266807f94f27a815",
+      bytes: 2404044,
+      page_count: 49,
+      downloaded_on: "2026-10-22"
+    },
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-22",
+      scope: "main_controller",
+      notes: [
+        "The canonical schematic value LM2598_ADJ selects the adjustable-output characteristics, not a fixed 3.3 V, 5 V or 12 V device.",
+        "The recommended operating temperature starts at -25 degC in this datasheet; it must not be generalized to -40 degC.",
+        "Output range and current are IC capabilities, not measured values for this example."
+      ]
+    },
+    parameters: {
+      input_voltage: {
+        category: "recommended_operating_condition",
+        unit: "V",
+        values: {
+          min: 4.5,
+          typ: null,
+          max: 40
+        },
+        conditions: "Use within the stated operating limits and the application requirements.",
+        source: {
+          page: 4,
+          section: "7.3 Recommended Operating Conditions",
+          row: "Supply voltage"
+        }
       },
-      conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. Frequency reduces under second-stage current limit.",
-      source: {
-        page: 7,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Oscillator frequency"
+      output_voltage: {
+        category: "feature",
+        unit: "V",
+        values: {
+          min: 1.2,
+          typ: null,
+          max: 37
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Adjustable output range"
+        }
+      },
+      output_current: {
+        category: "feature",
+        unit: "A",
+        values: {
+          min: null,
+          typ: null,
+          max: 1
+        },
+        conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
+        source: {
+          page: 1,
+          section: "1 Features",
+          row: "Output current capability"
+        }
+      },
+      operating_junction_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: -25,
+          typ: null,
+          max: 125
+        },
+        conditions: "Operating temperature; interpreted as junction temperature consistently with the electrical-characteristic limits.",
+        source: {
+          page: 4,
+          section: "7.3 Recommended Operating Conditions",
+          row: "Temperature"
+        }
+      },
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: null,
+          typ: null,
+          max: 45
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Maximum supply voltage"
+        }
+      },
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: null,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Maximum junction temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Stress limit only; functional operation is not implied.",
+        source: {
+          page: 4,
+          section: "7.1 Absolute Maximum Ratings",
+          row: "Storage temperature"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 1.193,
+          typ: 1.23,
+          max: 1.267
+        },
+        conditions: "Adjustable version, TJ = 25 degC; VIN = 4.5 to 40 V, ILOAD = 0.1 to 1 A, VOUT programmed for 3 V; Figures 42 and 45.",
+        source: {
+          page: 6,
+          section: "7.8 Electrical Characteristics - Adjustable Voltage Version",
+          row: "VFB"
+        }
+      },
+      switching_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 127e3,
+          typ: 15e4,
+          max: 173e3
+        },
+        conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. Frequency reduces under second-stage current limit.",
+        source: {
+          page: 6,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Oscillator frequency"
+        }
+      },
+      switch_current_limit: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: 1.2,
+          typ: 1.5,
+          max: 2.4
+        },
+        conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. No diode, inductor or capacitor on output pin; feedback forced to 0 V (footnotes 4 and 5).",
+        source: {
+          page: 6,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Peak current limit"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 5e-3,
+          max: 0.01
+        },
+        conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. SD/SS open, feedback disconnected from output and tied to 12 V to force switch off (footnote 6).",
+        source: {
+          page: 6,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Operating quiescent current"
+        }
+      },
+      shutdown_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 85e-6,
+          max: 2e-4
+        },
+        conditions: "TJ = 25 degC, VIN = 40 V, SD/SS = 0 V (footnote 7).",
+        source: {
+          page: 6,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Standby quiescent current"
+        }
+      },
+      maximum_duty_cycle: {
+        category: "electrical_characteristic",
+        unit: "1",
+        values: {
+          min: null,
+          typ: 1,
+          max: null
+        },
+        conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. Feedback forced to 0 V (footnote 5).",
+        source: {
+          page: 6,
+          section: "7.9 Electrical Characteristics - All Output Voltage Versions",
+          row: "Maximum duty cycle"
+        }
       }
+    }
+  },
+  {
+    $schema: "./ic-datasheet.schema.json",
+    schema_version: "1.0.0",
+    example: {
+      id: "emc-flyback-demo",
+      file: "emc-flyback",
+      title: "EMC Flyback",
+      topology: "Flyback"
     },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 3.6,
-        typ: 4.5,
-        max: 6.9
-      },
-      conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. No diode, inductor or capacitor on the output pin; feedback forced to 0 V (footnotes 4 and 5).",
-      source: {
-        page: 7,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Peak current limit"
-      }
+    ic: {
+      manufacturer: "STMicroelectronics",
+      family: "UC3845B",
+      reference: "U1",
+      schematic_value: "UC3845B",
+      symbol_library_id: "Regulator_Controller:UC3845_SOIC8",
+      footprint: "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+      package: "SOIC-8",
+      datasheet_variant: "UC3845B, SO8 (UC3845BD1013TR fitted)"
     },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 5e-3,
-        max: 0.01
-      },
-      conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. Feedback disconnected from output and tied to 12 V to force switch off (footnote 6).",
-      source: {
-        page: 7,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Operating quiescent current"
-      }
+    datasheet: {
+      title: "High performance current mode PWM controller",
+      document_number: "UC3842B/3B/4B/5B",
+      revision: null,
+      published_month: "1999-03",
+      product_url: "https://www.st.com/en/power-management/uc3845b.html",
+      source_url: "https://www.st.com/resource/en/datasheet/uc3842b.pdf",
+      filename: "uc3845b.pdf",
+      sha256: "fedfd7362400f8b32aab63349708c772b15a0999a8abc2ee0ec046c1f42cdae9",
+      bytes: 239299,
+      page_count: 15,
+      downloaded_on: "2026-10-30"
     },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 8e-5,
-        max: 2e-4
-      },
-      conditions: "TJ = 25 degC, VIN = 40 V, ON/OFF pin = 5 V (off); footnote 7.",
-      source: {
-        page: 7,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Standby quiescent current"
-      }
+    extraction: {
+      method: "pdf_text_with_visual_table_review",
+      reviewed_on: "2026-10-30",
+      scope: "main_controller",
+      notes: [
+        "The original March 1999 ST family document has no printed revision letter or numbered document identifier; the printed family heading identifies this issue.",
+        "UC384XB limits are selected, not UC284XB. Electrical characteristics use 0 to 70 degC ambient, VI = 15 V, RT = 10 kohm and CT = 3.3 nF unless stated otherwise.",
+        "The controller supply is independent of the flyback input bus. No recommended supply-voltage range or recommended junction-temperature range is inferred from absolute ratings or UVLO thresholds.",
+        "UC3845B output frequency is half the oscillator frequency. Oscillator table values are not board switching-frequency measurements.",
+        "UVLO values use the electrical table (8.4 V and 7.6 V typical); the first-page summary instead states 8.5 V and 7.9 V. The reviewed record retains table values.",
+        "These specifications do not qualify the approximate behavioural SPICE controller or the assembled board."
+      ]
     },
-    maximum_duty_cycle: {
-      category: "electrical_characteristic",
-      unit: "1",
-      values: {
-        min: null,
-        typ: 1,
-        max: null
+    parameters: {
+      input_voltage_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "V",
+        values: {
+          min: null,
+          typ: null,
+          max: 30
+        },
+        conditions: "Controller pin 7 relative to pin 5; low-impedance supply. Stress rating, not a recommended operating range.",
+        source: {
+          page: 2,
+          section: "Absolute maximum ratings",
+          row: "VI, supply voltage (low impedance source)"
+        }
       },
-      conditions: "VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row specifies otherwise. Feedback forced to 0 V; footnote 5.",
-      source: {
-        page: 7,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Maximum duty cycle"
+      junction_temperature_absolute_maximum: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -40,
+          typ: null,
+          max: 150
+        },
+        conditions: "Absolute-rating table; not the guaranteed electrical-characteristic temperature range.",
+        source: {
+          page: 2,
+          section: "Absolute maximum ratings",
+          row: "TJ, junction operating temperature"
+        }
+      },
+      storage_temperature: {
+        category: "absolute_maximum_rating",
+        unit: "degC",
+        values: {
+          min: -65,
+          typ: null,
+          max: 150
+        },
+        conditions: "Device storage, not powered operation.",
+        source: {
+          page: 2,
+          section: "Absolute maximum ratings",
+          row: "Tstg, storage temperature range"
+        }
+      },
+      operating_ambient_temperature: {
+        category: "recommended_operating_condition",
+        unit: "degC",
+        values: {
+          min: 0,
+          typ: null,
+          max: 70
+        },
+        conditions: "Ambient range for the stated UC384XB electrical specifications; respect package power dissipation.",
+        source: {
+          page: 3,
+          section: "Electrical characteristics",
+          row: "UC384XB table conditions"
+        }
+      },
+      reference_output_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 4.9,
+          typ: 5,
+          max: 5.1
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply. TJ = 25 degC; IO = 1 mA.",
+        source: {
+          page: 3,
+          section: "Reference section",
+          row: "VREF, output voltage"
+        }
+      },
+      feedback_reference_voltage: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 2.42,
+          typ: 2.5,
+          max: 2.58
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply. Pin 1 = 2.5 V.",
+        source: {
+          page: 3,
+          section: "Error amp section",
+          row: "V2, input voltage"
+        }
+      },
+      oscillator_frequency: {
+        category: "electrical_characteristic",
+        unit: "Hz",
+        values: {
+          min: 49e3,
+          typ: 52e3,
+          max: 55e3
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply. TJ = 25 degC.",
+        source: {
+          page: 3,
+          section: "Oscillator section",
+          row: "fOSC, frequency at TJ = 25 degC"
+        },
+        notes: "This is oscillator frequency; UC3845B blanks alternate cycles at the output."
+      },
+      maximum_duty_cycle: {
+        category: "electrical_characteristic",
+        unit: "1",
+        values: {
+          min: 0.47,
+          typ: 0.48,
+          max: 0.5
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply.",
+        source: {
+          page: 4,
+          section: "PWM section",
+          row: "Maximum duty cycle, X844B/5B"
+        }
+      },
+      undervoltage_start_threshold: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 7.8,
+          typ: 8.4,
+          max: 9
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply.",
+        source: {
+          page: 4,
+          section: "Under-voltage lockout section",
+          row: "Start threshold, X843B/5B"
+        }
+      },
+      undervoltage_stop_threshold: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 7,
+          typ: 7.6,
+          max: 8.2
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply.",
+        source: {
+          page: 4,
+          section: "Under-voltage lockout section",
+          row: "Min operating voltage after turn-on, X843B/5B"
+        }
+      },
+      current_sense_threshold: {
+        category: "electrical_characteristic",
+        unit: "V",
+        values: {
+          min: 0.9,
+          typ: 1,
+          max: 1.1
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply. Pin 1 = 5 V; measured at latch trip with pin 2 = 0 V (note 3).",
+        source: {
+          page: 3,
+          section: "Current sense section",
+          row: "V3, maximum input signal"
+        },
+        notes: "Sense voltage is not a current rating; external resistance and circuit dynamics determine peak current."
+      },
+      startup_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 3e-4,
+          max: 5e-4
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply. VI = 6.5 V for UCX843B/45B.",
+        source: {
+          page: 4,
+          section: "Total standby current",
+          row: "Ist, start-up current"
+        }
+      },
+      quiescent_current: {
+        category: "electrical_characteristic",
+        unit: "A",
+        values: {
+          min: null,
+          typ: 0.012,
+          max: 0.017
+        },
+        conditions: "UC3845B (UC384XB column); ambient 0 to 70 degC, VI = 15 V, RT = 10 kohm, CT = 3.3 nF unless stated otherwise; package power limits apply. Pins 2 and 3 = 0 V.",
+        source: {
+          page: 4,
+          section: "Total standby current",
+          row: "II, operating supply current"
+        },
+        notes: "Operating supply current, not shutdown current or board input current."
       }
     }
   }
-};
-
-// examples/tps61046-bga6-boost/datasheets/parameters.json
-var parameters_default2 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-tps61046-bga6-boost",
-    file: "tps61046-bga6-boost",
-    title: "TPS61046 Boost",
-    topology: "Boost"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "TPS61046",
-    reference: "U1",
-    schematic_value: "TPS61046",
-    symbol_library_id: "Reference:tps61046-bga6-boost",
-    footprint: "Package_BGA:Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC",
-    package: "BGA-6",
-    datasheet_variant: "TPS61046, 6-ball WCSP"
-  },
-  datasheet: {
-    title: "TPS61046 28-V Output Voltage Boost Converter in WCSP Package",
-    document_number: "SLVSCQ7",
-    revision: null,
-    published_month: "2015-04",
-    product_url: "https://www.ti.com/product/TPS61046",
-    source_url: "https://www.ti.com/lit/ds/symlink/tps61046.pdf",
-    filename: "tps61046.pdf",
-    sha256: "add7a1f0ea698136e45d777ba249d1877c96f2ec5f88f86d067fcb05e29bfe08",
-    bytes: 1153649,
-    page_count: 26,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "The 0.9 A typical limit is peak switch current, not guaranteed output current. Output-current capability depends on the conversion ratio and application.",
-      "The electrical table specifies 1.05 MHz typical switching frequency; the feature summary rounds this to 1 MHz.",
-      "The input operating range requires 1.8 V for startup. The feature summary permits 1.6 V after startup; that value is not the startup minimum."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 1.8,
-        typ: null,
-        max: 5.5
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "7.3 Recommended Operating Conditions",
-        row: "VIN input voltage range"
-      }
-    },
-    output_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 4.5,
-        typ: null,
-        max: 28
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "7.3 Recommended Operating Conditions",
-        row: "VOUT output voltage range"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "7.3 Recommended Operating Conditions",
-        row: "TJ"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.3,
-        typ: null,
-        max: 6
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "VIN terminal voltage"
-      }
-    },
-    switch_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.3,
-        typ: null,
-        max: 32
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "SW terminal voltage"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "TJ"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 0.779,
-        typ: 0.795,
-        max: 0.811
-      },
-      conditions: "VIN = 3.6 V, VOUT = 12 V, PWM mode, TJ = 0 to 125 degC; typical at 25 degC.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "VREF, PWM mode"
-      }
-    },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 85e4,
-        typ: 105e4,
-        max: 125e4
-      },
-      conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated. PWM mode.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "fSW"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 0.6,
-        typ: 0.9,
-        max: 1.2
-      },
-      conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "ILIM_SW"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 11e-5,
-        max: 2e-4
-      },
-      conditions: "IC enabled, no load, no switching; VIN = 1.8 to 5.5 V, VOUT = 12 V; typical at TJ = 25 degC, limits over -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "IQ_VIN"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 1e-7,
-        max: 8e-7
-      },
-      conditions: "IC disabled, VIN = 1.8 to 5.5 V, TJ up to 85 degC; typical at 25 degC.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "ISD, first temperature condition"
-      }
-    },
-    switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 0.45,
-        max: null
-      },
-      conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "Low-side MOSFET resistance"
-      }
-    },
-    startup_time: {
-      category: "electrical_characteristic",
-      unit: "s",
-      values: {
-        min: null,
-        typ: 2e-3,
-        max: 5e-3
-      },
-      conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated. VOUT rises from VIN to 12 V, effective COUT = 2.2 uF, IOUT = 0 A.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "tSTARTUP"
-      }
-    },
-    thermal_shutdown_temperature: {
-      category: "electrical_characteristic",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: 150,
-        max: null
-      },
-      conditions: "VIN = 3.6 V, VOUT = 12 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC unless otherwise stated. Junction temperature rising.",
-      source: {
-        page: 5,
-        section: "7.5 Electrical Characteristics",
-        row: "TSD"
-      }
-    }
-  }
-};
-
-// examples/lm2735-msop8-sepic/datasheets/parameters.json
-var parameters_default3 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lm2735-msop8-sepic",
-    file: "lm2735-msop8-sepic",
-    title: "LM2735 SEPIC",
-    topology: "SEPIC"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LM2735",
-    reference: "U1",
-    schematic_value: "LM2735Y",
-    symbol_library_id: "Reference:lm2735-msop8-sepic",
-    footprint: "Package_SO:MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm",
-    package: "MSOP-8",
-    datasheet_variant: "LM2735-Y, MSOP-PowerPAD (DGN), 8 pins"
-  },
-  datasheet: {
-    title: "LM2735 520-kHz and 1.6-MHz Space-Efficient Boost and SEPIC DC/DC Regulator",
-    document_number: "SNVS485I",
-    revision: "I",
-    published_month: "2018-09",
-    product_url: "https://www.ti.com/product/LM2735",
-    source_url: "https://www.ti.com/lit/ds/symlink/lm2735.pdf",
-    filename: "lm2735.pdf",
-    sha256: "7564bb2f7164071f1c3971e935d19b47ae6a12891da12858004a9c48f907682e",
-    bytes: 1571061,
-    page_count: 61,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "The example uses LM2735Y (520 kHz typical), not LM2735X (1.6 MHz typical).",
-      "Feedback-voltage and switch-resistance entries use MSOP-PowerPAD specifications. Typical values are at TJ = 25 degC; specified limits are over the temperatures stated in each condition.",
-      "Peak switch-current limit is not an output-current rating; SEPIC output capability depends on input, output and external components."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 2.7,
-        typ: null,
-        max: 5.5
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "6.3 Recommended Operating Conditions",
-        row: "VIN"
-      }
-    },
-    output_voltage: {
-      category: "feature",
-      unit: "V",
-      values: {
-        min: 3,
-        typ: null,
-        max: 24
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Output voltage range"
-      },
-      notes: "Feature range for the regulator family; the example is a SEPIC application. It is not a guaranteed output at every conversion ratio."
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "6.3 Recommended Operating Conditions",
-        row: "Junction temperature"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.5,
-        typ: null,
-        max: 7
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "VIN"
-      }
-    },
-    switch_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.5,
-        typ: null,
-        max: 26.5
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "SW voltage"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Junction temperature"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.22,
-        typ: 1.255,
-        max: 1.29
-      },
-      conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. MSOP-PowerPAD package.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "VFB, MSOP-PowerPAD full-temperature row"
-      }
-    },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 36e4,
-        typ: 52e4,
-        max: 68e4
-      },
-      conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "FSW, LM2735-Y"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 2.1,
-        typ: 3,
-        max: null
-      },
-      conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "ICL"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 34e-4,
-        max: 7e-3
-      },
-      conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Switching enabled.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "IQ switching, LM2735-Y"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 8e-8,
-        max: null
-      },
-      conditions: "VIN = 5 V, VEN = 0 V; typical at TJ = 25 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "IQ shutdown"
-      }
-    },
-    switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 0.17,
-        max: 0.33
-      },
-      conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. MSOP-PowerPAD package.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "RDS(ON), SOT-23 and MSOP-PowerPAD"
-      }
-    },
-    maximum_duty_cycle: {
-      category: "electrical_characteristic",
-      unit: "1",
-      values: {
-        min: 0.91,
-        typ: 0.99,
-        max: null
-      },
-      conditions: "LM2735-Y, VIN = 5 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "DMAX, LM2735-Y"
-      }
-    },
-    soft_start_time: {
-      category: "electrical_characteristic",
-      unit: "s",
-      values: {
-        min: null,
-        typ: 4e-3,
-        max: null
-      },
-      conditions: "VIN = 5 V; typical at TJ = 25 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "SS"
-      }
-    },
-    thermal_shutdown_temperature: {
-      category: "electrical_characteristic",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: 160,
-        max: null
-      },
-      conditions: "VIN = 5 V; typical thermal shutdown threshold; it is not the permitted continuous operating temperature.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "TSD"
-      }
-    }
-  }
-};
-
-// examples/lm25017-wson8-flybuck/datasheets/parameters.json
-var parameters_default4 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lm25017-wson8-flybuck",
-    file: "lm25017-wson8-flybuck",
-    title: "LM25017 Fly-Buck",
-    topology: "Fly-Buck"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LM25017",
-    reference: "U1",
-    schematic_value: "LM25017",
-    symbol_library_id: "Reference:lm25017-wson8-flybuck",
-    footprint: "Package_SON:WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm_ThermalVias",
-    package: "WSON-8",
-    datasheet_variant: "LM25017, WSON (NGU), 8 pins"
-  },
-  datasheet: {
-    title: "LM25017 48-V, 650-mA Constant On-Time Synchronous Buck/Fly-Buck\u2122 Regulator",
-    document_number: "SNVS951F",
-    revision: "F",
-    published_month: "2021-05",
-    product_url: "https://www.ti.com/product/LM25017",
-    source_url: "https://www.ti.com/lit/ds/symlink/lm25017.pdf",
-    filename: "lm25017.pdf",
-    sha256: "68e039d11701f352bfee8849f721ebb678771c8e374160f470484c182fc2c286",
-    bytes: 2155823,
-    page_count: 41,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "The 0.65 A feature is the integrated buck-stage capability. Available isolated secondary current depends on the Fly-Buck design and cannot be read as 0.65 A per output.",
-      "Switching frequency is resistor-programmed constant-on-time operation; 1 MHz is the feature ceiling, not a fixed oscillator frequency.",
-      "The datasheet states an adjustable output starting at 1.225 V; no universal output upper bound is extracted."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 7.5,
-        typ: null,
-        max: 48
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 5,
-        section: "6.3 Recommended Operating Conditions",
-        row: "VIN voltage"
-      }
-    },
-    output_voltage: {
-      category: "feature",
-      unit: "V",
-      values: {
-        min: 1.225,
-        typ: null,
-        max: null
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Adjustable output voltage"
-      }
-    },
-    output_current: {
-      category: "feature",
-      unit: "A",
-      values: {
-        min: null,
-        typ: null,
-        max: 0.65
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Integrated buck-stage capability"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 5,
-        section: "6.3 Recommended Operating Conditions",
-        row: "Operating junction temperature"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.3,
-        typ: null,
-        max: 53
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 5,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "VIN to RTN"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 5,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Maximum junction temperature"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -55,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 5,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.2,
-        typ: 1.225,
-        max: 1.25
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Internal comparator trip point for switch-on.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "FB regulation level"
-      }
-    },
-    switching_frequency_programmable_maximum: {
-      category: "feature",
-      unit: "Hz",
-      values: {
-        min: null,
-        typ: null,
-        max: 1e6
-      },
-      conditions: "Set by RON and the application operating point; this is not a fixed frequency or the frequency measured in the example.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Frequency adjustable ceiling"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 0.7,
-        typ: 1.02,
-        max: 1.3
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "Current limit threshold"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 175e-5,
-        max: null
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Non-switching, FB = 3 V.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "IIN operating current"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 5e-5,
-        max: 225e-6
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. UVLO = 0 V.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "IIN shutdown current"
-      }
-    },
-    switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 0.8,
-        max: 1.8
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. ITEST = 0.2 A, BST-SW = 7 V.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "Buck switch RDS(ON)"
-      }
-    },
-    synchronous_switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 0.45,
-        max: 1
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. ITEST = 0.2 A.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "Synchronous RDS(ON)"
-      }
-    },
-    thermal_shutdown_temperature: {
-      category: "electrical_characteristic",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: 165,
-        max: null
-      },
-      conditions: "VIN = 48 V; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 6,
-        section: "6.5 Electrical Characteristics",
-        row: "Tsd"
-      }
-    }
-  }
-};
-
-// examples/lm5001-soic8-boost/datasheets/parameters.json
-var parameters_default5 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lm5001-soic8-boost",
-    file: "lm5001-soic8-boost",
-    title: "LM5001 Boost",
-    topology: "Boost"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LM5001",
-    reference: "U1",
-    schematic_value: "LM5001",
-    symbol_library_id: "Regulator_Switching:LM5001MA",
-    footprint: "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
-    package: "SOIC-8",
-    datasheet_variant: "LM5001 (non-Q1), SOIC-8"
-  },
-  datasheet: {
-    title: "LM5001x High-Voltage Switch-Mode Regulator",
-    document_number: "SNVS484H",
-    revision: "H",
-    published_month: "2015-07",
-    product_url: "https://www.ti.com/product/LM5001",
-    source_url: "https://www.ti.com/lit/ds/symlink/lm5001.pdf",
-    filename: "lm5001.pdf",
-    sha256: "508ee28768a531b102587a1a55b5e17f5f5afc8b1828764a0867097280675742",
-    bytes: 1063924,
-    page_count: 32,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "SOIC LM5001 values are used; the shared datasheet also contains WSON and automotive LM5001-Q1 entries.",
-      "The 1 A typical current limit is peak switch current, not guaranteed boost output current.",
-      "The electrical frequency row is a specified test point at RT = 48.7 kOhm, not an extraction of the example oscillator setting.",
-      "No universal output-voltage range is extracted: boost, flyback and SEPIC applications have topology-specific limits and must respect the SW pin rating."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 3.1,
-        typ: null,
-        max: 75
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "6.3 Recommended Operating Conditions",
-        row: "VIN"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "6.3 Recommended Operating Conditions",
-        row: "Operating junction temperature"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: null,
-        typ: null,
-        max: 76
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "VIN to GND"
-      }
-    },
-    switch_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.3,
-        typ: null,
-        max: 76
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "SW to GND, steady state"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Maximum junction temperature"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.241,
-        typ: 1.26,
-        max: 1.279
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. Internal reference; VFB = VCOMP.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "VFB-REF"
-      }
-    },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 225e3,
-        typ: 26e4,
-        max: 295e3
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "FSW1"
-      }
-    },
-    switching_frequency_programmable_maximum: {
-      category: "feature",
-      unit: "Hz",
-      values: {
-        min: null,
-        typ: null,
-        max: 15e5
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Programmable switching frequency"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 0.8,
-        typ: 1,
-        max: 1.2
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "ILIM"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 31e-4,
-        max: 45e-4
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. VFB = 1.5 V.",
-      source: {
-        page: 4,
-        section: "6.5 Electrical Characteristics",
-        row: "Bias current IIN"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 95e-6,
-        max: 13e-5
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. VEN = 0 V.",
-      source: {
-        page: 4,
-        section: "6.5 Electrical Characteristics",
-        row: "Shutdown current IIN"
-      }
-    },
-    switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 0.49,
-        max: 0.8
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC. LM5001 non-Q1; ID = 0.5 A.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "MOSFET RDS(ON) plus current-sense resistance"
-      },
-      notes: "Includes the current-sense resistance; not the MOSFET resistance alone."
-    },
-    maximum_duty_cycle: {
-      category: "electrical_characteristic",
-      unit: "1",
-      values: {
-        min: 0.8,
-        typ: 0.85,
-        max: 0.9
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "Maximum duty cycle"
-      }
-    },
-    thermal_shutdown_temperature: {
-      category: "electrical_characteristic",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: 165,
-        max: null
-      },
-      conditions: "VIN = 10 V, RT = 48.7 kOhm; typical at TJ = 25 degC, limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.5 Electrical Characteristics",
-        row: "TSD"
-      }
-    }
-  }
-};
-
-// examples/lm27761-wson8-pump/datasheets/parameters.json
-var parameters_default6 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lm27761-wson8-pump",
-    file: "lm27761-wson8-pump",
-    title: "LM27761 Charge Pump",
-    topology: "Charge pump"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LM27761",
-    reference: "U1",
-    schematic_value: "LM27761",
-    symbol_library_id: "Regulator_SwitchedCapacitor:LM27761",
-    footprint: "Package_SON:WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm",
-    package: "WSON-8",
-    datasheet_variant: "LM27761, WSON (DSG), 8 pins"
-  },
-  datasheet: {
-    title: "LM27761 Low-Noise, Regulated, Switched-Capacitor Voltage Inverter",
-    document_number: "SNVSA85D",
-    revision: "D",
-    published_month: "2025-10",
-    product_url: "https://www.ti.com/product/LM27761",
-    source_url: "https://www.ti.com/lit/ds/symlink/lm27761.pdf",
-    filename: "lm27761.pdf",
-    sha256: "0724ce35e920e1350907de9f8a70f0e40257cff907fc0c9331609cf0267a6814",
-    bytes: 2050711,
-    page_count: 27,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "Negative output limits retain their sign and are ordered numerically: -5 V minimum, -1.5 V maximum.",
-      "Recommended output current (0.25 A) is separate from the absolute-maximum continuous current (0.3 A).",
-      "The regulator is a charge-pump inverter with a following negative LDO. No numeric switch-current limit is extracted because this table does not specify one."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 2.7,
-        typ: null,
-        max: 5.5
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "5.3 Recommended Operating Conditions",
-        row: "Operating input voltage"
-      }
-    },
-    output_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: -5,
-        typ: null,
-        max: -1.5
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. VIN = 2.7 to 5.5 V.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "Adjustable output voltage"
-      }
-    },
-    output_current: {
-      category: "recommended_operating_condition",
-      unit: "A",
-      values: {
-        min: 0,
-        typ: null,
-        max: 0.25
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "5.3 Recommended Operating Conditions",
-        row: "Operating output current"
-      }
-    },
-    operating_ambient_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 85
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "5.3 Recommended Operating Conditions",
-        row: "Operating ambient temperature"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "5.3 Recommended Operating Conditions",
-        row: "Operating junction temperature"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: null,
-        typ: null,
-        max: 5.8
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "5.1 Absolute Maximum Ratings",
-        row: "VIN to GND"
-      }
-    },
-    output_current_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "A",
-      values: {
-        min: null,
-        typ: null,
-        max: 0.3
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "5.1 Absolute Maximum Ratings",
-        row: "Continuous output current, CPOUT and VOUT"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "5.1 Absolute Maximum Ratings",
-        row: "TJMAX"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "5.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.202,
-        typ: 1.22,
-        max: 1.238
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "VFB"
-      }
-    },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 17e5,
-        typ: 2e6,
-        max: 23e5
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. VIN = 3.6 V instead of 5 V.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "Switching frequency"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 37e-5,
-        max: 6e-4
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. Open circuit, no load.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "Iq supply current"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 7e-6,
-        max: 12e-6
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "ISD"
-      }
-    },
-    ldo_dropout_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: null,
-        typ: 0.03,
-        max: null
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.1 A, VOUT = -5 V.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "VDO"
-      }
-    },
-    output_noise_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: null,
-        typ: 2e-5,
-        max: null
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.08 A; integrated over 10 Hz to 100 kHz.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "VN"
-      },
-      notes: "RMS noise voltage, converted from uV RMS to V RMS; not peak-to-peak ripple."
-    },
-    ldo_psrr: {
-      category: "electrical_characteristic",
-      unit: "dB",
-      values: {
-        min: null,
-        typ: 35,
-        max: null
-      },
-      conditions: "VIN = 5 V; C1 to C4 as in Typical Application; typical at TA = 25 degC, limits over the full operating temperature range. ILOAD = 0.08 A, VCPOUT = -5 V; at 2 MHz per page 1 feature summary.",
-      source: {
-        page: 5,
-        section: "5.5 Electrical Characteristics",
-        row: "PSRR"
-      }
-    }
-  }
-};
-
-// examples/lmr12010-sot236-buck/datasheets/parameters.json
-var parameters_default7 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lmr12010-sot236-buck",
-    file: "lmr12010-sot236-buck",
-    title: "LMR12010 Buck",
-    topology: "Buck"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LMR12010",
-    reference: "U1",
-    schematic_value: "LMR12010X",
-    symbol_library_id: "Reference:lmr12010-sot236-buck",
-    footprint: "Package_TO_SOT_SMD:SOT-23-6",
-    package: "SOT-23-6",
-    datasheet_variant: "LMR12010X, SOT-23-6"
-  },
-  datasheet: {
-    title: "LMR12010 3-V to 20-V, 1-A Step-Down DC/DC Switching Regulator in SOT-23",
-    document_number: "SNVS731B",
-    revision: "B",
-    published_month: "2019-06",
-    product_url: "https://www.ti.com/product/LMR12010",
-    source_url: "https://www.ti.com/lit/ds/symlink/lmr12010.pdf",
-    filename: "lmr12010.pdf",
-    sha256: "3068c8a516c2257608fed9f0cfa04a741edfa132af50f03255b2b74ffc2356cb",
-    bytes: 883441,
-    page_count: 33,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "The example uses LMR12010X (1.6 MHz typical), not LMR12010Y (3 MHz typical).",
-      "Bold min/max limits in the electrical table apply over TJ = -40 to 125 degC; typical values are at TJ = 25 degC."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 3,
-        typ: null,
-        max: 20
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "6.2 Recommended Operating Ratings",
-        row: "VIN"
-      }
-    },
-    output_voltage: {
-      category: "feature",
-      unit: "V",
-      values: {
-        min: 0.8,
-        typ: null,
-        max: 17
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Output voltage range"
-      }
-    },
-    output_current: {
-      category: "feature",
-      unit: "A",
-      values: {
-        min: null,
-        typ: null,
-        max: 1
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Output current capability"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "6.2 Recommended Operating Ratings",
-        row: "Junction temperature"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.5,
-        typ: null,
-        max: 24
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "VIN"
-      }
-    },
-    switch_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.5,
-        typ: null,
-        max: 24
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "SW voltage"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Junction temperature"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "6.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 0.784,
-        typ: 0.8,
-        max: 0.816
-      },
-      conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "VFB"
-      }
-    },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 12e5,
-        typ: 16e5,
-        max: 19e5
-      },
-      conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "FSW, LMR12010X"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 1.2,
-        typ: 1.7,
-        max: 2.5
-      },
-      conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. VBOOST-VSW = 3 V instead of 5 V.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "ICL"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 15e-4,
-        max: 25e-4
-      },
-      conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. Switching enabled.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "IQ switching"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 3e-8,
-        max: null
-      },
-      conditions: "VIN = 5 V, VBOOST-VSW = 5 V, VEN = 0 V; typical at TJ = 25 degC.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "IQ shutdown"
-      }
-    },
-    switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 0.3,
-        max: 0.6
-      },
-      conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC. VBOOST-VSW = 3 V instead of 5 V.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "RDS(ON)"
-      }
-    },
-    maximum_duty_cycle: {
-      category: "electrical_characteristic",
-      unit: "1",
-      values: {
-        min: 0.85,
-        typ: 0.92,
-        max: null
-      },
-      conditions: "LMR12010X, VIN = 5 V, VBOOST-VSW = 5 V; typical at TJ = 25 degC; bold limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 5,
-        section: "6.3 Electrical Characteristics",
-        row: "DMAX, LMR12010X"
-      }
-    }
-  }
-};
-
-// examples/lmr70503-bga8-buckboost/datasheets/parameters.json
-var parameters_default8 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lmr70503-bga8-buckboost",
-    file: "lmr70503-bga8-buckboost",
-    title: "LMR70503 Buck-Boost",
-    topology: "Buck-Boost"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LMR70503",
-    reference: "U1",
-    schematic_value: "LMR70503",
-    symbol_library_id: "Reference:lmr70503-bga8-buckboost",
-    footprint: "Package_BGA:Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm",
-    package: "BGA-8",
-    datasheet_variant: "LMR70503, 8-bump thin DSBGA"
-  },
-  datasheet: {
-    title: "LMR70503 SIMPLE SWITCHER\xAE Buck-Boost Converter For Negative Output Voltage in \xB5SMD",
-    document_number: "SNVS850A",
-    revision: "A",
-    published_month: "2013-04",
-    product_url: "https://www.ti.com/product/LMR70503",
-    source_url: "https://www.ti.com/lit/ds/symlink/lmr70503.pdf",
-    filename: "lmr70503.pdf",
-    sha256: "38d5416b3118cc1aeb08861a700bd330b202f2aba27e7bd5c40ed1d41c18048a",
-    bytes: 1235215,
-    page_count: 26,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "The downloaded PDF still titles the package microSMD; its features identify the 8-bump thin DSBGA package.",
-      "VREF is a reference output loaded by RREF, not the voltage regulated at the FB pin. FB is compared to ground.",
-      "The 500 kHz typical entry describes minimum switching frequency, not a fixed switching frequency.",
-      "The 0.32 A typical limit is peak switch current, not guaranteed output current. The private simulation adapter does not establish datasheet-equivalent timing."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 2.8,
-        typ: null,
-        max: 5.5
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 3,
-        section: "Operating Ratings",
-        row: "VIN input voltage"
-      }
-    },
-    output_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: -5.5,
-        typ: null,
-        max: -0.9
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 3,
-        section: "Operating Ratings",
-        row: "VOUT output voltage"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -40,
-        typ: null,
-        max: 125
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 3,
-        section: "Operating Ratings",
-        row: "TJ"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -0.5,
-        typ: null,
-        max: 6
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 3,
-        section: "Absolute Maximum Ratings",
-        row: "VIN to GND"
-      }
-    },
-    output_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: -6.5,
-        typ: null,
-        max: 0.5
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 3,
-        section: "Absolute Maximum Ratings",
-        row: "VOUT to GND"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 3,
-        section: "Absolute Maximum Ratings",
-        row: "Junction temperature"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 3,
-        section: "Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    reference_output_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.166,
-        typ: 1.19,
-        max: 1.214
-      },
-      conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC. RREF = 100 kOhm to GND.",
-      source: {
-        page: 3,
-        section: "Electrical Characteristics",
-        row: "VREF"
-      }
-    },
-    minimum_switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 4e5,
-        typ: 5e5,
-        max: null
-      },
-      conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 3,
-        section: "Electrical Characteristics",
-        row: "FSW-MIN"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 0.27,
-        typ: 0.32,
-        max: 0.37
-      },
-      conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC.",
-      source: {
-        page: 4,
-        section: "Electrical Characteristics",
-        row: "IPEAK-CL"
-      },
-      notes: "Internally trimmed limit; actual application peak depends on VIN, inductance and junction temperature (footnote 3)."
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 245e-6,
-        max: 3e-4
-      },
-      conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC. VIN = 5.5 V instead of 3.3 V, no switching.",
-      source: {
-        page: 3,
-        section: "Electrical Characteristics",
-        row: "IQ"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 1e-8,
-        max: 1e-6
-      },
-      conditions: "VIN = 3.3 V, VOUT = -5 V, VEN = 1.8 V; typical at TJ = 25 degC, bold limits over TJ = -40 to 125 degC. VIN = 5.5 V instead of 3.3 V, EN = 0 V.",
-      source: {
-        page: 3,
-        section: "Electrical Characteristics",
-        row: "ISD"
-      }
-    },
-    switch_on_resistance: {
-      category: "electrical_characteristic",
-      unit: "Ohm",
-      values: {
-        min: null,
-        typ: 1.1,
-        max: 2
-      },
-      conditions: "VIN = 2.8 V, VOUT = -5 V, VEN = 1.8 V, TJ = 25 degC; both resistance entries use standard type and apply at 25 degC only.",
-      source: {
-        page: 3,
-        section: "Electrical Characteristics",
-        row: "RDSON"
-      }
-    },
-    thermal_shutdown_temperature: {
-      category: "electrical_characteristic",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: 165,
-        max: null
-      },
-      conditions: "Junction temperature rising; typical thermal shutdown threshold.",
-      source: {
-        page: 4,
-        section: "Electrical Characteristics",
-        row: "TSDTH-HIGH"
-      }
-    }
-  }
-};
-
-// examples/lm2598-to220-7-buck/datasheets/parameters.json
-var parameters_default9 = {
-  $schema: "../../../resources/example-catalog/ic-datasheet.schema.json",
-  schema_version: "1.0.0",
-  example: {
-    id: "reference-lm2598-to220-7-buck",
-    file: "lm2598-to220-7-buck",
-    title: "LM2598 Buck",
-    topology: "Buck"
-  },
-  ic: {
-    manufacturer: "Texas Instruments",
-    family: "LM2598",
-    reference: "U1",
-    schematic_value: "LM2598_ADJ",
-    symbol_library_id: "Reference:lm2598-to220-7-buck",
-    footprint: "Package_TO_SOT_THT:TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical",
-    package: "TO-220-7",
-    datasheet_variant: "Adjustable output, TO-220-7"
-  },
-  datasheet: {
-    title: "LM2598 SIMPLE SWITCHER\xAE Power Converter 150-kHz 1-A Step-Down Voltage Regulator, With Features",
-    document_number: "SNVS125D",
-    revision: "D",
-    published_month: "2016-05",
-    product_url: "https://www.ti.com/product/LM2598",
-    source_url: "https://www.ti.com/lit/ds/symlink/lm2598.pdf",
-    filename: "lm2598.pdf",
-    sha256: "62f57a1c796bfcefe155e4452560b51d7516ea7dd2c386d2266807f94f27a815",
-    bytes: 2404044,
-    page_count: 49,
-    downloaded_on: "2026-10-22"
-  },
-  extraction: {
-    method: "pdf_text_with_visual_table_review",
-    reviewed_on: "2026-10-22",
-    scope: "main_controller",
-    notes: [
-      "The canonical schematic value LM2598_ADJ selects the adjustable-output characteristics, not a fixed 3.3 V, 5 V or 12 V device.",
-      "The recommended operating temperature starts at -25 degC in this datasheet; it must not be generalized to -40 degC.",
-      "Output range and current are IC capabilities, not measured values for this example."
-    ]
-  },
-  parameters: {
-    input_voltage: {
-      category: "recommended_operating_condition",
-      unit: "V",
-      values: {
-        min: 4.5,
-        typ: null,
-        max: 40
-      },
-      conditions: "Use within the stated operating limits and the application requirements.",
-      source: {
-        page: 4,
-        section: "7.3 Recommended Operating Conditions",
-        row: "Supply voltage"
-      }
-    },
-    output_voltage: {
-      category: "feature",
-      unit: "V",
-      values: {
-        min: 1.2,
-        typ: null,
-        max: 37
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Adjustable output range"
-      }
-    },
-    output_current: {
-      category: "feature",
-      unit: "A",
-      values: {
-        min: null,
-        typ: null,
-        max: 1
-      },
-      conditions: "Application capability stated in the datasheet; external components, input voltage and temperature constrain usable operation.",
-      source: {
-        page: 1,
-        section: "1 Features",
-        row: "Output current capability"
-      }
-    },
-    operating_junction_temperature: {
-      category: "recommended_operating_condition",
-      unit: "degC",
-      values: {
-        min: -25,
-        typ: null,
-        max: 125
-      },
-      conditions: "Operating temperature; interpreted as junction temperature consistently with the electrical-characteristic limits.",
-      source: {
-        page: 4,
-        section: "7.3 Recommended Operating Conditions",
-        row: "Temperature"
-      }
-    },
-    input_voltage_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "V",
-      values: {
-        min: null,
-        typ: null,
-        max: 45
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Maximum supply voltage"
-      }
-    },
-    junction_temperature_absolute_maximum: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: null,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Maximum junction temperature"
-      }
-    },
-    storage_temperature: {
-      category: "absolute_maximum_rating",
-      unit: "degC",
-      values: {
-        min: -65,
-        typ: null,
-        max: 150
-      },
-      conditions: "Stress limit only; functional operation is not implied.",
-      source: {
-        page: 4,
-        section: "7.1 Absolute Maximum Ratings",
-        row: "Storage temperature"
-      }
-    },
-    feedback_reference_voltage: {
-      category: "electrical_characteristic",
-      unit: "V",
-      values: {
-        min: 1.193,
-        typ: 1.23,
-        max: 1.267
-      },
-      conditions: "Adjustable version, TJ = 25 degC; VIN = 4.5 to 40 V, ILOAD = 0.1 to 1 A, VOUT programmed for 3 V; Figures 42 and 45.",
-      source: {
-        page: 6,
-        section: "7.8 Electrical Characteristics - Adjustable Voltage Version",
-        row: "VFB"
-      }
-    },
-    switching_frequency: {
-      category: "electrical_characteristic",
-      unit: "Hz",
-      values: {
-        min: 127e3,
-        typ: 15e4,
-        max: 173e3
-      },
-      conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. Frequency reduces under second-stage current limit.",
-      source: {
-        page: 6,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Oscillator frequency"
-      }
-    },
-    switch_current_limit: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: 1.2,
-        typ: 1.5,
-        max: 2.4
-      },
-      conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. No diode, inductor or capacitor on output pin; feedback forced to 0 V (footnotes 4 and 5).",
-      source: {
-        page: 6,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Peak current limit"
-      }
-    },
-    quiescent_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 5e-3,
-        max: 0.01
-      },
-      conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. SD/SS open, feedback disconnected from output and tied to 12 V to force switch off (footnote 6).",
-      source: {
-        page: 6,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Operating quiescent current"
-      }
-    },
-    shutdown_current: {
-      category: "electrical_characteristic",
-      unit: "A",
-      values: {
-        min: null,
-        typ: 85e-6,
-        max: 2e-4
-      },
-      conditions: "TJ = 25 degC, VIN = 40 V, SD/SS = 0 V (footnote 7).",
-      source: {
-        page: 6,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Standby quiescent current"
-      }
-    },
-    maximum_duty_cycle: {
-      category: "electrical_characteristic",
-      unit: "1",
-      values: {
-        min: null,
-        typ: 1,
-        max: null
-      },
-      conditions: "Adjustable version, VIN = 12 V, ILOAD = 0.5 A, TJ = 25 degC unless the row states otherwise. Feedback forced to 0 V (footnote 5).",
-      source: {
-        page: 6,
-        section: "7.9 Electrical Characteristics - All Output Voltage Versions",
-        row: "Maximum duty cycle"
-      }
-    }
-  }
-};
+];
 
 // lib/immutable-project-ownership.mjs
 var ownedNodes = /* @__PURE__ */ new WeakSet();
@@ -7848,6 +8080,33 @@ var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v 
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
 var val = (n, i = 1) => n ? atom(n[i]) : "";
+var num = (n, i = 1) => Number(val(n, i) || 0);
+
+// lib/immutable-project.ts
+function isOwnedCircuit(circuit) {
+  return isOwnedProjectNode(circuit);
+}
+
+// lib/circuit.ts
+var ownedPartPins = /* @__PURE__ */ new WeakMap();
+function pinPositions(part, library) {
+  const owned = isOwnedProjectNode(part) && isOwnedProjectNode(library);
+  const cached = owned ? ownedPartPins.get(part) : void 0;
+  if (cached && cached.library === library) return cached.points.map((point) => ({ ...point }));
+  const a = -part.rotation * Math.PI / 180;
+  const cosine = Math.cos(a), sine = Math.sin(a);
+  const points = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin")).map((p) => {
+    const at = child(p, "at");
+    const x = num(at), y = -num(at, 2);
+    return {
+      x: Number((part.x + (part.mirror === "y" ? -1 : 1) * (x * cosine - y * sine)).toFixed(4)),
+      y: Number((part.y + (part.mirror === "x" ? -1 : 1) * (x * sine + y * cosine)).toFixed(4))
+    };
+  });
+  if (owned && points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)))
+    ownedPartPins.set(part, { library, points: points.map((point) => ({ ...point })) });
+  return points;
+}
 
 // lib/library.ts
 import { createProject, validateProject } from "./project-format.mjs";
@@ -8284,6 +8543,25 @@ for (const [relative, entry] of records) {
 }
 
 // lib/library.ts
+var ownedUnitGraphics = /* @__PURE__ */ new WeakMap();
+function unitGraphics(library, unit = 1) {
+  const owned = isOwnedProjectNode(library);
+  const variants = owned ? ownedUnitGraphics.get(library) : void 0;
+  const cached = variants?.get(unit);
+  if (cached) return [...cached];
+  const graphics = children(library, "symbol").filter((s) => {
+    const match = val(s).match(/_(\d+)_(\d+)$/);
+    return !match || (Number(match[1]) === 0 || Number(match[1]) === unit) && Number(match[2]) <= 1;
+  });
+  if (owned) {
+    const next = variants ?? /* @__PURE__ */ new Map();
+    next.set(unit, graphics);
+    while (next.size > 3) next.delete(next.keys().next().value);
+    ownedUnitGraphics.set(library, next);
+    return [...graphics];
+  }
+  return graphics;
+}
 var ownedPartFields = /* @__PURE__ */ new WeakMap();
 function partFields(part) {
   const owned = isOwnedProjectNode(part);
@@ -8306,22 +8584,20 @@ function partFootprint(part) {
 }
 
 // lib/example-datasheets.ts
-var records2 = [
-  parameters_default,
-  parameters_default2,
-  parameters_default3,
-  parameters_default4,
-  parameters_default5,
-  parameters_default6,
-  parameters_default7,
-  parameters_default8,
-  parameters_default9
-];
+var records2 = ic_datasheets_default;
 function projectDatasheetContext(project) {
-  const provenance = project?.extensions["org.openpe.reference-example"];
-  const record = records2.find((item) => item.example.id === provenance?.id);
+  const identity2 = (part) => part.raw && val(child(part.raw, "lib_id")) || part.libId;
+  const candidates = records2.filter(
+    (item) => project?.schematic.parts.some((part) => identity2(part) === item.ic.symbol_library_id)
+  );
+  const matching = candidates.filter(
+    (item) => project?.schematic.parts.some(
+      (part) => identity2(part) === item.ic.symbol_library_id && part.value === item.ic.schematic_value && partFootprint(part) === item.ic.footprint
+    )
+  );
+  const record = matching.length === 1 ? matching[0] : candidates.length === 1 ? candidates[0] : null;
   const bindings = record && project ? project.schematic.parts.filter(
-    (part) => part.value === record.ic.schematic_value && (part.raw && val(child(part.raw, "lib_id")) || part.libId) === record.ic.symbol_library_id && partFootprint(part) === record.ic.footprint
+    (part) => part.value === record.ic.schematic_value && identity2(part) === record.ic.symbol_library_id && partFootprint(part) === record.ic.footprint
   ).map((part) => ({
     schematicId: project.schematic.id,
     partId: part.id,
@@ -8700,51 +8976,754 @@ var check = compileCapabilitySchema(
   })
 );
 function validateAgentThermalContext(value, boardId, sourcePending) {
-  const fail = () => {
+  const fail2 = () => {
     throw new Error("Invalid Agent thermal context.");
   };
-  if (!value || typeof value !== "object" || Array.isArray(value)) return fail();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fail2();
   const short = value;
   if (short.status === "disabled" || short.status === "not-opened") {
-    if (Object.keys(value).length !== 1) fail();
+    if (Object.keys(value).length !== 1) fail2();
     return;
   }
-  if (!check(value).valid) return fail();
+  if (!check(value).valid) return fail2();
   const context = value;
   if (boardId !== void 0 && context.boardId !== boardId || sourcePending !== void 0 && context.sourcePending !== sourcePending)
-    fail();
-  if (context.sourcePending && (context.result || context.probe)) fail();
+    fail2();
+  if (context.sourcePending && (context.result || context.probe)) fail2();
   if (context.result) {
     const { statistics, hottest, coolest } = context.result;
     if (!context.boardId || !context.resultSettings || !["completed", "detecting", "unavailable"].includes(context.status) || statistics.minC > statistics.maxC || statistics.meanC < statistics.minC || statistics.meanC > statistics.maxC || hottest.temperatureC !== statistics.maxC || coolest.temperatureC !== statistics.minC || hottest.node >= statistics.nodeCount || coolest.node >= statistics.nodeCount || context.probe && context.probe.node >= statistics.nodeCount)
-      fail();
-  } else if (context.probe) fail();
+      fail2();
+  } else if (context.probe) fail2();
+}
+
+// context/agent-prompt-context.ts
+import { parseProject, projectSchematics } from "./project-format.mjs";
+
+// lib/project-net-groups.ts
+var ownedGroups = /* @__PURE__ */ new WeakMap();
+var copyGroups = (groups) => groups.map((group) => ({
+  wires: [...group.wires],
+  junctions: [...group.junctions],
+  labels: [...group.labels],
+  pins: [...group.pins]
+}));
+var documentPinKey = (component, pin) => JSON.stringify([component, pin]);
+var documentPhysicalPinKey = (reference, pin) => `physical:${JSON.stringify([reference, pin])}`;
+function projectNetGroups(circuit) {
+  const owned = isOwnedCircuit(circuit);
+  const cached = owned ? ownedGroups.get(circuit) : void 0;
+  if (cached) return copyGroups(cached);
+  const groups = groupCircuit(circuit);
+  if (owned) {
+    ownedGroups.set(circuit, groups);
+    return copyGroups(groups);
+  }
+  return groups;
+}
+function groupCircuit(circuit) {
+  const points = [], parent = [];
+  const add = (p) => {
+    if (points.length >= 3e4)
+      throw new Error(
+        "Invalid OpenPE project: schematic grouping supports at most 30,000 physical anchors. Reduce the schematic size."
+      );
+    points.push(p);
+    parent.push(parent.length);
+    return parent.length - 1;
+  };
+  const root = (i) => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const join = (a, b) => {
+    parent[root(a)] = root(b);
+  };
+  const wires = circuit.wires.map((w) => {
+    const a = add(w.a), b = add(w.b);
+    join(a, b);
+    return a;
+  });
+  const pins = [];
+  const names = [];
+  const physical = /* @__PURE__ */ new Map();
+  for (const part of circuit.parts) {
+    const library = circuit.libraries[part.libId];
+    const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
+    const positions = pinPositions(part, library);
+    definitions.forEach((pin, i) => {
+      const index = add(positions[i]), number2 = val(child(pin, "number"));
+      const key = JSON.stringify([part.ref, number2]);
+      const previous = physical.get(key);
+      if (previous !== void 0) join(index, previous);
+      physical.set(key, index);
+      pins.push(
+        { key: documentPinKey(part.id, number2), index },
+        { key: documentPhysicalPinKey(part.ref, number2), index }
+      );
+      if (child(library, "power") && definitions.length === 1 && val(pin) === "power_in")
+        names.push({ name: part.value, index });
+      else if (val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
+        names.push({ name: val(child(pin, "name")), index });
+    });
+  }
+  const labels = circuit.labels.map((label2) => {
+    const index = add(label2);
+    names.push({ name: label2.text, index });
+    return index;
+  });
+  const junctions = circuit.junctions.map(add);
+  const cell = 10;
+  const bucketKey = (x, y) => `${x},${y}`;
+  const buckets = /* @__PURE__ */ new Map();
+  const long = [];
+  circuit.wires.forEach((w, i) => {
+    const minX = Math.floor((Math.min(w.a.x, w.b.x) - 5e-5) / cell);
+    const maxX = Math.floor((Math.max(w.a.x, w.b.x) + 5e-5) / cell);
+    const minY = Math.floor((Math.min(w.a.y, w.b.y) - 5e-5) / cell);
+    const maxY = Math.floor((Math.max(w.a.y, w.b.y) + 5e-5) / cell);
+    if ((maxX - minX + 1) * (maxY - minY + 1) > 256) {
+      long.push(i);
+      return;
+    }
+    for (let x = minX; x <= maxX; x++)
+      for (let y = minY; y <= maxY; y++) {
+        const key = bucketKey(x, y), list = buckets.get(key) ?? [];
+        list.push(i);
+        buckets.set(key, list);
+      }
+  });
+  const coordinates = /* @__PURE__ */ new Map();
+  let comparisons = 0;
+  points.forEach((p, i) => {
+    const key = `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+    const previous = coordinates.get(key);
+    if (previous !== void 0) {
+      join(i, previous);
+      return;
+    }
+    coordinates.set(key, i);
+    const candidates = [
+      ...buckets.get(bucketKey(Math.floor(p.x / cell), Math.floor(p.y / cell))) ?? [],
+      ...long
+    ];
+    comparisons += candidates.length;
+    if (comparisons > 1e7)
+      throw new Error(
+        "Invalid OpenPE project: schematic grouping exceeds the geometry work limit. Reduce long or overlapping wires."
+      );
+    for (const index of candidates) {
+      const w = circuit.wires[index], length = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
+      if (length && Math.abs((p.x - w.a.x) * (w.b.y - w.a.y) - (p.y - w.a.y) * (w.b.x - w.a.x)) / length < 5e-5 && p.x >= Math.min(w.a.x, w.b.x) - 5e-5 && p.x <= Math.max(w.a.x, w.b.x) + 5e-5 && p.y >= Math.min(w.a.y, w.b.y) - 5e-5 && p.y <= Math.max(w.a.y, w.b.y) + 5e-5)
+        join(i, wires[index]);
+    }
+  });
+  const named = /* @__PURE__ */ new Map();
+  for (const item of names) {
+    const previous = named.get(item.name);
+    if (previous !== void 0) join(item.index, previous);
+    named.set(item.name, item.index);
+  }
+  const groups = /* @__PURE__ */ new Map();
+  const group = (index) => {
+    const key = root(index);
+    if (!groups.has(key)) groups.set(key, { wires: [], junctions: [], labels: [], pins: [] });
+    return groups.get(key);
+  };
+  wires.forEach((index, i) => group(index).wires.push(i));
+  junctions.forEach((index, i) => group(index).junctions.push(i));
+  labels.forEach((index, i) => group(index).labels.push(i));
+  pins.forEach((pin) => group(pin.index).pins.push(pin.key));
+  return [...groups.values()];
+}
+
+// lib/model-cad.ts
+var MODEL_CAD_EXTENSION = "org.openpe.model-cad";
+var object3 = (properties, optional = []) => ({
+  type: "object",
+  properties,
+  required: Object.keys(properties).filter((key) => !optional.includes(key)),
+  additionalProperties: false
+});
+var number = (minimum, maximum) => ({ type: "number", minimum, maximum });
+var vector = (minimum, maximum) => object3({ x: number(minimum, maximum), y: number(minimum, maximum), z: number(minimum, maximum) });
+var identity = {
+  type: "string",
+  pattern: "^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
+};
+var modelCadProfileSchema = {
+  oneOf: [
+    object3({ kind: { const: "rectangle" } }),
+    object3({ kind: { const: "circle" } }),
+    object3({
+      kind: { const: "polygon" },
+      points: {
+        type: "array",
+        minItems: 3,
+        maxItems: 128,
+        items: object3({ x: number(-500, 500), y: number(-500, 500) })
+      }
+    })
+  ]
+};
+var modelCadEdgeTreatmentSchema = object3({
+  kind: { enum: ["chamfer", "fillet"] },
+  distanceMm: number(0.01, 500),
+  edges: {
+    type: "array",
+    minItems: 1,
+    maxItems: 448,
+    uniqueItems: true,
+    items: {
+      type: "string",
+      maxLength: 32,
+      pattern: "^(?:(?:profile|hole):(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$"
+    }
+  }
+});
+var shapeHolesSchema = {
+  type: "array",
+  maxItems: 32,
+  items: object3({ x: number(-500, 500), y: number(-500, 500), diameterMm: number(0.5, 500) })
+};
+function shapeSchema(depth) {
+  const common = {
+    size: vector(0.5, 1e3),
+    holes: shapeHolesSchema,
+    edgeTreatment: modelCadEdgeTreatmentSchema
+  };
+  const alternatives = [
+    object3({ kind: { enum: ["box", "cylinder"] }, ...common }, ["edgeTreatment"]),
+    object3({ kind: { const: "extrusion" }, ...common, profile: modelCadProfileSchema }, [
+      "edgeTreatment"
+    ])
+  ];
+  if (depth <= 4)
+    alternatives.push(
+      object3(
+        {
+          kind: { const: "boolean" },
+          ...common,
+          boolean: object3({
+            operation: { enum: ["union", "difference", "intersection"] },
+            operands: {
+              type: "array",
+              minItems: 2,
+              maxItems: 2,
+              items: object3({
+                shape: shapeSchema(depth + 1),
+                position: vector(-1e5, 1e5),
+                rotation: vector(-360, 360)
+              })
+            }
+          })
+        },
+        ["edgeTreatment"]
+      )
+    );
+  return { oneOf: alternatives };
+}
+var modelCadShapeSchema = shapeSchema(0);
+var modelCadObjectSchema = object3(
+  {
+    id: identity,
+    name: { type: "string", minLength: 1, maxLength: 80, pattern: "^[^\\x00-\\x1f\\x7f]+$" },
+    kind: { enum: ["box", "cylinder", "extrusion", "boolean"] },
+    position: vector(-1e5, 1e5),
+    rotation: vector(-360, 360),
+    size: vector(0.5, 1e3),
+    material: { enum: ["aluminium", "pmma", "plastic"] },
+    opacity: number(0.05, 1),
+    holes: {
+      type: "array",
+      maxItems: 32,
+      items: object3({
+        id: identity,
+        x: number(-500, 500),
+        y: number(-500, 500),
+        diameterMm: number(0.5, 500)
+      })
+    },
+    profile: modelCadProfileSchema,
+    edgeTreatment: modelCadEdgeTreatmentSchema,
+    boolean: {
+      type: "object",
+      properties: modelCadShapeSchema.oneOf[2].properties.boolean.properties,
+      required: ["operation", "operands"],
+      additionalProperties: false
+    }
+  },
+  ["profile", "edgeTreatment", "boolean"]
+);
+var modelCadSchema = object3({
+  version: { const: 1 },
+  objects: { type: "array", maxItems: 64, items: modelCadObjectSchema }
+});
+var checkObject = compileCapabilitySchema(modelCadObjectSchema);
+var checkModel = compileCapabilitySchema(modelCadSchema);
+var checkShape = compileCapabilitySchema(modelCadShapeSchema);
+var checkProfile = compileCapabilitySchema(modelCadProfileSchema);
+var fail = (message) => {
+  throw new Error(`Model CAD: ${message}`);
+};
+var epsilon = 1e-6;
+var cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+var segmentDistance2 = (p, a, b) => {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+};
+function intersects(a, b, c, d) {
+  const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b);
+  if (abC * abD < 0 && cdA * cdB < 0) return true;
+  return [
+    [abC, c, a, b],
+    [abD, d, a, b],
+    [cdA, a, c, d],
+    [cdB, b, c, d]
+  ].some(
+    ([area, point, start, end]) => Math.abs(area) <= epsilon ? segmentDistance2(point, start, end) <= epsilon : false
+  );
+}
+function profileClearance(profile, size, point) {
+  if (profile.kind === "circle") return size.x / 2 - Math.hypot(point.x, point.y);
+  if (profile.kind === "rectangle")
+    return Math.min(size.x / 2 - Math.abs(point.x), size.y / 2 - Math.abs(point.y));
+  let inside = false, distance = Infinity;
+  for (let i = 0; i < profile.points.length; i++) {
+    const a = profile.points[i], b = profile.points[(i + 1) % profile.points.length];
+    distance = Math.min(distance, segmentDistance2(point, a, b));
+    if (a.y > point.y !== b.y > point.y && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x)
+      inside = !inside;
+  }
+  return inside || distance <= epsilon ? distance : -distance;
+}
+function validateModelCadProfile(input, size) {
+  const result = checkProfile(input);
+  if (!result.valid) return fail(`Invalid profile: ${result.error}.`);
+  if (![size.x, size.y].every((n) => Number.isFinite(n) && n >= 0.5 && n <= 1e3))
+    return fail("Profile dimensions must be between 0.5 and 1,000 mm.");
+  const profile = input;
+  if (profile.kind === "circle") {
+    if (size.x !== size.y) return fail("A circular profile must have equal X and Y diameters.");
+  } else if (profile.kind === "polygon") {
+    const { points } = profile;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      if (Math.hypot(b.x - a.x, b.y - a.y) <= epsilon)
+        return fail(
+          "Polygon profile edges must have positive length; do not repeat the closing point."
+        );
+    }
+    let area = 0;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      area += a.x * b.y - b.x * a.y;
+      for (let j = i + 1; j < points.length; j++) {
+        if (j === i + 1 || i === 0 && j === points.length - 1) continue;
+        if (intersects(a, b, points[j], points[(j + 1) % points.length]))
+          return fail("Polygon profiles cannot cross or touch themselves.");
+      }
+    }
+    if (Math.abs(area) <= epsilon) return fail("A polygon profile must enclose positive area.");
+    const xs = points.map((p) => p.x), ys = points.map((p) => p.y), minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (Math.abs(minX + maxX) > epsilon || Math.abs(minY + maxY) > epsilon)
+      return fail("Polygon profile bounds must be centred on the local origin.");
+    if (Math.abs(maxX - minX - size.x) > epsilon || Math.abs(maxY - minY - size.y) > epsilon)
+      return fail("Polygon profile bounds must match the extrusion X and Y dimensions.");
+  }
+  return profile;
+}
+function selectableEdges(shape) {
+  if (shape.kind === "boolean") return [];
+  const edges = [];
+  const profile = shape.kind === "extrusion" ? shape.profile : shape.kind === "cylinder" ? { kind: "circle" } : { kind: "rectangle" };
+  const points = profile.kind === "polygon" ? profile.points : [
+    { x: -shape.size.x / 2, y: -shape.size.y / 2 },
+    { x: shape.size.x / 2, y: -shape.size.y / 2 },
+    { x: shape.size.x / 2, y: shape.size.y / 2 },
+    { x: -shape.size.x / 2, y: shape.size.y / 2 }
+  ];
+  for (const side of ["top", "bottom"]) {
+    const z = (side === "top" ? 1 : -1) * shape.size.z / 2;
+    const label2 = side === "top" ? "Top" : "Bottom";
+    if (profile.kind === "circle")
+      edges.push({
+        id: `profile:${side}:0`,
+        label: `${label2} circular edge`,
+        kind: "circle",
+        center: { x: 0, y: 0, z },
+        radiusMm: shape.size.x / 2
+      });
+    else
+      for (let index = 0; index < points.length; index++)
+        edges.push({
+          id: `profile:${side}:${index}`,
+          label: `${label2} edge ${index + 1}`,
+          kind: "line",
+          start: { ...points[index], z },
+          end: { ...points[(index + 1) % points.length], z }
+        });
+    for (let index = 0; index < shape.holes.length; index++)
+      edges.push({
+        id: `hole:${side}:${index}`,
+        label: `Hole ${index + 1} ${side} rim`,
+        kind: "circle",
+        center: { x: shape.holes[index].x, y: shape.holes[index].y, z },
+        radiusMm: shape.holes[index].diameterMm / 2
+      });
+  }
+  if (profile.kind !== "circle")
+    for (let index = 0; index < points.length; index++)
+      edges.push({
+        id: `side:${index}`,
+        label: `Vertical edge ${index + 1}`,
+        kind: "line",
+        start: { ...points[index], z: -shape.size.z / 2 },
+        end: { ...points[index], z: shape.size.z / 2 }
+      });
+  return edges;
+}
+function validateModelCadShape(input) {
+  const result = checkShape(input);
+  if (!result.valid) return fail(`Invalid shape: ${result.error}.`);
+  let operations = 0, holes = 0;
+  const visit = (shape, depth) => {
+    if (shape.kind === "cylinder" && shape.size.x !== shape.size.y)
+      return fail("A cylinder must have equal X and Y diameters.");
+    const profile = shape.kind === "extrusion" ? validateModelCadProfile(shape.profile, shape.size) : shape.kind === "box" ? { kind: "rectangle" } : shape.kind === "cylinder" ? { kind: "circle" } : null;
+    if (shape.edgeTreatment) {
+      const treatment = shape.edgeTreatment;
+      const selected = treatment.edges;
+      const available = new Set(selectableEdges(shape).map((edge) => edge.id));
+      if (selected.some((edge) => !available.has(edge)))
+        return fail("A selected edge is unavailable on this base shape.");
+      const d = treatment.distanceMm, count = Number(selected.some((edge) => edge.includes(":top:"))) + Number(selected.some((edge) => edge.includes(":bottom:")));
+      if (count * d >= shape.size.z - epsilon || 2 * d >= Math.min(shape.size.x, shape.size.y) - epsilon)
+        return fail("The edge treatment must leave positive body height and profile area.");
+    }
+    holes += shape.holes.length;
+    if (holes > 256) return fail("A shape supports at most 256 through holes.");
+    if (!profile && shape.holes.length)
+      return fail("Boolean bodies use subtractive solids instead of local through holes.");
+    for (let i = 0; i < shape.holes.length; i++) {
+      const hole = shape.holes[i];
+      if (profile && profileClearance(profile, shape.size, hole) + epsilon < hole.diameterMm / 2 + 0.5)
+        return fail("Each hole needs at least 0.5 mm of material to the object edge.");
+      for (let j = i + 1; j < shape.holes.length; j++) {
+        const other = shape.holes[j];
+        if (Math.hypot(other.x - hole.x, other.y - hole.y) < (other.diameterMm + hole.diameterMm) / 2 + 0.5)
+          return fail("Through holes must leave at least 0.5 mm between them.");
+      }
+    }
+    if (shape.kind === "boolean") {
+      if (depth > 4 || ++operations > 32)
+        return fail("Boolean geometry exceeds the supported depth or operation count.");
+      for (const operand of shape.boolean.operands) visit(operand.shape, depth + 1);
+      const bounds = booleanBounds(shape.boolean);
+      for (const axis of ["x", "y", "z"])
+        if (bounds.max[axis] <= bounds.min[axis] || bounds.min[axis] < -shape.size[axis] / 2 - epsilon || bounds.max[axis] > shape.size[axis] / 2 + epsilon)
+          return fail("The Boolean envelope must contain its positive bounded result.");
+    }
+  };
+  visit(input, 0);
+  return input;
+}
+function modelCadShape(body) {
+  const shape = {
+    kind: body.kind,
+    size: { x: body.size.x, y: body.size.y, z: body.size.z },
+    holes: body.holes.map(({ x, y, diameterMm }) => ({ x, y, diameterMm }))
+  };
+  if (body.profile)
+    shape.profile = body.profile.kind === "polygon" ? { kind: "polygon", points: body.profile.points.map(({ x, y }) => ({ x, y })) } : { kind: body.profile.kind };
+  if (body.edgeTreatment)
+    shape.edgeTreatment = {
+      kind: body.edgeTreatment.kind,
+      distanceMm: body.edgeTreatment.distanceMm,
+      edges: [...body.edgeTreatment.edges]
+    };
+  if (body.boolean)
+    shape.boolean = {
+      operation: body.boolean.operation,
+      operands: body.boolean.operands.map((operand) => ({
+        shape: modelCadShape(operand.shape),
+        position: { x: operand.position.x, y: operand.position.y, z: operand.position.z },
+        rotation: { x: operand.rotation.x, y: operand.rotation.y, z: operand.rotation.z }
+      }))
+    };
+  return shape;
+}
+function modelCadOperandBounds(operand) {
+  const min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  const radians = (n) => n * Math.PI / 180, [rx, ry, rz] = [operand.rotation.x, operand.rotation.y, operand.rotation.z].map(radians), [sx, sy, sz] = [rx, ry, rz].map(Math.sin), [cx, cy, cz] = [rx, ry, rz].map(Math.cos);
+  for (const x of [-operand.shape.size.x / 2, operand.shape.size.x / 2])
+    for (const y of [-operand.shape.size.y / 2, operand.shape.size.y / 2])
+      for (const z of [-operand.shape.size.z / 2, operand.shape.size.z / 2]) {
+        const zx = cz * x - sz * y, zy = sz * x + cz * y, yx = cy * zx + sy * z, yz = -sy * zx + cy * z, point = {
+          x: yx + operand.position.x,
+          y: cx * zy - sx * yz + operand.position.y,
+          z: sx * zy + cx * yz + operand.position.z
+        };
+        for (const axis of ["x", "y", "z"]) {
+          min[axis] = Math.min(min[axis], point[axis]);
+          max[axis] = Math.max(max[axis], point[axis]);
+        }
+      }
+  return { min, max };
+}
+function booleanBounds(operation) {
+  const [target, tool] = operation.operands.map(modelCadOperandBounds);
+  if (operation.operation === "difference") return target;
+  const min = { ...target.min }, max = { ...target.max };
+  for (const axis of ["x", "y", "z"]) {
+    min[axis] = operation.operation === "union" ? Math.min(min[axis], tool.min[axis]) : Math.max(min[axis], tool.min[axis]);
+    max[axis] = operation.operation === "union" ? Math.max(max[axis], tool.max[axis]) : Math.min(max[axis], tool.max[axis]);
+  }
+  return { min, max };
+}
+function validateModelCadObject(input) {
+  const result = checkObject(input);
+  if (!result.valid) return fail(`Invalid object: ${result.error}.`);
+  const body = input;
+  if (!body.name.trim()) return fail("An object name is required.");
+  validateModelCadShape(modelCadShape(body));
+  const identities = /* @__PURE__ */ new Set([body.id.toLowerCase()]);
+  for (const hole of body.holes) {
+    if (identities.has(hole.id.toLowerCase())) return fail("Feature identities must be unique.");
+    identities.add(hole.id.toLowerCase());
+  }
+  return body;
+}
+function validateModelCad(input) {
+  const result = checkModel(input);
+  if (!result.valid) return fail(`Invalid model: ${result.error}.`);
+  const model = input;
+  if (JSON.stringify(model).length > 256e3)
+    return fail("Model parameters exceed the supported 256,000-character native limit.");
+  const identities = /* @__PURE__ */ new Set();
+  let holeCount = 0;
+  const countHoles = (shape) => shape.holes.length + (shape.boolean?.operands.reduce((count, operand) => count + countHoles(operand.shape), 0) ?? 0);
+  for (const body of model.objects) {
+    validateModelCadObject(body);
+    holeCount += countHoles(body);
+    if (holeCount > 256) return fail("A model supports at most 256 through holes.");
+    for (const id of [body.id, ...body.holes.map((hole) => hole.id)]) {
+      if (identities.has(id.toLowerCase()))
+        return fail("Object and feature identities must be unique.");
+      identities.add(id.toLowerCase());
+    }
+  }
+  return model;
+}
+function modelCadFromProject(project) {
+  const input = project.extensions[MODEL_CAD_EXTENSION];
+  return input === void 0 ? null : validateModelCad(input);
+}
+
+// context/agent-prompt-context.ts
+var collectionLimit = 256;
+var bounded2 = (items) => ({
+  total: items.length,
+  items: items.slice(0, collectionLimit),
+  ...items.length > collectionLimit ? { truncated: true } : {}
+});
+function agentPromptContext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const context = value;
+  const workspace = context.workspace;
+  if (!workspace) return value;
+  const project = parseProject(JSON.stringify(workspace.project));
+  const selected = new Set(
+    Array.isArray(workspace.ui.selection) ? workspace.ui.selection : []
+  );
+  const summarizeSheet = (circuit) => {
+    const active = circuit.id === workspace.ui.activeSchematicId;
+    const summary = {
+      id: circuit.id,
+      title: circuit.title,
+      counts: {
+        components: circuit.parts.length,
+        wires: circuit.wires.length,
+        labels: circuit.labels.length,
+        junctions: circuit.junctions.length,
+        noConnects: circuit.noConnects?.length ?? 0
+      }
+    };
+    if (!active) return summary;
+    const parts = [...circuit.parts].sort(
+      (a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id))
+    );
+    const visibleParts = parts.slice(0, collectionLimit);
+    const groups = projectNetGroups(circuit).map((group) => ({
+      ...group,
+      selected: group.pins.some(
+        (key) => !key.startsWith("physical:") && selected.has(JSON.parse(key)[0])
+      ) || group.wires.some((index) => selected.has(circuit.wires[index].id)) || group.labels.some((index) => selected.has(circuit.labels[index].id))
+    })).sort((a, b) => Number(b.selected) - Number(a.selected));
+    const byId = new Map(circuit.parts.map((part) => [part.id, part]));
+    const symbols = [...new Set(visibleParts.map((part) => part.libId))];
+    return {
+      ...summary,
+      components: bounded2(
+        parts.map(({ raw: _raw, fields, ...part }) => ({
+          ...part,
+          ...fields?.Footprint ? { footprint: fields.Footprint } : {},
+          ...fields?.Description ? { description: fields.Description } : {},
+          simulation: Object.fromEntries(
+            Object.entries(fields ?? {}).filter(([key]) => key.startsWith("Sim."))
+          )
+        }))
+      ),
+      connections: bounded2(
+        groups.map((group) => ({
+          labels: [...new Set(group.labels.map((index) => circuit.labels[index].text))],
+          // Tuples are [component reference, native pin number]. Geometry owns
+          // grouping; drawing crossings never create a connection here.
+          pins: group.pins.filter((key) => !key.startsWith("physical:")).map((key) => {
+            const [id, pin] = JSON.parse(key);
+            return [byId.get(id).ref, pin];
+          })
+        }))
+      ),
+      symbolPins: Object.fromEntries(
+        symbols.map((id) => [
+          id,
+          bounded2(
+            children(circuit.libraries[id], "symbol").flatMap(
+              (unit) => children(unit, "pin").map((pin) => ({
+                unit: val(unit),
+                number: val(child(pin, "number")),
+                name: val(child(pin, "name")),
+                type: val(pin)
+              }))
+            )
+          )
+        ])
+      ),
+      selectedGeometry: {
+        wires: bounded2(
+          circuit.wires.filter((wire) => selected.has(wire.id)).map(({ raw: _raw, ...wire }) => wire)
+        ),
+        labels: bounded2(
+          circuit.labels.filter((label2) => selected.has(label2.id)).map(({ raw: _raw, ...label2 }) => label2)
+        ),
+        junctions: bounded2(
+          circuit.junctions.filter((point) => selected.has(point.id)).map(({ raw: _raw, ...point }) => point)
+        ),
+        noConnects: bounded2(
+          (circuit.noConnects ?? []).filter((point) => selected.has(point.id)).map(({ raw: _raw, ...point }) => point)
+        ),
+        pins: visibleParts.filter((part) => selected.has(part.id)).map((part) => {
+          const positions = pinPositions(part, circuit.libraries[part.libId]);
+          return {
+            componentId: part.id,
+            pins: bounded2(
+              unitGraphics(circuit.libraries[part.libId], part.unit || 1).flatMap((unit) => children(unit, "pin")).map((pin, index) => ({
+                number: val(child(pin, "number")),
+                ...positions[index]
+              }))
+            )
+          };
+        })
+      }
+    };
+  };
+  const board = project.pcb;
+  const model = modelCadFromProject(project);
+  return {
+    id: context.id,
+    basis: context.basis,
+    ...context.layout ? { layout: context.layout } : {},
+    workspace: {
+      version: workspace.version,
+      capturedAt: workspace.capturedAt,
+      project: {
+        id: project.id,
+        name: project.name,
+        units: project.units,
+        schematics: projectSchematics(project).map(summarizeSheet),
+        nativeFileNames: project.nativeFiles?.files.map(({ name }) => name),
+        pcb: board ? {
+          id: board.id,
+          layers: board.layers,
+          thickness: board.thickness,
+          counts: Object.fromEntries(
+            ["nets", "footprints", "tracks", "vias", "zones", "graphics"].map(
+              (key) => [key, board[key].length]
+            )
+          ),
+          ...workspace.ui.view === "layout" ? {
+            footprints: bounded2(
+              board.footprints.map(
+                ({ id, reference, libraryId, x, y, rotation, side, pads }) => ({
+                  id,
+                  reference,
+                  libraryId,
+                  x,
+                  y,
+                  rotation,
+                  side,
+                  padCount: pads.length
+                })
+              )
+            )
+          } : {}
+        } : null,
+        modelCad: model ? {
+          objectCount: model.objects.length,
+          ...workspace.ui.view === "3d" ? {
+            objects: model.objects.map(({ id, name, kind, position, rotation, size }) => ({
+              id,
+              name,
+              kind,
+              position,
+              rotation,
+              size
+            }))
+          } : {}
+        } : null
+      },
+      source: {
+        pending: workspace.source.pending,
+        error: workspace.source.error,
+        draftCharacters: workspace.source.draft?.length ?? 0
+      },
+      ui: workspace.ui,
+      icDatasheet: workspace.icDatasheet,
+      simulation: workspace.simulation,
+      thermal: workspace.thermal
+    }
+  };
 }
 
 // context/agent-workspace-context.ts
 function validateAgentWorkspaceContext(value, circuitId, basis) {
   if (value === void 0) return;
   const context = value;
-  const fail = () => {
+  const fail2 = () => {
     throw new Error("Invalid Agent workspace context.");
   };
   let nodes = 0;
   function finiteJSON(item, depth = 0) {
-    if (++nodes > 1e6 || depth > 64) fail();
-    if (typeof item === "number" && !Number.isFinite(item)) fail();
+    if (++nodes > 1e6 || depth > 64) fail2();
+    if (typeof item === "number" && !Number.isFinite(item)) fail2();
     else if (Array.isArray(item)) item.forEach((entry) => finiteJSON(entry, depth + 1));
     else if (item && typeof item === "object")
       Object.values(item).forEach((entry) => finiteJSON(entry, depth + 1));
-    else if (item !== null && !["string", "number", "boolean"].includes(typeof item)) fail();
+    else if (item !== null && !["string", "number", "boolean"].includes(typeof item)) fail2();
   }
   finiteJSON(value);
   if (!context || context.version !== 1 || typeof context.capturedAt !== "string" || !Number.isFinite(Date.parse(context.capturedAt)) || !context.source || typeof context.source.pending !== "boolean" || typeof context.source.error !== "string" || !(context.source.draft === null || typeof context.source.draft === "string") || (context.source.draft?.length ?? 0) > 8 * 1024 * 1024 || !context.ui || Array.isArray(context.ui) || !context.simulation)
-    fail();
-  const project = parseProject(JSON.stringify(context.project));
+    fail2();
+  const project = parseProject2(JSON.stringify(context.project));
   const active = [project.schematic, ...project.additionalSchematics ?? []].find(
     (file) => file.id === circuitId
   );
-  if (!active || context.ui.activeSchematicId !== circuitId) fail();
+  if (!active || context.ui.activeSchematicId !== circuitId) fail2();
   if (context.icDatasheet !== void 0) {
     const canonical2 = (item) => {
       if (Array.isArray(item)) return "[" + item.map(canonical2).join(",") + "]";
@@ -8754,15 +9733,15 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
         ).join(",") + "}";
       return JSON.stringify(item);
     };
-    if (canonical2(context.icDatasheet) !== canonical2(projectDatasheetContext(project))) fail();
+    if (canonical2(context.icDatasheet) !== canonical2(projectDatasheetContext(project))) fail2();
   }
   if (context.thermal !== void 0) {
     validateAgentThermalContext(context.thermal, project.pcb?.id, context.source.pending);
-    if (!project.pcb && "boardId" in context.thermal && context.thermal.boardId !== null) fail();
+    if (!project.pcb && "boardId" in context.thermal && context.thermal.boardId !== null) fail2();
   }
   const simulation = context.simulation;
   if (["disabled", "not-opened"].includes(simulation.status)) {
-    if ("result" in simulation || "circuitId" in simulation) fail();
+    if ("result" in simulation || "circuitId" in simulation) fail2();
     return;
   }
   if (!("circuitId" in simulation) || ![
@@ -8775,21 +9754,21 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
     "stopped",
     "failed"
   ].includes(simulation.status))
-    fail();
+    fail2();
   if ("circuitId" in simulation && (simulation.circuitId !== circuitId || simulation.basis !== basis))
-    fail();
+    fail2();
   if ("result" in simulation && simulation.result) {
     if (context.source.pending || !["running", "completed", "stopped"].includes(simulation.status) || !["live", "completed", "partial"].includes(simulation.result.status) || simulation.result.status === "live" !== (simulation.status === "running") || simulation.result.status === "partial" !== (simulation.status === "stopped") || !Array.isArray(simulation.result.traces) || simulation.result.sampleCount < 2)
-      fail();
+      fail2();
     const result = simulation.result;
     if (result.sampleCount > 2e5 || !Number.isInteger(result.sampleCount) || result.timeUnit !== "s" || !Array.isArray(result.timeRange) || result.timeRange.length !== 2 || result.timeRange.some((t) => typeof t !== "number" || !Number.isFinite(t)) || result.timeRange[0] < 0 || result.timeRange[0] >= result.timeRange[1] || !result.traces.length || result.traces.length > 4096 || new Set(result.traces.map((trace) => trace.vector)).size !== result.traces.length || Object.keys(result).some(
       (key) => !["status", "sampleCount", "timeUnit", "timeRange", "sampling", "traces"].includes(key)
     ))
-      fail();
+      fail2();
     let points = 0;
     for (const trace of result.traces) {
       if (typeof trace.vector !== "string" || !trace.vector || typeof trace.label !== "string" || !["V", "A"].includes(trace.unit) || !trace.statistics || Object.values(trace.statistics).some((v) => typeof v !== "number" || !Number.isFinite(v)) || trace.statistics.min > trace.statistics.max)
-        fail();
+        fail2();
       for (const samples of [
         trace.samples,
         ...trace.visibleWindow ? [trace.visibleWindow.samples] : []
@@ -8797,11 +9776,12 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
         if (!Array.isArray(samples) || !samples.length || (points += samples.length) > 65e3 || samples.some(
           (pair, i) => !Array.isArray(pair) || pair.length !== 2 || pair.some((v) => typeof v !== "number" || !Number.isFinite(v)) || pair[0] < result.timeRange[0] || pair[0] > result.timeRange[1] || i > 0 && pair[0] <= samples[i - 1][0]
         ))
-          fail();
+          fail2();
       }
     }
   }
 }
 export {
+  agentPromptContext,
   validateAgentWorkspaceContext
 };

@@ -1,6 +1,12 @@
 /** Browser fallback only; desktop project writes use the native file bridge. */
 export function downloadText(content: string, filename: string, type = 'text/plain;charset=utf-8') {
-  const url = URL.createObjectURL(new Blob([content], { type }));
+  downloadBlob(new Blob([content], { type }), filename);
+}
+export function downloadBytes(content: Uint8Array, filename: string, type: string) {
+  downloadBlob(new Blob([new Uint8Array(content)], { type }), filename);
+}
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   try {
     link.href = url;

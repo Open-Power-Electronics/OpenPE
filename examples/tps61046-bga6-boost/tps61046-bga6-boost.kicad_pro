@@ -4,6 +4,7 @@
     "version": 1
   },
   "text_variables": {
+    "OPENPE_PROJECT_NAME": "TPS61046 Boost",
     "OPENPE_SIMULATION_MODELS": "[\"circuits/TPS61046.lib\"]"
   }
 }

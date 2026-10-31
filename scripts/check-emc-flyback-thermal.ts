@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { parseProject } from '../lib/project';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { projectFromNativeFiles } from '../lib/project';
 import type { Point } from '../lib/circuit';
 import { buildSpiceDeck, defaultTransient } from '../lib/spice';
 import {
@@ -19,7 +21,10 @@ if (arguments_.length && !/^--mesh-size-mm=\d+(?:\.\d+)?$/.test(arguments_[0]))
 if (arguments_.length > 1) throw new Error('Only one mesh-size argument is supported.');
 const meshSizeMm = arguments_.length ? Number(arguments_[0].split('=')[1]) : 2;
 assert.ok(meshSizeMm > 0 && meshSizeMm <= 1000, 'Mesh size must be within (0, 1000] mm.');
-const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
+const nativePath = path.resolve('examples/emc-flyback/emc-flyback.kicad_pro');
+const native = await readNativeProject(nativePath);
+const project = projectFromNativeFiles(native);
 const deck = buildSpiceDeck(project.schematic, defaultTransient(project.schematic));
 const completed = JSON.parse(
   await readFile('test-results/emc-flyback-simulation/result.json', 'utf8'),
@@ -62,6 +67,11 @@ const result = validateThermalResult(
 );
 assert.ok(result.statistics.maxC > config.ambientC);
 assert.ok(result.statistics.energyImbalanceRelative < 0.005);
+assert.deepEqual(
+  await readNativeProject(nativePath),
+  native,
+  'Thermal analysis preserves native files.',
+);
 await writeFile(`${directory}/result.json`, JSON.stringify(result));
 const mesh = extrudeThermalMesh(
   parseThermalPlanarMesh(await readFile(`${directory}/artifacts/planar.msh`, 'utf8')),

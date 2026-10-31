@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { projectFromNativeFiles, serializeProject } from './project-format.mjs';
 import nativeProject from '../electron/native-project.cjs';
 import homeManifest from '../resources/example-catalog/home-manifest.json' with { type: 'json' };
+import { discoverExamples } from './example-discovery.mjs';
 
 const { readNativeProject } = nativeProject;
 const catalog = [...homeManifest.recent, ...homeManifest.examples];
@@ -31,9 +32,40 @@ export class ExampleProjects {
         },
       ]),
     );
+    this.fixedCatalog = new Map(this.catalog);
+  }
+
+  list() {
+    if (this.listing) return this.listing;
+    this.listing = this.#discover().finally(() => {
+      this.listing = undefined;
+    });
+    return this.listing;
+  }
+
+  async #discover() {
+    const { projects, warnings } = await discoverExamples(this.root, nativeProject.nativeName);
+    const next = new Map(this.fixedCatalog);
+    const entries = projects.map((project) => {
+      const fixed = catalog.find(
+        (entry) =>
+          project.directory === entry.file && project.filename === `${entry.file}.kicad_pro`,
+      );
+      const key = fixed ? `example:${fixed.id}` : project.key;
+      next.set(key, { ...project, id: defaultExampleId(key) });
+      return {
+        id: key.slice('example:'.length),
+        title: fixed?.title ?? project.filename.replace(/\.kicad_(?:pro|sch|pcb)$/i, ''),
+        description: fixed?.description ?? 'Native KiCad project',
+        section: fixed && homeManifest.recent.includes(fixed) ? 'recent' : 'examples',
+      };
+    });
+    this.catalog = next;
+    return { entries, warnings };
   }
 
   async prepare() {
+    await this.list();
     const entries = [...this.catalog];
     const warnings = new Array(entries.length);
     let next = 0;
@@ -57,12 +89,19 @@ export class ExampleProjects {
   }
 
   openDefault(key) {
-    if (typeof key !== 'string' || !this.catalog.has(key))
+    if (
+      typeof key !== 'string' ||
+      (!this.fixedCatalog.has(key) && !/^example:local-[a-f0-9]{64}$/.test(key))
+    )
       throw new Error('Unknown default example.');
-    const entry = this.catalog.get(key);
     const pending = this.busy.get(key);
     if (pending) return pending;
-    const opening = this.#openProject(entry).finally(() => this.busy.delete(key));
+    const opening = (async () => {
+      if (!this.fixedCatalog.has(key)) await this.list();
+      const entry = this.catalog.get(key);
+      if (!entry) throw new Error('The example is unavailable. Refresh the examples directory.');
+      return this.#openProject(entry);
+    })().finally(() => this.busy.delete(key));
     this.busy.set(key, opening);
     return opening;
   }

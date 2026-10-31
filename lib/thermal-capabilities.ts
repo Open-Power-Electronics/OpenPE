@@ -75,7 +75,7 @@ export function registerThermalCapabilities(
       id: 'thermal.run',
       kind: 'command',
       description:
-        'Mesh the current PCB with Gmsh and solve steady board temperatures with Elmer using the explicit thermal inputs. Open Thermal in Layout first. Desktop projects must be saved; the latest successful run and its process files are saved beside the project, outside design content.',
+        'Refresh verified completed electrical losses when SPICE heat input is selected, then mesh the current PCB with Gmsh and solve steady board temperatures with Elmer. Open Thermal in Layout first. Desktop projects must be saved; the latest successful run and its process files are saved beside the project, outside design content.',
       mutation: 'external',
       review: 'optional',
       available: () => (adapter.available() === true ? adapter.canRun() : adapter.available()),
@@ -88,7 +88,7 @@ export function registerThermalCapabilities(
       id: 'thermal.cancel',
       kind: 'command',
       description:
-        'Stop the active thermal mesh or solver process. Incomplete temperature fields are discarded.',
+        'Stop the active thermal heat-source import, mesh or solver process. Incomplete temperature fields are discarded.',
       mutation: 'session',
       review: 'optional',
       inputSchema: emptyCapabilityInput,

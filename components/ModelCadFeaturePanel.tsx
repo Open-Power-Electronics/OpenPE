@@ -1,4 +1,5 @@
 'use client';
+import QuantityInput from './QuantityInput';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
@@ -219,8 +220,9 @@ export default function ModelCadFeaturePanel({
           ) : (
             <>
               <label>
-                <span>{mode === 'fillet' ? 'Radius (mm)' : 'Distance (mm)'}</span>
-                <input
+                <span>{mode === 'fillet' ? 'Radius' : 'Distance'}</span>
+                <QuantityInput
+                  unit={'mm'}
                   aria-label={mode === 'fillet' ? 'Fillet radius (mm)' : 'Chamfer distance (mm)'}
                   inputMode="decimal"
                   value={distance}
@@ -228,8 +230,8 @@ export default function ModelCadFeaturePanel({
                   onFocus={() => {
                     focusDistance.current = distance;
                   }}
-                  onChange={(event) => {
-                    setDistance(event.target.value);
+                  onValueChange={(inputValue) => {
+                    setDistance(inputValue);
                     setError('');
                   }}
                 />

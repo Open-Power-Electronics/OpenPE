@@ -4,7 +4,7 @@ import examples from './example-simulation.json';
 import references from './reference-simulation.json';
 
 export type SimulationModelSource = 'basic' | 'external';
-export type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'D' | 'Q' | 'M';
+export type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'I' | 'D' | 'Q' | 'M';
 type BasicDefinition = {
   libId: string;
   kind: string;
@@ -25,6 +25,7 @@ export function simulationModelSource(fields: Record<string, string>): Simulatio
 }
 
 export function basicSimulationKind(part: Pick<Part, 'libId'>): BasicSimulationKind | null {
+  if (part.libId === 'Simulation_SPICE:IPULSE') return 'I';
   if (
     [
       'Device:R',
@@ -69,7 +70,7 @@ export function reviewedSimulationDevice(part: Pick<Part, 'libId'>): string | nu
   if (devices.length === 1) return devices[0];
   if (devices.length > 1) return null;
   const kind = basicSimulationKind(part);
-  return kind && ['R', 'C', 'L', 'V', 'D'].includes(kind) ? kind : null;
+  return kind && ['R', 'C', 'L', 'V', 'I', 'D'].includes(kind) ? kind : null;
 }
 
 /** These two reviewed MOSFET mappings intentionally differ: the KiCad Buck's
@@ -88,7 +89,7 @@ export function reviewedSimulationPins(part: Pick<Part, 'libId'>): string | null
   if (mappings.length === 1) return mappings[0];
   if (mappings.length > 1) return null;
   const kind = basicSimulationKind(part);
-  return kind && ['R', 'C', 'L', 'V'].includes(kind) ? '1=+ 2=-' : null;
+  return kind && ['R', 'C', 'L', 'V', 'I'].includes(kind) ? '1=+ 2=-' : null;
 }
 
 export function assertSimulationModelConfiguration(part: Part, fields = partFields(part)): void {
@@ -96,10 +97,10 @@ export function assertSimulationModelConfiguration(part: Part, fields = partFiel
   simulationModelSource(fields);
   if (
     fields['OpenPE.SourceType'] !== undefined &&
-    (basicSimulationKind(part) !== 'V' ||
+    (!['V', 'I'].includes(basicSimulationKind(part) || '') ||
       !['DC', 'PULSE', 'SIN'].includes(fields['OpenPE.SourceType']))
   )
-    throw new Error(`${part.ref}: unsupported voltage source type.`);
+    throw new Error(`${part.ref}: unsupported source waveform.`);
   if (explicit === 'basic' && !basicSimulationAvailable(part))
     throw new Error(`${part.ref}: no basic simulation model is available for this component.`);
   if (explicit === 'external' && (!fields['Sim.Library']?.trim() || !fields['Sim.Name']?.trim()))
@@ -125,7 +126,7 @@ export function effectiveSimulationModelFields(
   const result = { ...fields };
   if (
     simulationModelSource(fields) === 'basic' &&
-    basicSimulationKind(part) === 'V' &&
+    ['V', 'I'].includes(basicSimulationKind(part) || '') &&
     fields['OpenPE.SourceType']
   )
     result['Sim.Type'] = fields['OpenPE.SourceType'];
@@ -140,11 +141,14 @@ export function effectiveSimulationModelFields(
   const defaults =
     reviewedDefaults ??
     definition?.sim ??
-    (['R', 'C', 'L'].includes(kind)
-      ? { 'Sim.Device': kind, 'Sim.Type': '=', 'Sim.Pins': '1=+ 2=-' }
-      : {});
+    (kind === 'I'
+      ? { 'Sim.Device': 'I', 'Sim.Type': 'PULSE', 'Sim.Pins': '1=+ 2=-' }
+      : ['R', 'C', 'L'].includes(kind)
+        ? { 'Sim.Device': kind, 'Sim.Type': '=', 'Sim.Pins': '1=+ 2=-' }
+        : {});
   for (const name of ['Sim.Device', 'Sim.Type', 'Sim.Pins'])
     if (defaults[name] !== undefined) result[name] = defaults[name];
-  if (kind === 'V' && fields['OpenPE.SourceType']) result['Sim.Type'] = fields['OpenPE.SourceType'];
+  if (['V', 'I'].includes(kind) && fields['OpenPE.SourceType'])
+    result['Sim.Type'] = fields['OpenPE.SourceType'];
   return result;
 }

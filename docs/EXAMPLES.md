@@ -1,10 +1,24 @@
 # OpenPE examples
 
-Home follows [home-manifest.json](../resources/example-catalog/home-manifest.json): Example contains the nine
-curated projects, including LM27761 Charge Pump. During Preview, Recent contains
-the fixed EMC Flyback entry. Both sections share the ten-entry fixed catalog,
-with an editable schematic and two-layer PCB Layout for each project. Recent stays
-fixed independently of file-opening history.
+Home discovers native projects in `examples/` (packaged: `examples-native/`),
+including immediate project subdirectories. Add a KiCad project directory, then
+return to Home, focus the window or choose **Refresh examples**. No catalog
+registration or application rebuild is required. A directory with `.kicad_pro`
+files exposes those project entries; otherwise schematics, or PCB-only entries,
+use the ordinary native reader and its independent-sheet/primary-board rules.
+The [home manifest](../resources/example-catalog/home-manifest.json) supplies
+bundled display metadata and stable identities for the nine curated projects and
+the EMC Flyback Recent entry. Recent remains independent of file-opening history.
+
+Discovery reads directory names only, creates no grants or Git history, excludes
+links and private/generated directories, and bounds each listing to 1024 entries,
+128 project directories and 256 projects. Opaque `local-<SHA-256>` identities are
+resolved again by the host on open/recovery. Missing, invalid or unsupported
+files fail explicitly; discovery never rewrites or prepares a user's circuit.
+Discovered projects enter the same `readNativeProject` / `projectFromNativeFiles`
+path as File Open, then use the same Core and simulation compiler. Model bindings,
+electrical excitation and thermal power must come from supported design content
+or explicit analysis inputs; names and directories do not infer them.
 [manifest.json](../resources/example-catalog/manifest.json) records the nine curated projects,
 including stable internal IDs, plain filenames, source author, pinned source revision and SHA-256 hashes.
 The original `input.kicad_sch` and `expert.kicad_pcb` files remain unchanged under
@@ -30,9 +44,10 @@ the main [README.md](../README.md). Format, simulation and asset contracts are i
 | Example      | `lmr70503-bga8-buckboost` | LMR70503 Buck-Boost | BGA-8              |
 | Example      | `lm2598-to220-7-buck`     | LM2598 Buck         | TO-220-7           |
 
-`examples/` contains exactly the ten project directories listed above. Each keeps
-its complete native files and required portable assets; reviewed controller data
-and optional PDFs live in its `datasheets/`.
+The bundled `examples/` tree contains the ten project directories listed above;
+users may add their own native project directories. Each keeps
+its complete native files and required portable assets; reviewed controller
+data lives in the internal reference catalog; optional PDFs live in its `datasheets/`.
 Shared catalogs, schema, conversion/verification records, pinned originals under
 `sources/<stem>/`, the reference footprint subset and EMC manufacturer sources,
 manifest and notices under `footprints/emc-flyback/` belong to
@@ -72,6 +87,10 @@ Shared pinned footprints remain in `resources/example-catalog/footprints/` and
 downloaded SPICE models in `resources/example-catalog/simulation/models/`;
 EMC original sources remain under `resources/example-catalog/sources/emc-flyback/`,
 and manufacturer supplements under `resources/example-catalog/footprints/emc-flyback/`.
+EMC Flyback's four SPICE libraries are checked-in source assets under
+`examples/emc-flyback/circuits/`, with hashes in
+`resources/emc-flyback-models-lock.json`; preparation verifies them without
+regenerating or replacing their bytes.
 Generation/preparation verifies and copies required
 assets without changing model choices or transforms. Generated project asset copies are
 ignored in Git. Private regression snapshots live
@@ -89,14 +108,14 @@ UUIDs and the declared inset boundaries. Its snapshots and original native proje
 carry the same fills; thermal analysis reads them without refilling.
 KiCad local UI caches (`.kicad_prl`) are excluded.
 
-Each pinned Example controller also has an [official datasheet and reviewed parameter
+Each Home controller, including EMC Flyback, also has an [official datasheet and reviewed parameter
 record](DATASHEETS.md), with a versioned JSON Schema, units, conditions,
 source pages and pinned PDF hashes. Use `npm run datasheets:download` to fetch
-the nine local PDFs and `npm run datasheets:check` for offline verification.
+all 13 local IC PDFs (including EMC U1–U4) and `npm run datasheets:check` for offline verification.
 These reference assets are separate from native project files and model assets.
-Source lists the actual `datasheets/parameters.json` and any local PDF in the
-project directory. Ordinary JSON edits use Save file; PDFs open in the local
-viewer. The Agent's separate reviewed record remains available through
+Source lists actual local PDFs in the project directory and opens them in the
+local viewer. Reviewed parameters belong to the internal resource catalog; no
+separate datasheet JSON is generated in a project. The Agent's separate reviewed record remains available through
 `project.datasheet`, with controller bindings, parameters, conditions, document
 identity and official sources.
 
@@ -180,8 +199,7 @@ Closing leaves the files and private versions intact. Dirty example recovery
 becomes an ordinary project without a destination.
 See [VERSION-HISTORY.md](VERSION-HISTORY.md).
 
-Simulation source/load components are visible to the right of the connectors,
-with named-rail connections and no Footprint assignment or PCB packages.
+The nine Example projects show simulation source/load components to the right of their connectors. EMC Flyback shows V1, R21, V2, R22 and I1 in a separate framed Simulation testbench area above the original circuit. All use named-rail connections with no Footprint assignment or PCB packages; source and load settings come from those native components.
 Unassigned components render as Virtual; physical/virtual classification is
 independent of model support and Include in SPICE simulation.
 
@@ -254,6 +272,21 @@ preparing Home and internal KiCad/TI sidecars for the complete sweep.
 
 ## Verification and simulation scope
 
+`npm test -- tests/native-example-portability.test.ts` reads all ten actual native
+projects through the ordinary file reader, copies them to a new directory and
+filename, and reopens them without Home identity or snapshot factories. It checks
+native byte preservation, project-local SPICE model bytes, renderer/service deck
+agreement, Source apply/undo, Model CAD retention and thermal geometry with an
+explicit 1 W test input. The nine reference controllers also retain their reviewed
+model bindings after reference changes or copying the symbol into a project-local
+library; altered model identities and electrical pins remain rejected. These
+checks do not run solvers or establish support for arbitrary upstream files.
+
+The EMC electrical and thermal real-solver checks read
+`examples/emc-flyback/emc-flyback.kicad_pro` through the ordinary native reader.
+Electrical execution reads its colocated model files. Neither check substitutes
+the generated regression snapshot or a model download for those inputs.
+
 Documentation-only edits require static content, link and format checks. The
 following commands provide distinct verification when design/runtime changes
 require it; none launches Electron or an Agent provider.
@@ -274,7 +307,8 @@ ERC or DRC evidence and does not validate subsequent changes.
 [Simulation](SIMULATION.md#home-profiles-and-verification-scope) owns
 profile timing, acceptance criteria, controller derivatives and electrical
 assumptions. LM2596 uses an OpenPE adjustable derivative, not a TI-issued ADJ
-model; LMR70503 uses a scoped near-reset approximation. Recorded runs apply only
+model; LM25017 uses a scoped ideal-latch event-state approximation, and LMR70503
+uses a scoped near-reset approximation. Recorded runs apply only
 to matching inputs/models/solver and do not establish hardware qualification.
 Use the explicit [ERC/DRC reports](DESIGN-RULES.md) for supported rules.
 

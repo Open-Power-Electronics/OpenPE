@@ -743,6 +743,9 @@
           "items": {
             "type": "object",
             "properties": {
+              "locked": {
+                "const": true
+              },
               "id": {
                 "type": "string",
                 "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -1448,6 +1451,27 @@
           "maxLength": 4096,
           "minLength": 1
         },
+        "locked": {
+          "const": true
+        },
+        "solderMaskMargin": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "solderPasteMargin": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "solderPasteMarginRatio": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
         "x": {
           "type": "number",
           "minimum": -100000,
@@ -1484,6 +1508,9 @@
           "items": {
             "type": "object",
             "properties": {
+              "locked": {
+                "const": true
+              },
               "id": {
                 "type": "string",
                 "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"

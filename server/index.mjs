@@ -43,6 +43,7 @@ export async function startServer({
   modelCadPreviewFactory = createModelCadPreviewService,
   simulationModelFetcher = fetch,
   simulationModelFiles = undefined,
+  simulationExamplesRoot = undefined,
   simulationResultFiles = /** @type {{ forProject(fileId: string): ReturnType<typeof import('./project-spice-files.mjs').createProjectSpiceStore> | null } | undefined} */ (
     undefined
   ),
@@ -146,6 +147,7 @@ export async function startServer({
     simulationResultFiles,
     (deck, signal, store, resultFiles) =>
       simulationResultLoader(deck, signal, store, simulationRoot, resultFiles),
+    simulationExamplesRoot,
   );
   app.get('/api/libraries/:kind', async (req, res) => {
     if (!['symbols', 'footprints'].includes(req.params.kind))
@@ -266,6 +268,7 @@ export async function startServer({
       (b.effort !== undefined && !['low', 'medium', 'high'].includes(b.effort)) ||
       (b.model !== undefined && !validModelId(b.model)) ||
       (b.capabilities !== undefined && typeof b.capabilities !== 'boolean') ||
+      (b.requestTitle !== undefined && typeof b.requestTitle !== 'boolean') ||
       typeof b.sessionId !== 'string' ||
       !/^[a-zA-Z0-9-]{1,80}$/.test(b.sessionId) ||
       !b.context ||

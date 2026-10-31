@@ -4,6 +4,7 @@ import {
   simulationLibraryForPath,
   simulationLibraryPath,
   simulationComponentPresentation,
+  simulationLibraryDeclaration,
 } from '../lib/simulation-model-presentation';
 import { createPart, emptyCircuit } from '../lib/circuit';
 import { createHomeExample } from '../lib/create-home-example';
@@ -14,6 +15,31 @@ import { partFields } from '../lib/library';
 import PartProperties from '../components/PartProperties';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+
+test('model lookup stays inside the selected library, with only the reviewed derivative using its pinned source declaration', () => {
+  const declarations = [{ name: 'RES_A' }, { name: 'RES_B' }];
+  assert.equal(
+    simulationLibraryDeclaration('circuits/vendor.lib', 'RES_B', declarations),
+    declarations[1],
+  );
+  assert.equal(
+    simulationLibraryDeclaration('circuits/vendor.lib', 'MISSING', declarations),
+    undefined,
+  );
+  const source = [{ name: 'LM2596_5P0_TRANS' }];
+  assert.equal(
+    simulationLibraryDeclaration(
+      'OpenPE:lm2596-adj-derived',
+      'OPENPE_DERIVED_LM2596_ADJ_TRANS',
+      source,
+    ),
+    source[0],
+  );
+  assert.equal(
+    simulationLibraryDeclaration('circuits/other.lib', 'OPENPE_DERIVED_LM2596_ADJ_TRANS', source),
+    undefined,
+  );
+});
 
 test('implicit models identify their primitives and computed initial states without writing design defaults', () => {
   const circuit = emptyCircuit();
@@ -75,7 +101,7 @@ test('EMC initial values and model names match the generated execution bench', (
       circuit.parts.find((p) => p.ref === 'Q1')!,
       circuit,
     ).model,
-    'EMC_IRF520N',
+    'circuits/EMC_IRF520N.lib',
   );
   assert.equal(
     simulationComponentPresentation(

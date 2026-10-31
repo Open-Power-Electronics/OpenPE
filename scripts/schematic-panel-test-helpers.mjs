@@ -242,7 +242,6 @@ export async function checkPanelResize(page, name, defaultWidth) {
     exact: true,
   });
   await open();
-  if (name === 'Version history') await panel.getByText('2 changes', { exact: true }).waitFor();
   const input = panel.getByRole('textbox').first();
   if (await input.count()) await input.fill('Uncommitted name');
   const initial = await panel.boundingBox();

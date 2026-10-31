@@ -14,9 +14,11 @@ resources/kicad/
 resources/ngspice/
 resources/thermal/
 resources/examples/
-resources/third-party-source/
+resources/third-party-source/*
+!resources/third-party-source/newstroke-10.0.0/
 examples/**/models/
 examples/*/circuits/
+!examples/emc-flyback/circuits/
 examples/*/3D/*.step
 examples/*/footprints/*.step
 examples/*/licenses/

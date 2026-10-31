@@ -729,6 +729,33 @@ var example_models_lock_default = {
   ]
 };
 
+// resources/emc-flyback-models-lock.json
+var emc_flyback_models_lock_default = {
+  version: 1,
+  models: [
+    {
+      id: "emc-flyback-control",
+      file: "circuits/EMC_flyback_control.lib",
+      sha256: "a14c4f15e04f71b14516bf0c0310a340542007455366d3027be6b347e2ffd990"
+    },
+    {
+      id: "emc-flyback-irf520n",
+      file: "circuits/EMC_IRF520N.lib",
+      sha256: "18f550ce97364443584040a446fda2da0f80112e8f8a3e5e19c540db14fabf24"
+    },
+    {
+      id: "emc-flyback-es2d",
+      file: "circuits/EMC_ES2D.lib",
+      sha256: "efdb2de11b34a6ac43143733dab76c0b56fc8d9d763e2ebc7084d9d16affa1e7"
+    },
+    {
+      id: "emc-flyback-ss510c",
+      file: "circuits/EMC_SS510C.lib",
+      sha256: "f514e87c3677bd64e0b28b6ad5189f41dc790ec10812d36e1d23c69df3cc3291"
+    }
+  ]
+};
+
 // lib/simulation-models.ts
 var simulationModelDefinitions = [
   ...tiModels.map((model) => ({
@@ -745,7 +772,8 @@ var simulationModelDefinitions = [
     id: model.id,
     sha256: model.sha256,
     file: `circuits/${model.file.replace(/\.[^.]+$/, ".lib")}`
-  }))
+  })),
+  ...emc_flyback_models_lock_default.models
 ];
 var definitionsByFile = /* @__PURE__ */ new Map();
 var caseInsensitiveFiles = /* @__PURE__ */ new Set();

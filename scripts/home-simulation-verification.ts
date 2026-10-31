@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 export const homeSimulationDuration = 0.01;
 
 export function homeSimulationDurationFor(id: string) {
-  return id === 'reference-lm27761-wson8-pump' ? 0.005 : homeSimulationDuration;
+  return ['reference-tps61046-bga6-boost', 'reference-lm27761-wson8-pump'].includes(id)
+    ? 0.002
+    : homeSimulationDuration;
 }
 
 /** Integrate by time, so adaptive/reduced samples do not bias the voltage mean. */
@@ -51,9 +53,11 @@ export function verifyHomeOutput(
     Math.abs(time.at(-1)! - duration) < 1e-12,
     `Simulation must complete the requested ${duration * 1000} ms.`,
   );
-  const tail = voltageWindow(time, values, duration - 0.002, duration);
-  const previous = voltageWindow(time, values, duration - 0.002, duration - 0.001);
-  const final = voltageWindow(time, values, duration - 0.001, duration);
+  const start = duration * 0.8,
+    middle = duration * 0.9;
+  const tail = voltageWindow(time, values, start, duration);
+  const previous = voltageWindow(time, values, start, middle);
+  const final = voltageWindow(time, values, middle, duration);
   const ripplePercent = (tail.peakToPeak / Math.abs(tail.mean)) * 100;
   const driftPercent = (Math.abs(final.mean - previous.mean) / Math.abs(tail.mean)) * 100;
   const metrics = {

@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { exampleModelLock } from './example-models-lock.mjs';
+import { fileURLToPath } from 'node:url';
+import { exampleModelLock, emcFlybackModelLock } from './example-models-lock.mjs';
+import { readProjectModelFile } from './project-model-files.mjs';
 import { createTiModelStore } from './ti-models.mjs';
 import { fetchModelResponse } from './model-download.mjs';
 
@@ -62,8 +64,23 @@ export function createExampleModelStore(dataDir, fetcher = fetch) {
     return bytes;
   };
 }
-export function createSimulationModelStore(dataDir, fetcher = fetch) {
+export function createSimulationModelStore(
+  dataDir,
+  fetcher = fetch,
+  examplesRoot = fileURLToPath(new URL('../examples/', import.meta.url)),
+) {
   const examples = createExampleModelStore(dataDir, fetcher),
     ti = createTiModelStore(dataDir, fetcher);
-  return (id, signal) => (id.startsWith('example-') ? examples(id, signal) : ti(id, signal));
+  return async (id, signal) => {
+    const model = emcFlybackModelLock.models.find((entry) => entry.id === id);
+    if (!model) return id.startsWith('example-') ? examples(id, signal) : ti(id, signal);
+    signal.throwIfAborted();
+    const bytes = await readProjectModelFile(
+      path.join(examplesRoot, 'emc-flyback/emc-flyback.kicad_pro'),
+      model,
+    );
+    signal.throwIfAborted();
+    if (!bytes) throw new Error(`Missing bundled EMC Flyback model ${model.file}. Repair OpenPE.`);
+    return bytes;
+  };
 }

@@ -11,8 +11,13 @@ import { createExample } from '../lib/examples';
 import { createReferenceExample } from '../lib/reference-examples';
 import { createHomeExample } from '../lib/create-home-example';
 import { switchingStageFixture } from './fixtures/switching-stage';
-import { storagePrimitive, initialConditionField } from '../lib/simulation-initial-conditions';
-import { buildSpiceDeck, defaultTransient } from '../lib/spice';
+import {
+  storagePrimitive,
+  initialConditionField,
+  spiceInitialConditions,
+} from '../lib/simulation-initial-conditions';
+import { buildSpiceDeck, defaultTransient, type SpiceDeck } from '../lib/spice';
+import { runSimulation } from '../server/spice.mjs';
 import PartProperties from '../components/PartProperties';
 import type { KiCadProjectFiles } from '../lib/kicad-project';
 import { parseProject as serviceParse } from '../server/project-format.mjs';
@@ -112,3 +117,116 @@ test('EMC applies modeled capacitor overrides and explicitly rejects omitted-dev
   coil.fields = { ...partFields(coil), 'OpenPE.InitialCurrent': '2m' };
   assert.throws(() => buildSpiceDeck(circuit, config), /L2: initial conditions are not supported/);
 });
+
+test('capacitor initialization solves ground-referenced voltages without inventing a floating common mode', () => {
+  assert.deepEqual(
+    spiceInitialConditions([
+      { kind: 'C', positive: 'b', negative: 'a', value: -2 },
+      { kind: 'C', positive: 'a', negative: '0', value: 5 },
+      { kind: 'C', positive: 'series', negative: 'b', value: -3, groundedSeriesNode: 'series' },
+    ]),
+    { lines: ['.ic v(a)=5 v(series)=0 v(b)=3'], uic: false },
+  );
+  assert.deepEqual(
+    spiceInitialConditions([{ kind: 'C', positive: 'a', negative: 'b', value: 2 }]),
+    { lines: [], uic: true },
+  );
+  assert.deepEqual(
+    spiceInitialConditions([{ kind: 'L', positive: 'a', negative: '0', value: 2 }]),
+    { lines: [], uic: true },
+  );
+  assert.deepEqual(
+    spiceInitialConditions([{ kind: 'C', positive: 'a', negative: '0', value: 2 }], true),
+    { lines: [], uic: true },
+  );
+  assert.throws(
+    () =>
+      spiceInitialConditions([
+        { kind: 'C', positive: 'a', negative: '0', value: 2 },
+        { kind: 'C', positive: '0', negative: 'a', value: -3 },
+      ]),
+    /Conflicting capacitor initial voltages/,
+  );
+});
+
+test('TPS61046 retains its capacitor polarities and initial voltages while computing model bias', () => {
+  const circuit = createReferenceExample('reference-tps61046-bga6-boost').schematic;
+  circuit.id = 'renamed-circuit';
+  circuit.parts.forEach((part, index) => {
+    part.ref = `${part.ref.replace(/\d+$/, '')}${index + 100}`;
+  });
+  const config = defaultTransient(circuit),
+    deck = buildSpiceDeck(circuit, config);
+  assert.deepEqual(serviceDeck(circuit, config), deck);
+  assert.doesNotMatch(deck.netlist, /^tran .* uic$/m);
+  const nodes = new Map(
+    [...deck.netlist.matchAll(/v\((\w+)\)=(-?[\d.]+)/g)].map((match) => [
+      match[1],
+      Number(match[2]),
+    ]),
+  );
+  nodes.set('0', 0);
+  const capacitors = [...deck.netlist.matchAll(/^C\d+ (\S+) (\S+) \S+ IC=(\S+)$/gm)];
+  assert.equal(capacitors.length, 3);
+  for (const [, positive, negative, initial] of capacitors)
+    assert.equal(nodes.get(positive)! - nodes.get(negative)!, Number(initial));
+  assert.match(deck.netlist, /^R\d+ \S+ 0 1000$/m);
+});
+
+test('ideal and model Buck compilers preserve capacitor initial voltage while computing unspecified state', () => {
+  for (const circuit of [switchingStageFixture(), createExample('kicad-buck').schematic]) {
+    const capacitor = circuit.parts.find((part) => storagePrimitive(part) === 'C')!;
+    capacitor.fields = { ...partFields(capacitor), 'OpenPE.InitialVoltage': '1.5' };
+    const config = defaultTransient(circuit),
+      deck = buildSpiceDeck(circuit, config);
+    assert.match(deck.netlist, /^\.ic .*v\(\w+\)=1\.5/m);
+    assert.doesNotMatch(deck.netlist, /^tran .* uic$/m);
+    assert.deepEqual(serviceDeck(circuit, config), deck);
+  }
+});
+
+test(
+  'native constrained initialization preserves charge and solves an unspecified bias node',
+  {
+    skip: process.env.OPENPE_TEST_NGSPICE !== '1',
+  },
+  async () => {
+    const initialization = spiceInitialConditions([
+      { kind: 'C', positive: 'out', negative: '0', value: 2 },
+    ]);
+    const deck: SpiceDeck = {
+      stop: 0.001,
+      assumptions: [],
+      traces: [
+        { vector: 'v(out)', label: 'Output', unit: 'V' },
+        { vector: 'v(bias)', label: 'Bias', unit: 'V' },
+      ],
+      netlist: `Constrained capacitor and independent bias
+V1 in 0 5
+R1 in out 1k
+C1 out 0 1u IC=2
+R2 in bias 1k
+R3 bias 0 1k
+${initialization.lines.join('\n')}
+.save v(out) v(bias)
+.control
+set wr_singlescale
+set wr_vecnames
+set numdgt=15
+tran 1u 1m 0 1u${initialization.uic ? ' uic' : ''}
+wrdata waveforms.txt v(out) v(bias)
+quit
+.endc
+.end`,
+    };
+    const result = await runSimulation(deck, new AbortController().signal);
+    assert.equal(result.time[0], 0);
+    assert.ok(Math.abs(result.traces[0].values[0] - 2) < 1e-6);
+    for (const [index, time] of result.time.entries()) {
+      assert.ok(
+        Math.abs(result.traces[0].values[index] - (5 - 3 * Math.exp(-time / 0.001))) < 0.002,
+      );
+      assert.ok(Math.abs(result.traces[1].values[index] - 2.5) < 1e-6);
+    }
+  },
+);

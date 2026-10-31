@@ -19,6 +19,7 @@ const nodeOnly = new Set(['lib/default-examples.ts']);
 // domain source. Keep these forwards explicit instead of allowing all host types.
 const hostDeclarationSources = new Map([
   ['server/project-format.d.mts', 'lib/project.ts'],
+  ['server/manufacturing-format.d.mts', 'lib/manufacturing-export.ts'],
   ['server/spice-format.d.mts', 'lib/spice.ts'],
   ['server/thermal-format.d.mts', 'lib/thermal.ts'],
   ['server/model-cad-format.d.mts', 'lib/model-cad.ts'],

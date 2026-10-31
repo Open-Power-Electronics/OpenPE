@@ -16,8 +16,11 @@ export function prepareSourceConversion(
   rows: FieldRow[],
   type: SimulationSourceType,
 ) {
-  if (basicSimulationKind(part) !== 'V' || !['DC', 'PULSE', 'SIN'].includes(type))
-    throw new Error('Choose a compatible voltage source model.');
+  if (
+    !['V', 'I'].includes(basicSimulationKind(part) || '') ||
+    !['DC', 'PULSE', 'SIN'].includes(type)
+  )
+    throw new Error('Choose a compatible voltage or current source model.');
   const prepared = preparePartProperties(part, reference, value, rows);
   const accepted = prepared ? { ...part, ...prepared } : part;
   const fields = partFields(accepted);
@@ -26,8 +29,7 @@ export function prepareSourceConversion(
     fields: { ...fields, 'OpenPE.ModelSource': 'basic' },
   });
   const oldType = source?.type;
-  if (!oldType)
-    throw new Error('Select the intrinsic voltage source before changing its waveform.');
+  if (!oldType) throw new Error('Select the intrinsic source before changing its waveform.');
   const old = simulationSourceValues(
     oldType,
     fields['Sim.Params'] || '',

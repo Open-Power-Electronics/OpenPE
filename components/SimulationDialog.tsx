@@ -1,4 +1,6 @@
 'use client';
+import QuantityInput from './QuantityInput';
+import { quantityUnitFromLabel, quantityLabel } from './quantity-units';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Play, Square, X } from 'lucide-react';
 import Select from './Select';
@@ -16,6 +18,8 @@ import {
 import { createPortal } from 'react-dom';
 import SimulationWaveforms from './SimulationWaveforms';
 import AnalysisComponents from './AnalysisComponents';
+import SavedResultLoading, { type SavedResultLoadingStage } from './SavedResultLoading';
+import { paintAnalysisLoading } from '@/lib/analysis-loading';
 import { tiPart } from '@/lib/ti-dcdc';
 import { type ProbeTarget, spiceNets } from '@/lib/spice';
 import { validatedSimulationResult } from '@/lib/waveform';
@@ -100,7 +104,7 @@ export default function SimulationDialog({
   const waveformPresentation = useRef<AgentWaveformPresentation | null>({
     layout: 'auto',
     linked: true,
-    visibleCursors: [false, false],
+    visibleCursors: [true, false],
     traces: {},
   });
   const requestSource = useMemo(() => serializeProject(project), [project]);
@@ -148,6 +152,7 @@ export default function SimulationDialog({
   } | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [savedResultStage, setSavedResultStage] = useState<SavedResultLoadingStage>('reading');
   const [error, setError] = useState('');
   const [convergenceFailure, setConvergenceFailure] = useState(false);
   const [running, setRunning] = useState(false);
@@ -287,16 +292,22 @@ export default function SimulationDialog({
       return;
     const control = new AbortController();
     loadControl.current = control;
+    setSavedResultStage('reading');
     setLoadingSaved(true);
     const snapshot = source;
     const discover = !settingsEdited.current;
     void (async () => {
       try {
+        await paintAnalysisLoading(control.signal);
         const response = await api('simulation/result', {
           method: 'POST',
           signal: control.signal,
           body: JSON.stringify({ source: requestSource, ...(discover ? {} : { config }), fileId }),
         });
+        control.signal.throwIfAborted();
+        if (loadControl.current !== control) return;
+        setSavedResultStage('preparing');
+        await paintAnalysisLoading(control.signal);
         const received = await response.json();
         if (
           control.signal.aborted ||
@@ -482,7 +493,11 @@ export default function SimulationDialog({
         await readSimulationEvents(response.body, (event) => {
           if (control.signal.aborted || currentSource.current !== snapshot || pendingSource.current)
             return;
-          if (event.type === 'samples') {
+          if (event.type === 'retry') {
+            live.result = null;
+            setLiveResult(null);
+            setResultKey((key) => key + 1);
+          } else if (event.type === 'samples') {
             live.result = appendSimulationSamples(live.result, event, preview.deck!);
             if (live.result.time.length >= 2) setLiveResult(live.result);
           } else if (event.type === 'result') received = event.result;
@@ -804,7 +819,7 @@ export default function SimulationDialog({
                 </button>
               )}
             </header>
-            <div className="simulation-settings-body">
+            <div className="simulation-settings-body" aria-busy={loadingSaved}>
               {!supportError && (
                 <div className="simulation-fields">
                   {(
@@ -839,15 +854,17 @@ export default function SimulationDialog({
                     )
                     .map(([key, label]) => (
                       <label className="simulation-field" key={key}>
-                        <span>{label}</span>
-                        <input
+                        <span>{quantityLabel(label)}</span>
+                        <QuantityInput
+                          unit={quantityUnitFromLabel(label)}
+                          aria-label={label}
                           type="text"
                           inputMode="decimal"
                           value={drafts[key]}
                           disabled={running}
-                          onChange={(e) => {
+                          onValueChange={(inputValue) => {
                             executeSimulation('simulation.configure', {
-                              drafts: { [key]: e.target.value },
+                              drafts: { [key]: inputValue },
                             });
                           }}
                         />
@@ -925,6 +942,9 @@ export default function SimulationDialog({
                 <p className="simulation-error" role="alert">
                   {settingsError}
                 </p>
+              )}
+              {visible && loadingSaved && (
+                <SavedResultLoading analysis="spice" stage={savedResultStage} />
               )}
               {running ? (
                 <button

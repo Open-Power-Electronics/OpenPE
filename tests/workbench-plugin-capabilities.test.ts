@@ -33,7 +33,7 @@ test('workbench plugin UI/Agent operations share refresh, lifecycle confirmation
       },
       {
         id: PCB_DESIGN_PLUGIN_ID,
-        name: 'AI PCB Layout',
+        name: 'PE Layout Skill',
         scope: 'application',
         marketplace: 'OpenPE Marketplace',
         description: 'Bundled design guidance.',
@@ -118,7 +118,7 @@ test('workbench plugin UI/Agent operations share refresh, lifecycle confirmation
     );
     assert.equal(workbenchPluginAvailability(SPICE_PLUGIN_ID), true);
     await host.execute('workbench.plugins.change', { id: PCB_DESIGN_PLUGIN_ID, action: 'disable' });
-    await assert.rejects(host.query('pcbDesign.guide'), /Install and enable AI PCB Layout/);
+    await assert.rejects(host.query('pcbDesign.guide'), /Install and enable PE Layout Skill/);
     assert.equal(documents.length, 2);
     assert.equal(host.catalog().find((entry) => entry.id === 'pcbDesign.guide')?.available, false);
     await host.execute('workbench.plugins.change', { id: PCB_DESIGN_PLUGIN_ID, action: 'enable' });

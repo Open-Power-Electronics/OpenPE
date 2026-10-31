@@ -19,6 +19,8 @@ import { arrangeExampleText } from '../lib/example-layout';
 import { parseCircuit } from '../lib/circuit';
 import { buildSpiceDeck } from '../lib/spice';
 import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
+import { prepareEmcFlybackModelBindings } from '../scripts/emc-flyback-model-bindings';
+import { prepareEmcFlybackTestbench } from '../scripts/emc-flyback-testbench';
 import { partFields } from '../lib/library';
 
 test('EMC native passive values separate specifications and retain them through native round trips', () => {
@@ -61,6 +63,8 @@ test('EMC annotation layout changes only instance field placement and preserves 
     ),
   );
   prepareEmcFlybackValues(circuit);
+  prepareEmcFlybackModelBindings(circuit);
+  prepareEmcFlybackTestbench(circuit);
   const before = structuredClone(circuit);
   const deck = buildSpiceDeck(circuit, defaultTransient(circuit));
   arrangeExampleText(circuit, 'emc-flyback-demo');
@@ -113,7 +117,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.notEqual(cadA.objects[0].id, cadB.objects[0].id);
   assert.notEqual(cadA.objects[0].holes[0].id, cadB.objects[0].holes[0].id);
   assert.equal(cadA.objects.flatMap((body) => body.holes).length, 8);
-  assert.equal(a.schematic.parts.length, 140);
+  assert.equal(a.schematic.parts.length, 145);
   assert.equal(a.pcb!.footprints.length, 90);
   assert.equal(a.pcb!.tracks.length, 359);
   assert.equal(a.pcb!.vias.length, 155);
@@ -121,7 +125,8 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.ok(a.pcb!.footprints.some((fp) => fp.symbolId === q.id));
   assert.ok(schematicPolylines(a.schematic.original).length > 0);
   assert.ok(schematicTexts(a.schematic.original).some((t) => t.bold));
-  assert.ok(schematicTexts(a.schematic.original).some((t) => t.href?.startsWith('https://')));
+  assert.ok(a.schematic.parts.some((part) => partFields(part).Datasheet?.startsWith('https://')));
+  assert.ok(!schematicTexts(a.schematic.original).some((t) => /^7\./.test(t.text)));
   assert.equal(simulationSupportError(a.schematic), '');
   assert.equal(defaultTransient(a.schematic).stop, 0.01);
   const parsed = parseProject(serializeProject(a));

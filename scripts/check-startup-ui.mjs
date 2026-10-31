@@ -103,7 +103,7 @@ for (const deferred of [
   'components/SimulationDialog.tsx',
   'components/LayoutEditor.tsx',
   'components/LibraryChooser.tsx',
-  'components/ProjectHistoryDialog.tsx',
+  'components/ProjectHistoryView.tsx',
   'components/PluginsPage.tsx',
   'components/SettingsDialog.tsx',
   'components/AboutDialog.tsx',
@@ -129,7 +129,7 @@ const eager = await build({
           { filter: /[\\/]components[\\/](Workbench|LibraryChooser)\.tsx$/ },
           async ({ path }) => ({
             contents: (await readFile(path, 'utf8')).replace(
-              /const (SourceEditor|SimulationDialog|ModelPreview|LayoutEditor|LibraryChooser|ProjectHistoryDialog|PluginsPage|SettingsDialog|AboutDialog) = lazy\(\(\) => import\('\.\/(\w+)'\)\);/g,
+              /const (SourceEditor|SimulationDialog|ModelPreview|LayoutEditor|LibraryChooser|ProjectHistoryView|PluginsPage|SettingsDialog|AboutDialog) = lazy\(\(\) => import\('\.\/(\w+)'\)\);/g,
               "import $1 from './$2';",
             ),
             loader: 'tsx',
@@ -313,7 +313,7 @@ try {
     'LayoutEditor',
     'AgentMarkdown',
     'LibraryChooser',
-    'ProjectHistoryDialog',
+    'ProjectHistoryView',
     'PluginsPage',
     'SettingsDialog',
     'AboutDialog',

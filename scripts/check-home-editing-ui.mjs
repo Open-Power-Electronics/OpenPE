@@ -28,12 +28,15 @@ assert.equal(
 assert.equal(new Set(entries.map((entry) => entry.id)).size, 9);
 assert.ok(entries.every((entry) => entry.id.startsWith('reference-')));
 assert.ok(entries.some((entry) => entry.id === 'reference-lm27761-wson8-pump'));
-const sources = JSON.parse(await readFile('lib/reference-examples.json', 'utf8'));
 const footprintManifest = JSON.parse(
   await readFile('resources/example-catalog/footprints/manifest.json', 'utf8'),
 );
 const footprintPackages = new Map(footprintManifest.footprints.map((entry) => [entry.id, entry]));
 const { parseProject, serializeProject } = await tsImport('../lib/project.ts', import.meta.url);
+const { defaultAgentPreferences, restoreWorkspace } = await tsImport(
+  '../lib/workspace-state.ts',
+  import.meta.url,
+);
 const { projectNativeFiles, projectFromNativeFiles } = await tsImport(
   '../lib/kicad-project.ts',
   import.meta.url,
@@ -47,7 +50,22 @@ const { participatesInSimulation } = await tsImport(
 const require = createRequire(import.meta.url);
 const { createNativeSave } = require('../electron/native-save.cjs');
 const { FileGrants } = require('../electron/file-grants.cjs');
+const { createProjectDirectoryReader } = require('../electron/project-directory.cjs');
 const { readNativeProject: readNativeProjectFile } = require('../electron/native-project.cjs');
+const sources = Object.fromEntries(
+  await Promise.all(
+    entries.map(async (entry) => [
+      entry.id,
+      serializeProject(
+        projectFromNativeFiles(
+          await readNativeProjectFile(
+            path.resolve('examples', entry.file, `${entry.file}.kicad_pro`),
+          ),
+        ),
+      ),
+    ]),
+  ),
+);
 const bundle = await build({
   stdin: {
     contents:
@@ -162,6 +180,7 @@ try {
     );
     assert.match(entry.file, /^[a-z0-9-]+$/);
     const fileGrants = new FileGrants();
+    const directoryReader = createProjectDirectoryReader(fileGrants);
     const nativeDirectory = await mkdtemp(path.resolve('test-results/home-editing/native-'));
     const nativeFile = path.join(nativeDirectory, entry.file + '.kicad_pro');
     // This fixed manifest path is a read-only source of pinned model bytes. It
@@ -189,7 +208,8 @@ try {
       },
     });
     const documentId = crypto.randomUUID();
-    let recovery = {
+    let recovery = restoreWorkspace({
+      ...defaultAgentPreferences,
       version: 2,
       documents: [
         {
@@ -205,11 +225,7 @@ try {
         },
       ],
       activeDocumentId: documentId,
-      provider: 'codex',
-      effort: 'low',
-      approvalMode: 'review',
-      models: {},
-    };
+    });
     let ignoreRecoveryWrites = false;
     const page = await browser.newPage({ viewport: { width: 1520, height: 980 } });
     page.setDefaultTimeout(25000);
@@ -219,6 +235,10 @@ try {
     try {
       await page.exposeFunction('homeEditingNewFile', () => fileGrants.create());
       await page.exposeFunction('homeEditingReleaseFile', (id) => fileGrants.release(id));
+      await page.exposeFunction('homeEditingDirectory', (id) => directoryReader.list(id));
+      await page.exposeFunction('homeEditingFilePreview', (id, entryId) =>
+        directoryReader.read(id, entryId),
+      );
       await page.exposeFunction('homeEditingAcceptOpen', () => fileGrants.create(nativeFile));
       await page.exposeFunction('homeEditingOpen', async () => ({
         source: serializeProject(projectFromNativeFiles(await readNativeProjectFile(nativeFile))),
@@ -245,6 +265,8 @@ try {
           connection: async () => ({ base: 'http://localhost', token: 'home-editing' }),
           newFile: () => window.homeEditingNewFile(),
           releaseFile: (id) => window.homeEditingReleaseFile(id),
+          projectDirectory: (id) => window.homeEditingDirectory(id),
+          projectFilePreview: ({ fileId, id }) => window.homeEditingFilePreview(fileId, id),
           open: () => window.homeEditingOpen(),
           acceptOpen: () => window.homeEditingAcceptOpen(),
           save: async (options) => {
@@ -395,7 +417,12 @@ try {
       await page.keyboard.press('e');
       const inspector = page.getByRole('complementary', { name: 'Layout properties', exact: true });
       await inspector.waitFor({ state: 'visible' });
-      assert.equal(await inspector.locator('header strong').innerText(), part.ref);
+      assert.equal(
+        await inspector
+          .getByRole('textbox', { name: 'Component reference', exact: true })
+          .inputValue(),
+        part.ref,
+      );
       const x = inspector.getByRole('spinbutton', { name: 'X (mm)', exact: true });
       assert.equal(Number(await x.inputValue()), footprint.x);
       const targetX = Math.floor(footprint.x) + 2;
@@ -534,6 +561,14 @@ try {
       console.log(
         `${entry.title}: SCH Value and Layout footprint edits, cross-view Undo, exact native Save and fresh disk Open passed.`,
       );
+    } catch (error) {
+      console.error({
+        project: entry.title,
+        errors,
+        unexpectedRequests,
+        visibleText: (await page.locator('body').innerText()).slice(0, 4000),
+      });
+      throw error;
     } finally {
       await page.close();
       fileGrants.clear();

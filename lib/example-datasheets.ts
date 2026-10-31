@@ -1,12 +1,4 @@
-import lm2596 from '../examples/lm2596-to220-5-buck/datasheets/parameters.json';
-import tps61046 from '../examples/tps61046-bga6-boost/datasheets/parameters.json';
-import lm2735 from '../examples/lm2735-msop8-sepic/datasheets/parameters.json';
-import lm25017 from '../examples/lm25017-wson8-flybuck/datasheets/parameters.json';
-import lm5001 from '../examples/lm5001-soic8-boost/datasheets/parameters.json';
-import lm27761 from '../examples/lm27761-wson8-pump/datasheets/parameters.json';
-import lmr12010 from '../examples/lmr12010-sot236-buck/datasheets/parameters.json';
-import lmr70503 from '../examples/lmr70503-bga8-buckboost/datasheets/parameters.json';
-import lm2598 from '../examples/lm2598-to220-7-buck/datasheets/parameters.json';
+import catalog from '../resources/example-catalog/ic-datasheets.json';
 import type { Project } from './project';
 import { partFootprint } from './library';
 import { child, val } from './sexpr';
@@ -64,30 +56,35 @@ export type ProjectDatasheetContext = {
 
 // Imported lazily by the workbench; build-format validates these exact records.
 // There is no filesystem, URL resolver, model compiler or editable data owner here.
-const records: readonly ICDatasheetRecord[] = [
-  lm2596,
-  tps61046,
-  lm2735,
-  lm25017,
-  lm5001,
-  lm27761,
-  lmr12010,
-  lmr70503,
-  lm2598,
-];
+// JSON array inference adds optional undefined keys across differing parameter
+// maps; build-format validates every record against the exact record schema.
+const records = catalog as unknown as readonly ICDatasheetRecord[];
 
 export function projectDatasheetContext(project: Project | null): ProjectDatasheetContext {
-  const provenance = project?.extensions['org.openpe.reference-example'] as
-    { id?: unknown } | undefined;
-  const record = records.find((item) => item.example.id === provenance?.id);
+  const identity = (part: NonNullable<Project['schematic']['parts']>[number]) =>
+    (part.raw && val(child(part.raw, 'lib_id'))) || part.libId;
+  const candidates = records.filter((item) =>
+    project?.schematic.parts.some((part) => identity(part) === item.ic.symbol_library_id),
+  );
+  const matching = candidates.filter((item) =>
+    project?.schematic.parts.some(
+      (part) =>
+        identity(part) === item.ic.symbol_library_id &&
+        part.value === item.ic.schematic_value &&
+        partFootprint(part) === item.ic.footprint,
+    ),
+  );
+  // A singular record cannot represent multiple different controllers. Native
+  // identity, rather than private example provenance, selects reviewed evidence.
+  const record =
+    matching.length === 1 ? matching[0] : candidates.length === 1 ? candidates[0] : null;
   const bindings =
     record && project
       ? project.schematic.parts
           .filter(
             (part) =>
               part.value === record.ic.schematic_value &&
-              ((part.raw && val(child(part.raw, 'lib_id'))) || part.libId) ===
-                record.ic.symbol_library_id &&
+              identity(part) === record.ic.symbol_library_id &&
               partFootprint(part) === record.ic.footprint,
           )
           .map((part) => ({

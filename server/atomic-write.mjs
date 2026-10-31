@@ -25,7 +25,8 @@ export async function renameWithRetry(source, target, check, signal = undefined)
 }
 
 // Callers own destination validation; replace only after the complete write.
-export async function atomicWrite(file, content) {
+export async function atomicWrite(file, content, check = async () => {}) {
+  await check();
   const temp = file + '.' + randomBytes(6).toString('hex') + '.tmp';
   const handle = await open(temp, 'wx');
   try {
@@ -34,6 +35,7 @@ export async function atomicWrite(file, content) {
     } finally {
       await handle.close();
     }
+    await check();
     await rename(temp, file);
   } finally {
     await unlink(temp).catch(() => {});

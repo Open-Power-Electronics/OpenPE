@@ -1,6 +1,7 @@
 'use client';
-import { useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import Dialog from './Dialog';
+import QuantityInput from './QuantityInput';
 import {
   parseWaveformNumber,
   validWaveformAxis,
@@ -14,6 +15,7 @@ export default function WaveformAxisDialog({
   time,
   title,
   anchorRef,
+  anchorPoint,
   onApply,
   onClose,
 }: {
@@ -22,18 +24,35 @@ export default function WaveformAxisDialog({
   time?: number[];
   title: string;
   anchorRef: RefObject<HTMLElement | null>;
+  anchorPoint: { x: number; y: number };
   onApply: (axis: WaveformAxis | null) => void;
   onClose: () => void;
 }) {
-  const [min, setMin] = useState(String(Number(axis.min.toPrecision(12))));
-  const [max, setMax] = useState(String(Number(axis.max.toPrecision(12))));
-  const [step, setStep] = useState(axis.step === undefined ? '' : String(axis.step));
+  const composing = useRef(false);
+  const digits = Math.min(
+    12,
+    Math.max(
+      5,
+      Math.ceil(
+        Math.log10(Math.max(Math.abs(axis.min), Math.abs(axis.max)) / (axis.max - axis.min)),
+      ) + 3,
+    ),
+  );
+  const initialMin = String(axis.min);
+  const initialMax = String(axis.max);
+  const initialStep = axis.step === undefined ? '' : String(axis.step);
+  const [min, setMin] = useState(initialMin);
+  const [max, setMax] = useState(initialMax);
+  const [step, setStep] = useState(initialStep);
   const [error, setError] = useState('');
   function apply() {
+    if (composing.current) return;
     const next = {
-      min: parseWaveformNumber(min, unit),
-      max: parseWaveformNumber(max, unit),
-      ...(step.trim() ? { step: parseWaveformNumber(step, unit) } : {}),
+      min: min === initialMin ? axis.min : parseWaveformNumber(min, unit),
+      max: max === initialMax ? axis.max : parseWaveformNumber(max, unit),
+      ...(step.trim()
+        ? { step: step === initialStep ? axis.step! : parseWaveformNumber(step, unit) }
+        : {}),
     };
     if (!validWaveformAxis(next)) {
       setError(
@@ -54,11 +73,17 @@ export default function WaveformAxisDialog({
       compact
       modal={false}
       anchorRef={anchorRef}
-      anchorPlacement="inside"
+      anchorPlacement="near"
+      anchorPoint={anchorPoint}
       className="waveform-axis-dialog"
       footer={
         <>
-          <button className="dialog-button secondary" onClick={() => onApply(null)}>
+          <button
+            className="dialog-button secondary"
+            onClick={() => {
+              if (!composing.current) onApply(null);
+            }}
+          >
             Auto scale
           </button>
           <button className="dialog-button primary" onClick={apply}>
@@ -69,23 +94,59 @@ export default function WaveformAxisDialog({
     >
       <form
         className="waveform-axis-fields"
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={() => {
+          composing.current = false;
+        }}
+        onKeyDown={(event) => {
+          if (
+            composing.current ||
+            event.nativeEvent.isComposing ||
+            event.nativeEvent.keyCode === 229
+          ) {
+            event.stopPropagation();
+            if (event.key === 'Enter' || event.key === 'Escape') event.preventDefault();
+          }
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           apply();
         }}
       >
         <label>
-          Minimum ({unit})<input value={min} onChange={(event) => setMin(event.target.value)} />
+          Min
+          <QuantityInput
+            unit={unit}
+            autoScale
+            precision={digits}
+            aria-label={`Minimum (${unit})`}
+            value={min}
+            onValueChange={setMin}
+          />
         </label>
         <label>
-          Maximum ({unit})<input value={max} onChange={(event) => setMax(event.target.value)} />
+          Max
+          <QuantityInput
+            unit={unit}
+            autoScale
+            precision={digits}
+            aria-label={`Maximum (${unit})`}
+            value={max}
+            onValueChange={setMax}
+          />
         </label>
         <label>
-          Tick spacing ({unit})
-          <input
+          Step
+          <QuantityInput
+            unit={unit}
+            autoScale
+            precision={digits}
+            aria-label={`Tick spacing (${unit})`}
             value={step}
             placeholder="Auto"
-            onChange={(event) => setStep(event.target.value)}
+            onValueChange={setStep}
           />
         </label>
         <button type="submit" hidden />

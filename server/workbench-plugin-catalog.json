@@ -34,7 +34,7 @@
   },
   {
     "id": "ai-pcb-layout@openpe",
-    "name": "AI PCB Layout",
+    "name": "PE Layout Skill",
     "marketplace": "OpenPE Marketplace",
     "description": "Guide power-electronics PCB review, placement and routing with the Agent.",
     "detail": "Use the power-pcb-design workflow by Chengmin Li and Xiao Yang, with nine engineering stages and ten offline references for switching loops, insulation, copper capability and verification. The Agent reads guidance on demand and uses available OpenPE capabilities. Engineering review gates remain part of the workflow. This plugin adds guidance, not an autorouter, new CAD support or compliance certification. Licensed under CC BY 4.0.",

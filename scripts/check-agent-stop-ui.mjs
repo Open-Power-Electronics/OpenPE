@@ -7,7 +7,17 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
 const requests = [];
+const toolResults = [];
 const server = createServer((req, res) => {
+  if (req.url === '/api/chat/tool-result') {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      toolResults.push(JSON.parse(body));
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"ok":true}');
+    });
+    return;
+  }
   if (req.url !== '/api/chat') return res.writeHead(404).end();
   let body = '';
   req.on('data', (chunk) => (body += chunk));
@@ -31,6 +41,10 @@ const bundle = await build({
       const ids = ['first-session', 'second-session'];
       const agents = [{id:'codex',available:true,supportsEffort:true}];
       const ignore = () => {};
+      const capabilities = {
+        query: () => new Promise(resolve => { window.releaseToolQuery = resolve; }),
+        execute: () => ({}), observe: () => ({cursor:0,events:[],truncated:false}),
+      };
       function Fixture() {
         const [active,setActive] = useState(ids[0]);
         const [sessions,setSessions] = useState(Object.fromEntries(ids.map(id=>[id,{messages:[],draft:''}])));
@@ -47,7 +61,7 @@ const bundle = await build({
           active={active===id} sessionId={id} conversationTitle={'Session '+id}
           input={sessions[id].draft} setInput={value=>update(id,'draft',value)}
           onRunningChange={ignore}
-          annotations={[]} setAnnotations={ignore}/>)}</main></>;
+          annotations={[]} setAnnotations={ignore} capabilities={capabilities}/>)}</main></>;
       }
       createRoot(document.getElementById('root')).render(<Fixture/>);`,
     resolveDir: process.cwd(),
@@ -90,7 +104,7 @@ try {
   }, base);
   await page.route(`${base}/**`, async (route) => {
     const pathname = new URL(route.request().url()).pathname;
-    if (pathname === '/api/chat') return route.continue();
+    if (pathname === '/api/chat' || pathname === '/api/chat/tool-result') return route.continue();
     if (pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });
     if (/^\/agents\/[\w.-]+\.svg$/.test(pathname))
@@ -137,14 +151,65 @@ try {
   // Interrupting streamed text preserves it exactly once and retains the follow-up draft.
   const partial = await send('Inspect the inductor ripple');
   const partialText = 'Partial Ω analysis before interruption.';
+  emit(partial, { type: 'status', stage: 'waiting', text: 'Waiting for the model…' });
   emit(partial, { type: 'text-delta', delta: partialText });
   await visibleChat.getByText(partialText, { exact: true }).waitFor();
+  assert.ok(
+    await visibleChat
+      .locator('.message.assistant')
+      .last()
+      .evaluate((reply) => {
+        const progress = reply.querySelector('.chat-progress');
+        const body = reply.querySelector('.agent-markdown');
+        const name = reply.querySelector('.message-agent-name');
+        return (
+          progress.parentElement === reply.querySelector('.message-author') &&
+          progress.getBoundingClientRect().left >= name.getBoundingClientRect().right &&
+          Math.abs(
+            progress.getBoundingClientRect().right -
+              reply.querySelector('.message-author').getBoundingClientRect().right,
+          ) < 1 &&
+          progress.getBoundingClientRect().bottom <= body.getBoundingClientRect().top
+        );
+      }),
+    'Live elapsed time aligns to the right edge of the Agent header.',
+  );
+  assert.match(
+    await visibleChat.locator('.chat-progress .chat-elapsed').innerText(),
+    /^(?:<1s|\d+s|\d+m(?: \d+s)?)$/,
+  );
+  assert.equal(
+    await visibleChat.locator('.chat-progress [role="status"]').innerText(),
+    'Receiving response…',
+  );
+  assert.equal(await visibleChat.locator('.chat-progress svg').count(), 0);
   await input.fill('Continue with a different question');
   await stop(partial);
   assert.equal(await input.inputValue(), 'Continue with a different question');
   assistant = (await messages()).at(-1);
   assert.equal(assistant.outcome, 'cancelled');
   assert.equal(assistant.text, partialText);
+  assert.ok(
+    await visibleChat
+      .locator('.message.assistant')
+      .last()
+      .evaluate(
+        (reply) =>
+          reply
+            .querySelector('.message-agent-name')
+            .nextElementSibling.matches('.message-timing') &&
+          Math.abs(
+            reply.querySelector('.message-timing').getBoundingClientRect().right -
+              reply.querySelector('.message-author').getBoundingClientRect().right,
+          ) < 1 &&
+          !reply.querySelector('.chat-progress'),
+      ),
+    'Finished elapsed time aligns to the right edge of the Agent header.',
+  );
+  assert.match(
+    await visibleChat.locator('.message.assistant').last().locator('.message-timing').innerText(),
+    /^(?:<1s|\d+s|\d+m(?: \d+s)?)$/,
+  );
   assert.equal(await visibleChat.getByText(partialText, { exact: true }).count(), 1);
 
   const next = await send();
@@ -203,6 +268,60 @@ try {
   await button('Send message').waitFor();
   assert.equal((await messages()).at(-1).outcome, 'completed');
   assert.equal(await page.evaluate(() => window.chatStopFixture.applied), 1);
+
+  // In-flight tools are visible in their originating conversation and Stop seals the card.
+  const toolRun = await send('Observe a slow OpenPE query');
+  emit(toolRun, {
+    type: 'capability-request',
+    tool: 'openpe_query',
+    arguments: { name: 'project.snapshot' },
+    sessionId: 'first-session',
+    runId: 'tool-run',
+    requestId: 'slow-query',
+    token: 'private-tool-token',
+  });
+  const toolCard = visibleChat.locator('.agent-tool-call').last();
+  await toolCard.locator('.tool-state').getByText('Running…', { exact: true }).waitFor();
+  await toolCard.locator('summary').focus();
+  await toolCard.locator('summary').press('Enter');
+  assert.equal(await toolCard.locator('details').getAttribute('open'), '');
+  assert.doesNotMatch(await toolCard.innerText(), /private-tool-token|tool-run|slow-query/);
+  await button('Show session 2').click();
+  assert.equal(await visibleChat.locator('.agent-tool-call').count(), 0);
+  await button('Show session 1').click();
+  await stop(toolRun);
+  assert.equal(await toolCard.getAttribute('data-tool-status'), 'cancelled');
+  await page.evaluate(() => window.releaseToolQuery({ revision: 'late-revision' }));
+  await page.waitForTimeout(100);
+  assert.equal(await toolCard.getAttribute('data-tool-status'), 'cancelled');
+  assert.equal(toolResults.length, 0, 'A stopped tool cannot publish a late response.');
+  assert.doesNotMatch(await toolCard.innerText(), /late-revision/);
+
+  // Reading old output pauses following; the explicit jump resumes it without moving focus.
+  const scrollingRun = await send('Read a long response');
+  emit(scrollingRun, { type: 'text-delta', delta: 'Long analysis.\n\n'.repeat(120) });
+  const chatScroll = visibleChat.locator('.chat-scroll');
+  await visibleChat.getByText('Long analysis.', { exact: true }).first().waitFor();
+  await input.focus();
+  await chatScroll.evaluate((el) => {
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event('scroll'));
+  });
+  await button('Latest messages').waitFor();
+  emit(scrollingRun, { type: 'text-delta', delta: '\n\nNew output while reading.' });
+  await visibleChat
+    .getByText('New output while reading.', { exact: true })
+    .waitFor({ state: 'attached' });
+  assert.equal(await chatScroll.evaluate((el) => el.scrollTop), 0);
+  assert.equal(await input.evaluate((el) => document.activeElement === el), true);
+  await button('Latest messages').focus();
+  await button('Latest messages').press('Enter');
+  await button('Latest messages').waitFor({ state: 'hidden' });
+  finish(scrollingRun, 'Following resumed.');
+  await button('Send message').waitFor();
+  assert.ok(
+    await chatScroll.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 2),
+  );
   assert.deepEqual(errors, []);
   console.log(
     'Agent Stop releases waiting/streaming responses, preserves partial context and drafts, blocks unfinished proposals and isolates sessions.',

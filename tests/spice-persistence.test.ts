@@ -46,6 +46,7 @@ test(
       runs = 0,
       modelReads = 0;
     let fail = false;
+    let convergenceOnce = false;
     const directories: string[] = [];
     childProcess.execFile = Object.assign(
       () => {
@@ -72,6 +73,13 @@ test(
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
         void (async () => {
+          if (convergenceOnce) {
+            convergenceOnce = false;
+            await writeFile(path.join(directory, 'waveforms.txt'), 'failed attempt');
+            child.stderr.write('Timestep too small; time = 0.1');
+            child.emit('close', 1);
+            return;
+          }
           await writeFile(path.join(directory, 'waveforms.raw'), 'native binary fixture');
           await writeFile(path.join(directory, 'waveforms.txt'), 'time v(out)\n0 0\n1 5\n');
           child.stdout.write('solver completed');
@@ -280,7 +288,63 @@ test(
         'Only the latest successful run remains after a failed run.',
       );
       assert.deepEqual(await readFile(path.join(records, 'buck.manifest.json')), retainedManifest);
+      fail = false;
+      convergenceOnce = true;
+      const retriedDeck = {
+        ...deck,
+        netlist: deck.netlist.replace(
+          '.control',
+          '.options itl4=50 reltol=0.005 method=gear\n.control',
+        ),
+      };
+      const beforeRetryRuns = runs;
+      const resets: unknown[] = [];
+      const retried = await restarted.runSimulation(
+        retriedDeck,
+        new AbortController().signal,
+        store,
+        root,
+        async (packet: unknown) => {
+          resets.push(packet);
+        },
+        resultFiles(),
+        { ...defaultTransient(switchingStageFixture()), stop: 1, step: 0.1 },
+      );
+      assert.equal(runs, beforeRetryRuns + 2);
+      assert.deepEqual(resets, [{ reset: true }]);
+      assert.match(retried.log, /Convergence retry/);
+      assert.match(
+        await readFile(path.join(records, 'buck.circuit.cir'), 'utf8'),
+        /itl4=1000 reltol=0.005 method=gear/,
+      );
+      assert.doesNotMatch(
+        await readFile(path.join(records, 'buck.waveforms.txt'), 'utf8'),
+        /failed attempt/,
+      );
+      assert.deepEqual(
+        await restarted.findSimulationResult(
+          retriedDeck,
+          new AbortController().signal,
+          store,
+          root,
+          resultFiles(),
+        ),
+        retried,
+      );
+      assert.equal(runs, beforeRetryRuns + 2, 'Restoring a retried run must never solve again.');
+      assert.equal(
+        await restarted.findSimulationResult(
+          { ...retriedDeck, netlist: retriedDeck.netlist.replace('itl4=50', 'itl4=1000') },
+          new AbortController().signal,
+          store,
+          root,
+          resultFiles(),
+        ),
+        null,
+        'A single-attempt plan cannot reuse the two-attempt plan identity.',
+      );
       await rm(path.join(root, 'bin', 'ngspice_con.exe'));
+
       await assert.rejects(
         restarted.runSimulation(
           deck,
@@ -293,7 +357,11 @@ test(
         ),
         /ENOENT/,
       );
-      assert.equal(runs, 4, 'Missing solver must not be hidden by a saved result.');
+      assert.equal(
+        runs,
+        beforeRetryRuns + 2,
+        'Missing solver must not be hidden by a saved result.',
+      );
       for (const directory of directories)
         await assert.rejects(stat(directory), { code: 'ENOENT' });
     } finally {

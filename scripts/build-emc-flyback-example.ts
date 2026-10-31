@@ -18,6 +18,9 @@ import { arrangeExampleText } from '../lib/example-layout';
 import { emcFlybackModelCad } from './emc-flyback-model-cad';
 import { emcFlybackPassiveValue, prepareEmcFlybackValues } from './emc-flyback-values';
 import { homeExampleNativePath } from '../lib/home-examples';
+import models from '../resources/emc-flyback-models-lock.json';
+import { prepareEmcFlybackModelBindings } from './emc-flyback-model-bindings';
+import { prepareEmcFlybackTestbench } from './emc-flyback-testbench';
 import { writeHomeExampleNativeFiles, writeExampleFile as writeFile } from './example-native-files';
 
 const root = 'resources/example-catalog/sources/emc-flyback';
@@ -252,10 +255,13 @@ const project = importDocument(
 );
 project.id = stable('project');
 project.name = 'EMC Flyback';
+project.simulationModels = models.models.map((model) => ({ ...model }));
 project.schematic.title = 'EMC Flyback';
 child(project.schematic.original!, 'version')![1] = KICAD_SCHEMATIC_VERSION;
 prepareEmcFlybackValues(project.schematic);
+prepareEmcFlybackModelBindings(project.schematic);
 arrangeExampleText(project.schematic, 'emc-flyback-demo');
+prepareEmcFlybackTestbench(project.schematic);
 const pcbSource = preparePCB(
   stableUpgrade(await readFile(`${conversion}/emc_flyback.kicad_pcb`, 'utf8')),
 );
@@ -318,7 +324,7 @@ for (const file of await readdir(`${root}/design`, { withFileTypes: true })) {
 }
 project.nativeFiles = native;
 validateProject(project);
-projectFromNativeFiles(projectNativeFiles(project, filename));
+project.schematic = projectFromNativeFiles(projectNativeFiles(project, filename)).schematic;
 await writeHomeExampleNativeFiles(project, 'emc-flyback-demo');
 await writeFile('lib/emc-flyback-example.json', serializeProject(project) + '\n');
 console.log(JSON.stringify({ parts: project.schematic.parts.length, ...parsed.audit }));

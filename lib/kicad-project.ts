@@ -1,5 +1,5 @@
 import { emptyCircuit, parseCircuitTree, type Circuit } from './circuit';
-import { parseKiCadPCB } from './kicad-pcb';
+import { parseKiCadPCB, expandNativeBoardZones } from './kicad-pcb';
 import { nativeIdentity } from './kicad-project-identity';
 import { toProjectDocument } from './project-document';
 import { rememberNativeSourceJson } from './project-json';
@@ -573,7 +573,10 @@ function mergeBoardSource(
   const owned = isOwnedProjectNode(original);
   let before = owned ? ownedBoardSourceTrees.get(original) : undefined;
   if (!before) {
-    before = owned ? parseOwnedSExpr(original.source) : parseSExpr(original.source);
+    const expanded = expandNativeBoardZones(
+      owned ? parseOwnedSExpr(original.source) : parseSExpr(original.source),
+    );
+    before = owned ? ownProjectData(expanded) : expanded;
     if (owned) {
       ownedBoardSourceTrees.set(original, before);
     }
@@ -730,13 +733,19 @@ function mergeBoardSource(
         'sheetfile',
         'duplicate_pad_numbers_are_jumpers',
         'embedded_fonts',
+        'units',
       ]);
       if (!child(node, 'path') && child(old, 'path')) node.push(child(old, 'path')!);
+      node.push(
+        ...children(old, 'property').filter(
+          (property) => !child(property, 'at') && !child(property, 'effects'),
+        ),
+      );
       matched(
         children(old, 'pad'),
         children(node, 'pad'),
         (pi) => `fp:${fi}:pad:${pi}`,
-        (oldPad, pad) => retain(oldPad, pad, []),
+        (oldPad, pad) => retain(oldPad, pad, ['pinfunction', 'pintype']),
         node,
       );
       matched(

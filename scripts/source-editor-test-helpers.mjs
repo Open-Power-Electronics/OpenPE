@@ -77,7 +77,9 @@ export async function readNativeFiles(page) {
   await navigation.waitFor({ state: 'visible' });
   // Collapsed folders retain mounted file rows, so collect the complete native
   // set independently of visibility and expand ancestors only when selecting.
-  const buttons = navigation.locator('button[data-source-file]');
+  // Directory observations (including text STEP files) are outside Core/native
+  // design. Source marks them private independently of whether they are editable.
+  const buttons = navigation.locator('button[data-source-file]:not([data-agent-private])');
   await buttons.first().waitFor({ state: 'attached' });
   const names = await buttons.evaluateAll((items) => items.map((item) => item.dataset.sourceFile));
   if (!names.length) throw new Error('Open Source before reading its native project files.');

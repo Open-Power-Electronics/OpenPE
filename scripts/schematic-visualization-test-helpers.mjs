@@ -3,7 +3,7 @@ import { openDisplayDrawer } from './visualization-test-helpers.mjs';
 export async function openSchematicPanel(page, name) {
   if (!['Parts list', 'Selection', 'Visible layers'].includes(name))
     throw new Error(`Unsupported schematic visualization panel: ${name}`);
-  for (const previous of ['Parts list', 'Version history']) {
+  for (const previous of ['Parts list']) {
     const dialog = page.getByRole('dialog', { name: previous, exact: true });
     if (await dialog.isVisible()) {
       if (previous === name) return dialog;

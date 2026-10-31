@@ -10,6 +10,7 @@ export type SelectOption = {
   description?: ReactNode;
   icon?: ReactNode;
   muted?: boolean;
+  disabled?: boolean;
   separatorBefore?: boolean;
   children?: Omit<SelectOption, 'children'>[];
 };
@@ -73,7 +74,7 @@ export default function Select({
   const childOpen = open && enabled && !!children?.length;
   const search = useRef({ text: '', at: 0 });
   function expand(index: number) {
-    if (!options[index]?.children?.length) return;
+    if (!options[index]?.children?.length || options[index]?.disabled) return;
     setActive(index);
     if (submenu !== index) {
       setSubmenu(index);
@@ -107,7 +108,7 @@ export default function Select({
   function choose(index: number) {
     if (!enabled || disabled) return;
     const option = options[index];
-    if (!option) return;
+    if (!option || option.disabled) return;
     if (option.children?.length) {
       expand(index);
       return;
@@ -116,6 +117,10 @@ export default function Select({
   }
   function chooseValue(next: string) {
     if (!enabled || disabled) return;
+    const option = options
+      .flatMap((option) => [option, ...(option.children || [])])
+      .find((option) => option.value === next);
+    if (option?.disabled) return;
     onChange(next);
     setOpen(false);
     setSubmenu(null);
@@ -249,6 +254,7 @@ export default function Select({
         id={`${id}${child ? '-submenu' : ''}-${index}`}
         role="option"
         aria-selected={value === option.value}
+        aria-disabled={option.disabled || undefined}
         aria-haspopup={nested ? 'listbox' : undefined}
         aria-expanded={nested ? childOpen && submenu === index : undefined}
         aria-controls={nested && childOpen && submenu === index ? `${id}-submenu` : undefined}

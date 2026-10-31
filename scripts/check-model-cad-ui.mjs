@@ -105,7 +105,7 @@ grid={grid} gridSpacing={gridSpacing}
 modelCad={modelCadFromProject(snapshot.project)}
 revision={String(snapshot.revision)} undoDepth={snapshot.undoDepth} redoDepth={snapshot.redoDepth}
 sourcePending={snapshot.sourceDraft!==null} capabilityHost={host} active={active} viewState={view}
-sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)} historyAction={<button type="button" className="tool-button" aria-label="Version history"/>} sidebarAction={<div className="editor-tool-group editor-view-controls"><SidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div>}/></div></div>};
+sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)} sidebarAction={<div className="editor-tool-group editor-view-controls"><SidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div>}/></div></div>};
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',

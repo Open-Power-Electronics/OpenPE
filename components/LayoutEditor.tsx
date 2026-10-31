@@ -146,6 +146,7 @@ import Select from './Select';
 import { NumberField } from './LayoutPropertyFields';
 import LayoutProperties from './LayoutProperties';
 import EditorStatusBar from './EditorStatusBar';
+import ThermalComponentOutlines from './ThermalComponentOutlines';
 import CanvasCoordinates, { createCanvasCoordinates } from './CanvasCoordinates';
 import {
   createLayoutCamera,
@@ -224,11 +225,15 @@ type Props = {
   onAnnotationsChange: (annotations: AgentAnnotation[]) => void;
   onAnnotationAdd?: () => void;
   annotationDisabled?: boolean;
-  historyAction?: ReactNode;
   sidebarAction?: ReactNode;
   ruleAction?: ReactNode;
   analysisAction?: ReactNode;
   analysisDrawing?: ReactNode;
+  analysisOutlineSurface?: 'front' | 'back';
+  analysisComponentSurface?: 'front' | 'back';
+  analysisComponentDetail?: (footprint: Footprint, layers: PCBDisplay, scale: number) => ReactNode;
+  analysisMarkers?: (scale: number) => ReactNode;
+  onAnalysisComponentChange?: (footprint: Footprint | null) => void;
   analysisReadout?: ReactNode;
   analysisPanel?: ReactNode;
   onAnalysisProbe?: (point: Point | null) => void;
@@ -281,11 +286,15 @@ function LayoutEditor({
   onAnnotationsChange,
   onAnnotationAdd,
   annotationDisabled = false,
-  historyAction,
   sidebarAction,
   ruleAction,
   analysisAction,
   analysisDrawing,
+  analysisOutlineSurface,
+  analysisComponentSurface,
+  analysisComponentDetail,
+  analysisMarkers,
+  onAnalysisComponentChange,
   analysisReadout,
   analysisPanel,
   onAnalysisProbe,
@@ -993,6 +1002,21 @@ function LayoutEditor({
     [pcb.layers, displayBoard.footprints, layers],
   );
   const bodyTargetsInteractive = tool === 'annotate' || (tool === 'select' && filters.footprint);
+  const inspectedAnalysisFootprint =
+    analysisComponentDetail &&
+    active &&
+    visible &&
+    !annotationDisabled &&
+    selectedFootprint &&
+    selectedFootprint.side === analysisComponentSurface &&
+    footprintBounds.get(selectedFootprint.id) &&
+    pcbSelectionEligible(pcb, { kind: 'footprint', id: selectedFootprint.id }, filters)
+      ? selectedFootprint
+      : null;
+  useLayoutEffect(() => {
+    onAnalysisComponentChange?.(inspectedAnalysisFootprint);
+    return () => onAnalysisComponentChange?.(null);
+  }, [onAnalysisComponentChange, inspectedAnalysisFootprint]);
   const zoneOwners = useMemo(
     () =>
       new Map(placed.footprints.flatMap((f) => (f.zones ?? []).map((z) => [z.id, f.id] as const))),
@@ -2560,7 +2584,8 @@ function LayoutEditor({
       host.current?.classList.add('is-panning');
       return;
     }
-    if (onAnalysisProbe) return;
+    if (onAnalysisProbe || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
+      return;
     const p =
       tool === 'route' && (e.ctrlKey || e.metaKey)
         ? routeFreePoint(canvasPoint(e, false))
@@ -2815,7 +2840,7 @@ function LayoutEditor({
     // Idle pointer motion only updates the coordinate subscriber. Tools keep
     // their live cursor preview without rebuilding the entire board on hover.
     updateCursor(p, !overlayOpen && tool !== 'select' && tool !== 'hand' && tool !== 'annotate');
-    if (onAnalysisProbe) {
+    if (onAnalysisProbe || (analysisComponentDetail && tool === 'select' && !annotationDisabled)) {
       if (pointer.current === e.pointerId && pointerStart.current)
         pointerMoved.current ||=
           Math.hypot(e.clientX - pointerStart.current.x, e.clientY - pointerStart.current.y) > 4;
@@ -2896,6 +2921,31 @@ function LayoutEditor({
       } else setDrag({ ...drag, current: p });
     }
   }
+  function inspectAnalysisComponent(point: Point) {
+    if (annotationDisabled || latestBoard.current !== pcb) return;
+    const candidates = pcb.footprints
+      .flatMap((footprint) => {
+        if (
+          footprint.side !== analysisComponentSurface ||
+          !pcbSelectionEligible(pcb, { kind: 'footprint', id: footprint.id }, filters)
+        )
+          return [];
+        const bounds = footprintBounds.get(footprint.id);
+        if (!bounds) return [];
+        const angle = (footprint.rotation * Math.PI) / 180;
+        const dx = point.x - footprint.x,
+          dy = point.y - footprint.y;
+        const x = dx * Math.cos(angle) - dy * Math.sin(angle);
+        const y = dx * Math.sin(angle) + dy * Math.cos(angle);
+        return x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY
+          ? [{ footprint, area: (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY) }]
+          : [];
+      })
+      .sort((a, b) => a.area - b.area);
+    setSelection(candidates.length ? [{ kind: 'footprint', id: candidates[0].footprint.id }] : []);
+    setInspectedPadId('');
+    setInspector(false);
+  }
   function end(e: React.PointerEvent<SVGSVGElement>) {
     if (pointer.current !== e.pointerId) return;
     const moved =
@@ -2935,7 +2985,14 @@ function LayoutEditor({
       return;
     }
     if (onAnalysisProbe) {
-      if (!moved) onAnalysisProbe(canvasPoint(e, false));
+      if (!moved) {
+        if (analysisComponentDetail) inspectAnalysisComponent(canvasPoint(e, false));
+        onAnalysisProbe(canvasPoint(e, false));
+      }
+      return;
+    }
+    if (analysisComponentDetail && tool === 'select' && !annotationDisabled) {
+      if (!moved) inspectAnalysisComponent(canvasPoint(e, false));
       return;
     }
     if (!moved && picked?.basis === latestBoard.current) setSelection([picked.selection]);
@@ -3904,11 +3961,10 @@ function LayoutEditor({
       >
         {ruleAction}
         {listAction}
-        {historyAction}
         {sidebarAction}
       </div>
     ),
-    [ruleAction, listAction, historyAction, sidebarAction],
+    [ruleAction, listAction, sidebarAction],
   );
   const moving = Boolean(
     outlineResize ||
@@ -4178,12 +4234,28 @@ function LayoutEditor({
             {analysisDrawing && (
               <g data-annotation-overlay pointerEvents="none">
                 {analysisDrawing}
+                {analysisOutlineSurface && (
+                  <ThermalComponentOutlines
+                    footprints={pcb.footprints}
+                    surface={analysisOutlineSurface}
+                    layers={layers}
+                  />
+                )}
               </g>
             )}
             <LayoutCameraScaleRender camera={camera}>
               {(view) => (
                 <>
-                  {' '}
+                  {analysisMarkers?.(view.width / size.width)}
+                  {analysisComponentDetail &&
+                    selectedFootprint &&
+                    selectedFootprint.side === analysisComponentSurface &&
+                    pcbSelectionEligible(
+                      pcb,
+                      { kind: 'footprint', id: selectedFootprint.id },
+                      filters,
+                    ) &&
+                    analysisComponentDetail(selectedFootprint, layers, view.width / size.width)}
                   {active &&
                     tool === 'select' &&
                     !onAnalysisProbe &&

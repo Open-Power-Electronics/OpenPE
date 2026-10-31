@@ -35,11 +35,20 @@ export function assertDatasheetRecord(record) {
   const { family } = record.ic;
   const name = family.toLowerCase();
   const { datasheet } = record;
+  const st = record.ic.manufacturer === 'STMicroelectronics';
   if (
-    !record.example.file.startsWith(`${name}-`) ||
+    (st && (family !== 'UC3845B' || record.example.id !== 'emc-flyback-demo')) ||
+    (!st && family === 'UC3845B') ||
+    (st ? record.example.file !== 'emc-flyback' : !record.example.file.startsWith(`${name}-`)) ||
     datasheet.filename !== `${name}.pdf` ||
-    datasheet.source_url !== `https://www.ti.com/lit/ds/symlink/${name}.pdf` ||
-    datasheet.product_url !== `https://www.ti.com/product/${family}` ||
+    datasheet.source_url !==
+      (st
+        ? 'https://www.st.com/resource/en/datasheet/uc3842b.pdf'
+        : `https://www.ti.com/lit/ds/symlink/${name}.pdf`) ||
+    datasheet.product_url !==
+      (st
+        ? `https://www.st.com/en/power-management/${name}.html`
+        : `https://www.ti.com/product/${family}`) ||
     (datasheet.revision !== null && !datasheet.document_number.endsWith(datasheet.revision))
   )
     throw new Error(`${family}: datasheet identity does not match the selected IC`);
@@ -66,6 +75,7 @@ export function assertDatasheetRecord(record) {
       'switching_frequency',
       'minimum_switching_frequency',
       'switching_frequency_programmable_maximum',
+      'oscillator_frequency',
     ].some((id) => Object.hasOwn(record.parameters, id))
   )
     throw new Error(`${family}: a frequency specification is required`);
@@ -74,15 +84,24 @@ export function assertDatasheetRecord(record) {
 
 export async function loadDatasheetCatalog(root = repositoryRoot) {
   const catalog = JSON.parse(
-    await readFile(path.join(root, 'resources/example-catalog/manifest.json'), 'utf8'),
+    await readFile(path.join(root, 'resources/example-catalog/home-manifest.json'), 'utf8'),
   );
+  const examples = [...catalog.examples, ...catalog.recent];
+  const reviewed = JSON.parse(
+    await readFile(path.join(root, 'resources/example-catalog/ic-datasheets.json'), 'utf8'),
+  );
+  if (!Array.isArray(reviewed) || reviewed.length !== examples.length)
+    throw new Error('The internal datasheet catalog must match the current example catalog.');
+  const identities = new Set(reviewed.map((record) => assertDatasheetRecord(record).example.id));
+  if (identities.size !== reviewed.length)
+    throw new Error('The internal datasheet catalog contains duplicate identities.');
   const records = [];
-  for (const example of catalog.examples) {
+  for (const example of examples) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(example.file))
       throw new Error('Invalid example file stem');
     const directory = path.join(root, 'examples', example.file, 'datasheets');
     const record = assertDatasheetRecord(
-      JSON.parse(await readFile(path.join(directory, 'parameters.json'), 'utf8')),
+      reviewed.find((record) => record.example.id === example.id),
     );
     if (
       ['id', 'file', 'title', 'topology'].some((key) => record.example[key] !== example[key]) ||
@@ -90,7 +109,12 @@ export async function loadDatasheetCatalog(root = repositoryRoot) {
     )
       throw new Error(`${example.file}: reference data no longer matches the Home catalog`);
     const fixture = JSON.parse(
-      await readFile(path.join(root, 'tests/fixtures/reference', `${example.file}.json`), 'utf8'),
+      await readFile(
+        example.id === 'emc-flyback-demo'
+          ? path.join(root, 'lib/emc-flyback-example.json')
+          : path.join(root, 'tests/fixtures/reference', `${example.file}.json`),
+        'utf8',
+      ),
     );
     const controller = fixture.schematic.components.find(
       (part) => part.reference === record.ic.reference,
@@ -98,7 +122,7 @@ export async function loadDatasheetCatalog(root = repositoryRoot) {
     if (
       !controller ||
       controller.value !== record.ic.schematic_value ||
-      controller.libraryId !== record.ic.symbol_library_id ||
+      (controller.libraryId ?? controller.symbol) !== record.ic.symbol_library_id ||
       controller.fields?.Footprint !== record.ic.footprint
     )
       throw new Error(`${example.file}: reference data no longer matches the canonical controller`);
@@ -107,6 +131,66 @@ export async function loadDatasheetCatalog(root = repositoryRoot) {
   if (new Set(records.map(({ record }) => record.ic.family)).size !== records.length)
     throw new Error('Each Home example must have a distinct controller reference');
   return records;
+}
+
+// Download-only references for the other fitted EMC ICs. These are not reviewed
+// parameter records and are never submitted as Agent context.
+export async function loadSupplementalDatasheets(root = repositoryRoot) {
+  const assets = JSON.parse(
+    await readFile(
+      path.join(root, 'resources/example-catalog/emc-ic-datasheet-files.json'),
+      'utf8',
+    ),
+  );
+  const fixture = JSON.parse(
+    await readFile(path.join(root, 'lib/emc-flyback-example.json'), 'utf8'),
+  );
+  const sources = {
+    U2: 'https://www.st.com/resource/en/datasheet/l78l.pdf',
+    U3: 'https://www.ti.com/lit/ds/symlink/tl431.pdf',
+    U4: 'https://pdf.hitech-semi.com/754058/LTV-817S.pdf',
+  };
+  if (
+    !Array.isArray(assets) ||
+    assets.length !== 3 ||
+    new Set(assets.map((asset) => asset.ic?.reference)).size !== 3
+  )
+    throw new Error('Expected one supplemental PDF for each of EMC U2, U3 and U4.');
+  return assets.map((record) => {
+    const { ic, datasheet } = record;
+    const part = fixture.schematic.components.find((part) => part.reference === ic?.reference);
+    if (
+      Object.keys(record).sort().join() !== 'datasheet,ic' ||
+      !part ||
+      Object.keys(ic).sort().join() !==
+        'family,footprint,manufacturer,reference,schematic_value,symbol_library_id' ||
+      ic.schematic_value !== part.value ||
+      ic.symbol_library_id !== part.symbol ||
+      ic.footprint !== part.fields.Footprint ||
+      !/^[A-Za-z0-9-]+$/.test(ic.family) ||
+      typeof ic.manufacturer !== 'string' ||
+      !ic.manufacturer ||
+      Object.keys(datasheet).sort().join() !==
+        'bytes,downloaded_on,filename,page_count,sha256,source_url,title' ||
+      datasheet.source_url !== sources[ic.reference] ||
+      datasheet.filename !== `${ic.family.toLowerCase()}.pdf` ||
+      !/^[a-f0-9]{64}$/.test(datasheet.sha256) ||
+      !Number.isInteger(datasheet.bytes) ||
+      datasheet.bytes < 5 ||
+      datasheet.bytes > 20971520 ||
+      !Number.isInteger(datasheet.page_count) ||
+      datasheet.page_count < 1 ||
+      datasheet.page_count > 1000 ||
+      typeof datasheet.title !== 'string' ||
+      !datasheet.title ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(datasheet.downloaded_on) ||
+      new Date(datasheet.downloaded_on).toISOString().slice(0, 10) !== datasheet.downloaded_on
+    )
+      throw new Error(
+        'Supplemental EMC PDF metadata does not match the fitted IC or pinned source.',
+      );
+    return { record, directory: path.join(root, 'examples/emc-flyback/datasheets') };
+  });
 }
 
 function verifyBytes(data, record) {
@@ -156,25 +240,38 @@ export async function verifyDatasheet(record, directory) {
 
 export async function downloadDatasheet(record, directory, fetchImpl = fetch) {
   assertDatasheetRecord(record);
+  return downloadPinnedPdf(record, directory, fetchImpl);
+}
+
+async function downloadPinnedPdf(record, directory, fetchImpl = fetch) {
   if (await verifyDatasheet(record, directory)) return 'cached';
   let url = record.datasheet.source_url;
   const signal = AbortSignal.timeout(60000);
   let response;
+  const source = new URL(record.datasheet.source_url);
   for (let redirects = 0; redirects <= 3; redirects++) {
     const parsed = new URL(url);
     if (
-      parsed.origin !== 'https://www.ti.com' ||
+      parsed.origin !== source.origin ||
       parsed.username ||
       parsed.password ||
-      !parsed.pathname.startsWith('/lit/')
+      !parsed.pathname.startsWith(
+        source.origin === 'https://www.ti.com'
+          ? '/lit/'
+          : source.origin === 'https://www.st.com'
+            ? '/resource/en/datasheet/'
+            : '/754058/',
+      )
     )
-      throw new Error('Datasheet download must remain on the official TI HTTPS literature origin');
+      throw new Error(
+        'Datasheet download must remain on the official TI/ST or pinned distributor HTTPS literature origin',
+      );
     response = await fetchImpl(url, { redirect: 'manual', signal });
     if (![301, 302, 303, 307, 308].includes(response.status)) break;
     const location = response.headers.get('location');
     await response.body?.cancel();
     if (!location || redirects === 3)
-      throw new Error('Invalid or excessive TI datasheet redirects');
+      throw new Error('Invalid or excessive vendor datasheet redirects');
     url = new URL(location, url).href;
   }
   if (!response.ok || !response.body)
@@ -213,20 +310,21 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.length !== 1 || !['--verify', '--download'].includes(args[0]))
     throw new Error('Usage: node scripts/example-datasheets.mjs --verify|--download');
-  const catalog = await loadDatasheetCatalog();
+  const controllers = await loadDatasheetCatalog();
+  const catalog = [...controllers, ...(await loadSupplementalDatasheets())];
   for (const { record, directory } of catalog) {
     if (args[0] === '--download') {
-      console.log(`${record.ic.family}: ${await downloadDatasheet(record, directory)}`);
+      console.log(`${record.ic.family}: ${await downloadPinnedPdf(record, directory)}`);
     } else if (!(await verifyDatasheet(record, directory))) {
       throw new Error(`${record.ic.family}: PDF missing. Run npm run datasheets:download.`);
     }
   }
-  const count = catalog.reduce(
+  const count = controllers.reduce(
     (total, { record }) => total + Object.keys(record.parameters).length,
     0,
   );
   console.log(
-    `Verified ${catalog.length} controller records, ${count} parameters and ${catalog.length} pinned PDFs.`,
+    `Verified ${controllers.length} controller records, ${count} parameters and ${catalog.length} pinned IC PDFs.`,
   );
 }
 
