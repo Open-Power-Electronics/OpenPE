@@ -366,7 +366,7 @@ export default function ModelCadSketchPanel({
   const normalAxis = plane === 'XY' ? 'Z' : plane === 'XZ' ? 'Y' : 'X';
   return (
     <aside
-      className={styles.panel}
+      className={`${styles.panel} editor-tool-sheet`}
       aria-label={phase === 'profile' ? title : `${title} settings`}
       onCompositionStart={() => {
         composition.current = true;
@@ -398,17 +398,7 @@ export default function ModelCadSketchPanel({
       }}
     >
       <header className={styles.header}>
-        <h2>{title}</h2>
-        <button
-          type="button"
-          className="tool-button"
-          aria-label={phase === 'extrude' ? 'Cancel extrusion' : 'Cancel sketch'}
-          title="Cancel"
-          disabled={busy}
-          onClick={close}
-        >
-          <X size={17} aria-hidden />
-        </button>
+        <h2>{phase === 'extrude' ? 'Distance' : phase === 'profile' ? 'Size' : 'Plane'}</h2>
       </header>
       <form
         onSubmit={(event) => {
@@ -417,144 +407,133 @@ export default function ModelCadSketchPanel({
           else if (phase === 'extrude') void apply();
         }}
       >
-        {phase === 'plane' ? (
-          <div className={styles.fields}>
-            <label>
-              <span>Plane</span>
-              <Select
-                label="Sketch plane"
-                value={plane}
-                options={['XY', 'XZ', 'YZ'].map((value) => ({ value, label: value }))}
+        <div className={styles.parameters}>
+          {phase === 'plane' ? (
+            <div className={styles.fields}>
+              <label>
+                <span>Plane</span>
+                <Select
+                  label="Sketch plane"
+                  value={plane}
+                  options={['XY', 'XZ', 'YZ'].map((value) => ({ value, label: value }))}
+                  disabled={blocked}
+                  onChange={(value) => {
+                    setPlane(value as ModelCadSketchPlane);
+                    setError('');
+                  }}
+                />
+              </label>
+              <label>
+                <span>{normalAxis} position</span>
+                <QuantityInput
+                  unit={'mm'}
+                  aria-label="Sketch plane offset (mm)"
+                  inputMode="decimal"
+                  value={offsets[plane]}
+                  disabled={blocked}
+                  onFocus={() => {
+                    focusOffset.current = offsets[plane];
+                  }}
+                  onValueChange={(inputValue) => {
+                    setOffsets((previous) => ({ ...previous, [plane]: inputValue }));
+                    setError('');
+                  }}
+                />
+              </label>
+            </div>
+          ) : phase === 'sketch' ? (
+            <div className={styles.fields}>
+              <span>
+                {plane} · {normalAxis} = {Number(offsets[plane]).toFixed(2)} mm
+              </span>
+              <button
+                type="button"
+                className="tool-button"
+                aria-label="Align view to sketch"
+                title="Align view"
                 disabled={blocked}
-                onChange={(value) => {
-                  setPlane(value as ModelCadSketchPlane);
-                  setError('');
+                onClick={() => {
+                  if (origin) onAlignView(plane, origin);
                 }}
-              />
-            </label>
-            <label>
-              <span>{normalAxis} position</span>
-              <QuantityInput
-                unit={'mm'}
-                aria-label="Sketch plane offset (mm)"
-                inputMode="decimal"
-                value={offsets[plane]}
+              >
+                <Focus size={17} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="tool-button"
+                aria-label="Clear sketch"
+                title="Clear sketch"
                 disabled={blocked}
-                onFocus={() => {
-                  focusOffset.current = offsets[plane];
-                }}
-                onValueChange={(inputValue) => {
-                  setOffsets((previous) => ({ ...previous, [plane]: inputValue }));
-                  setError('');
-                }}
-              />
-            </label>
-          </div>
-        ) : phase === 'sketch' ? (
-          <div className={styles.fields}>
-            <span>
-              {plane} · {normalAxis} = {Number(offsets[plane]).toFixed(2)} mm
-            </span>
-            <button
-              type="button"
-              className="tool-button"
-              aria-label="Align view to sketch"
-              title="Align view"
-              disabled={blocked}
-              onClick={() => {
-                if (origin) onAlignView(plane, origin);
-              }}
-            >
-              <Focus size={17} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="tool-button"
-              aria-label="Clear sketch"
-              title="Clear sketch"
-              disabled={blocked}
-              onClick={clearSketch}
-            >
-              <RotateCcw size={17} aria-hidden />
-            </button>
-          </div>
-        ) : phase === 'extrude' ? (
-          <div className={styles.fields}>
-            <label>
-              <span>Distance</span>
-              <QuantityInput
-                unit={'mm'}
-                aria-label="Extrusion distance (mm)"
-                inputMode="decimal"
-                value={depth}
-                disabled={blocked}
-                onFocus={() => {
-                  focusDepth.current = depth;
-                }}
-                onValueChange={(inputValue) => {
-                  setDepth(inputValue);
-                  setError('');
-                }}
-              />
-            </label>
-            <label>
-              <span>Direction</span>
-              <Select
-                label="Extrusion direction"
-                value={direction}
-                options={[
-                  { value: 'positive', label: 'Positive' },
-                  { value: 'negative', label: 'Negative' },
-                  { value: 'symmetric', label: 'Symmetric' },
-                ]}
-                disabled={blocked}
-                onChange={(value) => {
-                  setDirection(value as typeof direction);
-                  setError('');
-                }}
-              />
-            </label>
-          </div>
-        ) : null}
-        {profile && phase !== 'plane' && (
-          <div className={styles.readout}>
-            <span>
-              {profile.width.toFixed(2)} × {profile.height.toFixed(2)} mm
-            </span>
-            {shape === 'polygon' && <span>{points.length} vertices</span>}
-          </div>
-        )}
-        {errorText && (
-          <p className={styles.error} role="alert">
-            {errorText}
-          </p>
-        )}
+                onClick={clearSketch}
+              >
+                <RotateCcw size={17} aria-hidden />
+              </button>
+            </div>
+          ) : phase === 'extrude' ? (
+            <div className={styles.fields}>
+              <label>
+                <span>Distance</span>
+                <QuantityInput
+                  unit={'mm'}
+                  aria-label="Extrusion distance (mm)"
+                  inputMode="decimal"
+                  value={depth}
+                  disabled={blocked}
+                  onFocus={() => {
+                    focusDepth.current = depth;
+                  }}
+                  onValueChange={(inputValue) => {
+                    setDepth(inputValue);
+                    setError('');
+                  }}
+                />
+              </label>
+              <label>
+                <span>Direction</span>
+                <Select
+                  label="Extrusion direction"
+                  value={direction}
+                  options={[
+                    { value: 'positive', label: 'Positive' },
+                    { value: 'negative', label: 'Negative' },
+                    { value: 'symmetric', label: 'Symmetric' },
+                  ]}
+                  disabled={blocked}
+                  onChange={(value) => {
+                    setDirection(value as typeof direction);
+                    setError('');
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
+          {profile && phase !== 'plane' && (
+            <div className={styles.readout}>
+              <span>
+                {profile.width.toFixed(2)} × {profile.height.toFixed(2)} mm
+              </span>
+              {shape === 'polygon' && <span>{points.length} vertices</span>}
+            </div>
+          )}
+          {errorText && (
+            <p className={styles.error} role="alert">
+              {errorText}
+            </p>
+          )}
+        </div>
         <footer className={styles.footer}>
           {phase === 'plane' ? (
-            <>
-              <button type="button" disabled={busy} onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="primary" disabled={blocked || !origin}>
-                Start sketch
-              </button>
-            </>
+            <button type="submit" className="primary" disabled={blocked || !origin}>
+              Start sketch
+            </button>
           ) : phase === 'sketch' ? (
-            <>
-              <button type="button" disabled={blocked} onClick={() => leaveSketch('plane')}>
-                Change plane
-              </button>
-              <button type="button" disabled={busy} onClick={onClose}>
-                Cancel
-              </button>
-            </>
+            <button type="button" disabled={blocked} onClick={() => leaveSketch('plane')}>
+              Change plane
+            </button>
           ) : (
             <>
               <button type="button" disabled={blocked} onClick={enterSketch}>
                 Edit sketch
-              </button>
-              <button type="button" disabled={busy} onClick={close}>
-                {phase === 'profile' ? 'Discard sketch' : 'Cancel'}
               </button>
               {phase === 'extrude' && (
                 <button type="submit" className="primary" disabled={blocked || !parsed.object}>
@@ -563,6 +542,16 @@ export default function ModelCadSketchPanel({
               )}
             </>
           )}
+          <button
+            type="button"
+            className={styles.close}
+            aria-label={phase === 'profile' ? 'Discard sketch' : 'Cancel'}
+            title="Close"
+            disabled={busy}
+            onClick={close}
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
         </footer>
       </form>
     </aside>

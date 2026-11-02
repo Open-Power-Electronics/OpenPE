@@ -140,9 +140,9 @@ function sourceNumber(node: SExpr | undefined, index: number, context: string, o
     !raw ||
     !Number.isFinite(n) ||
     Math.abs(n) > 100000 ||
-    Math.abs(n - Number(n.toFixed(4))) > 1e-9
+    Math.abs(n - Number(n.toFixed(6))) > 1e-9
   )
-    fail(`${context} needs finite dimensions at 0.0001 mm precision.`);
+    fail(`${context} needs finite dimensions at 0.000001 mm precision.`);
   return n;
 }
 const sourcePoint = (node: SExpr | undefined, context: string): Point => ({
@@ -238,15 +238,38 @@ export function createPCBFootprint(
     if (kind === 'pad') {
       allowedChildren(
         node,
-        ['at', 'size', 'drill', 'layers', 'uuid', 'tstamp', 'remove_unused_layers'],
+        [
+          'at',
+          'size',
+          'drill',
+          'layers',
+          'uuid',
+          'tstamp',
+          'remove_unused_layers',
+          'roundrect_rratio',
+        ],
         'The pad',
       );
       const type = val(node, 2),
         shape = val(node, 3),
         number = val(node);
       if (type !== 'smd' && type !== 'thru_hole') fail(`Pad type ${type} is not supported.`);
-      if (!['rect', 'circle', 'oval'].includes(shape))
-        fail(`Pad shape ${shape} is not supported. Use rectangular, circular or oval pads.`);
+      if (!['rect', 'circle', 'oval', 'roundrect'].includes(shape))
+        fail(
+          `Pad shape ${shape} is not supported. Use rectangular, circular, oval or rounded rectangular pads.`,
+        );
+      const ratioNode = child(node, 'roundrect_rratio');
+      if ((shape === 'roundrect') !== Boolean(ratioNode))
+        fail(
+          'Rounded rectangular pads require an explicit corner ratio; other pad shapes cannot use it.',
+        );
+      let roundrectRatio: number | undefined;
+      if (ratioNode) {
+        tuple(ratioNode, 1, 1, 'Pad corner ratio');
+        roundrectRatio = sourceNumber(ratioNode, 1, 'Pad corner ratio');
+        if (roundrectRatio < 0 || roundrectRatio > 0.5)
+          fail('Pad corner ratio must be between 0 and 0.5.');
+      }
       if (!pins.has(number))
         fail(`${symbol.ref} has no pin ${number || '(unnumbered)'} for this footprint pad.`);
       tuple(child(node, 'size'), 2, 2, 'Pad size');
@@ -281,6 +304,7 @@ export function createPCBFootprint(
         rotation: angle(sourceNumber(position, 3, 'Pad rotation', true)),
         type,
         shape: shape as Pad['shape'],
+        ...(roundrectRatio === undefined ? {} : { roundrectRatio }),
         size,
         ...(drill === undefined ? {} : { drill }),
         netId: null,
@@ -340,7 +364,7 @@ export function createPCBFootprint(
         });
     } else
       fail(
-        `Footprint feature ${kind} is not supported. Choose a footprint with straight graphics and rectangular, circular or oval pads.`,
+        `Footprint feature ${kind} is not supported. Choose a footprint with straight graphics and rectangular, circular, oval or rounded rectangular pads.`,
       );
     if (pads.length > 2000 || graphics.length > 2000)
       fail('This footprint exceeds the supported geometry limit.');

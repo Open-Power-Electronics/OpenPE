@@ -153,6 +153,7 @@ import ConfirmationDialog, { type ConfirmationKind } from './ConfirmationDialog'
 import RenameDialog from './RenameDialog';
 import type { FootprintDetail } from './LibraryChooser';
 import PartProperties from './PartProperties';
+import FootprintModels, { UnassignedModelField } from './FootprintModels';
 import FieldProperties from './FieldProperties';
 import InspectorResize, { type InspectorSize } from './InspectorResize';
 import SimulationResize from './SimulationResize';
@@ -3124,6 +3125,8 @@ export default function Workbench({
       canEditProperties() && part?.id === id ? saveFields(ref, value, fields, id) : false,
   );
   const propertiesPartId = part?.id;
+  const propertiesBoard = project?.pcb;
+  const propertiesFootprint = propertiesBoard?.footprints.find((f) => f.symbolId === part?.id);
   const getPropertiesRevision = useCallback(() => core.getSnapshot().revision, [core]);
   const saveSelectedPartProperties = useCallback(
     (ref: string, value: string, fields: Record<string, string>) =>
@@ -3145,6 +3148,26 @@ export default function Workbench({
       return false;
     return commitBoard({ ...basis, thickness });
   });
+  const saveComponentFootprint = useEditorAction((basis: PCB, next: PCB['footprints'][number]) => {
+    const current = core.getSnapshot();
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      !['schematic', 'layout', '3d'].includes(view) ||
+      !rightSidebarVisible ||
+      modal ||
+      confirmation ||
+      current.sourceDraft !== null ||
+      current.editingBlocked !== null ||
+      current.project?.pcb !== basis ||
+      !basis.footprints.some((f) => f.id === next.id)
+    )
+      return false;
+    return commitBoard({
+      ...basis,
+      footprints: basis.footprints.map((f) => (f.id === next.id ? next : f)),
+    });
+  });
   const saveLayoutPartProperties = useEditorAction(
     (
       schematicBasis: Circuit,
@@ -3158,9 +3181,9 @@ export default function Workbench({
       if (
         !active ||
         screen !== 'workspace' ||
-        view !== 'layout' ||
+        !['schematic', 'layout', '3d'].includes(view) ||
         !rightSidebarVisible ||
-        thermalVisible ||
+        (view === 'layout' && thermalVisible) ||
         modal ||
         confirmation ||
         snapshot.sourceDraft !== null ||
@@ -3552,18 +3575,9 @@ export default function Workbench({
                           key={inspectedField ? activeSelection : selected}
                         >
                           <div className="inspector-body">
-                            {!part && (
-                              <div className="property-object-actions">
-                                {propertiesDeleteAction}
-                              </div>
-                            )}
                             {part ? (
                               <>
-                                <PartIdentity
-                                  part={part}
-                                  library={doc.libraries[part.libId]}
-                                  actions={propertiesDeleteAction}
-                                />
+                                <PartIdentity part={part} library={doc.libraries[part.libId]} />
                                 {inspectedField && fieldPosition && activeSelection ? (
                                   <FieldProperties
                                     active={propertiesActive}
@@ -3612,6 +3626,27 @@ export default function Workbench({
                                       capabilityHost={capabilityHost}
                                       key={part.id}
                                       part={part}
+                                      modelFields={
+                                        propertiesFootprint && propertiesBoard ? (
+                                          <FootprintModels
+                                            key={propertiesFootprint.id}
+                                            footprint={propertiesFootprint}
+                                            projectSource={source}
+                                            active={propertiesActive}
+                                            fileId={fileId}
+                                            getRevision={getPropertiesRevision}
+                                            capabilityHost={capabilityHost}
+                                            onChange={(models) =>
+                                              saveComponentFootprint(propertiesBoard, {
+                                                ...propertiesFootprint,
+                                                models,
+                                              })
+                                            }
+                                          />
+                                        ) : (
+                                          <UnassignedModelField />
+                                        )
+                                      }
                                       onSave={saveSelectedPartProperties}
                                     />
                                     <div className="geometry-fields component-geometry">
@@ -3726,6 +3761,9 @@ export default function Workbench({
                               </div>
                             )}
                           </div>
+                          {propertiesDeleteAction && (
+                            <div className="inspector-footer">{propertiesDeleteAction}</div>
+                          )}
                         </aside>
                       ) : (
                         <section className="schematic-properties-empty">
@@ -3814,6 +3852,10 @@ export default function Workbench({
                           !confirmation
                         }
                         onCommit={commitBoard}
+                        fileId={fileId}
+                        projectSource={source}
+                        getRevision={getPropertiesRevision}
+                        spiceAvailable={spiceAvailable}
                         onSavePartProperties={saveLayoutPartProperties}
                         onRequestSave={requestPropertiesSave}
                         syncStatus={layoutSyncStatus}
@@ -3871,6 +3913,13 @@ export default function Workbench({
                             !confirmation
                           }
                           board={project.pcb}
+                          fileId={fileId}
+                          projectSource={source}
+                          getRevision={getPropertiesRevision}
+                          spiceAvailable={spiceAvailable}
+                          onSavePartProperties={saveLayoutPartProperties}
+                          onFootprintChange={saveComponentFootprint}
+                          onRequestSave={requestPropertiesSave}
                           onBoardThicknessChange={saveModelBoardThickness}
                           onModeChange={setModelMode}
                           schematic={project.schematic}

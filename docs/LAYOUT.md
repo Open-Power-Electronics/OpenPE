@@ -141,8 +141,9 @@ board and receives complete Core validation before commit. Airwire analysis reta
 its two-million-operation bound. Divider resize cursors release on cancellation,
 deactivation and unmount.
 
-Manual tools place/move/rotate footprints, route, place vias, draw chained-line or
-rectangular Edge.Cuts and draw/fill zones. The right dock combines Properties and Appearance.
+Manual tools place/move/rotate footprints, route, place vias and draw closed
+rectangles or polygons on the selected layer. Properties assigns networks and
+fills selected regions. The right dock combines Properties and Appearance.
 Its full-height left edge resizes the complete sidebar from 224 px up to 480 px,
 retaining at least 160 px of drawing space. The default is 280 px; Arrow keys
 resize by 16 px, Home/double-click resets and Escape cancels a drag. Width remains
@@ -213,35 +214,20 @@ Place footprint opens an independent centered component/library chooser with
 2D/3D previews. Its confirmation starts placement; the edit commits only on canvas
 after rechecking that the target exists and is unplaced. Cancelling a reopened
 chooser retains the preview.
+Library placement retains coordinates through six decimal places and supports
+rectangular, circular, oval and rounded rectangular pads with an explicit
+0–0.5 corner ratio. Pad positions, corner ratios and straight artwork remain
+exact through native Save and reopening; unsupported geometry is rejected.
 Route tracks uses a compact nonmodal horizontal panel 8 px below the drawing top
-and 12 px from its left edge. Its width follows the title, three numeric fields
-and pinned Close: Track width, Via diameter and Via drill, in mm. All three remain
-available before a via transition. Via and Draw board outline retain their
-single-row strips across the drawing width; vias expose net, diameter and smaller
-drill. Parameters scroll horizontally within the available drawing width, and
-the shared page-fold motion respects reduced motion. Closing/switching tools or leaving Layout cancels
-unfinished drafts, retaining parameters/camera/selection/property drafts.
-Selecting a different layer row cancels pickups/routes; clearing the selected
-row's display priority retains them and the active copper layer. Layer keys
-select explicitly without toggling an already selected layer off.
-Tool number-field Escape restores accepted input and focuses canvas; the
-next Escape cancels. Selector Escape closes options before cancelling the tool.
-Composing Enter/Escape, including code 229, leaves drafts/tools intact.
+and 12 px from its left edge. Its width follows the content up to 720 px, with a
+Track width prefix, three inline numeric fields and pinned Close. The width, via
+diameter and via drill remain available before a via transition. The Net-prefixed
+via strip follows the same content-sized layout, exposing net, diameter and
+smaller drill. The rectangle and polygon strips share compact width controls and pinned Finish/× actions, without repeating the current layer. Copper regions expose Minimum width; other layers expose Line width. Parameters scroll horizontally within the drawing width. Both tools draw on the selected layer (or the retained copper layer with no display priority), revealing it on activation. Rectangle uses two opposite corners; polygon uses at least three corners. First-corner closure, Enter, double-click and Finish publish one closed region without duplicate vertices. Copper output is an unassigned native zone with fill disabled; other output is an unfilled native polygon. No net is required before drawing. Both select the accepted region and restore canvas focus. Properties subsequently assigns net and fill.
 
-Board outlines expose Lines/Rectangle and native line width on fixed Edge.Cuts;
-activation reveals that layer. Board and footprint Edge.Cuts artwork and line/
-rectangle previews share a 0.05 mm display minimum, retaining wider native strokes.
-Display widths leave native geometry and hit targets unchanged. Each accepted line click commits one segment and
-retains its exact endpoint as the next origin. Escape discards only the unplaced
-head and returns to Interaction, preserving placed segments and their undo edits.
-An unrelated board revision cancels continuation. Existing board-edge endpoints
-attract within eight screen pixels; Shift bypasses attraction and Ctrl/Cmd
-bypasses grid snapping. Clicking the first point closes a chain; Enter,
-double-click and Finish outline finish an open or closed chain without adding
-duplicate segments. Rejection retains the exact origin/head
-for retry. Rectangle completion commits four native lines once and retains the
-tool. Backspace cancels an unplaced head; rectangle Escape discards its preview
-before an idle Escape exits.
+Layer changes, unrelated board revisions and cancellation discard the complete preview without partial writes. Escape clears a draft before idle Escape exits. Polygon Backspace removes one corner. Rejection retains its exact draft for retry. Same-layer endpoints attract within eight screen pixels; Shift bypasses attraction and Ctrl/Cmd bypasses grid snapping. Preview and native output use the same layer/coordinates; hidden-layer drafts cannot commit. Edge.Cuts uses a 0.05 mm display floor, retaining native widths. Number-field Escape restores accepted input/canvas focus. Selector Escape closes options first; IME composition, including code 229, cannot apply or cancel.
+
+Closed-region interiors are fallback point targets behind precise copper and strokes, respecting visible outlines, filters and cutouts. Properties groups net/layer, clearance/minimum width and bounds into paired rows. Fill rules and vertex lists remain collapsed until requested; retained drafts survive disclosure and dock visibility changes.
 
 ### Rectangular outline editing
 
@@ -384,7 +370,7 @@ transition; Escape cancels all. Existing legs/vias revalidate current
 width/clearance. Locked vias retain their size; changed sizes affect future ones.
 Through vias check full diameter/clearance across every copper layer and
 via-specific keepouts; track-only keepouts do not block them. Standalone vias
-share checks. Routes never push tracks or reroute when footprints move.
+share checks. With a closed board outline, standalone and route-transition via circles hide outside the board material, including cutouts; placement remains blocked there. Inside-board collisions retain their blocked preview. Routes never push tracks or reroute when footprints move.
 
 ### Connected track drag
 
@@ -471,15 +457,7 @@ creates solid/thermal contacts. Curves use nominal 0.01 mm tessellation within
 caps. Invalid/open/excessive geometry fails. Islands remain; complete KiCad
 island/fabrication rules are unsupported.
 
-The toolbar action opens a nonmodal settings card. Minimum clearance accepts
-0.0001–1,000 mm and defaults to 0.25 mm; Fill zones commits once. Each enabled
-zone uses the larger of its existing clearance and this minimum, measured from
-track/pad/via copper edges on shared layers. Same-net copper remains connected.
-The effective clearance and contours are saved together and undone together;
-lowering a larger saved rule requires editing that zone's Properties first.
-Native zero clearance cannot supply inherited KiCad board/net-class rules, which
-are not imported; explicit filling applies this minimum instead of a zero gap.
-Opening/cancelling settings and merely viewing saved fills do not alter content.
+There is no standalone fill toolbar button or settings strip. Properties Filled enables and fills the selected zone as one transaction; disabling removes its fill. Unfilled/stale contours show the switch off. The default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones but publishes contours only for its target. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Enabling a zone or changing effective copper rules invalidates other affected fills once. Failed calculation leaves all design data unchanged. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so filling applies the explicit minimum. Viewing and Properties disclosure never calculate fills.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
@@ -689,8 +667,11 @@ whole-assembly simulation are unsupported. CAD does not couple into board Therma
 
 ### Model resolution and alignment
 
-Model paths are metadata, not grants. Requests use fixed bundled identities or
-official footprint/model indices. Explicit assignments, including empty ones,
+Model paths are metadata, not grants. Component Properties share the same field editor across Schematic, Layout and Model. Model appears directly after Footprint; its browser opens the secondary Component models dialog. File/library selection, multiple assignments, placement, visibility and opacity are edited there through one validated PCB transaction per accepted change. Component reference/value/Footprint edits use the same shared part transaction. Schematic symbol placement remains distinct from PCB placement.
+
+Local STEP selection requires a saved project and an explicit native picker. The host validates regular unlinked STEP files up to 32 MiB and tessellates them before accepting the choice. Approved bytes enter an immutable content-addressed private cache; native PCB references use `${KIPRJMOD}/models/<SHA-256>.step`. Save/Save as prepares verified model sidecars without replacing changed files. Reopening can read verified relative STEP files through the project grant; arbitrary absolute paths do not grant access. Official KiCad paths use the bounded library resource resolver. Component STEP import adds preview geometry only; it does not import editable CAD topology.
+
+Requests use fixed bundled identities, official footprint/model indices or the current validated project with component/model indices. Explicit assignments, including empty ones,
 remain authoritative. Without links, all numbered embedded pads must support
 one common origin translation, including back-side mirroring; otherwise retain
 estimates/notices without editing data. Home models stay offline. Official files
@@ -758,21 +739,22 @@ not establish hardware qualification. [Examples](EXAMPLES.md) owns
 regeneration/assets and [EMC verification](EMC-FLYBACK.md) owns recorded numerical
 comparisons.
 
-| Check                                                                                                                                                                                                                      | Scope                                                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`                                                                                                        | Synchronization, geometry, routing/fill transactions                                                      |
-| `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts            |
-| `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Isolated fill settings, Core/native clearance, Source and undo                                            |
-| `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                       |
-| `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                      |
-| `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                   |
-| `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking |
-| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                          |
-| `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                       |
-| `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                               |
-| `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                             |
-| `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                           | Offline real native Save/reopen, CAD/STEP and cross-view undo                                             |
-| `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                 |
+| Check                                                                                                                                                                                                                      | Scope                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`                                                                                                        | Synchronization, geometry, routing/fill transactions                                                                                                         |
+| `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                               |
+| `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                        |
+| `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                          |
+| `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                         |
+| `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                                                                      |
+| `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking                                                    |
+| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                                                                             |
+| `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                                                                          |
+| `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                                                                                  |
+| `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                                                                                |
+| `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                           | Offline real native Save/reopen, CAD/STEP and cross-view undo                                                                                                |
+| `node scripts/e2e-new-project.mjs`                                                                                                                                                                                         | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process |
+| `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                                                                    |
 
 After explicit desktop-test authorization, measure the current built renderer
 with EMC Flyback using PowerShell:

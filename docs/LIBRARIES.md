@@ -114,8 +114,7 @@ authoritative.
 ## STEP access and previews
 
 Native model paths/transforms/visibility are design metadata, not filesystem
-grants. Runtime resolves fixed example identities or official footprint/model
-indices. Without instance links, alignment is permitted only when all numbered
+grants. Runtime resolves fixed example identities, official footprint/model indices, or validated component model references through the local STEP asset store. Explicit native STEP selection and Save portability follow [Layout](LAYOUT.md#model-resolution-and-alignment). Without instance links, alignment is permitted only when all numbered
 embedded pads share one translation; unsafe alignment errors without rewriting
 the board.
 
@@ -200,6 +199,7 @@ unpacked to support replacement. Do not package missing notices/source.
 | `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts` | Catalog/access boundaries, placement/assignment and atomic synchronization                                                         |
 | `tests/step-parser-pool.test.ts`, `node scripts/check-step-parser-reuse.mjs`              | Worker bounds/recovery and exact 31-file mesh parity                                                                               |
 | `node scripts/check-library-scroll-ui.mjs`, `node scripts/check-object-retention-ui.mjs`  | Mocked isolated chooser/state retention                                                                                            |
+| `node scripts/check-assignment-preview-ui.mjs` | Opt-in real STEP previews in both assignment dialogs, model-index selection, retry, retained placement scene, IME, narrow layout and native undo |
 | `node scripts/e2e-libraries.mjs`                                                          | Opt-in desktop interaction                                                                                                         |
 
 `KICAD_CLI` is test-only for `libraries:verify` and must report KiCad 10.x.

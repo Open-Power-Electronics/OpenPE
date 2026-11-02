@@ -10,9 +10,9 @@ export const homeExampleSections = [
 export const homeExampleCatalog = [...homeRecent, ...homeExamples];
 export type HomeExampleId = (typeof homeExampleCatalog)[number]['id'];
 
-// Repository native projects share one directory/stem rule across Home sections.
+// Catalog directories are independent of the retained native project stems.
 export function homeExampleNativePath(id: HomeExampleId) {
   const entry = homeExampleCatalog.find((entry) => entry.id === id);
   if (!entry) throw new Error('Unknown example project.');
-  return `examples/${entry.file}/${entry.file}.kicad_pro`;
+  return `${entry.root}/${entry.directory}/${entry.file}.kicad_pro`;
 }

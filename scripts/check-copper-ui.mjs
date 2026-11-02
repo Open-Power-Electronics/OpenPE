@@ -1,4 +1,9 @@
-import { selectModelView, toggleLayoutVisualization } from './visualization-test-helpers.mjs';
+import {
+  selectModelView,
+  selectLayoutLayer,
+  setLayoutVisibility,
+  toggleLayoutVisualization,
+} from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -68,7 +73,8 @@ board.zones = ['F.Cu', 'B.Cu'].map((layer) => ({
   netId: 'ground',
   layer,
   outline: rectangle(-2, -2, 34, 24),
-  clearance: 0,
+  clearance: 0.5,
+  fillEnabled: true,
   minThickness: 0.1,
   thermalGap: 0.3,
   thermalBridge: 0.3,
@@ -171,36 +177,46 @@ try {
     '',
     'Zone outlines do not imply completed copper.',
   );
-  await button('Fill copper zones').click();
-  const clearance = page.getByRole('spinbutton', { name: 'Minimum clearance (mm)', exact: true });
-  assert.equal(await clearance.inputValue(), '0.25');
-  assert.equal(await page.evaluate(() => window.commits), 0, 'Opening settings never fills.');
-  await clearance.fill('0');
-  await button('Fill zones').click();
-  assert.equal(await page.evaluate(() => window.commits), 0, 'Invalid clearance cannot fill.');
-  await clearance.fill('0.8');
-  await clearance.dispatchEvent('keydown', {
-    key: 'Enter',
-    code: 'Enter',
-    keyCode: 229,
-    isComposing: true,
-  });
-  assert.equal(await page.evaluate(() => window.commits), 0, 'Composing Enter cannot fill.');
-  await clearance.press('Escape');
-  assert.equal(await clearance.inputValue(), '0.25');
-  await canvas.press('Escape');
-  await page
-    .getByRole('complementary', { name: 'Copper fill settings' })
-    .waitFor({ state: 'hidden' });
-  assert.equal(await page.evaluate(() => window.commits), 0, 'Cancelling settings never fills.');
-  await button('Fill copper zones').click();
-  await clearance.fill('0.5');
-  await button('Fill zones').click();
-  assert.equal(await page.evaluate(() => window.commits), 1);
+  // Fill each zone explicitly from Properties using the actual outline.
+  for (const zone of board.zones) {
+    await setLayoutVisibility(page, 'F.Cu', zone.layer === 'F.Cu');
+    await setLayoutVisibility(page, 'B.Cu', zone.layer === 'B.Cu');
+    await selectLayoutLayer(page, zone.layer);
+    const a = zone.outline[0],
+      b = zone.outline[1];
+    const at = await canvas.evaluate(
+      (svg, at) => {
+        const p = new DOMPoint(at.x, at.y).matrixTransform(svg.getScreenCTM());
+        return { x: p.x, y: p.y };
+      },
+      { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+    );
+    await page.mouse.click(at.x, at.y);
+    assert.equal(
+      await page.getByRole('combobox', { name: 'Zone layer', exact: true }).innerText(),
+      zone.layer,
+    );
+    const clearance = page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
+    await clearance.fill('0.5');
+    await clearance.press('Enter');
+    await page.getByRole('checkbox', { name: 'Filled', exact: true }).check();
+  }
+  await setLayoutVisibility(page, 'F.Cu', true);
+  await setLayoutVisibility(page, 'B.Cu', true);
+  await selectLayoutLayer(page, 'F.Cu');
   assert.ok(await page.evaluate(() => window.savedBoard.zones.every((z) => z.clearance === 0.5)));
   assert.ok(
-    await page.evaluate(() => window.savedBoard.zones.every((z) => z.filledPolygons.length)),
-    'Manual filling commits polygons to the board.',
+    await page.evaluate(() => window.savedBoard.zones.every((z) => z.filledPolygons?.length)),
+    JSON.stringify(
+      await page.evaluate(() =>
+        window.savedBoard.zones.map(({ id, fillEnabled, clearance, filledPolygons }) => ({
+          id,
+          fillEnabled,
+          clearance,
+          count: filledPolygons?.length,
+        })),
+      ),
+    ),
   );
   const color = (text) =>
     canvas

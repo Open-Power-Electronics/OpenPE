@@ -9,10 +9,10 @@ const require = createRequire(import.meta.url);
 const { readNativeProject } = require('../electron/native-project.cjs');
 const { readSpiceModelFile } = require('../electron/spice-model-picker.cjs');
 const emcFiles = await readNativeProject(
-  path.resolve('examples/emc-flyback/emc-flyback.kicad_pro'),
+  path.resolve('recent/emc-flyback/emc-flyback.kicad_pro'),
 );
 const emcModels = await readSpiceModelFile(
-  path.resolve('examples/emc-flyback/circuits/EMC_flyback_control.lib'),
+  path.resolve('recent/emc-flyback/circuits/EMC_flyback_control.lib'),
 );
 const lm5001Files = await readNativeProject(
   path.resolve('examples/lm5001-soic8-boost/lm5001-soic8-boost.kicad_pro'),

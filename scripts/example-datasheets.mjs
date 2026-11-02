@@ -99,7 +99,7 @@ export async function loadDatasheetCatalog(root = repositoryRoot) {
   for (const example of examples) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(example.file))
       throw new Error('Invalid example file stem');
-    const directory = path.join(root, 'examples', example.file, 'datasheets');
+    const directory = path.join(root, example.root, example.directory, 'datasheets');
     const record = assertDatasheetRecord(
       reviewed.find((record) => record.example.id === example.id),
     );
@@ -189,7 +189,7 @@ export async function loadSupplementalDatasheets(root = repositoryRoot) {
       throw new Error(
         'Supplemental EMC PDF metadata does not match the fitted IC or pinned source.',
       );
-    return { record, directory: path.join(root, 'examples/emc-flyback/datasheets') };
+    return { record, directory: path.join(root, 'recent/emc-flyback/datasheets') };
   });
 }
 

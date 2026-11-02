@@ -1,6 +1,16 @@
 'use client';
 import QuantityInput from './QuantityInput';
-import { lazy, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  type ReactNode,
+  lazy,
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ChevronRight, FolderSearch, Plus, Trash2 } from 'lucide-react';
 import { type Part, type Circuit } from '@/lib/circuit';
 import { displayPartValue, partFields } from '@/lib/library';
@@ -115,6 +125,7 @@ function PartProperties({
   part,
   circuit,
   onSave,
+  modelFields,
   onRequestSave,
   capabilityHost,
   active = true,
@@ -123,9 +134,10 @@ function PartProperties({
   getRevision,
 }: {
   part: Part;
+  modelFields?: ReactNode;
   circuit?: Circuit;
   active?: boolean;
-  /** Schematic-only controls owned by the installed and enabled SPICE plugin. */
+  /** Shared component controls owned by the installed and enabled SPICE plugin. */
   spiceAvailable?: boolean;
   fileId?: string;
   getRevision?: () => number;
@@ -662,114 +674,119 @@ function PartProperties({
     );
   }
 
-  function renderFields(simulation: boolean) {
+  function renderFields(simulation: boolean, additional = false) {
     const displayedRows = rows.map((row, i) => ({ row, i }));
     return displayedRows.map(
       ({ row, i }) =>
         row.simulation === simulation &&
+        (simulation || (row.name !== 'Footprint') === additional) &&
         visibleRow(row) && (
-          <div
-            className={`property-field${simulation ? ' property-simulation-field' : ''}${simulation && row.name === 'Sim.Library' ? ' property-simulation-library' : ''}${simulationParameterLabels.has(row.name) || row.sourceKey ? ' property-simulation-parameter' : ''}`}
-            key={i}
-          >
-            {simulation && row.name === 'Sim.Library' ? null : simulation || row.label ? (
-              <span className="property-parameter-name" aria-description={row.label || row.name}>
-                {simulationParameterLabels.has(row.name) || row.sourceKey
-                  ? row.label?.replace(/ \([^)]*\)$/, '')
-                  : row.label || row.name}
-              </span>
-            ) : (
-              <input
-                className="property-field-name"
-                aria-label={`Field ${i + 1} name`}
-                aria-description={row.name}
-                placeholder="Name"
-                value={row.name}
-                readOnly={['Footprint', 'Datasheet'].includes(row.name)}
-                disabled={!active}
-                onChange={(e) => update(i, 'name', e.target.value)}
-              />
-            )}
-            {simulationParameterLabels.has(row.name) || row.sourceKey ? (
-              <div className="property-simulation-value">
-                <QuantityInput
-                  unit={row.unit || simulationParameterUnits.get(row.name)}
-                  autoScale
-                  className="property-field-value"
-                  aria-label={row.label || row.name}
-                  value={parameterValue(row)}
-                  placeholder={
-                    row.optional
-                      ? row.sourceKey
-                        ? '0'
-                        : presentation.initial
-                      : row.sourceKey
-                        ? 'Value'
-                        : undefined
-                  }
-                  title={
-                    row.optional && !row.value
-                      ? row.sourceKey
-                        ? '0'
-                        : presentation.initial === 'Computed'
-                          ? 'Calculated from the circuit operating point.'
-                          : presentation.initial
-                      : undefined
-                  }
-                  disabled={!active || !spiceAvailable}
-                  onValueChange={(inputValue) => update(i, 'value', inputValue)}
+          <Fragment key={i}>
+            <div
+              className={`property-field${!simulation && row.name === 'Footprint' ? ' property-resource-field' : ''}${simulation ? ' property-simulation-field' : ''}${simulation && row.name === 'Sim.Library' ? ' property-simulation-library' : ''}${simulationParameterLabels.has(row.name) || row.sourceKey ? ' property-simulation-parameter' : ''}`}
+              key={i}
+            >
+              {simulation && row.name === 'Sim.Library' ? null : simulation || row.label ? (
+                <span className="property-parameter-name" aria-description={row.label || row.name}>
+                  {simulationParameterLabels.has(row.name) || row.sourceKey
+                    ? row.label?.replace(/ \([^)]*\)$/, '')
+                    : row.label || row.name}
+                </span>
+              ) : (
+                <input
+                  className="property-field-name"
+                  aria-label={`Field ${i + 1} name`}
+                  aria-description={row.name}
+                  placeholder="Name"
+                  value={row.name}
+                  readOnly={['Footprint', 'Datasheet'].includes(row.name)}
+                  disabled={!active}
+                  onChange={(e) => update(i, 'name', e.target.value)}
                 />
-              </div>
-            ) : simulation ? (
-              <span
-                className="property-readonly-value"
-                aria-label={row.label || row.name}
-                title={displayedSimulationValue(row)}
-              >
-                {displayedSimulationValue(row) || '—'}
-              </span>
-            ) : (
-              <input
-                className={`property-field-value${['Datasheet', 'Description'].includes(row.name) ? ' property-field-prose' : ''}`}
-                aria-label={row.label || row.name || `Field ${i + 1} value`}
-                aria-description={row.value}
-                placeholder={
-                  row.name === 'Footprint' ? 'Unassigned' : row.fresh ? 'Value' : undefined
-                }
-                value={row.value}
-                disabled={!active}
-                onChange={(e) => update(i, 'value', e.target.value)}
-              />
-            )}
-            {simulation ? null : row.name === 'Footprint' ? (
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Browse footprints"
-                title="Browse footprints"
-                disabled={!active}
-                onClick={() => setPicker(true)}
-              >
-                <FolderSearch size={17} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={`Remove field ${row.label || row.name || i + 1}`}
-                title="Remove field"
-                disabled={!active}
-                onClick={() => {
-                  if (!active) return;
-                  const next = rows.filter((_, j) => i !== j);
-                  setRows(next);
-                  save(next);
-                }}
-              >
-                <Trash2 size={17} />
-              </button>
-            )}
-          </div>
+              )}
+              {simulationParameterLabels.has(row.name) || row.sourceKey ? (
+                <div className="property-simulation-value">
+                  <QuantityInput
+                    unit={row.unit || simulationParameterUnits.get(row.name)}
+                    autoScale
+                    className="property-field-value"
+                    aria-label={row.label || row.name}
+                    value={parameterValue(row)}
+                    placeholder={
+                      row.optional
+                        ? row.sourceKey
+                          ? '0'
+                          : presentation.initial
+                        : row.sourceKey
+                          ? 'Value'
+                          : undefined
+                    }
+                    title={
+                      row.optional && !row.value
+                        ? row.sourceKey
+                          ? '0'
+                          : presentation.initial === 'Computed'
+                            ? 'Calculated from the circuit operating point.'
+                            : presentation.initial
+                        : undefined
+                    }
+                    disabled={!active || !spiceAvailable}
+                    onValueChange={(inputValue) => update(i, 'value', inputValue)}
+                  />
+                </div>
+              ) : simulation ? (
+                <span
+                  className="property-readonly-value"
+                  aria-label={row.label || row.name}
+                  title={displayedSimulationValue(row)}
+                >
+                  {displayedSimulationValue(row) || '—'}
+                </span>
+              ) : (
+                <input
+                  className={`property-field-value${['Datasheet', 'Description'].includes(row.name) ? ' property-field-prose' : ''}`}
+                  aria-label={row.label || row.name || `Field ${i + 1} value`}
+                  aria-description={row.value}
+                  title={row.name === 'Footprint' ? row.value : undefined}
+                  placeholder={
+                    row.name === 'Footprint' ? 'Unassigned' : row.fresh ? 'Value' : undefined
+                  }
+                  value={row.value}
+                  disabled={!active}
+                  onChange={(e) => update(i, 'value', e.target.value)}
+                />
+              )}
+              {simulation ? null : row.name === 'Footprint' ? (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Browse footprints"
+                  title="Browse footprints"
+                  disabled={!active}
+                  onClick={() => setPicker(true)}
+                >
+                  <FolderSearch size={17} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Remove field ${row.label || row.name || i + 1}`}
+                  title="Remove field"
+                  disabled={!active}
+                  onClick={() => {
+                    if (!active) return;
+                    const next = rows.filter((_, j) => i !== j);
+                    setRows(next);
+                    save(next);
+                  }}
+                >
+                  <Trash2 size={17} />
+                </button>
+              )}
+            </div>
+            {!simulation && row.name === 'Footprint' ? modelFields : null}
+          </Fragment>
         ),
     );
   }
@@ -841,17 +858,21 @@ function PartProperties({
           </label>
         </div>
         <div className="property-fields">{renderFields(false)}</div>
-        <button
-          type="button"
-          className="property-add-field"
-          disabled={!active}
-          onClick={() =>
-            setRows([...rows, { name: '', value: '', fresh: true, simulation: false }])
-          }
-        >
-          <Plus size={15} />
-          Add field
-        </button>
+        <details className="layout-property-details property-additional-fields">
+          <summary>Fields</summary>
+          <div className="property-fields">{renderFields(false, true)}</div>
+          <button
+            type="button"
+            className="property-add-field"
+            disabled={!active}
+            onClick={() =>
+              setRows([...rows, { name: '', value: '', fresh: true, simulation: false }])
+            }
+          >
+            <Plus size={15} />
+            Add field
+          </button>
+        </details>
         {spiceAvailable && (
           <details className="property-simulation">
             <summary className="property-simulation-heading">
@@ -898,6 +919,7 @@ export default memo(
   PartProperties,
   (previous, next) =>
     previous.onSave === next.onSave &&
+    previous.modelFields === next.modelFields &&
     previous.circuit === next.circuit &&
     previous.onRequestSave === next.onRequestSave &&
     previous.active === next.active &&

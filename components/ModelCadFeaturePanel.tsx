@@ -146,7 +146,7 @@ export default function ModelCadFeaturePanel({
   }
   return (
     <aside
-      className={styles.panel}
+      className={`${styles.panel} editor-tool-sheet`}
       aria-label={`${title} settings`}
       onCompositionStart={() => {
         composition.current = true;
@@ -177,18 +177,7 @@ export default function ModelCadFeaturePanel({
       }}
     >
       <header className={styles.header}>
-        <h2>{title}</h2>
-        <button
-          type="button"
-          className="tool-button"
-          aria-label={`Cancel ${title.toLowerCase()}`}
-          title="Cancel"
-          aria-description="Cancel"
-          disabled={busy}
-          onClick={onClose}
-        >
-          <X size={17} aria-hidden />
-        </button>
+        <h2>{mode === 'boolean' ? 'Operation' : mode === 'fillet' ? 'Radius' : 'Distance'}</h2>
       </header>
       <form
         onSubmit={(event) => {
@@ -196,177 +185,186 @@ export default function ModelCadFeaturePanel({
           if (!composition.current) void apply();
         }}
       >
-        <div className={styles.fields}>
-          {mode === 'boolean' ? (
-            <>
-              <label>
-                <span>Operation</span>
-                <Select
-                  label="Boolean operation"
-                  value={operation}
-                  options={[
-                    { value: 'union', label: 'Union' },
-                    { value: 'difference', label: 'Difference' },
-                    { value: 'intersection', label: 'Intersection' },
-                  ]}
-                  disabled={disabled || busy || stale}
-                  onChange={(value) => {
-                    setOperation(value as typeof operation);
-                    setError('');
-                  }}
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              <label>
-                <span>{mode === 'fillet' ? 'Radius' : 'Distance'}</span>
-                <QuantityInput
-                  unit={'mm'}
-                  aria-label={mode === 'fillet' ? 'Fillet radius (mm)' : 'Chamfer distance (mm)'}
-                  inputMode="decimal"
-                  value={distance}
-                  disabled={disabled || busy || stale}
-                  onFocus={() => {
-                    focusDistance.current = distance;
-                  }}
-                  onValueChange={(inputValue) => {
-                    setDistance(inputValue);
-                    setError('');
-                  }}
-                />
-              </label>
-            </>
+        <div className={styles.parameters}>
+          <div className={styles.fields}>
+            {mode === 'boolean' ? (
+              <>
+                <label>
+                  <span>Operation</span>
+                  <Select
+                    label="Boolean operation"
+                    value={operation}
+                    options={[
+                      { value: 'union', label: 'Union' },
+                      { value: 'difference', label: 'Difference' },
+                      { value: 'intersection', label: 'Intersection' },
+                    ]}
+                    disabled={disabled || busy || stale}
+                    onChange={(value) => {
+                      setOperation(value as typeof operation);
+                      setError('');
+                    }}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label>
+                  <span>{mode === 'fillet' ? 'Radius' : 'Distance'}</span>
+                  <QuantityInput
+                    unit={'mm'}
+                    aria-label={mode === 'fillet' ? 'Fillet radius (mm)' : 'Chamfer distance (mm)'}
+                    inputMode="decimal"
+                    value={distance}
+                    disabled={disabled || busy || stale}
+                    onFocus={() => {
+                      focusDistance.current = distance;
+                    }}
+                    onValueChange={(inputValue) => {
+                      setDistance(inputValue);
+                      setError('');
+                    }}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+          {mode === 'boolean' && (
+            <section className={styles.operandSelection} aria-label="Boolean operands">
+              <dl className={styles.operandList}>
+                {(['Target', 'Tool'] as const).map((role, index) => {
+                  const id = booleanOperands[index],
+                    body = objects.find((body) => body.id === id);
+                  return (
+                    <div key={role}>
+                      <dt>{role}</dt>
+                      <dd>
+                        <span aria-description={body?.name}>
+                          {body?.name ?? (id ? 'Unavailable solid' : 'Not selected')}
+                        </span>
+                        {id && (
+                          <button
+                            type="button"
+                            aria-label={`Remove Boolean ${role.toLowerCase()}`}
+                            title="Remove operand"
+                            aria-description={`Remove ${role.toLowerCase()}`}
+                            disabled={disabled || busy || stale}
+                            onClick={() => {
+                              onBooleanOperandsChange(
+                                booleanOperands.filter((_, slot) => slot !== index),
+                              );
+                              setError('');
+                            }}
+                          >
+                            <X size={14} aria-hidden />
+                          </button>
+                        )}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+              {booleanOperands.length < 2 && !booleanSelectionError && (
+                <p className={styles.edgeHint}>Select two solids on canvas.</p>
+              )}
+              <div className={styles.operandActions}>
+                {booleanSelectionError && booleanSelectionOwners.length > 0 ? (
+                  <button
+                    type="button"
+                    disabled={disabled || busy || stale || booleanSelectionOwners.length > 2}
+                    onClick={() => {
+                      onBooleanOperandsChange([...booleanSelectionOwners]);
+                      setError('');
+                    }}
+                  >
+                    Use owning solids
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={disabled || busy || stale || !canSwap}
+                    onClick={() => {
+                      onBooleanOperandsChange([toolId, targetId]);
+                      setError('');
+                    }}
+                  >
+                    Swap operands
+                  </button>
+                )}
+              </div>
+            </section>
           )}
-        </div>
-        {mode === 'boolean' && (
-          <section className={styles.operandSelection} aria-label="Boolean operands">
-            <dl className={styles.operandList}>
-              {(['Target', 'Tool'] as const).map((role, index) => {
-                const id = booleanOperands[index],
-                  body = objects.find((body) => body.id === id);
-                return (
-                  <div key={role}>
-                    <dt>{role}</dt>
-                    <dd>
-                      <span aria-description={body?.name}>
-                        {body?.name ?? (id ? 'Unavailable solid' : 'Not selected')}
-                      </span>
-                      {id && (
+          {mode !== 'boolean' && (
+            <section className={styles.edgeSelection} aria-label="Edge selection">
+              <div className={styles.edgeSelectionHeader}>
+                <span aria-live="polite">
+                  {selectedEdges.length} {selectedEdges.length === 1 ? 'edge' : 'edges'} selected
+                </span>
+                <button
+                  type="button"
+                  disabled={disabled || busy || stale || selectedEdges.length === 0}
+                  onClick={() => {
+                    onSelectedEdgesChange([]);
+                    setError('');
+                  }}
+                >
+                  Clear selection
+                </button>
+              </div>
+              {selectedEdges.length === 0 ? (
+                <p className={styles.edgeHint}>Select edges on the solid.</p>
+              ) : (
+                <ul className={styles.edgeList} aria-label="Selected edges">
+                  {selectedEdges.map((id, index) => {
+                    const label =
+                      selectableEdges.find((edge) => edge.id === id)?.label ??
+                      `Selected edge ${index + 1}`;
+                    return (
+                      <li key={id}>
                         <button
                           type="button"
-                          aria-label={`Remove Boolean ${role.toLowerCase()}`}
-                          title="Remove operand"
-                          aria-description={`Remove ${role.toLowerCase()}`}
+                          aria-label={`Remove ${label}`}
                           disabled={disabled || busy || stale}
                           onClick={() => {
-                            onBooleanOperandsChange(
-                              booleanOperands.filter((_, slot) => slot !== index),
-                            );
+                            onSelectedEdgesChange(selectedEdges.filter((edge) => edge !== id));
                             setError('');
                           }}
                         >
+                          <span>{label}</span>
                           <X size={14} aria-hidden />
                         </button>
-                      )}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-            {booleanOperands.length < 2 && !booleanSelectionError && (
-              <p className={styles.edgeHint}>Select two solids on canvas.</p>
-            )}
-            <div className={styles.operandActions}>
-              {booleanSelectionError && booleanSelectionOwners.length > 0 ? (
-                <button
-                  type="button"
-                  disabled={disabled || busy || stale || booleanSelectionOwners.length > 2}
-                  onClick={() => {
-                    onBooleanOperandsChange([...booleanSelectionOwners]);
-                    setError('');
-                  }}
-                >
-                  Use owning solids
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={disabled || busy || stale || !canSwap}
-                  onClick={() => {
-                    onBooleanOperandsChange([toolId, targetId]);
-                    setError('');
-                  }}
-                >
-                  Swap operands
-                </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-            </div>
-          </section>
-        )}
-        {mode !== 'boolean' && (
-          <section className={styles.edgeSelection} aria-label="Edge selection">
-            <div className={styles.edgeSelectionHeader}>
-              <span aria-live="polite">
-                {selectedEdges.length} {selectedEdges.length === 1 ? 'edge' : 'edges'} selected
-              </span>
-              <button
-                type="button"
-                disabled={disabled || busy || stale || selectedEdges.length === 0}
-                onClick={() => {
-                  onSelectedEdgesChange([]);
-                  setError('');
-                }}
-              >
-                Clear selection
-              </button>
-            </div>
-            {selectedEdges.length === 0 ? (
-              <p className={styles.edgeHint}>Select edges on the solid.</p>
-            ) : (
-              <ul className={styles.edgeList} aria-label="Selected edges">
-                {selectedEdges.map((id, index) => {
-                  const label =
-                    selectableEdges.find((edge) => edge.id === id)?.label ??
-                    `Selected edge ${index + 1}`;
-                  return (
-                    <li key={id}>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${label}`}
-                        disabled={disabled || busy || stale}
-                        onClick={() => {
-                          onSelectedEdgesChange(selectedEdges.filter((edge) => edge !== id));
-                          setError('');
-                        }}
-                      >
-                        <span>{label}</span>
-                        <X size={14} aria-hidden />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        )}
-        {(stale || error || parsed.error) && (
-          <p className={styles.error} role="alert">
-            {stale
-              ? 'The project changed. Start the operation again.'
-              : (mode === 'boolean' && booleanSelectionError) || error || parsed.error}
-          </p>
-        )}
+            </section>
+          )}
+          {(stale || error || parsed.error) && (
+            <p className={styles.error} role="alert">
+              {stale
+                ? 'The project changed. Start the operation again.'
+                : (mode === 'boolean' && booleanSelectionError) || error || parsed.error}
+            </p>
+          )}
+        </div>
         <footer className={styles.footer}>
-          <button type="button" disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
           <button
             type="submit"
             className="primary"
             disabled={disabled || stale || busy || !parsed.object}
           >
             {busy ? 'Applying…' : 'Apply'}
+          </button>
+          <button
+            type="button"
+            className={styles.close}
+            aria-label="Cancel"
+            title="Close"
+            disabled={busy}
+            onClick={onClose}
+          >
+            <X size={15} aria-hidden="true" />
           </button>
         </footer>
       </form>

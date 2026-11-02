@@ -11,7 +11,7 @@ import {
 import { createPCBTrackDrag } from '../lib/pcb-track-drag';
 import { createPCBRouter } from '../lib/pcb-routing';
 import { createPCBViaValidator } from '../lib/pcb-via-routing';
-import { fillCopperZones } from '../lib/pcb-polygons';
+import { fillCopperZone, fillCopperZones } from '../lib/pcb-polygons';
 import type { CoreDefinition } from './project-core';
 
 const identity = { type: 'string', minLength: 1, maxLength: 200 };
@@ -185,8 +185,8 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   operationCommand(
     'layout.fill',
-    'Fill board copper zones with a minimum copper clearance (default 0.25 mm), preserving larger zone clearances.',
-    { clearance: { type: 'number', minimum: 0.0001, maximum: 1000 } },
+    'Fill board copper zones, or enable and fill one selected zone, preserving larger zone clearances.',
+    { zoneId: identity, clearance: { type: 'number', minimum: 0.0001, maximum: 1000 } },
   ),
   objectCommand(
     'layout.net',
@@ -469,7 +469,9 @@ export function executeLayout(
       break;
     }
     case 'layout.fill':
-      next = fillCopperZones(board, args.clearance);
+      next = args.zoneId
+        ? fillCopperZone(board, args.zoneId, args.clearance)
+        : fillCopperZones(board, args.clearance);
       break;
     case 'layout.net': {
       const name = args.name.trim();

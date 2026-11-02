@@ -105,6 +105,7 @@ grid={grid} gridSpacing={gridSpacing}
 modelCad={modelCadFromProject(snapshot.project)}
 revision={String(snapshot.revision)} undoDepth={snapshot.undoDepth} redoDepth={snapshot.redoDepth}
 sourcePending={snapshot.sourceDraft!==null} capabilityHost={host} active={active} viewState={view}
+listAction={<button className="tool-button" aria-label="Parts list">☷</button>}
 sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)} sidebarAction={<div className="editor-tool-group editor-view-controls"><SidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div>}/></div></div>};
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     resolveDir: process.cwd(),
@@ -134,10 +135,14 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
         });
         plugin.onLoad({ filter: /[\\/]PCBModelPreview\.tsx$/ }, async (args) => {
           let source = await readFile(args.path, 'utf8');
-          assert.ok(source.includes('renderer?.render(scene, camera);'));
+          const renderMarker = '      const render = () => {';
+          assert.ok(
+            source.includes(renderMarker),
+            'The scene inspection follows the current render callback.',
+          );
           source = source.replace(
-            'renderer?.render(scene, camera);',
-            'window.scene=scene;window.camera=camera;window.modelOrbit=orbit;renderer?.render(scene, camera);',
+            renderMarker,
+            renderMarker + '\nwindow.scene=scene;window.camera=camera;window.modelOrbit=orbit;',
           );
           return { contents: source, loader: 'tsx', resolveDir: path.dirname(args.path) };
         });
@@ -426,13 +431,16 @@ try {
     exact: true,
   });
   await componentProperties.waitFor();
-  await componentProperties.getByRole('heading', { name: 'J1', exact: true }).waitFor();
+  await componentProperties
+    .locator('.inspector-symbol strong')
+    .filter({ hasText: /^J1$/ })
+    .waitFor();
   await page.waitForFunction(() =>
     window.originalComponentMaterials.every(({ mesh, material }) => mesh.material !== material),
   );
   assert.equal(
-    await componentProperties.locator('input:not([readonly]), textarea:not([readonly])').count(),
-    0,
+    await componentProperties.getByLabel('Reference', { exact: true }).inputValue(),
+    'J1',
   );
   assert.deepEqual(await state(), beforeSidebar, 'Inspecting a component is presentation state.');
   for (const name of [
@@ -601,7 +609,7 @@ try {
       const footer = element.querySelector('footer');
       return {
         panel: rect(element),
-        input: rect(element.querySelector('input[aria-label="Solid name"]')),
+        input: rect(element.querySelector('input[aria-label="Solid name"]').closest('label')),
         delete: rect(footer.querySelector('button[aria-label="Delete solid"]')),
         apply: rect(footer.querySelector('button[type="submit"]')),
         footer: rect(footer),
@@ -706,6 +714,10 @@ try {
   });
   await inspector.getByLabel('Solid name', { exact: true }).fill('Aluminium bracket');
   await inspector.getByLabel('Length (mm)', { exact: true }).fill('26');
+  await inspector
+    .locator('summary')
+    .filter({ hasText: /^Placement$/ })
+    .click();
   await inspector.getByLabel('Solid X rotation (degrees)', { exact: true }).fill('15');
   await inspector.getByLabel('Solid Y rotation (degrees)', { exact: true }).fill('20');
   await inspector.getByLabel('Solid Z rotation (degrees)', { exact: true }).fill('30');
@@ -1678,7 +1690,7 @@ try {
       'The drawing phase exposes sketch tools instead of solid creation tools.',
     );
     assert.equal(await button('Finish sketch').isDisabled(), true);
-    await button('Cancel sketch').click();
+    await sketchPanel.getByRole('button', { name: 'Cancel', exact: true }).click();
     await sketchPanel.waitFor({ state: 'hidden' });
     await waitSketchGrid(false);
     await assertSketchCameraRestored(

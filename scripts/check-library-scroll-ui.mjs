@@ -31,6 +31,10 @@ const bundle = await build({
         window.propertySaves = [];
         root.render(<Properties footprint={footprint} key={++propertiesInvocation}/>);
       };
+      window.showModelChooser = () => {
+        window.modelChosen = false;
+        root.render(<LibraryChooser kind="footprints" initialPreview="3d" requireModel actionLabel="Use model" onClose={()=>{}} onChoose={()=>{window.modelChosen=true;}}/>);
+      };
       root.render(<LibraryChooser kind="footprints" onClose={()=>{}} onChoose={detail=>window.chosen=detail.id}/>);
     `,
     resolveDir: process.cwd(),
@@ -202,7 +206,7 @@ try {
   assert.equal(await rows.count(), 1);
   assert.equal(await rows.first().getAttribute('aria-description'), entries.at(-1).id);
   assert.equal(await rows.first().getAttribute('aria-pressed'), 'true');
-  assert.equal(await page.locator('.library-detail > strong').textContent(), entries.at(-1).id);
+  assert.equal(await page.locator('.library-detail-id').textContent(), entries.at(-1).id);
   await page.getByRole('img', { name: 'Footprint preview' }).waitFor();
   assert.equal(await page.evaluate(() => window.propertySaves.length), 0);
   await search.press('Escape');
@@ -270,7 +274,7 @@ try {
       selected: dialog
         .querySelector('.library-results button[aria-pressed="true"]')
         ?.getAttribute('aria-description'),
-      preview: dialog.querySelector('.library-detail > strong')?.textContent,
+      preview: dialog.querySelector('.library-detail-id')?.textContent,
       rowCount: dialog.querySelectorAll('.library-results button').length,
       scrollTop: dialog.querySelector('.library-results').scrollTop,
     }));
@@ -334,7 +338,7 @@ try {
     await page.waitForFunction(
       (id) =>
         document.querySelectorAll('.library-results button').length === 1 &&
-        document.querySelector('.library-detail > strong')?.textContent === id &&
+        document.querySelector('.library-detail-id')?.textContent === id &&
         !document.querySelector('.dialog-button.primary').disabled,
       entries[2].id,
     );
@@ -348,6 +352,22 @@ try {
       `Ordinary Enter from ${surface} confirms the current footprint exactly once.`,
     );
   }
+  await page.evaluate(() => window.showModelChooser());
+  await page.getByText('This footprint has no 3D model.', { exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole('button', { name: 'Use model', exact: true }).isDisabled(),
+    true,
+  );
+  assert.equal(
+    await page.getByRole('button', { name: '3D model', exact: true }).isDisabled(),
+    true,
+  );
+  await page.getByRole('textbox', { name: 'Search footprints', exact: true }).press('Enter');
+  assert.equal(
+    await page.evaluate(() => window.modelChosen),
+    false,
+    'A footprint without models cannot be assigned as a model.',
+  );
   assert.deepEqual(errors, []);
   console.log(
     'Library browsing: scroll loading, retries, keyboard paging, current footprint preview, reassignment, cancellation, empty-state protection, IME default suppression and ordinary Enter confirmation passed.',

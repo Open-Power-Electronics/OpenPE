@@ -76,6 +76,8 @@ export type PCBSelectionMode = 'replace' | 'add' | 'toggle' | 'subtract';
 export type PCBPointSelectionOptions = {
   preparedFills?: ReadonlyMap<string, Polygon[]>;
   includeFills?: boolean;
+  /** Closed board regions can be picked through their interior behind precise objects. */
+  includeRegionInteriors?: boolean;
   /** Eligible DOM body, caption and outline hits, excluding saved-fill targets. */
   preciseCandidates?: readonly PCBSelection[];
   /** Read-only pad inspection can suppress broad fill fallback without selecting its owner. */
@@ -399,6 +401,7 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     layerOrder?: readonly string[];
     filters?: PCBSelectionFilters;
     preparedFills?: ReadonlyMap<string, Polygon[]>;
+    includeRegionInteriors?: boolean;
   },
 ): T | undefined {
   const tieTolerance = options.tieTolerance ?? epsilon;
@@ -588,6 +591,22 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
         priority: priority([graphic.layer]),
         layerRank: layerRank([graphic.layer]),
       });
+      if (options.includeRegionInteriors && graphic.kind === 'polygon') {
+        const polygon = {
+          outer: [graphic.start, ...(graphic.points ?? []), graphic.end],
+          holes: [],
+        };
+        if (inContour(at, polygon.outer))
+          fallback.push({
+            candidate,
+            zones: [],
+            body: {
+              ...shapeScore({ paths: [], polygons: [polygon], radius: 0 }),
+              priority: priority([graphic.layer]),
+              layerRank: layerRank([graphic.layer]),
+            },
+          });
+      }
     } else if (object.kind === 'zone') {
       const zone = allObjects().zones.get(object.id);
       if (!zone || !layers[zone.layer] || !pcbZoneSelectionEligible(zone, filters)) continue;
@@ -601,7 +620,22 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
           priority: priority([zone.layer]),
           layerRank: layerRank([zone.layer]),
         });
-      fallback.push({ candidate, zones: [zone] });
+      const body =
+        options.includeRegionInteriors &&
+        layers.zoneOutlines &&
+        inContour(at, zone.outline) &&
+        !(zone.holes ?? []).some((hole) => inContour(at, hole))
+          ? {
+              ...shapeScore({
+                paths: [],
+                polygons: [{ outer: zone.outline, holes: zone.holes ?? [] }],
+                radius: 0,
+              }),
+              priority: priority([zone.layer]),
+              layerRank: layerRank([zone.layer]),
+            }
+          : undefined;
+      fallback.push({ candidate, zones: [zone], body });
     } else {
       const owner = allObjects().footprints.get(object.id);
       if (!owner || !filters.footprint || !layers.footprints) continue;
@@ -1087,6 +1121,28 @@ export function selectPCBPoint(
         : precisePointGeometry(board, layers, filters, rectangle),
       'add',
     );
+  if (!precise.length && !options.hasPrecisePad && options.includeRegionInteriors) {
+    const regions: PCBSelection[] = [];
+    for (const graphic of board.graphics)
+      if (
+        graphic.kind === 'polygon' &&
+        layers[graphic.layer] &&
+        (graphic.layer === 'Edge.Cuts' || layers.footprints) &&
+        pcbGraphicSelectionEligible(graphic, filters) &&
+        inContour(at, [graphic.start, ...(graphic.points ?? []), graphic.end])
+      )
+        regions.push({ kind: 'graphic', id: graphic.id });
+    if (layers.zoneOutlines)
+      for (const zone of board.zones)
+        if (
+          layers[zone.layer] &&
+          pcbZoneSelectionEligible(zone, filters) &&
+          inContour(at, zone.outline) &&
+          !(zone.holes ?? []).some((hole) => inContour(at, hole))
+        )
+          regions.push({ kind: 'zone', id: zone.id });
+    if (regions.length) return regions;
+  }
   if (options.includeFills || precise.length || options.hasPrecisePad || !layers.copper)
     return precise;
   const fills = selectionFills(board, layers, filters, options.preparedFills),

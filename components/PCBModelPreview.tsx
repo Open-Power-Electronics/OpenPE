@@ -1,5 +1,7 @@
 'use client';
 import CanvasContextMenu from './CanvasContextMenu';
+import ComponentProperties, { type ComponentPropertiesProps } from './ComponentProperties';
+import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import { NumberField } from './LayoutPropertyFields';
 import { modelReferenceKey } from '@/lib/example-model-paths';
@@ -163,6 +165,13 @@ function PCBModelPreview({
   toolbarRef,
   listAction,
   sidebarAction,
+  fileId,
+  projectSource,
+  getRevision,
+  spiceAvailable,
+  onSavePartProperties,
+  onFootprintChange,
+  onRequestSave,
   onBoardThicknessChange,
   onModeChange,
   capabilityHost,
@@ -176,6 +185,13 @@ function PCBModelPreview({
   onToggleSidebar,
 }: {
   board: PCB;
+  fileId?: string;
+  projectSource?: string;
+  getRevision?: () => number;
+  spiceAvailable?: boolean;
+  onSavePartProperties?: ComponentPropertiesProps['onSavePartProperties'];
+  onFootprintChange?: (board: PCB, footprint: PCB['footprints'][number]) => boolean;
+  onRequestSave?: (saveAs: boolean) => void;
   onBoardThicknessChange?: (board: PCB, thickness: number) => boolean;
   onModeChange?: (mode: string) => void;
   schematic?: Circuit;
@@ -1615,9 +1631,14 @@ function PCBModelPreview({
         try {
           if (!details.has(f.libraryId))
             details.set(f.libraryId, previewFootprint(f.libraryId, control.signal));
-          const detail = await details.get(f.libraryId)!;
-          const official = detail.models;
-          const assigned = resolveFootprintModels(f, detail.footprint);
+          let detail: PreviewFootprint | undefined;
+          try {
+            detail = await details.get(f.libraryId)!;
+          } catch (error) {
+            if (f.models === undefined) throw error;
+          }
+          const official = detail?.models ?? [];
+          const assigned = f.models ?? resolveFootprintModels(f, detail!.footprint);
           if (assigned.length && assigned.every((model) => model.hidden)) {
             clippingBoundsDirty.current = true;
             const estimate = estimates.get(f.id);
@@ -1634,13 +1655,35 @@ function PCBModelPreview({
             await waitForActive();
             if (control.signal.aborted) return;
             const index = official.findIndex((m) => modelKey(m.path) === modelKey(model.path));
-            if (index < 0) {
-              notices.push(`${name}: this model is not linked by the bundled footprint.`);
+            if (index < 0 && !projectSource) {
+              notices.push(`${name}: model source is unavailable.`);
               continue;
             }
             if (++instanceCount > 512)
               throw new Error('The board exceeds the 512-model preview limit.');
-            const template = await loadModel(f.libraryId, index);
+            const template =
+              index >= 0
+                ? await loadModel(f.libraryId, index)
+                : await modelMeshGroupAsync(
+                    await previewAssignedModel(
+                      projectSource!,
+                      fileId,
+                      f.id,
+                      assigned.indexOf(model),
+                      control.signal,
+                    ),
+                    yieldBuild,
+                  );
+            if (index < 0) {
+              templates.add(template);
+              vertexCount += template.children.reduce(
+                (n, child) =>
+                  n + ((child as THREE.Mesh).geometry?.attributes.position?.count ?? 0) * 3,
+                0,
+              );
+              if (vertexCount > 6000000)
+                throw new Error('Component models exceed the board preview complexity limit.');
+            }
             if (control.signal.aborted) return;
             const placed = new THREE.Group(),
               transformed = cloneModelInstance(template, model.opacity),
@@ -1731,7 +1774,6 @@ function PCBModelPreview({
     };
   }, [board, linkedCaptionBasis, retry, viewState]);
   const selectedFootprint = board.footprints.find((footprint) => selection.includes(footprint.id));
-  const selectedPart = schematic?.parts.find((part) => part.id === selectedFootprint?.symbolId);
   const interacting = !annotating && !cad.tool && !cad.pan;
   const drawingSketch = cad.tool === 'sketch' && cad.sketchPhase === 'sketch';
   const pointerTool = Boolean(cad.tool && (cad.tool !== 'sketch' || drawingSketch));
@@ -2239,51 +2281,25 @@ function PCBModelPreview({
               >
                 <div className="model-properties-body">
                   {selectedFootprint ? (
-                    <>
-                      <h3 className="model-properties-title">
-                        {selectedPart?.ref ?? selectedFootprint.reference ?? 'Component'}
-                      </h3>
-                      <dl className="model-property-list">
-                        <dt>Reference</dt>
-                        <dd>{selectedPart?.ref ?? selectedFootprint.reference ?? '—'}</dd>
-                        <dt>Value</dt>
-                        <dd>{selectedPart?.value ?? selectedFootprint.value ?? '—'}</dd>
-                        <dt>Footprint</dt>
-                        <dd>{selectedFootprint.libraryId}</dd>
-                        <dt>Side</dt>
-                        <dd>{selectedFootprint.side === 'front' ? 'Front' : 'Back'}</dd>
-                        <dt>X position</dt>
-                        <dd>{selectedFootprint.x} mm</dd>
-                        <dt>Y position</dt>
-                        <dd>{selectedFootprint.y} mm</dd>
-                        <dt>Rotation</dt>
-                        <dd>{selectedFootprint.rotation}°</dd>
-                        <dt>Pads</dt>
-                        <dd>{selectedFootprint.pads.length}</dd>
-                      </dl>
-                      {selectedFootprint.models?.map((model, index) => (
-                        <section key={index} className="model-properties-model">
-                          <h3>Model {index + 1}</h3>
-                          <p>{model.path}</p>
-                          <dl className="model-property-list">
-                            <dt>Offset (mm)</dt>
-                            <dd>
-                              {model.offset.x} / {model.offset.y} / {model.offset.z}
-                            </dd>
-                            <dt>Rotation (°)</dt>
-                            <dd>
-                              {model.rotation.x} / {model.rotation.y} / {model.rotation.z}
-                            </dd>
-                            <dt>Scale</dt>
-                            <dd>
-                              {model.scale.x} / {model.scale.y} / {model.scale.z}
-                            </dd>
-                            <dt>Opacity</dt>
-                            <dd>{Math.round((model.opacity ?? 1) * 100)}%</dd>
-                          </dl>
-                        </section>
-                      ))}
-                    </>
+                    schematic ? (
+                      <ComponentProperties
+                        footprint={selectedFootprint}
+                        schematic={schematic}
+                        active={active && !sourcePending && sidebarVisible}
+                        resetKey={active}
+                        snap={(value) => value}
+                        onFootprint={(footprint) => onFootprintChange?.(board, footprint) ?? false}
+                        onSavePartProperties={onSavePartProperties}
+                        capabilityHost={capabilityHost}
+                        fileId={fileId}
+                        projectSource={projectSource}
+                        getRevision={getRevision}
+                        spiceAvailable={spiceAvailable}
+                        onRequestSave={onRequestSave}
+                      />
+                    ) : (
+                      <p>Component schematic is unavailable.</p>
+                    )
                   ) : (
                     <PropertiesEmptyState icon={Box}>
                       Select an element to view its properties.

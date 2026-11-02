@@ -401,7 +401,9 @@ export default function ModelCadPanel({
     >
       {!docked && (
         <header className={styles.header}>
-          <h2 aria-description={toolSheet ? title : undefined}>{title}</h2>
+          <h2 aria-description={toolSheet ? title : undefined}>
+            {toolSheet ? (mode === 'hole' ? 'Diameter' : 'Name') : title}
+          </h2>
           <span>{mode === 'edit' && dirty ? 'Unapplied' : ''}</span>
           {!toolSheet && (
             <button
@@ -512,30 +514,33 @@ export default function ModelCadPanel({
                   {base.object.kind !== 'boolean' && numberField('height', 'Height (mm)')}
                 </div>
               </section>
-              <section className={styles.section} aria-label="Solid position">
-                <h3>Position (mm)</h3>
-                <div className={styles.axes}>
-                  {(['x', 'y', 'z'] as const).map((axis) =>
-                    numberField(
-                      axis,
-                      axis.toUpperCase(),
-                      `Solid ${axis.toUpperCase()} position (mm)`,
-                    ),
-                  )}
-                </div>
-              </section>
-              <section className={styles.section} aria-label="Solid rotation">
-                <h3>Rotation (°)</h3>
-                <div className={styles.axes}>
-                  {(['rx', 'ry', 'rz'] as const).map((axis) =>
-                    numberField(
-                      axis,
-                      axis.slice(1).toUpperCase(),
-                      `Solid ${axis.slice(1).toUpperCase()} rotation (degrees)`,
-                    ),
-                  )}
-                </div>
-              </section>
+              <details className={styles.transforms} open={toolSheet || undefined}>
+                <summary>Placement</summary>
+                <section className={styles.section} aria-label="Solid position">
+                  <h3>{toolSheet ? 'Position' : 'Position (mm)'}</h3>
+                  <div className={styles.axes}>
+                    {(['x', 'y', 'z'] as const).map((axis) =>
+                      numberField(
+                        axis,
+                        axis.toUpperCase(),
+                        `Solid ${axis.toUpperCase()} position (mm)`,
+                      ),
+                    )}
+                  </div>
+                </section>
+                <section className={styles.section} aria-label="Solid rotation">
+                  <h3>{toolSheet ? 'Rotation' : 'Rotation (°)'}</h3>
+                  <div className={styles.axes}>
+                    {(['rx', 'ry', 'rz'] as const).map((axis) =>
+                      numberField(
+                        axis,
+                        axis.slice(1).toUpperCase(),
+                        `Solid ${axis.slice(1).toUpperCase()} rotation (degrees)`,
+                      ),
+                    )}
+                  </div>
+                </section>
+              </details>
               <section className={styles.section} aria-label="Solid appearance">
                 <div className={styles.fields}>
                   <div className={styles.field}>
@@ -561,9 +566,16 @@ export default function ModelCadPanel({
                 </div>
               </section>
               {base.object.kind !== 'boolean' && (
-                <section className={styles.section} aria-label="Solid holes">
+                <details
+                  className={styles.holeDetails}
+                  open={toolSheet || undefined}
+                  aria-label="Solid holes"
+                >
+                  <summary>
+                    Holes <span>{draft.holes.length}</span>
+                  </summary>
                   <div className={styles.sectionHeader}>
-                    <h3>Holes</h3>
+                    <h3>{toolSheet ? 'Holes' : 'Local Z cuts'}</h3>
                     <button
                       type="button"
                       className="tool-button"
@@ -623,7 +635,7 @@ export default function ModelCadPanel({
                       </fieldset>
                     ))}
                   </div>
-                </section>
+                </details>
               )}
             </>
           )}
@@ -654,8 +666,15 @@ export default function ModelCadPanel({
                     ? 'Click the canvas to move'
                     : 'Click the canvas to place'}
               </p>
-              <button type="button" disabled={busy} onClick={onClose}>
-                Cancel
+              <button
+                type="button"
+                className={styles.close}
+                aria-label="Cancel"
+                title="Close"
+                disabled={busy}
+                onClick={onClose}
+              >
+                <X size={15} aria-hidden="true" />
               </button>
             </>
           ) : (

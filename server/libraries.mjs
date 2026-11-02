@@ -238,6 +238,25 @@ export function createLibraryService({
   }
   return {
     request,
+    async componentModelBytes(id, index) {
+      const detail = await request({ action: 'detail', kind: 'footprints', id });
+      const model = detail.models[index];
+      if (!model) throw new Error('No model is assigned to this footprint.');
+      const relative = model.path
+        .replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, '')
+        .replace(/^\$\{KIPRJMOD\}\/(?:(?:footprints\/)?models|footprints)\//, '')
+        .replace(/\.wrl$/i, '.step');
+      return (await exampleModelBytes(id, relative)) ?? (await modelBytes(relative));
+    },
+    parseStep: (bytes, signal) => stepParsers.run(bytes, signal),
+    async modelPath(reference, signal) {
+      if (!/^\$\{KICAD\d+_3DMODEL_DIR\}\//.test(reference))
+        throw new Error('Unsupported library STEP reference.');
+      const relative = reference
+        .replace(/^\$\{KICAD\d+_3DMODEL_DIR\}\//, '')
+        .replace(/\.wrl$/i, '.step');
+      return stepParsers.run(await modelBytes(relative), signal);
+    },
     async model(id, index, signal) {
       if (closed || signal?.aborted) throw new Error('Preview cancelled.');
       if (modelJobs >= 2) throw new Error('Two 3D previews are loading. Try again shortly.');

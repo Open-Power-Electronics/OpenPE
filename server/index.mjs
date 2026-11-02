@@ -1,4 +1,5 @@
 import express from 'express';
+import { createComponentModelStore, registerComponentModels } from './component-models.mjs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -43,7 +44,8 @@ export async function startServer({
   modelCadPreviewFactory = createModelCadPreviewService,
   simulationModelFetcher = fetch,
   simulationModelFiles = undefined,
-  simulationExamplesRoot = undefined,
+  componentModelFiles = undefined,
+  simulationRecentRoot = undefined,
   simulationResultFiles = /** @type {{ forProject(fileId: string): ReturnType<typeof import('./project-spice-files.mjs').createProjectSpiceStore> | null } | undefined} */ (
     undefined
   ),
@@ -58,6 +60,7 @@ export async function startServer({
   const app = express();
   const libraries = createLibraryService({ root: libraryRoot || undefined, dataDir });
   const modelCadPreviews = modelCadPreviewFactory({ resourceRoot: thermalRoot });
+  const componentModels = createComponentModelStore(dataDir, libraries.parseStep);
   let base = '';
   const active = new Map();
   const agentBridges = new Map();
@@ -115,7 +118,9 @@ export async function startServer({
   app.use('/api/chat/tool-result', express.json({ limit: '40mb' }));
   app.use('/api/chat', express.json({ limit: '32mb' }));
   app.use('/api/model-cad/preview', express.json({ limit: '512kb' }));
+  app.use('/api/component-model', express.json({ limit: '24mb' }));
   app.use(express.json({ limit: '8mb' }));
+  registerComponentModels(app, componentModels, libraries, componentModelFiles);
   registerAppearance(app, dataDir, atomicWrite);
   const plugins = registerPlugins(app, cwd, { service: pluginServiceFactory(cwd, { dataDir }) });
   const workbenchPlugins = createWorkbenchPlugins(dataDir);
@@ -147,7 +152,7 @@ export async function startServer({
     simulationResultFiles,
     (deck, signal, store, resultFiles) =>
       simulationResultLoader(deck, signal, store, simulationRoot, resultFiles),
-    simulationExamplesRoot,
+    simulationRecentRoot,
   );
   app.get('/api/libraries/:kind', async (req, res) => {
     if (!['symbols', 'footprints'].includes(req.params.kind))
@@ -365,6 +370,7 @@ export async function startServer({
   base = `http://127.0.0.1:${server.address().port}`;
   return {
     base,
+    componentModels,
     token,
     writeWorkspaceRecovery: (content) =>
       content === null ? recovery.clear() : recovery.writeEncoded(content),

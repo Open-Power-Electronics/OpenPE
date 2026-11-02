@@ -1,8 +1,7 @@
 # OpenPE examples
 
-Home discovers native projects in `examples/` (packaged: `examples-native/`),
-including immediate project subdirectories. Add a KiCad project directory, then
-return to Home, focus the window or choose **Refresh examples**. No catalog
+Home discovers native projects in two sibling roots: `examples/` (packaged: `examples-native/`) and `recent/` (packaged: `recent-native/`), including their immediate project subdirectories. EMC Flyback resides in `recent/emc-flyback/`; the other nine bundled projects remain directly under `examples/`. Add a KiCad project directory, then
+return to Home or focus the window. No catalog
 registration or application rebuild is required. A directory with `.kicad_pro`
 files exposes those project entries; otherwise schematics, or PCB-only entries,
 use the ordinary native reader and its independent-sheet/primary-board rules.
@@ -12,7 +11,7 @@ the EMC Flyback Recent entry. Recent remains independent of file-opening history
 
 Discovery reads directory names only, creates no grants or Git history, excludes
 links and private/generated directories, and bounds each listing to 1024 entries,
-128 project directories and 256 projects. Opaque `local-<SHA-256>` identities are
+128 project directories per root and 256 projects across both roots. Opaque `local-<SHA-256>` identities are
 resolved again by the host on open/recovery. Missing, invalid or unsupported
 files fail explicitly; discovery never rewrites or prepares a user's circuit.
 Discovered projects enter the same `readNativeProject` / `projectFromNativeFiles`
@@ -88,7 +87,7 @@ downloaded SPICE models in `resources/example-catalog/simulation/models/`;
 EMC original sources remain under `resources/example-catalog/sources/emc-flyback/`,
 and manufacturer supplements under `resources/example-catalog/footprints/emc-flyback/`.
 EMC Flyback's four SPICE libraries are checked-in source assets under
-`examples/emc-flyback/circuits/`, with hashes in
+`recent/emc-flyback/circuits/`, with hashes in
 `resources/emc-flyback-models-lock.json`; preparation verifies them without
 regenerating or replacing their bytes.
 Generation/preparation verifies and copies required
@@ -121,7 +120,7 @@ identity and official sources.
 
 EMC Flyback comes from the [pinned AI-PCB-layout demonstration](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo)
 under CC BY 4.0. Its originals and source hashes stay in `resources/example-catalog/sources/emc-flyback/`.
-The generated native project is in `examples/emc-flyback/`; it uses KiCad 10, with
+The generated native project is in `recent/emc-flyback/`; it uses KiCad 10, with
 source UUIDs, electrical connectivity, footprint placement and copper retained.
 One custom pad is represented by an exact same-number rectangle union and
 multi-layer keepouts by per-layer zones. Native polylines, bold text, inert datasheet
@@ -176,8 +175,7 @@ presentation, conversations and simulation results stay outside native designs.
 
 ## Original project directories and portable assets
 
-Desktop Home opens the original `examples/<stem>/<stem>.kicad_pro` files in
-development and the packaged `examples-native/<stem>/<stem>.kicad_pro` files.
+Desktop Home resolves each manifest entry's explicit `root` and `directory` independently of its native `file` stem. The sibling source roots `examples/` and `recent/` are packaged separately as `examples-native/` and `recent-native/`; neither is nested inside the other.
 Their matching schematics, PCB, rules, libraries and supporting files retain
 their actual filenames. Source displays that same directory, including empty
 folders, editable ordinary text and existing PDFs. Packaging includes the
@@ -283,7 +281,7 @@ library; altered model identities and electrical pins remain rejected. These
 checks do not run solvers or establish support for arbitrary upstream files.
 
 The EMC electrical and thermal real-solver checks read
-`examples/emc-flyback/emc-flyback.kicad_pro` through the ordinary native reader.
+`recent/emc-flyback/emc-flyback.kicad_pro` through the ordinary native reader.
 Electrical execution reads its colocated model files. Neither check substitutes
 the generated regression snapshot or a model download for those inputs.
 

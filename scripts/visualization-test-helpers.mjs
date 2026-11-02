@@ -389,6 +389,16 @@ export async function toggleLayoutVisualization(page, section) {
   await showLayoutSection(page, section);
 }
 
+/** Choose an explicit drawing layer without toggling an already selected row off. */
+export async function selectLayoutLayer(page, name) {
+  await showLayoutSection(page, 'Visible layers');
+  const button = layoutAppearance(page)
+    .getByRole('group', { name: 'Visible layers', exact: true })
+    .getByRole('button', { name, exact: true });
+  if ((await button.getAttribute('aria-pressed')) !== 'true') await button.click();
+  await page.getByTestId('layout-canvas').focus();
+}
+
 /** Locate object visibility independently from same-named selection filters. */
 export async function setLayoutVisibility(page, name, checked) {
   const section = layoutObjectVisibility.has(name) ? 'Visible objects' : 'Visible layers';

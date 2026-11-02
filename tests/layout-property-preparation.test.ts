@@ -27,7 +27,7 @@ const run = new Function(
   'board',
   'schematic',
   'footprint',
-  prepared.code + '\nreturn {netOptions,layerOptions,part};',
+  prepared.code + '\nreturn {netOptions,layerOptions};',
 );
 function renderer() {
   let slots: { inputs: readonly unknown[]; value: unknown }[] = [];
@@ -137,7 +137,7 @@ test('ownership belongs to the array and switching from owned inputs cannot reta
   assert.deepEqual(render(borrowed).netOptions, [{ value: 'C', label: 'New' }]);
 });
 
-test('non-footprint inspection never scans schematic parts; assigned footprints observe current source', () => {
+test('Layout option preparation never scans schematic parts; linked part resolution belongs to the shared component inspector', () => {
   const render = renderer(),
     owned = ownProjectData(board());
   let reads = 0;
@@ -147,19 +147,8 @@ test('non-footprint inspection never scans schematic parts; assigned footprints 
       throw new Error('Unrelated schematic scan');
     },
   };
-  assert.equal(render(owned, unused).part, undefined);
-  assert.equal(render(owned, unused, { symbolId: null }).part, undefined);
-  assert.equal(render(owned, unused, { symbolId: '' }).part, undefined);
+  render(owned, unused);
+  render(owned, unused, { symbolId: null });
+  render(owned, unused, { symbolId: 'P' });
   assert.equal(reads, 0);
-  const schematic = {
-    parts: [
-      { id: 'P', value: 'Before' },
-      { id: 'Q', value: 'Other' },
-    ],
-  };
-  assert.equal(render(owned, schematic, { symbolId: 'P' }).part, schematic.parts[0]);
-  schematic.parts[0] = { id: 'P', value: 'After Source update' };
-  assert.equal(render(owned, schematic, { symbolId: 'P' }).part?.value, 'After Source update');
-  assert.equal(render(owned, schematic, { symbolId: 'Q' }).part, schematic.parts[1]);
-  assert.equal(render(owned, { parts: [] }, { symbolId: 'P' }).part, undefined);
 });

@@ -31,7 +31,6 @@ import {
   Square,
   Trash2,
   Pentagon,
-  PaintBucket,
   Scan,
   SquareDashed,
   X,
@@ -87,6 +86,7 @@ import {
 import { padCopperLayers, type Airwire } from '@/lib/pcb-connectivity';
 import { createPCBRouter } from '@/lib/pcb-routing';
 import { createPCBViaValidator } from '@/lib/pcb-via-routing';
+import { insidePolygon } from '@/lib/pcb-collision';
 import { createPCBRouteAnchorResolver, type PCBRouteAnchorResult } from '@/lib/pcb-route-anchor';
 import {
   defaultPCBDisplay,
@@ -102,7 +102,7 @@ import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
 import {
   boardPolygons,
   defaultCopperFillClearance,
-  fillCopperZones,
+  fillCopperZone,
   polygonPath,
   worldZones,
   type Polygon,
@@ -168,15 +168,13 @@ import {
   preparePCBTrackPresentation,
   preparePCBZoneOutlinePaths,
 } from './pcbPresentationAnalysis';
-import { isOwnedProjectNode, ownProjectData } from '@/lib/immutable-project';
+import { isOwnedProjectNode } from '@/lib/immutable-project';
 import LayoutAppearancePanel, { type LayoutAppearanceTab } from './LayoutAppearancePanel';
 import EditorDisplayDrawer from './EditorDisplayDrawer';
 import InspectorResize, { type InspectorSize } from './InspectorResize';
-import CopperFillSettings from './CopperFillSettings';
 import { hasOpenOverlay } from './Dialog';
 import type { CapabilityHost } from '@/api/capabilities';
 const pixelsPerMM = 96 / 25.4;
-const zoneOutlineWidth = 0.08;
 
 const RetainedLayoutProperties = memo(
   function RetainedLayoutProperties({
@@ -217,6 +215,10 @@ type Props = {
   onShowSidebar?: () => void;
   onToggleSidebar?: () => void;
   onCommit: (board: PCB) => boolean;
+  fileId?: string;
+  projectSource?: string;
+  getRevision?: () => number;
+  spiceAvailable?: boolean;
   onSavePartProperties?: ComponentProps<typeof LayoutProperties>['onSavePartProperties'];
   onRequestSave?: (saveAs: boolean) => void;
   syncStatus?: { pending: boolean; error: string; warnings: string[] };
@@ -278,6 +280,10 @@ function LayoutEditor({
   sidebarVisible = true,
   onShowSidebar,
   onCommit,
+  fileId,
+  projectSource,
+  getRevision,
+  spiceAvailable,
   onSavePartProperties,
   onRequestSave,
   syncStatus,
@@ -330,7 +336,8 @@ function LayoutEditor({
     ids: Selection[];
     basis: PCB;
   } | null>(null);
-  const toolSettings = tool === 'route' || tool === 'via' || tool === 'outline';
+  const drawing = tool === 'outline' || tool === 'zone';
+  const toolSettings = tool === 'route' || tool === 'via' || drawing;
   const [selection, writeSelection] = useState<Selection[]>([]);
   const [selectionPaint] = useState(createLayoutSelection);
   const setSelection = useCallback((input: SetStateAction<Selection[]>) => {
@@ -403,6 +410,7 @@ function LayoutEditor({
   const focusedInspectorRequest = useRef(0);
   const [layer, setLayer] = useState<CopperLayer>('F.Cu');
   const [priorityLayer, setPriorityLayer] = useState<BoardLayer | null>(null);
+  const outlineLayer = priorityLayer ?? layer;
   const [net, setNet] = useState('');
   const [width, setWidth] = useState(0.4);
   const [viaDiameter, setViaDiameter] = useState(0.8);
@@ -423,20 +431,13 @@ function LayoutEditor({
   } | null>(null);
   const [viaTarget, setViaTarget] = useState<CopperLayer | null>(null);
   const [outline, writeOutline] = useState<Point | null>(null);
-  const [outlineShape, setOutlineShape] = useState<'line' | 'rectangle'>('line');
+  const outlineShape = tool === 'outline' ? 'rectangle' : 'polygon';
   const [outlinePoints, setOutlinePoints] = useState<Point[]>([]);
   const [outlineWidth, setOutlineWidth] = useState(0.05);
-  const outlinePublication = useRef<PCB | null>(null);
+  const [regionMinThickness, setRegionMinThickness] = useState(0.2);
   const outlineBasis = useRef<PCB | null>(null);
-  const [zoneDraft, setZoneDraft] = useState<Point[]>([]);
-  const [zoneClearance, setZoneClearance] = useState(0.25);
-  const [fillClearance, setFillClearance] = useState(defaultCopperFillClearance);
-  const [fillSettingsOpen, setFillSettingsOpen] = useState(false);
-  useEffect(() => {
-    if (toolSettings || trackDrag) setFillSettingsOpen(false);
-  }, [toolSettings, Boolean(trackDrag)]);
-  const [zoneThermalGap, setZoneThermalGap] = useState(0.3);
-  const [zoneThermalBridge, setZoneThermalBridge] = useState(0.3);
+  const outlineLayerBasis = useRef<BoardLayer | null>(null);
+  const [fillBusy, setFillBusy] = useState(false);
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
   const cursorPosition = useRef(cursor);
   const [coordinates] = useState(createCanvasCoordinates);
@@ -455,7 +456,7 @@ function LayoutEditor({
     setRoute(null);
     setTrackDrag(null);
     setViaTarget(null);
-    setZoneDraft([]);
+
     setOutline(null);
     setInspector(false);
     setInspectedPadId('');
@@ -796,13 +797,17 @@ function LayoutEditor({
       return { edges: [], padCount: 0, warnings: [], error: (e as Error).message };
     }
   }, [presentationBoard, pcb, baselineConnectivity]);
-  const boardSurface = useMemo(() => {
+  const boardRegions = useMemo(() => {
     try {
-      return polygonPath(boardPolygons(placed));
+      return boardPolygons(placed);
     } catch {
-      return '';
+      return null;
     }
   }, [placed.graphics, placed.footprints]);
+  const boardSurface = useMemo(
+    () => (boardRegions ? polygonPath(boardRegions) : ''),
+    [boardRegions],
+  );
   const validNet = pcb.nets.some((n) => n.id === net) ? net : (pcb.nets[0]?.id ?? '');
   const netOptions = useMemo(
     () => pcb.nets.map((n) => ({ value: n.id, label: n.name })),
@@ -1265,9 +1270,8 @@ function LayoutEditor({
     setRoutePointer(null);
     lastCanvasPoint.current = null;
     setViaTarget(null);
-    if (outlinePublication.current === pcb) outlinePublication.current = null;
-    else setOutline(null);
-    setZoneDraft((current) => (current.length ? [] : current));
+    setOutline(null);
+
     setPlacement(null);
     setGesture(null);
     releasePointer();
@@ -1301,10 +1305,9 @@ function LayoutEditor({
     setRoutePointer(null);
     setViaTarget(null);
     setOutline(null);
-    setZoneDraft((current) => (current.length ? [] : current));
+
     setPlacement(null);
     setChoosing(false);
-    setFillSettingsOpen(false);
     setError('');
   }, [visible]);
   useEffect(() => {
@@ -1433,29 +1436,24 @@ function LayoutEditor({
     }
   }
   function activate(next: Tool, retainAnalysisProbe = false) {
-    if (next === 'zone' && !copperLayers.some((item) => item === (priorityLayer ?? layer))) {
-      setError('Select a copper layer before drawing a copper zone.');
-      return;
-    }
     if (!retainAnalysisProbe) onAnalysisProbe?.(null);
     cancelGesture();
     setTool(next);
-    setFillSettingsOpen(false);
     setCursor(cursorPosition.current);
     setChoosing(false);
     setRoute(null);
     setRoutePointer(null);
     setViaTarget(null);
     setOutline(null);
-    setZoneDraft((current) => (current.length ? [] : current));
+
     setPlacement(null);
     setGesture(null);
     setError('');
-    if (next === 'outline')
-      setLayers((current) => (current['Edge.Cuts'] ? current : { ...current, 'Edge.Cuts': true }));
-    if (next === 'outline') setPriorityLayer('Edge.Cuts');
+    if (next === 'outline' || next === 'zone')
+      setLayers((current) =>
+        current[outlineLayer] ? current : { ...current, [outlineLayer]: true },
+      );
     if (next !== 'annotate') setAnnotationIds((current) => (current.length ? [] : current));
-    if (next === 'zone') setInspector(true);
     svg.current?.focus({ preventScroll: true });
   }
   useLayoutEffect(() => {
@@ -1550,6 +1548,7 @@ function LayoutEditor({
   }
   function changePriorityLayer(next: BoardLayer | null) {
     if (next === priorityLayer) return;
+    if (drawing && (next ?? layer) !== outlineLayer) setOutline(null);
     if (next === null) {
       setPriorityLayer(null);
       return;
@@ -1558,15 +1557,12 @@ function LayoutEditor({
     setRoute(null);
     setRoutePointer(null);
     setViaTarget(null);
-    setZoneDraft((current) => (current.length ? [] : current));
+
     setError('');
     setPriorityLayer(next);
     const copperLayer = copperLayers.some((layer) => layer === next);
     if (copperLayer) setLayer(next as CopperLayer);
-    if (
-      (!copperLayer && ['route', 'via', 'zone'].includes(tool)) ||
-      (tool === 'outline' && next !== 'Edge.Cuts')
-    ) {
+    if (!copperLayer && ['route', 'via'].includes(tool)) {
       setTool('select');
       setOutline(null);
       setOutlinePoints([]);
@@ -1914,6 +1910,7 @@ function LayoutEditor({
     const uniqueObjects = selectPCBPoint(pcb, layers, filters, raw, margin, {
       preparedFills: placed === pcb ? copper.fills : undefined,
       includeFills,
+      includeRegionInteriors: tool === 'select',
       preciseCandidates: objects,
       hasPrecisePad: candidates.length > 0,
     });
@@ -1937,6 +1934,7 @@ function LayoutEditor({
       layerOrder: physicalLayerOrder,
       filters,
       preparedFills: placed === pcb ? copper.fills : undefined,
+      includeRegionInteriors: tool === 'select',
     });
   }
   function selectionMode(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
@@ -2406,9 +2404,9 @@ function LayoutEditor({
   function setOutline(point: Point | null) {
     writeOutline(point);
     outlineBasis.current = point ? pcb : null;
+    outlineLayerBasis.current = point ? outlineLayer : null;
     if (!point) {
       setOutlinePoints((current) => (current.length ? [] : current));
-      outlinePublication.current = null;
     }
   }
   function outlinePoint(event: {
@@ -2433,7 +2431,12 @@ function LayoutEditor({
       }
     };
     for (const graphic of pcb.graphics) {
-      if (graphic.layer !== 'Edge.Cuts' || graphic.kind === 'text' || graphic.kind === 'dimension')
+      if (
+        graphic.layer !== outlineLayer ||
+        !layers[graphic.layer] ||
+        graphic.kind === 'text' ||
+        graphic.kind === 'dimension'
+      )
         continue;
       attract(graphic.start);
       if (graphic.kind !== 'circle') attract(graphic.end);
@@ -2442,116 +2445,91 @@ function LayoutEditor({
     outlinePoints.forEach(attract);
     return result;
   }
-  function finishOutline(finish = true, head = cursorPosition.current) {
+  function finishShape(head = cursorPosition.current) {
     if (!outline) return;
-    if (outlineBasis.current !== pcb) {
+    if (outlineBasis.current !== pcb || outlineLayerBasis.current !== outlineLayer) {
       setOutline(null);
       return;
     }
-    let points: Point[];
-    if (outlineShape === 'rectangle') {
-      if (same(outline, head) || outline.x === head.x || outline.y === head.y) {
-        setError('Choose an opposite corner with nonzero width and height.');
-        return;
-      }
-      points = [outline, { x: head.x, y: outline.y }, head, { x: outline.x, y: head.y }, outline];
-    } else {
-      if (same(outline, head)) {
-        if (finish) setOutline(null);
-        return;
-      }
-      points = [outline, head];
-    }
-    const lines = points.slice(1).map((end, index) => ({
-      id: uid(),
-      start: points[index],
-      end,
-      width: outlineWidth,
-      layer: 'Edge.Cuts' as const,
-    }));
-    // Core validates and adopts this exact internally owned candidate. Only its
-    // own publication can retain the next line origin; any other board revision
-    // cancels it, including Source changes, undo and external edits.
-    let next: PCB;
-    try {
-      next = ownProjectData(
-        invalidatePCBFill(pcb, { ...pcb, graphics: [...pcb.graphics, ...lines] }),
-        pcb,
-      );
-    } catch (error) {
-      setError((error as Error).message);
+    if (!layers[outlineLayer]) {
+      setError('Show the selected layer before drawing a region.');
       return;
     }
-    outlinePublication.current = next;
+    const points =
+      outlineShape === 'rectangle'
+        ? [outline, { x: head.x, y: outline.y }, head, { x: outline.x, y: head.y }]
+        : outlinePoints;
+    if (outlineShape === 'rectangle' && (outline.x === head.x || outline.y === head.y)) {
+      setError('Choose an opposite corner with nonzero width and height.');
+      return;
+    }
+    if (points.length < 3) {
+      setError('Choose at least three corners for the region.');
+      return;
+    }
+    const id = uid();
+    const copperLayer = copperLayers.find((item) => item === outlineLayer);
+    const next: PCB = copperLayer
+      ? {
+          ...pcb,
+          zones: [
+            ...pcb.zones,
+            {
+              id,
+              netId: null,
+              layer: copperLayer,
+              outline: points,
+              clearance: defaultCopperFillClearance,
+              minThickness: regionMinThickness,
+              thermalGap: 0.3,
+              thermalBridge: 0.3,
+              fillEnabled: false,
+            },
+          ],
+        }
+      : {
+          ...pcb,
+          graphics: [
+            ...pcb.graphics,
+            {
+              id,
+              kind: 'polygon',
+              start: points[0],
+              points: points.slice(1, -1),
+              end: points.at(-1)!,
+              width: outlineWidth,
+              layer: outlineLayer,
+              fill: false,
+            },
+          ],
+        };
     if (commit(next)) {
-      if (outlineShape === 'line' && !finish) {
-        writeOutline(head);
-        outlineBasis.current = next;
-        setOutlinePoints((current) => [current[0] ?? outline, head]);
-      } else setOutline(null);
-      setSelection(lines.map((line) => ({ kind: 'graphic', id: line.id })));
-      focusCanvas();
-    } else outlinePublication.current = null;
-  }
-  function finishZone() {
-    const zoneLayer = copperLayers.find((item) => item === (priorityLayer ?? layer));
-    if (!zoneLayer) {
-      setError('Select a copper layer before drawing a copper zone.');
-      return;
-    }
-    if (zoneDraft.length < 3) {
-      setError('Choose at least three corners for the copper zone.');
-      return;
-    }
-    if (!validNet) {
-      setError('Choose a net for the copper zone.');
-      return;
-    }
-    const zone: PCB['zones'][number] = {
-      id: uid(),
-      netId: validNet,
-      layer: zoneLayer,
-      outline: zoneDraft,
-      clearance: zoneClearance,
-      minThickness: 0.2,
-      thermalGap: zoneThermalGap,
-      thermalBridge: zoneThermalBridge,
-      fillEnabled: true,
-    };
-    if (commit({ ...pcb, zones: [...pcb.zones, zone] })) {
-      setZoneDraft([]);
-      setSelection([{ kind: 'zone', id: zone.id }]);
+      setOutline(null);
       setTool('select');
+      setSelection([{ kind: copperLayer ? 'zone' : 'graphic', id }]);
+      setInspector(true);
       focusCanvas();
     }
   }
   function updateZone(next: PCB['zones'][number]) {
     return commit({ ...pcb, zones: pcb.zones.map((z) => (z.id === next.id ? next : z)) });
   }
-  async function fillZones(clearance: number) {
-    if (!active) return false;
+  async function fillZone(zoneId: string) {
+    if (!active || fillBusy) return;
+    setFillBusy(true);
     try {
-      let accepted: boolean;
       if (capabilityHost) {
-        await capabilityHost.execute('layout.fill', { boardId: pcb.id, clearance });
-        accepted = true;
+        await capabilityHost.execute('layout.fill', { boardId: pcb.id, zoneId });
       } else {
-        // Standalone editor adapters receive the exact generated board. A fill
-        // already contains current contours, so do not invalidate it as an edit.
-        const next = fillCopperZones(pcb, clearance);
-        accepted = JSON.stringify(next) === JSON.stringify(pcb) || onCommit(next);
+        const next = fillCopperZone(pcb, zoneId);
+        if (!onCommit(next)) return;
       }
-      if (accepted) {
-        setFillClearance(clearance);
-        setFillSettingsOpen(false);
-        setLayers((current) => ({ ...current, copper: true }));
-        setError('');
-        focusCanvas();
-      }
-      return accepted;
+      setLayers((current) => ({ ...current, copper: true }));
+      setError('');
     } catch (error) {
       setError((error as Error).message);
-      return false;
+    } finally {
+      setFillBusy(false);
     }
   }
   function start(e: React.PointerEvent<SVGSVGElement>) {
@@ -2704,31 +2682,16 @@ function LayoutEditor({
       if (commit({ ...pcb, vias: [...pcb.vias, via] })) setSelection([{ kind: 'via', id: via.id }]);
       return;
     }
-    if (tool === 'outline') {
+    if (drawing) {
       const corner = outlinePoint(e);
       updateCursor(corner);
       if (!outline) {
         setOutline(corner);
         setOutlinePoints([corner]);
-        return;
-      }
-      if (outlineShape === 'rectangle') finishOutline(true, corner);
-      else finishOutline(outlinePoints.length > 1 && same(corner, outlinePoints[0]), corner);
-      return;
-    }
-    if (tool === 'zone') {
-      if (!copperLayers.some((item) => item === (priorityLayer ?? layer))) {
-        setError('Select a copper layer before drawing a copper zone.');
-        return;
-      }
-      if (!validNet) {
-        setError('Add a net before drawing a copper zone.');
-        return;
-      }
-      if (zoneDraft.length >= 3 && same(p, zoneDraft[0])) finishZone();
-      else if (zoneDraft.length >= 128) setError('A new zone supports at most 128 corners.');
-      else if (!zoneDraft.length || !same(p, zoneDraft[zoneDraft.length - 1]))
-        setZoneDraft([...zoneDraft, p]);
+      } else if (outlineShape === 'rectangle') finishShape(corner);
+      else if (outlinePoints.length >= 3 && same(corner, outlinePoints[0])) finishShape();
+      else if (outlinePoints.length >= 128) setError('A new region supports at most 128 corners.');
+      else if (!same(corner, outlinePoints.at(-1)!)) setOutlinePoints([...outlinePoints, corner]);
       return;
     }
     let candidate: SelectionCandidate | undefined;
@@ -2830,12 +2793,11 @@ function LayoutEditor({
     }
     const raw = canvasPoint(e, false);
     lastCanvasPoint.current = raw;
-    const p =
-      tool === 'outline'
-        ? outlinePoint(e)
-        : tool === 'route' && (e.ctrlKey || e.metaKey)
-          ? routeFreePoint(raw)
-          : { x: snap(raw.x), y: snap(raw.y) };
+    const p = drawing
+      ? outlinePoint(e)
+      : tool === 'route' && (e.ctrlKey || e.metaKey)
+        ? routeFreePoint(raw)
+        : { x: snap(raw.x), y: snap(raw.y) };
     const overlayOpen = hasOpenOverlay();
     // Idle pointer motion only updates the coordinate subscriber. Tools keep
     // their live cursor preview without rebuilding the entire board on hover.
@@ -3311,21 +3273,19 @@ function LayoutEditor({
         setRoute(null);
         setViaTarget(null);
       }
-    } else if (key === 'backspace' && tool === 'zone') {
-      setZoneDraft((points) => points.slice(0, -1));
-    } else if (key === 'backspace' && tool === 'outline') {
-      setOutline(null);
+    } else if (key === 'backspace' && drawing) {
+      if (outlinePoints.length <= 1) setOutline(null);
+      else setOutlinePoints((points) => points.slice(0, -1));
     } else if (key === 'delete' || key === 'backspace') remove();
     if (key === '/' && (route || trackDrag?.mode === 'connected'))
       setRoutePosture((current) => !current);
     if (key === ' ' || key === 'home') fit('board');
     if (key === 'enter' && route) finishRoute();
-    if (key === 'enter' && tool === 'outline') finishOutline();
-    if (key === 'enter' && tool === 'zone') finishZone();
+    if (key === 'enter' && drawing) finishShape();
     if (key === 'enter' && drag?.mode === 'move') finishMove();
     if (key === 'enter' && trackDrag) finishTrackDrag();
     if (key === 'escape') {
-      if (tool === 'outline' && outline && outlineShape === 'rectangle') {
+      if (drawing && outline) {
         setOutline(null);
         setError('');
         return;
@@ -3362,6 +3322,9 @@ function LayoutEditor({
     () => (viaTarget || tool === 'via' ? viaValidator.validate(cursor) : ''),
     [viaTarget, tool, viaValidator, cursor],
   );
+  const viaPreviewVisible =
+    (tool === 'via' || viaTarget) &&
+    (!boardRegions || boardRegions.some((region) => insidePolygon(cursor, region)));
   const routingIssue = route
     ? router.error ||
       fixedRouteIssue ||
@@ -3883,8 +3846,7 @@ function LayoutEditor({
   useLayoutEffect(() => {
     toolbarActions.current = currentToolbarActions;
   });
-  const connectionSettingsVisible =
-    toolSettings && (tool === 'route' || tool === 'via' || tool === 'outline');
+  const connectionSettingsVisible = toolSettings;
   const modeToolGroup = useMemo(
     () => (
       <div className="editor-tool-group" role="group" aria-label="Canvas modes">
@@ -3927,8 +3889,8 @@ function LayoutEditor({
           [
             ['route', 'Route tracks', Route],
             ['via', 'Place through via', CircleDot],
-            ['outline', 'Draw board outline', Square],
-            ['zone', 'Draw copper zone', Pentagon],
+            ['outline', 'Draw rectangle', Square],
+            ['zone', 'Draw polygon', Pentagon],
           ] as const
         ).map(([value, label, Icon]) => (
           <button
@@ -3938,7 +3900,7 @@ function LayoutEditor({
             aria-label={label}
             title={label}
             aria-expanded={
-              value === 'route' || value === 'via' || value === 'outline'
+              value === 'route' || value === 'via' || value === 'outline' || value === 'zone'
                 ? tool === value
                 : undefined
             }
@@ -3977,18 +3939,6 @@ function LayoutEditor({
         trackDrag.start.x !== trackDrag.current.x ||
         trackDrag.start.y !== trackDrag.current.y)),
   );
-  const fillAvailable =
-    active &&
-    tool !== 'annotate' &&
-    !route &&
-    !outline &&
-    !placement &&
-    !zoneDraft.length &&
-    !drag &&
-    !trackDrag &&
-    !outlineResize &&
-    !marquee &&
-    nativeZones.some((z) => z.layer.endsWith('.Cu') && !z.keepout && z.fillEnabled !== false);
   return (
     <div className="layout-editor" data-layout-editor data-pcb-theme={darkBoard ? 'dark' : 'light'}>
       <div
@@ -4000,20 +3950,6 @@ function LayoutEditor({
         {modeToolGroup}
         <div className="editor-tool-group" role="group" aria-label="Place and connect">
           {connectToolButtons}
-          <button
-            className={`tool-button${fillSettingsOpen ? ' active' : ''}`}
-            aria-label="Fill copper zones"
-            title="Fill copper zones"
-            aria-expanded={fillSettingsOpen}
-            disabled={!fillAvailable}
-            onClick={() => {
-              const open = !fillSettingsOpen;
-              activate('select');
-              setFillSettingsOpen(open);
-            }}
-          >
-            <PaintBucket size={17} />
-          </button>
         </div>
         <div className="editor-tool-group" role="group" aria-label="Edit and history">
           <div className={`tool-menu${tool === 'hand' ? ' active' : ''}`}>
@@ -4161,14 +4097,7 @@ function LayoutEditor({
               if (onAnalysisProbe) return;
               if (trackDrag || drag?.mode === 'move') return;
               if (route) finishRoute();
-              else if (tool === 'outline') {
-                // A rectangle or closed chain may have committed on the first
-                // click. Its second pointerdown must not leave a fresh origin.
-                if (outlineShape === 'rectangle' || outlinePoints.length < 2) {
-                  setOutline(null);
-                  setError('');
-                } else finishOutline();
-              } else if (tool === 'zone') finishZone();
+              else if (drawing) finishShape();
               else setInspector(true);
             }}
             onWheel={(e) => {
@@ -4400,7 +4329,7 @@ function LayoutEditor({
                       pointerEvents="none"
                     />
                   )}
-                  {route && routingIssue && (
+                  {route && routingIssue && (!viaTarget || viaPreviewVisible) && (
                     <circle
                       data-route-obstacle
                       data-annotation-overlay
@@ -4433,35 +4362,47 @@ function LayoutEditor({
                     />
                   )}
                   {outline &&
+                    layers[outlineLayer] &&
                     (outlineShape === 'rectangle' ? (
                       <rect
                         data-annotation-overlay
-                        data-outline-preview="rectangle"
+                        data-shape-preview="rectangle"
+                        data-outline-layer={outlineLayer}
                         x={Math.min(outline.x, cursor.x)}
                         y={Math.min(outline.y, cursor.y)}
                         width={Math.abs(outline.x - cursor.x)}
                         height={Math.abs(outline.y - cursor.y)}
                         fill="none"
-                        stroke="var(--pcb-outline)"
-                        strokeWidth={Math.max(boardOutlineMinWidth, outlineWidth)}
+                        stroke={layerColor(outlineLayer)}
+                        strokeWidth={
+                          outlineLayer === 'Edge.Cuts'
+                            ? Math.max(boardOutlineMinWidth, outlineWidth)
+                            : outlineWidth
+                        }
                         strokeDasharray="1 0.5"
                         pointerEvents="none"
                       />
                     ) : (
                       <polyline
                         data-annotation-overlay
-                        data-outline-preview="line"
-                        points={pointString([outline, cursor])}
+                        data-shape-preview="polygon"
+                        data-outline-layer={outlineLayer}
+                        points={pointString([...outlinePoints, cursor, outlinePoints[0]])}
                         fill="none"
-                        stroke="var(--pcb-outline)"
-                        strokeWidth={Math.max(boardOutlineMinWidth, outlineWidth)}
+                        stroke={layerColor(outlineLayer)}
+                        strokeWidth={
+                          outlineLayer === 'Edge.Cuts'
+                            ? Math.max(boardOutlineMinWidth, outlineWidth)
+                            : outlineWidth
+                        }
                         strokeDasharray="1 0.5"
                         pointerEvents="none"
                       />
                     ))}
-                  {(tool === 'via' || viaTarget) && (
+                  {viaPreviewVisible && (
                     <g
                       data-annotation-overlay
+                      data-via-preview
                       data-route-via-preview={viaTarget ? viaTarget : undefined}
                       data-route-blocked={Boolean(routingIssue)}
                       pointerEvents="none"
@@ -4475,18 +4416,6 @@ function LayoutEditor({
                       />
                       <circle cx={cursor.x} cy={cursor.y} r={viaDrill / 2} fill="var(--canvas)" />
                     </g>
-                  )}
-                  {zoneDraft.length > 0 && (
-                    <polyline
-                      data-annotation-overlay
-                      points={pointString([...zoneDraft, cursor, zoneDraft[0]])}
-                      fill={layerColor(layer)}
-                      fillOpacity="0.12"
-                      stroke={layerColor(layer)}
-                      strokeWidth={zoneOutlineWidth}
-                      strokeDasharray="0.7 0.5"
-                      pointerEvents="none"
-                    />
                   )}
                   {gesture && (
                     <g
@@ -4588,29 +4517,13 @@ function LayoutEditor({
               />
             )}
           </LayoutCameraRender>
-          {fillSettingsOpen && !toolSettings && (
-            <CopperFillSettings
-              clearance={fillClearance}
-              active={fillAvailable}
-              onFill={fillZones}
-              onClose={() => {
-                setFillSettingsOpen(false);
-                focusCanvas();
-              }}
-              onCancelField={focusCanvas}
-            />
-          )}
           {toolSettings && (
             <aside
               id={toolSettingsId}
               className="layout-tool-settings editor-tool-sheet"
               data-tool={tool}
               aria-label={
-                tool === 'route'
-                  ? 'Routing settings'
-                  : tool === 'outline'
-                    ? 'Outline settings'
-                    : 'Via settings'
+                tool === 'route' ? 'Routing settings' : drawing ? 'Region settings' : 'Via settings'
               }
               onKeyDown={(e) => {
                 if (
@@ -4629,54 +4542,38 @@ function LayoutEditor({
               <header>
                 <strong>
                   {tool === 'route'
-                    ? 'Route tracks'
-                    : tool === 'outline'
-                      ? 'Draw board outline'
-                      : 'Through via'}
+                    ? 'Track width'
+                    : drawing
+                      ? copperLayers.includes(outlineLayer as CopperLayer)
+                        ? 'Minimum width'
+                        : 'Line width'
+                      : trackDrag
+                        ? 'Diameter'
+                        : 'Net'}
                 </strong>
               </header>
               <div className="layout-tool-settings-content">
-                {tool === 'outline' && (
-                  <>
-                    <label className="layout-field">
-                      <span>Shape</span>
-                      <Select
-                        label="Outline shape"
-                        onClosedEscape={active ? () => activate('select') : undefined}
-                        value={outlineShape}
-                        options={[
-                          { value: 'line', label: 'Lines' },
-                          { value: 'rectangle', label: 'Rectangle' },
-                        ]}
-                        onChange={(value) => {
-                          setOutline(null);
-                          setError('');
-                          setOutlineShape(value as typeof outlineShape);
-                          focusCanvas();
-                        }}
-                      />
-                    </label>
-                    <div className="layout-field">
-                      <span>Layer</span>
-                      <span className="layout-property-value">Edge.Cuts</span>
-                    </div>
-                    <NumberField
-                      label="Line width (mm)"
-                      value={outlineWidth}
-                      min={0.01}
-                      max={10}
-                      onCommit={setOutlineWidth}
-                      onCancel={focusCanvas}
-                    />
-                    <button
-                      className="dialog-button primary"
-                      aria-label="Finish board outline"
-                      disabled={!outline}
-                      onClick={() => finishOutline()}
-                    >
-                      Finish outline
-                    </button>
-                  </>
+                {drawing && (
+                  <NumberField
+                    label={
+                      copperLayers.includes(outlineLayer as CopperLayer)
+                        ? 'Minimum width (mm)'
+                        : 'Line width (mm)'
+                    }
+                    value={
+                      copperLayers.includes(outlineLayer as CopperLayer)
+                        ? regionMinThickness
+                        : outlineWidth
+                    }
+                    min={0.01}
+                    max={10}
+                    onCommit={
+                      copperLayers.includes(outlineLayer as CopperLayer)
+                        ? setRegionMinThickness
+                        : setOutlineWidth
+                    }
+                    onCancel={focusCanvas}
+                  />
                 )}
                 {tool === 'via' && !trackDrag && (
                   <label className="layout-field">
@@ -4707,7 +4604,8 @@ function LayoutEditor({
                       onCancel={focusCanvas}
                     />
                     <NumberField
-                      label="Via diameter (mm)"
+                      label="Diameter (mm)"
+                      accessibleLabel="Via diameter (mm)"
                       value={viaDiameter}
                       min={Math.max(0.2, viaDrill + 0.01)}
                       max={20}
@@ -4715,7 +4613,8 @@ function LayoutEditor({
                       onCancel={focusCanvas}
                     />
                     <NumberField
-                      label="Via drill (mm)"
+                      label="Drill (mm)"
+                      accessibleLabel="Via drill (mm)"
                       value={viaDrill}
                       min={0.1}
                       max={viaDiameter - 0.01}
@@ -4744,6 +4643,16 @@ function LayoutEditor({
                   </div>
                 ) : null}
               </div>
+              {drawing && (
+                <button
+                  className="dialog-button primary layout-region-finish"
+                  aria-label="Finish region"
+                  disabled={!outline || (outlineShape === 'polygon' && outlinePoints.length < 3)}
+                  onClick={() => finishShape()}
+                >
+                  Finish
+                </button>
+              )}
               <button
                 className="layout-tool-settings-close"
                 aria-label="Close tool settings"
@@ -4931,7 +4840,7 @@ function LayoutEditor({
                         }
                         board={pcb}
                         schematic={schematic}
-                        active={propertiesActive}
+                        active={propertiesActive && !fillBusy}
                         resetKey={propertiesShown}
                         footprint={selectedFootprint}
                         track={selectedTrack}
@@ -4946,11 +4855,16 @@ function LayoutEditor({
                         snap={snap}
                         onCommit={commit}
                         onFootprint={updateFootprint}
+                        fileId={fileId}
+                        projectSource={projectSource}
+                        getRevision={getRevision}
+                        spiceAvailable={spiceAvailable}
                         onSavePartProperties={onSavePartProperties}
                         onRequestSave={onRequestSave}
                         capabilityHost={capabilityHost}
                         onTrack={updateTrack}
                         onZone={updateZone}
+                        onFillZone={fillZone}
                         onRectangle={updateRectangle}
                         onError={setError}
                         onInspectFootprint={(id) => {
@@ -4958,55 +4872,6 @@ function LayoutEditor({
                           setSelection([{ kind: 'footprint', id }]);
                         }}
                       />
-                      {tool === 'zone' && (
-                        <>
-                          <div className="layout-property-heading">Copper zone</div>
-                          <Select
-                            active={propertiesActive}
-                            label="New zone net"
-                            value={validNet}
-                            options={netOptions}
-                            placeholder="Choose a net"
-                            onChange={setNet}
-                          />
-                          <NumberField
-                            resetKey={propertiesShown}
-                            active={propertiesActive}
-                            label="Zone clearance (mm)"
-                            value={zoneClearance}
-                            min={0}
-                            max={100}
-                            onCommit={setZoneClearance}
-                          />
-                          <div className="layout-two-fields">
-                            <NumberField
-                              resetKey={propertiesShown}
-                              active={propertiesActive}
-                              label="Zone thermal gap (mm)"
-                              value={zoneThermalGap}
-                              min={0}
-                              max={100}
-                              onCommit={setZoneThermalGap}
-                            />
-                            <NumberField
-                              resetKey={propertiesShown}
-                              active={propertiesActive}
-                              label="Zone thermal bridge (mm)"
-                              value={zoneThermalBridge}
-                              min={0.0001}
-                              max={100}
-                              onCommit={setZoneThermalBridge}
-                            />
-                          </div>
-                          <button
-                            className="secondary"
-                            disabled={zoneDraft.length < 3}
-                            onClick={finishZone}
-                          >
-                            Finish copper zone
-                          </button>
-                        </>
-                      )}
                     </div>
                   </aside>
                 )}
@@ -5054,7 +4919,7 @@ function LayoutEditor({
                     ? route
                       ? 'Routing'
                       : 'Route tracks'
-                    : tool === 'outline'
+                    : drawing
                       ? outline
                         ? outlineShape === 'rectangle'
                           ? 'Choose opposite corner'
@@ -5064,15 +4929,11 @@ function LayoutEditor({
                         ? 'Place footprint'
                         : tool === 'via'
                           ? 'Place through via'
-                          : tool === 'zone'
-                            ? zoneDraft.length
-                              ? 'Choose next corner'
-                              : 'Draw copper zone'
-                            : tool === 'annotate'
-                              ? 'Annotation mode'
-                              : tool === 'hand'
-                                ? 'Pan'
-                                : 'Interaction mode'
+                          : tool === 'annotate'
+                            ? 'Annotation mode'
+                            : tool === 'hand'
+                              ? 'Pan'
+                              : 'Interaction mode'
         }
         coordinates={<CanvasCoordinates coordinates={coordinates} />}
         controls={gridControl}

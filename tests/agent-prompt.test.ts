@@ -17,7 +17,7 @@ test('the native EMC Flyback prompt fits provider input while preserving electri
     files: await Promise.all(
       names.map(async (name) => ({
         name,
-        source: await readFile(`examples/emc-flyback/${name}`, 'utf8'),
+        source: await readFile(`recent/emc-flyback/${name}`, 'utf8'),
       })),
     ),
   });

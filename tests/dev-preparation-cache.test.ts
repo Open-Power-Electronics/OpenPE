@@ -210,8 +210,8 @@ test('a linked cache parent never redirects cache publication outside its regula
 
 test('Home solver results never enter development preparation fingerprints', async (t) => {
   const f = await fixture(t);
-  const paths = ['source.txt', 'generated.txt', 'examples'];
-  const project = path.join(f.root, 'examples/emc-flyback');
+  const paths = ['source.txt', 'generated.txt', 'examples', 'recent'];
+  const project = path.join(f.root, 'recent/emc-flyback');
   const put = async (relative: string, text: string) => {
     const target = path.join(project, relative);
     await mkdir(path.dirname(target), { recursive: true });
@@ -255,7 +255,7 @@ test('pinned original SPICE source directories remain preparation inputs', async
 
 test('first-time models and circuits outputs remain cacheable while native footprint inputs invalidate preparation', async (t) => {
   const f = await fixture(t);
-  const project = path.join(f.root, 'examples/emc-flyback');
+  const project = path.join(f.root, 'recent/emc-flyback');
   const model = path.join(project, 'models/pinned.step');
   const circuit = path.join(project, 'circuits/pinned.lib');
   const footprint = path.join(project, 'footprints/custom.pretty/custom.kicad_mod');

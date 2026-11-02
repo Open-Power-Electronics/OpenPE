@@ -2,6 +2,7 @@ import Clipper from 'clipper-lib';
 import type { Point } from './circuit';
 import type { BoardLine, BoardZone, Footprint, Pad, PCB } from './pcb';
 import { pcbArc, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
+import { invalidatePCBFill } from './pcb';
 import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pcb-layout';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
@@ -228,6 +229,30 @@ export const polygonPath = (polygons: Polygon[]) =>
     .join(' ');
 
 export const defaultCopperFillClearance = 0.25;
+
+/** Enable and fill one board zone as one edit, retaining other zones' saved state.
+ * Changed zone participation invalidates affected fills before calculation.
+ */
+export function fillCopperZone(
+  board: PCB,
+  zoneId: string,
+  clearance = defaultCopperFillClearance,
+): PCB {
+  const zone = board.zones.find((item) => item.id === zoneId);
+  if (!zone || zone.keepout || !zone.layer.endsWith('.Cu'))
+    throw new Error('Select an existing board copper zone to fill.');
+  const enabled = invalidatePCBFill(board, {
+    ...board,
+    zones: board.zones.map((item) =>
+      item.id === zoneId
+        ? { ...item, fillEnabled: true, clearance: Math.max(item.clearance, clearance) }
+        : item,
+    ),
+  });
+  const filled = fillCopperZones(enabled, clearance);
+  const result = filled.zones.find((item) => item.id === zoneId)!;
+  return { ...enabled, zones: enabled.zones.map((item) => (item.id === zoneId ? result : item)) };
+}
 
 /** Bounded manual fill calculation. Persist only after the entire operation succeeds. */
 export function copperPolygons(

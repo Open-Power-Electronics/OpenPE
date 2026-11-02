@@ -256,7 +256,9 @@ var home_manifest_default = {
       title: "LM2596 Buck",
       description: "Buck converter \xB7 TO-220-5.",
       topology: "Buck",
-      package: "TO-220-5"
+      package: "TO-220-5",
+      directory: "lm2596-to220-5-buck",
+      root: "examples"
     },
     {
       id: "reference-tps61046-bga6-boost",
@@ -264,7 +266,9 @@ var home_manifest_default = {
       title: "TPS61046 Boost",
       description: "Boost converter \xB7 BGA-6.",
       topology: "Boost",
-      package: "BGA-6"
+      package: "BGA-6",
+      directory: "tps61046-bga6-boost",
+      root: "examples"
     },
     {
       id: "reference-lm2735-msop8-sepic",
@@ -272,7 +276,9 @@ var home_manifest_default = {
       title: "LM2735 SEPIC",
       description: "SEPIC converter \xB7 MSOP-8.",
       topology: "SEPIC",
-      package: "MSOP-8"
+      package: "MSOP-8",
+      directory: "lm2735-msop8-sepic",
+      root: "examples"
     },
     {
       id: "reference-lm25017-wson8-flybuck",
@@ -280,7 +286,9 @@ var home_manifest_default = {
       title: "LM25017 Fly-Buck",
       description: "Fly-Buck converter \xB7 WSON-8.",
       topology: "Fly-Buck",
-      package: "WSON-8"
+      package: "WSON-8",
+      directory: "lm25017-wson8-flybuck",
+      root: "examples"
     },
     {
       id: "reference-lm5001-soic8-boost",
@@ -288,7 +296,9 @@ var home_manifest_default = {
       title: "LM5001 Boost",
       description: "Boost converter \xB7 SOIC-8.",
       topology: "Boost",
-      package: "SOIC-8"
+      package: "SOIC-8",
+      directory: "lm5001-soic8-boost",
+      root: "examples"
     },
     {
       id: "reference-lm27761-wson8-pump",
@@ -296,7 +306,9 @@ var home_manifest_default = {
       title: "LM27761 Charge Pump",
       description: "Charge pump converter \xB7 WSON-8.",
       topology: "Charge pump",
-      package: "WSON-8"
+      package: "WSON-8",
+      directory: "lm27761-wson8-pump",
+      root: "examples"
     },
     {
       id: "reference-lmr12010-sot236-buck",
@@ -304,7 +316,9 @@ var home_manifest_default = {
       title: "LMR12010 Buck",
       description: "Buck converter \xB7 SOT-23-6.",
       topology: "Buck",
-      package: "SOT-23-6"
+      package: "SOT-23-6",
+      directory: "lmr12010-sot236-buck",
+      root: "examples"
     },
     {
       id: "reference-lmr70503-bga8-buckboost",
@@ -312,7 +326,9 @@ var home_manifest_default = {
       title: "LMR70503 Buck-Boost",
       description: "Buck-Boost converter \xB7 BGA-8.",
       topology: "Buck-Boost",
-      package: "BGA-8"
+      package: "BGA-8",
+      directory: "lmr70503-bga8-buckboost",
+      root: "examples"
     },
     {
       id: "reference-lm2598-to220-7-buck",
@@ -320,7 +336,9 @@ var home_manifest_default = {
       title: "LM2598 Buck",
       description: "Buck converter \xB7 TO-220-7.",
       topology: "Buck",
-      package: "TO-220-7"
+      package: "TO-220-7",
+      directory: "lm2598-to220-7-buck",
+      root: "examples"
     }
   ],
   recent: [
@@ -330,7 +348,9 @@ var home_manifest_default = {
       title: "EMC Flyback",
       description: "Isolated flyback \xB7 UC3845B \xB7 EMC demo.",
       topology: "Flyback",
-      package: "SOIC-8"
+      package: "SOIC-8",
+      directory: "emc-flyback",
+      root: "recent"
     }
   ]
 };

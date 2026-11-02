@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { readNativeProject } from './source-editor-test-helpers.mjs';
+import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
 // Real workspace, recovered proposal and mocked services; no providers or Electron.
 const { createPart, emptyCircuit, pinPositions, uid } = await tsImport(
@@ -14,6 +15,7 @@ const { createProject, parseProject, serializeProject } = await tsImport(
   '../lib/project.ts',
   import.meta.url,
 );
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const d = emptyCircuit();
 d.parts.push(createPart(d, 'R', 25.4, 25.4), createPart(d, 'C', 76.2, 25.4));
 for (const part of d.parts) part.rotation = 180;
@@ -29,6 +31,7 @@ project.extensions.note = { retained: true };
 const source = serializeProject(project);
 let baseline;
 const proposal = 'Remove R1.\n\n```openpe\n[{"type":"removePart","ref":"R1"}]\n```';
+const plugins = bundledWorkbenchCatalog();
 let state = {
   version: 2,
   documents: [
@@ -37,7 +40,7 @@ let state = {
       source,
       sourceDraft: null,
       dirty: false,
-      filename: null,
+      filename: 'delete.kicad_pro',
       sessions: [
         {
           id: 'delete-session',
@@ -49,10 +52,7 @@ let state = {
     },
   ],
   activeDocumentId: '00000000-0000-4000-8000-000000000001',
-  provider: 'codex',
-  effort: 'low',
-  approvalMode: 'review',
-  models: {},
+  ...defaultAgentPreferences,
 };
 const bundle = await build({
   stdin: {
@@ -77,10 +77,11 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   page.setDefaultTimeout(10000);
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.stack ?? error.message));
   await page.addInitScript(() => {
     window.openpe = {
       titleBarOverlay: false,
+      listExamples: async () => ({ entries: [], warnings: [] }),
       writeWorkspaceRecovery: async (content) => {
         await fetch('http://localhost/api/state', {
           method: content === null ? 'DELETE' : 'POST',
@@ -91,6 +92,7 @@ try {
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
       releaseFile: async () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       setDirty: async () => {},
       onCloseRequested: () => () => {},
     };
@@ -106,7 +108,7 @@ try {
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });
-    if (url.pathname === '/api/workbench-plugins') return route.fulfill({ json: { plugins: [] } });
+    if (url.pathname === '/api/workbench-plugins') return route.fulfill({ json: plugins });
     if (/^\/(brand|agents|cursors)\/[\w.-]+\.(svg|png)$/.test(url.pathname))
       return route.fulfill({
         contentType: url.pathname.endsWith('.svg') ? 'image/svg+xml' : 'image/png',
@@ -121,13 +123,21 @@ try {
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const button = (name) => page.getByRole('button', { name, exact: true });
   const canvas = page.getByTestId('schematic-canvas');
-  await canvas.waitFor();
+  await canvas.waitFor().catch(async (error) => {
+    console.error(errors, await page.locator('body').innerText());
+    await page.screenshot({ path: 'test-results/schematic-delete/startup-failure.png' });
+    throw error;
+  });
   await page.waitForFunction(
     () => document.querySelector('[data-testid="schematic-canvas"]')?.viewBox.baseVal.x !== 0,
   );
   async function currentProject() {
     await button('Source').click();
-    const current = await readNativeProject(page);
+    const current = await readNativeProject(page).catch(async (error) => {
+      console.error(errors, await page.locator('body').innerText());
+      await page.screenshot({ path: 'test-results/schematic-delete/source-failure.png' });
+      throw error;
+    });
     // Private provenance is asserted at the explicit recovery IPC boundary.
     assert.deepEqual(parseProject(state.documents[0].source).extensions, project.extensions);
     await button('Schematic').click();
@@ -135,6 +145,38 @@ try {
     return current;
   }
   baseline ??= await currentProject();
+  async function checkDeleteFooter(name) {
+    const inspector = page.getByRole('complementary', { name: 'Object properties', exact: true });
+    await inspector.getByRole('button', { name: 'Delete object', exact: true }).waitFor();
+    assert.equal(
+      await inspector.evaluate((el) => {
+        const footer = el.querySelector('.inspector-footer').getBoundingClientRect();
+        const action = el.querySelector('.property-delete-action').getBoundingClientRect();
+        const body = el.querySelector('.inspector-body').getBoundingClientRect();
+        const panel = el.getBoundingClientRect();
+        return (
+          Math.abs(panel.bottom - footer.bottom) < 1 &&
+          Math.abs(footer.right - action.right - 12) < 1 &&
+          Math.abs(footer.bottom - action.bottom - 6) < 1 &&
+          body.bottom <= footer.top + 1
+        );
+      }),
+      true,
+      'Deletion stays at the panel bottom right, outside the scrolling fields.',
+    );
+    const before = await inspector
+      .getByRole('button', { name: 'Delete object', exact: true })
+      .boundingBox();
+    await inspector.locator('.inspector-body').evaluate((el) => (el.scrollTop = el.scrollHeight));
+    assert.deepEqual(
+      await inspector.getByRole('button', { name: 'Delete object', exact: true }).boundingBox(),
+      before,
+      'Scrolling fields retains the deletion button position.',
+    );
+    await page.screenshot({ path: 'test-results/schematic-delete/' + name + '-footer.png' });
+  }
+  await page.getByTestId('label-LEAD').click();
+  await checkDeleteFooter('label');
   await page.getByTestId('part-R1').click();
   await page.keyboard.press('Delete');
   const manual = await currentProject();
@@ -156,6 +198,7 @@ try {
   assert.deepEqual(await currentProject(), baseline);
 
   await page.getByTestId('part-R1').click();
+  await checkDeleteFooter('component');
   await button('Delete object').click();
   assert.deepEqual(await currentProject(), manual, 'Properties deletion uses the same cleanup');
   await button('Undo').click();

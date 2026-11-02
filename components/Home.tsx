@@ -159,11 +159,6 @@ export default function Home({
             <section key={section.id} className="home-examples" aria-labelledby={section.id}>
               <div className="home-section-heading">
                 <h2 id={section.id}>{section.title}</h2>
-                {section.id === 'example-heading' && (
-                  <button className="secondary" onClick={exampleList.refresh}>
-                    Refresh examples
-                  </button>
-                )}
               </div>
               <div className="home-example-list">
                 {section.examples.map((example) => (

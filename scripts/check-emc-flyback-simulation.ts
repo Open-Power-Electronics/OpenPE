@@ -159,7 +159,7 @@ async function measureFullOutput(file: string, current: SpiceDeck): Promise<Full
 
 // Offline, real bundled ngspice check; never invokes Electron or fetches models.
 const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-const nativePath = path.resolve('examples/emc-flyback/emc-flyback.kicad_pro');
+const nativePath = path.resolve('recent/emc-flyback/emc-flyback.kicad_pro');
 const native = await readNativeProject(nativePath);
 const project = projectFromNativeFiles(native);
 const snapshot = serializeProject(project);

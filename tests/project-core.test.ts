@@ -2,7 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ProjectCore, coreCommandDefinitions, coreQueryDefinitions } from '../core/project-core';
 import { createPart, emptyCircuit, pinPositions, uid } from '../lib/circuit';
-import { createProject, serializeProject, parseProject } from '../lib/project';
+import {
+  createProject,
+  serializeProject,
+  parseProject,
+  projectFromNativeFiles,
+} from '../lib/project';
 import { updatePCBFromSchematic } from '../lib/pcb-sync';
 import { PCBProjectSync } from '../lib/pcb-project-sync';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
@@ -1124,6 +1129,117 @@ test('Layout fill commits effective clearance and contours together, with undo a
   assert.equal(core.getSnapshot().source, filled.source);
   core.updateSource('pending');
   assert.throws(() => core.execute('layout.fill', { boardId, clearance: 0.8 }), /Apply the Source/);
+  assert.equal(core.getSnapshot().source, filled.source);
+});
+
+test('drawing an inactive zone through Core or renderer retains existing native pours through undo and reopening', () => {
+  for (const origin of ['command', 'renderer']) {
+    const { project, boardId, netId } = layoutFixture();
+    const core = new ProjectCore(project);
+    const { zoneId: existingId } = core.execute('layout.zone', {
+      boardId,
+      netId,
+      layer: 'F.Cu',
+      outline: [
+        { x: -15, y: -15 },
+        { x: 15, y: -15 },
+        { x: 15, y: 15 },
+        { x: -15, y: 15 },
+      ],
+    }) as { zoneId: string };
+    core.execute('layout.fill', { boardId, zoneId: existingId });
+    const before = core.getSnapshot();
+    const saved = before.project!.pcb!.zones.find((zone) => zone.id === existingId)!;
+    assert.ok(saved.filledPolygons!.length);
+    const outline = [
+      { x: -5, y: -5 },
+      { x: 5, y: -5 },
+      { x: 5, y: 5 },
+      { x: -5, y: 5 },
+    ];
+    if (origin === 'command')
+      core.execute('layout.zone', {
+        boardId,
+        netId: null,
+        layer: 'F.Cu',
+        outline,
+        fillEnabled: false,
+      });
+    else {
+      const inactive = { ...saved, id: uid(), netId: null, outline, fillEnabled: false };
+      delete inactive.filledPolygons;
+      core.replaceBoard({
+        ...before.project!.pcb!,
+        zones: [...before.project!.pcb!.zones, inactive],
+      });
+    }
+    const after = core.getSnapshot();
+    assert.equal(after.undoDepth, before.undoDepth + 1);
+    assert.deepEqual(
+      after.project!.pcb!.zones.find((zone) => zone.id === existingId),
+      saved,
+    );
+    const reopened = projectFromNativeFiles(core.getNativeFiles());
+    assert.deepEqual(
+      reopened.pcb!.zones.find((zone) => zone.id === existingId)!.filledPolygons,
+      saved.filledPolygons,
+    );
+    const inactive = reopened.pcb!.zones.find((zone) => zone.id !== existingId)!;
+    assert.equal(inactive.fillEnabled, false);
+    assert.equal(inactive.netId, null);
+    core.undo();
+    assert.equal(core.getSnapshot().source, before.source);
+    core.redo();
+    assert.equal(core.getSnapshot().source, after.source);
+  }
+});
+
+test('selected zone fill is one native, undoable transaction behind Source barriers', () => {
+  const { project, boardId, netId } = layoutFixture();
+  const zoneId = uid();
+  project.pcb!.zones = [
+    {
+      id: zoneId,
+      netId,
+      layer: 'F.Cu',
+      outline: [
+        { x: -10, y: -10 },
+        { x: 10, y: -10 },
+        { x: 10, y: 10 },
+        { x: -10, y: 10 },
+      ],
+      clearance: 0.4,
+      minThickness: 0.1,
+      thermalGap: 0.3,
+      thermalBridge: 0.3,
+      fillEnabled: false,
+    },
+  ];
+  const core = new ProjectCore(project);
+  const before = core.getSnapshot().source;
+  assert.throws(
+    () => core.execute('layout.fill', { boardId, zoneId: uid() }),
+    /existing board copper zone/,
+  );
+  core.execute('layout.fill', { boardId, zoneId });
+  const filled = core.getSnapshot();
+  assert.equal(filled.undoDepth, 1);
+  assert.equal(filled.project!.pcb!.zones[0].fillEnabled, true);
+  assert.equal(filled.project!.pcb!.zones[0].clearance, 0.4);
+  assert.ok(filled.project!.pcb!.zones[0].filledPolygons!.length);
+  const reopened = projectFromNativeFiles(core.getNativeFiles());
+  const zoneNames = (board: NonNullable<typeof project.pcb>) =>
+    board.zones.map(({ netId, ...zone }) => ({
+      ...zone,
+      net: board.nets.find((net) => net.id === netId)?.name ?? null,
+    }));
+  assert.deepEqual(zoneNames(reopened.pcb!), zoneNames(filled.project!.pcb!));
+  core.undo();
+  assert.equal(core.getSnapshot().source, before);
+  core.redo();
+  assert.equal(core.getSnapshot().source, filled.source);
+  core.updateSource('pending');
+  assert.throws(() => core.execute('layout.fill', { boardId, zoneId }), /Apply the Source/);
   assert.equal(core.getSnapshot().source, filled.source);
 });
 

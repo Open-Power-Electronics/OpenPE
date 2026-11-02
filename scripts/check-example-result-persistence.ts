@@ -48,7 +48,7 @@ for (const entry of entries) {
     30000,
   );
   try {
-    const filename = path.resolve('examples', entry.file, `${entry.file}.kicad_pro`);
+    const filename = path.resolve(entry.root, entry.directory, `${entry.file}.kicad_pro`);
     const native = await readNativeProject(filename);
     const project = projectFromNativeFiles(native);
     const source = serializeProject(project);

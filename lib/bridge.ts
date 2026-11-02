@@ -40,6 +40,7 @@ declare global {
       releaseFile(fileId: string): Promise<void>;
       revealFile(fileId: string): Promise<{ status: 'revealed' | 'needs-save' }>;
       projectDirectory(fileId: string): Promise<ProjectDirectoryListing>;
+      chooseComponentModel(fileId: string): Promise<{ path: string } | null>;
       chooseSpiceModel(
         fileId: string,
         currentLibrary?: string,

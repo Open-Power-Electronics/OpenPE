@@ -177,7 +177,7 @@ test('unfilled zone outlines never become thermal copper and saved fill holes re
   const pour = zone();
   pcb.zones = [pour];
   const before = structuredClone(pcb);
-  assert.throws(() => prepareThermalModel(pcb, scenario(pcb)), /Fill copper zones in Layout/);
+  assert.throws(() => prepareThermalModel(pcb, scenario(pcb)), /Fill copper zones from Layout Properties/);
   assert.deepEqual(pcb, before);
   pour.fillEnabled = false;
   let model = prepareThermalModel(pcb, scenario(pcb));

@@ -44,6 +44,82 @@ const footprint = (id: string, x = 0, y = 0): Footprint => ({
 });
 const ids = (selection: ReturnType<typeof selectPCBRectangle>) => selection.map((item) => item.id);
 
+test('closed region interiors are optional fallback picks, respect holes/layers and lose to precise copper', () => {
+  const board = createEmptyPCB();
+  const ring = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ];
+  board.graphics = [
+    {
+      id: 'region',
+      kind: 'polygon',
+      layer: 'F.SilkS',
+      width: 0.1,
+      fill: false,
+      start: ring[0],
+      points: ring.slice(1, -1),
+      end: ring.at(-1)!,
+    },
+  ];
+  const layers = defaultPCBDisplay();
+  const at = { x: 5, y: 5 };
+  assert.deepEqual(selectPCBPoint(board, layers, filters, at, 0.1), []);
+  const options = { includeRegionInteriors: true };
+  const candidates = selectPCBPoint(board, layers, filters, at, 0.1, options).map((selection) => ({
+    selection,
+  }));
+  assert.equal(
+    choosePCBPointCandidate(board, layers, candidates, at, { tolerance: 0.1, ...options })!
+      .selection.id,
+    'region',
+  );
+  assert.deepEqual(
+    selectPCBPoint(board, { ...layers, 'F.SilkS': false }, filters, at, 0.1, options),
+    [],
+  );
+  board.zones = [
+    {
+      id: 'zone',
+      layer: 'F.Cu',
+      netId: null,
+      outline: ring,
+      holes: [
+        [
+          { x: 4, y: 4 },
+          { x: 6, y: 4 },
+          { x: 6, y: 6 },
+          { x: 4, y: 6 },
+        ],
+      ],
+      clearance: 0.25,
+      minThickness: 0.2,
+      thermalGap: 0.3,
+      thermalBridge: 0.3,
+      fillEnabled: false,
+    },
+  ];
+  assert.equal(
+    selectPCBPoint(board, layers, filters, at, 0.1, options).some((item) => item.id === 'zone'),
+    false,
+  );
+  board.tracks = [
+    {
+      id: 'precise',
+      layer: 'F.Cu',
+      netId: '',
+      width: 0.4,
+      start: { x: 2, y: 5 },
+      end: { x: 8, y: 5 },
+    },
+  ];
+  assert.deepEqual(selectPCBPoint(board, layers, filters, at, 0.1, options), [
+    { kind: 'track', id: 'precise' },
+  ]);
+});
+
 test('physical paint order resolves exact copper ties independently of record and candidate order', () => {
   const board = createEmptyPCB();
   board.layers = ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'];

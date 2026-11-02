@@ -1,4 +1,8 @@
-import { setLayoutVisibility, toggleLayoutVisualization } from './visualization-test-helpers.mjs';
+import {
+  setLayoutVisibility,
+  toggleLayoutVisualization,
+  selectLayoutLayer,
+} from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -333,22 +337,21 @@ try {
           'Footprint edges use the display floor while preserving wider native strokes.',
         );
       await clean();
-      for (const shape of ['Lines', 'Rectangle']) {
-        await button('Draw board outline').click();
-        await page.getByRole('combobox', { name: 'Outline shape', exact: true }).click();
-        await page.getByRole('option', { name: shape, exact: true }).click();
+      for (const shape of ['polygon', 'rectangle']) {
+        await selectLayoutLayer(page, 'Edge.Cuts');
+        await button(`Draw ${shape}`).click();
         const width = page.getByRole('spinbutton', { name: 'Line width (mm)', exact: true });
         await width.fill('0.01');
         await width.press('Enter');
         await point({ x: 10, y: 15 }, true);
         await point({ x: 18, y: 20 });
         assert.equal(
-          await canvas.locator('[data-outline-preview]').getAttribute('stroke-width'),
+          await canvas.locator('[data-shape-preview]').getAttribute('stroke-width'),
           '0.05',
           `${shape} previews use the same thin display floor.`,
         );
         await canvas.press('Escape');
-        assert.equal(await canvas.locator('[data-outline-preview]').count(), 0);
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 0);
         await clean();
       }
     },

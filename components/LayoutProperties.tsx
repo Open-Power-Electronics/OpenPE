@@ -4,31 +4,33 @@ import PropertiesEmptyState from './PropertiesEmptyState';
 import type { Circuit } from '@/lib/circuit';
 import { isOwnedProjectNode } from '@/lib/immutable-project';
 import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
-import { flipPCBFootprint, padPosition, type PCBBounds } from '@/lib/pcb-layout';
+import { padPosition, type PCBBounds } from '@/lib/pcb-layout';
 import { padCopperLayers } from '@/lib/pcb-connectivity';
 import { pcbPadShapeLabel, pcbPadTypeLabel } from '@/lib/pcb-display';
 import { setPCBPadProperties, setPCBTrackEndpoints } from '@/lib/pcb-properties';
 import type { PCBRectangle } from '@/lib/pcb-outline-resize';
 import type { CapabilityHost } from '@/api/capabilities';
 import type { FootprintDetail } from './LibraryChooser';
-import PartIdentity from './PartIdentity';
-import FootprintIdentity from './FootprintIdentity';
-import PartProperties from './PartProperties';
+import ComponentProperties from './ComponentProperties';
 import { PropertySelect as Select } from './LayoutPropertyFields';
 import LayoutGraphicProperties from './LayoutGraphicProperties';
 import {
   NumberField,
   OptionalNumberField,
-  TextField,
   PropertyRow,
   PropertySection,
   PropertyGrid,
   PropertyToggle,
   PropertyVertices,
+  PropertyDetails,
 } from './LayoutPropertyFields';
 
 type Props = {
   actions?: ReactNode;
+  spiceAvailable?: boolean;
+  fileId?: string;
+  projectSource?: string;
+  getRevision?: () => number;
   board: PCB;
   schematic: Circuit;
   active: boolean;
@@ -63,6 +65,7 @@ type Props = {
     locked?: boolean;
   }) => boolean;
   onZone: (zone: PCB['zones'][number]) => boolean;
+  onFillZone?: (zoneId: string) => void;
   onRectangle: (bounds: PCBBounds) => boolean;
   onError: (message: string) => void;
   onInspectFootprint: (id: string) => void;
@@ -92,10 +95,15 @@ export default function LayoutProperties({
   onSavePartProperties,
   onTrack,
   onZone,
+  onFillZone,
   onRectangle,
   onError,
   onInspectFootprint,
   actions,
+  spiceAvailable,
+  fileId,
+  projectSource,
+  getRevision,
 }: Props) {
   const field = { active, resetKey };
   const ownedNets = isOwnedProjectNode(board.nets) ? board.nets : null;
@@ -115,8 +123,6 @@ export default function LayoutProperties({
     retainedLayerOptions ?? board.layers.map((value) => ({ value, label: value }));
   const netName = (id: string | null) =>
     board.nets.find((net) => net.id === id)?.name ?? 'Unconnected';
-  const symbolId = footprint?.symbolId;
-  const part = symbolId ? schematic.parts.find((part) => part.id === symbolId) : undefined;
   const attempt = (create: () => PCB) => {
     try {
       return onCommit(create());
@@ -169,7 +175,7 @@ export default function LayoutProperties({
     <>
       {pad && padOwner ? (
         <>
-          <PropertySection title="Pad">
+          <PropertySection title={`Pad ${pad.number || '—'}`}>
             <PropertyRow
               label="Footprint"
               value={
@@ -178,16 +184,11 @@ export default function LayoutProperties({
                 padOwner.libraryId
               }
             />
-            <PropertyRow label="Pad number" value={pad.number || '—'} />
             <PropertyRow label="Type" value={pcbPadTypeLabel(pad.type)} />
             <PropertyRow
               label="Net"
               value={netName(pad.netId)}
               description="Pad nets follow the schematic pin connections."
-            />
-            <PropertyRow
-              label="Copper layers"
-              value={padCopperLayers(board, padOwner, pad).join(', ') || 'None'}
             />
             <button
               className="secondary layout-owner-action"
@@ -198,11 +199,7 @@ export default function LayoutProperties({
             </button>
           </PropertySection>
           <PropertySection title="Geometry">
-            <PropertyRow
-              label="Board position (mm)"
-              value={`${Number(padPosition(padOwner, pad).x.toFixed(4))} / ${Number(padPosition(padOwner, pad).y.toFixed(4))}`}
-            />
-            <PropertyGrid columns={3}>
+            <PropertyGrid>
               <NumberField
                 {...field}
                 label="Pad X (mm)"
@@ -215,15 +212,15 @@ export default function LayoutProperties({
                 value={pad.y}
                 onCommit={(y) => padChange({ y })}
               />
-              <NumberField
-                {...field}
-                label="Pad rotation (°)"
-                value={pad.rotation}
-                min={-360}
-                max={360}
-                onCommit={(rotation) => padChange({ rotation })}
-              />
             </PropertyGrid>
+            <NumberField
+              {...field}
+              label="Pad rotation (°)"
+              value={pad.rotation}
+              min={-360}
+              max={360}
+              onCommit={(rotation) => padChange({ rotation })}
+            />
             <Select
               active={active}
               label="Pad shape"
@@ -255,7 +252,7 @@ export default function LayoutProperties({
               )}
             </PropertyGrid>
             {pad.shape === 'roundrect' && (
-              <>
+              <PropertyDetails title="Corners">
                 <NumberField
                   {...field}
                   label="Corner radius ratio"
@@ -288,7 +285,7 @@ export default function LayoutProperties({
                     />
                   ),
                 )}
-              </>
+              </PropertyDetails>
             )}
             {pad.type !== 'smd' && (
               <>
@@ -300,24 +297,30 @@ export default function LayoutProperties({
                   max={pad.type === 'thru_hole' ? Math.min(pad.size.x, pad.size.y) - 0.0001 : 1000}
                   onCommit={(drill) => padChange({ drill })}
                 />
-                <PropertyGrid>
-                  <NumberField
-                    {...field}
-                    label="Drill offset X (mm)"
-                    value={pad.drillOffset?.x ?? 0}
-                    onCommit={(x) => padChange({ drillOffset: { x, y: pad.drillOffset?.y ?? 0 } })}
-                  />
-                  <NumberField
-                    {...field}
-                    label="Drill offset Y (mm)"
-                    value={pad.drillOffset?.y ?? 0}
-                    onCommit={(y) => padChange({ drillOffset: { x: pad.drillOffset?.x ?? 0, y } })}
-                  />
-                </PropertyGrid>
+                <PropertyDetails title="Drill offset">
+                  <PropertyGrid>
+                    <NumberField
+                      {...field}
+                      label="Drill offset X (mm)"
+                      value={pad.drillOffset?.x ?? 0}
+                      onCommit={(x) =>
+                        padChange({ drillOffset: { x, y: pad.drillOffset?.y ?? 0 } })
+                      }
+                    />
+                    <NumberField
+                      {...field}
+                      label="Drill offset Y (mm)"
+                      value={pad.drillOffset?.y ?? 0}
+                      onCommit={(y) =>
+                        padChange({ drillOffset: { x: pad.drillOffset?.x ?? 0, y } })
+                      }
+                    />
+                  </PropertyGrid>
+                </PropertyDetails>
               </>
             )}
           </PropertySection>
-          <PropertySection title="Fabrication">
+          <PropertyDetails title="Fabrication">
             <OptionalNumberField
               {...field}
               label="Solder mask margin (mm)"
@@ -376,144 +379,88 @@ export default function LayoutProperties({
                 }
               />
             )}
-          </PropertySection>
+          </PropertyDetails>
+          <PropertyDetails title="Pad details">
+            <PropertyRow
+              label="Copper layers"
+              value={padCopperLayers(board, padOwner, pad).join(', ') || 'None'}
+            />
+            <PropertyRow
+              label="Board X / Y (mm)"
+              value={`${Number(padPosition(padOwner, pad).x.toFixed(4))} / ${Number(padPosition(padOwner, pad).y.toFixed(4))}`}
+            />
+          </PropertyDetails>
         </>
       ) : (
         <>
           {footprint && (
-            <>
-              {part ? (
-                <>
-                  <PartIdentity
-                    part={part}
-                    library={schematic.libraries[part.libId]}
-                    actions={actions}
-                  />
-                  <PartProperties
-                    part={part}
-                    active={active && !!onSavePartProperties}
-                    capabilityHost={capabilityHost}
-                    onRequestSave={onRequestSave}
-                    onSave={(ref, value, fields, footprintDetail) =>
-                      onSavePartProperties?.(
-                        schematic,
-                        part.id,
-                        ref,
-                        value,
-                        fields,
-                        footprintDetail,
-                      ) ?? false
-                    }
-                  />
-                </>
-              ) : (
-                <>
-                  <FootprintIdentity footprint={footprint} actions={actions} />
-                  <div className="layout-property-section">
-                    <div className="property-primary layout-property-primary">
-                      <TextField
-                        {...field}
-                        label="Reference"
-                        value={footprint.reference ?? ''}
-                        onCommit={(reference) => onFootprint({ ...footprint, reference })}
-                      />
-                      <TextField
-                        {...field}
-                        label="Value"
-                        value={footprint.value ?? ''}
-                        onCommit={(value) => onFootprint({ ...footprint, value })}
-                      />
-                    </div>
-                    <PropertyRow
-                      label="Library"
-                      value={footprint.libraryId}
-                      description={footprint.libraryId}
-                    />
-                  </div>
-                </>
-              )}
-              <div className="layout-footprint-geometry component-geometry">
-                <PropertyGrid columns={3}>
-                  <NumberField
-                    {...field}
-                    label="X (mm)"
-                    value={footprint.x}
-                    normalize={snap}
-                    onCommit={(x) => onFootprint({ ...footprint, x })}
-                  />
-                  <NumberField
-                    {...field}
-                    label="Y (mm)"
-                    value={footprint.y}
-                    normalize={snap}
-                    onCommit={(y) => onFootprint({ ...footprint, y })}
-                  />
-                  <NumberField
-                    {...field}
-                    label="Rotation (°)"
-                    value={footprint.rotation}
-                    min={-360}
-                    max={360}
-                    onCommit={(rotation) => onFootprint({ ...footprint, rotation })}
-                  />
-                </PropertyGrid>
-                <Select
-                  active={active}
-                  label="Footprint side"
-                  value={footprint.side}
-                  options={[
-                    { value: 'front', label: 'Front' },
-                    { value: 'back', label: 'Back' },
-                  ]}
-                  onChange={(side) =>
-                    side === footprint.side || onFootprint(flipPCBFootprint(footprint))
-                  }
-                />
-              </div>
-            </>
+            <ComponentProperties
+              footprint={footprint}
+              schematic={schematic}
+              active={active}
+              resetKey={resetKey}
+              snap={snap}
+              onFootprint={onFootprint}
+              capabilityHost={capabilityHost}
+              onRequestSave={onRequestSave}
+              onSavePartProperties={onSavePartProperties}
+              actions={actions}
+              fileId={fileId}
+              projectSource={projectSource}
+              getRevision={getRevision}
+              spiceAvailable={spiceAvailable}
+            />
           )}
           {track && (
             <>
-              <PropertySection title="Track">
-                <PropertyToggle
-                  label="Locked track"
-                  active={active}
-                  checked={Boolean(track.locked)}
-                  onChange={(locked) => onTrack({ locked })}
-                />
-                <Select
-                  active={active}
-                  label="Track net"
-                  disabled={track.locked}
-                  value={track.netId}
-                  options={netOptions}
-                  onChange={(netId) => onTrack({ netId })}
-                />
-                <Select
-                  active={active}
-                  label="Track layer"
-                  disabled={track.locked}
-                  value={track.layer}
-                  options={layerOptions}
-                  onChange={(layer) => onTrack({ layer: layer as PCB['layers'][number] })}
-                />
+              <PropertySection
+                title="Track"
+                actions={
+                  <PropertyToggle
+                    label="Locked track"
+                    active={active}
+                    checked={Boolean(track.locked)}
+                    onChange={(locked) => onTrack({ locked })}
+                  />
+                }
+              >
+                <PropertyGrid>
+                  <Select
+                    active={active}
+                    label="Track net"
+                    disabled={track.locked}
+                    value={track.netId}
+                    options={netOptions}
+                    onChange={(netId) => onTrack({ netId })}
+                  />
+                  <Select
+                    active={active}
+                    label="Track layer"
+                    disabled={track.locked}
+                    value={track.layer}
+                    options={layerOptions}
+                    onChange={(layer) => onTrack({ layer: layer as PCB['layers'][number] })}
+                  />
+                </PropertyGrid>
               </PropertySection>
               <PropertySection title="Geometry">
-                {(['start', 'end'] as const).map((end) => (
-                  <PropertyGrid key={end}>
-                    {(['x', 'y'] as const).map((axis) => (
-                      <NumberField
-                        {...field}
-                        key={`${end}-${axis}`}
-                        disabled={track.locked}
-                        label={`${end === 'start' ? 'Start' : 'End'} ${axis.toUpperCase()} (mm)`}
-                        value={track[end][axis]}
-                        normalize={snap}
-                        onCommit={(value) => endpoint(end, axis, value)}
-                      />
-                    ))}
-                  </PropertyGrid>
-                ))}
+                <PropertyDetails title="Endpoints">
+                  {(['start', 'end'] as const).map((end) => (
+                    <PropertyGrid key={end}>
+                      {(['x', 'y'] as const).map((axis) => (
+                        <NumberField
+                          {...field}
+                          key={`${end}-${axis}`}
+                          disabled={track.locked}
+                          label={`${end === 'start' ? 'Start' : 'End'} ${axis.toUpperCase()} (mm)`}
+                          value={track[end][axis]}
+                          normalize={snap}
+                          onCommit={(value) => endpoint(end, axis, value)}
+                        />
+                      ))}
+                    </PropertyGrid>
+                  ))}
+                </PropertyDetails>
                 <NumberField
                   {...field}
                   label="Width (mm)"
@@ -582,6 +529,148 @@ export default function LayoutProperties({
                 </PropertyGrid>
               </PropertySection>
             </>
+          )}
+          {zone && (
+            <PropertySection
+              title={zone.keepout ? 'Rule area' : 'Copper zone'}
+              actions={
+                !zone.keepout && (
+                  <PropertyToggle
+                    label="Filled"
+                    active={active}
+                    checked={zone.fillEnabled !== false && zone.filledPolygons !== undefined}
+                    disabled={!onFillZone}
+                    onChange={(filled) => {
+                      if (filled) onFillZone?.(zone.id);
+                      else onZone({ ...zone, fillEnabled: false });
+                    }}
+                  />
+                )
+              }
+            >
+              <PropertyGrid>
+                {!zone.keepout && (
+                  <Select
+                    active={active}
+                    label="Zone net"
+                    value={zone.netId ?? ''}
+                    options={[{ value: '', label: 'Unassigned' }, ...netOptions]}
+                    onChange={(netId) => onZone({ ...zone, netId: netId || null })}
+                  />
+                )}
+                <Select
+                  active={active}
+                  label="Zone layer"
+                  value={zone.layer}
+                  options={
+                    zone.keepout
+                      ? graphicLayers.map((value) => ({ value, label: value }))
+                      : layerOptions
+                  }
+                  onChange={(layer) => onZone({ ...zone, layer: layer as BoardLayer })}
+                />
+              </PropertyGrid>
+              {zone.keepout ? (
+                (Object.keys(zone.keepout) as (keyof NonNullable<typeof zone.keepout>)[]).map(
+                  (key) => (
+                    <PropertyToggle
+                      active={active}
+                      key={key}
+                      label={`Keep out ${key === 'copperpour' ? 'copper pours' : key}`}
+                      checked={zone.keepout![key]}
+                      onChange={(checked) =>
+                        onZone({ ...zone, keepout: { ...zone.keepout!, [key]: checked } })
+                      }
+                    />
+                  ),
+                )
+              ) : (
+                <>
+                  <PropertyGrid>
+                    <NumberField
+                      {...field}
+                      label="Clearance (mm)"
+                      value={zone.clearance}
+                      min={0}
+                      max={100}
+                      onCommit={(clearance) => onZone({ ...zone, clearance })}
+                    />
+                    <NumberField
+                      {...field}
+                      label="Minimum width (mm)"
+                      value={zone.minThickness}
+                      min={0.0001}
+                      max={100}
+                      onCommit={(minThickness) => onZone({ ...zone, minThickness })}
+                    />
+                  </PropertyGrid>
+                  <details className="layout-property-details layout-fill-rules">
+                    <summary>Fill rules</summary>
+                    <PropertyGrid>
+                      <NumberField
+                        {...field}
+                        label="Thermal gap (mm)"
+                        value={zone.thermalGap}
+                        min={0}
+                        max={100}
+                        onCommit={(thermalGap) => onZone({ ...zone, thermalGap })}
+                      />
+                      <NumberField
+                        {...field}
+                        label="Thermal bridge (mm)"
+                        value={zone.thermalBridge}
+                        min={0.0001}
+                        max={100}
+                        onCommit={(thermalBridge) => onZone({ ...zone, thermalBridge })}
+                      />
+                      <NumberField
+                        {...field}
+                        label="Zone priority"
+                        value={zone.priority ?? 0}
+                        min={0}
+                        max={10000}
+                        step="1"
+                        onCommit={(priority) => onZone({ ...zone, priority })}
+                      />
+                      <Select
+                        active={active}
+                        label="Pad connection"
+                        value={zone.padConnection ?? 'thermal'}
+                        options={[
+                          { value: 'thermal', label: 'Thermal relief' },
+                          { value: 'yes', label: 'Solid' },
+                          { value: 'no', label: 'None' },
+                          { value: 'thru_hole_only', label: 'Thermal relief for through-hole' },
+                        ]}
+                        onChange={(value) => {
+                          const next = { ...zone };
+                          delete next.padConnection;
+                          onZone(
+                            value === 'thermal'
+                              ? next
+                              : {
+                                  ...next,
+                                  padConnection: value as NonNullable<typeof zone.padConnection>,
+                                },
+                          );
+                        }}
+                      />
+                      <Select
+                        active={active}
+                        label="Island removal"
+                        value={String(zone.islandRemovalMode ?? 0)}
+                        options={[
+                          { value: '0', label: 'Always' },
+                          { value: '1', label: 'Never' },
+                          { value: '2', label: 'Below area limit' },
+                        ]}
+                        onChange={(value) => onZone({ ...zone, islandRemovalMode: Number(value) })}
+                      />
+                    </PropertyGrid>
+                  </details>
+                </>
+              )}
+            </PropertySection>
           )}
           {rectangle && (
             <PropertySection title={rectangle.zoneId ? 'Zone bounds' : 'Board outline'}>
@@ -672,127 +761,6 @@ export default function LayoutProperties({
           )}
           {zone && (
             <>
-              <PropertySection title={zone.keepout ? 'Rule area' : 'Copper zone'}>
-                {!zone.keepout && (
-                  <Select
-                    active={active}
-                    label="Zone net"
-                    value={zone.netId ?? ''}
-                    options={[{ value: '', label: 'Unassigned' }, ...netOptions]}
-                    onChange={(netId) => onZone({ ...zone, netId: netId || null })}
-                  />
-                )}
-                <Select
-                  active={active}
-                  label="Zone layer"
-                  value={zone.layer}
-                  options={
-                    zone.keepout
-                      ? graphicLayers.map((value) => ({ value, label: value }))
-                      : layerOptions
-                  }
-                  onChange={(layer) => onZone({ ...zone, layer: layer as BoardLayer })}
-                />
-                {zone.keepout ? (
-                  (Object.keys(zone.keepout) as (keyof NonNullable<typeof zone.keepout>)[]).map(
-                    (key) => (
-                      <PropertyToggle
-                        active={active}
-                        key={key}
-                        label={`Keep out ${key === 'copperpour' ? 'copper pours' : key}`}
-                        checked={zone.keepout![key]}
-                        onChange={(checked) =>
-                          onZone({ ...zone, keepout: { ...zone.keepout!, [key]: checked } })
-                        }
-                      />
-                    ),
-                  )
-                ) : (
-                  <>
-                    <PropertyToggle
-                      label="Fill zone"
-                      active={active}
-                      checked={zone.fillEnabled !== false}
-                      onChange={(fillEnabled) => onZone({ ...zone, fillEnabled })}
-                    />
-                    <NumberField
-                      {...field}
-                      label="Clearance (mm)"
-                      value={zone.clearance}
-                      min={0}
-                      max={100}
-                      onCommit={(clearance) => onZone({ ...zone, clearance })}
-                    />
-                    <NumberField
-                      {...field}
-                      label="Minimum width (mm)"
-                      value={zone.minThickness}
-                      min={0.0001}
-                      max={100}
-                      onCommit={(minThickness) => onZone({ ...zone, minThickness })}
-                    />
-                    <NumberField
-                      {...field}
-                      label="Thermal gap (mm)"
-                      value={zone.thermalGap}
-                      min={0}
-                      max={100}
-                      onCommit={(thermalGap) => onZone({ ...zone, thermalGap })}
-                    />
-                    <NumberField
-                      {...field}
-                      label="Thermal bridge (mm)"
-                      value={zone.thermalBridge}
-                      min={0.0001}
-                      max={100}
-                      onCommit={(thermalBridge) => onZone({ ...zone, thermalBridge })}
-                    />
-                    <NumberField
-                      {...field}
-                      label="Zone priority"
-                      value={zone.priority ?? 0}
-                      min={0}
-                      max={10000}
-                      step="1"
-                      onCommit={(priority) => onZone({ ...zone, priority })}
-                    />
-                    <Select
-                      active={active}
-                      label="Pad connection"
-                      value={zone.padConnection ?? 'thermal'}
-                      options={[
-                        { value: 'thermal', label: 'Thermal relief' },
-                        { value: 'yes', label: 'Solid' },
-                        { value: 'no', label: 'None' },
-                        { value: 'thru_hole_only', label: 'Thermal relief for through-hole' },
-                      ]}
-                      onChange={(value) => {
-                        const next = { ...zone };
-                        delete next.padConnection;
-                        onZone(
-                          value === 'thermal'
-                            ? next
-                            : {
-                                ...next,
-                                padConnection: value as NonNullable<typeof zone.padConnection>,
-                              },
-                        );
-                      }}
-                    />
-                    <Select
-                      active={active}
-                      label="Island removal"
-                      value={String(zone.islandRemovalMode ?? 0)}
-                      options={[
-                        { value: '0', label: 'Always' },
-                        { value: '1', label: 'Never' },
-                        { value: '2', label: 'Below area limit' },
-                      ]}
-                      onChange={(value) => onZone({ ...zone, islandRemovalMode: Number(value) })}
-                    />
-                  </>
-                )}
-              </PropertySection>
               <PropertyVertices title="Zone corners" count={zone.outline.length} active={active}>
                 {(index) => {
                   const point = zone.outline[index];

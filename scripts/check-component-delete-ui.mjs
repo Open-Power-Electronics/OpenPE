@@ -30,13 +30,13 @@ const bundle = await build({
         onClick={()=>setCount(value=>value+1)}><Trash2 size={16}/></button>;
       return <div className="panel"><EditorDisplayDrawer label="Properties" open={open} onOpenChange={setOpen}>
         <aside className="inspector part-inspector"><div className="inspector-body">
-        {mode==='schematic'?<><PartIdentity part={part} library={schematic.libraries[part.libId]} actions={actions}/>
+        {mode==='schematic'?<><PartIdentity part={part} library={schematic.libraries[part.libId]}/>
           <PartProperties part={part} active={open} onSave={()=>true}/></>:
           <LayoutProperties board={board} schematic={schematic} active={open} resetKey={false}
             footprint={footprint} actions={actions} rectangle={null} selectionCount={1} snap={value=>value}
             onCommit={()=>false} onFootprint={()=>false} onTrack={()=>false} onZone={()=>false}
             onRectangle={()=>false} onError={()=>{}} onInspectFootprint={()=>{}}/>}
-        </div></aside>
+        </div>{mode==='schematic'&&<div className="inspector-footer">{actions}</div>}</aside>
       </EditorDisplayDrawer></div>;
     }
     createRoot(document.getElementById('root')).render(<Fixture/>);
@@ -65,7 +65,7 @@ try {
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
   await page.addStyleTag({
     content:
-      '.panel{width:280px;margin:24px}.panel>.editor-display-drawer{height:680px}*{transition:none!important}',
+      '.panel{width:280px;margin:24px}.panel>.editor-display-drawer{height:680px}.panel .inspector{flex:1;min-height:0;max-height:none;max-width:none}*{transition:none!important}',
   });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const action = page.getByRole('button', { name: 'Delete object', exact: true });
@@ -82,9 +82,11 @@ try {
           .locator('.panel')
           .evaluate((element, width) => (element.style.width = width + 'px'), width);
         await page.mouse.move(590, 750);
-        const style = await action.evaluate((element) => {
+        const style = await action.evaluate((element, mode) => {
           const box = element.getBoundingClientRect(),
-            identity = element.closest('.inspector-symbol').getBoundingClientRect();
+            identity = element
+              .closest(mode === 'schematic' ? '.inspector' : '.inspector-symbol')
+              .getBoundingClientRect();
           const icon = element.querySelector('svg'),
             iconBox = icon.getBoundingClientRect(),
             paint = getComputedStyle(icon);
@@ -94,23 +96,24 @@ try {
             border: paint.borderWidth,
             color: paint.color,
             expected: getComputedStyle(element).getPropertyValue('--error-ink').trim(),
-            right: Math.abs(box.right - identity.right) < 1,
+            right: Math.abs(box.right - identity.right + (mode === 'schematic' ? 13 : 0)) < 1,
             inside: box.top >= identity.top && box.bottom <= identity.bottom,
+            bottom: mode !== 'schematic' || Math.abs(identity.bottom - box.bottom - 7) < 1,
           };
-        });
+        }, mode);
         assert.deepEqual(style.button, [30, 30]);
         assert.deepEqual(style.icon, [16, 16]);
         assert.equal(style.border, '0px');
         assert.equal(style.color, theme === 'dark' ? 'rgb(255, 150, 150)' : 'rgb(181, 42, 42)');
-        assert.ok(style.right && style.inside);
+        assert.ok(style.right && style.inside && style.bottom);
         assert.equal(
           await page.locator('.editor-display-drawer-header [aria-label="Delete object"]').count(),
           0,
         );
-        assert.equal(await page.locator('.inspector-footer').count(), 0);
+        assert.equal(await page.locator('.inspector-footer').count(), mode === 'schematic' ? 1 : 0);
       }
       await page
-        .locator('.inspector-symbol')
+        .locator('.inspector')
         .screenshot({ path: 'test-results/component-delete-' + mode + '-' + theme + '.png' });
     }
     const count = await page.evaluate(() => window.deleteFixture.count);

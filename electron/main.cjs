@@ -9,6 +9,7 @@ const { createEnclosureExport } = require('./enclosure-export.cjs');
 const { readNativeProject } = require('./native-project.cjs');
 const { registerWorkspaceRecovery } = require('./workspace-recovery.cjs');
 const { registerProjectDirectory } = require('./project-directory.cjs');
+const { registerComponentModelPicker } = require('./component-model-picker.cjs');
 const { registerSpiceModelPicker } = require('./spice-model-picker.cjs');
 const fileGrants = new FileGrants();
 let win,
@@ -52,13 +53,7 @@ app.whenReady().then(async () => {
     { ProjectHistory },
     { ExampleProjects },
     { prepareExampleFootprints },
-    {
-      parseProject,
-      serializeProject,
-      projectFilename,
-      projectFromNativeFiles,
-      projectNativeFiles,
-    },
+    { parseProject, serializeProject, projectFilename, projectFromNativeFiles, projectNativeFiles },
     { createEnclosureStep },
     { exportProjectFile, projectExportFormats },
   ] = await serviceModules;
@@ -67,13 +62,12 @@ app.whenReady().then(async () => {
   const examplesRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'examples-native')
     : path.join(__dirname, '../examples');
-  const modelStore = createSimulationModelStore(
-    app.getPath('userData'),
-    modelFetcher,
-    examplesRoot,
-  );
+  const recentRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'recent-native')
+    : path.join(__dirname, '../recent');
+  const modelStore = createSimulationModelStore(app.getPath('userData'), modelFetcher, recentRoot);
   history = new ProjectHistory(app.getPath('userData'), fileGrants);
-  const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history);
+  const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history, recentRoot);
   let examplePreparation;
   // Example opens join one bounded preparation before granting a file.
   // Home performs no example Git/model checks.
@@ -92,7 +86,8 @@ app.whenReady().then(async () => {
     thermalRoot: app.isPackaged ? process.resourcesPath : undefined,
     // Model downloads follow the desktop's system proxy instead of Node's direct HTTP stack.
     simulationModelFetcher: modelFetcher,
-    simulationExamplesRoot: examplesRoot,
+    simulationRecentRoot: recentRoot,
+    componentModelFiles: { resolve: (id) => fileGrants.location(id) },
     simulationModelFiles: {
       read: (fileId, model) => readProjectModelFile(fileGrants.get(fileId), model),
       write: (fileId, model, bytes) => writeProjectModelFile(fileGrants.get(fileId), model, bytes),
@@ -144,6 +139,14 @@ app.whenReady().then(async () => {
     ipcMain,
     authorize: trusted,
     grants: fileGrants,
+  });
+  registerComponentModelPicker({
+    ipcMain,
+    dialog,
+    getWindow: () => win,
+    authorize: trusted,
+    grants: fileGrants,
+    models: service.componentModels,
   });
   registerSpiceModelPicker({
     ipcMain,
@@ -277,6 +280,7 @@ app.whenReady().then(async () => {
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
     prepareProjectFiles: async (project, file, sourceFile) => {
       await prepareExampleFootprints(project, file);
+      await service.componentModels.prepare(project, file, sourceFile);
       await prepareProjectModelFiles(
         project,
         file,

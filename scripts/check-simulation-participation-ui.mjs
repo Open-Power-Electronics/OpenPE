@@ -141,8 +141,7 @@ try {
   assert.equal(await page.getByRole('switch').count(), 0, 'The chooser only places components.');
   await page.waitForFunction(
     () =>
-      document.querySelector('.library-detail > strong')?.textContent ===
-      'Connector_Generic:Conn_01x01',
+      document.querySelector('.library-detail-id')?.textContent === 'Connector_Generic:Conn_01x01',
   );
   await button('Place').click();
   await page.getByTestId('schematic-canvas').click({ position: { x: 380, y: 260 } });
@@ -418,7 +417,7 @@ try {
   assert.equal(await dialog.getByRole('switch').count(), 0);
   await page.getByRole('button', { name: 'R Device', exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelector('.library-detail > strong')?.textContent === 'Device:R',
+    () => document.querySelector('.library-detail-id')?.textContent === 'Device:R',
   );
   await button('Place').click();
   await page.getByTestId('schematic-canvas').click({ position: { x: 480, y: 360 } });

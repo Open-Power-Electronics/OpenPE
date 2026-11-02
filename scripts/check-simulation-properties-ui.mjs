@@ -99,7 +99,7 @@ try {
   assert.equal(await field('Series resistance (Ω)').count(), 0);
   assert.equal(await field('Coupling (unitless)').count(), 0);
   assert.equal(
-    await disclosure.locator('input').count(),
+    await disclosure.locator('.property-simulation-parameter input').count(),
     1,
     'Numeric simulation parameters are editable without field-removal controls.',
   );
@@ -119,6 +119,7 @@ try {
   assert.equal(await field('Scratch').inputValue(), '2');
   assert.deepEqual(await state(), original, 'Inspecting parameters stays clean.');
 
+  await page.locator('.property-additional-fields > summary').click();
   await field('Scratch').fill('3');
   await field('Scratch').press('Enter');
   const edited = await state();
@@ -140,7 +141,7 @@ try {
     assert.equal((await state()).source, original.source);
   }
   await field('Initial voltage (V)').fill('invalid');
-  await field('Initial voltage (V)').press('Tab');
+  await button('Undo').focus();
   await page.getByRole('alert').waitFor();
   assert.equal((await state()).source, original.source);
   assert.equal(await field('Initial voltage (V)').inputValue(), 'invalid');
@@ -189,7 +190,7 @@ try {
   await button('Reopen').click();
   assert.equal((await state()).source, original.source);
   assert.equal(await field(labels['OpenPE.InitialVoltage']).inputValue(), '1.2');
-  assert.equal(await disclosure.locator('input').count(), 1);
+  assert.equal(await disclosure.locator('.property-simulation-parameter input').count(), 1);
 
   const beforeAppearance = await state();
   await mkdir('test-results', { recursive: true });

@@ -62,17 +62,18 @@ export async function checkInspectorResize(page, inspector) {
       const header = section
         .querySelector(':scope > .editor-display-drawer-header')
         .getBoundingClientRect();
-      const identity = element.querySelector('.inspector-symbol').getBoundingClientRect();
+      const footer = element.querySelector('.inspector-footer').getBoundingClientRect();
       const action = element.querySelector('.property-delete-action').getBoundingClientRect();
       return (
         header.top >= panel.top &&
-        action.top >= identity.top &&
-        action.bottom <= identity.bottom &&
-        action.right <= identity.right
+        action.top >= footer.top &&
+        action.bottom <= footer.bottom &&
+        Math.abs(action.right - footer.right + 12) < 1 &&
+        Math.abs(footer.bottom - action.bottom - 6) < 1
       );
     }),
     true,
-    'Docked Properties keeps deletion at the component identity upper right.',
+    'Docked Properties keeps deletion in the bottom-right footer.',
   );
   await handle.dblclick();
   assert.ok(Math.abs((await dock.boundingBox()).width - initial.width) < 2);

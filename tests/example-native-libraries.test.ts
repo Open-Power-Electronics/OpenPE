@@ -22,7 +22,7 @@ test('Home libraries are native Source files with project-bound names and stable
     if (!original.files.some((file) => file.name.includes('.pretty/'))) continue;
     for (const file of original.files)
       assert.equal(
-        await readFile(path.join('examples', entry.file, file.name), file.encoding ?? 'utf8'),
+        await readFile(path.join(entry.root, entry.directory, file.name), file.encoding ?? 'utf8'),
         file.source,
       );
     customProjects++;

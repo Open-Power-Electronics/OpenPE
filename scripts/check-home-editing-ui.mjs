@@ -59,7 +59,7 @@ const sources = Object.fromEntries(
       serializeProject(
         projectFromNativeFiles(
           await readNativeProjectFile(
-            path.resolve('examples', entry.file, `${entry.file}.kicad_pro`),
+            path.resolve(entry.root, entry.directory, `${entry.file}.kicad_pro`),
           ),
         ),
       ),
@@ -185,7 +185,7 @@ try {
     const nativeFile = path.join(nativeDirectory, entry.file + '.kicad_pro');
     // This fixed manifest path is a read-only source of pinned model bytes. It
     // is never granted as the renderer's destination or passed to the picker.
-    const modelSource = path.resolve('examples', entry.file, entry.file + '.kicad_pro');
+    const modelSource = path.resolve(entry.root, entry.directory, entry.file + '.kicad_pro');
     let saves = 0;
     const nativeSave = createNativeSave({
       parseProject,

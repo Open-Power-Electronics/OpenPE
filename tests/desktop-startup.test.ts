@@ -99,6 +99,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     './native-project.cjs': {},
     './workspace-recovery.cjs': { registerWorkspaceRecovery: () => {} },
     './project-directory.cjs': { registerProjectDirectory: () => ({}) },
+    './component-model-picker.cjs': { registerComponentModelPicker: () => {} },
     './spice-model-picker.cjs': { registerSpiceModelPicker: () => {} },
   };
   // Redirect the bootstrap's module loading to isolated host adapters. Execute

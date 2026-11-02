@@ -19,7 +19,12 @@ const spicePickerSource = readFileSync(
 test('desktop preload forwards every operation to a registered main channel and releases close listeners', async () => {
   const mainChannels = new Set(
     [
-      ...[mainSource, directorySource, spicePickerSource]
+      ...[
+        mainSource,
+        directorySource,
+        spicePickerSource,
+        readFileSync(new URL('../electron/component-model-picker.cjs', import.meta.url), 'utf8'),
+      ]
         .join('\n')
         .matchAll(/ipcMain\.handle\(\s*'([^']+)'/g),
     ].map((match) => match[1]),
@@ -61,6 +66,7 @@ test('desktop preload forwards every operation to a registered main channel and 
   const options = { fileId: 'opaque-project-id', source: 'validated native source' };
   const operations: Array<[string, string, unknown[]]> = [
     ['connection', 'connection', []],
+    ['chooseComponentModel', 'choose-component-model', ['opaque-project-id']],
     ['open', 'open', []],
     ['acceptOpen', 'accept-open', []],
     ['newFile', 'new', []],
@@ -179,6 +185,7 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
             './workspace-recovery.cjs',
             './project-directory.cjs',
             './spice-model-picker.cjs',
+            './component-model-picker.cjs',
           ].includes(specifier),
           `Unexpected bootstrap dependency: ${specifier}`,
         );

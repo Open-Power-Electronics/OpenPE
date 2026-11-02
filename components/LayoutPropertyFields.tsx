@@ -219,7 +219,7 @@ export function TextField({
     <label className="layout-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea {...props} rows={3} />
+        <textarea {...props} rows={2} />
       ) : quantityUnitFromLabel(label) ? (
         <QuantityInput
           {...props}
@@ -284,12 +284,37 @@ export function PropertyRow({
   );
 }
 
-export function PropertySection({ title, children }: { title: string; children: ReactNode }) {
+export function PropertySection({
+  title,
+  children,
+  actions,
+}: {
+  title: string;
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
     <section className="layout-property-section" aria-label={title}>
-      <h3>{title}</h3>
+      {actions ? (
+        <div className="layout-property-section-title">
+          <h3>{title}</h3>
+          {actions}
+        </div>
+      ) : (
+        <h3>{title}</h3>
+      )}
       {children}
     </section>
+  );
+}
+
+/** Native disclosure keeps local field drafts mounted while hiding secondary controls. */
+export function PropertyDetails({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="layout-property-details">
+      <summary>{title}</summary>
+      <div className="layout-property-section">{children}</div>
+    </details>
   );
 }
 

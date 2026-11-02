@@ -26,6 +26,7 @@ const defaultPaths = [
   'server',
   'schemas',
   'examples',
+  'recent',
   'resources/example-catalog',
   'tests/fixtures/reference',
   'resources/example-models-lock.json',
@@ -39,11 +40,11 @@ const defaultPaths = [
 ];
 const defaultOutputs = [
   'resources/example-catalog/simulation',
-  ...[...homeManifest.recent, ...homeManifest.examples].flatMap(({ file }) => [
-    `examples/${file}/3D`,
-    `examples/${file}/circuits`,
-    `examples/${file}/circuit`,
-    `examples/${file}/models`,
+  ...[...homeManifest.recent, ...homeManifest.examples].flatMap(({ root, directory }) => [
+    `${root}/${directory}/3D`,
+    `${root}/${directory}/circuits`,
+    `${root}/${directory}/circuit`,
+    `${root}/${directory}/models`,
   ]),
   'schemas/internal-project-snapshot.schema.json',
   'lib/project-validator.mjs',
@@ -65,10 +66,9 @@ const defaultOutputs = [
   ].flatMap((name) => [`server/${name}-format.mjs`, `server/${name}-format.d.mts`]),
 ];
 // Generated solver records belong to the saved project, not Home preparation.
-const resultDirectories = [...homeManifest.recent, ...homeManifest.examples].flatMap(({ file }) => [
-  `examples/${file}/spice`,
-  `examples/${file}/thermal`,
-]);
+const resultDirectories = [...homeManifest.recent, ...homeManifest.examples].flatMap(
+  ({ root, directory }) => [`${root}/${directory}/spice`, `${root}/${directory}/thermal`],
+);
 const workspace = fileURLToPath(new URL('../', import.meta.url));
 const missing = (error) => error.code === 'ENOENT';
 const normalized = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
@@ -209,8 +209,10 @@ async function snapshot(root, paths, outputs) {
           ![...homeManifest.recent, ...homeManifest.examples].some((entry) =>
             ['3D', 'footprints'].some(
               (folder) =>
-                file.startsWith(`examples/${entry.file}/${folder}/`) &&
-                /^[^/]+\.step$/i.test(file.slice(`examples/${entry.file}/${folder}/`.length)),
+                file.startsWith(`${entry.root}/${entry.directory}/${folder}/`) &&
+                /^[^/]+\.step$/i.test(
+                  file.slice(`${entry.root}/${entry.directory}/${folder}/`.length),
+                ),
             ),
           ),
       ),

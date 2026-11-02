@@ -75,13 +75,13 @@ test('EMC Flyback model signatures and behavioural library bind the pinned sourc
     assert.match(deck.netlist, new RegExp(`^\\.include example-model-${index}\\.lib$`, 'm'));
     assert.equal(
       createHash('sha256')
-        .update(readFileSync(`examples/emc-flyback/${model.file}`))
+        .update(readFileSync(`recent/emc-flyback/${model.file}`))
         .digest('hex'),
       model.sha256,
     );
   }
   assert.deepEqual(
-    readFileSync('examples/emc-flyback/circuits/EMC_flyback_control.lib'),
+    readFileSync('recent/emc-flyback/circuits/EMC_flyback_control.lib'),
     readFileSync(
       'resources/example-catalog/sources/emc-flyback/simulation/EMC_flyback_control.lib',
     ),

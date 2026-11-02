@@ -67,7 +67,7 @@ export function createExampleModelStore(dataDir, fetcher = fetch) {
 export function createSimulationModelStore(
   dataDir,
   fetcher = fetch,
-  examplesRoot = fileURLToPath(new URL('../examples/', import.meta.url)),
+  recentRoot = fileURLToPath(new URL('../recent/', import.meta.url)),
 ) {
   const examples = createExampleModelStore(dataDir, fetcher),
     ti = createTiModelStore(dataDir, fetcher);
@@ -76,7 +76,7 @@ export function createSimulationModelStore(
     if (!model) return id.startsWith('example-') ? examples(id, signal) : ti(id, signal);
     signal.throwIfAborted();
     const bytes = await readProjectModelFile(
-      path.join(examplesRoot, 'emc-flyback/emc-flyback.kicad_pro'),
+      path.join(recentRoot, 'emc-flyback/emc-flyback.kicad_pro'),
       model,
     );
     signal.throwIfAborted();

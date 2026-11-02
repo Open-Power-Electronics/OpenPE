@@ -35,7 +35,11 @@ try {
   const before = await page.evaluate(() => window.openpe.listExamples());
   const bundle = projectNativeFiles(createProject(switchingStageFixture()), `${title}.kicad_pro`);
   for (const file of bundle.files) await writeFile(path.join(directory, file.name), file.source);
-  await page.getByRole('button', { name: 'Refresh examples', exact: true }).click();
+  assert.equal(
+    await page.getByRole('button', { name: 'Refresh examples', exact: true }).count(),
+    0,
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   const card = page.getByRole('button', { name: `Open ${title} example`, exact: true });
   await card.waitFor();
   const after = await page.evaluate(() => window.openpe.listExamples());
@@ -61,7 +65,7 @@ try {
     assert.equal(await readFile(path.join(directory, file.name), 'utf8'), file.source);
   await page.screenshot({ path: 'test-results/example-discovery-desktop.png' });
   console.log(
-    'Dropped native project appeared after Refresh, opened through the real desktop grant, and compiled identically to ordinary native import without changing its files.',
+    'Dropped native project appeared after window focus, opened through the real desktop grant, and compiled identically to ordinary native import without changing its files.',
   );
 } finally {
   await application?.close();

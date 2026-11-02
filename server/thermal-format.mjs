@@ -6404,7 +6404,7 @@ function prepareThermalGeometry(board, config) {
     (zone) => zone.layer.endsWith(".Cu") && !zone.keepout && zone.fillEnabled !== false && zone.filledPolygons === void 0
   ))
     throw new Error(
-      "Fill copper zones in Layout before thermal analysis. Unfilled or invalidated zone outlines cannot be used as copper."
+      "Fill copper zones from Layout Properties before thermal analysis. Unfilled or invalidated zone outlines cannot be used as copper."
     );
   for (const track of board.tracks) {
     inspect([track.start, track.end]);

@@ -899,7 +899,7 @@ try {
           'borderRadius',
           'backgroundColor',
         ]),
-        deleteAction: styles(identity.querySelector('.property-delete-action'), [
+        deleteAction: styles(element.querySelector('.property-delete-action'), [
           'width',
           'height',
           'color',
@@ -908,20 +908,19 @@ try {
     });
   const schematicComponentPropertiesStyle = await componentPropertiesStyle(properties);
   const objectDelete = properties.getByRole('button', { name: 'Delete object', exact: true });
-  assert.equal(await properties.locator('.inspector-footer').count(), 0);
+  assert.equal(await properties.locator('.inspector-footer').count(), 1);
   assert.equal(
     await objectDelete.evaluate((element) => {
       const action = element.getBoundingClientRect(),
-        identity = element.closest('.inspector-symbol').getBoundingClientRect();
+        footer = element.closest('.inspector-footer').getBoundingClientRect();
       return (
-        action.top >= identity.top &&
-        action.bottom <= identity.bottom &&
-        action.right <= identity.right &&
-        action.left > identity.left + identity.width / 2
+        action.top >= footer.top &&
+        Math.abs(footer.bottom - action.bottom - 6) < 1 &&
+        Math.abs(footer.right - action.right - 12) < 1
       );
     }),
     true,
-    'Delete is at the upper right of the component identity, outside the drawer title.',
+    'Delete stays at the bottom right of Properties, outside the scrolling fields.',
   );
   const inputValue = properties.getByRole('textbox', { name: 'Component value', exact: true });
   const valueBeforeIME = await inputValue.inputValue();

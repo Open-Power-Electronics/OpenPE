@@ -138,6 +138,27 @@
         ]
       },
       {
+        "from": "recent",
+        "to": "recent-native",
+        "filter": [
+          "**/*",
+          "!**/spice/**",
+          "!**/thermal/**",
+          "!**/.*",
+          "!**/.*/**",
+          "!**/history.git/**",
+          "!**/node_modules/**",
+          "!**/cache/**",
+          "!**/simulation-cache/**",
+          "!**/*-backups/**",
+          "!**/*.kicad_prl",
+          "!**/*.pem",
+          "!**/*.key",
+          "!**/*.pfx",
+          "!**/*.p12"
+        ]
+      },
+      {
         "from": "resources/thermal/1",
         "to": "thermal/1",
         "filter": [

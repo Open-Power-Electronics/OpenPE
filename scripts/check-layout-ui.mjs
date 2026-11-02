@@ -4,6 +4,7 @@ import {
   toggleModelVisibility,
   selectModelView,
   toggleLayoutVisualization,
+  selectLayoutLayer,
 } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -637,7 +638,7 @@ try {
     const p = await point(x, y);
     await page.mouse.click(p.x, p.y);
   };
-  await button('Draw copper zone').click();
+  await button('Draw polygon').click();
   // The zone intentionally extends beyond the original board; make it visible.
   await button('Zoom out').click();
   await button('Zoom out').click();
@@ -649,7 +650,7 @@ try {
     [2.54, 12.7],
   ])
     await clickPoint(x, y);
-  await button('Finish copper zone').click();
+  await button('Finish region').click();
   await canvas.locator('[data-copper-zone]').first().waitFor({ state: 'attached' });
   assert.equal(await canvas.locator('[data-copper-zone]').last().getAttribute('d'), '');
   await page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).fill('0.5');
@@ -661,8 +662,7 @@ try {
   assert.equal(poured.pcb.zones.at(-1).filledPolygons, undefined);
   assert.deepEqual(poured.schematic, moved.schematic);
   await button('Layout').click();
-  await button('Fill copper zones').click();
-  await button('Fill zones').click();
+  await page.getByRole('checkbox', { name: 'Filled', exact: true }).check();
   await button('Source').click();
   const filled = await readNativeProject(page);
   assert.ok(filled.pcb.zones.at(-1).filledPolygons.length);
@@ -706,9 +706,8 @@ try {
   await button('Redo').click();
   await button('Place through via').click();
   await clickPoint(22.86, 25.4);
-  await button('Draw board outline').click();
-  await page.getByRole('combobox', { name: 'Outline shape', exact: true }).click();
-  await page.getByRole('option', { name: 'Rectangle', exact: true }).click();
+  await selectLayoutLayer(page, 'Edge.Cuts');
+  await button('Draw rectangle').click();
   await button('Zoom out').click();
   await button('Zoom out').click();
   await clickPoint(10.16, 10.16);
@@ -716,15 +715,9 @@ try {
   await button('Source').click();
   const drawn = await readNativeProject(page);
   assert.equal(drawn.pcb.vias.length, moved.pcb.vias.length + 1);
-  assert.equal(drawn.pcb.graphics.length, moved.pcb.graphics.length + 4);
-  const outline = drawn.pcb.graphics.slice(-4);
-  assert.ok(
-    outline.every(
-      (line, i) =>
-        line.layer === 'Edge.Cuts' &&
-        JSON.stringify(line.end) === JSON.stringify(outline[(i + 1) % 4].start),
-    ),
-  );
+  assert.equal(drawn.pcb.graphics.length, moved.pcb.graphics.length + 1);
+  assert.equal(drawn.pcb.graphics.at(-1).kind, 'polygon');
+  assert.equal(drawn.pcb.graphics.at(-1).layer, 'Edge.Cuts');
   await button('Layout').click();
   await canvas.press('Control+s');
   await page.getByText('Save project', { exact: true }).waitFor();

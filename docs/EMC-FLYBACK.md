@@ -1,6 +1,6 @@
 # EMC Flyback verification
 
-During Preview, EMC Flyback is the fixed entry in Home's Recent section. It is converted from [AI-PCB-layout's EMC Flyback demo](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo), pinned at commit `e1b9a64ac9ac306647fa30094932fb792d17e373`. Original design, simulation bench, notices and SHA-256 identities remain under `resources/example-catalog/sources/emc-flyback/`. The editable project is [emc-flyback.kicad_pro](../examples/emc-flyback/emc-flyback.kicad_pro), following the same directory/stem rule as every Home example. Source attribution is CC BY 4.0.
+During Preview, EMC Flyback is the fixed entry in Home's Recent section. It is converted from [AI-PCB-layout's EMC Flyback demo](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo), pinned at commit `e1b9a64ac9ac306647fa30094932fb792d17e373`. Original design, simulation bench, notices and SHA-256 identities remain under `resources/example-catalog/sources/emc-flyback/`. The editable project is [emc-flyback.kicad_pro](../recent/emc-flyback/emc-flyback.kicad_pro), inside the dedicated `recent/` group with its native stem unchanged. Source attribution is CC BY 4.0.
 
 ## Native conversion
 

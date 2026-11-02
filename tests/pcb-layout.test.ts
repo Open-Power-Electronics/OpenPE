@@ -25,6 +25,7 @@ import {
   validateProject,
 } from '../lib/project';
 import { child, children, num, parseSExpr, val } from '../lib/sexpr';
+import { projectFromNativeFiles, projectNativeFiles } from '../lib/kicad-project';
 
 // Parser fixtures deliberately use a test identity rather than posing as library assets.
 const source = `(footprint "TwoPin"
@@ -84,7 +85,7 @@ test('reject unsupported or changed physical geometry instead of manufacturing a
     source.replace('(fill no) (layer "F.SilkS")', '(fill no) (layer "F.Cu")'),
     source.replace('(pad "2"', '(pad "9"'),
     source.replace('(size 1.8 1.4)', '(size 1.8 0)'),
-    source.replace('(at -1.27 0.635 30)', '(at -1.27 0.63501 30)'),
+    source.replace('(at -1.27 0.635 30)', '(at -1.27 0.6350001 30)'),
     source.replace('(at -1.27 0.635 30)', '(at -1.27 NaN 30)'),
     source.replace('(layers "*.Cu" "*.Mask")', '(layers "F.Cu" "F.Mask")'),
     source.replace(
@@ -104,6 +105,13 @@ test('reject unsupported or changed physical geometry instead of manufacturing a
     source.replace('(size 1.8 1.4)', '(size 1.8 1.4) (size 1 1)'),
     source.replace('(size 1.8 1.4)', '(size 1.8 1.4 1)'),
     source.replace('(at -1.27 0.635 30)', '(at -1.27 0.635 30 40)'),
+    source
+      .replace('thru_hole rect', 'thru_hole roundrect')
+      .replace('(size 1.8 1.4)', '(size 1.8 1.4) (roundrect_rratio 0.6)'),
+    source
+      .replace('thru_hole rect', 'thru_hole roundrect')
+      .replace('(size 1.8 1.4)', '(size 1.8 1.4) (roundrect_rratio NaN)'),
+    source.replace('(size 1.8 1.4)', '(size 1.8 1.4) (roundrect_rratio 0.25)'),
   ];
   for (const text of mutations) {
     assert.notEqual(text, source);
@@ -118,6 +126,62 @@ test('reject unsupported or changed physical geometry instead of manufacturing a
     () => createPCBFootprint({ ...detail, id: 'Test:Wrong' }, circuit, symbol.id, { x: 0, y: 0 }),
     /library identity/,
   );
+});
+
+test('bundled 0805 placement preserves six-decimal artwork and rounded pad corners through native save and reopen', () => {
+  const raw = parseSExpr(
+    readFileSync(
+      'resources/kicad/10.0.0/footprints/Resistor_SMD.pretty/R_0805_2012Metric.kicad_mod',
+      'utf8',
+    ),
+  );
+  const { circuit, symbol } = fixture();
+  const footprint = createPCBFootprint(
+    { id: 'Resistor_SMD:R_0805_2012Metric', footprint: raw },
+    circuit,
+    symbol.id,
+    { x: 20, y: 20 },
+  );
+  assert.deepEqual(footprint.graphics[0].start, { x: -0.227064, y: -0.735 });
+  assert.deepEqual(footprint.graphics[0].end, { x: 0.227064, y: -0.735 });
+  assert.ok(
+    footprint.pads.every((pad) => pad.shape === 'roundrect' && pad.roundrectRatio === 0.243902),
+  );
+  const project = {
+    ...createProject(circuit),
+    pcb: { ...createEmptyPCB(), footprints: [footprint] },
+  };
+  validateProject(project);
+  const files = projectNativeFiles(project, 'placed.kicad_pro');
+  const reopened = projectFromNativeFiles(files);
+  const restored = reopened.pcb!.footprints[0];
+  for (const graphic of footprint.graphics) {
+    const actual = restored.graphics.find((item) => item.id === graphic.id)!;
+    assert.ok(actual);
+    assert.deepEqual(
+      {
+        id: actual.id,
+        start: actual.start,
+        end: actual.end,
+        width: actual.width,
+        layer: actual.layer,
+      },
+      graphic,
+    );
+  }
+  const padGeometry = (pad: (typeof footprint.pads)[number]) => ({
+    id: pad.id,
+    number: pad.number,
+    x: pad.x,
+    y: pad.y,
+    size: pad.size,
+    shape: pad.shape,
+    rotation: pad.rotation,
+    roundrectRatio: pad.roundrectRatio,
+  });
+  assert.deepEqual(restored.pads.map(padGeometry), footprint.pads.map(padGeometry));
+  const unchanged = projectNativeFiles(reopened, files.entry);
+  assert.deepEqual(unchanged, files);
 });
 
 test(

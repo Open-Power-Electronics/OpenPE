@@ -253,7 +253,7 @@ test('EMC replacement hides only the two original case instances and retains the
 });
 
 test('native schematic note outlines reject unsupported or malformed geometry', () => {
-  const source = parseSExpr(readFileSync('examples/emc-flyback/emc-flyback.kicad_sch', 'utf8'));
+  const source = parseSExpr(readFileSync('recent/emc-flyback/emc-flyback.kicad_sch', 'utf8'));
   const line = children(source, 'polyline')[0];
   child(child(line, 'pts')!, 'xy')![1] = 'NaN';
   assert.throws(() => schematicPolylines(source), /Unsupported schematic polyline/);

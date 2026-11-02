@@ -19,12 +19,20 @@ import {
 
 const root = 'resources/example-catalog/footprints';
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
-test('examples contains exactly ten self-contained project folders and retains pinned assets', async () => {
+test('examples and sibling recent contain the ten self-contained projects and pinned assets', async () => {
+  assert.equal(existsSync('examples/recent'), false);
+  assert.deepEqual(readdirSync('recent'), ['emc-flyback']);
   const stems = manifest.examples.map((entry) => entry.file).sort();
   const rootEntries = readdirSync('examples', { withFileTypes: true });
   assert.deepEqual(
     rootEntries.map((entry) => entry.name).sort(),
-    homeExampleCatalog.map((entry) => entry.file).sort(),
+    Array.from(
+      new Set(
+        homeExampleCatalog
+          .filter((entry) => entry.root === 'examples')
+          .map((entry) => entry.directory.split('/')[0]),
+      ),
+    ).sort(),
   );
   assert.ok(rootEntries.every((entry) => entry.isDirectory()));
   for (const extension of ['kicad_pro', 'kicad_sch', 'kicad_pcb']) {
@@ -38,14 +46,14 @@ test('examples contains exactly ten self-contained project folders and retains p
     );
   }
   for (const entry of homeExampleCatalog) {
-    assert.ok(rootEntries.some((item) => item.isDirectory() && item.name === entry.file));
+    assert.ok(existsSync(`${entry.root}/${entry.directory}`));
     assert.deepEqual(
-      readdirSync(`examples/${entry.file}`)
+      readdirSync(`${entry.root}/${entry.directory}`)
         .filter((file) => /\.kicad_(?:pro|sch|pcb)$/.test(file))
         .sort(),
       ['kicad_pcb', 'kicad_pro', 'kicad_sch'].map((extension) => `${entry.file}.${extension}`),
     );
-    const directory = `examples/${entry.file}`;
+    const directory = `${entry.root}/${entry.directory}`;
     assert.ok(JSON.parse(readFileSync(`${directory}/${entry.file}.kicad_pro`, 'utf8')).meta);
     const board = parseSExpr(readFileSync(`${directory}/${entry.file}.kicad_pcb`, 'utf8'));
     let linkedModels = 0;

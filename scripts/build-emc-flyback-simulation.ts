@@ -120,7 +120,7 @@ for (const [id, name] of [
   ['emc-flyback-ss510c', 'EMC_SS510C'],
 ]) {
   const file = `circuits/${name}.lib`;
-  const bytes = await readFile(`examples/emc-flyback/${file}`);
+  const bytes = await readFile(`recent/emc-flyback/${file}`);
   if (id === 'emc-flyback-control' && !bytes.equals(Buffer.from(control)))
     throw new Error('EMC Flyback control library must retain the pinned upstream bytes.');
   models.push({ id, file, sha256: createHash('sha256').update(bytes).digest('hex') });

@@ -1,4 +1,8 @@
-import { toggleLayoutVisualization } from './visualization-test-helpers.mjs';
+import {
+  toggleLayoutVisualization,
+  selectLayoutLayer,
+  setLayoutVisibility,
+} from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -253,7 +257,7 @@ async function waitForCanvasFocus(page) {
 }
 
 async function drawZoneDraft({ page, point }) {
-  await page.getByRole('button', { name: 'Draw copper zone', exact: true }).click();
+  await page.getByRole('button', { name: 'Draw polygon', exact: true }).click();
   for (const corner of [
     { x: 45, y: 20 },
     { x: 65, y: 20 },
@@ -285,227 +289,132 @@ async function openFootprintChooser(page) {
 }
 
 try {
-  await run(
-    'outline: chained lines close an irregular cutout at the exact first vertex',
-    async ({ page, canvas, point, screen, snapshot }) => {
-      await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-      const corners = [
-        { x: 45, y: 15 },
-        { x: 65, y: 15 },
-        { x: 65, y: 35 },
-        { x: 55, y: 35 },
-        { x: 55, y: 25 },
-        { x: 45, y: 25 },
-      ];
-      for (const corner of corners) await point(corner, true);
-      assert.equal((await snapshot()).commits, 5, 'Each placed segment is a validated edit.');
-      const first = await screen(corners[0]);
-      await page.mouse.move(first.x + 3, first.y + 2);
-      await page.mouse.click(first.x + 3, first.y + 2);
-      const accepted = await snapshot();
-      assert.equal(accepted.commits, 6);
-      assert.deepEqual(
-        accepted.board.graphics.slice(-6).map((line) => line.start),
-        corners,
+  for (const drawingLayer of ['F.Cu', 'B.Cu', 'F.SilkS', 'B.SilkS', 'Edge.Cuts']) {
+    for (const shape of ['rectangle', 'polygon']) {
+      await run(
+        `regions: ${shape} draws, selects and saves on ${drawingLayer}`,
+        async ({ page, canvas, point, snapshot }) => {
+          await selectLayoutLayer(page, drawingLayer);
+          await page.getByRole('button', { name: `Draw ${shape}`, exact: true }).click();
+          assert.equal(
+            await page.getByRole('button', { name: 'Fill copper zones', exact: true }).count(),
+            0,
+          );
+          assert.equal(
+            await page.getByRole('combobox', { name: 'Outline shape', exact: true }).count(),
+            0,
+          );
+          await point({ x: 45, y: 15 }, true);
+          await point({ x: 65, y: 35 });
+          assert.equal(
+            await canvas.locator('[data-shape-preview]').getAttribute('data-outline-layer'),
+            drawingLayer,
+          );
+          if (shape === 'rectangle') await point({ x: 65, y: 35 }, true);
+          else {
+            await point({ x: 65, y: 15 }, true);
+            await point({ x: 65, y: 35 }, true);
+            await point({ x: 45, y: 35 }, true);
+            await canvas.press('Enter');
+          }
+          const accepted = await snapshot();
+          assert.equal(accepted.commits, 1);
+          const copper = drawingLayer.endsWith('.Cu');
+          const region = copper ? accepted.board.zones.at(-1) : accepted.board.graphics.at(-1);
+          assert.equal(region.layer, drawingLayer);
+          if (copper) {
+            assert.equal(region.netId, null, 'A region requires no net during drawing.');
+            assert.equal(region.fillEnabled, false);
+            assert.equal(region.filledPolygons, undefined);
+          } else {
+            assert.equal(region.kind, 'polygon');
+            assert.equal(region.fill, false);
+          }
+          await point({ x: 70, y: 40 }, true);
+          await point({ x: 55, y: 25 }, true);
+          assert.deepEqual(await page.evaluate(() => window.layoutContext().selection), [
+            { kind: copper ? 'zone' : 'graphic', id: region.id },
+          ]);
+          const filled = page.getByRole('checkbox', { name: 'Filled', exact: true });
+          await filled.waitFor();
+          assert.equal(await filled.isChecked(), false);
+          if (copper) {
+            assert.equal(
+              await page.getByRole('combobox', { name: 'Region net', exact: true }).count(),
+              0,
+            );
+            await filled.click();
+            await page.getByRole('alert').filter({ hasText: 'Assign a net' }).waitFor();
+            assert.equal((await snapshot()).commits, 1);
+            const net = page.getByRole('combobox', { name: 'Zone net', exact: true });
+            await net.click();
+            await page.getByRole('option', { name: 'SIGNAL', exact: true }).click();
+            await filled.check();
+            assert.ok((await snapshot()).board.zones.at(-1).filledPolygons.length);
+          } else {
+            await filled.check();
+            assert.equal((await snapshot()).board.graphics.at(-1).fill, true);
+          }
+          const native = parseSExpr(serializePCB((await snapshot()).board, emptyCircuit()));
+          const nodes = native.filter(
+            (node) => Array.isArray(node) && node[0] === (copper ? 'zone' : 'gr_poly'),
+          );
+          assert.equal(
+            nodes.length,
+            copper
+              ? accepted.board.zones.length
+              : accepted.board.graphics.filter((graphic) => graphic.kind === 'polygon').length,
+          );
+        },
       );
-      assert.deepEqual(accepted.board.graphics.at(-1).end, corners[0]);
-      assert.equal(boardPolygons(accepted.board)[0].holes.length, 1);
-      const native = parseSExpr(serializePCB(accepted.board, emptyCircuit()));
-      assert.equal(
-        native.filter((node) => Array.isArray(node) && node[0] === 'gr_line').length,
-        10,
-      );
-      assert.deepEqual(accepted.board.tracks, board.tracks);
-      assert.equal(await canvas.locator('[data-outline-preview]').count(), 0);
-      assert.equal(
-        await page
-          .getByRole('button', { name: 'Draw board outline', exact: true })
-          .getAttribute('aria-pressed'),
-        'true',
-      );
-    },
-  );
-
-  await run(
-    'outline: rectangle settings, rejection and repeat drawing retain exact previews',
-    async ({ page, canvas, point, snapshot }) => {
-      await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-      await page.getByRole('combobox', { name: 'Outline shape', exact: true }).click();
-      await page.getByRole('option', { name: 'Rectangle', exact: true }).click();
-      const width = page.getByRole('spinbutton', { name: 'Line width (mm)', exact: true });
-      await width.fill('0.15');
-      await width.press('Enter');
-      await point({ x: 45, y: 15 }, true);
-      await point({ x: 65, y: 35 });
-      await page.evaluate(() => (window.rejectCommit = true));
-      await canvas.press('Enter');
-      assert.equal((await snapshot()).commits, 0);
-      assert.equal(await canvas.locator('[data-outline-preview="rectangle"]').count(), 1);
-      await page.evaluate(() => (window.rejectCommit = false));
-      await page.getByRole('button', { name: 'Finish board outline', exact: true }).click();
-      const accepted = await snapshot();
-      assert.equal(accepted.commits, 1);
-      assert.equal(accepted.board.graphics.length, board.graphics.length + 4);
-      assert.ok(
-        accepted.board.graphics
-          .slice(-4)
-          .every((line) => line.width === 0.15 && line.layer === 'Edge.Cuts'),
-      );
-      assert.equal(await canvas.evaluate((element) => document.activeElement === element), true);
-      await point({ x: 48, y: 18 }, true);
-      await point({ x: 50, y: 20 }, true);
-      assert.equal((await snapshot()).commits, 2, 'A finished rectangle retains the drawing tool.');
-    },
-  );
-
-  await run(
-    'outline: Escape preserves placed segments, discards the live head and returns to Interaction',
-    async ({ page, canvas, point, snapshot }) => {
-      await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-      for (const corner of [
-        { x: 45, y: 15 },
-        { x: 65, y: 15 },
-        { x: 65, y: 35 },
-      ])
-        await point(corner, true);
-      await point({ x: 55, y: 40 });
-      await canvas.press('Escape');
-      assert.equal(await canvas.locator('[data-outline-preview]').count(), 0);
-      assert.equal(
-        await page.getByRole('complementary', { name: 'Outline settings', exact: true }).count(),
-        0,
-      );
-      assert.equal(
-        await page
-          .getByRole('button', { name: 'Interaction mode', exact: true })
-          .getAttribute('aria-pressed'),
-        'true',
-      );
-      const accepted = await snapshot();
-      assert.equal(accepted.commits, 2);
-      assert.deepEqual(
-        accepted.board.graphics.slice(-2).map((line) => [line.start, line.end]),
-        [
-          [
-            { x: 45, y: 15 },
-            { x: 65, y: 15 },
-          ],
-          [
-            { x: 65, y: 15 },
-            { x: 65, y: 35 },
-          ],
-        ],
-      );
-      assert.ok(accepted.board.graphics.slice(-2).every((line) => line.width === 0.05));
-      assert.deepEqual(accepted.board.tracks, board.tracks);
-      const native = parseSExpr(serializePCB(accepted.board, emptyCircuit()));
-      assert.equal(native.filter((node) => Array.isArray(node) && node[0] === 'gr_line').length, 6);
-    },
-  );
-
-  await run(
-    'outline: rejected segment retains its origin and exact head for retry',
-    async ({ page, canvas, point, snapshot }) => {
-      await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-      await point({ x: 45, y: 15 }, true);
-      await page.evaluate(() => (window.rejectCommit = true));
-      await point({ x: 65, y: 15 }, true);
-      assert.equal((await snapshot()).commits, 0);
-      assert.equal(
-        await canvas.locator('[data-outline-preview]').getAttribute('points'),
-        '45,15 65,15',
-      );
-      await page.evaluate(() => (window.rejectCommit = false));
-      await canvas.press('Enter');
-      const accepted = await snapshot();
-      assert.equal(accepted.commits, 1);
-      assert.deepEqual(accepted.board.graphics.at(-1).start, { x: 45, y: 15 });
-      assert.deepEqual(accepted.board.graphics.at(-1).end, { x: 65, y: 15 });
-      assert.equal(await canvas.locator('[data-outline-preview]').count(), 0);
-    },
-  );
-
-  await run(
-    'outline: unrelated board replacement cancels the continuation without another write',
-    async ({ page, canvas, point, snapshot }) => {
-      await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-      await point({ x: 45, y: 15 }, true);
-      await point({ x: 65, y: 15 }, true);
-      const accepted = await snapshot();
-      assert.equal(accepted.commits, 1);
-      assert.equal(await canvas.locator('[data-outline-preview]').count(), 1);
-      const replacement = structuredClone(accepted.board);
-      replacement.footprints[0].x += 0.5;
-      await page.evaluate((next) => window.replaceBoard(next), replacement);
-      await canvas.press('Enter');
-      assert.equal(await canvas.locator('[data-outline-preview]').count(), 0);
-      assert.deepEqual(await snapshot(), { board: replacement, commits: 1 });
-    },
-  );
-
-  await run(
-    'outline: existing off-grid edge endpoints override the grid and Control retains exact coordinates',
-    async ({ page, canvas, point, screen, snapshot }) => {
-      const offGrid = { x: 40.13, y: 40.17 };
-      const replacement = structuredClone(board);
-      replacement.graphics.push({
-        id: 'off-grid-edge',
-        start: offGrid,
-        end: { x: 42.13, y: 40.17 },
-        width: 0.05,
-        layer: 'Edge.Cuts',
-      });
-      await page.evaluate((next) => window.replaceBoard(next), replacement);
-      await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-      const anchor = await screen(offGrid);
-      await page.mouse.click(anchor.x + 2, anchor.y + 1);
-      const free = { x: 50.13, y: 42.17 };
-      await page.keyboard.down('Control');
-      await point(free);
-      await page.keyboard.up('Control');
-      assert.equal(await canvas.locator('[data-outline-preview]').count(), 1);
-      await canvas.press('Enter');
-      const accepted = await snapshot();
-      assert.equal(
-        accepted.commits,
-        1,
-        JSON.stringify(await page.evaluate(() => window.layoutContext())),
-      );
-      assert.deepEqual(accepted.board.graphics.at(-1).start, offGrid);
-      assert.ok(Math.abs(accepted.board.graphics.at(-1).end.x - free.x) < 0.00001);
-      assert.ok(Math.abs(accepted.board.graphics.at(-1).end.y - free.y) < 0.00001);
-    },
-  );
-
-  for (const shape of ['Lines', 'Rectangle']) {
+    }
+  }
+  for (const shape of ['rectangle', 'polygon'])
     await run(
-      'outline: double-click completion leaves no spurious ' + shape + ' draft',
-      async ({ page, canvas, point, screen, snapshot }) => {
-        await page.getByRole('button', { name: 'Draw board outline', exact: true }).click();
-        if (shape === 'Rectangle') {
-          await page.getByRole('combobox', { name: 'Outline shape', exact: true }).click();
-          await page.getByRole('option', { name: shape, exact: true }).click();
-        }
+      `regions: ${shape} cancellation, IME, rejection and layer changes retain no partial edits`,
+      async ({ page, canvas, point, snapshot }) => {
+        await selectLayoutLayer(page, 'F.SilkS');
+        await page.getByRole('button', { name: `Draw ${shape}`, exact: true }).click();
         await point({ x: 45, y: 15 }, true);
-        const finish = await screen({ x: 65, y: 35 });
-        await page.mouse.dblclick(finish.x, finish.y);
-        const accepted = await snapshot();
-        assert.equal(accepted.commits, 1);
-        assert.equal(
-          accepted.board.graphics.length,
-          board.graphics.length + (shape === 'Lines' ? 1 : 4),
-        );
-        assert.equal(await canvas.locator('[data-outline-preview]').count(), 0);
-        assert.equal(await page.getByRole('alert').count(), 0);
+        await point({ x: 65, y: 35 });
+        await canvas.dispatchEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 229,
+          isComposing: true,
+          bubbles: true,
+        });
+        assert.equal((await snapshot()).commits, 0);
+        await canvas.press('Escape');
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 0);
         assert.equal(
           await page
-            .getByRole('button', { name: 'Draw board outline', exact: true })
+            .getByRole('button', { name: `Draw ${shape}`, exact: true })
             .getAttribute('aria-pressed'),
           'true',
         );
+        await point({ x: 45, y: 15 }, true);
+        if (shape === 'polygon') {
+          await point({ x: 65, y: 15 }, true);
+          await point({ x: 65, y: 35 }, true);
+        } else await point({ x: 65, y: 35 });
+        await page.evaluate(() => (window.rejectCommit = true));
+        await canvas.press('Enter');
+        assert.equal((await snapshot()).commits, 0);
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 1);
+        await selectLayoutLayer(page, 'B.SilkS');
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 0);
+        await page.evaluate(() => (window.rejectCommit = false));
+        await point({ x: 45, y: 15 }, true);
+        if (shape === 'polygon') {
+          await point({ x: 65, y: 15 }, true);
+          await point({ x: 65, y: 35 }, true);
+          await canvas.press('Enter');
+        } else await point({ x: 65, y: 35 }, true);
+        assert.equal((await snapshot()).commits, 1);
+        assert.equal((await snapshot()).board.graphics.at(-1).layer, 'B.SilkS');
       },
     );
-  }
 
   for (const finish of ['keyboard', 'pointer']) {
     await run(
@@ -513,7 +422,7 @@ try {
       async (context) => {
         const { page, canvas, snapshot } = context;
         await drawZoneDraft(context);
-        const button = page.getByRole('button', { name: 'Finish copper zone', exact: true });
+        const button = page.getByRole('button', { name: 'Finish region', exact: true });
         if (finish === 'keyboard') {
           await tabTo(page, button);
           await page.keyboard.press('Enter');
@@ -556,9 +465,9 @@ try {
     async (context) => {
       const { page, canvas, snapshot } = context;
       await drawZoneDraft(context);
-      const draft = canvas.locator('polyline[data-annotation-overlay][fill-opacity="0.12"]');
+      const draft = canvas.locator('[data-shape-preview]');
       const points = await draft.getAttribute('points');
-      const button = page.getByRole('button', { name: 'Finish copper zone', exact: true });
+      const button = page.getByRole('button', { name: 'Finish region', exact: true });
       await tabTo(page, button);
       await page.evaluate(() => {
         window.rejectCommit = true;
@@ -849,6 +758,86 @@ try {
     );
   }
 
+  for (const cutout of [false, true]) {
+    const input = structuredClone(board);
+    if (cutout)
+      input.graphics.push({
+        id: 'via-cutout',
+        kind: 'circle',
+        layer: 'Edge.Cuts',
+        width: 0.1,
+        start: { x: 55, y: 30 },
+        end: { x: 59, y: 30 },
+      });
+    await run(
+      'via boundary: standalone preview hides and placement fails ' +
+        (cutout ? 'inside a cutout' : 'outside the board'),
+      async ({ page, canvas, point, snapshot }) => {
+        await page.getByRole('button', { name: 'Place through via', exact: true }).click();
+        const preview = canvas.locator('[data-via-preview]');
+        await point({ x: 50, y: 40 });
+        await preview.waitFor();
+        const blocked = cutout ? { x: 55, y: 30 } : { x: 82, y: 35 };
+        assert.equal(
+          await canvas.evaluate((svg, at) => {
+            const p = new DOMPoint(at.x, at.y).matrixTransform(svg.getScreenCTM());
+            return svg.contains(document.elementFromPoint(p.x, p.y));
+          }, blocked),
+          true,
+          'The outside-board target remains inside the drawing viewport.',
+        );
+        await point(blocked);
+        await preview.waitFor({ state: 'detached' });
+        await point(blocked, true);
+        assert.deepEqual(
+          await snapshot(),
+          { board: input, commits: 0 },
+          'Outside clicks cannot place a via.',
+        );
+        await point({ x: 0.5, y: 35 });
+        await preview.waitFor();
+        assert.equal(
+          await preview.getAttribute('data-route-blocked'),
+          'true',
+          'Insufficient edge clearance remains visibly blocked inside the board.',
+        );
+        await point({ x: 50, y: 40 });
+        await preview.waitFor();
+        assert.equal(await preview.getAttribute('data-route-blocked'), 'false');
+        await point({ x: 50, y: 40 }, true);
+        const accepted = await snapshot();
+        assert.equal(accepted.commits, 1);
+        assert.equal(accepted.board.vias.length, input.vias.length + 1);
+        const via = accepted.board.vias.at(-1);
+        assert.deepEqual({ x: via.x, y: via.y }, { x: 50, y: 40 });
+      },
+      input,
+    );
+  }
+  await run(
+    'via boundary: route transition preview hides outside the board without losing its draft',
+    async ({ page, canvas, point, snapshot }) => {
+      await page.getByRole('button', { name: 'Route tracks', exact: true }).click();
+      await point({ x: 50, y: 35 }, true);
+      await point({ x: 65, y: 35 });
+      await canvas.press('v');
+      const preview = canvas.locator('[data-via-preview]');
+      await preview.waitFor();
+      await point({ x: 82, y: 35 });
+      await preview.waitFor({ state: 'detached' });
+      assert.equal(
+        await canvas.locator('[data-route-obstacle]').count(),
+        0,
+        'A hidden via has no remaining obstacle circle outside the board.',
+      );
+      await canvas.press('Enter');
+      assert.deepEqual(await snapshot(), { board, commits: 0 });
+      await point({ x: 65, y: 35 });
+      await preview.waitFor();
+      await canvas.press('Escape');
+      assert.deepEqual(await snapshot(), { board, commits: 0 });
+    },
+  );
   await run(
     'tool select continuity: closed Via net Escape returns to Interaction and retains selection',
     async ({ page, canvas, point, snapshot, selected }) => {
@@ -1381,14 +1370,14 @@ try {
     'Backspace removes only the last zone corner and finishing commits the revised outline once',
     async ({ page, canvas, point, snapshot }) => {
       await point({ x: 20, y: 20 }, true);
-      await page.getByRole('button', { name: 'Draw copper zone', exact: true }).click();
+      await page.getByRole('button', { name: 'Draw polygon', exact: true }).click();
       for (const corner of [
         { x: 15, y: 15 },
         { x: 25, y: 15 },
         { x: 25, y: 25 },
       ])
         await point(corner, true);
-      const finish = page.getByRole('button', { name: 'Finish copper zone', exact: true });
+      const finish = page.getByRole('button', { name: 'Finish region', exact: true });
       assert.equal(await finish.isEnabled(), true);
       await canvas.press('Backspace');
       assert.equal(

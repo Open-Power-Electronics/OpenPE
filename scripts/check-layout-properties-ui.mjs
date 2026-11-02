@@ -249,33 +249,39 @@ async function run(name, check) {
             .map((field) => {
               const control = field.querySelector('input, textarea, [role="combobox"]');
               const style = getComputedStyle(control);
+              const surface = field.querySelector('.quantity-input') ?? control;
+              const surfaceStyle = getComputedStyle(surface);
               return {
                 label: bounds(field.querySelector(':scope > span')),
                 field: bounds(field),
-                control: bounds(control),
+                control: bounds(surface),
                 labelFontSize: parseFloat(getComputedStyle(field).fontSize),
                 controlFontSize: parseFloat(style.fontSize),
-                radius: style.borderRadius,
-                minHeight: parseFloat(style.minHeight),
+                radius: surfaceStyle.borderRadius,
+                minHeight: parseFloat(surfaceStyle.minHeight),
               };
             }),
           grids: Array.from(element.querySelectorAll('.layout-property-grid'))
             .filter((grid) => grid.getClientRects().length)
             .map((grid) => ({
               columns: Number(grid.dataset.columns),
-              fields: Array.from(grid.children).map(bounds),
+              fields: Array.from(grid.children)
+                .filter((field) => getComputedStyle(field).gridColumnEnd !== '-1')
+                .map(bounds),
             })),
         };
       });
       for (const field of formatting.fields) {
+        const stacked = field.control.top >= field.label.bottom + 3;
         assert.ok(
-          field.control.top >= field.label.bottom + 3 &&
-            Math.abs(field.control.left - field.label.left) <= 1,
-          'Editable Properties labels sit above their controls with the Schematic field gap.',
-        );
-        assert.ok(
-          Math.abs(field.control.width - field.field.width) <= 1,
-          'Properties controls fill their own column without a separate label column.',
+          stacked
+            ? Math.abs(field.control.left - field.label.left) <= 1 &&
+                Math.abs(field.control.width - field.field.width) <= 1
+            : field.control.left >= field.label.left + field.label.width + 7 &&
+                Math.abs(
+                  field.control.top + field.control.bottom - field.label.top - field.label.bottom,
+                ) <= 2,
+          'Properties uses paired stacked fields or aligned label/control rows.',
         );
         assert.ok(
           field.controlFontSize > field.labelFontSize,
@@ -374,11 +380,13 @@ try {
       await identity.waitFor();
       await frames();
       assert.ok(
-        await identity.locator('svg').evaluate((svg) => svg.viewBox.baseVal.width >= 20),
+        await identity
+          .locator('.component-preview svg')
+          .evaluate((svg) => svg.viewBox.baseVal.width >= 20),
         'Revealing Properties fits the complete footprint thumbnail.',
       );
       assert.equal(await identity.locator('strong').innerText(), 'J1');
-      assert.match(await identity.innerText(), /PadTypes/);
+      assert.match(await panel.innerText(), /Fixture:PadTypes/);
       assert.equal(await panel.getByRole('heading', { name: 'Footprint', exact: true }).count(), 0);
       const preview = identity.getByRole('img', { name: 'Footprint preview', exact: true });
       assert.equal(await preview.getAttribute('class'), 'footprint-identity-preview');
@@ -411,8 +419,8 @@ try {
         layout,
         {
           gap: '8px',
-          top: '10px',
-          bottom: '12px',
+          top: '8px',
+          bottom: '8px',
           offset: 0,
           thumbnail: [36, 36],
           preview: [28, 28],
@@ -508,8 +516,12 @@ try {
 
   await run(
     'track endpoints and lock guards share Core transactions',
-    async ({ panel, click, number, native, undo, state }) => {
+    async ({ page, panel, click, number, native, undo, state }) => {
       await click(18, 30);
+      await panel
+        .locator('summary')
+        .filter({ hasText: /^Endpoints$/ })
+        .click();
       const before = (await state()).board;
       await number('Start X (mm)', 11.5);
       const changed = await native();
@@ -518,6 +530,10 @@ try {
       assert.equal(changed.tracks[0].netId, ids.net);
       await undo();
       assert.deepEqual((await state()).board, before);
+      const selection = page.getByRole('button', { name: 'Selection', exact: true });
+      await selection.click();
+      await page.getByRole('checkbox', { name: 'Locked items', exact: true }).check();
+      await selection.click();
       await panel.getByRole('checkbox', { name: 'Locked track', exact: true }).check();
       assert.equal(
         await panel.getByRole('spinbutton', { name: 'Start X (mm)', exact: true }).isDisabled(),
@@ -636,6 +652,10 @@ try {
       };
       await width.fill('5');
       await composingSave(width);
+      await panel
+        .locator('summary')
+        .filter({ hasText: /^Fabrication$/ })
+        .click();
       const margin = panel.getByRole('textbox', { name: 'Solder mask margin (mm)', exact: true });
       await margin.fill('.05');
       await margin.press('Enter');

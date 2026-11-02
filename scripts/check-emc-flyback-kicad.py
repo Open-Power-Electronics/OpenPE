@@ -18,7 +18,7 @@ parser.add_argument('--cli', default=str(Path(sys.executable).with_name('kicad-c
 args = parser.parse_args()
 assert pcb.GetBuildVersion().startswith('10.'), 'Use KiCad 10 Python.'
 original = ROOT / 'resources/example-catalog/sources/emc-flyback/design/emc_flyback'
-converted = ROOT / 'examples/emc-flyback/emc-flyback'
+converted = ROOT / 'recent/emc-flyback/emc-flyback'
 
 def connections(stem, name):
     destination = OUT / f'{name}.net'

@@ -22,7 +22,7 @@ async function entries(directory) {
 }
 
 /** Host-owned discovery only. Keys identify files; they are never file paths or grants. */
-export async function discoverExamples(root, nativeName) {
+export async function discoverExamples(root, nativeName, keyPrefix = '') {
   const top = await entries(root);
   const projects = [],
     warnings = [];
@@ -47,29 +47,37 @@ export async function discoverExamples(root, nativeName) {
     for (const file of candidates) {
       if (projects.length >= 256) throw new Error('Example discovery exceeds 256 projects.');
       const relative = directory ? `${directory}/${file.name}` : file.name;
-      const digest = createHash('sha256').update(normalize(relative)).digest('hex');
+      const digest = createHash('sha256')
+        .update(keyPrefix + normalize(relative))
+        .digest('hex');
       projects.push({ key: `example:local-${digest}`, directory, filename: file.name });
     }
   };
   inspect(top, '');
   let directories = 0;
-  for (const entry of top) {
-    if (entry.isSymbolicLink()) {
-      warnings.push(`Skipped linked example entry: ${entry.name}`);
-      continue;
+  const scan = async (items) => {
+    for (const entry of items) {
+      const directory = entry.name;
+      if (entry.isSymbolicLink()) {
+        warnings.push(`Skipped linked example entry: ${entry.name}`);
+        continue;
+      }
+      if (
+        !entry.isDirectory() ||
+        privateFolder.test(entry.name) ||
+        !nativeName(`${entry.name}/project.kicad_pro`)
+      )
+        continue;
+      if (++directories > 128)
+        throw new Error('Example discovery exceeds 128 project directories.');
+      try {
+        const children = await entries(path.join(root, directory));
+        inspect(children, directory);
+      } catch (error) {
+        warnings.push(`Could not inspect ${entry.name}: ${error.message}`);
+      }
     }
-    if (
-      !entry.isDirectory() ||
-      privateFolder.test(entry.name) ||
-      !nativeName(`${entry.name}/project.kicad_pro`)
-    )
-      continue;
-    if (++directories > 128) throw new Error('Example discovery exceeds 128 project directories.');
-    try {
-      inspect(await entries(path.join(root, entry.name)), entry.name);
-    } catch (error) {
-      warnings.push(`Could not inspect ${entry.name}: ${error.message}`);
-    }
-  }
+  };
+  await scan(top);
   return { projects, warnings };
 }

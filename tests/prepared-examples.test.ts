@@ -35,7 +35,7 @@ test('all ten original examples retain their actual native filenames and parse a
       ),
     );
   }
-  await assert.rejects(readFile('examples/emc-flyback/emc-flyback.scad'), { code: 'ENOENT' });
+  await assert.rejects(readFile('emc-flyback/emc-flyback.scad'), { code: 'ENOENT' });
   const reference = homeExampleCatalog.find((entry) => entry.id !== 'emc-flyback-demo')!;
   await assert.rejects(readFile(`examples/${reference.file}/datasheets/parameters.json`), {
     code: 'ENOENT',
@@ -52,6 +52,12 @@ test('packaging retains the original examples tree including documents and optio
     examples,
     'Desktop packaging includes the same examples directory used in development.',
   );
+  const recent = configuration.build.extraResources.find(
+    (entry: { from: string; to: string }) =>
+      entry.from === 'recent' && entry.to === 'recent-native',
+  );
+  assert.ok(recent);
+  assert.deepEqual(recent.filter, examples.filter);
   const includes = (file: string) =>
     examples.filter
       .filter((pattern: string) => !pattern.startsWith('!'))

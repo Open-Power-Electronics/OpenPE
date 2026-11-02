@@ -91,3 +91,21 @@ export function previewModel(id: string, index: number, signal: AbortSignal): Pr
   );
   return result;
 }
+
+export async function previewAssignedModel(
+  source: string,
+  fileId: string | undefined,
+  footprintId: string,
+  index: number,
+  signal: AbortSignal,
+): Promise<MeshData[]> {
+  const result = await (
+    await api('component-model', {
+      method: 'POST',
+      signal,
+      body: JSON.stringify({ source, ...(fileId ? { fileId } : {}), footprintId, index }),
+    })
+  ).json();
+  checkCancelled(signal);
+  return result.meshes;
+}

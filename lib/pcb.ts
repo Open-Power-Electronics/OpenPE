@@ -187,6 +187,11 @@ export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
         );
       }));
   const zoneInput = ({ filledPolygons: _filled, ...zone }: BoardZone) => zone;
+  // Disabled zones are only editable outlines: adding, assigning or reshaping
+  // one cannot change existing copper. Rule areas remain obstacles regardless
+  // of their fill flag; enabling a zone brings it back into this comparison.
+  const zoneInputs = (zones: BoardZone[]) =>
+    zones.filter((zone) => zone.keepout || zone.fillEnabled !== false).map(zoneInput);
   const copperGraphics = (graphics: BoardLine[]) =>
     graphics.filter((g) => g.layer === 'Edge.Cuts' || g.layer.endsWith('.Cu'));
   const inputs = (board: PCB) =>
@@ -195,7 +200,7 @@ export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
       board.tracks.map(({ locked: _locked, ...track }) => track),
       board.vias,
       copperGraphics(board.graphics),
-      board.zones.map(zoneInput),
+      zoneInputs(board.zones),
       board.footprints.map((f) => [
         f.x,
         f.y,
@@ -203,7 +208,7 @@ export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
         f.side,
         f.pads,
         copperGraphics(f.graphics),
-        (f.zones ?? []).map(zoneInput),
+        zoneInputs(f.zones ?? []),
       ]),
     ]);
   if (!trackCopperChanged && inputs(previous) === inputs(next)) return next;

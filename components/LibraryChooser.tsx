@@ -37,10 +37,12 @@ export default function LibraryChooser({
   actionLabel,
   header,
   canChoose = true,
+  initialPreview = '2d',
+  requireModel = false,
 }: {
   kind: 'symbols' | 'footprints';
   onClose: () => void;
-  onChoose: (detail: Detail, unit: number) => void;
+  onChoose: (detail: Detail, unit: number, modelIndex: number) => void;
   initialSearch?: string;
   initialLibrary?: string;
   capabilityHost?: CapabilityHost;
@@ -49,6 +51,8 @@ export default function LibraryChooser({
   actionLabel?: string;
   header?: ReactNode;
   canChoose?: boolean;
+  initialPreview?: '2d' | '3d';
+  requireModel?: boolean;
 }) {
   const [query, setQuery] = useState(initialSearch),
     [library, setLibrary] = useState(initialLibrary);
@@ -150,7 +154,7 @@ export default function LibraryChooser({
     setDetail(null);
     setError('');
     setUnit(1);
-    setTab('2d');
+    setTab(initialPreview);
     setModel(0);
     setTiPreview('symbol');
     if (!selected) return;
@@ -170,7 +174,7 @@ export default function LibraryChooser({
         if (!control.signal.aborted) setError(e.message);
       });
     return () => control.abort();
-  }, [kind, selected, capabilityHost]);
+  }, [kind, selected, capabilityHost, initialPreview]);
   useEffect(() => {
     setFootprint(null);
     setFootprintError('');
@@ -196,12 +200,17 @@ export default function LibraryChooser({
       });
     return () => control.abort();
   }, [ti, capabilityHost]);
-  const invalid = detail && 'error' in detail ? detail.error : '';
+  const invalid =
+    detail && 'error' in detail && detail.error
+      ? detail.error
+      : requireModel && detail && 'models' in detail && !detail.models.length
+        ? 'This footprint has no 3D model.'
+        : '';
   const ready = canChoose && !busy && !error && detail?.id === selected && !!detail && !invalid;
   const choose = () => {
     if (ready && detail && !chosen.current) {
       chosen.current = true;
-      onChoose(detail, unit);
+      onChoose(detail, unit, model);
     }
   };
   function navigate(event: KeyboardEvent<HTMLElement>, focusResult: boolean) {
@@ -237,7 +246,7 @@ export default function LibraryChooser({
     <>
       <Dialog
         wide
-        className="library-chooser"
+        className={`library-chooser${kind === 'footprints' ? ' footprint-chooser assignment-dialog' : ''}`}
         title={title ?? (kind === 'symbols' ? 'Choose symbol' : 'Choose footprint')}
         label={label ?? (kind === 'symbols' ? 'Components' : 'Footprints')}
         icon={<Library size={20} />}
@@ -318,7 +327,7 @@ export default function LibraryChooser({
             </button>
           </div>
         )}
-        <div className="library-browser">
+        <div className={`library-browser${kind === 'footprints' ? ' assignment-browser' : ''}`}>
           <div
             ref={results}
             className="library-results"
@@ -350,10 +359,15 @@ export default function LibraryChooser({
             ))}
             {!busy && !entries.length && !error && !resultsError && <p>No matching {kind}.</p>}
           </div>
-          <div className="library-detail">
+          <div className={`library-detail${kind === 'footprints' ? ' assignment-detail' : ''}`}>
             {detail ? (
               <>
-                <strong>{detail.id}</strong>
+                <div className="library-detail-heading">
+                  <strong className="library-detail-title">{detail.name}</strong>
+                  <small className="library-detail-id" title={detail.id}>
+                    {detail.id}
+                  </small>
+                </div>
                 {'symbol' in detail ? (
                   <>
                     {ti && (
@@ -403,24 +417,29 @@ export default function LibraryChooser({
                 ) : (
                   <>
                     <div className="preview-tabs">
-                      <button aria-pressed={tab === '2d'} onClick={() => setTab('2d')}>
+                      <button
+                        aria-pressed={tab === '2d' || !detail.models.length}
+                        onClick={() => setTab('2d')}
+                      >
                         Footprint
                       </button>
                       <button
-                        aria-pressed={tab === '3d'}
+                        aria-pressed={tab === '3d' && !!detail.models.length}
                         disabled={!detail.models.length}
                         onClick={() => setTab('3d')}
                       >
                         3D model
                       </button>
                     </div>
-                    {tab === '2d' ? (
-                      <FootprintPreview footprint={detail.footprint} />
-                    ) : (
-                      <Suspense fallback={<p role="status">Loading 3D model…</p>}>
-                        <ModelPreview id={detail.id} index={model} />
-                      </Suspense>
-                    )}
+                    <div className="library-preview-stage assignment-preview-stage">
+                      {tab === '2d' || !detail.models.length ? (
+                        <FootprintPreview footprint={detail.footprint} />
+                      ) : (
+                        <Suspense fallback={<p role="status">Loading 3D model…</p>}>
+                          <ModelPreview id={detail.id} index={model} />
+                        </Suspense>
+                      )}
+                    </div>
                     {tab === '3d' && detail.models.length > 1 && (
                       <Select
                         label="3D model"
@@ -433,6 +452,10 @@ export default function LibraryChooser({
                       />
                     )}
                     <p>{detail.description}</p>
+                    <small className="library-detail-meta">
+                      {detail.pads.length} pads · {detail.models.length} 3D{' '}
+                      {detail.models.length === 1 ? 'model' : 'models'}
+                    </small>
                   </>
                 )}
                 {invalid && (

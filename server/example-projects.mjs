@@ -15,10 +15,17 @@ const defaultExampleId = (key) => {
 // Catalog keys resolve only original host-owned example folders. The directory
 // grant exposes the same native and supporting files used by ordinary projects.
 export class ExampleProjects {
-  constructor(examplesRoot, grants, history) {
+  constructor(
+    examplesRoot,
+    grants,
+    history,
+    recentRoot = path.resolve(examplesRoot, '..', 'recent'),
+  ) {
     if (typeof examplesRoot !== 'string' || !path.isAbsolute(examplesRoot))
       throw new Error('The original example root must be an absolute host directory.');
-    this.root = path.resolve(examplesRoot);
+    if (typeof recentRoot !== 'string' || !path.isAbsolute(recentRoot))
+      throw new Error('The Recent root must be an absolute host directory.');
+    this.roots = { examples: path.resolve(examplesRoot), recent: path.resolve(recentRoot) };
     this.grants = grants;
     this.history = history;
     this.busy = new Map();
@@ -28,7 +35,8 @@ export class ExampleProjects {
         {
           id: defaultExampleId(`example:${entry.id}`),
           filename: `${entry.file}.kicad_pro`,
-          directory: entry.file,
+          directory: entry.directory,
+          root: entry.root,
         },
       ]),
     );
@@ -44,12 +52,30 @@ export class ExampleProjects {
   }
 
   async #discover() {
-    const { projects, warnings } = await discoverExamples(this.root, nativeProject.nativeName);
+    const projects = [],
+      warnings = [];
+    for (const [root, directory] of Object.entries(this.roots)) {
+      try {
+        const found = await discoverExamples(
+          directory,
+          nativeProject.nativeName,
+          root === 'recent' ? 'recent/' : '',
+        );
+        projects.push(...found.projects.map((project) => ({ ...project, root })));
+        warnings.push(...found.warnings);
+      } catch (error) {
+        if (root === 'examples') throw error;
+        warnings.push(`Could not inspect Recent: ${error.message}`);
+      }
+    }
+    if (projects.length > 256) throw new Error('Example discovery exceeds 256 projects.');
     const next = new Map(this.fixedCatalog);
     const entries = projects.map((project) => {
       const fixed = catalog.find(
         (entry) =>
-          project.directory === entry.file && project.filename === `${entry.file}.kicad_pro`,
+          project.root === entry.root &&
+          project.directory === entry.directory &&
+          project.filename === `${entry.file}.kicad_pro`,
       );
       const key = fixed ? `example:${fixed.id}` : project.key;
       next.set(key, { ...project, id: defaultExampleId(key) });
@@ -57,7 +83,7 @@ export class ExampleProjects {
         id: key.slice('example:'.length),
         title: fixed?.title ?? project.filename.replace(/\.kicad_(?:pro|sch|pcb)$/i, ''),
         description: fixed?.description ?? 'Native KiCad project',
-        section: fixed && homeManifest.recent.includes(fixed) ? 'recent' : 'examples',
+        section: project.root,
       };
     });
     this.catalog = next;
@@ -74,7 +100,9 @@ export class ExampleProjects {
         while (next < entries.length) {
           const index = next++;
           const [key, entry] = entries[index];
-          const existing = this.grants.find(path.join(this.root, entry.directory, entry.filename));
+          const existing = this.grants.find(
+            path.join(this.roots[entry.root], entry.directory, entry.filename),
+          );
           try {
             const result = await this.openDefault(key);
             if (!existing) this.grants.release(result.fileId);
@@ -107,7 +135,7 @@ export class ExampleProjects {
   }
 
   async #openProject(entry) {
-    const file = path.join(this.root, entry.directory, entry.filename);
+    const file = path.join(this.roots[entry.root], entry.directory, entry.filename);
     const existingGrant = this.grants.find(file);
     let fileId;
     try {

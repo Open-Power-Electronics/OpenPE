@@ -15,6 +15,7 @@ import {
   copperPolygons,
   filledCopperPolygons,
   fillCopperZones,
+  fillCopperZone,
   copperFillContour,
   subtractPolygons,
   offsetPolygons,
@@ -80,6 +81,26 @@ function fixture() {
   board.vias = [{ id: uid(), netId: board.nets[1].id, x: 10, y: 5, diameter: 1, drill: 0.5 }];
   return board;
 }
+
+test('selected zone fill enables exactly that zone, preserves unrelated fills and rejects missing or unassigned targets', () => {
+  const board = fixture();
+  const selected = { ...board.zones[0], fillEnabled: false };
+  const other = { ...selected, id: uid(), layer: 'B.Cu' as const };
+  board.zones = [selected, other];
+  const before = structuredClone(board);
+  const filled = fillCopperZone(board, selected.id);
+  assert.equal(filled.zones[0].fillEnabled, true);
+  assert.ok(filled.zones[0].filledPolygons!.length);
+  assert.deepEqual(filled.zones[1], other);
+  assert.deepEqual(board, before);
+  assert.throws(() => fillCopperZone(board, uid()), /existing board copper zone/);
+  const unassigned = { ...board, zones: [{ ...selected, netId: null }] };
+  assert.throws(() => fillCopperZone(unassigned, selected.id), /Assign a net/);
+  assert.deepEqual(board, before);
+  const refilled = fillCopperZone(filled, selected.id, 0.5);
+  assert.equal(refilled.zones[0].clearance, 0.5);
+  assert.deepEqual(refilled.zones[1], other);
+});
 
 test('zero native clearance uses the fill minimum and retains copper-edge spacing around track sides and ends', () => {
   for (const clearance of [undefined, 0.1, 0.6]) {
@@ -378,6 +399,113 @@ test('saved fills are authoritative and survive display; edits invalidate them a
   assert.ok(
     contains(filledCopperPolygons(source).get(source.zones[0].id)!, 20, 15),
     'Native saved copper is preserved even if its source boundary changed later.',
+  );
+});
+
+test('adding or editing disabled zone outlines retains existing copper on either layer, including overlapping regions', () => {
+  const filled = fillCopperZones(fixture());
+  const original = structuredClone(filled);
+  for (const layer of ['F.Cu', 'B.Cu'] as const) {
+    for (const outline of [rectangle(2, 2, 20, 12), rectangle(40, 30, 5, 5)]) {
+      const zone: BoardZone = {
+        ...filled.zones[0],
+        id: uid(),
+        layer,
+        outline,
+        netId: null,
+        fillEnabled: false,
+      };
+      delete zone.filledPolygons;
+      const added = { ...filled, zones: [...filled.zones, zone] };
+      assert.equal(invalidatePCBFill(filled, added), added);
+      assert.equal(added.zones[0], filled.zones[0]);
+      assert.equal(added.zones[0].filledPolygons, filled.zones[0].filledPolygons);
+      const assigned = {
+        ...added,
+        zones: [
+          filled.zones[0],
+          { ...zone, netId: filled.nets[1].id, clearance: 0.6, outline: rectangle(1, 1, 25, 16) },
+        ],
+      };
+      assert.equal(invalidatePCBFill(added, assigned), assigned);
+      assert.equal(
+        invalidatePCBFill(assigned, filled),
+        filled,
+        'Removing an inactive outline retains copper too.',
+      );
+      const enabled = {
+        ...assigned,
+        zones: assigned.zones.map((item) =>
+          item.id === zone.id ? { ...item, fillEnabled: true } : item,
+        ),
+      };
+      assert.equal(
+        invalidatePCBFill(assigned, enabled).zones[0].filledPolygons,
+        undefined,
+        'Enabling a pour still checks existing copper.',
+      );
+      const keepout = {
+        ...added,
+        zones: [
+          filled.zones[0],
+          {
+            ...zone,
+            keepout: {
+              tracks: false,
+              vias: false,
+              pads: false,
+              copperpour: true,
+              footprints: false,
+            },
+          },
+        ],
+      };
+      assert.equal(
+        invalidatePCBFill(added, keepout).zones[0].filledPolygons,
+        undefined,
+        'A disabled fill flag cannot hide a copper keepout.',
+      );
+    }
+  }
+  assert.deepEqual(filled, original);
+});
+
+test('disabled embedded zone outlines retain saved board and package copper', () => {
+  const board = fixture();
+  board.footprints = [
+    {
+      id: uid(),
+      symbolId: null,
+      libraryId: 'Test:Zones',
+      x: 10,
+      y: 10,
+      rotation: 0,
+      side: 'back',
+      pads: [],
+      graphics: [],
+      zones: [{ ...board.zones[0], id: uid(), layer: 'B.Cu', outline: rectangle(-3, -3, 6, 6) }],
+    },
+  ];
+  const filled = fillCopperZones(board);
+  const embedded: BoardZone = {
+    ...board.zones[0],
+    id: uid(),
+    netId: null,
+    fillEnabled: false,
+    outline: rectangle(-1, -1, 2, 2),
+  };
+  const next = {
+    ...filled,
+    footprints: filled.footprints.map((footprint) => ({
+      ...footprint,
+      zones: [...footprint.zones!, embedded],
+    })),
+  };
+  assert.equal(invalidatePCBFill(filled, next), next);
+  assert.equal(next.zones[0].filledPolygons, filled.zones[0].filledPolygons);
+  assert.equal(
+    next.footprints[0].zones![0].filledPolygons,
+    filled.footprints[0].zones![0].filledPolygons,
   );
 });
 

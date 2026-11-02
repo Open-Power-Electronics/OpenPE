@@ -558,15 +558,16 @@ try {
   await setLayoutVisibility(page, 'B.Cu', true);
   await toggleLayoutVisualization(page, 'Visible layers');
   await panel.getByRole('button', { name: 'F.Cu', exact: true }).click();
-  await page.getByRole('button', { name: 'Draw copper zone', exact: true }).click();
+  await page.getByRole('button', { name: 'Draw polygon', exact: true }).click();
   assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), 'F.Cu');
   assert.equal(await page.evaluate(() => window.layoutContext().layer), 'F.Cu');
   await panel.getByRole('button', { name: 'Edge.Cuts', exact: true }).click();
   assert.equal(
     await page.evaluate(() => window.layoutContext().tool),
-    'select',
-    'A noncopper row exits copper drawing so the outline can be selected.',
+    'zone',
+    'Drawing continues on the newly selected noncopper layer.',
   );
+  await canvas.press('Escape');
   const outline = lm.graphics.find((graphic) => graphic.layer === 'Edge.Cuts');
   const points = [outline.start, ...(outline.points ?? []), outline.end];
   const at = await point({
@@ -580,26 +581,14 @@ try {
     'The actual LM2596 polygon frame is selectable.',
   );
   await clearSelection();
-  await page.getByRole('button', { name: 'Draw copper zone', exact: true }).click();
-  assert.equal(
-    await page.evaluate(() => window.layoutContext().priorityLayer),
-    'Edge.Cuts',
-    'Copper drawing cannot silently restore the back copper layer.',
-  );
-  assert.equal(await page.evaluate(() => window.layoutContext().tool), 'select');
-  await page.getByRole('button', { name: 'Fill copper zones', exact: true }).click();
+  await page.getByRole('button', { name: 'Draw polygon', exact: true }).click();
   assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), 'Edge.Cuts');
-  await page.getByRole('button', { name: 'Fill zones', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.layoutContext().tool), 'zone');
   assert.equal(
-    await page.getByRole('complementary', { name: 'Copper fill settings', exact: true }).count(),
+    await page.getByRole('button', { name: 'Fill copper zones', exact: true }).count(),
     0,
-    'The real refill completed successfully.',
   );
-  assert.equal(
-    await page.evaluate(() => window.layoutContext().priorityLayer),
-    'Edge.Cuts',
-    'Refilling retains the selected outline layer.',
-  );
+  await canvas.press('Escape');
   assert.equal(await page.evaluate(() => window.layoutContext().layer), 'F.Cu');
   assert.equal(
     await canvas.locator('[data-copper-layer]').last().getAttribute('data-copper-layer'),
