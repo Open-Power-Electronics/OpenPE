@@ -23,7 +23,10 @@ import {
 // This never opens Electron or touches project destinations, providers or solvers.
 const { createProject } = await tsImport('../lib/project.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
-const { modelCadGeometryKey } = await tsImport('../lib/model-cad.ts', import.meta.url);
+const { modelCadGeometryKey, modelCadColor } = await tsImport(
+  '../lib/model-cad.ts',
+  import.meta.url,
+);
 const project = createProject();
 project.name = 'Model CAD';
 project.pcb = createEmptyPCB();
@@ -103,6 +106,7 @@ return <div className="editor" style={{position:'relative',display:'flex',flexDi
 <div style={{position:'relative',flex:1,minHeight:0}}><Preview board={snapshot.project.pcb} schematic={snapshot.project.schematic}
 grid={grid} gridSpacing={gridSpacing}
 modelCad={modelCadFromProject(snapshot.project)}
+onModeChange={mode=>window.modelMode=mode}
 revision={String(snapshot.revision)} undoDepth={snapshot.undoDepth} redoDepth={snapshot.redoDepth}
 sourcePending={snapshot.sourceDraft!==null} capabilityHost={host} active={active} viewState={view}
 listAction={<button className="tool-button" aria-label="Parts list">☷</button>}
@@ -156,6 +160,11 @@ const browser = await chromium.launch({
   channel:
     process.env.OPENPE_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
 });
+const colorOnly = process.argv.includes('--color');
+const sketchInputOnly = process.argv.includes('--sketch-input');
+const deleteActionsOnly = process.argv.includes('--delete-actions');
+const sketchPlaneOnly = process.argv.includes('--sketch-plane') || colorOnly;
+const sketchPlaneComplete = Symbol('sketch-plane-complete');
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.setDefaultTimeout(15000);
@@ -443,6 +452,77 @@ try {
     'J1',
   );
   assert.deepEqual(await state(), beforeSidebar, 'Inspecting a component is presentation state.');
+  if (deleteActionsOnly) {
+    const native = await page.evaluate(() => window.cad.core.getNativeFiles());
+    const id = project.pcb.footprints[0].id;
+    const removeComponent = componentProperties.getByRole('button', {
+      name: 'Delete object',
+      exact: true,
+    });
+    await componentProperties.dispatchEvent('compositionstart');
+    await removeComponent.click();
+    assert.deepEqual(await state(), beforeSidebar, 'IME composition cannot delete a component.');
+    await componentProperties.dispatchEvent('compositionend');
+    await page.evaluate(() => window.cad.core.updateSource('invalid source'));
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[aria-label="Component properties"] .property-delete-action')
+          .disabled,
+    );
+    await page.evaluate(() => window.cad.core.discardSource());
+    await removeComponent.click();
+    await page.waitForFunction(
+      () => window.cad.core.getSnapshot().project.pcb.footprints.length === 0,
+    );
+    const manual = await page.evaluate(() => window.cad.core.getNativeFiles());
+    assert.equal((await state()).undoDepth, beforeSidebar.undoDepth + 1);
+    await button('Undo').click();
+    await page.waitForFunction(
+      () => window.cad.core.getSnapshot().project.pcb.footprints.length === 1,
+    );
+    assert.deepEqual(await page.evaluate(() => window.cad.core.getNativeFiles()), native);
+    await page.evaluate(async (id) => {
+      await window.cad.host.execute(
+        'layout.delete',
+        {
+          boardId: window.cad.core.getSnapshot().project.pcb.id,
+          selection: [{ kind: 'footprint', id }],
+        },
+        { actor: 'agent', expectedRevision: String(window.cad.core.getSnapshot().revision) },
+      );
+    }, id);
+    assert.deepEqual(
+      await page.evaluate(() => window.cad.core.getNativeFiles()),
+      manual,
+      'Model component Delete and Agent layout.delete produce the same native files.',
+    );
+    await button('Undo').click();
+    await button('Place box').click();
+    await canvas.press('Enter');
+    await waitObjects(1);
+    const solidPanel = page.getByRole('complementary', {
+      name: 'Solid properties settings',
+      exact: true,
+    });
+    const removeSolid = solidPanel.getByRole('button', { name: 'Delete object', exact: true });
+    await removeSolid.waitFor();
+    const nativeSolid = await page.evaluate(() => window.cad.core.getNativeFiles());
+    const name = solidPanel.getByLabel('Solid name', { exact: true });
+    await name.fill('unapplied name');
+    assert.equal(await removeSolid.isDisabled(), true);
+    await name.press('Escape');
+    await removeSolid.focus();
+    await removeSolid.press('Enter');
+    await waitObjects(0);
+    await button('Undo').click();
+    await waitObjects(1);
+    assert.deepEqual(await page.evaluate(() => window.cad.core.getNativeFiles()), nativeSolid);
+    assert.deepEqual(errors, []);
+    console.log(
+      'PASS: Model component/CAD deletion, shared footer, IME/Source/draft gates, Agent parity and native undo.',
+    );
+    throw sketchPlaneComplete;
+  }
   for (const name of [
     'Place box',
     'Place cylinder',
@@ -457,6 +537,47 @@ try {
       `A visible Model toolbar action is available: ${name}`,
     );
   const toolbar = page.getByRole('group', { name: 'Model tools', exact: true });
+  assert.deepEqual(
+    await toolbar
+      .getByRole('button')
+      .evaluateAll((buttons) =>
+        buttons.slice(0, 3).map((button) => button.getAttribute('aria-label')),
+      ),
+    ['Interaction mode', 'Annotation mode', 'Create sketch'],
+    'Create sketch follows Annotation mode.',
+  );
+  const primitives = toolbar.getByRole('group', { name: '3D primitives', exact: true });
+  const drawingTools = toolbar.getByRole('group', { name: '2D drawing', exact: true });
+  const conversionTools = toolbar.getByRole('group', { name: '2D to 3D', exact: true });
+  assert.deepEqual(
+    await primitives
+      .getByRole('button')
+      .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
+    ['Place box', 'Place cylinder'],
+  );
+  assert.equal(
+    await drawingTools.getByRole('button', { name: 'Create sketch', exact: true }).count(),
+    1,
+  );
+  assert.equal(
+    await conversionTools.getByRole('button', { name: 'Extrude sketch', exact: true }).isDisabled(),
+    true,
+  );
+  const modifications = toolbar.getByRole('group', { name: 'Solid modifications', exact: true });
+  assert.equal(
+    await modifications.getByRole('button', { name: 'Drill through hole', exact: true }).count(),
+    1,
+  );
+  assert.equal(
+    await modifications.getByRole('combobox', { name: 'Modify solids', exact: true }).count(),
+    1,
+  );
+  for (const group of [drawingTools, conversionTools, modifications])
+    assert.equal(
+      await group.evaluate((element) => getComputedStyle(element).borderLeftWidth),
+      '1px',
+    );
+  await toolbar.screenshot({ path: 'test-results/model-toolbar-categories.png' });
   for (const name of ['Modify solids', 'Edit model'])
     assert.equal(
       await toolbar.getByRole('combobox', { name, exact: true }).count(),
@@ -487,6 +608,69 @@ try {
 
   await button('Place box').click();
   const placement = page.getByRole('complementary', { name: 'Box settings' });
+  const assertPlacementStrip = async (panel, name, singleRow = true) => {
+    await panel.evaluate(async (element) => {
+      await Promise.all(
+        element
+          .getAnimations({ subtree: true })
+          .filter((animation) => animation.effect.getTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
+    const geometry = await panel.evaluate((element) => {
+      const body = element.querySelector('form > div');
+      const inputs = [...body.querySelectorAll('input')].filter(
+        (input) => input.getClientRects().length,
+      );
+      const centers = inputs.map((input) => {
+        const rect = input.getBoundingClientRect();
+        return rect.y + rect.height / 2;
+      });
+      const bounds = element.getBoundingClientRect();
+      const bodyBounds = body.getBoundingClientRect();
+      const close = element.querySelector('button[aria-label="Cancel"]').getBoundingClientRect();
+      return {
+        rows: Math.max(...centers) - Math.min(...centers),
+        height: bounds.height,
+        overflowX: body.scrollWidth > body.clientWidth,
+        overflowY: body.scrollHeight > body.clientHeight,
+        closeInside: close.left >= bounds.left && close.right <= bounds.right,
+        inputsInside: inputs.every((input) => {
+          const rect = input.getBoundingClientRect();
+          return rect.left >= bodyBounds.left && rect.right <= bodyBounds.right + 1;
+        }),
+        labels: inputs.map((input) => input.getAttribute('aria-label')),
+      };
+    });
+    if (singleRow) {
+      assert.ok(geometry.rows < 1, `${name} fields share one row: ${JSON.stringify(geometry)}`);
+      assert.ok(geometry.height <= 54, `${name} uses a compact strip.`);
+    }
+    assert.equal(geometry.overflowX, false, `${name} needs no horizontal scrolling.`);
+    assert.equal(geometry.overflowY, false);
+    assert.equal(geometry.closeInside, true);
+    assert.equal(geometry.inputsInside, true, `${name} keeps every dimension visible.`);
+    assert.deepEqual(
+      geometry.labels,
+      name.includes('Cylinder')
+        ? ['Diameter (mm)', 'Height (mm)']
+        : ['Length (mm)', 'Width (mm)', 'Height (mm)'],
+    );
+    assert.equal(await panel.locator('header').count(), 0);
+    assert.equal(
+      await panel.getByRole('combobox', { name: 'Solid material', exact: true }).count(),
+      0,
+    );
+  };
+  await assertPlacementStrip(placement, 'Box');
+  await placement.screenshot({ path: 'test-results/model-box-single-row.png' });
+  await page.setViewportSize({ width: 900, height: 900 });
+  await assertPlacementStrip(placement, 'Narrow Box');
+  await placement.screenshot({ path: 'test-results/model-box-single-row-narrow.png' });
+  await page.setViewportSize({ width: 640, height: 900 });
+  await assertPlacementStrip(placement, 'Compact Box', false);
+  await placement.screenshot({ path: 'test-results/model-box-dimensions-compact.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
   assert.equal(
     await button('Interaction mode').getAttribute('aria-pressed'),
     'false',
@@ -543,6 +727,16 @@ try {
   });
   await selectedSolidProperties.waitFor();
   assert.equal(
+    await selectedSolidProperties
+      .getByRole('combobox', { name: 'Solid material', exact: true })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await selectedSolidProperties.getByLabel('Solid X position (mm)', { exact: true }).count(),
+    1,
+  );
+  assert.equal(
     await selectedSolidProperties.getByLabel('Solid name', { exact: true }).inputValue(),
     first.name,
     'A successful placement selects the new solid and restores the old component materials.',
@@ -565,6 +759,13 @@ try {
 
   await button('Place cylinder').click();
   await page.getByRole('complementary', { name: 'Cylinder settings' }).waitFor();
+  await assertPlacementStrip(
+    page.getByRole('complementary', { name: 'Cylinder settings' }),
+    'Cylinder',
+  );
+  await page
+    .getByRole('complementary', { name: 'Cylinder settings' })
+    .screenshot({ path: 'test-results/model-cylinder-single-row.png' });
   await page.mouse.move(position.x + 80, position.y + 20);
   await page.keyboard.press('Escape');
   await page.getByRole('complementary', { name: 'Cylinder settings' }).waitFor({ state: 'hidden' });
@@ -584,7 +785,7 @@ try {
   const inspector = page.getByRole('complementary', { name: 'Solid properties settings' });
   await inspector.waitFor();
   const deleteSolid = inspector.locator('footer').getByRole('button', {
-    name: 'Delete solid',
+    name: 'Delete object',
     exact: true,
   });
   assert.equal(await deleteSolid.isEnabled(), true);
@@ -610,7 +811,7 @@ try {
       return {
         panel: rect(element),
         input: rect(element.querySelector('input[aria-label="Solid name"]').closest('label')),
-        delete: rect(footer.querySelector('button[aria-label="Delete solid"]')),
+        delete: rect(footer.querySelector('button[aria-label="Delete object"]')),
         apply: rect(footer.querySelector('button[type="submit"]')),
         footer: rect(footer),
         body: rect(body),
@@ -632,12 +833,12 @@ try {
       const geometry = await inspectorGeometry();
       const detail = `${viewport.width} × ${viewport.height}: ${JSON.stringify(geometry)}`;
       assert.ok(
-        Math.abs(geometry.delete.left - geometry.input.left) <= 1,
-        `Delete aligns with the field's left edge (${detail}).`,
+        Math.abs(geometry.footer.right - geometry.delete.right - 12) <= 1,
+        `Delete uses the shared 12 px right inset (${detail}).`,
       );
       assert.ok(
-        Math.abs(geometry.apply.right - geometry.input.right) <= 1,
-        `Apply aligns with the field's right edge, accounting for its scrollbar gutter (${detail}).`,
+        geometry.apply.right + 8 <= geometry.delete.left + 1,
+        `Apply precedes the rightmost Delete action (${detail}).`,
       );
       assert.ok(
         Math.abs(
@@ -1135,8 +1336,12 @@ try {
   await cylinderPanel.getByLabel('Diameter (mm)', { exact: true }).fill('9');
   await cylinderPanel.getByLabel('Height (mm)', { exact: true }).fill('12');
   assert.equal(await sidebar.isVisible(), false, 'Placement starts with the right dock collapsed.');
-  await cylinderPanel.getByLabel('Solid X position (mm)', { exact: true }).fill('30');
-  await cylinderPanel.getByLabel('Solid Y position (mm)', { exact: true }).fill('30');
+  const cylinderPosition = await screenPoint({
+    x: 30,
+    y: 30,
+    z: await page.evaluate(() => window.cad.newObject('cylinder').position.z),
+  });
+  await page.mouse.move(cylinderPosition.x, cylinderPosition.y);
   const beforeKeyboardPlacement = await state();
   await canvas.focus();
   await page.keyboard.press('Enter');
@@ -1428,6 +1633,9 @@ try {
   }
 
   const beforeSketch = await state();
+  const beforeSketchNative = sketchInputOnly
+    ? await page.evaluate(() => window.cad.core.getNativeFiles())
+    : null;
   const beforeSketchCount = (await solids()).length;
   const sketchCameraState = () =>
     page.evaluate(() => ({
@@ -1481,11 +1689,28 @@ try {
     assert.ok(Math.abs(actual.zoom - expected.zoom) < 1e-6, `${message}: zoom`);
     assert.equal(actual.orthographic, expected.orthographic, `${message}: projection`);
   };
-  const waitSketchPhase = (phase) =>
-    page.waitForFunction(
-      (phase) => document.querySelector('.pcb-model-canvas').dataset.sketchPhase === phase,
-      phase,
-    );
+  const waitSketchPhase = async (phase) => {
+    await page
+      .waitForFunction(
+        (phase) => document.querySelector('.pcb-model-canvas').dataset.sketchPhase === phase,
+        phase,
+      )
+      .catch(async (cause) => {
+        await preview.screenshot({ path: 'test-results/model-sketch-phase-failure.png' });
+        throw new Error(
+          `Expected sketch phase ${phase}: ${JSON.stringify(
+            await page.evaluate(() => ({
+              actual: document.querySelector('.pcb-model-canvas').dataset.sketchPhase,
+              mode: window.modelMode,
+              panels: [...document.querySelectorAll('aside[aria-label]')].map((node) =>
+                node.getAttribute('aria-label'),
+              ),
+            })),
+          )}`,
+          { cause },
+        );
+      });
+  };
   const sketchGrid = () =>
     page.evaluate(() => {
       const grids = [];
@@ -1580,7 +1805,14 @@ try {
   const sketchPanel = page.getByRole('complementary', { name: 'Sketch settings', exact: true });
   const profilePanel = page.getByRole('complementary', { name: 'Sketch profile', exact: true });
   const extrude = page.getByRole('complementary', { name: 'Extrude settings', exact: true });
-  const seedPosition = await page.evaluate(() => window.cad.newObject('extrusion').position);
+  const chooseSketchPlane = async (plane) => {
+    const selector = planePanel.getByRole('combobox', { name: 'Sketch plane', exact: true });
+    await selector.press('ArrowDown');
+    await selector.press('Home');
+    for (let index = 0; index < ['XY', 'XZ', 'YZ'].indexOf(plane); index++)
+      await selector.press('ArrowDown');
+    await selector.press('Enter');
+  };
   await waitSketchGrid(false);
   for (const [plane, axis, offset, normal] of [
     ['XY', 'z', 4.5, [0, 0, 1]],
@@ -1592,13 +1824,12 @@ try {
     await planePanel.waitFor();
     await waitSketchPhase('plane');
     await waitSketchGrid(false);
-    await planePanel.getByRole('combobox', { name: 'Sketch plane', exact: true }).click();
-    await page.getByRole('option', { name: plane, exact: true }).click();
+    await chooseSketchPlane(plane);
     const planeOffset = planePanel.getByLabel('Sketch plane offset (mm)', { exact: true });
     assert.equal(
       Number(await planeOffset.inputValue()),
-      plane === 'XY' ? project.pcb.thickness / 2 : seedPosition[axis],
-      `${plane} defaults to the native coordinate of its normal axis.`,
+      0,
+      `${plane} starts with zero offset along its normal axis.`,
     );
     await planeOffset.fill('-');
     assert.equal(
@@ -1606,6 +1837,24 @@ try {
       true,
     );
     await planeOffset.fill(String(offset));
+    await page.waitForFunction(
+      ({ plane, axis, offset }) => {
+        const expected = { x: 'X', y: 'Y', z: 'Z' }[axis];
+        if (window.modelMode !== `${plane} plane · ${expected} = ${offset} mm`) return false;
+        let surface;
+        window.scene.traverseVisible((node) => {
+          if (node.isMesh && node.userData.modelCadSketchPlane) surface = node;
+        });
+        return (
+          surface &&
+          Math.abs(
+            surface.getWorldPosition(new window.THREE.Vector3())[axis] -
+              (axis === 'y' ? -offset : offset),
+          ) < 1e-6
+        );
+      },
+      { plane, axis, offset },
+    );
     for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
       await planeOffset.dispatchEvent('keydown', { key: 'Enter', ...composition });
       assert.equal(await canvas.getAttribute('data-sketch-phase'), 'plane');
@@ -1683,7 +1932,13 @@ try {
       `${plane} grid lines lie on the chosen absolute workplane offset.`,
     );
     for (const name of ['Draw rectangle', 'Draw circle', 'Draw polyline', 'Finish sketch'])
-      assert.equal(await toolbar.getByRole('button', { name, exact: true }).count(), 1);
+      assert.equal(await drawingTools.getByRole('button', { name, exact: true }).count(), 1);
+    assert.equal(
+      await conversionTools
+        .getByRole('button', { name: 'Extrude sketch', exact: true })
+        .isDisabled(),
+      true,
+    );
     assert.equal(
       await toolbar.getByRole('button', { name: 'Place box', exact: true }).count(),
       0,
@@ -1704,12 +1959,56 @@ try {
     );
   }
 
-  const sketchPlaneOffset = 4.5;
+  // Offset editing keeps the 3D view; Start sketch aligns to the exact distant plane.
+  const beforeRemoteCamera = await sketchCameraState();
+  await button('Create sketch').click();
+  await chooseSketchPlane('XZ');
+  const remoteOffset = planePanel.getByLabel('Sketch plane offset (mm)', { exact: true });
+  assert.equal(await planePanel.getByText('Offset', { exact: true }).count(), 1);
+  assert.equal(
+    await planePanel.getByRole('button', { name: 'Locate sketch plane', exact: true }).count(),
+    0,
+  );
+  await remoteOffset.fill('212');
+  await page.waitForFunction(() => window.modelCadGui.sketch?.origin.y === 212);
+  await assertSketchCameraRestored(
+    beforeRemoteCamera,
+    'Editing a plane offset preserves the 3D view',
+  );
+  await remoteOffset.fill('-');
+  assert.equal(
+    await planePanel.getByRole('button', { name: 'Start sketch', exact: true }).isDisabled(),
+    true,
+  );
+  await page.waitForFunction(() => {
+    let count = 0;
+    window.scene.traverseVisible((node) => {
+      if (node.userData.modelCadSketchPlane) count++;
+    });
+    return count === 0;
+  });
+  await remoteOffset.fill('212');
+  await planePanel.getByRole('button', { name: 'Start sketch', exact: true }).click();
+  await waitSketchPhase('sketch');
+  await page.waitForFunction(() => {
+    const origin = window.modelCadGui.sketch?.origin;
+    if (!origin || origin.y !== 212) return false;
+    const point = new window.THREE.Vector3(origin.x, -origin.y, origin.z).project(window.camera);
+    return Math.abs(point.x) < 1e-5 && Math.abs(point.y) < 1e-5 && point.z > -1 && point.z < 1;
+  });
+  await sketchPanel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await assertSketchCameraRestored(
+    beforeRemoteCamera,
+    'Cancelling a distant sketch restores the camera',
+  );
+  assert.deepEqual(await state(), beforeSketch);
+
+  const sketchPlaneOffset = sketchInputOnly ? 0 : 4.5;
   const beforeSketchCamera = await sketchCameraState();
   await button('Create sketch').click();
-  await planePanel
-    .getByLabel('Sketch plane offset (mm)', { exact: true })
-    .fill(String(sketchPlaneOffset));
+  const sketchOffsetInput = planePanel.getByLabel('Sketch plane offset (mm)', { exact: true });
+  assert.equal(Number(await sketchOffsetInput.inputValue()), 0);
+  if (sketchPlaneOffset) await sketchOffsetInput.fill(String(sketchPlaneOffset));
   await preview.screenshot({ path: 'test-results/model-sketch-flow-plane.png' });
   await planePanel.getByRole('button', { name: 'Start sketch', exact: true }).click();
   await waitSketchPhase('sketch');
@@ -1743,6 +2042,58 @@ try {
     true,
     'Sketch drawing targets the same PCB rendering surface.',
   );
+  for (const shape of ['rectangle', 'circle']) {
+    await button(shape === 'rectangle' ? 'Draw rectangle' : 'Draw circle').click();
+    await button('Clear sketch').click();
+    await page.mouse.click(startSketch.x, startSketch.y);
+    assert.equal(
+      await sketchPanel.getByRole('alert').count(),
+      0,
+      `${shape}: the first point is an incomplete gesture, not an invalid solid.`,
+    );
+    assert.equal(await button('Finish sketch').isDisabled(), true);
+    const anchor = await page.evaluate(() => window.modelCadGui.sketch.points[0]);
+    if (shape === 'rectangle') {
+      await page.mouse.move(endSketch.x, startSketch.y);
+      assert.equal(await sketchPanel.getByRole('alert').count(), 0);
+      assert.equal(await button('Finish sketch').isDisabled(), true);
+    }
+    await page.mouse.move(endSketch.x, endSketch.y, { steps: 4 });
+    const following = await page.evaluate(() => window.modelCadGui.sketch);
+    assert.deepEqual(following.points[0], anchor);
+    assert.notDeepEqual(
+      following.points[1],
+      anchor,
+      'The first click retains a live pointer preview.',
+    );
+    assert.equal(following.closed, false);
+    assert.equal(await button('Finish sketch').isDisabled(), true);
+    await page.mouse.click(endSketch.x, endSketch.y);
+    assert.equal(await page.evaluate(() => window.modelCadGui.sketch.closed), true);
+    assert.equal(await button('Finish sketch').isEnabled(), true);
+    assert.equal(await sketchPanel.getByRole('alert').count(), 0);
+    assert.deepEqual(await state(), beforeSketch, 'Click drawing never commits a partial solid.');
+    await button('Clear sketch').click();
+    await page.mouse.click(startSketch.x, startSketch.y);
+    await canvas.dispatchEvent('keydown', { key: 'Escape', keyCode: 229, isComposing: true });
+    assert.equal(await page.evaluate(() => window.modelCadGui.sketch.points.length), 2);
+    await canvas.press('Escape');
+    await page.waitForFunction(() => window.modelCadGui.sketch.points.length === 0);
+    assert.equal(await page.evaluate(() => window.modelCadGui.sketch.points.length), 0);
+    assert.equal(await canvas.getAttribute('data-sketch-phase'), 'sketch');
+    assert.equal(await button('Finish sketch').isDisabled(), true);
+    await page.mouse.move(startSketch.x, startSketch.y);
+    await page.mouse.down();
+    await page.mouse.move(endSketch.x, endSketch.y, { steps: 4 });
+    await page.mouse.up();
+    assert.equal(
+      await button('Finish sketch').isEnabled(),
+      true,
+      `${shape} still supports dragging.`,
+    );
+    await button('Clear sketch').click();
+  }
+  await button('Draw rectangle').click();
   await page.mouse.move(startSketch.x, startSketch.y);
   await page.mouse.down();
   await page.mouse.move(endSketch.x, endSketch.y, { steps: 8 });
@@ -1884,8 +2235,123 @@ try {
     await toolbar.getByRole('button', { name: 'Draw rectangle', exact: true }).count(),
     0,
   );
-  assert.equal(await button('Extrude sketch').isEnabled(), true);
+  assert.equal(
+    await conversionTools.getByRole('button', { name: 'Extrude sketch', exact: true }).isEnabled(),
+    true,
+  );
   await preview.screenshot({ path: 'test-results/model-sketch-flow-profile.png' });
+  if (sketchPlaneOnly) {
+    await conversionTools
+      .getByRole('button', { name: 'Extrude sketch', exact: true })
+      .press('Enter');
+    await waitSketchPhase('extrude');
+    assert.equal(await button('Extrude sketch').getAttribute('aria-pressed'), 'true');
+    await extrude.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await waitSketchPhase('profile');
+    await profilePanel.getByRole('button', { name: 'Discard sketch', exact: true }).click();
+    await assertSketchCameraRestored(
+      beforeSketchCamera,
+      'Discarding a profile restores the camera',
+    );
+    assert.deepEqual(await state(), beforeSketch);
+    if (colorOnly) {
+      await clickSolid(first.id, { x: 5, y: 0, z: null });
+      await inspector.waitFor();
+      const beforeColor = await state();
+      const target = (await solids()).find((body) => body.id === first.id);
+      const picker = inspector.getByLabel('Solid color', { exact: true });
+      const resetColor = inspector.getByRole('button', { name: 'Use material color', exact: true });
+      const defaultColor = `#${modelCadColor(target).toString(16).padStart(6, '0')}`;
+      assert.equal(await picker.inputValue(), defaultColor);
+      assert.equal(await resetColor.isDisabled(), true);
+      await picker.fill('#e06445');
+      await page.waitForFunction(() => {
+        let colored = false;
+        window.scene.traverseVisible((node) => {
+          if (
+            node.isMesh &&
+            node.userData.modelCadPreview &&
+            node.material.color.getHexString() === 'e06445'
+          )
+            colored = true;
+        });
+        return colored;
+      });
+      assert.deepEqual(await state(), beforeColor, 'Color preview creates no native edit.');
+      await picker.dispatchEvent('compositionstart');
+      await resetColor.press('Enter');
+      assert.equal(await picker.inputValue(), '#e06445', 'IME cannot reset the color draft.');
+      await picker.dispatchEvent('compositionend');
+      await rightToggle.click();
+      await rightToggle.click();
+      assert.equal(await picker.inputValue(), '#e06445', 'Color drafts survive hidden Properties.');
+      await inspector.getByRole('button', { name: 'Apply', exact: true }).click();
+      await page.waitForFunction(
+        (id) =>
+          window.cad.state().modelCad.objects.find((body) => body.id === id)?.color === '#e06445',
+        first.id,
+      );
+      assert.equal((await state()).undoDepth, beforeColor.undoDepth + 1);
+      assert.equal((await state()).pcb, beforeColor.pcb);
+      const themeBeforeColor = await page.evaluate(() =>
+        document.documentElement.getAttribute('data-theme'),
+      );
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(
+          (theme) => document.documentElement.setAttribute('data-theme', theme),
+          theme,
+        );
+        await page.waitForFunction(
+          (theme) => document.querySelector('.pcb-model-preview').dataset.modelTheme === theme,
+          theme,
+        );
+        await preview.screenshot({ path: `test-results/model-color-properties-${theme}.png` });
+      }
+      await page.evaluate((theme) => {
+        if (theme === null) document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', theme);
+      }, themeBeforeColor);
+      await button('Undo').click();
+      await page.waitForFunction(
+        (id) =>
+          window.cad.state().modelCad.objects.find((body) => body.id === id)?.color === undefined,
+        first.id,
+      );
+      await button('Redo').click();
+      await page.waitForFunction(
+        (id) =>
+          window.cad.state().modelCad.objects.find((body) => body.id === id)?.color === '#e06445',
+        first.id,
+      );
+      await clickSolid(first.id, { x: 5, y: 0, z: null });
+      await resetColor.click();
+      assert.equal(await picker.inputValue(), defaultColor);
+      assert.equal(
+        (await solids()).find((body) => body.id === first.id).color,
+        '#e06445',
+        'Reset remains a draft until Apply.',
+      );
+      await inspector.getByRole('button', { name: 'Apply', exact: true }).click();
+      await page.waitForFunction(
+        (id) =>
+          window.cad.state().modelCad.objects.find((body) => body.id === id)?.color === undefined,
+        first.id,
+      );
+      assert.equal(
+        (await state()).source,
+        beforeColor.source,
+        'Reset restores the original native design.',
+      );
+      console.log(
+        'PASS: editable per-solid color, live preview, retained drafts/IME guards, Apply/undo/redo, material-color reset and unchanged PCB (isolated browser).',
+      );
+    }
+    assert.deepEqual(errors, []);
+    console.log(
+      'PASS: grouped 3D primitives/2D drawing/conversion/modifications, conversion availability and keyboard activation, live workplanes, distant-plane alignment/clipping, draft/IME guards, grid isolation and retained camera/native state (isolated browser).',
+    );
+    throw sketchPlaneComplete;
+  }
   const profileCamera = await sketchCameraState();
   await canvas.hover();
   await page.mouse.wheel(0, -120);
@@ -1939,6 +2405,13 @@ try {
     finishedContour,
     'Cancelling extrusion preserves the completed sketch.',
   );
+  await page.waitForFunction(() => {
+    let previews = 0;
+    window.scene.traverse((node) => {
+      if (node.userData.modelCadPreview && node.isMesh) previews++;
+    });
+    return previews === 0;
+  });
   assert.equal(await previewMeshCount(), 0);
   assert.deepEqual(await state(), beforeSketch, 'Extrusion cancellation creates no design edit.');
   await profilePanel.getByRole('button', { name: 'Edit sketch', exact: true }).click();
@@ -1988,6 +2461,22 @@ try {
   assert.equal((await state()).undoDepth, beforeSketch.undoDepth + 1);
   assert.equal((await state()).revision, beforeSketch.revision + 1);
   assert.equal((await state()).pcb, beforeSketch.pcb);
+  if (sketchInputOnly) {
+    await button('Undo').click();
+    await waitObjects(beforeSketchCount);
+    assert.equal((await state()).source, beforeSketch.source);
+    assert.deepEqual(
+      await page.evaluate(() => window.cad.core.getNativeFiles()),
+      beforeSketchNative,
+      'Undo restores exact native files.',
+    );
+    assert.equal((await state()).pcb, beforeSketch.pcb);
+    assert.deepEqual(errors, []);
+    console.log(
+      'PASS: zero-offset rectangle/circle click and drag drawing, live anchors, incomplete profiles, Escape/IME guards, extrusion Apply and exact native undo (isolated browser).',
+    );
+    throw sketchPlaneComplete;
+  }
   await inspector.waitFor();
   await selectModelView(page, 'Top view');
   const beforeTopologyFilters = await state();
@@ -2461,6 +2950,8 @@ try {
   console.log(
     'PASS: shared PCB-canvas draw/extrude/chamfer/fillet/Boolean controls, one-edit Core/undo semantics, docked properties/drafts, primitive edits/holes, Source/IME guards, visible-only Fit, STEP and retained WebGL/caches (geometry service mocked).',
   );
+} catch (cause) {
+  if (cause !== sketchPlaneComplete) throw cause;
 } finally {
   await browser.close();
 }

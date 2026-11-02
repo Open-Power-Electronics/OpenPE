@@ -69,9 +69,12 @@ Native `.kicad_pro` text variables retain application-owned project metadata:
 | Variable / private extension                | Content                                                                                                                                                                                         |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OPENPE_PROJECT_NAME`                       | Project display name, a string of 1–4096 characters. Absent names use the native entry's filename stem. Rename retains filenames and unrelated settings; Save as controls the destination stem. |
-| `OPENPE_MODEL_CAD` / `org.openpe.model-cad` | Version 1; up to 64 identified box/cylinder/extrusion/Boolean bodies with XYZ pose, dimensions, material, opacity and bounded geometry recipes                                                  |
+| `OPENPE_MODEL_CAD` / `org.openpe.model-cad` | Version 1; up to 64 identified box/cylinder/extrusion/Boolean bodies with XYZ pose, dimensions, material, optional RGB color, opacity and bounded geometry recipes                                                  |
 
-Model CAD retains unchanged version-1 boxes/cylinders. Extrusions use local XY
+Model CAD retains unchanged version-1 boxes/cylinders. Each body may retain a
+`color` override as a six-digit RGB hex string (`#RRGGBB`); absent color uses the
+selected material palette. Color is independent of material and opacity, survives
+native Save/Source/history and is excluded from geometry recipes and kernel keys. Extrusions use local XY
 rectangle/circle profiles or 3–128-point simple implicitly closed polygons;
 polygon bounds are centred and match X/Y dimensions. Z is extrusion depth.
 Optional chamfer/fillet stores 1–448 unique semantic base-edge IDs; profile rims,
@@ -190,7 +193,7 @@ Gerbers (including drill files) and JLCPCB are ZIP archives; BOM and
 CPL are separate CSV outputs. See [manufacturing export](#manufacturing-export).
 When the project has a PCB and Model CAD solids, Export also offers an OpenSCAD model. Its millimetre text uses native PCB
 X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, through holes, Boolean
-recipes, material colours and opacity; circles are faceted with `$fn = 96`.
+recipes, per-body color overrides or material colors, and opacity; circles are faceted with `$fn = 96`.
 Fillets and chamfers have no OpenSCAD equivalent, so they reject the export without
 writing. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it. Portable `.lib`, footprint and STEP
 sidecars travel beside native files. New example assets use `circuits/<component>.lib`,

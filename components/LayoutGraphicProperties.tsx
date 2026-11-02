@@ -79,7 +79,6 @@ export default function LayoutGraphicProperties({
     hideable: boolean,
     editableContent = true,
   ) => {
-    const TextSection = editableContent ? PropertySection : PropertyDetails;
     const change = (changes: Partial<BoardText>) => onChange({ ...text, ...changes });
     const align = (axis: 'horizontal' | 'vertical', value: string) => {
       const remove = axis === 'horizontal' ? ['left', 'right'] : ['top', 'bottom'];
@@ -87,8 +86,8 @@ export default function LayoutGraphicProperties({
       if (value !== 'center') justify.push(value as 'left' | 'right' | 'top' | 'bottom');
       return change({ justify });
     };
-    return (
-      <TextSection title="Text">
+    const controls = (
+      <>
         {editableContent ? (
           <TextField
             {...field}
@@ -172,7 +171,14 @@ export default function LayoutGraphicProperties({
             )}
           </PropertyGrid>
         </PropertyDetails>
-      </TextSection>
+      </>
+    );
+    return editableContent ? (
+      <PropertySection title="Text" showTitle={false}>
+        {controls}
+      </PropertySection>
+    ) : (
+      <PropertyDetails title="Text">{controls}</PropertyDetails>
     );
   };
   const dimension = graphic.dimension;
@@ -181,7 +187,7 @@ export default function LayoutGraphicProperties({
 
   return (
     <>
-      <PropertySection title="Appearance">
+      <PropertySection title="Appearance" showTitle={false}>
         <PropertyGrid>
           {select(
             'Graphic layer',
@@ -222,7 +228,7 @@ export default function LayoutGraphicProperties({
         </PropertyGrid>
       </PropertySection>
       {geometry && (
-        <PropertySection title="Geometry">
+        <PropertySection title="Geometry" showTitle={false}>
           {point(
             graphic.kind === 'text' ? 'Position' : graphic.kind === 'circle' ? 'Center' : 'Start',
             graphic.start,
@@ -278,7 +284,7 @@ export default function LayoutGraphicProperties({
             false,
             false,
           )}
-          <PropertySection title="Dimension">
+          <PropertySection title="Dimension" showTitle={false}>
             <PropertyRow
               label="Dimension type"
               value={

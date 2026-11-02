@@ -6,7 +6,6 @@ import {
   FileDiff,
   FileCode2,
   FileCheck2,
-  GitBranch,
   Check,
   Circle,
   RefreshCw,
@@ -15,7 +14,7 @@ import {
 } from 'lucide-react';
 import Select from './Select';
 import Dialog from './Dialog';
-import { SchematicIcon } from './EditorIcons';
+import { GitIcon, SchematicIcon } from './EditorIcons';
 import ProjectFileComparison from './ProjectFileComparison';
 import { compareProjectFiles, type HistoryEntry, type HistoryPage } from '@/lib/project-history';
 import type { CapabilityHost } from '@/api/capabilities';
@@ -179,7 +178,7 @@ export default function ProjectHistoryView({
   return (
     <Dialog
       title="Git"
-      icon={<GitBranch size={18} />}
+      icon={<GitIcon size={18} />}
       className="project-history-dialog"
       open={visible}
       onClose={() => {
@@ -340,7 +339,7 @@ export default function ProjectHistoryView({
                     })
                   }
                 >
-                  <GitBranch size={16} />
+                  <GitIcon size={16} />
                   <div>
                     <strong>Worktree</strong>
                     <span>Current project</span>

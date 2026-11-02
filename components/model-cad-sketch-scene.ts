@@ -80,7 +80,12 @@ export function createModelCadSketchScene(root: THREE.Group, extent: number) {
   const clear = () => {
     root.traverse((object) => {
       if (object === grid.lines) return;
-      if (!(object instanceof THREE.Line || object instanceof THREE.Points)) return;
+      if (!(
+        object instanceof THREE.Line ||
+        object instanceof THREE.Points ||
+        object instanceof THREE.Mesh
+      ))
+        return;
       object.geometry.dispose();
       for (const material of Array.isArray(object.material) ? object.material : [object.material])
         material.dispose();
@@ -107,33 +112,55 @@ export function createModelCadSketchScene(root: THREE.Group, extent: number) {
         updateGrid();
       }
       if (sketch.phase === 'plane' || drawing) {
+        const boundarySpan = drawing ? span : Math.max(10, extent * 0.6);
+        if (!drawing) {
+          const plane = new THREE.Mesh(
+            new THREE.PlaneGeometry(boundarySpan * 2, boundarySpan * 2),
+            new THREE.MeshBasicMaterial({
+              color: dark ? 0x82c1ff : 0x2684d9,
+              transparent: true,
+              opacity: 0.12,
+              side: THREE.DoubleSide,
+              depthTest: false,
+              depthWrite: false,
+            }),
+          );
+          plane.matrixAutoUpdate = false;
+          plane.matrix.makeBasis(u, v, u.clone().cross(v)).setPosition(center);
+          plane.matrixWorldNeedsUpdate = true;
+          plane.renderOrder = 20;
+          plane.userData.modelCadSketchPlane = true;
+          plane.raycast = () => {};
+          root.add(plane);
+        }
         const boundary = new THREE.LineSegments(
           new THREE.BufferGeometry().setFromPoints(
             [
-              { x: -span, y: -span },
-              { x: span, y: -span },
-              { x: span, y: -span },
-              { x: span, y: span },
-              { x: span, y: span },
-              { x: -span, y: span },
-              { x: -span, y: span },
-              { x: -span, y: -span },
-              { x: -span, y: 0 },
-              { x: span, y: 0 },
-              { x: 0, y: -span },
-              { x: 0, y: span },
+              { x: -boundarySpan, y: -boundarySpan },
+              { x: boundarySpan, y: -boundarySpan },
+              { x: boundarySpan, y: -boundarySpan },
+              { x: boundarySpan, y: boundarySpan },
+              { x: boundarySpan, y: boundarySpan },
+              { x: -boundarySpan, y: boundarySpan },
+              { x: -boundarySpan, y: boundarySpan },
+              { x: -boundarySpan, y: -boundarySpan },
+              { x: -boundarySpan, y: 0 },
+              { x: boundarySpan, y: 0 },
+              { x: 0, y: -boundarySpan },
+              { x: 0, y: boundarySpan },
             ].map(world),
           ),
           new THREE.LineBasicMaterial({
-            color: dark ? 0xaeb7bd : 0x6f7e88,
+            color: dark ? 0x82c1ff : 0x2684d9,
             transparent: true,
-            opacity: 0.4,
+            opacity: drawing ? 0.4 : 0.8,
             depthTest: false,
             depthWrite: false,
           }),
         );
         boundary.renderOrder = 21;
         boundary.userData.modelCadSketchPlane = true;
+        boundary.raycast = () => {};
         root.add(boundary);
       }
       let points = [...sketch.points];
@@ -176,6 +203,16 @@ export function createModelCadSketchScene(root: THREE.Group, extent: number) {
         vertices.userData.modelCadSketch = true;
         root.add(vertices);
       }
+    },
+    clippingRange(camera: THREE.Camera) {
+      if (!current || (current.phase !== 'plane' && current.phase !== 'sketch')) return null;
+      const { center, u, v } = modelCadSketchFrame(current.plane, current.origin);
+      const direction = camera.getWorldDirection(new THREE.Vector3());
+      const halfSize = current.phase === 'plane' ? Math.max(10, extent * 0.6) : span;
+      const radius = halfSize * (Math.abs(u.dot(direction)) + Math.abs(v.dot(direction)));
+      const depth = center.sub(camera.position).dot(direction);
+      if (depth + radius <= 0) return null;
+      return { near: Math.max(0.001, depth - radius - 0.05), far: depth + radius + 0.05 };
     },
     updateGrid(nextView: { camera: THREE.Camera; width: number; height: number }) {
       view = nextView;

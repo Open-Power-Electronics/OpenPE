@@ -7,9 +7,11 @@ import { chromium } from 'playwright';
 const bundle = await build({
   stdin: {
     contents: `
-    import React,{useState} from 'react';
+    import React,{useState,useRef} from 'react';
     import {createRoot} from 'react-dom/client';
-    import {Trash2} from 'lucide-react';
+    import PropertyDeleteButton from './components/PropertyDeleteButton';
+    import ModelCadPanel from './components/ModelCadPanel';
+    import {newModelCadObject} from './lib/model-cad';
     import EditorDisplayDrawer from './components/EditorDisplayDrawer';
     import PartIdentity from './components/PartIdentity';
     import PartProperties from './components/PartProperties';
@@ -22,21 +24,23 @@ const bundle = await build({
     const footprint={id:'package',symbolId:part.id,libraryId:'Fixture:R',reference:part.ref,
       value:part.value,x:0,y:0,rotation:0,side:'front',pads:[],graphics:[]};
     board.footprints.push(footprint);
+    const solid=newModelCadObject(board,'box');
     function Fixture(){
       const [mode,setMode]=useState('schematic'),[count,setCount]=useState(0),[open,setOpen]=useState(true);
+      const composing=useRef(false);
       window.deleteFixture={count};window.setDeleteMode=setMode;
-      const actions=<button type="button" className="icon-button property-delete-action"
-        aria-label="Delete object" title="Delete object" data-edit-action disabled={!open}
-        onClick={()=>setCount(value=>value+1)}><Trash2 size={16}/></button>;
-      return <div className="panel"><EditorDisplayDrawer label="Properties" open={open} onOpenChange={setOpen}>
+      const actions=<PropertyDeleteButton disabled={!open}
+        onClick={()=>{if(!composing.current)setCount(value=>value+1)}}/>;
+      return <div className="panel" onCompositionStart={()=>composing.current=true} onCompositionEnd={()=>composing.current=false}><EditorDisplayDrawer label="Properties" open={open} onOpenChange={setOpen}>
+      {mode==='model'?<ModelCadPanel object={solid} mode="edit" docked visible={open} disabled={!open} revision="1" onClose={()=>{}} onDraftChange={()=>{}} onApply={async()=>{}} onRemove={async()=>{setCount(value=>value+1)}}/>:
         <aside className="inspector part-inspector"><div className="inspector-body">
         {mode==='schematic'?<><PartIdentity part={part} library={schematic.libraries[part.libId]}/>
           <PartProperties part={part} active={open} onSave={()=>true}/></>:
           <LayoutProperties board={board} schematic={schematic} active={open} resetKey={false}
-            footprint={footprint} actions={actions} rectangle={null} selectionCount={1} snap={value=>value}
+            footprint={footprint} rectangle={null} selectionCount={1} snap={value=>value}
             onCommit={()=>false} onFootprint={()=>false} onTrack={()=>false} onZone={()=>false}
             onRectangle={()=>false} onError={()=>{}} onInspectFootprint={()=>{}}/>}
-        </div>{mode==='schematic'&&<div className="inspector-footer">{actions}</div>}</aside>
+        </div><footer className="inspector-footer">{actions}</footer></aside>}
       </EditorDisplayDrawer></div>;
     }
     createRoot(document.getElementById('root')).render(<Fixture/>);
@@ -46,6 +50,7 @@ const bundle = await build({
   },
   bundle: true,
   write: false,
+  outfile: 'test-results/component-delete-ui.js',
   platform: 'browser',
   define: { 'process.env.NODE_ENV': '"development"' },
 });
@@ -63,6 +68,8 @@ try {
   await page.goto('http://localhost');
   for (const file of ['app/globals.css', 'app/workspace.css', 'app/layout-editor.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
+  for (const file of bundle.outputFiles.filter((file) => file.path.endsWith('.css')))
+    await page.addStyleTag({ content: file.text });
   await page.addStyleTag({
     content:
       '.panel{width:280px;margin:24px}.panel>.editor-display-drawer{height:680px}.panel .inspector{flex:1;min-height:0;max-height:none;max-width:none}*{transition:none!important}',
@@ -72,9 +79,10 @@ try {
   const reference = page.getByRole('textbox', { name: 'Component reference', exact: true });
   await reference.waitFor();
   await mkdir('test-results', { recursive: true });
-  for (const mode of ['schematic', 'layout']) {
+  for (const mode of ['schematic', 'layout', 'model']) {
     await page.evaluate((mode) => window.setDeleteMode(mode), mode);
-    await reference.waitFor();
+    const field = mode === 'model' ? page.getByLabel('Solid name', { exact: true }) : reference;
+    await field.waitFor();
     for (const theme of ['light', 'dark']) {
       await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
       for (const width of [280, 400]) {
@@ -84,9 +92,7 @@ try {
         await page.mouse.move(590, 750);
         const style = await action.evaluate((element, mode) => {
           const box = element.getBoundingClientRect(),
-            identity = element
-              .closest(mode === 'schematic' ? '.inspector' : '.inspector-symbol')
-              .getBoundingClientRect();
+            identity = element.closest('footer').getBoundingClientRect();
           const icon = element.querySelector('svg'),
             iconBox = icon.getBoundingClientRect(),
             paint = getComputedStyle(icon);
@@ -96,9 +102,9 @@ try {
             border: paint.borderWidth,
             color: paint.color,
             expected: getComputedStyle(element).getPropertyValue('--error-ink').trim(),
-            right: Math.abs(box.right - identity.right + (mode === 'schematic' ? 13 : 0)) < 1,
+            right: Math.abs(identity.right - box.right - 12) < 1,
             inside: box.top >= identity.top && box.bottom <= identity.bottom,
-            bottom: mode !== 'schematic' || Math.abs(identity.bottom - box.bottom - 7) < 1,
+            bottom: Math.abs(identity.bottom - box.bottom - 6) < 1,
           };
         }, mode);
         assert.deepEqual(style.button, [30, 30]);
@@ -110,17 +116,17 @@ try {
           await page.locator('.editor-display-drawer-header [aria-label="Delete object"]').count(),
           0,
         );
-        assert.equal(await page.locator('.inspector-footer').count(), mode === 'schematic' ? 1 : 0);
+        assert.equal(await page.locator('.inspector-footer').count(), 1);
       }
       await page
-        .locator('.inspector')
+        .locator('.panel')
         .screenshot({ path: 'test-results/component-delete-' + mode + '-' + theme + '.png' });
     }
     const count = await page.evaluate(() => window.deleteFixture.count);
-    await reference.dispatchEvent('compositionstart');
+    await field.dispatchEvent('compositionstart');
     await action.click();
     assert.equal(await page.evaluate(() => window.deleteFixture.count), count);
-    await reference.dispatchEvent('compositionend');
+    await field.dispatchEvent('compositionend');
     assert.equal(
       await action.evaluate((element) => {
         const event = new KeyboardEvent('keydown', {
@@ -142,7 +148,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Component-level delete placement, 30 px target, 16 px default-red icon, preview isolation, narrow/wide light/dark Schematic/Layout, Enter/Space and IME guards passed.',
+    'Shared Schematic/Layout/Model delete footer, 30 px target, 16 px red icon, narrow/wide light/dark presentation, Enter/Space and IME guards passed.',
   );
 } finally {
   await browser.close();

@@ -100,19 +100,29 @@ export function createPCBTrackShove(
   selections: readonly PCBSelection[],
   clearance: number,
   prepare: (basis: PCB) => PreviewEngine,
+  walkAround?: () => PreviewEngine,
+  cursorMovement = false,
 ): PreviewEngine {
-  if (isOwnedPCB(board)) return preparePCBTrackShove(board, selections, clearance, prepare);
+  if (isOwnedPCB(board))
+    return preparePCBTrackShove(board, selections, clearance, prepare, walkAround, cursorMovement);
   // A caller-owned board can change while a gesture is active, even when its
   // outer object was frozen. Rebuild all derived geometry before using a cached
   // router or contact partition after any such change.
   const picked = selections.map((selection) => ({ ...selection }));
   let fingerprint = JSON.stringify(board);
-  let engine = preparePCBTrackShove(board, picked, clearance, prepare);
+  let engine = preparePCBTrackShove(board, picked, clearance, prepare, walkAround, cursorMovement);
   return {
     preview(delta, posture) {
       const current = JSON.stringify(board);
       if (current !== fingerprint) {
-        engine = preparePCBTrackShove(board, picked, clearance, prepare);
+        engine = preparePCBTrackShove(
+          board,
+          picked,
+          clearance,
+          prepare,
+          walkAround,
+          cursorMovement,
+        );
         fingerprint = current;
       }
       return engine.preview(delta, posture);
@@ -125,6 +135,8 @@ function preparePCBTrackShove(
   selections: readonly PCBSelection[],
   clearance: number,
   prepare: (basis: PCB) => PreviewEngine,
+  walkAround?: () => PreviewEngine,
+  cursorMovement = false,
 ): PreviewEngine {
   const failed = (error: string): PCBTrackDragPreview => ({ board, error, changedIds: [] });
   try {
@@ -574,12 +586,82 @@ function preparePCBTrackShove(
     let originalPartition: Map<string, number> | undefined;
     let fixedCaps: Track[] | undefined;
 
+    let detourEngine: PreviewEngine | undefined;
+    function checked(
+      tracks: Track[],
+      finalChanged: Track[],
+      removedIds: Set<string>,
+    ): PCBTrackDragPreview {
+      const source = selected[0];
+      const moved = finalChanged.find((track) => track.id === source?.id);
+      if (!source || !moved)
+        throw new Error('Track shove could not retain the selected track. Choose another segment.');
+      for (const id of removedIds) {
+        const track = original.get(id)!;
+        if (
+          selected.length !== 1 ||
+          track.id === source.id ||
+          track.locked ||
+          track.netId !== source.netId ||
+          track.layer !== source.layer ||
+          track.width !== source.width ||
+          !(['start', 'end'] as const).some((endpoint) =>
+            (['start', 'end'] as const).some(
+              (attached) =>
+                same(source[endpoint], track[attached]) &&
+                same(moved[endpoint], track[attached === 'start' ? 'end' : 'start']),
+            ),
+          )
+        )
+          throw new Error(connectionMessage);
+      }
+
+      if (tracks.length > 15000) throw new Error(limitMessage);
+      const result = { ...board, tracks };
+      for (const track of finalChanged) {
+        const validator = retainedRouter('final', tracks, track);
+        const issue = validator.validate([track.start, track.end], spend);
+        if (issue) throw new Error(issue);
+      }
+      // Original and moved partitions use the same stationary subgraph on
+      // the first preview. Check affected original spans separately too,
+      // avoiding two preparations of the remaining fixed geometry.
+      originalPartition ??= partition(
+        board.tracks,
+        new Set(finalChanged.map((track) => track.id).concat([...removedIds])),
+      );
+      const nextPartition = partition(tracks);
+      const forwardGroups = new Map<number, number>(),
+        reverseGroups = new Map<number, number>();
+      for (const [id, before] of originalPartition) {
+        if (removedIds.has(id)) continue;
+        const after = nextPartition.get(id);
+        if (
+          after === undefined ||
+          (forwardGroups.has(before) && forwardGroups.get(before) !== after) ||
+          (reverseGroups.has(after) && reverseGroups.get(after) !== before)
+        )
+          throw new Error(
+            'Track shove would change copper connectivity. Move less or choose another direction.',
+          );
+        forwardGroups.set(before, after);
+        reverseGroups.set(after, before);
+      }
+      if ([...removedIds].some((id) => !forwardGroups.has(originalPartition!.get(id)!)))
+        throw new Error(connectionMessage);
+      return {
+        board: result,
+        error: '',
+        changedIds: finalChanged.map((track) => track.id).concat([...removedIds]),
+      };
+    }
+
     return {
       preview(delta, posture = false) {
         try {
           work = 0;
           const proposed = engine.preview(delta, posture);
-          if (proposed.error) return failed(proposed.error);
+          if (proposed.error) throw new Error(proposed.error);
           if (!proposed.changedIds.length) return { board, error: '', changedIds: [] };
           const changedIds = new Set(proposed.changedIds);
           const proposedIds = new Set(proposed.board.tracks.map((track) => track.id));
@@ -593,26 +675,9 @@ function preparePCBTrackShove(
             throw new Error(
               'Track shove could not retain the selected track. Choose another segment.',
             );
-          for (const id of removedIds) {
-            const track = original.get(id)!;
-            if (
-              selected.length !== 1 ||
-              track.id === source.id ||
-              track.locked ||
-              track.netId !== source.netId ||
-              track.layer !== source.layer ||
-              track.width !== source.width ||
-              !(['start', 'end'] as const).some((endpoint) =>
-                (['start', 'end'] as const).some(
-                  (attached) =>
-                    same(source[endpoint], track[attached]) &&
-                    same(moved[endpoint], track[attached === 'start' ? 'end' : 'start']),
-                ),
-              )
-            )
-              throw new Error(connectionMessage);
-          }
-          let movement = { x: moved.start.x - source.start.x, y: moved.start.y - source.start.y };
+          let movement = cursorMovement
+            ? delta
+            : { x: moved.start.x - source.start.x, y: moved.start.y - source.start.y };
           if (selected.length === 1) {
             // Sliding joints also travel along the source line. Only its normal
             // displacement defines which way neighbouring copper is pushed.
@@ -880,47 +945,38 @@ function preparePCBTrackShove(
               roots.filter((track) => !original.has(track.id)),
               [...replacements.values()].flatMap((items) => items.slice(1)),
             );
-          if (tracks.length > 15000) throw new Error(limitMessage);
-          const result = { ...board, tracks };
-          const finalChanged = roots.concat([...replacements.values()].flat());
-          for (const track of finalChanged) {
-            const validator = retainedRouter('final', tracks, track);
-            const issue = validator.validate([track.start, track.end], spend);
-            if (issue) throw new Error(issue);
-          }
-          // Original and moved partitions use the same stationary subgraph on
-          // the first preview. Check affected original spans separately too,
-          // avoiding two preparations of the remaining fixed geometry.
-          originalPartition ??= partition(
-            board.tracks,
-            new Set(finalChanged.map((track) => track.id).concat([...removedIds])),
-          );
-          const nextPartition = partition(tracks);
-          const forwardGroups = new Map<number, number>(),
-            reverseGroups = new Map<number, number>();
-          for (const [id, before] of originalPartition) {
-            if (removedIds.has(id)) continue;
-            const after = nextPartition.get(id);
-            if (
-              after === undefined ||
-              (forwardGroups.has(before) && forwardGroups.get(before) !== after) ||
-              (reverseGroups.has(after) && reverseGroups.get(after) !== before)
-            )
-              throw new Error(
-                'Track shove would change copper connectivity. Move less or choose another direction.',
-              );
-            forwardGroups.set(before, after);
-            reverseGroups.set(after, before);
-          }
-          if ([...removedIds].some((id) => !forwardGroups.has(originalPartition!.get(id)!)))
-            throw new Error(connectionMessage);
-          return {
-            board: result,
-            error: '',
-            changedIds: finalChanged.map((track) => track.id).concat([...removedIds]),
-          };
+          return checked(tracks, roots.concat([...replacements.values()].flat()), removedIds);
         } catch (error) {
-          return failed((error as Error).message);
+          const message = (error as Error).message;
+          if (
+            walkAround &&
+            selected.length === 1 &&
+            (message === blockedMessage ||
+              message ===
+                'Route blocked. Move around the obstacle or reduce the track width or clearance.' ||
+              message ===
+                'Connected drag would collapse or reverse a track. Move less or choose another direction.' ||
+              message ===
+                'Connected drag would collapse an attached track. Move less or choose another direction.')
+          ) {
+            try {
+              const result = (detourEngine ??= walkAround()).preview(delta, posture);
+              if (result.error) return failed(result.error);
+              if (!result.changedIds.length) return { board, error: '', changedIds: [] };
+              const changed = new Set(result.changedIds);
+              const retained = new Set(result.board.tracks.map((track) => track.id));
+              return checked(
+                result.board.tracks,
+                result.board.tracks.filter((track) => changed.has(track.id)),
+                new Set(
+                  board.tracks.filter((track) => !retained.has(track.id)).map((track) => track.id),
+                ),
+              );
+            } catch (detourError) {
+              return failed((detourError as Error).message);
+            }
+          }
+          return failed(message);
         }
       },
     };

@@ -128,6 +128,7 @@ const changes: [string, (object: ModelCadObject) => ModelCadObject][] = [
   ],
   ['material', (object) => ({ ...object, material: 'pmma' })],
   ['opacity', (object) => ({ ...object, opacity: 0.35 })],
+  ['color', (object) => ({ ...object, color: '#d94838' })],
 ];
 
 for (const [label, change] of changes)
@@ -152,6 +153,7 @@ for (const [label, change] of changes)
       assert.deepEqual(counts, { geometry: 1, material: 1 });
       assert.deepEqual(otherCounts, { geometry: 0, material: 0 });
       assert.equal(replacement.material.opacity, next.opacity);
+      if (next.color) assert.equal(replacement.material.color.getHexString(), next.color.slice(1));
       assert.equal(replacement.material.transparent, next.opacity < 1);
       assert.equal(replacement.material.depthWrite, next.opacity === 1);
       assert.equal(replacement.material.metalness, next.material === 'aluminium' ? 0.82 : 0.05);

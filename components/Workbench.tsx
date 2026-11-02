@@ -1,4 +1,5 @@
 'use client';
+import PropertyDeleteButton from './PropertyDeleteButton';
 import { NumberField } from './LayoutPropertyFields';
 import {
   lazy,
@@ -31,6 +32,7 @@ import { registerLibraryCapabilities } from '@/lib/library-capabilities';
 import type { AgentThermalContext } from '@/context/agent-thermal-context';
 import ThermalField, { ThermalFieldMarkers } from './ThermalField';
 import ThermalComponentHighlight from './ThermalComponentHighlight';
+import { GitIcon, WireIcon } from './EditorIcons';
 import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalLayoutResults';
 import {
   AlertCircle,
@@ -38,7 +40,6 @@ import {
   Cpu,
   FolderPlus,
   FolderOpen,
-  GitBranch,
   MessageSquareText,
   Home as HomeIcon,
   List,
@@ -50,7 +51,6 @@ import {
   SlidersHorizontal,
   ShieldCheck,
   Tag,
-  Trash2,
   Undo2,
   X,
 } from 'lucide-react';
@@ -2027,19 +2027,12 @@ export default function Workbench({
     !coreSnapshot.editingBlocked;
   const canEditProperties = () => propertiesActive && current.current === doc;
   const propertiesDeleteAction = !inspectedField ? (
-    <button
-      type="button"
-      className="icon-button property-delete-action"
-      aria-label="Delete object"
-      title="Delete object"
-      data-edit-action
+    <PropertyDeleteButton
       disabled={
         !propertiesActive || (!inspectedPartId && selection.every((id) => !!selectedField(id)))
       }
       onClick={() => remove(inspectedPartId ? [inspectedPartId] : selection)}
-    >
-      <Trash2 size={16} />
-    </button>
+    />
   ) : undefined;
 
   function saveNetName(value: string): boolean {
@@ -2900,7 +2893,7 @@ export default function Workbench({
           aria-expanded={modal === 'history'}
           onClick={openHistory}
         >
-          <GitBranch size={17} aria-hidden="true" />
+          <GitIcon size={17} aria-hidden="true" />
         </button>
       </>
     ),
@@ -2961,21 +2954,7 @@ export default function Workbench({
           active={schematicCanvasView && tool === 'wire'}
           onClick={activateSchematicWire}
         >
-          <svg
-            width={17}
-            height={17}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M6 19h4L20 9V7" />
-            <rect x={2} y={17} width={4} height={4} rx={0.5} />
-            <rect x={18} y={3} width={4} height={4} rx={0.5} />
-          </svg>
+          <WireIcon size={17} aria-hidden="true" />
         </ToolButton>
         <div
           className={
@@ -3750,7 +3729,7 @@ export default function Workbench({
                               </>
                             ) : (
                               <div className="wire-properties">
-                                <strong>Electrical wire</strong>
+                                <strong>Wire</strong>
                                 <p>
                                   Length{' '}
                                   {Math.hypot(wire!.a.x - wire!.b.x, wire!.a.y - wire!.b.y).toFixed(
@@ -3762,7 +3741,7 @@ export default function Workbench({
                             )}
                           </div>
                           {propertiesDeleteAction && (
-                            <div className="inspector-footer">{propertiesDeleteAction}</div>
+                            <footer className="inspector-footer">{propertiesDeleteAction}</footer>
                           )}
                         </aside>
                       ) : (

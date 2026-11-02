@@ -1,9 +1,5 @@
 import * as THREE from 'three';
-import {
-  modelCadMaterialColors,
-  modelCadRequiresPreparation,
-  type ModelCadObject,
-} from '@/lib/model-cad';
+import { modelCadColor, modelCadRequiresPreparation, type ModelCadObject } from '@/lib/model-cad';
 import type { MeshData } from '@/lib/model-mesh';
 import { disposeModelGroup } from '@/lib/model-mesh';
 
@@ -50,7 +46,7 @@ export function modelCadMesh(object: ModelCadObject, preview = false) {
   const mesh = new THREE.Mesh(
     geometry,
     new THREE.MeshStandardMaterial({
-      color: modelCadMaterialColors[object.material],
+      color: modelCadColor(object),
       metalness: object.material === 'aluminium' ? 0.82 : 0.05,
       roughness: object.material === 'pmma' ? 0.16 : 0.34,
       transparent: opacity < 1,
@@ -92,7 +88,7 @@ export function modelCadKernelMesh(
       const mesh = new THREE.Mesh(
         geometry,
         new THREE.MeshStandardMaterial({
-          color: modelCadMaterialColors[object.material],
+          color: modelCadColor(object),
           metalness: object.material === 'aluminium' ? 0.82 : 0.05,
           roughness: object.material === 'pmma' ? 0.16 : 0.34,
           transparent: opacity < 1,

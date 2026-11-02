@@ -3,6 +3,7 @@ import CanvasContextMenu from './CanvasContextMenu';
 import ComponentProperties, { type ComponentPropertiesProps } from './ComponentProperties';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import PropertiesEmptyState from './PropertiesEmptyState';
+import PropertyDeleteButton from './PropertyDeleteButton';
 import { NumberField } from './LayoutPropertyFields';
 import { modelReferenceKey } from '@/lib/example-model-paths';
 import {
@@ -254,6 +255,9 @@ function PCBModelPreview({
   const propertiesDock = useRef<HTMLElement>(null);
   const [inspectorSize, setInspectorSize] = useState<InspectorSize>({});
   const [propertiesExpanded, setPropertiesExpanded] = useState(true);
+  const [componentDeleteBusy, setComponentDeleteBusy] = useState(false);
+  const [componentDeleteError, setComponentDeleteError] = useState('');
+  const componentComposition = useRef(false);
   function showProperties() {
     setPropertiesExpanded(true);
     onShowSidebar?.();
@@ -267,6 +271,7 @@ function PCBModelPreview({
   const surface = useRef<HTMLElement>(null);
   const darkCanvas = useCanvasBrightness(surface);
   const [selection, setSelection] = useState<string[]>([]);
+  useEffect(() => setComponentDeleteError(''), [selection]);
   const [boardSelected, setBoardSelected] = useState(false);
   useEffect(() => setBoardSelected(false), [board.id]);
   const selectionRef = useRef({ ids: selection, dark: darkCanvas });
@@ -377,6 +382,11 @@ function PCBModelPreview({
   });
   const cadRef = useRef(cad);
   cadRef.current = cad;
+  const sketchNormalAxis =
+    cad.sketch?.plane === 'XY' ? 'z' : cad.sketch?.plane === 'XZ' ? 'y' : 'x';
+  const sketchPlanePosition = cad.sketch
+    ? `${cad.sketch.plane} plane · ${sketchNormalAxis.toUpperCase()} = ${cad.sketch.origin[sketchNormalAxis]} mm`
+    : 'Set sketch plane position';
   const mode = annotating
     ? 'Annotation mode'
     : cad.pan
@@ -387,7 +397,7 @@ function PCBModelPreview({
             cylinder: 'Place cylinder',
             move: 'Move selection',
             hole: 'Drill through hole',
-            sketch: cad.sketchPhase === 'plane' ? 'Choose sketch plane' : 'Draw sketch',
+            sketch: cad.sketchPhase === 'plane' ? sketchPlanePosition : 'Draw sketch',
             chamfer: 'Chamfer edges',
             fillet: 'Fillet edges',
             boolean: 'Boolean operation',
@@ -1056,8 +1066,9 @@ function PCBModelPreview({
             target: orbit!.target,
             bounds: clippingBounds.isEmpty() ? null : clippingSphere,
           });
-          camera.near = clipping.near;
-          camera.far = clipping.far;
+          const planeClipping = sketchScene.clippingRange(camera);
+          camera.near = Math.min(clipping.near, planeClipping?.near ?? clipping.near);
+          camera.far = Math.max(clipping.far, planeClipping?.far ?? clipping.far);
           camera.updateProjectionMatrix();
           // Wheel zoom and camera gestures can change the placement plane below
           // a stationary pointer. Keep its snapped preview current before the
@@ -1774,6 +1785,43 @@ function PCBModelPreview({
     };
   }, [board, linkedCaptionBasis, retry, viewState]);
   const selectedFootprint = board.footprints.find((footprint) => selection.includes(footprint.id));
+  const componentDeleteBlocked =
+    !active ||
+    sourcePending ||
+    !sidebarVisible ||
+    !propertiesExpanded ||
+    annotating ||
+    cad.selectionBlocked ||
+    Boolean(cad.tool) ||
+    componentDeleteBusy ||
+    !capabilityHost;
+  async function removeComponent() {
+    if (
+      componentDeleteBlocked ||
+      componentComposition.current ||
+      !selectedFootprint ||
+      !capabilityHost
+    )
+      return;
+    const id = selectedFootprint.id;
+    setComponentDeleteBusy(true);
+    setComponentDeleteError('');
+    try {
+      await capabilityHost.execute(
+        'layout.delete',
+        {
+          boardId: board.id,
+          selection: [{ kind: 'footprint', id }],
+        },
+        { actor: 'human', expectedRevision: revision },
+      );
+      setSelection((previous) => previous.filter((selected) => selected !== id));
+    } catch (cause) {
+      setComponentDeleteError((cause as Error).message);
+    } finally {
+      setComponentDeleteBusy(false);
+    }
+  }
   const interacting = !annotating && !cad.tool && !cad.pan;
   const drawingSketch = cad.tool === 'sketch' && cad.sketchPhase === 'sketch';
   const pointerTool = Boolean(cad.tool && (cad.tool !== 'sketch' || drawingSketch));
@@ -2251,7 +2299,6 @@ function PCBModelPreview({
               hidden={!boardSelected || cad.inspecting}
             >
               <div className="model-properties-body">
-                <h3 className="model-properties-title">Board</h3>
                 <NumberField
                   label="Board thickness (mm)"
                   value={board.thickness}
@@ -2278,6 +2325,12 @@ function PCBModelPreview({
               <section
                 className="model-properties-content"
                 aria-label={selectedFootprint ? 'Component properties' : 'Model properties'}
+                onCompositionStart={() => {
+                  componentComposition.current = true;
+                }}
+                onCompositionEnd={() => {
+                  componentComposition.current = false;
+                }}
               >
                 <div className="model-properties-body">
                   {selectedFootprint ? (
@@ -2305,7 +2358,20 @@ function PCBModelPreview({
                       Select an element to view its properties.
                     </PropertiesEmptyState>
                   )}
+                  {componentDeleteError && (
+                    <p className="dialog-error" role="alert">
+                      {componentDeleteError}
+                    </p>
+                  )}
                 </div>
+                {selectedFootprint && (
+                  <footer className="inspector-footer">
+                    <PropertyDeleteButton
+                      disabled={componentDeleteBlocked}
+                      onClick={() => void removeComponent()}
+                    />
+                  </footer>
+                )}
               </section>
             )}
           </EditorDisplayDrawer>

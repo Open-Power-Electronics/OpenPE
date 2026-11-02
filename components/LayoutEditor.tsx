@@ -1,4 +1,5 @@
 'use client';
+import PropertyDeleteButton from './PropertyDeleteButton';
 
 import {
   memo,
@@ -25,6 +26,7 @@ import {
   MessageSquareText,
   Minus,
   MousePointer2,
+  PaintBucket,
   Plus,
   RotateCw,
   Route,
@@ -63,12 +65,9 @@ import {
   type PCBSelectionFilters,
 } from '@/lib/pcb-selection';
 import { expandPCBTrackSelection } from '@/lib/pcb-track-selection';
-import {
-  createPCBTrackDrag,
-  previewConstrainedPCBTrackDrag,
-  type PCBTrackDragPreview,
-} from '@/lib/pcb-track-drag';
+import { previewConstrainedPCBTrackDrag, type PCBTrackDragPreview } from '@/lib/pcb-track-drag';
 import { createPCBTrackJointDrag } from '@/lib/pcb-track-joint-drag';
+import { createPCBInteractiveTrackDrag } from '@/lib/pcb-interactive-track-drag';
 import {
   findPCBRectangle,
   pcbRectangleDragBounds,
@@ -175,6 +174,8 @@ import InspectorResize, { type InspectorSize } from './InspectorResize';
 import { hasOpenOverlay } from './Dialog';
 import type { CapabilityHost } from '@/api/capabilities';
 const pixelsPerMM = 96 / 25.4;
+const outlineWidth = 0.05;
+const regionMinThickness = 0.2;
 
 const RetainedLayoutProperties = memo(
   function RetainedLayoutProperties({
@@ -411,6 +412,8 @@ function LayoutEditor({
   const [layer, setLayer] = useState<CopperLayer>('F.Cu');
   const [priorityLayer, setPriorityLayer] = useState<BoardLayer | null>(null);
   const outlineLayer = priorityLayer ?? layer;
+  const [regionNet, setRegionNet] = useState('');
+  const regionNetId = pcb.nets.some((item) => item.id === regionNet) ? regionNet : '';
   const [net, setNet] = useState('');
   const [width, setWidth] = useState(0.4);
   const [viaDiameter, setViaDiameter] = useState(0.8);
@@ -433,8 +436,6 @@ function LayoutEditor({
   const [outline, writeOutline] = useState<Point | null>(null);
   const outlineShape = tool === 'outline' ? 'rectangle' : 'polygon';
   const [outlinePoints, setOutlinePoints] = useState<Point[]>([]);
-  const [outlineWidth, setOutlineWidth] = useState(0.05);
-  const [regionMinThickness, setRegionMinThickness] = useState(0.2);
   const outlineBasis = useRef<PCB | null>(null);
   const outlineLayerBasis = useRef<BoardLayer | null>(null);
   const [fillBusy, setFillBusy] = useState(false);
@@ -525,6 +526,7 @@ function LayoutEditor({
   const [placement, setPlacement] = useState<Footprint | null>(null);
   const [drag, setDrag] = useState<{
     start: Point;
+    pickup?: Point;
     current: Point;
     ids: Selection[];
     basis: PCB;
@@ -631,16 +633,13 @@ function LayoutEditor({
     if (!trackDrag || trackDrag.basis !== pcb) return { engine: null, error: '' };
     try {
       return {
-        engine:
-          trackDrag.mode === 'corner'
-            ? createPCBTrackJointDrag(pcb, trackDrag.ids[0].id, trackDrag.pickup, {
-                clearance: routeClearance,
-                endpointTolerance: trackDrag.endpointTolerance,
-              })
-            : createPCBTrackDrag(pcb, trackDrag.ids, {
-                clearance: routeClearance,
-                obstacleMode: dragObstacleMode,
-              }),
+        engine: createPCBInteractiveTrackDrag(pcb, trackDrag.ids, {
+          mode: trackDrag.mode,
+          clearance: routeClearance,
+          endpointTolerance: trackDrag.endpointTolerance,
+          obstacleMode: dragObstacleMode,
+          pickup: trackDrag.pickup,
+        }),
         error: '',
       };
     } catch (error) {
@@ -1122,6 +1121,10 @@ function LayoutEditor({
         ? {
             mode: trackDrag.mode,
             trackIds: trackDrag.ids.map((item) => item.id),
+            pickup: trackDrag.pickup ? { ...trackDrag.pickup } : undefined,
+            endpointTolerance:
+              trackDrag.mode === 'corner' ? trackDrag.endpointTolerance : undefined,
+            posture: trackDrag.mode === 'connected' ? routePosture : undefined,
             delta: {
               x: trackDrag.current.x - trackDrag.start.x,
               y: trackDrag.current.y - trackDrag.start.y,
@@ -1548,6 +1551,10 @@ function LayoutEditor({
   }
   function changePriorityLayer(next: BoardLayer | null) {
     if (next === priorityLayer) return;
+    if (priorityLayer === null && next === layer) {
+      setPriorityLayer(next);
+      return;
+    }
     if (drawing && (next ?? layer) !== outlineLayer) setOutline(null);
     if (next === null) {
       setPriorityLayer(null);
@@ -1993,6 +2000,20 @@ function LayoutEditor({
     setDrag({ start: anchor, current: at, ids, basis: pcb, preview: pcb, mode: 'move' });
     setError('');
   }
+  function trackDragPickup(ids: Selection[], point: Point) {
+    const tracks = ids.flatMap((item) =>
+      item.kind === 'track' ? pcb.tracks.filter((track) => track.id === item.id) : [],
+    );
+    const distance = (track: PCB['tracks'][number]) => {
+      const at = projectPointToTrack(track, point);
+      return (at.x - point.x) ** 2 + (at.y - point.y) ** 2;
+    };
+    const nearest = tracks.reduce<PCB['tracks'][number] | undefined>(
+      (best, track) => (!best || distance(track) < distance(best) ? track : best),
+      undefined,
+    );
+    return nearest ? projectPointToTrack(nearest, point) : point;
+  }
   function beginTrackDrag(
     mode: 'connected' | 'corner' = 'connected',
     targets?: Selection[],
@@ -2016,15 +2037,12 @@ function LayoutEditor({
     }
     if (!editableSelection(ids)) return;
     cancelGesture();
-    const pickup = pickupOverride
-      ? mode === 'corner'
-        ? pickupOverride
-        : { x: snap(pickupOverride.x), y: snap(pickupOverride.y) }
-      : pointerPosition.current
-        ? canvasPoint(pointerPosition.current, mode !== 'corner')
-        : mode === 'corner'
-          ? (lastCanvasPoint.current ?? cursorPosition.current)
-          : cursorPosition.current;
+    const rawPickup =
+      pickupOverride ??
+      (pointerPosition.current
+        ? canvasPoint(pointerPosition.current, false)
+        : (lastCanvasPoint.current ?? cursorPosition.current));
+    const pickup = mode === 'connected' ? trackDragPickup(ids, rawPickup) : rawPickup;
     const endpointTolerance = (view.width / size.width) * 6;
     let at = pickup;
     if (mode === 'corner') {
@@ -2476,7 +2494,7 @@ function LayoutEditor({
             ...pcb.zones,
             {
               id,
-              netId: null,
+              netId: regionNetId || null,
               layer: copperLayer,
               outline: points,
               clearance: defaultCopperFillClearance,
@@ -2565,7 +2583,7 @@ function LayoutEditor({
     if (onAnalysisProbe || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
       return;
     const p =
-      tool === 'route' && (e.ctrlKey || e.metaKey)
+      (tool === 'route' || trackDrag) && (e.ctrlKey || e.metaKey)
         ? routeFreePoint(canvasPoint(e, false))
         : canvasPoint(e);
     if (trackDrag) {
@@ -2752,6 +2770,7 @@ function LayoutEditor({
           basis: pcb,
           preview: pcb,
           mode: 'pointer',
+          pickup: canvasPoint(e, false),
         });
     } else {
       setMarquee({
@@ -2795,7 +2814,10 @@ function LayoutEditor({
     lastCanvasPoint.current = raw;
     const p = drawing
       ? outlinePoint(e)
-      : tool === 'route' && (e.ctrlKey || e.metaKey)
+      : (tool === 'route' ||
+            trackDrag ||
+            (drag?.mode === 'pointer' && drag.ids.every((item) => item.kind === 'track'))) &&
+          (e.ctrlKey || e.metaKey)
         ? routeFreePoint(raw)
         : { x: snap(raw.x), y: snap(raw.y) };
     const overlayOpen = hasOpenOverlay();
@@ -2863,9 +2885,9 @@ function LayoutEditor({
       if (drag.mode === 'pointer' && !pointerMoved.current) return;
       if (drag.mode === 'pointer' && drag.ids.every((item) => item.kind === 'track')) {
         const endpointTolerance = (view.width / size.width) * 6;
-        const pickup = drag.start;
+        const pickup = trackDragPickup(drag.ids, drag.pickup ?? drag.start);
         const ids = drag.ids;
-        const start = drag.start;
+        const start = pickup;
         setTrackDrag({
           mode: mouseDragTracks,
           pointer: true,
@@ -2958,7 +2980,10 @@ function LayoutEditor({
       return;
     }
     if (!moved && picked?.basis === latestBoard.current) setSelection([picked.selection]);
-    if (trackDrag?.pointer) finishTrackDrag(canvasPoint(e));
+    if (trackDrag?.pointer)
+      finishTrackDrag(
+        e.ctrlKey || e.metaKey ? routeFreePoint(canvasPoint(e, false)) : canvasPoint(e),
+      );
     if (drag?.mode === 'pointer') {
       if (!moved || drag.ids.every((item) => item.kind === 'track')) setDrag(null);
       else finishMove(canvasPoint(e));
@@ -3111,7 +3136,7 @@ function LayoutEditor({
         fit('all');
         return;
       }
-      if (!(tool === 'route' && key === 'enter')) return;
+      if (!((tool === 'route' || trackDrag) && key === 'enter')) return;
     }
     if (
       ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key) &&
@@ -4379,7 +4404,7 @@ function LayoutEditor({
                             ? Math.max(boardOutlineMinWidth, outlineWidth)
                             : outlineWidth
                         }
-                        strokeDasharray="1 0.5"
+                        strokeDasharray="0.5 0.35"
                         pointerEvents="none"
                       />
                     ) : (
@@ -4395,7 +4420,7 @@ function LayoutEditor({
                             ? Math.max(boardOutlineMinWidth, outlineWidth)
                             : outlineWidth
                         }
-                        strokeDasharray="1 0.5"
+                        strokeDasharray="0.5 0.35"
                         pointerEvents="none"
                       />
                     ))}
@@ -4540,40 +4565,43 @@ function LayoutEditor({
               }}
             >
               <header>
-                <strong>
-                  {tool === 'route'
-                    ? 'Track width'
-                    : drawing
-                      ? copperLayers.includes(outlineLayer as CopperLayer)
-                        ? 'Minimum width'
-                        : 'Line width'
-                      : trackDrag
-                        ? 'Diameter'
-                        : 'Net'}
-                </strong>
+                <strong>{tool === 'route' ? 'Track width' : trackDrag ? 'Diameter' : 'Net'}</strong>
               </header>
               <div className="layout-tool-settings-content">
                 {drawing && (
-                  <NumberField
-                    label={
-                      copperLayers.includes(outlineLayer as CopperLayer)
-                        ? 'Minimum width (mm)'
-                        : 'Line width (mm)'
-                    }
-                    value={
-                      copperLayers.includes(outlineLayer as CopperLayer)
-                        ? regionMinThickness
-                        : outlineWidth
-                    }
-                    min={0.01}
-                    max={10}
-                    onCommit={
-                      copperLayers.includes(outlineLayer as CopperLayer)
-                        ? setRegionMinThickness
-                        : setOutlineWidth
-                    }
-                    onCancel={focusCanvas}
-                  />
+                  <>
+                    <label className="layout-field">
+                      <span>Net</span>
+                      <Select
+                        label="Region net"
+                        active={active && visible}
+                        disabled={!copperLayers.includes(outlineLayer as CopperLayer)}
+                        onClosedEscape={active ? () => activate('select') : undefined}
+                        value={regionNetId}
+                        options={[{ value: '', label: 'Unassigned' }, ...netOptions]}
+                        onChange={(value) => {
+                          if (value === regionNetId) return;
+                          setOutline(null);
+                          setError('');
+                          setRegionNet(value);
+                        }}
+                      />
+                    </label>
+                    <label className="layout-field">
+                      <span>Layer</span>
+                      <Select
+                        label="Region layer"
+                        active={active && visible}
+                        onClosedEscape={active ? () => activate('select') : undefined}
+                        value={outlineLayer}
+                        options={displayLayers.map((value) => ({ value, label: value }))}
+                        onChange={(value) => {
+                          changePriorityLayer(value as BoardLayer);
+                          setLayers((current) => ({ ...current, [value]: true }));
+                        }}
+                      />
+                    </label>
+                  </>
                 )}
                 {tool === 'via' && !trackDrag && (
                   <label className="layout-field">
@@ -4643,16 +4671,6 @@ function LayoutEditor({
                   </div>
                 ) : null}
               </div>
-              {drawing && (
-                <button
-                  className="dialog-button primary layout-region-finish"
-                  aria-label="Finish region"
-                  disabled={!outline || (outlineShape === 'polygon' && outlinePoints.length < 3)}
-                  onClick={() => finishShape()}
-                >
-                  Finish
-                </button>
-              )}
               <button
                 className="layout-tool-settings-close"
                 aria-label="Close tool settings"
@@ -4815,29 +4833,6 @@ function LayoutEditor({
                   >
                     <div className="layout-inspector-content" key={propertiesSubject}>
                       <LayoutProperties
-                        actions={
-                          selectedFootprint && !inspectedPad ? (
-                            <button
-                              type="button"
-                              className="icon-button property-delete-action"
-                              aria-label="Delete object"
-                              title="Delete object"
-                              data-edit-action
-                              disabled={
-                                !propertiesActive ||
-                                tool !== 'select' ||
-                                !!drag ||
-                                !!trackDrag ||
-                                !!marquee
-                              }
-                              onClick={() =>
-                                remove([{ kind: 'footprint', id: selectedFootprint.id }])
-                              }
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          ) : undefined
-                        }
                         board={pcb}
                         schematic={schematic}
                         active={propertiesActive && !fillBusy}
@@ -4873,6 +4868,54 @@ function LayoutEditor({
                         }}
                       />
                     </div>
+                    {!inspectedPad && selection.length > 0 && (
+                      <footer className="inspector-footer layout-inspector-footer">
+                        {selectedZone && !selectedZone.keepout && (
+                          <button
+                            type="button"
+                            className="tool-button property-fill-action"
+                            data-edit-action
+                            disabled={
+                              !propertiesActive ||
+                              fillBusy ||
+                              tool !== 'select' ||
+                              !!drag ||
+                              !!trackDrag ||
+                              !!marquee
+                            }
+                            aria-label={
+                              selectedZone.fillEnabled !== false &&
+                              selectedZone.filledPolygons !== undefined
+                                ? 'Refill zone'
+                                : 'Fill zone'
+                            }
+                            title={
+                              fillBusy
+                                ? 'Filling zone…'
+                                : selectedZone.fillEnabled !== false &&
+                                    selectedZone.filledPolygons !== undefined
+                                  ? 'Refill zone'
+                                  : 'Fill zone'
+                            }
+                            aria-busy={fillBusy}
+                            onClick={() => fillZone(selectedZone.id)}
+                          >
+                            <PaintBucket size={16} aria-hidden />
+                          </button>
+                        )}
+                        <PropertyDeleteButton
+                          disabled={
+                            !propertiesActive ||
+                            fillBusy ||
+                            tool !== 'select' ||
+                            !!drag ||
+                            !!trackDrag ||
+                            !!marquee
+                          }
+                          onClick={() => remove(selection)}
+                        />
+                      </footer>
+                    )}
                   </aside>
                 )}
               </RetainedLayoutProperties>

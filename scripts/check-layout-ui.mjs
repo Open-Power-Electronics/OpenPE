@@ -650,7 +650,7 @@ try {
     [2.54, 12.7],
   ])
     await clickPoint(x, y);
-  await button('Finish region').click();
+  await canvas.press('Enter');
   await canvas.locator('[data-copper-zone]').first().waitFor({ state: 'attached' });
   assert.equal(await canvas.locator('[data-copper-zone]').last().getAttribute('d'), '');
   await page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).fill('0.5');

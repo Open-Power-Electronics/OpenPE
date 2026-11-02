@@ -4,7 +4,7 @@ import {
   setLayoutVisibility,
 } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
@@ -242,14 +242,6 @@ async function run(
   }
 }
 
-async function tabTo(page, control) {
-  for (let step = 0; step < 60; step++) {
-    if (await control.evaluate((element) => document.activeElement === element)) return;
-    await page.keyboard.press('Tab');
-  }
-  assert.fail('The control must remain reachable through ordinary Tab navigation.');
-}
-
 async function waitForCanvasFocus(page) {
   await page.waitForFunction(
     () => document.activeElement?.getAttribute('data-testid') === 'layout-canvas',
@@ -289,13 +281,229 @@ async function openFootprintChooser(page) {
 }
 
 try {
+  for (const kind of [
+    'footprint',
+    'track',
+    'via',
+    'graphic',
+    'zone',
+    'rule area',
+    'outline',
+    'multiple',
+  ]) {
+    const input = structuredClone(board);
+    input.graphics.push({
+      id: 'property-line',
+      start: { x: 40, y: 15 },
+      end: { x: 50, y: 15 },
+      width: 0.2,
+      layer: 'F.SilkS',
+    });
+    input.zones.push({
+      id: 'property-zone',
+      netId: 'net',
+      layer: 'F.Cu',
+      outline: [
+        { x: 45, y: 35 },
+        { x: 65, y: 35 },
+        { x: 65, y: 45 },
+        { x: 45, y: 45 },
+      ],
+      holes: [
+        [
+          { x: 50, y: 38 },
+          { x: 54, y: 38 },
+          { x: 54, y: 42 },
+          { x: 50, y: 42 },
+        ],
+      ],
+      clearance: 0.25,
+      minThickness: 0.2,
+      thermalGap: 0.3,
+      thermalBridge: 0.3,
+      fillEnabled: false,
+      ...(kind === 'rule area'
+        ? { keepout: { tracks: true, vias: true, pads: true, copperpour: true } }
+        : {}),
+    });
+    await run(
+      `properties actions: fixed footer deletes ${kind}`,
+      async ({ page, canvas, point, snapshot, box }) => {
+        assert.equal(
+          await page.getByRole('button', { name: 'Delete object', exact: true }).count(),
+          0,
+        );
+        const pickups = {
+          footprint: { x: 20, y: 21 },
+          track: { x: 20, y: 30 },
+          via: { x: 30, y: 30 },
+          graphic: { x: 45, y: 15 },
+          zone: { x: 60, y: 35 },
+          'rule area': { x: 60, y: 35 },
+          outline: { x: 40, y: 0 },
+        };
+        if (kind === 'multiple') {
+          await box({ x: 17, y: 17 }, { x: 33, y: 23 });
+          await canvas.press('e');
+        } else {
+          await point(pickups[kind]);
+          await canvas.press('e');
+        }
+        const panel = page.getByRole('complementary', { name: 'Layout properties' });
+        if (kind === 'footprint') {
+          await mkdir('test-results/layout-properties-actions', { recursive: true });
+          await panel.locator('.layout-footprint-geometry').screenshot({
+            path: 'test-results/layout-properties-actions/footprint-geometry.png',
+          });
+        }
+        const remove = panel.getByRole('button', { name: 'Delete object', exact: true });
+        await remove.waitFor();
+        assert.equal(await remove.count(), 1);
+        assert.equal(
+          await panel
+            .locator('.layout-inspector-content')
+            .getByRole('button', { name: 'Delete object', exact: true })
+            .count(),
+          0,
+        );
+        assert.equal(await panel.getByText('Zone corners', { exact: true }).count(), 0);
+        assert.equal(await panel.getByText('Cutout 1', { exact: true }).count(), 0);
+        assert.equal(
+          await panel.getByRole('button', { name: 'Fill zone', exact: true }).count(),
+          kind === 'zone' ? 1 : 0,
+        );
+        if (kind === 'zone') {
+          const bounds = panel
+            .locator('details')
+            .filter({ has: page.locator('summary', { hasText: /^Zone bounds$/ }) });
+          const rules = panel
+            .locator('details')
+            .filter({ has: page.locator('summary', { hasText: /^Fill rules$/ }) });
+          assert.equal(await bounds.getAttribute('open'), null);
+          assert.equal(await rules.getAttribute('open'), null);
+          assert.deepEqual(
+            await panel.locator('details > summary').allTextContents(),
+            ['Zone bounds', 'Fill rules'],
+            'Secondary zone controls are collapsed with fill rules last.',
+          );
+          const beforeDisclosure = await snapshot();
+          const summary = bounds.locator('summary');
+          await summary.focus();
+          await summary.press('Enter');
+          const width = bounds.getByRole('spinbutton', { name: 'Width (mm)', exact: true });
+          await width.fill('0');
+          await width.press('Enter');
+          await summary.click();
+          assert.equal(await bounds.getAttribute('open'), null);
+          await summary.press('Space');
+          assert.equal(
+            await width.inputValue(),
+            '0',
+            'Collapsing retains an invalid bounds draft.',
+          );
+          await width.press('Escape');
+          assert.equal(await width.inputValue(), '20');
+          await summary.click();
+          assert.deepEqual(
+            await snapshot(),
+            beforeDisclosure,
+            'Disclosure and rejected drafts never edit geometry.',
+          );
+          const fill = panel.getByRole('button', { name: 'Fill zone', exact: true });
+          assert.equal((await fill.textContent()).trim(), '', 'Fill is an icon-only action.');
+          assert.equal(await fill.getAttribute('title'), 'Fill zone');
+          assert.equal(await fill.locator('svg').count(), 1);
+          await mkdir('test-results/layout-properties-actions', { recursive: true });
+          for (const theme of ['light', 'dark']) {
+            await page.evaluate(
+              (theme) => document.documentElement.setAttribute('data-theme', theme),
+              theme,
+            );
+            await panel.screenshot({
+              path: `test-results/layout-properties-actions/zone-${theme}.png`,
+            });
+          }
+        }
+        const beforeScroll = await remove.boundingBox();
+        await panel.locator('.layout-inspector-content').evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
+        assert.deepEqual(
+          await remove.boundingBox(),
+          beforeScroll,
+          'Footer stays outside the scrolling fields.',
+        );
+        const bounds = await panel.boundingBox();
+        assert.ok(Math.abs(bounds.x + bounds.width - beforeScroll.x - beforeScroll.width - 12) < 1);
+        assert.ok(
+          Math.abs(bounds.y + bounds.height - beforeScroll.y - beforeScroll.height - 6) < 1,
+        );
+        await remove.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+        await panel.dispatchEvent('compositionstart');
+        await remove.click();
+        assert.deepEqual(
+          await snapshot(),
+          { board: input, commits: 0 },
+          'IME cannot delete a selection.',
+        );
+        await panel.dispatchEvent('compositionend');
+        await page.evaluate(() => {
+          window.rejectCommit = true;
+        });
+        await remove.click();
+        assert.deepEqual(
+          await snapshot(),
+          { board: input, commits: 0 },
+          'Rejected deletion retains the board and selection.',
+        );
+        await page.evaluate(() => {
+          window.rejectCommit = false;
+        });
+        await remove.press('Enter');
+        const result = await snapshot();
+        const expected = structuredClone(input);
+        if (kind === 'footprint')
+          expected.footprints = expected.footprints.filter((item) => item.id !== 'A1');
+        else if (kind === 'multiple') expected.footprints = [];
+        else if (kind === 'track') expected.tracks = [];
+        else if (kind === 'via') expected.vias = [];
+        else if (kind === 'zone' || kind === 'rule area') expected.zones = [];
+        else if (kind === 'graphic')
+          expected.graphics = expected.graphics.filter((item) => item.id !== 'property-line');
+        else expected.graphics = expected.graphics.filter((item) => item.id !== 'edge-0');
+        assert.deepEqual(
+          result,
+          { board: expected, commits: 1 },
+          'Delete uses one transaction for the selected objects.',
+        );
+        assert.equal(
+          await page.getByRole('button', { name: 'Delete object', exact: true }).count(),
+          0,
+        );
+      },
+      input,
+    );
+  }
+
   for (const drawingLayer of ['F.Cu', 'B.Cu', 'F.SilkS', 'B.SilkS', 'Edge.Cuts']) {
     for (const shape of ['rectangle', 'polygon']) {
       await run(
         `regions: ${shape} draws, selects and saves on ${drawingLayer}`,
         async ({ page, canvas, point, snapshot }) => {
-          await selectLayoutLayer(page, drawingLayer);
           await page.getByRole('button', { name: `Draw ${shape}`, exact: true }).click();
+          const settings = page.getByRole('complementary', {
+            name: 'Region settings',
+            exact: true,
+          });
+          assert.equal(await settings.getByRole('spinbutton').count(), 0);
+          assert.equal(await settings.getByRole('button', { name: /Finish/ }).count(), 0);
+          await settings.getByRole('combobox', { name: 'Region layer', exact: true }).click();
+          await page.getByRole('option', { name: drawingLayer, exact: true }).click();
+          assert.equal(
+            await settings.getByRole('combobox', { name: 'Region net', exact: true }).isEnabled(),
+            drawingLayer.endsWith('.Cu'),
+          );
+          assert.equal((await snapshot()).commits, 0, 'Presets do not edit the board.');
           assert.equal(
             await page.getByRole('button', { name: 'Fill copper zones', exact: true }).count(),
             0,
@@ -371,6 +579,89 @@ try {
   }
   for (const shape of ['rectangle', 'polygon'])
     await run(
+      `regions: ${shape} presets net and layer with guarded drafts and exact commit`,
+      async ({ page, canvas, point, snapshot }) => {
+        const start = () =>
+          page.getByRole('button', { name: `Draw ${shape}`, exact: true }).click();
+        await start();
+        const settings = page.getByRole('complementary', { name: 'Region settings', exact: true });
+        const net = settings.getByRole('combobox', { name: 'Region net', exact: true });
+        const layer = settings.getByRole('combobox', { name: 'Region layer', exact: true });
+        // Escape closes only the open selector; IME must not choose or exit the tool.
+        await net.click();
+        await page.keyboard.press('Escape');
+        assert.equal(await settings.isVisible(), true);
+        await net.dispatchEvent('keydown', {
+          key: 'Escape',
+          code: 'Escape',
+          keyCode: 229,
+          isComposing: true,
+          bubbles: true,
+        });
+        assert.equal(await settings.isVisible(), true);
+        await net.click();
+        await page.getByRole('option', { name: 'SIGNAL', exact: true }).click();
+        await point({ x: 45, y: 15 }, true);
+        await layer.click();
+        await page.getByRole('option', { name: 'B.Cu', exact: true }).click();
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 0);
+        await point({ x: 45, y: 15 }, true);
+        await net.click();
+        await page.getByRole('option', { name: 'Unassigned', exact: true }).click();
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 0);
+        await net.click();
+        await page.getByRole('option', { name: 'SIGNAL', exact: true }).click();
+        assert.equal((await snapshot()).commits, 0);
+        if (shape === 'rectangle') {
+          await mkdir('test-results', { recursive: true });
+          await page.screenshot({ path: 'test-results/region-presets.png' });
+        }
+        const draw = async () => {
+          await point({ x: 45, y: 15 }, true);
+          if (shape === 'polygon') {
+            await point({ x: 65, y: 15 }, true);
+            await point({ x: 65, y: 35 }, true);
+          } else await point({ x: 65, y: 35 });
+          assert.equal(
+            await canvas.locator('[data-shape-preview]').getAttribute('data-outline-layer'),
+            'B.Cu',
+          );
+        };
+        await draw();
+        await page.evaluate(() => (window.rejectCommit = true));
+        await canvas.press('Enter');
+        assert.equal((await snapshot()).commits, 0);
+        assert.equal(await canvas.locator('[data-shape-preview]').count(), 1);
+        await page.evaluate(() => (window.rejectCommit = false));
+        await canvas.press('Enter');
+        const accepted = await snapshot();
+        assert.equal(accepted.commits, 1);
+        const zone = accepted.board.zones.at(-1);
+        assert.equal(zone.netId, 'net');
+        assert.equal(zone.layer, 'B.Cu');
+        assert.equal(zone.minThickness, 0.2);
+        assert.equal(zone.fillEnabled, false);
+        assert.equal(await canvas.evaluate((svg) => document.activeElement === svg), true);
+        const native = parseSExpr(serializePCB(accepted.board, emptyCircuit()));
+        const saved = native.find((node) => Array.isArray(node) && node[0] === 'zone');
+        assert.deepEqual(
+          saved.find((node) => Array.isArray(node) && node[0] === 'net'),
+          ['net', '"SIGNAL"'],
+        );
+        assert.deepEqual(
+          saved.find((node) => Array.isArray(node) && node[0] === 'layer'),
+          ['layer', '"B.Cu"'],
+        );
+        // Both tools retain the accepted presets when drawing another region.
+        await start();
+        assert.equal(await net.textContent().then((text) => text.trim()), 'SIGNAL');
+        assert.equal(await layer.textContent().then((text) => text.trim()), 'B.Cu');
+        await canvas.press('Escape');
+        assert.equal((await snapshot()).commits, 1);
+      },
+    );
+  for (const shape of ['rectangle', 'polygon'])
+    await run(
       `regions: ${shape} cancellation, IME, rejection and layer changes retain no partial edits`,
       async ({ page, canvas, point, snapshot }) => {
         await selectLayoutLayer(page, 'F.SilkS');
@@ -420,13 +711,11 @@ try {
     await run(
       'creation continuity: ' + finish + ' zone completion supports natural M Escape and E',
       async (context) => {
-        const { page, canvas, snapshot } = context;
+        const { page, canvas, point, snapshot } = context;
         await drawZoneDraft(context);
-        const button = page.getByRole('button', { name: 'Finish region', exact: true });
         if (finish === 'keyboard') {
-          await tabTo(page, button);
-          await page.keyboard.press('Enter');
-        } else await button.click();
+          await canvas.press('Enter');
+        } else await point({ x: 45, y: 20 }, true);
         const accepted = await snapshot();
         assert.equal(accepted.commits, 1);
         assert.equal(accepted.board.zones.length, 1);
@@ -467,13 +756,11 @@ try {
       await drawZoneDraft(context);
       const draft = canvas.locator('[data-shape-preview]');
       const points = await draft.getAttribute('points');
-      const button = page.getByRole('button', { name: 'Finish region', exact: true });
-      await tabTo(page, button);
       await page.evaluate(() => {
         window.rejectCommit = true;
       });
       await page.keyboard.press('Enter');
-      assert.equal(await button.evaluate((control) => document.activeElement === control), true);
+      assert.equal(await canvas.evaluate((control) => document.activeElement === control), true);
       assert.equal(await draft.getAttribute('points'), points);
       assert.deepEqual(await snapshot(), { board, commits: 0 });
       await page.evaluate(() => {
@@ -1065,8 +1352,8 @@ try {
       });
       pickup = { x: 52, y: 35 };
       fields = [
-        { label: 'Corner 1 X (mm)', value: 45 },
-        { label: 'Corner 1 Y (mm)', value: 35 },
+        { label: 'X (mm)', value: 45 },
+        { label: 'Y (mm)', value: 35 },
       ];
     }
     await run(
@@ -1077,7 +1364,6 @@ try {
         await point(pickup);
         await canvas.press('e');
         const inspector = page.getByRole('complementary', { name: 'Layout properties' });
-        if (kind === 'zone') await inspector.getByText('Zone corners', { exact: true }).click();
         for (const entry of fields) {
           const field = inspector.getByRole('spinbutton', { name: entry.label, exact: true });
           for (const method of ['Enter', 'blur']) {
@@ -1108,7 +1394,11 @@ try {
         else if (kind === 'via') expected.vias[0].x = 30.5;
         else if (kind === 'graphic')
           expected.graphics.find((graphic) => graphic.id === 'inspection-line').start.x = 40.5;
-        else expected.zones[0].outline[0].x = 45.5;
+        else
+          expected.zones[0].outline = expected.zones[0].outline.map((point) => ({
+            ...point,
+            x: point.x + 0.5,
+          }));
         assert.deepEqual(await snapshot(), { board: expected, commits: 1 });
       },
       input,
@@ -1377,14 +1667,9 @@ try {
         { x: 25, y: 25 },
       ])
         await point(corner, true);
-      const finish = page.getByRole('button', { name: 'Finish region', exact: true });
-      assert.equal(await finish.isEnabled(), true);
       await canvas.press('Backspace');
-      assert.equal(
-        await finish.isDisabled(),
-        true,
-        'Removing the third corner leaves the unfinished two-corner outline.',
-      );
+      await canvas.press('Enter');
+      await page.getByRole('alert').filter({ hasText: 'at least three corners' }).waitFor();
       assert.deepEqual(
         await snapshot(),
         { board, commits: 0 },

@@ -50,6 +50,8 @@ export type ModelCadObject = {
   size: ModelCadVector;
   material: 'aluminium' | 'pmma' | 'plastic';
   opacity: number;
+  /** Optional RGB appearance override; absence uses the selected material color. */
+  color?: string;
   /** Local XY hole centres, cut through the object's local Z axis. */
   holes: { id: string; x: number; y: number; diameterMm: number }[];
   profile?: ModelCadProfile;
@@ -62,6 +64,11 @@ export const modelCadMaterialColors: Record<ModelCadObject['material'], number> 
   pmma: 0xdcecef,
   plastic: 0x777c82,
 };
+export function modelCadColor(object: Pick<ModelCadObject, 'material' | 'color'>): number {
+  return object.color === undefined
+    ? modelCadMaterialColors[object.material]
+    : Number.parseInt(object.color.slice(1), 16);
+}
 
 const object = (properties: Record<string, unknown>, optional: string[] = []) => ({
   type: 'object',
@@ -159,6 +166,7 @@ export const modelCadObjectSchema = object(
     size: vector(0.5, 1000),
     material: { enum: ['aluminium', 'pmma', 'plastic'] },
     opacity: number(0.05, 1),
+    color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', minLength: 7, maxLength: 7 },
     holes: {
       type: 'array',
       maxItems: 32,
@@ -179,7 +187,7 @@ export const modelCadObjectSchema = object(
       additionalProperties: false,
     },
   },
-  ['profile', 'edgeTreatment', 'boolean'],
+  ['profile', 'edgeTreatment', 'boolean', 'color'],
 );
 const modelCadSchema = object({
   version: { const: 1 },
@@ -540,6 +548,7 @@ export function newModelCadBooleanObject(
     size,
     material: target.material,
     opacity: target.opacity,
+    ...(target.color === undefined ? {} : { color: target.color }),
     holes: [],
     boolean: { operation, operands },
   });

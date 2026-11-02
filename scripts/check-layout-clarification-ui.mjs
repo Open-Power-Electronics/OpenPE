@@ -147,7 +147,11 @@ const browser = await chromium.launch({
   headless: true,
 });
 
+const casePattern = process.argv[2] ? new RegExp(process.argv[2]) : null;
+let matchedCases = 0;
 async function run(name, check, fixtureBoard = board) {
+  if (casePattern && !casePattern.test(name)) return;
+  matchedCases++;
   const page = await browser.newPage({ viewport: { width: 1200, height: 820 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -340,9 +344,14 @@ try {
       for (const shape of ['polygon', 'rectangle']) {
         await selectLayoutLayer(page, 'Edge.Cuts');
         await button(`Draw ${shape}`).click();
-        const width = page.getByRole('spinbutton', { name: 'Line width (mm)', exact: true });
-        await width.fill('0.01');
-        await width.press('Enter');
+        assert.equal(
+          await page
+            .getByRole('complementary', { name: 'Region settings', exact: true })
+            .getByRole('spinbutton')
+            .count(),
+          0,
+          'Region drawing uses the default line width without a width preset.',
+        );
         await point({ x: 10, y: 15 }, true);
         await point({ x: 18, y: 20 });
         assert.equal(
@@ -583,6 +592,7 @@ try {
     },
     dense,
   );
+  assert.ok(matchedCases > 0, 'The Layout clarification check must match at least one case.');
 } finally {
   await browser.close();
 }

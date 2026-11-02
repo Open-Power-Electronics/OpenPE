@@ -99,3 +99,64 @@ test('only drawing shows a dense grid, vertices and cursor; plane setup retains 
     scene.dispose();
   }
 });
+
+test('plane setup shows an exact translucent surface and releases each replaced preview', () => {
+  const root = new THREE.Group();
+  const scene = createModelCadSketchScene(root, 100);
+  let disposals = 0;
+  try {
+    for (const plane of ['XY', 'XZ', 'YZ'] as const) {
+      const origin = { x: 45.5, y: 212, z: -7.25 };
+      scene.update({ ...sketch, phase: 'plane', plane, origin, points: [], cursor: null }, false);
+      const surface = root.children.find((node) => node instanceof THREE.Mesh) as THREE.Mesh;
+      assert.ok(surface?.userData.modelCadSketchPlane);
+      surface.geometry.addEventListener('dispose', () => disposals++);
+      const material = surface.material as THREE.MeshBasicMaterial;
+      assert.equal(material.transparent, true);
+      assert.equal(material.side, THREE.DoubleSide);
+      assert.equal(material.depthWrite, false);
+      root.updateMatrixWorld(true);
+      const center = surface.localToWorld(new THREE.Vector3());
+      assert.deepEqual(center.toArray(), [45.5, -212, -7.25]);
+      const frame = modelCadSketchFrame(plane, origin);
+      const raycaster = new THREE.Raycaster(
+        center.clone().add(frame.normal),
+        frame.normal.clone().negate(),
+      );
+      assert.deepEqual(raycaster.intersectObject(root, true), []);
+      const corner = surface.localToWorld(new THREE.Vector3(60, 60, 0));
+      assert.ok(corner.sub(center).dot(frame.normal) === 0);
+    }
+    scene.update(null, false);
+    assert.equal(root.children.length, 0);
+    assert.equal(disposals, 3);
+  } finally {
+    scene.dispose();
+  }
+});
+
+test('remote planes stay inside their finite clipping range independently of the drawing grid', () => {
+  const root = new THREE.Group();
+  const scene = createModelCadSketchScene(root, 100);
+  const camera = new THREE.OrthographicCamera(-40, 40, 30, -30, 0.1, 100);
+  camera.position.set(12, 88, 4);
+  camera.up.set(0, 0, 1);
+  camera.lookAt(12, -212, 4);
+  camera.updateMatrixWorld(true);
+  const remote = { ...sketch, phase: 'plane' as const, origin: { x: 12, y: 212, z: 4 } };
+  try {
+    scene.update(remote, false);
+    const clipping = scene.clippingRange(camera)!;
+    assert.ok(clipping.near < 300 && clipping.far > 300);
+    scene.update(remote, false, { visible: false, spacing: 10 });
+    assert.deepEqual(scene.clippingRange(camera), clipping);
+    scene.update({ ...remote, phase: 'sketch' }, false);
+    assert.deepEqual(scene.clippingRange(camera), clipping);
+    scene.update({ ...remote, phase: 'profile' }, false);
+    assert.equal(scene.clippingRange(camera), null);
+    scene.update(null, false);
+    assert.equal(scene.clippingRange(camera), null);
+  } finally {
+    scene.dispose();
+  }
+});

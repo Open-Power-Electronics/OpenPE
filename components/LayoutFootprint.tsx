@@ -125,7 +125,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
                 fillRule="evenodd"
                 stroke={color}
                 strokeWidth={zoneOutlineWidth}
-                strokeDasharray="1 0.7"
+                strokeDasharray="0.5 0.35"
               />
             )}
           </PCBSelectionPaint>

@@ -18,6 +18,7 @@ import { preparePCBTrackAnchors, type CenteredPCBTrackAnchor as Anchor } from '.
 import { createPCBRouter } from './pcb-routing';
 import { preparePCBArtworkObstacles } from './pcb-routing-artwork';
 import { createPCBTrackShove } from './pcb-track-shove';
+import { createPCBTrackChainDrag } from './pcb-track-chain-drag';
 import { isOwnedProjectNode } from './immutable-project';
 
 type Track = PCB['tracks'][number];
@@ -232,12 +233,77 @@ const copperKey = (track: Track) => {
 export function createPCBTrackDrag(
   board: PCB,
   selections: readonly PCBSelection[],
-  options: { clearance: number; obstacleMode?: 'shove' | 'walk-around' },
+  options: {
+    clearance: number;
+    obstacleMode?: 'shove' | 'walk-around';
+    /** Interactive chain reshaping and local detours around fixed copper. */
+    rerouteSelected?: boolean;
+    pickup?: Point;
+    preservePickup?: boolean;
+  },
 ): { preview: (delta: Point, posture?: boolean) => PCBTrackDragPreview } {
+  if (options.rerouteSelected && selections.length > 1) {
+    const chain = createPCBTrackChainDrag(board, selections, options.clearance, options.pickup);
+    if (chain?.leaderId)
+      return createPCBTrackDrag(board, [{ kind: 'track', id: chain.leaderId }], {
+        ...options,
+        preservePickup: true,
+      });
+  }
   if (options.obstacleMode === 'shove')
-    return createPCBTrackShove(board, selections, options.clearance, (basis) =>
-      createPCBTrackDrag(basis, selections, { clearance: options.clearance }),
+    return createPCBTrackShove(
+      board,
+      selections,
+      options.clearance,
+      (basis) => {
+        if (options.rerouteSelected) {
+          const chain = createPCBTrackChainDrag(
+            basis,
+            selections,
+            options.clearance,
+            options.pickup,
+            options.preservePickup,
+          );
+          if (chain?.leaderId) return chain;
+        }
+        return createPCBTrackDrag(basis, selections, { clearance: options.clearance });
+      },
+      options.rerouteSelected
+        ? () => {
+            const walking = createPCBTrackDrag(board, selections, {
+              clearance: options.clearance,
+              rerouteSelected: true,
+              pickup: options.pickup,
+            });
+            let chain: ReturnType<typeof createPCBTrackChainDrag> | null;
+            return {
+              preview(delta, posture) {
+                if (chain === undefined)
+                  chain =
+                    createPCBTrackChainDrag(
+                      board,
+                      selections,
+                      options.clearance,
+                      options.pickup,
+                      options.preservePickup,
+                    ) ?? null;
+                return chain?.preview(delta, posture) ?? walking.preview(delta, posture);
+              },
+            };
+          }
+        : undefined,
+      options.rerouteSelected,
     );
+  if (options.rerouteSelected) {
+    const chain = createPCBTrackChainDrag(
+      board,
+      selections,
+      options.clearance,
+      options.pickup,
+      options.preservePickup,
+    );
+    if (chain?.leaderId) return chain;
+  }
   const failed = (error: string): PCBTrackDragPreview => ({ board, error, changedIds: [] });
   try {
     if (!Number.isFinite(options.clearance) || options.clearance < 0.05 || options.clearance > 20)
@@ -527,9 +593,25 @@ export function createPCBTrackDrag(
           if (!movement.x && !movement.y) return { board, error: '', changedIds: [] };
           work = 0;
           const replacements = new Map<string, Track[]>(),
+            spines = new Map<string, Track>(),
             rerouted = new Set<string>(),
             added: Track[] = [],
             addedBySelected = new Map<string, Track[]>();
+          const segments = (
+            track: Track,
+            path: Point[],
+            key: string,
+            preserveId: boolean,
+            reverse = false,
+          ) => {
+            const points = reverse ? path.slice().reverse() : path;
+            return points.slice(1).map((point, i) => ({
+              ...track,
+              id: preserveId && i === 0 ? track.id : idFor(`${key}:${i}`),
+              start: { x: points[i].x, y: points[i].y },
+              end: { x: point.x, y: point.y },
+            }));
+          };
           const route = (
             track: Track,
             start: Point,
@@ -612,13 +694,7 @@ export function createPCBTrackDrag(
                   );
               }
             }
-            const points = reverse ? result.points.slice().reverse() : result.points;
-            return points.slice(1).map((point, i) => ({
-              ...track,
-              id: preserveId && i === 0 ? track.id : idFor(`${key}:${i}`),
-              start: { x: points[i].x, y: points[i].y },
-              end: { x: point.x, y: point.y },
-            }));
+            return segments(track, result.points, key, preserveId, reverse);
           };
           for (const track of selected) {
             const next = {
@@ -712,8 +788,22 @@ export function createPCBTrackDrag(
             }
             checkDirection(track, next);
             const issue = engineFor(track).validate([next.start, next.end], spend);
-            if (issue) throw new Error(issue);
-            replacements.set(track.id, [next]);
+            if (
+              issue &&
+              (!options.rerouteSelected ||
+                selected.length !== 1 ||
+                !collisionMessages.has(issue) ||
+                [...links.values()].some(
+                  (link) => !same(link.point, track.start) && !same(link.point, track.end),
+                ))
+            )
+              throw new Error(issue);
+            if (issue) {
+              const detour = engineFor(track).walk([next.start, next.end], posture, spend);
+              if (detour.blocked) throw new Error(detour.message);
+              replacements.set(track.id, segments(track, detour.points, `spine:${track.id}`, true));
+            } else replacements.set(track.id, [next]);
+            spines.set(track.id, next);
             for (const { slide, joint: preferred } of terminalSlides) {
               const lead = slide.stretch.track,
                 fixed = lead[slide.attachedEndpoint === 'start' ? 'end' : 'start'],
@@ -768,8 +858,14 @@ export function createPCBTrackDrag(
             );
           }
           for (const link of links.values()) {
-            const moved = replacements.get(link.track.id)![0];
-            if (link.terminal && trackTouchesPolygon(moved, link.terminal.polygon, spend)) continue;
+            const moved = spines.get(link.track.id)!;
+            if (
+              link.terminal &&
+              replacements
+                .get(link.track.id)!
+                .some((span) => trackTouchesPolygon(span, link.terminal!.polygon, spend))
+            )
+              continue;
             const endpoint = same(link.point, link.track.start)
                 ? 'start'
                 : same(link.point, link.track.end)

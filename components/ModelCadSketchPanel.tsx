@@ -75,9 +75,9 @@ export default function ModelCadSketchPanel({
 }) {
   const [plane, setPlane] = useState<ModelCadSketchPlane>('XY');
   const [offsets, setOffsets] = useState({
-    XY: String(board.thickness / 2),
-    XZ: String(seed.position.y),
-    YZ: String(seed.position.x),
+    XY: '0',
+    XZ: '0',
+    YZ: '0',
   });
   const [points, setPoints] = useState<Point[]>([]);
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -117,12 +117,14 @@ export default function ModelCadSketchPanel({
     if (shape !== 'polygon' && points.length < 2) return null;
     if (shape === 'circle') {
       const radius = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+      if (!radius) return null;
       return { center: points[0], width: radius * 2, height: radius * 2 };
     }
     const minX = Math.min(...points.map((point) => point.x)),
       maxX = Math.max(...points.map((point) => point.x));
     const minY = Math.min(...points.map((point) => point.y)),
       maxY = Math.max(...points.map((point) => point.y));
+    if (shape === 'rectangle' && (minX === maxX || minY === maxY)) return null;
     return {
       center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
       width: maxX - minX,
@@ -275,8 +277,9 @@ export default function ModelCadSketchPanel({
                   setClosed(false);
                 }
               } else {
-                drag.current = point;
-                setPoints([point, point]);
+                const anchor = !closed && points.length === 2 ? points[0] : point;
+                drag.current = anchor;
+                setPoints([anchor, point]);
                 setClosed(false);
               }
               setError('');
@@ -287,13 +290,19 @@ export default function ModelCadSketchPanel({
               setCursor((previous) =>
                 previous?.x === point.x && previous?.y === point.y ? previous : point,
               );
-              if (drag.current) setPoints([drag.current, point]);
+              const anchor =
+                drag.current ??
+                (shape !== 'polygon' && !closed && points.length === 2 ? points[0] : null);
+              if (anchor) setPoints([anchor, point]);
             },
             up: (raw) => {
               if (!drag.current) return;
               if (!blocked && raw) {
-                setPoints([drag.current, snapPoint(raw)]);
-                setClosed(true);
+                const point = snapPoint(raw);
+                const dx = Math.abs(point.x - drag.current.x);
+                const dy = Math.abs(point.y - drag.current.y);
+                setPoints([drag.current, point]);
+                setClosed(shape === 'circle' ? dx > 0 || dy > 0 : dx > 0 && dy > 0);
               }
               drag.current = null;
             },
@@ -306,7 +315,7 @@ export default function ModelCadSketchPanel({
             keyDown: (key) => {
               if (blocked) return false;
               if (key === 'Escape') {
-                if (drag.current) clearSketch();
+                if (drag.current || (!closed && points.length)) clearSketch();
                 setCursor(null);
                 return true;
               }
@@ -424,7 +433,7 @@ export default function ModelCadSketchPanel({
                 />
               </label>
               <label>
-                <span>{normalAxis} position</span>
+                <span>Offset</span>
                 <QuantityInput
                   unit={'mm'}
                   aria-label="Sketch plane offset (mm)"
@@ -527,7 +536,14 @@ export default function ModelCadSketchPanel({
               Start sketch
             </button>
           ) : phase === 'sketch' ? (
-            <button type="button" disabled={blocked} onClick={() => leaveSketch('plane')}>
+            <button
+              type="button"
+              disabled={blocked}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!composition.current) leaveSketch('plane');
+              }}
+            >
               Change plane
             </button>
           ) : (

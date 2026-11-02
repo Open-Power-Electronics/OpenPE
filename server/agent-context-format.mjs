@@ -9237,6 +9237,7 @@ var modelCadObjectSchema = object3(
     size: vector(0.5, 1e3),
     material: { enum: ["aluminium", "pmma", "plastic"] },
     opacity: number(0.05, 1),
+    color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", minLength: 7, maxLength: 7 },
     holes: {
       type: "array",
       maxItems: 32,
@@ -9256,7 +9257,7 @@ var modelCadObjectSchema = object3(
       additionalProperties: false
     }
   },
-  ["profile", "edgeTreatment", "boolean"]
+  ["profile", "edgeTreatment", "boolean", "color"]
 );
 var modelCadSchema = object3({
   version: { const: 1 },

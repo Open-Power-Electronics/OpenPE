@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import { CircuitBoard } from 'lucide-react';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import type { Circuit } from '@/lib/circuit';
@@ -21,12 +21,10 @@ import {
   PropertySection,
   PropertyGrid,
   PropertyToggle,
-  PropertyVertices,
   PropertyDetails,
 } from './LayoutPropertyFields';
 
 type Props = {
-  actions?: ReactNode;
   spiceAvailable?: boolean;
   fileId?: string;
   projectSource?: string;
@@ -99,13 +97,13 @@ export default function LayoutProperties({
   onRectangle,
   onError,
   onInspectFootprint,
-  actions,
   spiceAvailable,
   fileId,
   projectSource,
   getRevision,
 }: Props) {
   const field = { active, resetKey };
+  const BoundsSection = rectangle?.zoneId ? PropertyDetails : PropertySection;
   const ownedNets = isOwnedProjectNode(board.nets) ? board.nets : null;
   const ownedLayers = isOwnedProjectNode(board.layers) ? board.layers : null;
   const retainedNetOptions = useMemo(
@@ -198,7 +196,7 @@ export default function LayoutProperties({
               Footprint properties
             </button>
           </PropertySection>
-          <PropertySection title="Geometry">
+          <PropertySection title="Geometry" showTitle={false}>
             <PropertyGrid>
               <NumberField
                 {...field}
@@ -404,7 +402,6 @@ export default function LayoutProperties({
               capabilityHost={capabilityHost}
               onRequestSave={onRequestSave}
               onSavePartProperties={onSavePartProperties}
-              actions={actions}
               fileId={fileId}
               projectSource={projectSource}
               getRevision={getRevision}
@@ -443,7 +440,7 @@ export default function LayoutProperties({
                   />
                 </PropertyGrid>
               </PropertySection>
-              <PropertySection title="Geometry">
+              <PropertySection title="Geometry" showTitle={false}>
                 <PropertyDetails title="Endpoints">
                   {(['start', 'end'] as const).map((end) => (
                     <PropertyGrid key={end}>
@@ -492,7 +489,7 @@ export default function LayoutProperties({
                   onChange={(netId) => viaChange({ netId })}
                 />
               </PropertySection>
-              <PropertySection title="Geometry">
+              <PropertySection title="Geometry" showTitle={false}>
                 <PropertyGrid>
                   <NumberField
                     {...field}
@@ -585,95 +582,29 @@ export default function LayoutProperties({
                   ),
                 )
               ) : (
-                <>
-                  <PropertyGrid>
-                    <NumberField
-                      {...field}
-                      label="Clearance (mm)"
-                      value={zone.clearance}
-                      min={0}
-                      max={100}
-                      onCommit={(clearance) => onZone({ ...zone, clearance })}
-                    />
-                    <NumberField
-                      {...field}
-                      label="Minimum width (mm)"
-                      value={zone.minThickness}
-                      min={0.0001}
-                      max={100}
-                      onCommit={(minThickness) => onZone({ ...zone, minThickness })}
-                    />
-                  </PropertyGrid>
-                  <details className="layout-property-details layout-fill-rules">
-                    <summary>Fill rules</summary>
-                    <PropertyGrid>
-                      <NumberField
-                        {...field}
-                        label="Thermal gap (mm)"
-                        value={zone.thermalGap}
-                        min={0}
-                        max={100}
-                        onCommit={(thermalGap) => onZone({ ...zone, thermalGap })}
-                      />
-                      <NumberField
-                        {...field}
-                        label="Thermal bridge (mm)"
-                        value={zone.thermalBridge}
-                        min={0.0001}
-                        max={100}
-                        onCommit={(thermalBridge) => onZone({ ...zone, thermalBridge })}
-                      />
-                      <NumberField
-                        {...field}
-                        label="Zone priority"
-                        value={zone.priority ?? 0}
-                        min={0}
-                        max={10000}
-                        step="1"
-                        onCommit={(priority) => onZone({ ...zone, priority })}
-                      />
-                      <Select
-                        active={active}
-                        label="Pad connection"
-                        value={zone.padConnection ?? 'thermal'}
-                        options={[
-                          { value: 'thermal', label: 'Thermal relief' },
-                          { value: 'yes', label: 'Solid' },
-                          { value: 'no', label: 'None' },
-                          { value: 'thru_hole_only', label: 'Thermal relief for through-hole' },
-                        ]}
-                        onChange={(value) => {
-                          const next = { ...zone };
-                          delete next.padConnection;
-                          onZone(
-                            value === 'thermal'
-                              ? next
-                              : {
-                                  ...next,
-                                  padConnection: value as NonNullable<typeof zone.padConnection>,
-                                },
-                          );
-                        }}
-                      />
-                      <Select
-                        active={active}
-                        label="Island removal"
-                        value={String(zone.islandRemovalMode ?? 0)}
-                        options={[
-                          { value: '0', label: 'Always' },
-                          { value: '1', label: 'Never' },
-                          { value: '2', label: 'Below area limit' },
-                        ]}
-                        onChange={(value) => onZone({ ...zone, islandRemovalMode: Number(value) })}
-                      />
-                    </PropertyGrid>
-                  </details>
-                </>
+                <PropertyGrid>
+                  <NumberField
+                    {...field}
+                    label="Clearance (mm)"
+                    value={zone.clearance}
+                    min={0}
+                    max={100}
+                    onCommit={(clearance) => onZone({ ...zone, clearance })}
+                  />
+                  <NumberField
+                    {...field}
+                    label="Minimum width (mm)"
+                    value={zone.minThickness}
+                    min={0.0001}
+                    max={100}
+                    onCommit={(minThickness) => onZone({ ...zone, minThickness })}
+                  />
+                </PropertyGrid>
               )}
             </PropertySection>
           )}
           {rectangle && (
-            <PropertySection title={rectangle.zoneId ? 'Zone bounds' : 'Board outline'}>
+            <BoundsSection title={rectangle.zoneId ? 'Zone bounds' : 'Board outline'}>
               <PropertyGrid>
                 <NumberField
                   {...field}
@@ -741,7 +672,73 @@ export default function LayoutProperties({
                   }
                 />
               )}
-            </PropertySection>
+            </BoundsSection>
+          )}
+          {zone && !zone.keepout && (
+            <details className="layout-property-details layout-fill-rules">
+              <summary>Fill rules</summary>
+              <PropertyGrid>
+                <NumberField
+                  {...field}
+                  label="Thermal gap (mm)"
+                  value={zone.thermalGap}
+                  min={0}
+                  max={100}
+                  onCommit={(thermalGap) => onZone({ ...zone, thermalGap })}
+                />
+                <NumberField
+                  {...field}
+                  label="Thermal bridge (mm)"
+                  value={zone.thermalBridge}
+                  min={0.0001}
+                  max={100}
+                  onCommit={(thermalBridge) => onZone({ ...zone, thermalBridge })}
+                />
+                <NumberField
+                  {...field}
+                  label="Zone priority"
+                  value={zone.priority ?? 0}
+                  min={0}
+                  max={10000}
+                  step="1"
+                  onCommit={(priority) => onZone({ ...zone, priority })}
+                />
+                <Select
+                  active={active}
+                  label="Pad connection"
+                  value={zone.padConnection ?? 'thermal'}
+                  options={[
+                    { value: 'thermal', label: 'Thermal relief' },
+                    { value: 'yes', label: 'Solid' },
+                    { value: 'no', label: 'None' },
+                    { value: 'thru_hole_only', label: 'Thermal relief for through-hole' },
+                  ]}
+                  onChange={(value) => {
+                    const next = { ...zone };
+                    delete next.padConnection;
+                    onZone(
+                      value === 'thermal'
+                        ? next
+                        : {
+                            ...next,
+                            padConnection: value as NonNullable<typeof zone.padConnection>,
+                          },
+                    );
+                  }}
+                />
+                <Select
+                  active={active}
+                  label="Island removal"
+                  value={String(zone.islandRemovalMode ?? 0)}
+                  options={[
+                    { value: '0', label: 'Always' },
+                    { value: '1', label: 'Never' },
+                    { value: '2', label: 'Below area limit' },
+                  ]}
+                  onChange={(value) => onZone({ ...zone, islandRemovalMode: Number(value) })}
+                />
+              </PropertyGrid>
+            </details>
           )}
           {graphic && (
             <LayoutGraphicProperties
@@ -758,84 +755,6 @@ export default function LayoutProperties({
                 })
               }
             />
-          )}
-          {zone && (
-            <>
-              <PropertyVertices title="Zone corners" count={zone.outline.length} active={active}>
-                {(index) => {
-                  const point = zone.outline[index];
-                  return (
-                    <div key={index}>
-                      <NumberField
-                        {...field}
-                        label={`Corner ${index + 1} X (mm)`}
-                        value={point.x}
-                        normalize={snap}
-                        onCommit={(x) =>
-                          onZone({
-                            ...zone,
-                            outline: zone.outline.map((item, i) =>
-                              i === index ? { ...item, x } : item,
-                            ),
-                          })
-                        }
-                      />
-                      <NumberField
-                        {...field}
-                        label={`Corner ${index + 1} Y (mm)`}
-                        value={point.y}
-                        normalize={snap}
-                        onCommit={(y) =>
-                          onZone({
-                            ...zone,
-                            outline: zone.outline.map((item, i) =>
-                              i === index ? { ...item, y } : item,
-                            ),
-                          })
-                        }
-                      />
-                    </div>
-                  );
-                }}
-              </PropertyVertices>
-              {zone.holes?.map((hole, holeIndex) => (
-                <PropertyVertices
-                  title={`Cutout ${holeIndex + 1}`}
-                  count={hole.length}
-                  active={active}
-                  key={holeIndex}
-                >
-                  {(index) => {
-                    const point = hole[index];
-                    return (
-                      <div key={index}>
-                        {(['x', 'y'] as const).map((axis) => (
-                          <NumberField
-                            {...field}
-                            key={axis}
-                            label={`Cutout ${holeIndex + 1} corner ${index + 1} ${axis.toUpperCase()} (mm)`}
-                            value={point[axis]}
-                            normalize={snap}
-                            onCommit={(value) =>
-                              onZone({
-                                ...zone,
-                                holes: zone.holes!.map((points, i) =>
-                                  i === holeIndex
-                                    ? points.map((item, j) =>
-                                        j === index ? { ...item, [axis]: value } : item,
-                                      )
-                                    : points,
-                                ),
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    );
-                  }}
-                </PropertyVertices>
-              ))}
-            </>
           )}
           {showEmptyState &&
             !selectionCount &&

@@ -95,13 +95,23 @@ try {
   await clearance.fill('0.4');
   await clearance.press('Enter');
   assert.equal((await state()).undoDepth, 1);
-  await filledToggle.check();
+  const fill = panel.getByRole('button', { name: 'Fill zone', exact: true });
+  await fill.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+  await panel.dispatchEvent('compositionstart');
+  await fill.click();
+  assert.equal((await state()).undoDepth, 1, 'Composing input cannot fill copper.');
+  await panel.dispatchEvent('compositionend');
+  await fill.press('Space');
   await page.waitForFunction(
     (id) => window.readState().board.zones.find((z) => z.id === id).filledPolygons !== undefined,
     zoneId,
   );
   const filled = await state();
   assert.equal(filled.undoDepth, 2);
+  assert.equal(
+    await panel.getByRole('button', { name: 'Refill zone', exact: true }).isEnabled(),
+    true,
+  );
   const selected = filled.board.zones.find((z) => z.id === zoneId);
   assert.equal(selected.clearance, 0.4);
   assert.equal(selected.fillEnabled, true);
@@ -177,7 +187,10 @@ try {
   await filledToggle.uncheck();
   assert.equal((await state()).undoDepth, 3);
   await page.evaluate(() => window.pendingSource());
-  await filledToggle.click();
+  await panel.getByRole('button', { name: 'Delete object', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'Apply the Source edits' }).waitFor();
+  assert.equal((await state()).undoDepth, 3, 'Pending Source blocks footer deletion.');
+  await panel.getByRole('button', { name: 'Fill zone', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Apply the Source edits' }).waitFor();
   assert.equal((await state()).undoDepth, 3);
   await page.evaluate(() => window.clearSource());

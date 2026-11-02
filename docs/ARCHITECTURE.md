@@ -128,10 +128,19 @@ flowchart LR
     UI --> Preview[Local gesture preview]
     Preview --> Core[ProjectCore]
     Host --> Core
+    Preview --> Drag[Shared track-drag preparation]
+    Core --> Drag
     Host --> Ports[Host / plugin ports]
 ```
 
 Host calls apply schemas, availability, revision and lifecycle checks before handlers. Core validates domain candidates and commits one transaction. Context reads current accepted state and bounded presentation through browser-safe ports; it cannot mutate design.
+
+Layout's GUI preview and `layout.drag` both prepare geometry through
+`lib/pcb-interactive-track-drag.ts`, including connected chains, local obstacle
+avoidance and picked corners. The command exposes the same input parameters;
+constrained placement requires explicit consent and reports the accepted
+displacement. Model Properties deletes CAD bodies through `modelCad.remove` and
+physical components through `layout.delete`, sharing the Agent command paths.
 
 The service validates the complete submitted workspace, then uses the browser-safe `context/agent-prompt-context.ts` projection for semantic provider context: active-sheet components/pins/connections, selected geometry, sheet/PCB/Model summaries and observed UI/results. Native and draft text, duplicate circuit data and detailed drawing/copper geometry stay outside initial provider context. Complete native/canonical queries remain available on demand through the same scoped host; revision checks prefer `core.state`. Prompt assembly checks its character bound before starting a provider process; the projection never becomes Core input.
 

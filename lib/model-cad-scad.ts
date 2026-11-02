@@ -1,5 +1,5 @@
 import {
-  modelCadMaterialColors,
+  modelCadColor,
   modelCadShape,
   validateModelCad,
   type ModelCadShape,
@@ -79,7 +79,7 @@ export function exportModelCadScad(input: unknown): string {
   const shapes = model.objects.map((object) => modelCadShape(object));
   const bodies = model.objects.flatMap((object, index) => {
     const color = [16, 8, 0].map((shift) =>
-      Number((((modelCadMaterialColors[object.material] >> shift) & 0xff) / 255).toFixed(3)),
+      Number((((modelCadColor(object) >> shift) & 0xff) / 255).toFixed(3)),
     );
     return [
       `// ${object.name}`,

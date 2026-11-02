@@ -675,5 +675,155 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
       return blocked((error as Error).message);
     }
   }
-  return { route, validate, validateRegion };
+  /** Keep the requested spine on either side of a local obstruction. Unlike an
+   * endpoint-only search, a hull walk rejoins that spine as soon as possible. */
+  function walk(points: Point[], flip = false, budget?: () => void): RouteResult {
+    const blocked = (message = blockedMessage): RouteResult => ({
+      points: [],
+      blocked: true,
+      message,
+    });
+    if (invalidCoordinates(points))
+      return blocked('Routing coordinates are outside the supported range.');
+    try {
+      const { clear, spend } = checker(budget);
+      if (clear(points)) return { points, blocked: false, message: '' };
+      if (!walkAround || !clear([points[0]]) || !clear([points.at(-1)!])) return blocked();
+      const cross = (a: Point, b: Point) => a.x * b.y - a.y * b.x;
+      const difference = (a: Point, b: Point) => ({ x: a.x - b.x, y: a.y - b.y });
+      const rounded = (p: Point) => ({ x: Number(p.x.toFixed(6)), y: Number(p.y.toFixed(6)) });
+      const queue = [{ points, depth: 0 }];
+      const seen = new Set<string>();
+      for (let attempt = 0; queue.length && attempt < 64; attempt++) {
+        queue.sort((a, b) => length(a.points) - length(b.points));
+        const current = queue.shift()!;
+        if (clear(current.points)) return { points: current.points, blocked: false, message: '' };
+        if (current.depth >= 32) continue;
+        type Hit = {
+          startIndex: number;
+          endIndex: number;
+          hull: Point[];
+          entry: Point;
+          exit: Point;
+          first: number;
+          last: number;
+        };
+        const interval = (hull: Point[]): Hit | undefined => {
+          let entry: { index: number; point: Point; edge: number } | undefined;
+          for (let index = 0; index < current.points.length - 1; index++) {
+            const a = current.points[index],
+              b = current.points[index + 1],
+              direction = difference(b, a);
+            let lower = 0,
+              upper = 1,
+              first = -1,
+              last = -1,
+              miss = false;
+            for (let edgeIndex = 0; edgeIndex < hull.length; edgeIndex++) {
+              spend();
+              const origin = hull[edgeIndex],
+                edge = difference(hull[(edgeIndex + 1) % hull.length], origin);
+              const offset = cross(edge, difference(a, origin)),
+                slope = cross(edge, direction);
+              if (Math.abs(slope) < 1e-12) {
+                if (offset < -1e-9) miss = true;
+                continue;
+              }
+              const t = -offset / slope;
+              if (slope > 0 && t > lower) {
+                lower = t;
+                first = edgeIndex;
+              }
+              if (slope < 0 && t < upper) {
+                upper = t;
+                last = edgeIndex;
+              }
+            }
+            if (miss || lower > upper + 1e-9 || upper < -1e-9 || lower > 1 + 1e-9) continue;
+            const at = (t: number) =>
+              rounded({ x: a.x + direction.x * t, y: a.y + direction.y * t });
+            if (!entry && lower > 1e-9 && lower < 1 && first >= 0)
+              entry = { index, point: at(lower), edge: first };
+            if (entry && upper < 1 - 1e-9 && upper >= -1e-9 && last >= 0)
+              return {
+                startIndex: entry.index,
+                endIndex: index,
+                hull,
+                entry: entry.point,
+                exit: at(Math.max(0, upper)),
+                first: entry.edge,
+                last,
+              };
+          }
+        };
+        let hit: Hit | undefined;
+        for (let index = 0; index < current.points.length - 1 && !hit; index++) {
+          const a = current.points[index],
+            b = current.points[index + 1];
+          if (clear([a, b])) continue;
+          visitObstacles(
+            {
+              minX: Math.min(a.x, b.x),
+              maxX: Math.max(a.x, b.x),
+              minY: Math.min(a.y, b.y),
+              maxY: Math.max(a.y, b.y),
+            },
+            (obstacle) => {
+              const collides =
+                Boolean(
+                  obstacle.polygon &&
+                  (insidePolygon(a, obstacle.polygon, spend) ||
+                    insidePolygon(b, obstacle.polygon, spend)),
+                ) ||
+                obstacle.edges.some(([c, d]) => {
+                  spend();
+                  return segmentDistance(a, b, c, d) < obstacle.radius ** 2;
+                });
+              if (!collides) return true;
+              const candidate = interval(detourCorners(obstacle));
+              if (
+                candidate &&
+                (!hit ||
+                  candidate.startIndex < hit.startIndex ||
+                  (candidate.startIndex === hit.startIndex &&
+                    squaredDistance(current.points[candidate.startIndex], candidate.entry) <
+                      squaredDistance(current.points[hit.startIndex], hit.entry)))
+              )
+                hit = candidate;
+              return true;
+            },
+            spend,
+          );
+        }
+        if (!hit) continue;
+        const { startIndex, endIndex, hull, entry, exit, first, last } = hit;
+        for (const step of flip ? [-1, 1] : [1, -1]) {
+          const arc = [entry];
+          let vertex = step === 1 ? (first + 1) % hull.length : first;
+          const end = step === 1 ? (last + 1) % hull.length : last;
+          for (let count = 0; vertex !== end && count < hull.length; count++) {
+            arc.push(rounded(hull[vertex]));
+            vertex = (vertex + step + hull.length) % hull.length;
+          }
+          arc.push(exit);
+          const candidate = compact([
+            ...current.points.slice(0, startIndex + 1),
+            ...arc,
+            ...current.points.slice(endIndex + 1),
+          ]);
+          if (candidate.length > 15000) return blocked(limitMessage);
+          const key = JSON.stringify(candidate);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          queue.push({ points: candidate, depth: current.depth + 1 });
+        }
+      }
+      return points.length === 2
+        ? route(points[0], points.at(-1)!, '45', flip, budget, 'omit')
+        : blocked();
+    } catch (error) {
+      return blocked((error as Error).message);
+    }
+  }
+  return { route, walk, validate, validateRegion };
 }

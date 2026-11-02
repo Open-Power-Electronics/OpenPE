@@ -1,11 +1,12 @@
 'use client';
 import QuantityInput from './QuantityInput';
+import PropertyDeleteButton from './PropertyDeleteButton';
 import { quantityLabel } from './quantity-units';
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { uid } from '@/lib/circuit';
-import { validateModelCadObject, type ModelCadObject } from '@/lib/model-cad';
+import { modelCadColor, validateModelCadObject, type ModelCadObject } from '@/lib/model-cad';
 import Select from './Select';
 import { parseNumericInput as numeric } from './numeric-input';
 import styles from './ModelCadPanel.module.css';
@@ -16,6 +17,7 @@ type Draft = {
   name: string;
   values: Record<NumericKey, string>;
   material: ModelCadObject['material'];
+  color?: string;
   holes: { id: string; x: string; y: string; diameterMm: string }[];
 };
 
@@ -35,6 +37,7 @@ function draftFor(object: ModelCadObject | null): Draft {
       opacity: String((object?.opacity ?? 1) * 100),
     },
     material: object?.material ?? 'aluminium',
+    color: object?.color,
     holes:
       object?.holes.map((hole) => ({
         id: hole.id,
@@ -50,7 +53,7 @@ function objectFor(draft: Draft, base: ModelCadObject) {
     base.kind === 'cylinder' || (base.kind === 'extrusion' && base.profile?.kind === 'circle');
   const fixedProfile =
     base.kind === 'boolean' || (base.kind === 'extrusion' && base.profile?.kind === 'polygon');
-  return validateModelCadObject({
+  const next = {
     ...base,
     name: draft.name,
     size: {
@@ -82,7 +85,10 @@ function objectFor(draft: Draft, base: ModelCadObject) {
       y: numeric(hole.y, `Hole ${index + 1} Y`),
       diameterMm: numeric(hole.diameterMm, `Hole ${index + 1} diameter`),
     })),
-  });
+  };
+  if (draft.color === undefined) delete next.color;
+  else next.color = draft.color;
+  return validateModelCadObject(next);
 }
 
 export default function ModelCadPanel({
@@ -121,6 +127,7 @@ export default function ModelCadPanel({
   const [base, setBase] = useState({ object, key: incomingKey, revision, mode });
   const [draft, setDraft] = useState(() => draftFor(object));
   const currentDraft = useRef(draft);
+  const composing = useRef(false);
   currentDraft.current = draft;
   const [dirty, setDirty] = useState(false);
   const currentDirty = useRef(dirty);
@@ -247,7 +254,16 @@ export default function ModelCadPanel({
     setError('');
   }
   async function apply() {
-    if (blocked || stale || changedSelection || !parsed.object || !dirty || mode !== 'edit') return;
+    if (
+      blocked ||
+      stale ||
+      changedSelection ||
+      !parsed.object ||
+      !dirty ||
+      mode !== 'edit' ||
+      composing.current
+    )
+      return;
     setBusy(true);
     setError('');
     try {
@@ -261,6 +277,7 @@ export default function ModelCadPanel({
   }
   async function remove() {
     if (
+      composing.current ||
       blocked ||
       currentDirty.current ||
       baseOutdated ||
@@ -338,6 +355,8 @@ export default function ModelCadPanel({
             : 'Cylinder'
         : 'Solid properties';
   const toolSheet = !docked && (placement || mode === 'hole');
+  const primitiveSheet = toolSheet && (mode === 'box' || mode === 'cylinder');
+  const DraftDetails = toolSheet ? 'div' : 'details';
   const panelError = mode === 'hole' ? error : validationError;
   const circular =
     base.object?.kind === 'cylinder' ||
@@ -345,13 +364,27 @@ export default function ModelCadPanel({
   const fixedProfile =
     base.object?.kind === 'boolean' ||
     (base.object?.kind === 'extrusion' && base.object.profile?.kind === 'polygon');
+  const color = `#${modelCadColor(draft).toString(16).padStart(6, '0')}`;
+  const dimensionFields = (
+    <div className={styles.fields}>
+      {!fixedProfile && numberField('length', circular ? 'Diameter (mm)' : 'Length (mm)')}
+      {!fixedProfile && !circular && numberField('width', 'Width (mm)')}
+      {base.object?.kind !== 'boolean' && numberField('height', 'Height (mm)')}
+    </div>
+  );
 
   return (
     <aside
-      className={`${styles.panel} ${docked ? styles.docked : placement || mode === 'hole' ? styles.placement : styles.inspector}${toolSheet ? ' editor-tool-sheet' : ''}`}
+      className={`${styles.panel} ${docked ? styles.docked : placement || mode === 'hole' ? styles.placement : styles.inspector}${primitiveSheet ? ` ${styles.primitive}` : ''}${toolSheet ? ' editor-tool-sheet' : ''}`}
       data-cad-mode={toolSheet ? mode : undefined}
       hidden={!visible}
       aria-label={`${title} settings`}
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={() => {
+        composing.current = false;
+      }}
       onFocusCapture={(event) => {
         if (event.target instanceof HTMLInputElement)
           focusedInput.current = {
@@ -365,13 +398,14 @@ export default function ModelCadPanel({
       onKeyDown={(event) => {
         event.stopPropagation();
         if (
-          event.key !== 'Escape' ||
-          event.defaultPrevented ||
+          composing.current ||
           event.nativeEvent.isComposing ||
-          event.nativeEvent.keyCode === 229 ||
-          busy
-        )
+          event.nativeEvent.keyCode === 229
+        ) {
+          if (event.key === 'Enter' || event.key === 'Escape') event.preventDefault();
           return;
+        }
+        if (event.key !== 'Escape' || event.defaultPrevented || busy) return;
         if (event.target instanceof HTMLInputElement) {
           event.preventDefault();
           const snapshot = focusedInput.current;
@@ -399,7 +433,7 @@ export default function ModelCadPanel({
         onClose();
       }}
     >
-      {!docked && (
+      {!docked && !primitiveSheet && (
         <header className={styles.header}>
           <h2 aria-description={toolSheet ? title : undefined}>
             {toolSheet ? (mode === 'hole' ? 'Diameter' : 'Name') : title}
@@ -433,7 +467,7 @@ export default function ModelCadPanel({
           )}
           {docked && (
             <div className={styles.sectionHeader}>
-              <h3>{title}</h3>
+              <h3>{base.object?.name ?? title}</h3>
               <span>{mode === 'edit' && dirty ? 'Unapplied' : ''}</span>
               <button
                 type="button"
@@ -477,6 +511,10 @@ export default function ModelCadPanel({
             </>
           ) : !base.object ? (
             <p className={styles.empty}>Select a solid to edit its properties.</p>
+          ) : primitiveSheet ? (
+            <section className={styles.section} aria-label="Solid dimensions">
+              {dimensionFields}
+            </section>
           ) : (
             <>
               <label className={styles.field}>
@@ -492,7 +530,6 @@ export default function ModelCadPanel({
                 />
               </label>
               <section className={styles.section} aria-label="Solid dimensions">
-                <h3>{base.object.kind === 'boolean' ? 'Bounds' : 'Dimensions'}</h3>
                 {fixedProfile && (
                   <dl className="model-property-list">
                     <dt>Length</dt>
@@ -507,17 +544,12 @@ export default function ModelCadPanel({
                     )}
                   </dl>
                 )}
-                <div className={styles.fields}>
-                  {!fixedProfile &&
-                    numberField('length', circular ? 'Diameter (mm)' : 'Length (mm)')}
-                  {!fixedProfile && !circular && numberField('width', 'Width (mm)')}
-                  {base.object.kind !== 'boolean' && numberField('height', 'Height (mm)')}
-                </div>
+                {dimensionFields}
               </section>
-              <details className={styles.transforms} open={toolSheet || undefined}>
-                <summary>Placement</summary>
+              <DraftDetails className={styles.transforms}>
+                {!toolSheet && <summary>Placement</summary>}
                 <section className={styles.section} aria-label="Solid position">
-                  <h3>{toolSheet ? 'Position' : 'Position (mm)'}</h3>
+                  <h3>Position</h3>
                   <div className={styles.axes}>
                     {(['x', 'y', 'z'] as const).map((axis) =>
                       numberField(
@@ -529,7 +561,7 @@ export default function ModelCadPanel({
                   </div>
                 </section>
                 <section className={styles.section} aria-label="Solid rotation">
-                  <h3>{toolSheet ? 'Rotation' : 'Rotation (°)'}</h3>
+                  <h3>Rotation</h3>
                   <div className={styles.axes}>
                     {(['rx', 'ry', 'rz'] as const).map((axis) =>
                       numberField(
@@ -540,7 +572,7 @@ export default function ModelCadPanel({
                     )}
                   </div>
                 </section>
-              </details>
+              </DraftDetails>
               <section className={styles.section} aria-label="Solid appearance">
                 <div className={styles.fields}>
                   <div className={styles.field}>
@@ -563,19 +595,52 @@ export default function ModelCadPanel({
                     />
                   </div>
                   {numberField('opacity', 'Opacity (%)')}
+                  <div className={styles.colorField} role="group" aria-label="Color">
+                    <span>Color</span>
+                    <div className={styles.colorControls}>
+                      <input
+                        type="color"
+                        aria-label="Solid color"
+                        value={color}
+                        disabled={blocked || stale}
+                        onChange={(event) => {
+                          const color = event.target.value;
+                          edit((previous) => ({ ...previous, color }));
+                        }}
+                      />
+                      <output className={styles.colorValue} title={color}>
+                        {color.toUpperCase()}
+                      </output>
+                      <button
+                        type="button"
+                        className="tool-button"
+                        aria-label="Use material color"
+                        title="Use material color"
+                        disabled={blocked || stale || draft.color === undefined}
+                        onClick={() => {
+                          if (composing.current) return;
+                          edit((previous) => {
+                            const next = { ...previous };
+                            delete next.color;
+                            return next;
+                          });
+                        }}
+                      >
+                        <RotateCcw size={14} aria-hidden />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </section>
               {base.object.kind !== 'boolean' && (
-                <details
-                  className={styles.holeDetails}
-                  open={toolSheet || undefined}
-                  aria-label="Solid holes"
-                >
-                  <summary>
-                    Holes <span>{draft.holes.length}</span>
-                  </summary>
+                <DraftDetails className={styles.holeDetails} aria-label="Solid holes">
+                  {!toolSheet && (
+                    <summary>
+                      Holes (local Z) <span>{draft.holes.length}</span>
+                    </summary>
+                  )}
                   <div className={styles.sectionHeader}>
-                    <h3>{toolSheet ? 'Holes' : 'Local Z cuts'}</h3>
+                    {toolSheet && <h3>Holes</h3>}
                     <button
                       type="button"
                       className="tool-button"
@@ -592,7 +657,7 @@ export default function ModelCadPanel({
                       <fieldset key={hole.id} className={styles.hole}>
                         <legend>Hole {index + 1}</legend>
                         <div className={styles.holeHeader}>
-                          <span>{toolSheet ? `Hole ${index + 1}` : 'Local coordinates (mm)'}</span>
+                          {toolSheet && <span>Hole {index + 1}</span>}
                           <button
                             type="button"
                             className="tool-button"
@@ -635,12 +700,12 @@ export default function ModelCadPanel({
                       </fieldset>
                     ))}
                   </div>
-                </details>
+                </DraftDetails>
               )}
             </>
           )}
         </div>
-        <footer className={styles.footer}>
+        <footer className={`${styles.footer}${!toolSheet ? ' inspector-footer' : ''}`}>
           {!toolSheet && panelError && (
             <div className={styles.error}>
               <p role="alert">{panelError}</p>
@@ -680,25 +745,18 @@ export default function ModelCadPanel({
           ) : (
             <>
               <button
-                type="button"
-                className="tool-button"
-                aria-label="Delete solid"
-                title="Delete solid"
-                disabled={
-                  blocked || dirty || baseOutdated || changedSelection || !base.object || !onRemove
-                }
-                onClick={remove}
-              >
-                <Trash2 size={17} />
-              </button>
-              <span />
-              <button
                 type="submit"
                 className="dialog-button primary"
                 disabled={blocked || stale || changedSelection || !dirty || !parsed.object}
               >
                 Apply
               </button>
+              <PropertyDeleteButton
+                disabled={
+                  blocked || dirty || baseOutdated || changedSelection || !base.object || !onRemove
+                }
+                onClick={() => void remove()}
+              />
             </>
           )}
         </footer>

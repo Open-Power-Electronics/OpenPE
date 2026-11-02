@@ -8,7 +8,8 @@ import {
   setPCBTrackProperties,
   type PCBSelection,
 } from '../lib/pcb-layout';
-import { createPCBTrackDrag } from '../lib/pcb-track-drag';
+import { previewConstrainedPCBTrackDrag } from '../lib/pcb-track-drag';
+import { createPCBInteractiveTrackDrag } from '../lib/pcb-interactive-track-drag';
 import { createPCBRouter } from '../lib/pcb-routing';
 import { createPCBViaValidator } from '../lib/pcb-via-routing';
 import { fillCopperZone, fillCopperZones } from '../lib/pcb-polygons';
@@ -91,13 +92,18 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   operationCommand(
     'layout.drag',
-    'Drag selected tracks while preserving attached copper. Default Shove displaces nearby tracks; Walk Around keeps obstacles fixed.',
+    'Drag tracks with the canvas chain reshaping and local avoidance engine. Supports connected or picked corner drag. Default exact placement rejects blocked poses; constrain explicitly accepts a checked boundary and reports its displacement.',
     {
       selection,
       delta: point,
       clearance,
       posture: { type: 'boolean' },
       obstacleMode: { enum: ['shove', 'walk-around'] },
+      mode: { enum: ['connected', 'corner'] },
+      pickup: point,
+      endpointTolerance: { type: 'number', minimum: 0, maximum: 1000 },
+      constrain: { type: 'boolean' },
+      previousDelta: point,
     },
     ['selection', 'delta', 'clearance'],
   ),
@@ -343,13 +349,33 @@ export function executeLayout(
       const selected = args.selection as PCBSelection[];
       if (selected.some((item) => item.kind !== 'track'))
         throw new Error('Connected Layout drag requires track selections.');
-      const preview = createPCBTrackDrag(board, selected, {
+      if (args.previousDelta && !args.constrain)
+        throw new Error('A previous drag displacement requires constrain to be enabled.');
+      const engine = createPCBInteractiveTrackDrag(board, selected, {
         clearance: args.clearance,
-        obstacleMode: args.obstacleMode ?? 'shove',
-      }).preview(args.delta, args.posture);
+        obstacleMode: args.obstacleMode,
+        mode: args.mode,
+        pickup: args.pickup,
+        endpointTolerance: args.endpointTolerance,
+      });
+      const preview = args.constrain
+        ? previewConstrainedPCBTrackDrag(
+            engine,
+            board,
+            args.delta,
+            args.posture,
+            args.previousDelta,
+          )
+        : engine.preview(args.delta, args.posture);
       if (preview.error) throw new Error(preview.error);
       next = preview.board;
-      result = { changedIds: preview.changedIds };
+      result = {
+        changedIds: preview.changedIds,
+        requestedDelta: args.delta,
+        appliedDelta: preview.constraint?.appliedDelta ?? args.delta,
+        constrained: Boolean(preview.constraint),
+        ...(preview.constraint ? { constraintReason: preview.constraint.reason } : {}),
+      };
       break;
     }
     case 'layout.route': {

@@ -8488,6 +8488,9 @@ var modelCadMaterialColors = {
   pmma: 14478575,
   plastic: 7830658
 };
+function modelCadColor(object2) {
+  return object2.color === void 0 ? modelCadMaterialColors[object2.material] : Number.parseInt(object2.color.slice(1), 16);
+}
 var object = (properties, optional = []) => ({
   type: "object",
   properties,
@@ -8583,6 +8586,7 @@ var modelCadObjectSchema = object(
     size: vector2(0.5, 1e3),
     material: { enum: ["aluminium", "pmma", "plastic"] },
     opacity: number2(0.05, 1),
+    color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", minLength: 7, maxLength: 7 },
     holes: {
       type: "array",
       maxItems: 32,
@@ -8602,7 +8606,7 @@ var modelCadObjectSchema = object(
       additionalProperties: false
     }
   },
-  ["profile", "edgeTreatment", "boolean"]
+  ["profile", "edgeTreatment", "boolean", "color"]
 );
 var modelCadSchema = object({
   version: { const: 1 },
@@ -10339,7 +10343,7 @@ function exportModelCadScad(input) {
   const shapes = model.objects.map((object2) => modelCadShape(object2));
   const bodies = model.objects.flatMap((object2, index) => {
     const color = [16, 8, 0].map(
-      (shift) => Number(((modelCadMaterialColors[object2.material] >> shift & 255) / 255).toFixed(3))
+      (shift) => Number(((modelCadColor(object2) >> shift & 255) / 255).toFixed(3))
     );
     return [
       `// ${object2.name}`,

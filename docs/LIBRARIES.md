@@ -180,6 +180,19 @@ About OpenPE displays packaged `public/licenses/` notices. Three.js uses MIT;
 `occt-import-js` uses LGPL-2.1, and Open Cascade has its LGPL-2.1 exception.
 OpenPE permits modification and reverse engineering needed to debug changes.
 
+The Git glyph adapts Microsoft's VS Code Codicons `source-control.svg` at revision
+`ceaa8663a7e63e2bac7f1ecac128ce31404b7487`. The redrawn geometry retains its
+three-node branch structure with round nodes, balanced spacing and the shared
+2-unit stroke, inheriting the UI color and control size. Its CC BY 4.0 license,
+attribution and source URL are bundled in `public/licenses/vscode-codicons.txt`
+and listed in About OpenPE.
+
+Wire adapts KiCad 10.0.0 `resources/bitmaps_png/sources/light/add_line.svg`,
+the Draw Wires action icon, preserving its diagonal, round caps and 2-unit stroke
+while using the UI text color. The adapted artwork remains under CC BY-SA 4.0;
+`public/licenses/kicad-icons.txt` bundles attribution, the source URL and license,
+also listed in About OpenPE.
+
 `scripts/download-parser-source.mjs` prepares parser source commit
 `c2148e54b456b571238d35cac037d304053d64b2` and Open Cascade
 `d2abb6d844231cb8f29be6894440874a4700e4a5`. Packages ship corresponding

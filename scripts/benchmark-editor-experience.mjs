@@ -60,6 +60,25 @@ import {
   runPacedInputs,
 } from './editor-experience-safety.mjs';
 
+async function assertVerticalNetLine(layout, netId, x) {
+  assert.ok(
+    await layout.evaluate(
+      (svg, { netId, x }) =>
+        [...svg.querySelectorAll('[data-net-id] [data-layout-track-target]')].some((line) => {
+          const group = line.closest('[data-net-id]');
+          return (
+            group.getAttribute('data-net-id') === netId &&
+            Math.abs(Number(line.getAttribute('x1')) - x) < 0.000001 &&
+            Math.abs(Number(line.getAttribute('x2')) - x) < 0.000001 &&
+            Math.abs(Number(line.getAttribute('y1')) - Number(line.getAttribute('y2'))) > 0.5
+          );
+        }),
+      { netId, x },
+    ),
+    'Replanned copper reaches the current cursor line.',
+  );
+}
+
 const nativeAccessibilityValue = process.env.OPENPE_EXPERIENCE_NATIVE_AX;
 assert.ok(
   nativeAccessibilityValue === undefined || ['0', '1'].includes(nativeAccessibilityValue),
@@ -2174,7 +2193,7 @@ try {
             );
             assert.ok(
               obstacleTrack,
-              'The pinned EMC DRV span exercises the fixed-obstacle boundary.',
+              'The pinned EMC DRV span exercises continuous local obstacle avoidance.',
             );
             const obstaclePickup = { x: 87, y: 114.24975 };
             await prepareColdDragPickup(obstaclePickup);
@@ -2218,23 +2237,19 @@ try {
                 if (delta <= -1.5) {
                   assert.equal(
                     state.constrained,
-                    'true',
-                    'An illegal cursor retains a freshly constrained preview.',
+                    'false',
+                    'A reachable cursor keeps replanning around fixed copper.',
                   );
-                  assert.ok(displayed[0] > 85 && displayed[0] < 87);
+                  await assertVerticalNetLine(layout, obstacleTrack.netId, 87 + delta);
                 }
                 heads.push({ delta, ...state, displayed });
               }
               return { heads };
             });
-            await layout.locator('[data-track-drag-constrained="true"]').waitFor();
-            const stoppedTrack = await readObstacleTrack();
-            assert.ok(
-              stoppedTrack && stoppedTrack[0] > 85 && stoppedTrack[0] < 87,
-              'The collided drag stays at its legal limit instead of rebounding to its origin.',
-            );
-            assert.ok(Math.abs(stoppedTrack[0] - 85.570312) < 0.000001);
-            await page.getByText('Stopped at obstacle', { exact: true }).waitFor();
+            await layout.locator('[data-track-drag-constrained="false"]').waitFor();
+            const replannedTrack = await readObstacleTrack();
+            assert.ok(replannedTrack);
+            await assertVerticalNetLine(layout, obstacleTrack.netId, 85);
             await measure('layout-track-paced-obstacle-commit', async () => {
               await keyboard.down('Enter');
               await keyboard.up('Enter');
@@ -2242,8 +2257,8 @@ try {
             });
             assert.deepEqual(
               await readObstacleTrack(),
-              stoppedTrack,
-              'The exact displayed current-request boundary commits once.',
+              replannedTrack,
+              'The exact displayed current-request detour commits once.',
             );
             await button('Source').click();
             const obstacleNative = await guard.run(() => readNativeFiles(page), {
@@ -2261,8 +2276,8 @@ try {
                 nativeObstacleTrack.end.x,
                 nativeObstacleTrack.end.y,
               ],
-              stoppedTrack,
-              'The actual native board contains the exact constrained preview geometry.',
+              replannedTrack,
+              'The actual native board contains the exact replanned preview geometry.',
             );
             assert.deepEqual(
               obstacleNative.files.filter((file) => !file.name.endsWith('.kicad_pcb')),
@@ -2336,7 +2351,7 @@ try {
             await button('Fit board to canvas').click();
             await settle();
 
-            // A real fixed-obstacle EMC drag must stop at a freshly validated limit.
+            // A real fixed-obstacle EMC drag replans a local detour at each cursor position.
             await layout.press('Escape');
             await button('B.Cu').click();
             const obstacleTrack = project.pcb.tracks.find(
@@ -2357,7 +2372,7 @@ try {
             await measure('layout-track-obstacle-preview', () =>
               mouse.move(obstacleTarget.x, obstacleTarget.y, { steps: 8 }),
             );
-            await layout.locator('[data-track-drag-constrained="true"]').waitFor();
+            await layout.locator('[data-track-drag-constrained="false"]').waitFor();
             const readObstacleTrack = () =>
               layout.evaluate((svg, id) => {
                 const line = svg.querySelector(
@@ -2365,21 +2380,16 @@ try {
                 );
                 return ['x1', 'y1', 'x2', 'y2'].map((name) => Number(line.getAttribute(name)));
               }, obstacleTrack.id);
-            const stoppedTrack = await readObstacleTrack();
-            assert.ok(
-              stoppedTrack[0] > 85 && stoppedTrack[0] < 87,
-              'The collided drag stays at a legal limit rather than rebounding to its origin.',
-            );
-            assert.ok(Math.abs(stoppedTrack[0] - 85.570312) < 0.000001);
-            await page.getByText('Stopped at obstacle', { exact: true }).waitFor();
+            const replannedTrack = await readObstacleTrack();
+            await assertVerticalNetLine(layout, obstacleTrack.netId, 85);
             await measure('layout-track-obstacle-commit', async () => {
               await keyboard.press('Enter');
               await page.locator('.dirty-dot').first().waitFor();
             });
             assert.deepEqual(
               await readObstacleTrack(),
-              stoppedTrack,
-              'The exact displayed current-request limit commits once.',
+              replannedTrack,
+              'The exact displayed current-request detour commits once.',
             );
             await layout.press('Control+z');
             await page.waitForFunction(() => !document.querySelector('.dirty-dot'));

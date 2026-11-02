@@ -11,7 +11,7 @@ import { modelCadKernelMesh, modelCadMesh, setModelCadPose } from './model-cad-m
 // Snapshot only the parameters that construct the mesh. Names, feature IDs and
 // world poses do not change its local geometry or presentation material.
 const meshKey = (body: ModelCadObject) =>
-  JSON.stringify([modelCadGeometryKey(body), body.material, body.opacity]);
+  JSON.stringify([modelCadGeometryKey(body), body.material, body.opacity, body.color]);
 
 type Entry = {
   body: ModelCadObject;

@@ -19,6 +19,8 @@ const sources = [
   ['occt-import-js', 'STEP parser', '/licenses/occt-import-js.txt'],
   ['opencascade', 'Open CASCADE', '/licenses/opencascade.txt'],
   ['three', 'Three.js', '/licenses/three.txt'],
+  ['vscode-codicons', 'VS Code Codicons', '/licenses/vscode-codicons.txt'],
+  ['kicad-icons', 'KiCad icons', '/licenses/kicad-icons.txt'],
   ['clipper', 'Clipper', '/licenses/clipper.txt'],
   ['newstroke', 'Newstroke font', '/licenses/newstroke.txt'],
   ['Agent product marks', 'Agent product marks', '/agents/README.txt'],

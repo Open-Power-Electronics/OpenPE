@@ -2,6 +2,7 @@ import {
   closeDisplayDrawer,
   openDisplayDrawer,
   toggleLayoutVisualization,
+  selectLayoutLayer,
 } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -190,6 +191,7 @@ function fixture(kind = 'horizontal') {
       id: uid(),
       symbolId: null,
       reference: 'TP3',
+      value: 'Test point',
       libraryId: 'Test:HiddenObstacle',
       x: 30,
       y: 24,
@@ -387,6 +389,76 @@ async function run(name, input, check) {
 }
 
 try {
+  for (const gesture of ['D', 'pointer']) {
+    const input = fixture('hidden');
+    await run(
+      `continuous walk-around: ${gesture} follows successive cursor positions after fixed copper`,
+      input,
+      async ({
+        board,
+        schematic,
+        ids,
+        page,
+        canvas,
+        point,
+        marker,
+        preview,
+        state,
+        clean,
+        button,
+      }) => {
+        await point(input.pickup);
+        if (gesture === 'D') await canvas.press('d');
+        else await page.mouse.down();
+        let last;
+        for (const y of [21, 23, 24, 25, 26, 28, 24]) {
+          await point({ x: input.pickup.x, y });
+          assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
+          assert.equal(
+            await marker.getAttribute('data-track-drag-constrained'),
+            'false',
+            'A detour follows the current mouse rather than holding the first obstacle.',
+          );
+          const displayed = await preview();
+          if (last) assert.notDeepEqual(displayed, last);
+          last = displayed;
+          await clean();
+        }
+        await mkdir('test-results/track-drag', { recursive: true });
+        await page.screenshot({
+          path: `test-results/track-drag/continuous-walk-around-${gesture}.png`,
+        });
+        await page.evaluate(() => {
+          window.rejectCommit = true;
+        });
+        if (gesture === 'D') {
+          await canvas.press('Enter');
+          await clean();
+          assert.deepEqual(await preview(), last, 'A failed commit retains the displayed detour.');
+          await page.evaluate(() => {
+            window.rejectCommit = false;
+          });
+          await canvas.press('Enter');
+        } else {
+          await page.evaluate(() => {
+            window.rejectCommit = false;
+          });
+          await page.mouse.up();
+        }
+        const result = await state();
+        assert.equal(result.commits, 1);
+        assert.deepEqual(
+          geometry(result.board.tracks),
+          last,
+          'Commit uses the exact displayed detour.',
+        );
+        verify(board, result.board, schematic, ids);
+        await button('Undo').click();
+        assert.deepEqual((await state()).board, board);
+      },
+    );
+  }
+
   {
     const input = fixture();
     await run(
@@ -683,7 +755,7 @@ try {
         const displayed = await preview();
         const moved = displayed.find((track) => track.id === selectedId);
         const lead = displayed.find((track) => track.id === leadId);
-        assert.deepEqual(moved.end, { x: 37.425, y: 50.25 });
+        assert.deepEqual(moved.end, { x: 37.5, y: 50.175 });
         assert.deepEqual(lead.start, moved.end);
         assert.deepEqual(lead.end, { x: 39.55, y: 48.125 });
         const sourceIds = new Set(board.tracks.map((track) => track.id));
@@ -706,31 +778,30 @@ try {
 
   for (const gesture of ['D', 'pointer'])
     await run(
-      `LM2596 J2 ${gesture} drag holds the nearest checked boundary through illegal cursor moves`,
+      `LM2596 J2 ${gesture} drag revalidates displacement through blocked cursor moves`,
       {
         board: lm2596.pcb,
         schematic: lm2596.schematic,
         pickup: { x: 67.46, y: 66 },
       },
       async ({ board, page, canvas, point, state, clean, context, marker, preview, button }) => {
-        const selectedId = '9f4c2ebf-c1e7-410f-91a6-9f955554ce4e';
         await point({ x: 67.46, y: 66 });
         if (gesture === 'pointer') await page.mouse.down();
         else await canvas.press('d');
         await point({ x: 65.46, y: 66 });
         assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
-        let lastX = 65.46;
+        const firstPose = (await context()).connectedTrackDrag;
+        let lastDelta = firstPose.appliedDelta?.x ?? firstPose.delta.x;
         for (const x of [63.46, 61.46]) {
           await point({ x, y: 66 });
           assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
           assert.equal(await marker.getAttribute('data-track-drag-constrained'), 'true');
-          const displayed = await preview();
-          const selected = displayed.find((track) => track.id === selectedId);
+          const applied = (await context()).connectedTrackDrag.appliedDelta;
           assert.ok(
-            selected.start.x <= lastX && selected.start.x > 65.14,
-            'An increasingly illegal cursor cannot rebound toward the original x=67.46.',
+            applied.x <= lastDelta && applied.x > x - 67.46,
+            'The revalidated stop approaches the cursor without rebounding toward the original pose.',
           );
-          lastX = selected.start.x;
+          lastDelta = applied.x;
           assert.ok((await context()).connectedTrackDrag.appliedDelta.x < -2);
           await clean();
         }
@@ -746,6 +817,100 @@ try {
     );
 
   const emc = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+  const nativeCases = JSON.parse(
+    await readFile('tests/fixtures/emc-track-drag-kicad10.json', 'utf8'),
+  ).cases;
+  for (const name of [
+    'DRV left',
+    'VD vertical',
+    'J1 VIN diagonal',
+    'VIN return two selected spans',
+  ]) {
+    const reference = nativeCases.find((c) => c.name === name);
+    for (const gesture of reference.trackIds.length > 1 ? ['D'] : ['D', 'pointer']) {
+      await run(
+        `native EMC chain: ${name} ${gesture} follows the native cursor path`,
+        {
+          board: emc.pcb,
+          schematic: emc.schematic,
+          pickup: reference.pickup,
+        },
+        async ({ board, page, canvas, point, state, clean, marker, preview, context, button }) => {
+          const leader = board.tracks.find((t) => t.id === reference.trackIds[0]);
+          await selectLayoutLayer(page, leader.layer);
+          if (reference.trackIds.length > 1) {
+            for (let index = 0; index < reference.trackIds.length; index++) {
+              const track = board.tracks.find((t) => t.id === reference.trackIds[index]);
+              await point(
+                { x: (track.start.x + track.end.x) / 2, y: (track.start.y + track.end.y) / 2 },
+                true,
+                index ? ['Shift'] : [],
+              );
+            }
+            assert.deepEqual(
+              (await context()).selection.map((item) => item.id).sort(),
+              reference.trackIds.slice().sort(),
+            );
+          }
+          await point(reference.pickup);
+          if (gesture === 'D') await canvas.press('d');
+          else await page.mouse.down();
+          await page.keyboard.down('Control');
+          for (const cursor of reference.cursors) {
+            await point(cursor);
+            // Pointer drag starts only after the existing four-pixel threshold.
+            if (gesture === 'pointer' && !(await marker.count())) {
+              await clean();
+              continue;
+            }
+            assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
+            assert.equal(
+              await marker.getAttribute('data-track-drag-constrained'),
+              'false',
+              'Native-reachable EMC poses keep updating beyond the first obstacle.',
+            );
+            await clean();
+          }
+          assert.equal(await marker.count(), 1);
+          const displayed = await preview();
+          const observed = (await context()).connectedTrackDrag;
+          assert.ok(
+            Math.hypot(
+              observed.pickup.x - reference.pickup.x,
+              observed.pickup.y - reference.pickup.y,
+            ) < 0.001,
+            'Agent observation retains the exact pickup used by the GUI engine.',
+          );
+          assert.equal(typeof observed.posture, 'boolean');
+          const cursor = reference.cursors.at(-1);
+          const vertical = Math.abs(leader.end.x - leader.start.x) < 1e-6;
+          const horizontal = Math.abs(leader.end.y - leader.start.y) < 1e-6;
+          if (vertical || horizontal)
+            assert.ok(
+              displayed.some((t) =>
+                vertical
+                  ? Math.abs(t.start.x - cursor.x) < 0.001 &&
+                    Math.abs(t.end.x - cursor.x) < 0.001 &&
+                    Math.abs(t.start.y - t.end.y) > 0.5
+                  : Math.abs(t.start.y - cursor.y) < 0.001 &&
+                    Math.abs(t.end.y - cursor.y) < 0.001 &&
+                    Math.abs(t.start.x - t.end.x) > 0.5,
+              ),
+              'Rendered copper reaches the current native reference line.',
+            );
+          if (gesture === 'D') await canvas.press('Enter');
+          else await page.mouse.up();
+          await page.keyboard.up('Control');
+          assert.equal((await state()).commits, 1);
+          assert.deepEqual(geometry((await state()).board.tracks), displayed);
+          assert.deepEqual((await state()).board.vias, board.vias);
+          assert.deepEqual((await state()).board.footprints, board.footprints);
+          await button('Undo').click();
+          assert.deepEqual((await state()).board, board);
+        },
+      );
+    }
+  }
   const emcInput = {
     board: emc.pcb,
     schematic: emc.schematic,
@@ -807,23 +972,23 @@ try {
         const stretched = displayed.find((track) => track.id === ids.lead);
         assert.deepEqual(moved, {
           id: ids.main,
-          start: { x: 61.8625, y: 53.8 },
-          end: { x: 61, y: 54.6625 },
+          start: original.start,
+          end: { x: 61.7, y: 53.8 },
           width: original.width,
         });
         assert.deepEqual(stretched, {
           id: ids.lead,
           start: moved.end,
-          end: lead.end,
+          end: { x: 61, y: 54.5 },
           width: lead.width,
         });
         const sourceIds = new Set(board.tracks.map((track) => track.id));
         const reconnects = displayed.filter((track) => !sourceIds.has(track.id));
-        assert.equal(reconnects.length, 1, 'Only the fixed F1 end gains a reconnect.');
+        assert.equal(reconnects.length, 1, 'The two original UUIDs gain one fresh elbow leg.');
         assert.deepEqual(
           { ...reconnects[0], id: '' },
-          { id: '', start: original.start, end: moved.start, width: original.width },
-          'The fixed F1 end extends horizontally while J1 gains no reverse diagonal.',
+          { id: '', start: stretched.end, end: lead.end, width: original.width },
+          'The exact native pickup yields one horizontal/45-degree/vertical chain with fixed ends.',
         );
         await canvas.screenshot({
           path: `test-results/layout-emc-j1-track-drag-shove-${gesture.toLowerCase()}.png`,
@@ -965,12 +1130,11 @@ try {
       await clean();
       assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
       const displayed = await preview();
-      const main = displayed.find((track) => track.id === ids.main);
+      const main = displayed.find((track) => track.start.y === 24 && track.end.y === 24);
+      assert.ok(main, 'The picked horizontal line reaches the current cursor.');
       assert.deepEqual(main.start, { x: 24, y: 24 });
       assert.deepEqual(main.end, { x: 36, y: 24 });
-      const reconnect = displayed.find(
-        (track) => !board.tracks.some((source) => source.id === track.id),
-      );
+      const reconnect = displayed.find((track) => track.start.x === 20 && track.start.y === 20);
       assert.ok(reconnect, 'The fixed pad retains its copper connection during the preview.');
       assert.deepEqual(
         [reconnect.start, reconnect.end].sort((a, b) => a.x - b.x),
@@ -1015,7 +1179,7 @@ try {
 
   const group = fixture('group');
   await run(
-    'selected connected tracks translate rigidly while boundary copper follows',
+    'selected spans in one chain follow the picked leader while remote ends stay fixed',
     group,
     async ({ board, schematic, ids, canvas, point, state, clean, marker, preview }) => {
       await point({ x: 30, y: 20 }, true);
@@ -1025,12 +1189,21 @@ try {
       await clean();
       assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
       const displayed = await preview();
-      for (const name of ['main', 'next']) {
-        const before = board.tracks.find((track) => track.id === ids[name]);
-        const after = displayed.find((track) => track.id === ids[name]);
-        assert.deepEqual(after.start, { x: before.start.x + 3, y: before.start.y + 4 });
-        assert.deepEqual(after.end, { x: before.end.x + 3, y: before.end.y + 4 });
-      }
+      assert.ok(
+        displayed.some(
+          (track) =>
+            track.start.x === 38 && track.end.x === 38 && Math.abs(track.start.y - track.end.y) > 1,
+        ),
+      );
+      for (const endpoint of [
+        { x: 15, y: 20 },
+        { x: 45, y: 30 },
+      ])
+        assert.ok(
+          displayed.some((track) =>
+            [track.start, track.end].some((p) => p.x === endpoint.x && p.y === endpoint.y),
+          ),
+        );
       await canvas.press('Enter');
       const result = await state();
       assert.equal(result.commits, 1);
@@ -1090,7 +1263,7 @@ try {
   for (const kind of ['blocked', 'hidden']) {
     const input = fixture(kind);
     await run(
-      `${kind} foreign copper constrains connected drag without moving obstacles`,
+      `${kind} foreign copper resolves connected drag without moving obstacles`,
       input,
       async ({
         ids,
@@ -1122,19 +1295,19 @@ try {
         );
         await point({ x: 30, y: 24 });
         assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
-        assert.equal(await marker.getAttribute('data-track-drag-constrained'), 'true');
+        assert.equal(
+          await marker.getAttribute('data-track-drag-constrained'),
+          'false',
+          'Local chain detours continue around both locked tracks and hidden pads.',
+        );
         const observed = await context();
         assert.deepEqual(observed.connectedTrackDrag.trackIds, [ids.main]);
         assert.deepEqual(observed.connectedTrackDrag.delta, { x: 0, y: 4 });
         assert.equal(observed.connectedTrackDrag.clearance, 0.25);
         assert.equal(observed.connectedTrackDrag.blocked, false);
-        assert.equal(observed.connectedTrackDrag.constrained, true);
+        assert.equal(observed.connectedTrackDrag.constrained, false);
         assert.equal(observed.previewError, '');
-        assert.ok(observed.connectedTrackDrag.appliedDelta.y > 1);
-        assert.ok(
-          observed.connectedTrackDrag.appliedDelta.y < 4,
-          'Agent context distinguishes the requested cursor from its checked stop.',
-        );
+        assert.equal(observed.connectedTrackDrag.appliedDelta, undefined);
         await clean();
         const displayed = await preview();
         assert.notDeepEqual(displayed, geometry(input.board.tracks));
@@ -1159,10 +1332,23 @@ try {
         await start();
         await point({ x: 30, y: 21 });
         await point({ x: 30, y: 24 });
-        assert.deepEqual(await preview(), displayed, 'Cancellation cannot retain a stale stop.');
+        const retried = await preview();
+        const originalIds = new Set(input.board.tracks.map((track) => track.id));
+        const comparable = (items) =>
+          items
+            .map(({ id, ...span }) => ({
+              ...span,
+              id: originalIds.has(id) ? id : 'new',
+            }))
+            .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+        assert.deepEqual(
+          comparable(retried),
+          comparable(displayed),
+          'A fresh gesture recomputes the same geometry with fresh reconnect IDs.',
+        );
         await point({ x: 30, y: 24 }, true);
         assert.equal((await state()).commits, 1);
-        assert.deepEqual(geometry((await state()).board.tracks), displayed);
+        assert.deepEqual(geometry((await state()).board.tracks), retried);
         assert.deepEqual((await state()).board.footprints, input.board.footprints);
         assert.equal(await marker.count(), 0);
         assert.equal((await context()).connectedTrackDrag, null);

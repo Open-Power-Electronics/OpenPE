@@ -845,12 +845,12 @@ test('Layout diagonal drag slides joints in one undo transaction and rejects col
   assert.deepEqual(parseProject(after.source).pcb, after.project!.pcb);
   core.undo();
   assert.equal(core.getSnapshot().source, basis.source);
-  assert.throws(() => core.execute('layout.drag', { ...args, delta: { x: 2, y: -2 } }), /collapse/);
+  assert.throws(() => core.execute('layout.drag', { ...args, delta: { x: 2, y: -2 } }), /blocked/);
   assert.equal(core.getSnapshot().source, basis.source);
   assert.equal(core.getSnapshot().undoDepth, 0);
 });
 
-test('Layout drag consumes a zero-length simple neighbour in the same complete undo edit', () => {
+test('Layout drag reshapes a contracting chain while retaining every original UUID in one undo edit', () => {
   const { project, boardId, netId } = layoutFixture();
   const points = [
     { x: 0, y: -4 },
@@ -878,8 +878,9 @@ test('Layout drag consumes a zero-length simple neighbour in the same complete u
   const after = core.getSnapshot();
   assert.equal(after.undoDepth, 1);
   assert.deepEqual(after.project!.pcb!.tracks, [
-    { ...original[1], start: { x: 0, y: -4 }, end: { x: 8, y: -4 } },
-    { ...original[2], start: { x: 8, y: -4 } },
+    { ...original[0], start: { x: 0, y: -4 }, end: { x: 8, y: -4 } },
+    { ...original[1], start: { x: 8, y: -4 }, end: { x: 8, y: 2 } },
+    { ...original[2], start: { x: 8, y: 2 } },
   ]);
   assert.ok(result.changedIds.includes(original[0].id));
   assert.deepEqual(parseProject(after.source).pcb, after.project!.pcb);
@@ -915,15 +916,18 @@ test('Layout shove drag commits displaced neighbours in one whole-project undo a
     delta: { x: 0, y: 2 },
     clearance: 0.25,
   };
-  assert.throws(
-    () => core.execute('layout.drag', { ...args, obstacleMode: 'walk-around' }),
-    /blocked/i,
+  core.execute('layout.drag', { ...args, obstacleMode: 'walk-around' });
+  assert.deepEqual(
+    core.getSnapshot().project!.pcb!.tracks.find((track) => track.id === neighbour.id),
+    neighbour,
   );
-  assert.equal(core.getSnapshot(), basis);
+  assert.notDeepEqual(core.getSnapshot().project!.pcb!.tracks, project.pcb!.tracks);
+  core.undo();
+  assert.equal(core.getSnapshot().source, basis.source);
   core.execute('layout.drag', { ...args, obstacleMode: 'shove' });
   const after = core.getSnapshot();
   assert.equal(after.undoDepth, 1);
-  assert.equal(after.project!.pcb!.tracks[0].start.y, 2);
+  assert.ok(after.project!.pcb!.tracks.some((track) => track.start.y === 2 && track.end.y === 2));
   assert.notDeepEqual(after.project!.pcb!.tracks[1], neighbour);
   assert.deepEqual(
     after.project!.pcb!.tracks.slice(0, 2).map((item) => item.id),

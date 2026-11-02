@@ -39,6 +39,94 @@ const plan = (board: PCB, mode: 'shove' | 'walk-around' = 'shove') =>
     obstacleMode: mode,
   });
 
+function detourFixture() {
+  const { board, out, ground } = fixture();
+  board.tracks = [track(out, -5, 0, 5, 0), track(out, -5, -5, -5, 0), track(out, 5, 0, 5, -5)];
+  board.vias = [
+    { id: uid(), x: 0, y: 2, diameter: 1, drill: 0.4, netId: ground },
+    ...[-5, 5].map((x) => ({ id: uid(), x, y: -5, diameter: 1, drill: 0.4, netId: out })),
+  ];
+  return { board, out, ground };
+}
+
+test('interactive single-spine drag keeps replanning around fixed copper at successive cursor positions', () => {
+  const { board } = detourFixture();
+  const basis = ownProjectData(board);
+  const engine = createPCBTrackDrag(basis, [{ kind: 'track', id: board.tracks[0].id }], {
+    clearance: 0.25,
+    obstacleMode: 'shove',
+    rerouteSelected: true,
+  });
+  let previous: Point | undefined;
+  let last: PCBTrackDragPreview | undefined;
+  for (const y of [1, 2, 2.5, 3, 4, 2, -1]) {
+    const result = previewConstrainedPCBTrackDrag(engine, basis, { x: 0, y }, false, previous);
+    assert.equal(result.error, '', `Current cursor y=${y} has a legal route.`);
+    assert.equal(result.constraint, undefined, `Current cursor y=${y} is reached by replanning.`);
+    assert.deepEqual(result.board.vias, basis.vias, 'Pads/vias stay fixed.');
+    assert.equal(result.board.tracks[0].id, basis.tracks[0].id);
+    assert.ok(result.board.tracks.length >= basis.tracks.length);
+    for (const endpoint of [
+      { x: -5, y: -5 },
+      { x: 5, y: -5 },
+    ])
+      assert.ok(
+        result.board.tracks.some((t) =>
+          [t.start, t.end].some((p) => p.x === endpoint.x && p.y === endpoint.y),
+        ),
+        'Replanned chains retain both exact remote terminals.',
+      );
+    if (last)
+      assert.notDeepEqual(
+        result.board.tracks,
+        last.board.tracks,
+        'The preview keeps following the cursor after the first obstacle.',
+      );
+    assert.deepEqual(
+      result,
+      engine.preview({ x: 0, y }),
+      'Commit revalidation reproduces the exact displayed tracks and IDs.',
+    );
+    previous = { x: 0, y };
+    last = result;
+  }
+  assert.deepEqual(basis, board, 'Preview never edits the basis board.');
+});
+
+test('a walk-around detour cannot join an unrelated same-net island', () => {
+  const { board, out } = detourFixture();
+  const preview = (basis: PCB) =>
+    createPCBTrackDrag(basis, [{ kind: 'track', id: board.tracks[0].id }], {
+      clearance: 0.25,
+      obstacleMode: 'shove',
+      rerouteSelected: true,
+    }).preview({ x: 0, y: 2 });
+  const legal = preview(board);
+  assert.equal(legal.error, '');
+  const across = legal.board.tracks.find((t) => t.start.x < 0 && t.end.x > 0)!;
+  assert.ok(across && across.start.y === across.end.y);
+  board.tracks.push(track(out, -0.1, across.start.y, 0.1, across.start.y));
+  const result = preview(board);
+  assert.match(result.error, /connectivity/);
+  assert.equal(result.board, board);
+  assert.deepEqual(result.changedIds, []);
+});
+
+test('retained interactive detours rebuild for caller changes and respect newly fixed copper', () => {
+  const { board, ground } = detourFixture();
+  const engine = createPCBTrackDrag(board, [{ kind: 'track', id: board.tracks[0].id }], {
+    clearance: 0.25,
+    obstacleMode: 'shove',
+    rerouteSelected: true,
+  });
+  assert.equal(engine.preview({ x: 0, y: 2 }).error, '');
+  board.tracks.push({ ...track(ground, -6, -5, 6, -5), locked: true });
+  const result = engine.preview({ x: 0, y: 2 });
+  assert.ok(result.error, 'New locked copper covers the fixed chain terminals.');
+  assert.equal(result.board, board);
+  assert.deepEqual(result.changedIds, []);
+});
+
 test('constrained previews stop at a freshly validated current-request position in either obstacle mode', () => {
   const { board: source } = fixture();
   const board = ownProjectData(source);

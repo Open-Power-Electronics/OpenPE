@@ -181,7 +181,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'modelCad.update',
-    'Update a CAD object, its transform, material and local through holes as one undo edit.',
+    'Update a CAD object, its transform, material, color and local through holes as one undo edit.',
     object({ boardId: identity, object: modelCadObjectSchema }, ['boardId', 'object']),
   ),
   objectCommand(

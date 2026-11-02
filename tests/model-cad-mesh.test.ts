@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { modelCadMesh } from '../components/model-cad-mesh';
+import { modelCadKernelMesh, modelCadMesh } from '../components/model-cad-mesh';
 import { uid } from '../lib/circuit';
 import { validateModelCadObject, type ModelCadObject, type ModelCadVector } from '../lib/model-cad';
 import { disposeModelGroup } from '../lib/model-mesh';
@@ -19,6 +19,43 @@ const body = (kind: ModelCadObject['kind'] = 'box'): ModelCadObject =>
     opacity: 1,
     holes: [{ id: uid(), x: 3, y: 2, diameterMm: 3.2 }],
   });
+
+test('custom colors reach primitive, kernel and translucent preview materials and survive selection', () => {
+  const colored = validateModelCadObject({ ...body(), color: '#d94838', opacity: 0.8 });
+  const face = {
+    attributes: { position: { array: [0, 0, 0, 1, 0, 0, 0, 1, 0] } },
+    index: { array: [0, 1, 2] },
+  };
+  const root = new THREE.Group();
+  const selection = createModelSelection(root, 'modelCadId');
+  const surfaces = [
+    modelCadMesh(colored),
+    modelCadMesh(colored, true),
+    modelCadKernelMesh(colored, [face]),
+    modelCadKernelMesh(colored, [face], true),
+  ];
+  root.add(...surfaces);
+  try {
+    root.traverse((node) => {
+      if (!(node instanceof THREE.Mesh)) return;
+      assert.equal(node.material.color.getHexString(), 'd94838');
+      assert.equal(node.material.opacity, node.userData.modelCadPreview ? 0.45 : 0.8);
+    });
+    selection.update(new Set([colored.id]), true);
+    selection.withoutSelection(() =>
+      root.traverse((node) => {
+        if (node instanceof THREE.Mesh) assert.equal(node.material.color.getHexString(), 'd94838');
+      }),
+    );
+    selection.dispose();
+    root.traverse((node) => {
+      if (node instanceof THREE.Mesh) assert.equal(node.material.color.getHexString(), 'd94838');
+    });
+  } finally {
+    selection.dispose();
+    disposeModelGroup(root);
+  }
+});
 
 // Independent native-axis Rx * Ry * Rz transform, followed by the scene's Y
 // reflection. This deliberately does not use the mesh's Three transform.

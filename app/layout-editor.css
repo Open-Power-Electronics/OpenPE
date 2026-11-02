@@ -250,12 +250,6 @@
   padding: 12px;
   overflow: auto;
 }
-.model-properties-title {
-  margin: 0 0 8px;
-  font-size: var(--font-control);
-  font-weight: 600;
-  color: var(--text-strong);
-}
 .model-property-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -536,17 +530,6 @@
   overflow: hidden;
   font-size: var(--font-small);
 }
-.layout-tool-settings:is([data-tool='outline'], [data-tool='zone'])
-  .layout-field
-  > span:first-child {
-  display: none;
-}
-.layout-region-finish {
-  flex: 0 0 auto;
-  padding-inline: 6px;
-  font-size: inherit;
-  white-space: nowrap;
-}
 .layout-inspector {
   display: flex;
   flex-direction: column;
@@ -623,7 +606,7 @@
   max-width: 220px;
   min-width: 100px;
 }
-.layout-tool-settings-content .layout-field:has(> .select-trigger) > span:first-child {
+.layout-tool-settings-content .layout-field:first-child:has(> .select-trigger) > span:first-child {
   display: none;
 }
 .layout-tool-settings[data-tool='route'] .layout-field:first-child > span:first-child {
@@ -661,6 +644,10 @@
 .layout-part-inspector .layout-inspector-content {
   gap: 0;
   padding-top: 0;
+}
+.layout-inspector-footer .property-fill-action {
+  width: 30px;
+  height: 30px;
 }
 .layout-part-inspector .part-properties input {
   height: auto;
@@ -748,6 +735,10 @@
   margin-top: 2px;
   padding-top: 8px;
 }
+.layout-property-section + .layout-property-section > .layout-property-details:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
 .layout-property-section h3 {
   margin: 0 0 2px;
   font-size: var(--font-control);
@@ -818,6 +809,12 @@
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
+.layout-property-readout[data-single-line] output {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
 .layout-property-readout {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 24px;
@@ -885,7 +882,6 @@
 }
 .layout-property-section > .layout-field,
 .layout-property-section > .layout-property-select,
-.component-geometry > .layout-property-select,
 .model-properties-body > .layout-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);

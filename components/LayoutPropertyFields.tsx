@@ -271,13 +271,15 @@ export function PropertyRow({
   label,
   value,
   description,
+  singleLine = false,
 }: {
   label: string;
   value: ReactNode;
   description?: string;
+  singleLine?: boolean;
 }) {
   return (
-    <div className="layout-property-readout">
+    <div className="layout-property-readout" data-single-line={singleLine || undefined}>
       <span>{label}</span>
       <output aria-description={description}>{value}</output>
     </div>
@@ -288,20 +290,22 @@ export function PropertySection({
   title,
   children,
   actions,
+  showTitle = true,
 }: {
   title: string;
   children: ReactNode;
   actions?: ReactNode;
+  showTitle?: boolean;
 }) {
   return (
     <section className="layout-property-section" aria-label={title}>
       {actions ? (
         <div className="layout-property-section-title">
-          <h3>{title}</h3>
+          {showTitle && <h3>{title}</h3>}
           {actions}
         </div>
       ) : (
-        <h3>{title}</h3>
+        showTitle && <h3>{title}</h3>
       )}
       {children}
     </section>

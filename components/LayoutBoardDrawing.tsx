@@ -170,7 +170,7 @@ export const LayoutZoneOutlineDrawing = memo(function LayoutZoneOutlineDrawing({
             fill="none"
             stroke={color}
             strokeWidth={0.08}
-            strokeDasharray="1 0.7"
+            strokeDasharray="0.5 0.35"
           />
         )}
       </PCBSelectionPaint>

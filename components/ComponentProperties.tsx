@@ -113,6 +113,7 @@ export default function ComponentProperties({
               label="Library"
               value={footprint.libraryId}
               description={footprint.libraryId}
+              singleLine
             />
           </div>
         </>
@@ -141,17 +142,17 @@ export default function ComponentProperties({
             max={360}
             onCommit={(rotation) => onFootprint({ ...footprint, rotation })}
           />
+          <Select
+            active={active && geometryEditable}
+            label="Footprint side"
+            value={footprint.side}
+            options={[
+              { value: 'front', label: 'Front' },
+              { value: 'back', label: 'Back' },
+            ]}
+            onChange={(side) => side === footprint.side || onFootprint(flipPCBFootprint(footprint))}
+          />
         </PropertyGrid>
-        <Select
-          active={active && geometryEditable}
-          label="Footprint side"
-          value={footprint.side}
-          options={[
-            { value: 'front', label: 'Front' },
-            { value: 'back', label: 'Back' },
-          ]}
-          onChange={(side) => side === footprint.side || onFootprint(flipPCBFootprint(footprint))}
-        />
       </div>
     </>
   );

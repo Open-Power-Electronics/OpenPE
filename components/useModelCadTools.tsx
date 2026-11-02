@@ -650,61 +650,60 @@ export function useModelCadTools({
       },
     },
   ];
+  const drawingSketch = tool === 'sketch' && sketchPhase === 'sketch';
   const toolbar = (
     <>
-      {tool === 'sketch' && sketchPhase === 'sketch' ? (
-        <div className="editor-tool-group" role="group" aria-label="Sketch tools">
-          {button(
-            'Draw rectangle',
-            Square,
-            () => setSketchShape('rectangle'),
-            blocked,
-            sketchShape === 'rectangle',
-          )}
-          {button(
-            'Draw circle',
-            Circle,
-            () => setSketchShape('circle'),
-            blocked,
-            sketchShape === 'circle',
-          )}
-          {button(
-            'Draw polyline',
-            Pentagon,
-            () => setSketchShape('polygon'),
-            blocked,
-            sketchShape === 'polygon',
-          )}
-          <button
-            type="button"
-            className={`dialog-button primary ${styles.finishSketch}`}
-            disabled={blocked || !sketchReady}
-            onClick={() => sketchInput.current?.finish()}
-          >
-            <Check size={17} aria-hidden />
-            Finish sketch
-          </button>
-        </div>
-      ) : (
-        <div className="editor-tool-group" role="group" aria-label="Create and modify geometry">
-          {button(
+      <div className="editor-tool-group" role="group" aria-label="2D drawing" title="2D drawing">
+        {drawingSketch ? (
+          <>
+            {button(
+              'Draw rectangle',
+              Square,
+              () => setSketchShape('rectangle'),
+              blocked,
+              sketchShape === 'rectangle',
+            )}
+            {button(
+              'Draw circle',
+              Circle,
+              () => setSketchShape('circle'),
+              blocked,
+              sketchShape === 'circle',
+            )}
+            {button(
+              'Draw polyline',
+              Pentagon,
+              () => setSketchShape('polygon'),
+              blocked,
+              sketchShape === 'polygon',
+            )}
+            <button
+              type="button"
+              className={`dialog-button primary ${styles.finishSketch}`}
+              disabled={blocked || !sketchReady}
+              onClick={() => sketchInput.current?.finish()}
+            >
+              <Check size={17} aria-hidden />
+              Finish sketch
+            </button>
+          </>
+        ) : (
+          button(
             'Create sketch',
             PencilRuler,
             () => startFeature('sketch'),
             blocked || Boolean(tool) || staged,
             tool === 'sketch' && sketchPhase === 'plane',
-          )}
-          {tool === 'sketch' &&
-            (sketchPhase === 'profile' || sketchPhase === 'extrude') &&
-            button(
-              'Extrude sketch',
-              ArrowUpFromLine,
-              () => {
-                if (!blocked && sketchReady) setSketchPhase('extrude');
-              },
-              blocked || !sketchReady || sketchPhase !== 'profile',
-              sketchPhase === 'extrude',
-            )}
+          )
+        )}
+      </div>
+      {!drawingSketch && (
+        <div
+          className="editor-tool-group"
+          role="group"
+          aria-label="3D primitives"
+          title="3D primitives"
+        >
           {button(
             'Place box',
             Box,
@@ -719,6 +718,27 @@ export function useModelCadTools({
             blocked || tool === 'sketch',
             tool === 'cylinder',
           )}
+        </div>
+      )}
+      <div className="editor-tool-group" role="group" aria-label="2D to 3D" title="2D to 3D">
+        {button(
+          'Extrude sketch',
+          ArrowUpFromLine,
+          () => {
+            if (!blocked && tool === 'sketch' && sketchReady && sketchPhase === 'profile')
+              setSketchPhase('extrude');
+          },
+          blocked || tool !== 'sketch' || !sketchReady || sketchPhase !== 'profile',
+          tool === 'sketch' && sketchPhase === 'extrude',
+        )}
+      </div>
+      {!drawingSketch && (
+        <div
+          className="editor-tool-group"
+          role="group"
+          aria-label="Solid modifications"
+          title="Solid modifications"
+        >
           {button(
             'Drill through hole',
             CircleDot,

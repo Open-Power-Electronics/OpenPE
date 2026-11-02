@@ -1,0 +1,922 @@
+{
+  "reference": {
+    "application": "KiCad",
+    "version": "10.0.1",
+    "sourceBoard": "recent/emc-flyback/emc-flyback.kicad_pcb",
+    "sourceBoardSha256": "1c0a831df7e023552ca861d24aa7b1ae48cbcdb0aff1bedd512086a43f8a7d5e",
+    "mode": "shove",
+    "clearanceMM": 0.25,
+    "fixedVias": true,
+    "gridMM": 0.025,
+    "smoothDraggedSegments": true,
+    "optimizeEntireDraggedTrack": false,
+    "originalSource": "resources/example-catalog/sources/emc-flyback/design/emc_flyback.kicad_pcb",
+    "routerSource": "https://github.com/KiCad/kicad-source-mirror/blob/10.0.1/pcbnew/router/pns_dragger.cpp"
+  },
+  "cases": [
+    {
+      "name": "DRV left",
+      "trackIds": ["e5b79686-7bce-4eeb-bc33-cc09e12ffe67"],
+      "pickup": {
+        "x": 87,
+        "y": 114.24975
+      },
+      "cursors": [
+        {
+          "x": 86.475,
+          "y": 114.3
+        },
+        {
+          "x": 85.975,
+          "y": 114.3
+        },
+        {
+          "x": 84.975,
+          "y": 114.3
+        },
+        {
+          "x": 83.975,
+          "y": 114.3
+        }
+      ],
+      "removedIds": [
+        "700e4418-32d4-461d-9861-0b0711185187",
+        "e5b79686-7bce-4eeb-bc33-cc09e12ffe67"
+      ],
+      "tracks": [
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.57795,
+            "y": 115.3364
+          },
+          "end": {
+            "x": 84.42795,
+            "y": 115.4864
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.7,
+            "y": 112.78995
+          },
+          "end": {
+            "x": 84.7,
+            "y": 112.21005
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.28995,
+            "y": 113.2
+          },
+          "end": {
+            "x": 84.7,
+            "y": 112.78995
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.42795,
+            "y": 115.4864
+          },
+          "end": {
+            "x": 83.975,
+            "y": 115.4864
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.6169,
+            "y": 116.7364
+          },
+          "end": {
+            "x": 85.15785,
+            "y": 116.7364
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 88.0155,
+            "y": 120.135
+          },
+          "end": {
+            "x": 84.6169,
+            "y": 116.7364
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.7,
+            "y": 112.21005
+          },
+          "end": {
+            "x": 84.434975,
+            "y": 111.945025
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 85.15785,
+            "y": 116.7364
+          },
+          "end": {
+            "x": 85.5679,
+            "y": 116.32635
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.434975,
+            "y": 111.945025
+          },
+          "end": {
+            "x": 87,
+            "y": 109.38
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 85.5679,
+            "y": 115.74645
+          },
+          "end": {
+            "x": 85.15785,
+            "y": 115.3364
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 85.5679,
+            "y": 116.32635
+          },
+          "end": {
+            "x": 85.5679,
+            "y": 115.74645
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 85.15785,
+            "y": 115.3364
+          },
+          "end": {
+            "x": 84.57795,
+            "y": 115.3364
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 83.975,
+            "y": 113.2
+          },
+          "end": {
+            "x": 84.28995,
+            "y": 113.2
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 83.975,
+            "y": 115.4864
+          },
+          "end": {
+            "x": 83.975,
+            "y": 113.2
+          }
+        }
+      ]
+    },
+    {
+      "name": "DRV right",
+      "trackIds": ["e5b79686-7bce-4eeb-bc33-cc09e12ffe67"],
+      "pickup": {
+        "x": 87,
+        "y": 114.24975
+      },
+      "cursors": [
+        {
+          "x": 87.475,
+          "y": 114.3
+        },
+        {
+          "x": 88,
+          "y": 114.3
+        },
+        {
+          "x": 88.975,
+          "y": 114.3
+        }
+      ],
+      "removedIds": [
+        "700e4418-32d4-461d-9861-0b0711185187",
+        "e5b79686-7bce-4eeb-bc33-cc09e12ffe67"
+      ],
+      "tracks": [
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 88.975,
+            "y": 119.1755
+          },
+          "end": {
+            "x": 88.975,
+            "y": 111.355
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 88.975,
+            "y": 111.355
+          },
+          "end": {
+            "x": 87,
+            "y": 109.38
+          }
+        },
+        {
+          "width": 0.3,
+          "net": "DRV",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 88.0155,
+            "y": 120.135
+          },
+          "end": {
+            "x": 88.975,
+            "y": 119.1755
+          }
+        }
+      ]
+    },
+    {
+      "name": "J1 VIN diagonal",
+      "trackIds": ["f5f58608-884a-4ddc-9afc-1ddfccfc586e"],
+      "pickup": {
+        "x": 62.93125,
+        "y": 55.73125
+      },
+      "cursors": [
+        {
+          "x": 62.425,
+          "y": 55.25
+        },
+        {
+          "x": 61.9,
+          "y": 54.75
+        },
+        {
+          "x": 61.425,
+          "y": 54.275
+        }
+      ],
+      "removedIds": [
+        "1d86d449-e059-45b0-ae66-5414983dc04d",
+        "f5f58608-884a-4ddc-9afc-1ddfccfc586e"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "VIN_P",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 64.8625,
+            "y": 53.8
+          },
+          "end": {
+            "x": 61.9,
+            "y": 53.8
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_P",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 61,
+            "y": 54.7
+          },
+          "end": {
+            "x": 61,
+            "y": 62.7
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_P",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 61.9,
+            "y": 53.8
+          },
+          "end": {
+            "x": 61,
+            "y": 54.7
+          }
+        }
+      ]
+    },
+    {
+      "name": "VIN return horizontal",
+      "trackIds": ["4250b0d8-e0c8-40b7-a54a-1a8624235dbf"],
+      "pickup": {
+        "x": 68.65950000000001,
+        "y": 81.75
+      },
+      "cursors": [
+        {
+          "x": 68.625,
+          "y": 81.275
+        },
+        {
+          "x": 68.625,
+          "y": 80.75
+        },
+        {
+          "x": 68.625,
+          "y": 79.775
+        }
+      ],
+      "removedIds": [
+        "13f7f42c-2d00-47c4-9ed2-e6c696fa06c1",
+        "4250b0d8-e0c8-40b7-a54a-1a8624235dbf"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 78.294,
+            "y": 79.775
+          },
+          "end": {
+            "x": 62.975,
+            "y": 79.775
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 86.469,
+            "y": 71.6
+          },
+          "end": {
+            "x": 78.294,
+            "y": 79.775
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 62.975,
+            "y": 79.775
+          },
+          "end": {
+            "x": 61,
+            "y": 81.75
+          }
+        }
+      ]
+    },
+    {
+      "name": "VBUS upper horizontal",
+      "trackIds": ["55e76c6c-a882-41a3-85b9-455b1a2d200e"],
+      "pickup": {
+        "x": 116.54655,
+        "y": 64.9017
+      },
+      "cursors": [
+        {
+          "x": 116.55,
+          "y": 65.425
+        },
+        {
+          "x": 116.55,
+          "y": 65.95
+        },
+        {
+          "x": 116.5,
+          "y": 66.89
+        }
+      ],
+      "removedIds": [
+        "253b7d82-b833-4595-88a9-c2730d0f3ecf",
+        "37c40dcd-8ba4-4959-8a4b-71e2c870ffd1",
+        "55e76c6c-a882-41a3-85b9-455b1a2d200e",
+        "99584615-cbf3-4d62-834f-a3dc112a6d99",
+        "f982e7ee-1019-4703-a7d7-a7e39a01f758"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "VBUS",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 114.3,
+            "y": 60.9619
+          },
+          "end": {
+            "x": 114.3,
+            "y": 66.89
+          }
+        },
+        {
+          "width": 1,
+          "net": "VBUS",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 116.8048,
+            "y": 66.89
+          },
+          "end": {
+            "x": 119.4999,
+            "y": 64.1949
+          }
+        },
+        {
+          "width": 1,
+          "net": "VBUS",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 114.3,
+            "y": 66.89
+          },
+          "end": {
+            "x": 116.8048,
+            "y": 66.89
+          }
+        },
+        {
+          "width": 1,
+          "net": "VBUS",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 119.4999,
+            "y": 64.1949
+          },
+          "end": {
+            "x": 119.4999,
+            "y": 60.5
+          }
+        }
+      ]
+    },
+    {
+      "name": "VD vertical",
+      "trackIds": ["f5d7062b-da38-42c1-8cd1-871ccb077fbb"],
+      "pickup": {
+        "x": 86.5,
+        "y": 55.899150000000006
+      },
+      "cursors": [
+        {
+          "x": 85.975,
+          "y": 55.95
+        },
+        {
+          "x": 85.475,
+          "y": 55.95
+        },
+        {
+          "x": 84.475,
+          "y": 55.95
+        }
+      ],
+      "removedIds": [
+        "03a21f42-d29f-437d-a31f-716112635fe5",
+        "44668c17-f539-4ac1-898d-3a03437dd5e8",
+        "f5d7062b-da38-42c1-8cd1-871ccb077fbb"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "VD",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.475,
+            "y": 55.225
+          },
+          "end": {
+            "x": 86.5,
+            "y": 53.2
+          }
+        },
+        {
+          "width": 1,
+          "net": "VD",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 85.5,
+            "y": 59.5983
+          },
+          "end": {
+            "x": 84.475,
+            "y": 58.5733
+          }
+        },
+        {
+          "width": 1,
+          "net": "VD",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 84.475,
+            "y": 58.5733
+          },
+          "end": {
+            "x": 84.475,
+            "y": 55.225
+          }
+        },
+        {
+          "width": 1,
+          "net": "VD",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 85.5,
+            "y": 61.5
+          },
+          "end": {
+            "x": 85.5,
+            "y": 59.5983
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHASSIS vertical",
+      "trackIds": ["63fae3da-4fd8-4182-b0ca-63395c8833e6"],
+      "pickup": {
+        "x": 58.04,
+        "y": 111.36
+      },
+      "cursors": [
+        {
+          "x": 58.525,
+          "y": 111.4
+        },
+        {
+          "x": 59.025,
+          "y": 111.4
+        },
+        {
+          "x": 60.025,
+          "y": 111.4
+        }
+      ],
+      "removedIds": [
+        "63fae3da-4fd8-4182-b0ca-63395c8833e6",
+        "bafa4e24-2323-492a-a2ee-5f3697114da8"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "CHASSIS",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 58.04,
+            "y": 113.96
+          },
+          "end": {
+            "x": 60.025,
+            "y": 111.975
+          }
+        },
+        {
+          "width": 1,
+          "net": "CHASSIS",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 60.025,
+            "y": 111.975
+          },
+          "end": {
+            "x": 60.025,
+            "y": 106.775
+          }
+        },
+        {
+          "width": 1,
+          "net": "CHASSIS",
+          "layer": "B.Cu",
+          "locked": false,
+          "start": {
+            "x": 60.025,
+            "y": 106.775
+          },
+          "end": {
+            "x": 61,
+            "y": 105.8
+          }
+        }
+      ]
+    },
+    {
+      "name": "FP horizontal",
+      "trackIds": ["9a5cd4bd-b9ee-4c87-a504-896cb869d829"],
+      "pickup": {
+        "x": 92.1075,
+        "y": 53.2
+      },
+      "cursors": [
+        {
+          "x": 92.1,
+          "y": 53.725
+        },
+        {
+          "x": 92.1,
+          "y": 54.225
+        },
+        {
+          "x": 92.1,
+          "y": 55.225
+        }
+      ],
+      "removedIds": [
+        "12519a87-f36d-4d8a-8d07-65e79f500bb2",
+        "9a5cd4bd-b9ee-4c87-a504-896cb869d829"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "FP",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 91.065,
+            "y": 55.225
+          },
+          "end": {
+            "x": 97.2,
+            "y": 55.225
+          }
+        },
+        {
+          "width": 1,
+          "net": "FP",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 97.2,
+            "y": 55.225
+          },
+          "end": {
+            "x": 101,
+            "y": 59.025
+          }
+        },
+        {
+          "width": 1,
+          "net": "FP",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 89.04,
+            "y": 53.2
+          },
+          "end": {
+            "x": 91.065,
+            "y": 55.225
+          }
+        }
+      ]
+    },
+    {
+      "name": "VIN return positive single",
+      "trackIds": ["4250b0d8-e0c8-40b7-a54a-1a8624235dbf"],
+      "pickup": {
+        "x": 68.65950000000001,
+        "y": 81.75
+      },
+      "cursors": [
+        {
+          "x": 68.625,
+          "y": 82.275
+        },
+        {
+          "x": 68.625,
+          "y": 82.775
+        },
+        {
+          "x": 68.625,
+          "y": 83.775
+        }
+      ],
+      "removedIds": [
+        "13f7f42c-2d00-47c4-9ed2-e6c696fa06c1",
+        "4250b0d8-e0c8-40b7-a54a-1a8624235dbf"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 86.469,
+            "y": 71.6
+          },
+          "end": {
+            "x": 74.294,
+            "y": 83.775
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 74.294,
+            "y": 83.775
+          },
+          "end": {
+            "x": 63.025,
+            "y": 83.775
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 63.025,
+            "y": 83.775
+          },
+          "end": {
+            "x": 61,
+            "y": 81.75
+          }
+        }
+      ]
+    },
+    {
+      "name": "VIN return two selected spans",
+      "trackIds": ["4250b0d8-e0c8-40b7-a54a-1a8624235dbf", "13f7f42c-2d00-47c4-9ed2-e6c696fa06c1"],
+      "pickup": {
+        "x": 68.65950000000001,
+        "y": 81.75
+      },
+      "cursors": [
+        {
+          "x": 68.625,
+          "y": 82.275
+        },
+        {
+          "x": 68.625,
+          "y": 82.775
+        },
+        {
+          "x": 68.625,
+          "y": 83.775
+        }
+      ],
+      "removedIds": [
+        "13f7f42c-2d00-47c4-9ed2-e6c696fa06c1",
+        "4250b0d8-e0c8-40b7-a54a-1a8624235dbf"
+      ],
+      "tracks": [
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 66.6,
+            "y": 81.75
+          },
+          "end": {
+            "x": 61,
+            "y": 81.75
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 68.625,
+            "y": 83.775
+          },
+          "end": {
+            "x": 66.6,
+            "y": 81.75
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 74.294,
+            "y": 83.775
+          },
+          "end": {
+            "x": 68.625,
+            "y": 83.775
+          }
+        },
+        {
+          "width": 1,
+          "net": "VIN_N",
+          "layer": "F.Cu",
+          "locked": false,
+          "start": {
+            "x": 86.469,
+            "y": 71.6
+          },
+          "end": {
+            "x": 74.294,
+            "y": 83.775
+          }
+        }
+      ]
+    }
+  ]
+}

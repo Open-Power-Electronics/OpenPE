@@ -17,11 +17,11 @@ const footprint=board.footprints.find(f=>f.symbolId&&f.pads.length),part=project
 const solid=newModelCadObject(board,'box');solid.holes=[{id:crypto.randomUUID(),x:0,y:0,diameterMm:3.2}];
 window.inspectorSaves=0;window.solidApplies=0;window.draft=null;
 function Fixture(){const[choice,setChoice]=useState('pad'),[width,setWidth]=useState(280),[visible,setVisible]=useState(true);return <>
-<nav>{['pad','track','via','footprint','text','dimension','zone'].map(v=><button onClick={()=>setChoice(v)} key={v}>{v}</button>)}<button onClick={()=>setWidth(width===280?480:280)}>Resize</button><button onClick={()=>setVisible(!visible)}>Toggle model</button></nav>
+<nav>{['pad','track','via','footprint','mechanical','text','dimension','zone'].map(v=><button onClick={()=>setChoice(v)} key={v}>{v}</button>)}<button onClick={()=>setWidth(width===280?480:280)}>Resize</button><button onClick={()=>setVisible(!visible)}>Toggle model</button></nav>
 <main style={{'--inspector-width':width+'px'}}>
 <section className="column"><header>Schematic</header><div className="inspector part-inspector"><div className="inspector-body"><PartIdentity part={part} library={project.schematic.libraries[part.libId]}/><PartProperties part={part} circuit={project.schematic} spiceAvailable active onSave={()=>{window.inspectorSaves++;return true}}/></div></div></section>
 <section className="column"><header>Layout</header><div className="layout-inspector"><div className="layout-inspector-content"><LayoutProperties key={choice} board={board} schematic={project.schematic} active resetKey snap={v=>v}
-pad={choice==='pad'?footprint.pads[0]:undefined} padOwner={choice==='pad'?footprint:undefined} footprint={choice==='footprint'?footprint:undefined}
+pad={choice==='pad'?footprint.pads[0]:undefined} padOwner={choice==='pad'?footprint:undefined} footprint={choice==='mechanical'?board.footprints.find(f=>f.reference==='MECH1'):choice==='footprint'?footprint:undefined}
 track={choice==='track'?board.tracks[0]:undefined} via={choice==='via'?board.vias[0]:undefined}
 zone={choice==='zone'?{id:crypto.randomUUID(),layer:'F.Cu',netId:board.nets[0].id,clearance:.25,minThickness:.2,thermalGap:.3,thermalBridge:.3,outline:[{x:0,y:0},{x:10,y:0},{x:10,y:10}]}:undefined}
 graphic={choice==='text'?{id:'text',kind:'text',layer:'F.SilkS',width:.15,start:{x:0,y:0},end:{x:0,y:0},text:{value:'Output',rotation:0,size:{x:1,y:1},thickness:.15}}:choice==='dimension'?{id:'dimension',kind:'dimension',layer:'Dwgs.User',width:.15,start:{x:0,y:0},end:{x:20,y:0},dimension:{type:'aligned',height:5,caption:{value:'20 mm',x:10,y:5,rotation:0,size:{x:1,y:1},thickness:.15},format:{prefix:'',suffix:'',units:2,precision:2},style:{arrowLength:1,extensionOffset:.5,textPositionMode:0}}}:undefined}
@@ -135,7 +135,16 @@ try {
     }, theme);
     for (const width of [280, 480]) {
       if (width === 480) await page.getByRole('button', { name: 'Resize', exact: true }).click();
-      for (const choice of ['pad', 'track', 'via', 'footprint', 'text', 'dimension', 'zone']) {
+      for (const choice of [
+        'pad',
+        'track',
+        'via',
+        'footprint',
+        'mechanical',
+        'text',
+        'dimension',
+        'zone',
+      ]) {
         await page.getByRole('button', { name: choice, exact: true }).click();
         const disclosure = page.locator('.layout-inspector summary');
         const summaries = await disclosure.all();

@@ -10,6 +10,8 @@ import {
   MODEL_CAD_EXTENSION,
   MODEL_CAD_NATIVE_VARIABLE,
   modelCadFromProject,
+  modelCadColor,
+  modelCadMaterialColors,
   modelCadGeometryKey,
   modelCadOperandBounds,
   modelCadRequiresPreparation,
@@ -31,6 +33,61 @@ import { parseProject, serializeProject, validateProject } from '../lib/project'
 const source = readFileSync('lib/emc-flyback-example.json', 'utf8');
 const fixture = () => withModelCad(parseProject(source), null);
 const model = (object: ModelCadObject): ModelCAD => ({ version: 1, objects: [object] });
+
+test('explicit CAD colors validate independently of material and never change geometry keys', () => {
+  const box = newModelCadObject(fixture().pcb!, 'box');
+  assert.equal(modelCadColor(box), modelCadMaterialColors.aluminium);
+  const colored = validateModelCadObject({ ...box, color: '#3A6cF2' });
+  assert.equal(modelCadColor(colored), 0x3a6cf2);
+  assert.equal(modelCadColor({ ...colored, material: 'pmma' }), 0x3a6cf2);
+  assert.equal(modelCadGeometryKey(colored), modelCadGeometryKey(box));
+  assert.deepEqual(modelCadShape(colored), modelCadShape(box));
+  for (const color of ['red', '#abc', '#12345678', '#12345g', '#123456extra', '', null, 123456])
+    assert.throws(() => validateModelCadObject({ ...box, color }), /Invalid/);
+  const tool = newModelCadObject(fixture().pcb!, 'cylinder');
+  const combined = newModelCadBooleanObject(colored, tool, 'union');
+  assert.equal(combined.color, colored.color);
+  assert.equal('color' in combined.boolean!.operands[0].shape, false);
+});
+
+test('CAD color updates, reset, native round trips and undo retain unrelated project files', () => {
+  const project = fixture();
+  const box = newModelCadObject(project.pcb!, 'box');
+  const core = new ProjectCore(withModelCad(project, model(box)));
+  const before = core.getSnapshot();
+  const native = core.getNativeFiles();
+  const boardId = project.pcb!.id;
+  const colored = { ...box, color: '#d94838' };
+  core.execute('modelCad.update', { boardId, object: colored });
+  assert.equal(core.getSnapshot().undoDepth, before.undoDepth + 1);
+  assert.equal(core.getSnapshot().project!.pcb, before.project!.pcb);
+  const files = core.getNativeFiles();
+  const reopened = projectFromNativeFiles(files);
+  assert.equal(modelCadFromProject(reopened)!.objects[0].color, colored.color);
+  assert.deepEqual(projectNativeFiles(reopened), files);
+  for (const file of files.files.filter((file) => !file.name.endsWith('.kicad_pro')))
+    assert.deepEqual(
+      file,
+      native.files.find((original) => original.name === file.name),
+    );
+  core.undo();
+  assert.deepEqual(core.getNativeFiles(), native);
+  core.redo();
+  assert.equal(modelCadFromProject(core.getSnapshot().project!)!.objects[0].color, colored.color);
+  const copy = core.execute('modelCad.duplicate', {
+    boardId,
+    ids: [box.id],
+    offset: { x: 5, y: 0, z: 0 },
+  }) as { objects: ModelCadObject[] };
+  assert.equal(copy.objects[0].color, colored.color);
+  const reset: ModelCadObject = { ...colored };
+  delete reset.color;
+  core.execute('modelCad.update', { boardId, object: reset });
+  assert.equal(modelCadFromProject(core.getSnapshot().project!)!.objects[0].color, undefined);
+  assert.equal(modelCadFromProject(core.getSnapshot().project!)!.objects[1].color, colored.color);
+  core.undo();
+  assert.equal(modelCadFromProject(core.getSnapshot().project!)!.objects[0].color, colored.color);
+});
 
 test('explicit edge treatments address stable individual base edges', () => {
   const box = newModelCadObject(fixture().pcb!, 'box');
@@ -252,7 +309,13 @@ test('native primitive settings and Source changes preserve other CAD, provenanc
   assert.deepEqual(projectNativeFiles(loaded), files);
   const pro = files.files.find((file) => file.name.endsWith('.kicad_pro'))!;
   const settings = JSON.parse(pro.source);
-  const edit = { ...box, size: { x: 40, y: 20, z: 5 }, material: 'pmma', opacity: 0.3 };
+  const edit = {
+    ...box,
+    size: { x: 40, y: 20, z: 5 },
+    material: 'pmma',
+    opacity: 0.3,
+    color: '#3366cc',
+  };
   settings.text_variables[MODEL_CAD_NATIVE_VARIABLE] = JSON.stringify(
     model(edit as ModelCadObject),
   );
@@ -260,6 +323,7 @@ test('native primitive settings and Source changes preserve other CAD, provenanc
   assert.equal(modelCadFromProject(core.previewSource()!)!.objects[0].size.x, 40);
   assert.ok(core.applySource());
   assert.equal(modelCadFromProject(core.getSnapshot().project!)!.objects[0].material, 'pmma');
+  assert.equal(modelCadFromProject(core.getSnapshot().project!)!.objects[0].color, '#3366cc');
   assert.deepEqual(core.getSnapshot().project!.extensions['example.test'], { retained: true });
   delete settings.text_variables[MODEL_CAD_NATIVE_VARIABLE];
   core.updateNativeSource(pro.name, JSON.stringify(settings));

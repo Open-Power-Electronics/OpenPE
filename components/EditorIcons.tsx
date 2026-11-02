@@ -1,5 +1,20 @@
 import { createLucideIcon } from 'lucide-react';
 
+// Adapted from Microsoft VS Code Codicons source-control.svg.
+// Round nodes and balanced branch spacing use the shared 2-unit stroke.
+// Attribution and pinned source: public/licenses/vscode-codicons.txt (CC BY 4.0).
+export const GitIcon = createLucideIcon('Git', [
+  ['path', { d: 'M5.5 8v8', key: 'stem' }],
+  ['path', { d: 'M5.5 16a2.5 2.5 0 0 1 2.5-2.5h8a2.5 2.5 0 0 0 2.5-2.5', key: 'branch' }],
+  ['circle', { cx: '5.5', cy: '5.5', r: '2.5', key: 'head' }],
+  ['circle', { cx: '5.5', cy: '18.5', r: '2.5', key: 'base' }],
+  ['circle', { cx: '18.5', cy: '8.5', r: '2.5', key: 'fork' }],
+]);
+
+// KiCad 10 add_line.svg (Draw Wires), adapted to the shared monochrome palette.
+// Attribution and source: public/licenses/kicad-icons.txt (CC BY-SA 4.0).
+export const WireIcon = createLucideIcon('Wire', [['path', { d: 'M21 3 3 21', key: 'wire' }]]);
+
 export const SchematicIcon = createLucideIcon('Schematic', [
   ['path', { d: 'M5 3h8v6H5z', key: 'resistor' }],
   ['path', { d: 'M2 6h3m8 0h9m-4 0v6m-4 0h8m-8 4h8m-4 0v4', key: 'circuit' }],

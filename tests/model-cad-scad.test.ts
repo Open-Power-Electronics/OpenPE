@@ -136,6 +136,20 @@ const fixture = (): ModelCAD => ({
   ],
 });
 
+test('OpenSCAD uses per-body RGB overrides while retaining geometry and opacity', () => {
+  const input = fixture();
+  const original = exportModelCadScad(input);
+  input.objects[0].color = '#3366cc';
+  const colored = exportModelCadScad(input);
+  assert.ok(colored.includes(`color([0.2, 0.4, 0.8, ${input.objects[0].opacity}])`));
+  assert.equal(
+    colored.replace(/color\(\[[^\]]+\]\)/g, 'color()'),
+    original.replace(/color\(\[[^\]]+\]\)/g, 'color()'),
+  );
+  delete input.objects[0].color;
+  assert.equal(exportModelCadScad(input), original);
+});
+
 test('OpenSCAD export writes every solid kind with intrinsic XYZ poses, holes and nested Booleans', () => {
   const model = fixture();
   const original = structuredClone(model);
@@ -192,9 +206,9 @@ test('OpenSCAD export writes every solid kind with intrinsic XYZ poses, holes an
 });
 
 test('OpenSCAD export reproduces the EMC Flyback enclosure from its native Model CAD', async () => {
-  const native = JSON.parse(
-    await readFile('recent/emc-flyback/emc-flyback.kicad_pro', 'utf8'),
-  ) as { text_variables: Record<string, string> };
+  const native = JSON.parse(await readFile('recent/emc-flyback/emc-flyback.kicad_pro', 'utf8')) as {
+    text_variables: Record<string, string>;
+  };
   const model = JSON.parse(native.text_variables.OPENPE_MODEL_CAD) as ModelCAD;
   const original = structuredClone(model);
   const scad = exportModelCadScad(model);

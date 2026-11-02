@@ -120,7 +120,7 @@ export default function FieldProperties({
       <div className="geometry-fields text-geometry">
         {(['x', 'y'] as const).map((axis) => (
           <label key={axis}>
-            {axis.toUpperCase()} (mm)
+            {axis.toUpperCase()}
             <QuantityInput
               unit={'mm'}
               aria-label={`Text ${axis.toUpperCase()} position`}
