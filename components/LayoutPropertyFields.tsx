@@ -3,10 +3,13 @@ import { quantityUnitFromLabel, quantityLabel } from './quantity-units';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Select from './Select';
 
-export function PropertySelect(props: React.ComponentProps<typeof Select>) {
+export function PropertySelect({
+  displayLabel,
+  ...props
+}: React.ComponentProps<typeof Select> & { displayLabel?: string }) {
   return (
     <div className="layout-property-select">
-      <span>{props.label}</span>
+      <span>{displayLabel ?? props.label}</span>
       <Select {...props} />
     </div>
   );

@@ -19,7 +19,6 @@ export type ModelCadSelectableFace =
       kind: 'cylinder';
       center: ModelCadPoint;
       radiusMm: number;
-      inward: boolean;
     };
 
 function profilePoints(object: ModelCadObject): ModelCadPoint[] {
@@ -54,7 +53,6 @@ export function modelCadSelectableFaces(object: ModelCadObject): ModelCadSelecta
       kind: 'cylinder',
       center: { x: 0, y: 0 },
       radiusMm: object.size.x / 2,
-      inward: false,
     });
   else {
     const points = profilePoints(object);
@@ -80,16 +78,6 @@ export function modelCadSelectableFaces(object: ModelCadObject): ModelCadSelecta
       });
     }
   }
-  object.holes.forEach((hole, index) =>
-    faces.push({
-      id: `hole:${index}`,
-      label: `Hole ${index + 1} wall`,
-      kind: 'cylinder',
-      center: { x: hole.x, y: hole.y },
-      radiusMm: hole.diameterMm / 2,
-      inward: true,
-    }),
-  );
   return faces.filter((face) => ids.includes(face.id));
 }
 
@@ -104,12 +92,6 @@ function segmentDistance(point: ModelCadPoint, a: ModelCadPoint, b: ModelCadPoin
 }
 
 function inProfile(object: ModelCadObject, point: ModelCadPoint, epsilon: number) {
-  if (
-    object.holes.some(
-      (hole) => Math.hypot(point.x - hole.x, point.y - hole.y) < hole.diameterMm / 2 - epsilon,
-    )
-  )
-    return false;
   if (circular(object)) return Math.hypot(point.x, point.y) <= object.size.x / 2 + epsilon;
   const points = profilePoints(object);
   let inside = false;
@@ -157,7 +139,7 @@ export function modelCadFaceAtPoint(
       const dx = point.x - face.center.x;
       const dy = point.y - face.center.y;
       distance = Math.abs(Math.hypot(dx, dy) - face.radiusMm);
-      expected = new THREE.Vector3(dx, dy, 0).normalize().multiplyScalar(face.inward ? -1 : 1);
+      expected = new THREE.Vector3(dx, dy, 0).normalize();
     }
     const alignment = direction ? direction.dot(expected) : 0;
     if (distance <= tolerance && (!direction || alignment > 0.5))
@@ -178,11 +160,7 @@ function capGeometry(object: ModelCadObject) {
     points.slice(1).forEach((point) => shape.lineTo(point.x, -point.y));
     shape.closePath();
   }
-  for (const hole of object.holes) {
-    const cut = new THREE.Path();
-    cut.absarc(hole.x, -hole.y, hole.diameterMm / 2, 0, 2 * Math.PI, false);
-    shape.holes.push(cut);
-  }
+
   return new THREE.ShapeGeometry(shape, 48);
 }
 

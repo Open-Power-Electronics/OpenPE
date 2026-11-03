@@ -239,36 +239,6 @@ export default function LayoutGraphicProperties({
               update({ end }),
             )}
           {graphic.mid && point('Middle', graphic.mid, (mid) => update({ mid }))}
-          {graphic.points && (
-            <details
-              className="layout-property-details"
-              open={verticesOpen}
-              onToggle={(event) => setVerticesOpen(event.currentTarget.open)}
-            >
-              <summary>Polygon vertices</summary>
-              {verticesOpen &&
-                graphic.points.slice(0, vertexLimit).map((vertex, index) => (
-                  <div key={index}>
-                    {point(`Vertex ${index + 2}`, vertex, (value) =>
-                      update({
-                        points: graphic.points!.map((existing, i) =>
-                          i === index ? value : existing,
-                        ),
-                      }),
-                    )}
-                  </div>
-                ))}
-              {verticesOpen && vertexLimit < graphic.points.length && (
-                <button
-                  className="secondary"
-                  disabled={!active}
-                  onClick={() => setVertexLimit((limit) => limit + 128)}
-                >
-                  Show more vertices
-                </button>
-              )}
-            </details>
-          )}
           {dimension &&
             point('Text position', dimension.caption, (position) =>
               updateDimension({ caption: { ...dimension.caption, ...position } }),
@@ -278,12 +248,6 @@ export default function LayoutGraphicProperties({
       {graphic.text && textFields(graphic.text, (text) => update({ text }), true)}
       {dimension && (
         <>
-          {textFields(
-            dimension.caption,
-            (caption) => updateDimension({ caption: { ...dimension.caption, ...caption } }),
-            false,
-            false,
-          )}
           <PropertySection title="Dimension" showTitle={false}>
             <PropertyRow
               label="Dimension type"
@@ -309,18 +273,6 @@ export default function LayoutGraphicProperties({
               }}
               multiline
             />
-            <PropertyDetails title="Dimension format">
-              <PropertyRow label="Prefix" value={dimension.format.prefix || 'None'} />
-              <PropertyRow label="Suffix" value={dimension.format.suffix || 'None'} />
-              <PropertyRow
-                label="Units"
-                value={['Inches', 'Mils', 'Millimeters', 'Automatic'][dimension.format.units]}
-              />
-              <PropertyRow
-                label="Precision"
-                value={dimension.format.precision === 6 ? 'By unit' : dimension.format.precision}
-              />
-            </PropertyDetails>
             {dimension.type === 'aligned' &&
               number('Dimension height (mm)', dimension.height ?? 0, (height) =>
                 updateDimension({ height }),
@@ -329,98 +281,144 @@ export default function LayoutGraphicProperties({
               number('Leader length (mm)', dimension.leaderLength ?? 0, (leaderLength) =>
                 updateDimension({ leaderLength }),
               )}
-            <PropertyDetails title="Dimension style">
-              {number(
-                'Arrow length (mm)',
-                dimension.style.arrowLength,
-                (arrowLength) => updateDimension({ style: { ...dimension.style, arrowLength } }),
-                { min: 0.0001 },
-              )}
-              {dimension.type === 'aligned'
-                ? select(
-                    'Arrow direction',
-                    dimension.style.arrowDirection ?? 'outward',
-                    [
-                      { value: 'inward', label: 'Inward' },
-                      { value: 'outward', label: 'Outward' },
-                    ],
-                    (arrowDirection) =>
-                      updateDimension({
-                        style: {
-                          ...dimension.style,
-                          arrowDirection: arrowDirection as 'inward' | 'outward',
-                        },
-                      }),
-                  )
-                : dimension.style.arrowDirection !== undefined && (
-                    <PropertyRow
-                      label="Arrow direction"
-                      value={dimension.style.arrowDirection === 'inward' ? 'Inward' : 'Outward'}
-                    />
-                  )}
-              {number('Extension offset (mm)', dimension.style.extensionOffset, (extensionOffset) =>
-                updateDimension({ style: { ...dimension.style, extensionOffset } }),
-              )}
-              {dimension.type === 'aligned'
-                ? number(
-                    'Extension height (mm)',
-                    dimension.style.extensionHeight ?? 0,
-                    (extensionHeight) =>
-                      updateDimension({ style: { ...dimension.style, extensionHeight } }),
-                  )
-                : dimension.style.extensionHeight !== undefined && (
-                    <PropertyRow
-                      label="Extension height (mm)"
-                      value={dimension.style.extensionHeight}
-                    />
-                  )}
-              {select(
-                'Text position mode',
-                String(dimension.style.textPositionMode),
-                [
-                  { value: '0', label: 'Outside' },
-                  { value: '1', label: 'Inline' },
-                  { value: '2', label: 'Manual' },
-                ],
-                (value) =>
-                  updateDimension({
-                    style: { ...dimension.style, textPositionMode: Number(value) },
-                  }),
-              )}
-              {dimension.type === 'leader'
-                ? select(
-                    'Text frame',
-                    String(dimension.style.textFrame ?? 0),
-                    [
-                      { value: '0', label: 'None' },
-                      { value: '1', label: 'Rectangle' },
-                      { value: '2', label: 'Circle' },
-                      { value: '3', label: 'Rounded rectangle' },
-                    ],
-                    (value) =>
-                      updateDimension({ style: { ...dimension.style, textFrame: Number(value) } }),
-                  )
-                : dimension.style.textFrame !== undefined && (
-                    <PropertyRow
-                      label="Text frame"
-                      value={
-                        ['None', 'Rectangle', 'Circle', 'Rounded rectangle'][
-                          dimension.style.textFrame
-                        ]
-                      }
-                    />
-                  )}
-              <PropertyToggle
-                active={active}
-                label="Keep text aligned"
-                checked={dimension.style.keepTextAligned ?? dimension.type !== 'leader'}
-                onChange={(keepTextAligned) =>
-                  updateDimension({ style: { ...dimension.style, keepTextAligned } })
-                }
-              />
-            </PropertyDetails>
           </PropertySection>
+          {textFields(
+            dimension.caption,
+            (caption) => updateDimension({ caption: { ...dimension.caption, ...caption } }),
+            false,
+            false,
+          )}
+          <PropertyDetails title="Dimension format">
+            <PropertyRow label="Prefix" value={dimension.format.prefix || 'None'} />
+            <PropertyRow label="Suffix" value={dimension.format.suffix || 'None'} />
+            <PropertyRow
+              label="Units"
+              value={['Inches', 'Mils', 'Millimeters', 'Automatic'][dimension.format.units]}
+            />
+            <PropertyRow
+              label="Precision"
+              value={dimension.format.precision === 6 ? 'By unit' : dimension.format.precision}
+            />
+          </PropertyDetails>
+          <PropertyDetails title="Dimension style">
+            {number(
+              'Arrow length (mm)',
+              dimension.style.arrowLength,
+              (arrowLength) => updateDimension({ style: { ...dimension.style, arrowLength } }),
+              { min: 0.0001 },
+            )}
+            {dimension.type === 'aligned'
+              ? select(
+                  'Arrow direction',
+                  dimension.style.arrowDirection ?? 'outward',
+                  [
+                    { value: 'inward', label: 'Inward' },
+                    { value: 'outward', label: 'Outward' },
+                  ],
+                  (arrowDirection) =>
+                    updateDimension({
+                      style: {
+                        ...dimension.style,
+                        arrowDirection: arrowDirection as 'inward' | 'outward',
+                      },
+                    }),
+                )
+              : dimension.style.arrowDirection !== undefined && (
+                  <PropertyRow
+                    label="Arrow direction"
+                    value={dimension.style.arrowDirection === 'inward' ? 'Inward' : 'Outward'}
+                  />
+                )}
+            {number('Extension offset (mm)', dimension.style.extensionOffset, (extensionOffset) =>
+              updateDimension({ style: { ...dimension.style, extensionOffset } }),
+            )}
+            {dimension.type === 'aligned'
+              ? number(
+                  'Extension height (mm)',
+                  dimension.style.extensionHeight ?? 0,
+                  (extensionHeight) =>
+                    updateDimension({ style: { ...dimension.style, extensionHeight } }),
+                )
+              : dimension.style.extensionHeight !== undefined && (
+                  <PropertyRow
+                    label="Extension height (mm)"
+                    value={dimension.style.extensionHeight}
+                  />
+                )}
+            {select(
+              'Text position mode',
+              String(dimension.style.textPositionMode),
+              [
+                { value: '0', label: 'Outside' },
+                { value: '1', label: 'Inline' },
+                { value: '2', label: 'Manual' },
+              ],
+              (value) =>
+                updateDimension({
+                  style: { ...dimension.style, textPositionMode: Number(value) },
+                }),
+            )}
+            {dimension.type === 'leader'
+              ? select(
+                  'Text frame',
+                  String(dimension.style.textFrame ?? 0),
+                  [
+                    { value: '0', label: 'None' },
+                    { value: '1', label: 'Rectangle' },
+                    { value: '2', label: 'Circle' },
+                    { value: '3', label: 'Rounded rectangle' },
+                  ],
+                  (value) =>
+                    updateDimension({ style: { ...dimension.style, textFrame: Number(value) } }),
+                )
+              : dimension.style.textFrame !== undefined && (
+                  <PropertyRow
+                    label="Text frame"
+                    value={
+                      ['None', 'Rectangle', 'Circle', 'Rounded rectangle'][
+                        dimension.style.textFrame
+                      ]
+                    }
+                  />
+                )}
+            <PropertyToggle
+              active={active}
+              label="Keep text aligned"
+              checked={dimension.style.keepTextAligned ?? dimension.type !== 'leader'}
+              onChange={(keepTextAligned) =>
+                updateDimension({ style: { ...dimension.style, keepTextAligned } })
+              }
+            />
+          </PropertyDetails>
         </>
+      )}
+      {geometry && graphic.points && (
+        <details
+          className="layout-property-details"
+          open={verticesOpen}
+          onToggle={(event) => setVerticesOpen(event.currentTarget.open)}
+        >
+          <summary>Polygon vertices</summary>
+          {verticesOpen &&
+            graphic.points.slice(0, vertexLimit).map((vertex, index) => (
+              <div key={index}>
+                {point(`Vertex ${index + 2}`, vertex, (value) =>
+                  update({
+                    points: graphic.points!.map((existing, i) => (i === index ? value : existing)),
+                  }),
+                )}
+              </div>
+            ))}
+          {verticesOpen && vertexLimit < graphic.points.length && (
+            <button
+              className="secondary"
+              disabled={!active}
+              onClick={() => setVertexLimit((limit) => limit + 128)}
+            >
+              Show more vertices
+            </button>
+          )}
+        </details>
       )}
     </>
   );

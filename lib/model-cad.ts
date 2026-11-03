@@ -18,7 +18,6 @@ export type ModelCadEdgeTreatment = {
 export type ModelCadSelectableEdge =
   | { id: string; label: string; kind: 'line'; start: ModelCadVector; end: ModelCadVector }
   | { id: string; label: string; kind: 'circle'; center: ModelCadVector; radiusMm: number };
-export type ModelCadShapeHole = { x: number; y: number; diameterMm: number };
 export type ModelCadBooleanOperation = 'union' | 'difference' | 'intersection';
 export type ModelCadOperand = {
   shape: ModelCadShape;
@@ -33,7 +32,6 @@ export type ModelCadBoolean = {
 export type ModelCadShape = {
   kind: 'box' | 'cylinder' | 'extrusion' | 'boolean';
   size: ModelCadVector;
-  holes: ModelCadShapeHole[];
   profile?: ModelCadProfile;
   edgeTreatment?: ModelCadEdgeTreatment;
   boolean?: ModelCadBoolean;
@@ -52,8 +50,6 @@ export type ModelCadObject = {
   opacity: number;
   /** Optional RGB appearance override; absence uses the selected material color. */
   color?: string;
-  /** Local XY hole centres, cut through the object's local Z axis. */
-  holes: { id: string; x: number; y: number; diameterMm: number }[];
   profile?: ModelCadProfile;
   edgeTreatment?: ModelCadEdgeTreatment;
   boolean?: ModelCadBoolean;
@@ -83,7 +79,7 @@ const identity = {
   type: 'string',
   pattern: '^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$',
 };
-const modelCadProfileSchema = {
+export const modelCadProfileSchema = {
   oneOf: [
     object({ kind: { const: 'rectangle' } }),
     object({ kind: { const: 'circle' } }),
@@ -109,19 +105,13 @@ const modelCadEdgeTreatmentSchema = object({
     items: {
       type: 'string',
       maxLength: 32,
-      pattern: '^(?:(?:profile|hole):(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$',
+      pattern: '^(?:profile:(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$',
     },
   },
 });
-const shapeHolesSchema = {
-  type: 'array',
-  maxItems: 32,
-  items: object({ x: number(-500, 500), y: number(-500, 500), diameterMm: number(0.5, 500) }),
-};
 function shapeSchema(depth: number): Record<string, unknown> {
   const common = {
     size: vector(0.5, 1000),
-    holes: shapeHolesSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema,
   };
   const alternatives: Record<string, unknown>[] = [
@@ -167,16 +157,6 @@ export const modelCadObjectSchema = object(
     material: { enum: ['aluminium', 'pmma', 'plastic'] },
     opacity: number(0.05, 1),
     color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', minLength: 7, maxLength: 7 },
-    holes: {
-      type: 'array',
-      maxItems: 32,
-      items: object({
-        id: identity,
-        x: number(-500, 500),
-        y: number(-500, 500),
-        diameterMm: number(0.5, 500),
-      }),
-    },
     profile: modelCadProfileSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema,
     boolean: {
@@ -230,25 +210,6 @@ function intersects(a: ModelCadPoint, b: ModelCadPoint, c: ModelCadPoint, d: Mod
       : false,
   );
 }
-function profileClearance(profile: ModelCadProfile, size: ProfileSize, point: ModelCadPoint) {
-  if (profile.kind === 'circle') return size.x / 2 - Math.hypot(point.x, point.y);
-  if (profile.kind === 'rectangle')
-    return Math.min(size.x / 2 - Math.abs(point.x), size.y / 2 - Math.abs(point.y));
-  let inside = false,
-    distance = Infinity;
-  for (let i = 0; i < profile.points.length; i++) {
-    const a = profile.points[i],
-      b = profile.points[(i + 1) % profile.points.length];
-    distance = Math.min(distance, segmentDistance(point, a, b));
-    if (
-      a.y > point.y !== b.y > point.y &&
-      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
-    )
-      inside = !inside;
-  }
-  return inside || distance <= epsilon ? distance : -distance;
-}
-
 /** Closed profiles are local XY; polygon closure is implicit and its envelope is centred. */
 export function validateModelCadProfile(input: unknown, size: ProfileSize): ModelCadProfile {
   const result = checkProfile(input);
@@ -332,14 +293,6 @@ function selectableEdges(shape: ModelCadShape): ModelCadSelectableEdge[] {
           start: { ...points[index], z },
           end: { ...points[(index + 1) % points.length], z },
         });
-    for (let index = 0; index < shape.holes.length; index++)
-      edges.push({
-        id: `hole:${side}:${index}`,
-        label: `Hole ${index + 1} ${side} rim`,
-        kind: 'circle',
-        center: { x: shape.holes[index].x, y: shape.holes[index].y, z },
-        radiusMm: shape.holes[index].diameterMm / 2,
-      });
   }
   if (profile.kind !== 'circle')
     for (let index = 0; index < points.length; index++)
@@ -365,19 +318,11 @@ export function modelCadSelectableEdges(input: ModelCadObject | ModelCadShape) {
 export function validateModelCadShape(input: unknown): ModelCadShape {
   const result = checkShape(input);
   if (!result.valid) return fail(`Invalid shape: ${result.error}.`);
-  let operations = 0,
-    holes = 0;
+  let operations = 0;
   const visit = (shape: ModelCadShape, depth: number) => {
     if (shape.kind === 'cylinder' && shape.size.x !== shape.size.y)
       return fail('A cylinder must have equal X and Y diameters.');
-    const profile: ModelCadProfile | null =
-      shape.kind === 'extrusion'
-        ? validateModelCadProfile(shape.profile, shape.size)
-        : shape.kind === 'box'
-          ? { kind: 'rectangle' }
-          : shape.kind === 'cylinder'
-            ? { kind: 'circle' }
-            : null;
+    if (shape.kind === 'extrusion') validateModelCadProfile(shape.profile, shape.size);
     if (shape.edgeTreatment) {
       const treatment = shape.edgeTreatment;
       const selected = treatment.edges;
@@ -393,26 +338,6 @@ export function validateModelCadShape(input: unknown): ModelCadShape {
         2 * d >= Math.min(shape.size.x, shape.size.y) - epsilon
       )
         return fail('The edge treatment must leave positive body height and profile area.');
-    }
-    holes += shape.holes.length;
-    if (holes > 256) return fail('A shape supports at most 256 through holes.');
-    if (!profile && shape.holes.length)
-      return fail('Boolean bodies use subtractive solids instead of local through holes.');
-    for (let i = 0; i < shape.holes.length; i++) {
-      const hole = shape.holes[i];
-      if (
-        profile &&
-        profileClearance(profile, shape.size, hole) + epsilon < hole.diameterMm / 2 + 0.5
-      )
-        return fail('Each hole needs at least 0.5 mm of material to the object edge.');
-      for (let j = i + 1; j < shape.holes.length; j++) {
-        const other = shape.holes[j];
-        if (
-          Math.hypot(other.x - hole.x, other.y - hole.y) <
-          (other.diameterMm + hole.diameterMm) / 2 + 0.5
-        )
-          return fail('Through holes must leave at least 0.5 mm between them.');
-      }
     }
     if (shape.kind === 'boolean') {
       if (depth > 4 || ++operations > 32)
@@ -437,7 +362,6 @@ export function modelCadShape(body: ModelCadObject | ModelCadShape): ModelCadSha
   const shape: ModelCadShape = {
     kind: body.kind,
     size: { x: body.size.x, y: body.size.y, z: body.size.z },
-    holes: body.holes.map(({ x, y, diameterMm }) => ({ x, y, diameterMm })),
   };
   if (body.profile)
     shape.profile =
@@ -549,7 +473,6 @@ export function newModelCadBooleanObject(
     material: target.material,
     opacity: target.opacity,
     ...(target.color === undefined ? {} : { color: target.color }),
-    holes: [],
     boolean: { operation, operands },
   });
 }
@@ -560,11 +483,6 @@ export function validateModelCadObject(input: unknown): ModelCadObject {
   const body = input as ModelCadObject;
   if (!body.name.trim()) return fail('An object name is required.');
   validateModelCadShape(modelCadShape(body));
-  const identities = new Set([body.id.toLowerCase()]);
-  for (const hole of body.holes) {
-    if (identities.has(hole.id.toLowerCase())) return fail('Feature identities must be unique.');
-    identities.add(hole.id.toLowerCase());
-  }
   return body;
 }
 
@@ -575,19 +493,10 @@ export function validateModelCad(input: unknown): ModelCAD {
   if (JSON.stringify(model).length > 256000)
     return fail('Model parameters exceed the supported 256,000-character native limit.');
   const identities = new Set<string>();
-  let holeCount = 0;
-  const countHoles = (shape: ModelCadShape): number =>
-    shape.holes.length +
-    (shape.boolean?.operands.reduce((count, operand) => count + countHoles(operand.shape), 0) ?? 0);
   for (const body of model.objects) {
     validateModelCadObject(body);
-    holeCount += countHoles(body);
-    if (holeCount > 256) return fail('A model supports at most 256 through holes.');
-    for (const id of [body.id, ...body.holes.map((hole) => hole.id)]) {
-      if (identities.has(id.toLowerCase()))
-        return fail('Object and feature identities must be unique.');
-      identities.add(id.toLowerCase());
-    }
+    if (identities.has(body.id.toLowerCase())) return fail('Object identities must be unique.');
+    identities.add(body.id.toLowerCase());
   }
   return model;
 }
@@ -640,7 +549,6 @@ export function newModelCadObject(board: PCB, kind: ModelCadObject['kind']): Mod
     size: { x: kind === 'cylinder' ? 6 : 20, y: kind === 'cylinder' ? 6 : 20, z: 10 },
     material: 'aluminium',
     opacity: 1,
-    holes: [],
     ...(kind === 'extrusion' ? { profile: { kind: 'rectangle' } } : {}),
   });
 }

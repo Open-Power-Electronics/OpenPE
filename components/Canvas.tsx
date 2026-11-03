@@ -34,7 +34,6 @@ import {
   libraries,
   pinPositions,
   snap,
-  uid,
   circuitFingerprint,
 } from '@/lib/circuit';
 import SymbolGraphic from './SymbolGraphic';
@@ -58,6 +57,8 @@ import {
   objectPosition,
   moveSelection,
   transformSelection,
+  saveLabel,
+  placeNoConnect,
 } from '@/lib/schematic-edit';
 import { hasOpenOverlay } from './Dialog';
 import {
@@ -981,16 +982,12 @@ export default function Canvas({
       setTool('select');
     } else if (tool === 'wire') addWire(p);
     else if (tool === 'label' || tool === 'global-label') {
-      const d = structuredClone(doc);
-      const l = {
-        id: uid(),
-        ...p,
-        text: 'NET',
-        ...(tool === 'global-label' ? { scope: 'global' as const, shape: 'input' as const } : {}),
-      };
-      d.labels.push(l);
-      if (!onCommit(d)) return;
-      onSelect(l.id);
+      const result = saveLabel(doc, {
+        position: p,
+        ...(tool === 'global-label' ? { scope: 'global' as const } : {}),
+      });
+      if (!onCommit(result.circuit)) return;
+      onSelect(result.id);
       setTool('select');
     } else if (tool === 'no-connect') {
       const pin = doc.parts
@@ -998,16 +995,13 @@ export default function Canvas({
         .flatMap((p) => visibleSchematicPins(p, doc.libraries[p.libId]).map((pin) => pin.point))
         .find((q) => samePoint(q, p));
       if (!pin) return;
-      const d = structuredClone(doc),
-        existing = d.noConnects?.find((n) => samePoint(n, p));
-      if (existing) {
-        onSelect(existing.id);
+      const result = placeNoConnect(doc, p);
+      if (result.circuit === doc) {
+        onSelect(result.id);
         return;
       }
-      const n = { id: uid(), ...p };
-      (d.noConnects ||= []).push(n);
-      if (onCommit(d)) {
-        onSelect(n.id);
+      if (onCommit(result.circuit)) {
+        onSelect(result.id);
         setTool('select');
       }
     } else {

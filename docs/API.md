@@ -76,6 +76,13 @@ Registration additionally supplies `handler(input, context)`, optional `availabl
 
 ### Validation and lifecycle
 
+The numeric schema subset includes positive finite `multipleOf`, using the document
+validators' four-decimal quotient tolerance for binary division noise. PCB
+property schemas in [`core/layout-property-schemas.json`](../core/layout-property-schemas.json)
+are generated from the canonical definitions in `scripts/build-format.mjs`;
+local nonrecursive references are expanded before registration. Complete Core
+validation still checks object associations, aggregate limits and native geometry.
+
 Inputs/results must be finite JSON. Defaults are 32 MiB per input/result, nesting depth at most 128, 64 KiB per event and 256 retained events. Host options can change `maxDataBytes`, `maxEventBytes`, `eventLimit` (clamped to 1–2,000), `now` and `revision`. Inputs use the bounded interpreted JSON Schema subset in [`api/capability-schema.ts`](../api/capability-schema.ts); unsupported keywords fail registration. Results are checked as bounded JSON; there is no registered output-schema field.
 
 The mounted host rejects a command whose supplied `expectedRevision` differs from the current Core revision, checking again after synchronous availability and start observers before calling the handler. Core checks direct calls too; asynchronous library handlers recheck after loading. Revisions are **strings at this boundary**, including changes to Source drafts and editing barriers. A revision does not version all presentation/plugin state. Actor metadata does not bypass review, Source gates, plugin lifecycle or native grants.
@@ -140,7 +147,24 @@ Owner is `core`, except `capabilities.list` (`api`). Queries have mutation `fals
 
 Pending Source blocks non-Source document commands, undo/redo, sheet switching and version creation/restoration. Read queries remain usable except `schematic.erc` and `layout.drc`, which require applied Source. File drafts survive file selection; applying them is atomic at the project transaction level. Opaque aggregate `sourceDraft` can contain a native-file envelope; do not assume it equals the currently selected file's text. Per-file text comes from `source.files`.
 
+`project.rename` is a Core object command with input `{name:string}` and result
+`ProjectSnapshot`. It trims and validates the GUI's 1–120 character single-line
+display name and updates native project settings as one undo edit. Source,
+revision and close barriers apply.
+
 ## Schematic and component capabilities
+
+The following Core commands share canvas/Properties preparation. They return
+`EditResult`; creation commands additionally return the created or retained ID
+in `selection`. All require `schematicId` and share the normal revision, Source,
+validation and undo gates.
+
+| ID                        | Additional input                               | Behaviour                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schematic.label`         | `{id?,text?,position?,scope?:'global',shape?}` | Create a local/global label or update an existing label. Creation requires position, defaults text to `NET` and global shape to `input`; updates preserve omitted properties and UUID. Positions snap to 1.27 mm. Shape is `input`, `output`, `bidirectional`, `tri_state` or `passive` and requires a global label. Names must be nonblank and at most 4,096 characters. |
+| `schematic.noConnect`     | `{position:Point}`                             | Place on an existing component pin; retain an existing marker without an undo edit.                                                                                                                                                                                                                                                                                       |
+| `schematic.text.position` | `{id,position:Point}`                          | Set a Reference/Value/Sim.Params field or annotation position through `moveText`. Component field IDs use `field/<component UUID>/<field name>`.                                                                                                                                                                                                                          |
+| `schematic.simplify`      | `{}`                                           | Apply the canvas menu's topology-preserving wire simplification once.                                                                                                                                                                                                                                                                                                     |
 
 Owner is `core`; editing commands declare mutation `document`. `schematic.place` and `part.footprint` are host-backed object commands documented under [Library capabilities](#library-capabilities).
 
@@ -215,14 +239,14 @@ type RouteLeg = { layer: Layer; points: Point[]; via?: ViaSize };
 type ZoneChanges = {
   zoneId?: string;
   netId?: string | null;
-  layer?: Layer;
+  layer?: import('../lib/pcb').BoardLayer;
   outline?: Point[];
   holes?: Point[][];
   clearance?: number;
   minThickness?: number;
   thermalGap?: number;
   thermalBridge?: number;
-  priority?: number; // Integer, 0–100.
+  priority?: number; // Integer, 0–10,000.
   padConnection?: 'yes' | 'no' | 'thru_hole_only';
   islandRemovalMode?: number; // Integer, 0–2.
   fillEnabled?: boolean;
@@ -236,29 +260,66 @@ type ZoneChanges = {
 };
 ```
 
-Widths, thickness and via/zone positive dimensions use `0 < value ≤ 1,000` mm in these schemas. The `via` nested inside a `RouteLeg` has the narrower `0 < diameter/drill ≤ 20` mm schema. Routing/via clearance is 0.05–20 mm; zone clearance is 0–1,000 mm. Actual board and drill relationships receive domain validation too. Selection arrays are unique and at most 30,000 entries. A new zone requires `outline`, `layer` and an explicit `netId` (`null` for a keepout); `zoneId` updates must resolve an existing zone. Outline/hole rings have at least three points, with schema and complete-board geometry limits.
+Widths, thickness, via dimensions and zone minimum thickness use `0 < value ≤ 1,000` mm in these schemas. The `via` nested inside a `RouteLeg` has the narrower `0 < diameter/drill ≤ 20` mm schema. Routing/via clearance is 0.05–20 mm; zone clearance and thermal gap/bridge are 0–1,000 mm. Actual board and drill relationships receive domain validation too. Selection arrays are unique and at most 30,000 entries. A new zone requires `outline`, `layer` and an explicit `netId` (`null` for a keepout); `zoneId` updates must resolve an existing zone. Outline/hole rings have at least three points, with schema and complete-board geometry limits.
 
 Routes contain 1–65 legs and at most 15,000 points in total. Each non-final leg must end at the next leg's start, change layer and supply a through via; the final leg cannot contain an unfinished via transition. Blocked routes/drags fail before committing. Route validation and the separate read-only `layout.drc` query have bounded coverage; neither provides automatic routing, complete KiCad rule parity or manufacturing qualification. Saved fills require final review; Gerber export neither refills nor proves manufacturing readiness. See [Layout](LAYOUT.md).
 
 Move, rotation and deletion reject a selection containing locked tracks before writes. Connected drag, corner drag and Shove keep locked neighbours fixed. Track lock changes are document edits with whole-project undo and native persistence; changing only a lock retains saved copper fills. Explicit unlocking may share one `layout.track.properties` transaction with a net, layer or width change. Other objects retain their existing bounded lock metadata support.
 
+### Layout object Properties
+
+`layout.object` is a read-only Core query taking `{boardId,kind,id}`, where `kind`
+is `footprint`, `pad`, `track`, `via`, `graphic` or `zone`. It returns an independent
+copy of that complete native board record. No host path permissions or private
+project backing are included. Use it before editing to retain unrelated metadata.
+
+These Core object commands require `boardId` and return `{revision}`, with
+`layout.graphic` additionally returning `graphicId`. Each uses one whole-project
+transaction and the same Source/revision/close gates as GUI edits. Copper and
+boundary edits invalidate affected fills; captions/model-only edits retain them.
+
+| ID                            | Additional input                                         | Behaviour                                                                                                                                                                                                                                                                                |
+| ----------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `layout.pad.properties`       | `{padId,changes}`                                        | Shared `setPCBPadProperties`: position, rotation, size/shape, drill/offset, rounded/chamfered corners, fabrication and thermal overrides. Identity, pin number, net, type and layers cannot change. Circles normalize diameter; shape changes remove inapplicable corner overrides.      |
+| `layout.via.properties`       | `{viaId,changes}`                                        | Existing via X/Y, net, diameter and drill, with complete Core geometry validation, matching numerical Properties edits.                                                                                                                                                                  |
+| `layout.footprint.properties` | `{footprintId,changes}`                                  | X/Y, rotation, side, board-only reference/value, complete model array and fabrication margins. Side changes share `flipPCBFootprint`, including local pads/artwork/models. Linked captions require `part.properties`; IDs, assignments, pad nets and geometry arrays cannot change here. |
+| `layout.graphic`              | `{graphicId?,graphic}`                                   | Create or replace a complete supported board drawing, polygon outline, text or dimension. `graphic` is the native record without `id`; omission of `graphicId` creates a fresh UUID, while updates retain it.                                                                            |
+| `layout.rectangle.resize`     | `{selection:BoardObject[],bounds:{minX,minY,maxX,maxY}}` | Shared canvas/Properties boundary resize for an Edge.Cuts rectangle or one zone, including its holes. Preserves object UUIDs and rejects nonrectangular outline selections or degenerate bounds.                                                                                         |
+
+Property `changes` omit keys to retain them; `null` clears optional pad/footprint
+overrides (including the explicit `models` member). Required
+geometry cannot be cleared. Runtime discovery contains the exact generated
+nested schemas, including model XYZ transforms, opacity and visibility, board
+text effects and dimension formatting. Domain validation remains authoritative.
+
+`part.properties` accepts rotation within ±360°, rounds it to four decimals and
+normalizes it to [0°, 360°), using the same preparation as GUI numerical Properties.
+Component X/Y use the 1.27 mm schematic grid.
+
+`layout.track.properties` also accepts optional exact `start`/`end` points.
+It shares `setPCBTrackEndpoints`; a locked track rejects endpoint edits unless
+the same transaction explicitly includes `locked:false`. Endpoints retain native
+precision independently of display grid. `layout.zone` accepts supported board
+layers, priorities up to 10,000 and zero thermal gap/bridge as native Properties do.
+
 ## Model CAD capabilities
 
 `modelCad.get`, `modelCad.add`, `modelCad.update`, `modelCad.remove`,
-`modelCad.duplicate` and `modelCad.boolean` are Core-owned and require a current `boardId`. Commands
+`modelCad.duplicate`, `modelCad.sketch.extrude` and `modelCad.boolean` are Core-owned and require a current `boardId`. Commands
 have mutation `document`, review `optional` and the same revision, pending
 Source and close barriers as other document commands. The read query returns
 validated document state while Source is pending. These operations retain the
 PCB and schematic, and do not depend on simulation plugins.
 
-| ID                   | Kind / level | Input                                                                                      | Result                                                                                                                                  |
-| -------------------- | ------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `modelCad.get`       | query / —    | `{boardId}`                                                                                | `{boardId,modelCad:ModelCAD/null}`                                                                                                      |
-| `modelCad.add`       | command / O  | `{boardId,object:ModelCadObject}`                                                          | `{revision,boardId,modelCad,object}`; rejects reused UUIDs.                                                                             |
-| `modelCad.update`    | command / O  | `{boardId,object:ModelCadObject}`                                                          | Same shape as add; replaces an existing object, retaining its UUID.                                                                     |
-| `modelCad.remove`    | command / O  | `{boardId,ids:string[]}`                                                                   | `{revision,boardId,modelCad}`; all selected objects must exist.                                                                         |
-| `modelCad.duplicate` | command / P  | `{boardId,ids:string[],offset:{x,y,z}}`                                                    | `{revision,boardId,modelCad,objects:ModelCadObject[]}`; returns the new copies with fresh body and hole UUIDs.                          |
-| `modelCad.boolean`   | command / P  | `{boardId,operation:'union'/'difference'/'intersection',targetId,toolId,resultId?:string}` | `{revision,boardId,modelCad,object}`; removes both operands and inserts the prepared result at the target's position, as one undo edit. |
+| ID                        | Kind / level | Input                                                                                      | Result                                                                                                                                  |
+| ------------------------- | ------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelCad.get`            | query / —    | `{boardId}`                                                                                | `{boardId,modelCad:ModelCAD/null}`                                                                                                      |
+| `modelCad.add`            | command / O  | `{boardId,object:ModelCadObject}`                                                          | `{revision,boardId,modelCad,object}`; rejects reused UUIDs.                                                                             |
+| `modelCad.update`         | command / O  | `{boardId,object:ModelCadObject}`                                                          | Same shape as add; replaces an existing object, retaining its UUID.                                                                     |
+| `modelCad.remove`         | command / O  | `{boardId,ids:string[]}`                                                                   | `{revision,boardId,modelCad}`; all selected objects must exist.                                                                         |
+| `modelCad.duplicate`      | command / P  | `{boardId,ids:string[],offset:{x,y,z}}`                                                    | `{revision,boardId,modelCad,objects:ModelCadObject[]}`; returns the new copies with fresh body UUIDs.                                   |
+| `modelCad.sketch.extrude` | command / P  | `{boardId,sketch:ModelCadSketchExtrusion}`                                                 | `{revision,boardId,modelCad,object}`; one prepared solid from ordered planar contours.                                                  |
+| `modelCad.boolean`        | command / P  | `{boardId,operation:'union'/'difference'/'intersection',targetId,toolId,resultId?:string}` | `{revision,boardId,modelCad,object}`; removes both operands and inserts the prepared result at the target's position, as one undo edit. |
 
 GUI Boolean roles use ordered canvas body selection, without automatic operands.
 Face/edge/line picks remain typed presentation selection until explicit Use owning
@@ -275,7 +336,6 @@ type ModelCadProfile =
 type ModelCadShape = {
   kind: 'box' | 'cylinder' | 'extrusion' | 'boolean';
   size: ModelCadVector; // 0.5–1,000 mm; Boolean uses a conservative envelope.
-  holes: { x: number; y: number; diameterMm: number }[];
   profile?: ModelCadProfile; // Required only for extrusion.
   edgeTreatment?: {
     kind: 'chamfer' | 'fillet';
@@ -299,7 +359,6 @@ type ModelCadObject = {
   material: 'aluminium' | 'pmma' | 'plastic';
   opacity: number; // 0.05–1.
   color?: string; // RGB #RRGGBB; absence uses the selected material color.
-  holes: { id: string; x: number; y: number; diameterMm: number }[];
   profile?: ModelCadShape['profile'];
   edgeTreatment?: ModelCadShape['edgeTreatment'];
   boolean?: ModelCadShape['boolean'];
@@ -312,16 +371,8 @@ profiles and cylinders require equal X/Y diameters. Polygon profiles have 3–12
 vertices within ±500 mm, implicit closure, positive area, no self-crossing/touching
 and centred bounds matching X/Y dimensions. Extrusion depth is Z.
 
-Hole XY is local to the centred body and bounded to ±500 mm; diameter is
-0.5–500 mm. It cuts local Z before pose. Each shape permits 32 holes and the
-complete model permits 256 including nested operands, with at least 0.5 mm of
-material to profile edges and between cuts. Edge treatment accepts 1–448 unique IDs:
-`profile:top:N`, `profile:bottom:N`, `side:N`, `hole:top:N` or `hole:bottom:N`.
-Indices identify the current base profile vertices/segments or ordered holes;
-circle profiles have only profile index 0 and no vertical seam edge. The host
-requires exactly one matching base curve per ID before treatment. Changed or
-ambiguous topology fails without committing. Boolean bodies expose no explicit
-edge catalogue and have no local holes; subtract a body.
+Dedicated local-hole fields are unsupported, including empty `holes` arrays; native files containing them are rejected without rewriting. Openings use sketch contour Difference before extrusion. Edge treatment accepts 1–448 unique IDs: `profile:top:N`, `profile:bottom:N` or `side:N`. Indices address current base-profile segments. Circle profiles have only profile index 0 and no vertical seam. The host requires one exact matching base curve per ID; missing or ambiguous topology rejects the operation. Boolean bodies expose no editable edge catalogue.
+
 Boolean operand trees omit IDs/material and contain at most 32 operations with
 Boolean nesting depth four below the root. Operands retain local XYZ poses; the
 declared centred envelope must conservatively contain the operation's result
@@ -329,6 +380,8 @@ bound. The kernel constructs operands, not the envelope. The entire CAD JSON is
 at most 256,000 characters. Selection arrays contain 1–64 unique identities;
 duplicate offsets use ±100,000 mm per axis and final positions remain bounded.
 Emptying the model removes the native setting; an identical update adds no undo.
+
+`ModelCadSketchExtrusion` requires `{id,name,plane,origin,contours,distance,direction,material,opacity}` with optional `color`. Plane is `XY`/`XZ`/`YZ`; origin uses native XYZ millimetres; direction is `positive`/`negative`/`symmetric`; distance is 0.5–1,000 mm. Each of 1–6 contours is `{operation,profile,size:{x,y},position:{x,y}}`, with local workplane coordinates, analytic `ModelCadProfile`, and `union`/`difference`/`intersection`. The first contour must use `union`. Shared pure `extrudeModelCadSketch` compiles equal-depth analytic operands; planar Booleans distribute over extrusion, so one contour stores an extrusion and multiple contours store the same bounded immutable Boolean solid recipe. GUI and Agent use the same command, host proof, revision checks, native serialization and one undo transaction. Empty or invalid results cannot commit.
 
 The synchronous Core validates recipes but requires exact host preparation for
 new extrusion, Boolean or edge-treatment geometry. `registerProjectCapabilities`
@@ -461,6 +514,16 @@ Owner is `host`. Queries have mutation `false`; placement/assignment are object-
 | `part.footprint`  | command | `{schematicId, partId, libraryId:string}`                                        | `RevisionResult`; empty `libraryId` clears assignment and the linked package while retaining copper.                                          |
 
 Search entries include `id`, `name`, `library`, `description`, `keywords` and optional footprint information. Symbol detail is defined in [`lib/library.ts`](../lib/library.ts); footprint detail is produced by [`server/library-worker.mjs`](../server/library-worker.mjs) and the pinned example adapter [`server/example-footprints.mjs`](../server/example-footprints.mjs). Footprint detail includes `footprint` S-expression, `pads:string[]` and `models:[{path,offset,scale,rotate}]`. These are fixed bundled catalog identities, never filesystem paths. The `symbols` search with `library: 'ti-dcdc'` uses the bounded TI subset. Placement and assignment reject pending Source and stale asynchronous results; actual resolved symbol IDs, units and footprints must validate before Core commits.
+
+`layout.place` is a host object command taking
+`{boardId,partId,libraryId,position:Point,rotation?:number,side?:'front'/'back'}`
+and returning `{id,revision}`. It resolves the verified bundled footprint and
+shares the Layout chooser's `createPCBFootprint` preparation and assignment
+transaction for an unplaced primary-sheet component. Rotation defaults to zero;
+optional back-side placement flips that prepared footprint. Coordinates are
+millimetres within ±100,000; rotation is within ±360°. Existing placements,
+unsupported library geometry, pending Source, stale asynchronous results and
+closing projects reject without committing.
 
 ## Plugin lifecycle capabilities
 
@@ -876,7 +939,7 @@ Project export uses `openpe:export`, a validated complete snapshot and one requi
 
 Image export accepts a verified PNG data URL, at most 48,000,000 characters, with integer dimensions from 1 to 4,096 pixels. It opens a native picker and does not change project dirty state or destination grants.
 
-Model STEP export retains the `exportEnclosure` bridge method and `enclosure.exportStep` capability as current protocol identifiers. It accepts at most 8,000,000 bytes of validated source containing CAD bodies. The host reuses the preview kernel's fixed OpenCASCADE construction with verified packaged Gmsh, a 60-second geometry bound and completed-artifact validation, then opens the native STEP/STP picker and writes atomically to that selection. Renderer input supplies no path, executable or script. Overlapping independent bodies remain separate unless explicitly combined. STEP contains analytical profiles, holes, rim treatments and Boolean results with their XYZ poses, excluding PCB/package shapes and material/color/opacity properties. Export is independent of Thermal FEM plugin state and does not run a solve, edit the project or grant a native project destination.
+Model STEP export retains the `exportEnclosure` bridge method and `enclosure.exportStep` capability as current protocol identifiers. It accepts at most 8,000,000 bytes of validated source containing CAD bodies. The host reuses the preview kernel's fixed OpenCASCADE construction with verified packaged Gmsh, a 60-second geometry bound and completed-artifact validation, then opens the native STEP/STP picker and writes atomically to that selection. Renderer input supplies no path, executable or script. Overlapping independent bodies remain separate unless explicitly combined. STEP contains analytical profiles, selected-edge treatments and Boolean cutouts with their XYZ poses, excluding PCB/package shapes and material/color/opacity properties. Export is independent of Thermal FEM plugin state and does not run a solve, edit the project or grant a native project destination.
 
 ## Examples
 

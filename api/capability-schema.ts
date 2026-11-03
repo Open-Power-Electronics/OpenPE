@@ -21,6 +21,7 @@ const keywords = new Set([
   'maximum',
   'exclusiveMinimum',
   'exclusiveMaximum',
+  'multipleOf',
   'enum',
   'const',
   'anyOf',
@@ -76,6 +77,11 @@ export function compileCapabilitySchema(schema: unknown): (value: unknown) => Ca
       if (s[key] !== undefined && (typeof s[key] !== 'number' || !Number.isFinite(s[key])))
         throw new Error(`Invalid schema ${key}.`);
     }
+    if (
+      s.multipleOf !== undefined &&
+      (typeof s.multipleOf !== 'number' || !Number.isFinite(s.multipleOf) || s.multipleOf <= 0)
+    )
+      throw new Error('Invalid schema multipleOf.');
     if (
       s.required !== undefined &&
       (!Array.isArray(s.required) || s.required.some((key: unknown) => typeof key !== 'string'))
@@ -142,6 +148,12 @@ export function compileCapabilitySchema(schema: unknown): (value: unknown) => Ca
         if (not && !not(value, path, budget)) return error('matches a forbidden shape');
         if (typeof value === 'number') {
           if (!Number.isFinite(value)) return error('must be finite');
+          if (s.multipleOf !== undefined) {
+            const quotient = value / s.multipleOf;
+            // Match the generated document validators' multipleOfPrecision: 4.
+            if (!Number.isFinite(quotient) || Math.abs(Math.round(quotient) - quotient) > 1e-4)
+              return error('has unsupported precision');
+          }
           if (
             (s.minimum !== undefined && value < s.minimum) ||
             (s.maximum !== undefined && value > s.maximum) ||

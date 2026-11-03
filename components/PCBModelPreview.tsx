@@ -396,7 +396,6 @@ function PCBModelPreview({
             box: 'Place box',
             cylinder: 'Place cylinder',
             move: 'Move selection',
-            hole: 'Drill through hole',
             sketch: cad.sketchPhase === 'plane' ? sketchPlanePosition : 'Draw sketch',
             chamfer: 'Chamfer edges',
             fillet: 'Fillet edges',
@@ -1075,7 +1074,6 @@ function PCBModelPreview({
           // next click/Enter, without moving it during a held camera gesture.
           if (
             cadRef.current.tool &&
-            cadRef.current.tool !== 'hole' &&
             (cadRef.current.tool !== 'sketch' || cadRef.current.sketchPhase === 'sketch') &&
             placementPointer.current &&
             !hasOpenOverlay() &&
@@ -1992,10 +1990,7 @@ function PCBModelPreview({
                   cad.toggleEdge(pickCadEdge.current(point));
                   return;
                 }
-                void cad.canvasClick(
-                  cadPoint.current(point),
-                  cad.tool === 'hole' ? pickCad.current(point) : null,
-                );
+                void cad.canvasClick(cadPoint.current(point));
                 return;
               }
               if (cad.pan) return;

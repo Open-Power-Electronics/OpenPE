@@ -202,6 +202,7 @@ var keywords = /* @__PURE__ */ new Set([
   "maximum",
   "exclusiveMinimum",
   "exclusiveMaximum",
+  "multipleOf",
   "enum",
   "const",
   "anyOf",
@@ -248,6 +249,8 @@ function compileCapabilitySchema(schema) {
       if (s[key] !== void 0 && (typeof s[key] !== "number" || !Number.isFinite(s[key])))
         throw new Error(`Invalid schema ${key}.`);
     }
+    if (s.multipleOf !== void 0 && (typeof s.multipleOf !== "number" || !Number.isFinite(s.multipleOf) || s.multipleOf <= 0))
+      throw new Error("Invalid schema multipleOf.");
     if (s.required !== void 0 && (!Array.isArray(s.required) || s.required.some((key) => typeof key !== "string")))
       throw new Error("Invalid schema required fields.");
     if (s.properties !== void 0 && !plain(s.properties))
@@ -297,6 +300,11 @@ function compileCapabilitySchema(schema) {
         if (not && !not(value, path, budget)) return error("matches a forbidden shape");
         if (typeof value === "number") {
           if (!Number.isFinite(value)) return error("must be finite");
+          if (s.multipleOf !== void 0) {
+            const quotient = value / s.multipleOf;
+            if (!Number.isFinite(quotient) || Math.abs(Math.round(quotient) - quotient) > 1e-4)
+              return error("has unsupported precision");
+          }
           if (s.minimum !== void 0 && value < s.minimum || s.maximum !== void 0 && value > s.maximum || s.exclusiveMinimum !== void 0 && value <= s.exclusiveMinimum || s.exclusiveMaximum !== void 0 && value >= s.exclusiveMaximum)
             return error("is outside the supported bounds");
         } else if (typeof value === "string") {
@@ -399,19 +407,13 @@ var modelCadEdgeTreatmentSchema = object({
     items: {
       type: "string",
       maxLength: 32,
-      pattern: "^(?:(?:profile|hole):(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$"
+      pattern: "^(?:profile:(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$"
     }
   }
 });
-var shapeHolesSchema = {
-  type: "array",
-  maxItems: 32,
-  items: object({ x: number(-500, 500), y: number(-500, 500), diameterMm: number(0.5, 500) })
-};
 function shapeSchema(depth) {
   const common = {
     size: vector(0.5, 1e3),
-    holes: shapeHolesSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema
   };
   const alternatives = [
@@ -457,16 +459,6 @@ var modelCadObjectSchema = object(
     material: { enum: ["aluminium", "pmma", "plastic"] },
     opacity: number(0.05, 1),
     color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", minLength: 7, maxLength: 7 },
-    holes: {
-      type: "array",
-      maxItems: 32,
-      items: object({
-        id: identity,
-        x: number(-500, 500),
-        y: number(-500, 500),
-        diameterMm: number(0.5, 500)
-      })
-    },
     profile: modelCadProfileSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema,
     boolean: {

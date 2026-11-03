@@ -174,14 +174,13 @@
   padding: 6px 4px;
   border-left: 1px solid var(--line-soft);
 }
-.footer button {
+.footer button:not(:global(.property-apply-action)) {
   flex: none;
-  min-height: 30px;
-  padding: 4px 6px;
+  min-height: var(--control-height);
+  padding: 4px 8px;
   border-radius: var(--radius-control);
   background: var(--tint);
   color: var(--text);
-  font: inherit;
   white-space: nowrap;
 }
 .footer :global(.primary) {

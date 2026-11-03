@@ -442,6 +442,37 @@ const schema = {
     ),
   },
 };
+// Command property schemas share the canonical definitions. These records have
+// no recursive/native S-expressions; resolve their local refs for the bounded
+// capability interpreter instead of maintaining another set of PCB shapes.
+function capabilityShape(value) {
+  if (Array.isArray(value)) return value.map(capabilityShape);
+  if (!value || typeof value !== 'object') return value;
+  if (value.$ref) {
+    const key = value.$ref.replace(/^#\/\$defs\//, '');
+    if (!schema.$defs[key] || Object.keys(value).length !== 1)
+      throw new Error(`Unsupported capability shape reference: ${value.$ref}`);
+    return capabilityShape(schema.$defs[key]);
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, capabilityShape(item)]),
+  );
+}
+await writeGeneratedFile(
+  'core/layout-property-schemas.json',
+  JSON.stringify(
+    {
+      graphic: capabilityShape(line),
+      zone: capabilityShape(zone),
+      pad: capabilityShape(schema.$defs.pad),
+      footprint: capabilityShape(schema.$defs.footprint),
+      via: capabilityShape(schema.$defs.pcb.properties.vias.items),
+    },
+    null,
+    2,
+  ) + '\n',
+);
+
 // Native file schema: project content only. The editor model above is private.
 const native = (excluded = []) =>
   array(
@@ -848,7 +879,10 @@ await Promise.all([
   service('lib/appearance.ts', 'server/appearance-format.mjs'),
   service('lib/project.ts', 'server/project-format.mjs'),
   service('lib/manufacturing-export.ts', 'server/manufacturing-format.mjs', [sharedProject]),
-  writeGeneratedFile('server/manufacturing-format.d.mts', declaration('../lib/manufacturing-export')),
+  writeGeneratedFile(
+    'server/manufacturing-format.d.mts',
+    declaration('../lib/manufacturing-export'),
+  ),
   writeGeneratedFile('server/project-format.d.mts', declaration('../lib/project')),
   service('lib/library.ts', 'server/library-format.mjs', [sharedProject]),
   service('lib/spice.ts', 'server/spice-format.mjs'),

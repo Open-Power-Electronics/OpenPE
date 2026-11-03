@@ -65,7 +65,6 @@ export function modelCadSelectableFaceIds(object: ModelCadObject): string[] {
     'profile:top',
     'profile:bottom',
     ...(circular ? ['profile:wall'] : Array.from({ length: sides }, (_, i) => `side:${i}`)),
-    ...object.holes.map((_, i) => `hole:${i}`),
   ];
 }
 

@@ -8,6 +8,7 @@ import {
   MODEL_CAD_NATIVE_VARIABLE,
   modelCadFromProject,
   modelCadRequiresPreparation,
+  modelCadGeometryKey,
   withModelCad,
 } from '../lib/model-cad';
 import { parseProject } from '../lib/project';
@@ -25,10 +26,10 @@ test('EMC enclosure rebuilds through general CAD commands, edits and native save
   const rebuilt = assembly.objects.map((object) => ({
     ...object,
     id: uid(),
-    holes: object.holes.map((hole) => ({ ...hole, id: uid() })),
   }));
   for (const object of rebuilt) {
-    assert.equal(modelCadRequiresPreparation(object), false);
+    if (modelCadRequiresPreparation(object))
+      core.acceptPreparedModelCadGeometry(object, modelCadGeometryKey(object));
     core.execute('modelCad.add', { boardId, object });
   }
   assert.equal(core.getSnapshot().undoDepth, 4);
@@ -39,8 +40,7 @@ test('EMC enclosure rebuilds through general CAD commands, edits and native save
   const cover = rebuilt.find((object) => object.material === 'pmma')!;
   const edited = {
     ...cover,
-    size: { ...cover.size, z: cover.size.z + 1 },
-    holes: [...cover.holes, { id: uid(), x: 0, y: 0, diameterMm: 3.2 }],
+    opacity: 0.4,
   };
   core.execute('modelCad.update', { boardId, object: edited });
   const saved = core.getNativeFiles();
@@ -53,15 +53,11 @@ test('EMC enclosure rebuilds through general CAD commands, edits and native save
   );
   const reopened = projectFromNativeFiles(saved);
   assert.deepEqual(modelCadFromProject(reopened), modelCadFromProject(core.getSnapshot().project!));
-  assert.equal(
-    modelCadFromProject(reopened)!.objects.find((body) => body.id === cover.id)!.holes.length,
-    5,
-  );
   for (const file of saved.files.filter((file) => !file.name.endsWith('.kicad_pro')))
     assert.equal(file.source, initial.files.find((before) => before.name === file.name)!.source);
   const step = enclosureStepGeometry(reopened);
-  assert.equal((step.match(/Box\(/g) ?? []).length, 4);
-  assert.equal((step.match(/Cylinder\(/g) ?? []).length, 9);
+  assert.equal((step.match(/Box\(/g) ?? []).length, 2);
+  assert.equal((step.match(/Disk\(/g) ?? []).length, 8);
   assert.doesNotMatch(step, /BooleanUnion/);
 
   core.undo();

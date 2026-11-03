@@ -4,6 +4,7 @@ import { Box, FolderOpen, FolderSearch, Library, Trash2 } from 'lucide-react';
 import type { Footprint, FootprintModel } from '@/lib/pcb';
 import { api } from '@/lib/bridge';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
+import { validateFootprintModelPath } from '@/lib/pcb-properties';
 import type { CapabilityHost } from '@/api/capabilities';
 import {
   TextField,
@@ -85,12 +86,10 @@ export default function FootprintModels({
   );
   function change(index: number, path: string) {
     if (!active) return false;
-    if (
-      path.length > 4096 ||
-      !/^\$\{(?:KIPRJMOD|KICAD\d+_3DMODEL_DIR)\}\/[^\0\r\n]+\.(?:step|stp|wrl)$/i.test(path) ||
-      path.split(/[\\/]/).some((p) => p === '..')
-    ) {
-      setError('Use a project-relative STEP file or a library model.');
+    try {
+      validateFootprintModelPath(path);
+    } catch (error) {
+      setError((error as Error).message);
       return false;
     }
     const next = models.slice();

@@ -10,8 +10,27 @@ const actionMenus = new Map([
 export async function chooseModelTool(page, label) {
   const menu = actionMenus.get(label);
   if (!menu) return page.getByRole('button', { name: label, exact: true }).click();
-  await page.getByRole('combobox', { name: menu, exact: true }).click();
-  await page.getByRole('option', { name: label, exact: true }).click();
+  const trigger = page.getByRole('combobox', { name: menu, exact: true });
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.focus();
+  // Settle focus scrolling before opening the scroll-dismissed anchored popup.
+  await trigger.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await trigger.press('ArrowDown');
+  const targetId = await page.getByRole('option', { name: label, exact: true }).getAttribute('id');
+  const enabled = await page
+    .getByRole('option')
+    .evaluateAll((options) =>
+      options
+        .filter((option) => option.getAttribute('aria-disabled') !== 'true')
+        .map((option) => option.id),
+    );
+  const index = enabled.indexOf(targetId);
+  if (index < 0) throw new Error(`The Model tool is unavailable: ${label}`);
+  await trigger.press('Home');
+  for (let step = 0; step < index; step++) await trigger.press('ArrowDown');
+  await trigger.press('Enter');
 }
 
 export async function modelToolAvailable(page, label) {

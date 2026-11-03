@@ -14,6 +14,30 @@ import { createPCBRouter } from '../lib/pcb-routing';
 import { createPCBViaValidator } from '../lib/pcb-via-routing';
 import { fillCopperZone, fillCopperZones } from '../lib/pcb-polygons';
 import type { CoreDefinition } from './project-core';
+import propertySchemas from './layout-property-schemas.json';
+import {
+  preparePCBFootprintProperties,
+  setPCBPadProperties,
+  setPCBTrackEndpoints,
+  setPCBViaProperties,
+} from '../lib/pcb-properties';
+import { findPCBRectangle, resizePCBRectangle } from '../lib/pcb-outline-resize';
+
+// Property inputs derive from the same shapes as the full document validator.
+// null explicitly clears an optional override; omission retains it.
+const propertyShape = (schema: { properties: object; required: string[] }, excluded: string[]) =>
+  Object.fromEntries(
+    Object.entries(schema.properties)
+      .filter(([key]) => !excluded.includes(key))
+      .map(([key, value]) => [
+        key,
+        schema.required.includes(key) ? value : { anyOf: [value, { type: 'null' }] },
+      ]),
+  );
+const propertyChanges = (input: Record<string, any>) =>
+  Object.fromEntries(
+    Object.entries(input).map(([key, value]) => [key, value === null ? undefined : value]),
+  );
 
 const identity = { type: 'string', minLength: 1, maxLength: 200 };
 const coordinate = { type: 'number', minimum: -100000, maximum: 100000 };
@@ -68,6 +92,12 @@ export const layoutQueryDefinitions: CoreDefinition[] = [
     'Read the full canonical project containing the board, physical packages, nets and artwork, plus board counts.',
   ),
   definition(
+    'layout.object',
+    'Read one native board object, including editable properties, models and metadata, by stable ID.',
+    { kind: { enum: ['footprint', 'pad', 'track', 'via', 'graphic', 'zone'] }, id: identity },
+    ['kind', 'id'],
+  ),
+  definition(
     'layout.route.preview',
     'Plan one bounded Walk Around route using all board obstacles without changing the document.',
     {
@@ -84,6 +114,20 @@ export const layoutQueryDefinitions: CoreDefinition[] = [
   ),
 ];
 export const layoutCommandDefinitions: CoreDefinition[] = [
+  objectCommand(
+    'layout.rectangle.resize',
+    'Resize an Edge.Cuts rectangle or one zone and its holes through the shared canvas/Properties preparation.',
+    {
+      selection,
+      bounds: object({ minX: coordinate, minY: coordinate, maxX: coordinate, maxY: coordinate }, [
+        'minX',
+        'minY',
+        'maxX',
+        'maxY',
+      ]),
+    },
+    ['selection', 'bounds'],
+  ),
   objectCommand(
     'layout.move',
     'Move selected physical packages, copper, zones or artwork together.',
@@ -162,7 +206,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
     {
       zoneId: identity,
       netId: { type: ['string', 'null'], minLength: 1, maxLength: 200 },
-      layer,
+      layer: propertySchemas.zone.properties.layer,
       outline: { type: 'array', items: point, minItems: 3, maxItems: 60000 },
       holes: {
         type: 'array',
@@ -171,9 +215,9 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
       },
       clearance: { type: 'number', minimum: 0, maximum: 1000 },
       minThickness: positive,
-      thermalGap: positive,
-      thermalBridge: positive,
-      priority: { type: 'integer', minimum: 0, maximum: 100 },
+      thermalGap: propertySchemas.zone.properties.thermalGap,
+      thermalBridge: propertySchemas.zone.properties.thermalBridge,
+      priority: propertySchemas.zone.properties.priority,
       padConnection: { enum: ['yes', 'no', 'thru_hole_only'] },
       islandRemovalMode: { type: 'integer', minimum: 0, maximum: 2 },
       fillEnabled: { type: 'boolean' },
@@ -215,9 +259,75 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'layout.track.properties',
-    'Edit a track net, layer, width or lock. Unlock a locked track before changing its copper properties.',
-    { trackId: identity, netId: identity, layer, width: positive, locked: { type: 'boolean' } },
+    'Edit a track net, layer, width, exact endpoints or lock. Unlock a locked track before changing its copper properties.',
+    {
+      trackId: identity,
+      netId: identity,
+      layer,
+      width: positive,
+      locked: { type: 'boolean' },
+      start: point,
+      end: point,
+    },
     ['trackId'],
+  ),
+  objectCommand(
+    'layout.pad.properties',
+    'Edit pad geometry and fabrication overrides with the shared Properties preparation. Identity, pin nets, type and layers stay unchanged. null clears an optional override.',
+    {
+      padId: identity,
+      changes: object(
+        propertyShape(propertySchemas.pad, [
+          'id',
+          'number',
+          'netId',
+          'type',
+          'layers',
+          'unconnected',
+        ]),
+      ),
+    },
+    ['padId', 'changes'],
+  ),
+  objectCommand(
+    'layout.via.properties',
+    'Edit an existing via position, net, diameter or drill using Properties validation.',
+    { viaId: identity, changes: object(propertyShape(propertySchemas.via, ['id'])) },
+    ['viaId', 'changes'],
+  ),
+  objectCommand(
+    'layout.footprint.properties',
+    'Edit footprint placement, side, mechanical captions or complete model transforms. Side changes use the shared flip preparation. null clears optional models/overrides. Linked captions belong to part.properties.',
+    {
+      footprintId: identity,
+      changes: object(
+        propertyShape(propertySchemas.footprint, [
+          'id',
+          'symbolId',
+          'libraryId',
+          'pads',
+          'graphics',
+          'zones',
+          'locked',
+        ]),
+      ),
+    },
+    ['footprintId', 'changes'],
+  ),
+  objectCommand(
+    'layout.graphic',
+    'Create or replace a complete board drawing, outline polygon, text or dimension. Updates retain the selected UUID; query layout.object first to preserve unrelated metadata.',
+    {
+      graphicId: identity,
+      graphic: {
+        ...propertySchemas.graphic,
+        properties: Object.fromEntries(
+          Object.entries(propertySchemas.graphic.properties).filter(([key]) => key !== 'id'),
+        ),
+        required: propertySchemas.graphic.required.filter((key) => key !== 'id'),
+      },
+    },
+    ['graphic'],
   ),
 ];
 
@@ -257,6 +367,19 @@ const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 0.000001
 
 export function queryLayout(board: PCB | null | undefined, id: string, args: Record<string, any>) {
   checkBoard(board, args.boardId);
+  if (id === 'layout.object') {
+    const items = {
+      footprint: board.footprints,
+      pad: board.footprints.flatMap((item) => item.pads),
+      track: board.tracks,
+      via: board.vias,
+      graphic: board.graphics,
+      zone: board.zones,
+    };
+    const item = items[args.kind as keyof typeof items].find((item) => item.id === args.id);
+    if (!item) throw new Error('This board object no longer exists.');
+    return structuredClone(item);
+  }
   if (id === 'layout.get')
     return {
       boardId: board.id,
@@ -520,8 +643,53 @@ export function executeLayout(
         throw new Error(
           'This board track no longer exists. Query the current board and try again.',
         );
-      const { boardId: _boardId, trackId, ...changes } = args;
+      const { boardId: _boardId, trackId, start, end, ...changes } = args;
       next = setPCBTrackProperties(board, trackId, changes);
+      if (start || end) next = setPCBTrackEndpoints(next, trackId, { start, end });
+      break;
+    }
+    case 'layout.rectangle.resize': {
+      checkSelection(board, args.selection);
+      const rectangle = findPCBRectangle(board, args.selection);
+      if (!rectangle) throw new Error('Select a rectangular outline or one board zone.');
+      next = resizePCBRectangle(board, rectangle, args.bounds);
+      break;
+    }
+    case 'layout.pad.properties':
+      next = setPCBPadProperties(board, args.padId, propertyChanges(args.changes));
+      break;
+    case 'layout.via.properties': {
+      next = setPCBViaProperties(board, args.viaId, args.changes);
+      break;
+    }
+    case 'layout.footprint.properties': {
+      const existing = board.footprints.find((footprint) => footprint.id === args.footprintId);
+      if (!existing) throw new Error('This footprint no longer exists.');
+      if (
+        existing.symbolId &&
+        (Object.hasOwn(args.changes, 'reference') || Object.hasOwn(args.changes, 'value'))
+      )
+        throw new Error('Edit linked component captions through part.properties.');
+      const footprint = preparePCBFootprintProperties(existing, propertyChanges(args.changes));
+      next = {
+        ...board,
+        footprints: board.footprints.map((item) => (item === existing ? footprint : item)),
+      };
+      break;
+    }
+    case 'layout.graphic': {
+      const existing = args.graphicId
+        ? board.graphics.find((graphic) => graphic.id === args.graphicId)
+        : undefined;
+      if (args.graphicId && !existing) throw new Error('This board graphic no longer exists.');
+      const graphic = { ...args.graphic, id: existing?.id ?? uid() };
+      next = {
+        ...board,
+        graphics: existing
+          ? board.graphics.map((item) => (item === existing ? graphic : item))
+          : [...board.graphics, graphic],
+      };
+      result = { graphicId: graphic.id };
       break;
     }
     default:

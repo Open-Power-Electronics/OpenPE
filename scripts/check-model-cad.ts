@@ -25,7 +25,6 @@ const objects: ModelCadObject[] = [
     size: { x: 12, y: 8, z: 6 },
     material: 'aluminium',
     opacity: 1,
-    holes: [{ id: uid(), x: 2, y: 1, diameterMm: 2 }],
   },
   {
     id: uid(),
@@ -36,7 +35,6 @@ const objects: ModelCadObject[] = [
     size: { x: 8, y: 8, z: 10 },
     material: 'plastic',
     opacity: 1,
-    holes: [{ id: uid(), x: 0, y: 0, diameterMm: 3 }],
   },
 ];
 const target = withModelCad(project, { version: 1, objects }),

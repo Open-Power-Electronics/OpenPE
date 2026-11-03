@@ -10,11 +10,10 @@ import FootprintModels from './FootprintModels';
 import {
   NumberField,
   TextField,
-  PropertyRow,
   PropertyGrid,
   PropertySelect as Select,
 } from './LayoutPropertyFields';
-import { flipPCBFootprint } from '@/lib/pcb-layout';
+import { preparePCBFootprintProperties, type PCBFootprintProperties } from '@/lib/pcb-properties';
 export type ComponentPropertiesProps = {
   footprint: Footprint;
   schematic: Circuit;
@@ -57,6 +56,8 @@ export default function ComponentProperties({
   spiceAvailable = false,
 }: ComponentPropertiesProps) {
   const part = schematic.parts.find((p) => p.id === footprint.symbolId);
+  const update = (changes: PCBFootprintProperties) =>
+    onFootprint(preparePCBFootprintProperties(footprint, changes));
   const field = { active: active && geometryEditable, resetKey };
   const modelFields = (
     <FootprintModels
@@ -66,8 +67,49 @@ export default function ComponentProperties({
       projectSource={projectSource}
       getRevision={getRevision}
       capabilityHost={capabilityHost}
-      onChange={(models) => onFootprint({ ...footprint, models })}
+      onChange={(models) => update({ models })}
     />
+  );
+  const geometryFields = (
+    <div className="layout-footprint-geometry component-geometry">
+      <PropertyGrid>
+        <NumberField
+          {...field}
+          label="X (mm)"
+          value={footprint.x}
+          normalize={snap}
+          onCommit={(x) => update({ x })}
+        />
+        <NumberField
+          {...field}
+          label="Y (mm)"
+          value={footprint.y}
+          normalize={snap}
+          onCommit={(y) => update({ y })}
+        />
+        <NumberField
+          {...field}
+          label="Rotation (°)"
+          value={footprint.rotation}
+          min={-360}
+          max={360}
+          onCommit={(rotation) => update({ rotation })}
+        />
+        <Select
+          active={active && geometryEditable}
+          label="Footprint side"
+          displayLabel="Side"
+          value={footprint.side}
+          options={[
+            { value: 'front', label: 'Front' },
+            { value: 'back', label: 'Back' },
+          ]}
+          onChange={(side) =>
+            side === footprint.side || update({ side: side as Footprint['side'] })
+          }
+        />
+      </PropertyGrid>
+    </div>
   );
   return (
     <>
@@ -81,6 +123,7 @@ export default function ComponentProperties({
             getRevision={getRevision}
             spiceAvailable={spiceAvailable}
             modelFields={modelFields}
+            geometryFields={geometryFields}
             active={active && !!onSavePartProperties}
             capabilityHost={capabilityHost}
             onRequestSave={onRequestSave}
@@ -100,60 +143,19 @@ export default function ComponentProperties({
                 {...field}
                 label="Reference"
                 value={footprint.reference ?? ''}
-                onCommit={(reference) => onFootprint({ ...footprint, reference })}
+                onCommit={(reference) => update({ reference })}
               />
               <TextField
                 {...field}
                 label="Value"
                 value={footprint.value ?? ''}
-                onCommit={(value) => onFootprint({ ...footprint, value })}
+                onCommit={(value) => update({ value })}
               />
             </div>
-            <PropertyRow
-              label="Library"
-              value={footprint.libraryId}
-              description={footprint.libraryId}
-              singleLine
-            />
           </div>
+          {geometryFields}
         </>
       )}
-      <div className="layout-footprint-geometry component-geometry">
-        <PropertyGrid>
-          <NumberField
-            {...field}
-            label="X (mm)"
-            value={footprint.x}
-            normalize={snap}
-            onCommit={(x) => onFootprint({ ...footprint, x })}
-          />
-          <NumberField
-            {...field}
-            label="Y (mm)"
-            value={footprint.y}
-            normalize={snap}
-            onCommit={(y) => onFootprint({ ...footprint, y })}
-          />
-          <NumberField
-            {...field}
-            label="Rotation (°)"
-            value={footprint.rotation}
-            min={-360}
-            max={360}
-            onCommit={(rotation) => onFootprint({ ...footprint, rotation })}
-          />
-          <Select
-            active={active && geometryEditable}
-            label="Footprint side"
-            value={footprint.side}
-            options={[
-              { value: 'front', label: 'Front' },
-              { value: 'back', label: 'Back' },
-            ]}
-            onChange={(side) => side === footprint.side || onFootprint(flipPCBFootprint(footprint))}
-          />
-        </PropertyGrid>
-      </div>
     </>
   );
 }

@@ -264,7 +264,7 @@ async function run(name, check) {
           grids: Array.from(element.querySelectorAll('.layout-property-grid'))
             .filter((grid) => grid.getClientRects().length)
             .map((grid) => ({
-              columns: Number(grid.dataset.columns),
+              columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
               fields: Array.from(grid.children)
                 .filter((field) => getComputedStyle(field).gridColumnEnd !== '-1')
                 .map(bounds),
@@ -277,11 +277,11 @@ async function run(name, check) {
           stacked
             ? Math.abs(field.control.left - field.label.left) <= 1 &&
                 Math.abs(field.control.width - field.field.width) <= 1
-            : field.control.left >= field.label.left + field.label.width + 7 &&
+            : field.control.left >= field.label.left + field.label.width + 3 &&
                 Math.abs(
                   field.control.top + field.control.bottom - field.label.top - field.label.bottom,
                 ) <= 2,
-          'Properties uses paired stacked fields or aligned label/control rows.',
+          'Properties keeps controls aligned beside labels with the compact label gap.',
         );
         assert.ok(
           field.controlFontSize > field.labelFontSize,
@@ -291,7 +291,7 @@ async function run(name, check) {
         assert.ok(field.minHeight >= 30, 'Properties retains the standard minimum control height.');
       }
       for (const grid of formatting.grids) {
-        assert.ok([2, 3].includes(grid.columns), 'Geometry uses paired or triple columns.');
+        assert.ok([1, 2, 3].includes(grid.columns), 'Geometry columns adapt to the dock width.');
         for (let index = 1; index < grid.fields.length; index++) {
           assert.ok(
             Math.abs(grid.fields[index].width - grid.fields[0].width) <= 1,
@@ -385,7 +385,7 @@ try {
           .evaluate((svg) => svg.viewBox.baseVal.width >= 20),
         'Revealing Properties fits the complete footprint thumbnail.',
       );
-      assert.equal(await identity.locator('strong').innerText(), 'J1');
+      assert.equal(await identity.locator('strong').innerText(), board.footprints[0].libraryId);
       assert.match(await panel.innerText(), /Fixture:PadTypes/);
       assert.equal(await panel.getByRole('heading', { name: 'Footprint', exact: true }).count(), 0);
       const preview = identity.getByRole('img', { name: 'Footprint preview', exact: true });
@@ -419,11 +419,11 @@ try {
         layout,
         {
           gap: '8px',
-          top: '8px',
-          bottom: '8px',
-          offset: 0,
-          thumbnail: [36, 36],
-          preview: [28, 28],
+          top: '6px',
+          bottom: '6px',
+          offset: 8,
+          thumbnail: [32, 32],
+          preview: [26, 26],
           referenceWeight: '600',
         },
         'Unlinked footprints use the shared identity strip, thumbnail and top inset.',
@@ -504,7 +504,7 @@ try {
       await click(36, 15);
       assert.match(await panel.innerText(), /Non-plated hole/);
       await click(35, 28);
-      assert.match(await panel.innerText(), /Through via/);
+      await panel.getByRole('heading', { name: 'Via', exact: true }).waitFor();
       const previous = (await state()).board;
       await number('Diameter (mm)', 1.8);
       const changed = await native();

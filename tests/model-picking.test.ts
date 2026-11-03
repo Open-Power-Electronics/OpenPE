@@ -127,7 +127,6 @@ test('shared ray results retain exact CAD local drilling coordinates through com
     rotation: { x: 20, y: 30, z: 40 },
     material: 'aluminium',
     opacity: 1,
-    holes: [],
   };
   const saved = JSON.stringify(body);
   const group = new THREE.Group();

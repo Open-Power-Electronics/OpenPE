@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { uid } from '../lib/circuit';
 import { withModelCad, type ModelCadObject } from '../lib/model-cad';
 import { parseProject } from '../lib/project';
+import { extrudeModelCadSketch } from '../lib/model-cad-sketch';
 import { enclosureStepGeometry } from '../server/enclosure-step.mjs';
 
 const fixture = () =>
@@ -17,15 +18,42 @@ const body = (kind: ModelCadObject['kind'] = 'box'): ModelCadObject => ({
   size: { x: 20, y: 20, z: 10 },
   material: 'aluminium',
   opacity: 1,
-  holes: [{ id: uid(), x: 2, y: 1, diameterMm: 3 }],
 });
 
 test('STEP supports CAD bodies without an enclosure, with local cuts before XYZ pose', () => {
-  const project = withModelCad(fixture(), { version: 1, objects: [body()] });
+  const seed = body();
+  const cutBody = extrudeModelCadSketch({
+    id: seed.id,
+    name: seed.name,
+    plane: 'XY',
+    origin: seed.position,
+    distance: 10,
+    direction: 'symmetric',
+    material: seed.material,
+    opacity: seed.opacity,
+    contours: [
+      {
+        operation: 'union',
+        profile: { kind: 'rectangle' },
+        size: { x: 20, y: 20 },
+        position: { x: 0, y: 0 },
+      },
+      {
+        operation: 'difference',
+        profile: { kind: 'circle' },
+        size: { x: 3, y: 3 },
+        position: { x: 2, y: 1 },
+      },
+    ],
+  });
+  const project = withModelCad(fixture(), {
+    version: 1,
+    objects: [{ ...cutBody, rotation: seed.rotation }],
+  });
   const pcb = JSON.stringify(project.pcb);
   const geometry = enclosureStepGeometry(project);
-  assert.match(geometry, /Box\(volume1\) = \{-10,-10,-5,20,20,10\};/);
-  assert.match(geometry, /Cylinder\(volume2\) = \{2,1,-5\.01,0,0,10\.02,1\.5, 2\*Pi\};/);
+  assert.match(geometry, /Rectangle\([^)]*\) = \{-10,-10,-5,20,20\};/);
+  assert.match(geometry, /Disk\([^)]*\) = \{0,0,-5,1\.5,1\.5\};/);
   const cut = geometry.indexOf('BooleanDifference'),
     z = geometry.indexOf('Rotate {{0,0,1}, {0,0,0}, 43*Pi/180}'),
     y = geometry.indexOf('Rotate {{0,1,0}, {0,0,0}, 31*Pi/180}'),
@@ -48,10 +76,10 @@ test('STEP keeps independently editable overlapping boxes and cylinders as separ
     'Independent CAD bodies remain separate',
   );
   assert.doesNotMatch(geometry, /Coherence/);
-  assert.match(geometry, /Cylinder\(volume\d+\) = \{0,0,-5,0,0,10,10, 2\*Pi\};/);
+  assert.match(geometry, /Cylinder\([^)]*\) = \{0,0,-5,0,0,10,10,2\*Pi\};/);
   assert.match(
     geometry,
-    /volume\d+ = newv;/,
+    /\w+_volume\d+ = newv;/,
     'Primitive tags must follow OCC-generated Boolean tags',
   );
 });

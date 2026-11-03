@@ -1,4 +1,8 @@
 import test from 'node:test';
+import * as THREE from 'three';
+import { modelCadKernelMesh } from '../components/model-cad-mesh';
+import { disposeModelGroup } from '../lib/model-mesh';
+import { extrudeModelCadSketch, prepareModelCadSketchContour } from '../lib/model-cad-sketch';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -24,7 +28,6 @@ const body = (name: string): ModelCadObject => ({
   size: { x: 20, y: 16, z: 8 },
   material: 'aluminium',
   opacity: 1,
-  holes: [],
   profile: { kind: 'rectangle' },
 });
 const measure = (meshes: Mesh[], pose?: ModelCadObject) => {
@@ -89,7 +92,6 @@ test(
       position: { x: 0, y: 0, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
       size: { x: 20, y: 16, z: 8 },
-      holes: [],
     };
     delete base.profile;
     const occt = await createRequire(import.meta.url)('occt-import-js')();
@@ -156,42 +158,6 @@ test(
               );
             }
       }
-      const drilled: ModelCadObject = {
-        ...base,
-        holes: [{ id: uid(), x: 0, y: 0, diameterMm: 4 }],
-        edgeTreatment: { kind: 'fillet', distanceMm: 0.5, edges: ['hole:top:0'] },
-      };
-      const preview = await service.preview(drilled);
-      const bytes = await createEnclosureStep(
-        withModelCad(project, { version: 1, objects: [drilled] }),
-      );
-      const imported = occt.ReadStepFile(bytes, {
-        linearUnit: 'millimeter',
-        linearDeflectionType: 'bounding_box_ratio',
-        linearDeflection: 0.003,
-        angularDeflection: 0.5,
-      });
-      assert.equal(imported.success, true);
-      const local = measure(preview.meshes),
-        exported = measure(imported.meshes);
-      const precise = occt.ReadStepFile(bytes, {
-        linearUnit: 'millimeter',
-        linearDeflectionType: 'absolute_value',
-        linearDeflection: 0.002,
-        angularDeflection: 0.1,
-      });
-      assert.equal(precise.success, true);
-      const preciseVolume = measure(precise.meshes).volume;
-      assert.ok(preciseVolume > 0 && preciseVolume < 2560 - Math.PI * 4 * 8);
-      assert.ok(
-        Math.abs(local.volume - exported.volume) < 0.3,
-        `Hole rim preview/export volumes agree (${local.volume}, ${exported.volume}).`,
-      );
-      assert.equal(
-        (bytes.toString('ascii').match(/TOROIDAL_SURFACE\(/g) ?? []).length,
-        1,
-        'Only the selected top hole rim becomes toroidal.',
-      );
     } finally {
       service.close();
     }
@@ -251,7 +217,6 @@ test(
     const target: ModelCadObject = {
       ...body('boolean-target'),
       kind: 'box',
-      holes: [{ id: uid(), x: -6, y: 0, diameterMm: 2 }],
     };
     delete target.profile;
     const tool: ModelCadObject = {
@@ -259,7 +224,6 @@ test(
       id: uid(),
       name: 'boolean-tool',
       size: { x: 8, y: 6, z: 12 },
-      holes: [{ id: uid(), x: 0, y: 0, diameterMm: 1.5 }],
     };
     for (const operation of ['union', 'difference', 'intersection'] as const) {
       const combined: ModelCadObject = {
@@ -362,18 +326,18 @@ test(
         );
         assert.ok(Math.abs(top - bottom) < 0.2, `${kind} opposite rims are symmetric`);
       }
-      const a = 20 * 16 * 8 - Math.PI * 1 ** 2 * 8;
-      const b = 8 * 6 * 12 - Math.PI * 0.75 ** 2 * 12;
+      const a = 20 * 16 * 8;
+      const b = 8 * 6 * 12;
       const union = evidence['boolean-union'].volume,
         difference = evidence['boolean-difference'].volume,
         intersection = evidence['boolean-intersection'].volume;
       assert.ok(
         Math.abs(union + intersection - a - b) < 5,
-        'Rotated/holed Boolean union/intersection conserve operand volume',
+        'Rotated Boolean union/intersection conserve operand volume',
       );
       assert.ok(
         Math.abs(difference + intersection - a) < 5,
-        'Rotated/holed Boolean difference/intersection partition the target',
+        'Rotated Boolean difference/intersection partition the target',
       );
       const emptyOperand = () => ({
         shape: modelCadShape(rectangle),
@@ -408,6 +372,90 @@ test(
         ) + '\n',
       );
       console.log(`CAD native evidence: ${directory}/summary.json`);
+    } finally {
+      service.close();
+    }
+  },
+);
+
+test(
+  'native planar Difference extrusion has a genuine open cut and matching analytical STEP volume',
+  { skip: process.env.OPENPE_TEST_MODEL_CAD !== '1', timeout: 120_000 },
+  async () => {
+    const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+    const outer = prepareModelCadSketchContour('rectangle', [
+      { x: -10, y: -8 },
+      { x: 10, y: 8 },
+    ]);
+    const cut = prepareModelCadSketchContour(
+      'circle',
+      [
+        { x: 2, y: 1 },
+        { x: 4, y: 1 },
+      ],
+      'difference',
+    );
+    const parameters = {
+      id: uid(),
+      name: 'Sketch cut plate',
+      plane: 'XY',
+      origin: { x: 0, y: 0, z: 0 },
+      distance: 8,
+      direction: 'symmetric',
+      material: 'aluminium',
+      opacity: 1,
+      contours: [outer, cut],
+    };
+    const object = extrudeModelCadSketch(parameters);
+    const service = createModelCadPreviewService();
+    try {
+      const preview = await service.preview(object);
+      const mesh = modelCadKernelMesh(object, preview.meshes);
+      mesh.updateMatrixWorld(true);
+      try {
+        assert.equal(
+          new THREE.Raycaster(
+            new THREE.Vector3(2, -1, 12),
+            new THREE.Vector3(0, 0, -1),
+          ).intersectObject(mesh, true).length,
+          0,
+        );
+        assert.ok(
+          new THREE.Raycaster(
+            new THREE.Vector3(-4, 0, 12),
+            new THREE.Vector3(0, 0, -1),
+          ).intersectObject(mesh, true).length > 0,
+        );
+      } finally {
+        disposeModelGroup(mesh);
+      }
+      const bytes = await createEnclosureStep(
+        withModelCad(project, { version: 1, objects: [object] }),
+      );
+      await writeFile('test-results/model-cad-sketch-native.step', bytes);
+      assert.match(modelCadStepGeometry(object), /Disk\([^)]*\) = \{0,0,-4,2,2\};/);
+      assert.match(bytes.toString('ascii'), /MANIFOLD_SOLID_BREP/);
+      assert.doesNotMatch(bytes.toString('ascii'), /FACETED_BREP|TRIANGULATED_FACE_SET/);
+      const occt = await createRequire(import.meta.url)('occt-import-js')();
+      const step = occt.ReadStepFile(bytes, {
+        linearUnit: 'millimeter',
+        linearDeflectionType: 'absolute_value',
+        linearDeflection: 0.002,
+        angularDeflection: 0.1,
+      });
+      assert.equal(step.success, true);
+      const expected = (20 * 16 - Math.PI * 2 ** 2) * 8;
+      const measured = measure(preview.meshes),
+        exported = measure(step.meshes);
+      assert.ok(Math.abs(exported.volume - expected) < 0.1);
+      assert.ok(Math.abs(measured.volume - exported.volume) < 1.5);
+      assert.deepEqual(exported.min, { x: -10, y: -8, z: -4 });
+      assert.deepEqual(exported.max, { x: 10, y: 8, z: 4 });
+      const empty = extrudeModelCadSketch({
+        ...parameters,
+        contours: [outer, { ...outer, operation: 'difference' }],
+      });
+      await assert.rejects(service.preview(empty), /empty|positive|volume|solid|CAD geometry/i);
     } finally {
       service.close();
     }

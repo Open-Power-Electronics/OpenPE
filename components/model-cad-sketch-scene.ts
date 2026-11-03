@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { ModelCadSketch, ModelCadSketchPlane } from './ModelCadSketchPanel';
 import { createModelGridScene } from './model-grid-scene';
+import { modelCadSketchOutlines } from '@/lib/model-cad-sketch';
 
 /** Workplanes use native PCB axes; the Model renderer reflects native Y. */
 export function modelCadSketchFrame(plane: ModelCadSketchPlane, origin: ModelCadSketch['origin']) {
@@ -179,7 +180,17 @@ export function createModelCadSketchScene(root: THREE.Group, extent: number) {
         else if (drawing && sketch.cursor) points.push(sketch.cursor);
       }
       const color = dark ? 0x82c1ff : 0x2684d9;
-      if (points.length > 1) {
+      for (const outline of modelCadSketchOutlines(sketch.contours)) {
+        if (outline.length < 3) continue;
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([...outline, outline[0]].map(world)),
+          new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false }),
+        );
+        line.renderOrder = 22;
+        line.userData.modelCadSketch = true;
+        root.add(line);
+      }
+      if (points.length > 1 && !sketch.closed) {
         const line = new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(points.map(world)),
           new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false }),

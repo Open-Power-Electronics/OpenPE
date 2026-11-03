@@ -91,9 +91,8 @@ test('CAD color updates, reset, native round trips and undo retain unrelated pro
 
 test('explicit edge treatments address stable individual base edges', () => {
   const box = newModelCadObject(fixture().pcb!, 'box');
-  box.holes = [{ id: uid(), x: 0, y: 0, diameterMm: 2 }];
   const edges = modelCadSelectableEdges(box);
-  assert.equal(edges.length, 14, 'A drilled box has 12 outer edges and two hole rims.');
+  assert.equal(edges.length, 12, 'A box has twelve analytic outer edges.');
   assert.deepEqual(
     edges.find((edge) => edge.id === 'side:0'),
     {
@@ -102,16 +101,6 @@ test('explicit edge treatments address stable individual base edges', () => {
       kind: 'line',
       start: { x: -10, y: -10, z: -5 },
       end: { x: -10, y: -10, z: 5 },
-    },
-  );
-  assert.deepEqual(
-    edges.find((edge) => edge.id === 'hole:top:0'),
-    {
-      id: 'hole:top:0',
-      label: 'Hole 1 top rim',
-      kind: 'circle',
-      center: { x: 0, y: 0, z: 5 },
-      radiusMm: 1,
     },
   );
   for (const kind of ['fillet', 'chamfer'] as const) {
@@ -160,7 +149,7 @@ test('explicit edge treatments address stable individual base edges', () => {
   );
 });
 
-test('CAD primitives use native world centres, bounded dimensions and safe local through holes', () => {
+test('CAD primitives use native world centres, bounded dimensions and explicit geometry rejection', () => {
   const board = fixture().pcb!;
   const box = newModelCadObject(board, 'box'),
     cylinder = newModelCadObject(board, 'cylinder');
@@ -183,20 +172,7 @@ test('CAD primitives use native world centres, bounded dimensions and safe local
     () => validateModelCadObject({ ...cylinder, size: { ...cylinder.size, y: 5 } }),
     /equal X and Y/,
   );
-  const hole = { id: uid(), x: 0, y: 0, diameterMm: 3.2 };
-  assert.equal(validateModelCadObject({ ...box, holes: [hole] }).holes.length, 1);
-  assert.throws(
-    () => validateModelCadObject({ ...box, holes: [{ ...hole, x: 9 }] }),
-    /object edge/,
-  );
-  assert.throws(
-    () => validateModelCadObject({ ...cylinder, holes: [{ ...hole, x: 1.5 }] }),
-    /object edge/,
-  );
-  assert.throws(
-    () => validateModelCadObject({ ...box, holes: [hole, { ...hole, id: uid(), x: 2 }] }),
-    /between them/,
-  );
+
   assert.throws(
     () => validateModelCad({ version: 1, objects: Array(65).fill(box) }),
     /Invalid model/,
@@ -211,7 +187,6 @@ test('Core primitive edits, duplication and removal retain electrical identity a
   const before = core.getSnapshot(),
     initial = core.getNativeFiles();
   const box = newModelCadObject(project.pcb!, 'box');
-  box.holes = [{ id: uid(), x: 0, y: 0, diameterMm: 3.2 }];
   core.execute('modelCad.add', { boardId, object: box });
   const updated = {
     ...box,
@@ -233,7 +208,6 @@ test('Core primitive edits, duplication and removal retain electrical identity a
   }) as { objects: ModelCadObject[] };
   assert.equal(duplicate.objects.length, 1);
   assert.notEqual(duplicate.objects[0].id, box.id);
-  assert.notEqual(duplicate.objects[0].holes[0].id, box.holes[0].id);
   assert.deepEqual(duplicate.objects[0].position, { x: 115, y: 88, z: 4.8 });
   assert.deepEqual(duplicate.objects[0].rotation, current.rotation);
   for (const file of core.getNativeFiles().files.filter((f) => !f.name.endsWith('.kicad_pro')))
@@ -344,12 +318,10 @@ test('native primitive settings and Source changes preserve other CAD, provenanc
 test('copied projects remap CAD feature IDs and native backing settings together', () => {
   const project = fixture(),
     box = newModelCadObject(project.pcb!, 'box');
-  box.holes.push({ id: uid(), x: 0, y: 0, diameterMm: 3.2 });
   const original = withModelCad(project, model(box));
   const copied = copyExampleSource(serializeProject(original));
   const body = modelCadFromProject(copied)!.objects[0];
   assert.notEqual(body.id, box.id);
-  assert.notEqual(body.holes[0].id, box.holes[0].id);
   assert.deepEqual(body.position, box.position);
   const native = JSON.parse(
     projectNativeFiles(copied).files.find((f) => f.name.endsWith('.kicad_pro'))!.source,
@@ -357,7 +329,7 @@ test('copied projects remap CAD feature IDs and native backing settings together
   assert.deepEqual(JSON.parse(native.text_variables[MODEL_CAD_NATIVE_VARIABLE]), model(body));
 });
 
-test('closed sketch profiles validate centred extents, crossings and local holes', () => {
+test('closed sketch profiles validate centred extents, and crossings', () => {
   const extrusion = newModelCadObject(fixture().pcb!, 'extrusion');
   assert.deepEqual(extrusion.profile, { kind: 'rectangle' });
   assert.ok(modelCadRequiresPreparation(extrusion));
@@ -412,9 +384,8 @@ test('closed sketch profiles validate centred extents, crossings and local holes
         { x: 0, y: 10 },
       ],
     },
-    holes: [{ id: uid(), x: 8, y: 8, diameterMm: 1 }],
   };
-  assert.throws(() => validateModelCadObject(triangle), /object edge/);
+  assert.ok(validateModelCadObject(triangle));
   const chamfer = {
     kind: 'chamfer' as const,
     distanceMm: 1,
@@ -425,15 +396,7 @@ test('closed sketch profiles validate centred extents, crossings and local holes
     () => validateModelCadObject({ ...polygon, edgeTreatment: { ...chamfer, distanceMm: 5 } }),
     /positive body height/,
   );
-  assert.throws(
-    () =>
-      validateModelCadObject({
-        ...polygon,
-        edgeTreatment: chamfer,
-        holes: [{ id: uid(), x: 9, y: 0, diameterMm: 2 }],
-      }),
-    /object edge/,
-  );
+
   assert.throws(
     () =>
       validateModelCadObject({
@@ -446,25 +409,10 @@ test('closed sketch profiles validate centred extents, crossings and local holes
 
 test('geometry keys retain exact recipes and ignore only top-level identity and presentation', () => {
   const body = newModelCadObject(fixture().pcb!, 'extrusion');
-  body.holes = [{ id: uid(), x: 0, y: 0, diameterMm: 2 }];
   const key = modelCadGeometryKey(body),
     shape = modelCadShape(body);
   assert.equal(key, JSON.stringify(shape));
   assert.equal('id' in shape, false);
-  assert.equal('id' in shape.holes[0], false);
-  assert.equal(
-    modelCadGeometryKey({
-      ...body,
-      id: uid(),
-      name: 'Renamed',
-      material: 'pmma',
-      opacity: 0.2,
-      position: { x: 0, y: 0, z: 0 },
-      rotation: { x: 90, y: 10, z: 20 },
-      holes: [{ ...body.holes[0], id: uid() }],
-    }),
-    key,
-  );
   assert.notEqual(modelCadGeometryKey({ ...body, size: { ...body.size, z: 11 } }), key);
   assert.notEqual(modelCadGeometryKey({ ...body, profile: { kind: 'circle' } }), key);
   assert.notEqual(
@@ -475,7 +423,6 @@ test('geometry keys retain exact recipes and ignore only top-level identity and 
     key,
   );
   shape.size.x = 1;
-  shape.holes[0].diameterMm = 1;
   assert.equal(modelCadGeometryKey(body), key, 'public shape containers are independent');
   const tool = newModelCadObject(fixture().pcb!, 'cylinder'),
     combined = newModelCadBooleanObject(body, tool, 'difference');
@@ -513,12 +460,9 @@ test('Boolean recipes preserve transformed operands with bounded conservative en
     () => validateModelCadObject({ ...union, size: { ...union.size, x: 34 } }),
     /envelope/,
   );
-  assert.throws(
-    () => validateModelCadObject({ ...union, holes: [{ id: uid(), x: 0, y: 0, diameterMm: 1 }] }),
-    /subtractive solids/,
-  );
+
   const rotated = modelCadOperandBounds({
-    shape: { kind: 'box', size: { x: 2, y: 4, z: 6 }, holes: [] },
+    shape: { kind: 'box', size: { x: 2, y: 4, z: 6 } },
     position: { x: 10, y: 20, z: 30 },
     rotation: { x: 90, y: 0, z: 0 },
   });
@@ -702,6 +646,7 @@ test('Model CAD capabilities enforce PCB, revision, pending Source and close bar
       .map((c) => [c.id, c.owner, c.level]),
     [
       ['modelCad.get', 'core', undefined],
+      ['modelCad.sketch.extrude', 'core', 'operation'],
       ['modelCad.add', 'core', 'object'],
       ['modelCad.update', 'core', 'object'],
       ['modelCad.remove', 'core', 'object'],

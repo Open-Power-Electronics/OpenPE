@@ -29,7 +29,6 @@ export default function FootprintIdentity({
     if (drawing.current?.ownerSVGElement) observer.observe(drawing.current.ownerSVGElement);
     return () => observer.disconnect();
   }, [footprint]);
-  const reference = footprint.reference || 'Footprint';
   return (
     <div className="inspector-symbol">
       <div className="component-preview" aria-description="Board-only footprint">
@@ -84,8 +83,7 @@ export default function FootprintIdentity({
         </svg>
       </div>
       <div>
-        <strong aria-description={reference}>{reference}</strong>
-        <span aria-description={footprint.value}>{footprint.value}</span>
+        <strong title={footprint.libraryId}>{footprint.libraryId}</strong>
       </div>
       {actions}
     </div>

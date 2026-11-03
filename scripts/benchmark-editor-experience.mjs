@@ -3053,7 +3053,6 @@ try {
             size: { x: 24, y: 16, z: 8 },
             material: 'aluminium',
             opacity: 1,
-            holes: [],
           });
           const expected = { version: 1, objects: [...(baselineCad?.objects ?? []), body] };
           assert.deepEqual(added.cad, expected);
@@ -3084,9 +3083,6 @@ try {
 
           await inspector.waitFor();
           await replaceField(inspector, 'Height (mm)', '12');
-          await paced('Model CAD draft through hole', () =>
-            inspector.getByRole('button', { name: 'Add hole', exact: true }).click(),
-          );
           await commit(
             'model-cad-properties-commit',
             baselineCount + 1,
@@ -3094,12 +3090,8 @@ try {
             inspector.getByRole('button', { name: 'Apply', exact: true }),
           );
           const changed = await readCommitted();
-          const holes = changed.cad.objects.find((object) => object.id === body.id).holes;
-          assert.equal(holes.length, 1);
-          assert.match(holes[0].id, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
-          assert.deepEqual(holes[0], { id: holes[0].id, x: 0, y: 0, diameterMm: 3.2 });
           expected.objects = expected.objects.map((object) =>
-            object.id === body.id ? { ...object, size: { x: 24, y: 16, z: 12 }, holes } : object,
+            object.id === body.id ? { ...object, size: { x: 24, y: 16, z: 12 } } : object,
           );
           assert.deepEqual(changed.cad, expected);
           assert.equal(

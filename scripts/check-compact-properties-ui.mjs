@@ -10,16 +10,17 @@ const bundle = await build({
     contents: `
 import React,{useState} from 'react';import{createRoot}from'react-dom/client';
 import PartIdentity from './components/PartIdentity';import PartProperties from './components/PartProperties';
+import{NumberField}from'./components/LayoutPropertyFields';
 import LayoutProperties from './components/LayoutProperties';import ModelCadPanel from './components/ModelCadPanel';
 import{parseProject}from'./lib/project';import{newModelCadObject}from'./lib/model-cad';
 const project=parseProject(${JSON.stringify(source)}),board=project.pcb;
 const footprint=board.footprints.find(f=>f.symbolId&&f.pads.length),part=project.schematic.parts.find(p=>p.id===footprint.symbolId);
-const solid=newModelCadObject(board,'box');solid.holes=[{id:crypto.randomUUID(),x:0,y:0,diameterMm:3.2}];
+const solid=newModelCadObject(board,'box');
 window.inspectorSaves=0;window.solidApplies=0;window.draft=null;
 function Fixture(){const[choice,setChoice]=useState('pad'),[width,setWidth]=useState(280),[visible,setVisible]=useState(true);return <>
 <nav>{['pad','track','via','footprint','mechanical','text','dimension','zone'].map(v=><button onClick={()=>setChoice(v)} key={v}>{v}</button>)}<button onClick={()=>setWidth(width===280?480:280)}>Resize</button><button onClick={()=>setVisible(!visible)}>Toggle model</button></nav>
 <main style={{'--inspector-width':width+'px'}}>
-<section className="column"><header>Schematic</header><div className="inspector part-inspector"><div className="inspector-body"><PartIdentity part={part} library={project.schematic.libraries[part.libId]}/><PartProperties part={part} circuit={project.schematic} spiceAvailable active onSave={()=>{window.inspectorSaves++;return true}}/></div></div></section>
+<section className="column"><header>Schematic</header><div className="inspector part-inspector"><div className="inspector-body"><PartIdentity part={part} library={project.schematic.libraries[part.libId]}/><PartProperties part={part} circuit={project.schematic} spiceAvailable active geometryFields={<div className="geometry-fields component-geometry">{['x','y','rotation'].map(key=><NumberField key={key} label={key==='rotation'?'Rotation (°)':key.toUpperCase()+' (mm)'} accessibleLabel={key==='rotation'?'Component rotation':'Component '+key.toUpperCase()+' position'} value={part[key]} onCommit={()=>true}/>)}</div>} onSave={()=>{window.inspectorSaves++;return true}}/></div></div></section>
 <section className="column"><header>Layout</header><div className="layout-inspector"><div className="layout-inspector-content"><LayoutProperties key={choice} board={board} schematic={project.schematic} active resetKey snap={v=>v}
 pad={choice==='pad'?footprint.pads[0]:undefined} padOwner={choice==='pad'?footprint:undefined} footprint={choice==='mechanical'?board.footprints.find(f=>f.reference==='MECH1'):choice==='footprint'?footprint:undefined}
 track={choice==='track'?board.tracks[0]:undefined} via={choice==='via'?board.vias[0]:undefined}
@@ -54,7 +55,7 @@ try {
   for (const file of bundle.outputFiles.filter((file) => file.path.endsWith('.css')))
     await page.addStyleTag({ content: file.text });
   await page.addStyleTag({
-    content: `body{overflow:auto}nav{display:flex;gap:8px;padding:12px}nav button{padding:6px}main{display:flex;gap:20px;padding:12px}.column{width:var(--inspector-width);height:740px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line)}.column>header{padding:10px 12px;background:var(--panel);font-weight:600}.column>.inspector,.column>.layout-inspector{position:static;width:100%;min-height:0;flex:1;border:0;box-shadow:none;max-height:none;max-width:none}.inspector-body{padding:12px}.layout-inspector{display:flex;flex-direction:column}`,
+    content: `body{overflow:auto}nav{display:flex;gap:8px;padding:12px}nav button{padding:6px}main{display:flex;gap:20px;padding:12px}.column{width:var(--inspector-width);height:740px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line)}.column>header{padding:10px 12px;background:var(--panel);font-weight:600}.column>.inspector,.column>.layout-inspector{position:static;width:100%;min-height:0;flex:1;border:0;box-shadow:none;max-height:none;max-width:none}.inspector-body{padding:var(--properties-inset)}.layout-inspector{display:flex;flex-direction:column}`,
   });
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
@@ -77,13 +78,25 @@ try {
   assert.equal(await fieldValue.inputValue(), 'draft');
   await fieldsSummary.click();
 
+  const componentX = page.getByLabel('Component X position', { exact: true });
+  const savesBeforeGeometry = await page.evaluate(() => window.inspectorSaves);
+  await componentX.fill('235.6');
+  await componentX.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+  await componentX.press('Tab');
+  assert.equal(
+    await page.evaluate(() => window.inspectorSaves),
+    savesBeforeGeometry,
+    'Geometry edits keep their own commit handling without applying unrelated property drafts.',
+  );
+
   const model = page.getByRole('complementary', { name: 'Solid properties settings', exact: true });
   const placement = model.locator('summary').filter({ hasText: /^Placement$/ });
-  const holes = model.locator('summary').filter({ hasText: /^Holes/ });
   assert.equal(await placement.locator('..').getAttribute('open'), null);
-  assert.equal(await holes.locator('..').getAttribute('open'), null);
+  assert.equal(await model.getByRole('button', { name: 'Add hole', exact: true }).count(), 0);
   await placement.click();
   const x = model.getByLabel('Solid X position (mm)', { exact: true });
+  await mkdir('test-results/compact-properties', { recursive: true });
+  await page.screenshot({ path: 'test-results/compact-properties/light-model-placement.png' });
   const originalX = await x.inputValue();
   await x.fill('12.345');
   await x.press('Escape');
@@ -96,16 +109,35 @@ try {
   await page.getByRole('button', { name: 'Toggle model', exact: true }).click();
   await placement.click();
   assert.equal(await x.inputValue(), '12.345');
-  await holes.click();
-  assert.equal(await model.getByLabel('Hole 1 diameter (mm)', { exact: true }).inputValue(), '3.2');
-  await model.getByRole('button', { name: 'Apply', exact: true }).click();
+  const apply = model.getByRole('button', { name: 'Apply', exact: true });
+  assert.equal(await apply.textContent(), '');
+  assert.equal(await apply.getAttribute('title'), 'Apply');
+  assert.equal(await apply.locator('svg').count(), 1);
+  const applyBounds = await apply.boundingBox();
+  assert.equal(applyBounds.width, 30);
+  assert.equal(applyBounds.height, 30);
+  await apply.click();
   assert.equal(await page.evaluate(() => window.solidApplies), 1);
   assert.equal(await page.evaluate(() => window.draft.position.x), 12.345);
   await placement.click();
-  await holes.click();
 
   await mkdir('test-results/compact-properties', { recursive: true });
   const assertControlBounds = async (context) => {
+    const misplaced = await page.locator('.column').evaluateAll((columns) =>
+      columns.flatMap((column) => {
+        const disclosure = column.querySelector('details');
+        if (!disclosure) return [];
+        return Array.from(column.querySelectorAll('input, textarea, .select-trigger'))
+          .filter(
+            (control) =>
+              control.getClientRects().length &&
+              !control.closest('details') &&
+              !(control.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING),
+          )
+          .map((control) => control.getAttribute('aria-label'));
+      }),
+    );
+    assert.deepEqual(misplaced, [], `${context}: ordinary fields precede all disclosures.`);
     const overflows = await page
       .locator('.column input, .column textarea, .column .select-trigger')
       .evaluateAll((controls) =>
@@ -158,8 +190,10 @@ try {
           element.scrollTop = 0;
         });
         await page.mouse.move(1490, 20);
-        if (width === 280)
-          await page.screenshot({ path: `test-results/compact-properties/${theme}-${choice}.png` });
+        if (width === 280 || choice === 'footprint')
+          await page.screenshot({
+            path: `test-results/compact-properties/${theme}-${choice}${width === 480 ? '-wide' : ''}.png`,
+          });
       }
       if (width === 480) await page.getByRole('button', { name: 'Resize', exact: true }).click();
     }

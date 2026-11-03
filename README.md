@@ -7,7 +7,7 @@
 ## What you can do
 
 - Edit native KiCad schematics and Source, manually place and route PCBs, and run ERC/DRC.
-- Inspect boards in 3D and create Model CAD solids with sketches, extrusion, holes, fillets, chamfers and Boolean operations.
+- Inspect boards in 3D and create Model CAD solids with sketch contour Booleans, extrusion, fillets, chamfers and solid Boolean operations.
 - Run supported SPICE transients and steady PCB thermal analysis.
 - Keep independent projects and conversations, recover drafts and compare local Git history.
 - Work with Codex or Claude Code through scoped project tools, or review proposals from DeepSeek Harness and Pi. Cursor supports CLI detection only.

@@ -560,6 +560,65 @@ export function moveText(source: Circuit, id: string, target: Point) {
     y: snap(target.y) - origin.y,
   });
 }
+/** Placement and Properties share these preparations with Core commands. */
+export function saveLabel(
+  source: Circuit,
+  changes: {
+    id?: string;
+    text?: string;
+    position?: Point;
+    scope?: 'global';
+    shape?: NonNullable<Circuit['labels'][number]['shape']>;
+  },
+) {
+  const existing = changes.id ? source.labels.find((label) => label.id === changes.id) : undefined;
+  if (changes.id && !existing) throw new Error('This net label no longer exists.');
+  if (!existing && !changes.position) throw new Error('A new net label needs a position.');
+  const text = changes.text ?? existing?.text ?? 'NET';
+  if (!text.trim() || text.length > 4096)
+    throw new Error('Enter a net name between 1 and 4096 characters.');
+  const position = changes.position
+    ? { x: snap(changes.position.x), y: snap(changes.position.y) }
+    : existing!;
+  const scope = changes.scope ?? existing?.scope;
+  if (changes.shape && scope !== 'global') throw new Error('Only global labels have a shape.');
+  const label = {
+    ...existing,
+    id: existing?.id ?? uid(),
+    x: position.x,
+    y: position.y,
+    text,
+    ...(scope ? { scope } : {}),
+    ...(scope === 'global' ? { shape: changes.shape ?? existing?.shape ?? 'input' } : {}),
+  };
+  return {
+    circuit: {
+      ...source,
+      labels: existing
+        ? source.labels.map((item) => (item.id === label.id ? label : item))
+        : [...source.labels, label],
+    },
+    id: label.id,
+  };
+}
+
+export function placeNoConnect(source: Circuit, position: Point) {
+  const point = { x: snap(position.x), y: snap(position.y) };
+  if (
+    !source.parts.some((part) =>
+      pinPositions(part, source.libraries[part.libId]).some((pin) => samePoint(pin, point)),
+    )
+  )
+    throw new Error('Place a no-connect marker on an existing component pin.');
+  const existing = source.noConnects?.find((marker) => samePoint(marker, point));
+  if (existing) return { circuit: source, id: existing.id };
+  const marker = { id: uid(), ...point };
+  return {
+    circuit: { ...source, noConnects: [...(source.noConnects ?? []), marker] },
+    id: marker.id,
+  };
+}
+
 export function saveAnnotation(source: Circuit, text: string, position: Point, id?: string) {
   if (!text.trim() || text.length > 4096)
     throw new Error('Enter annotation text between 1 and 4096 characters.');

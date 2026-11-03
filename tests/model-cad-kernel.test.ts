@@ -17,7 +17,6 @@ const body = (): ModelCadObject => ({
   size: { x: 20, y: 10, z: 8 },
   material: 'aluminium',
   opacity: 1,
-  holes: [],
   profile: {
     kind: 'polygon',
     points: [
@@ -41,7 +40,6 @@ const createStep = async () => Buffer.from('mock STEP bytes');
 
 test('local kernel source closes polygon profiles and prepares rim operations after extrusion', () => {
   const target = body();
-  target.holes = [{ id: uid(), x: 0, y: 0, diameterMm: 2 }];
   target.edgeTreatment = {
     kind: 'chamfer',
     distanceMm: 0.5,
@@ -53,8 +51,7 @@ test('local kernel source closes polygon profiles and prepares rim operations af
   assert.match(source, /newcl;/);
   assert.match(source, /Curve Loop\(.+\) = \{[^}]+\};/);
   assert.match(source, /Extrude \{0,0,8\} \{ Surface\{[^}]+\}; \};/);
-  assert.ok(source.indexOf('Extrude') < source.indexOf('BooleanDifference'));
-  assert.ok(source.indexOf('BooleanDifference') < source.indexOf('Chamfer'));
+  assert.ok(source.indexOf('Extrude') < source.indexOf('Chamfer'));
   assert.match(source, /BoundingBox Curve/);
   assert.match(source, /Fabs\(/);
   assert.match(source, /_mass\(\) = Mass Volume\{[^}]+\};/);
@@ -65,7 +62,7 @@ test('local kernel source closes polygon profiles and prepares rim operations af
 });
 
 test('Boolean kernel source uses only allowlisted operations and retains operand poses', () => {
-  const cube: ModelCadShape = { kind: 'box', size: { x: 10, y: 10, z: 8 }, holes: [] };
+  const cube: ModelCadShape = { kind: 'box', size: { x: 10, y: 10, z: 8 } };
   for (const operation of ['union', 'difference', 'intersection'] as const) {
     const target: ModelCadObject = {
       ...body(),
@@ -115,7 +112,6 @@ test('selected-edge construction resolves exact base curves and rejects ambiguou
   const target: ModelCadObject = {
     ...body(),
     kind: 'box',
-    holes: [],
     edgeTreatment: { kind: 'fillet', distanceMm: 0.5, edges: ['side:0', 'profile:top:0'] },
   };
   delete target.profile;
@@ -154,7 +150,6 @@ test('kernel preview cache keys geometry only and retains independent public mes
   });
   try {
     const target = body();
-    target.holes = [{ id: uid(), x: 0, y: 0, diameterMm: 2 }];
     const first = await service.preview(target);
     assert.equal(first.shapeKey, modelCadGeometryKey(target));
     assert.equal(first.meshes[0].name, 'CAD solid 1');
@@ -165,7 +160,6 @@ test('kernel preview cache keys geometry only and retains independent public mes
     target.rotation.z += 1;
     target.material = 'plastic';
     target.opacity = 0.5;
-    target.holes[0].id = uid();
     const second = await service.preview(target);
     assert.equal(calls, 1);
     assert.equal(second.meshes[0].attributes.position.array[0], 0);

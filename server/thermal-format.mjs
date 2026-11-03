@@ -5446,6 +5446,7 @@ var keywords = /* @__PURE__ */ new Set([
   "maximum",
   "exclusiveMinimum",
   "exclusiveMaximum",
+  "multipleOf",
   "enum",
   "const",
   "anyOf",
@@ -5492,6 +5493,8 @@ function compileCapabilitySchema(schema) {
       if (s[key] !== void 0 && (typeof s[key] !== "number" || !Number.isFinite(s[key])))
         throw new Error(`Invalid schema ${key}.`);
     }
+    if (s.multipleOf !== void 0 && (typeof s.multipleOf !== "number" || !Number.isFinite(s.multipleOf) || s.multipleOf <= 0))
+      throw new Error("Invalid schema multipleOf.");
     if (s.required !== void 0 && (!Array.isArray(s.required) || s.required.some((key) => typeof key !== "string")))
       throw new Error("Invalid schema required fields.");
     if (s.properties !== void 0 && !plain(s.properties))
@@ -5541,6 +5544,11 @@ function compileCapabilitySchema(schema) {
         if (not && !not(value, path, budget)) return error("matches a forbidden shape");
         if (typeof value === "number") {
           if (!Number.isFinite(value)) return error("must be finite");
+          if (s.multipleOf !== void 0) {
+            const quotient = value / s.multipleOf;
+            if (!Number.isFinite(quotient) || Math.abs(Math.round(quotient) - quotient) > 1e-4)
+              return error("has unsupported precision");
+          }
           if (s.minimum !== void 0 && value < s.minimum || s.maximum !== void 0 && value > s.maximum || s.exclusiveMinimum !== void 0 && value <= s.exclusiveMinimum || s.exclusiveMaximum !== void 0 && value >= s.exclusiveMaximum)
             return error("is outside the supported bounds");
         } else if (typeof value === "string") {

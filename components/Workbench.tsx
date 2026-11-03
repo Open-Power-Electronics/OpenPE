@@ -58,7 +58,6 @@ import {
   serializeCircuit,
   circuitFingerprint,
   labelShapes,
-  snap,
   fmt,
   type Circuit,
   type Point,
@@ -90,6 +89,7 @@ import {
   transformSelection,
   simplifyWires,
   saveAnnotation,
+  saveLabel,
 } from '@/lib/schematic-edit';
 import Select from './Select';
 import SidebarToggle from './SidebarToggle';
@@ -171,7 +171,7 @@ import {
 } from '@/lib/workbench-plugins';
 import { schematicTexts } from '@/lib/schematic-text';
 import { displayPartValue, partFields } from '@/lib/library';
-import { preparePartProperties } from '@/lib/part-properties';
+import { preparePartGeometry, preparePartProperties } from '@/lib/part-properties';
 import { child, children, parseSExpr, val, type SExpr } from '@/lib/sexpr';
 import ProjectNavigation, {
   type ProjectNavigationItem,
@@ -1879,9 +1879,11 @@ export default function Workbench({
       );
       return { success: false, value: existing[key] };
     }
-    const next = key === 'rotation' ? Number(value.toFixed(4)) : snap(value);
-    if (Math.abs(next) > limit) {
-      notify('Position is outside the supported grid range.');
+    let next: number;
+    try {
+      next = preparePartGeometry(key, value);
+    } catch (error) {
+      notify((error as Error).message);
       return { success: false, value: existing[key] };
     }
     if (next !== existing[key]) {
@@ -2042,9 +2044,7 @@ export default function Workbench({
       return false;
     }
     if (value === label.text) return true;
-    const next = structuredClone(doc);
-    next.labels.find((item) => item.id === label.id)!.text = value;
-    return commit(next);
+    return commit(saveLabel(doc, { id: label.id, text: value }).circuit);
   }
   useEffect(() => {
     if (
@@ -3626,36 +3626,38 @@ export default function Workbench({
                                           <UnassignedModelField />
                                         )
                                       }
+                                      geometryFields={
+                                        <div className="geometry-fields component-geometry">
+                                          {(['x', 'y', 'rotation'] as const).map((key) => (
+                                            <NumberField
+                                              key={part.id + key}
+                                              label={
+                                                key === 'rotation'
+                                                  ? 'Rotation (°)'
+                                                  : key.toUpperCase() + ' (mm)'
+                                              }
+                                              accessibleLabel={
+                                                key === 'rotation'
+                                                  ? 'Component rotation'
+                                                  : 'Component ' + key.toUpperCase() + ' position'
+                                              }
+                                              value={part[key]}
+                                              format={fmt}
+                                              step={key === 'rotation' ? 'any' : '1.27'}
+                                              min={key === 'rotation' ? -360 : -100000}
+                                              max={key === 'rotation' ? 360 : 100000}
+                                              active={propertiesActive}
+                                              onCommit={(value) =>
+                                                canEditProperties() &&
+                                                patchGeometry(key, String(value)).success
+                                              }
+                                              onRequestSave={requestPropertiesSave}
+                                            />
+                                          ))}
+                                        </div>
+                                      }
                                       onSave={saveSelectedPartProperties}
                                     />
-                                    <div className="geometry-fields component-geometry">
-                                      {(['x', 'y', 'rotation'] as const).map((key) => (
-                                        <NumberField
-                                          key={part.id + key}
-                                          label={
-                                            key === 'rotation'
-                                              ? 'Rotation (°)'
-                                              : key.toUpperCase() + ' (mm)'
-                                          }
-                                          accessibleLabel={
-                                            key === 'rotation'
-                                              ? 'Component rotation'
-                                              : 'Component ' + key.toUpperCase() + ' position'
-                                          }
-                                          value={part[key]}
-                                          format={fmt}
-                                          step={key === 'rotation' ? 'any' : '1.27'}
-                                          min={key === 'rotation' ? -360 : -100000}
-                                          max={key === 'rotation' ? 360 : 100000}
-                                          active={propertiesActive}
-                                          onCommit={(value) =>
-                                            canEditProperties() &&
-                                            patchGeometry(key, String(value)).success
-                                          }
-                                          onRequestSave={requestPropertiesSave}
-                                        />
-                                      ))}
-                                    </div>
                                   </>
                                 )}
                               </>
@@ -3719,10 +3721,12 @@ export default function Workbench({
                                     }))}
                                     onChange={(shape) => {
                                       if (!canEditProperties()) return;
-                                      const d = structuredClone(doc);
-                                      d.labels.find((l) => l.id === label.id)!.shape =
-                                        shape as (typeof labelShapes)[number];
-                                      commit(d);
+                                      commit(
+                                        saveLabel(doc, {
+                                          id: label.id,
+                                          shape: shape as (typeof labelShapes)[number],
+                                        }).circuit,
+                                      );
                                     }}
                                   />
                                 )}
@@ -4047,7 +4051,7 @@ export default function Workbench({
               if (renameTarget.kind === 'project') {
                 const current = core.getSnapshot().project;
                 if (!current) throw new Error('The project is no longer open.');
-                core.commitProject({ ...current, name });
+                core.execute('project.rename', { name });
               } else {
                 const id = renameTarget.id;
                 if (!sessions.some((session) => session.id === id))

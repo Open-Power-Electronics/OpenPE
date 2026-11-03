@@ -1,4 +1,4 @@
-import type { Part } from './circuit';
+import { snap, type Part } from './circuit';
 import { displayPartValue, partFields, singleSimulationParameter } from './library';
 import { editableSimulationParameters, simulationParameterValue } from './simulation-parameters';
 import { simulationParameterEntries } from './simulation-parameters';
@@ -16,6 +16,21 @@ import {
 } from './simulation-source-parameters';
 
 export type FieldRow = { name: string; value: string; fresh?: boolean; sourceKey?: string };
+
+/** Numeric Properties edits use one precision/grid rule for both clients. */
+export function preparePartGeometry(key: 'x' | 'y' | 'rotation', value: number): number {
+  const limit = key === 'rotation' ? 360 : 100000;
+  if (!Number.isFinite(value) || Math.abs(value) > limit)
+    throw new Error(
+      `${key === 'rotation' ? 'Rotation' : 'Position'} is outside the supported range.`,
+    );
+  const next =
+    key === 'rotation'
+      ? Number((((Number(value.toFixed(4)) % 360) + 360) % 360).toFixed(4))
+      : snap(value);
+  if (Math.abs(next) > limit) throw new Error('Position is outside the supported grid range.');
+  return next;
+}
 
 export function simulationSourceProperties(part: Part) {
   const stored = partFields(part);

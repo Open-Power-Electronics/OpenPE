@@ -13,19 +13,6 @@ const header = [
   '$fn = 96;',
   '',
 ];
-const throughHoles = [
-  '// Cuts [x, y, diameter] holes along local Z through a centred child of this depth.',
-  'module through_holes(depth, holes) {',
-  '  difference() {',
-  '    children();',
-  '    for (hole = holes)',
-  '      translate([hole[0], hole[1], 0])',
-  '        cylinder(h = depth + 0.02, d = hole[2], center = true);',
-  '  }',
-  '}',
-  '',
-];
-
 const zero = { x: 0, y: 0, z: 0 };
 const uuid = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 const body = (
@@ -35,7 +22,6 @@ const body = (
   rotation: zero,
   material: 'aluminium',
   opacity: 1,
-  holes: [],
   ...properties,
 });
 
@@ -59,7 +45,6 @@ const fixture = (): ModelCAD => ({
       profile: { kind: 'rectangle' },
       material: 'pmma',
       opacity: 0.5,
-      holes: [{ id: uuid(3), x: 5, y: 0, diameterMm: 2 }],
     }),
     body({
       id: uuid(4),
@@ -101,7 +86,6 @@ const fixture = (): ModelCAD => ({
             shape: {
               kind: 'box',
               size: { x: 10, y: 10, z: 10 },
-              holes: [{ x: 3, y: 3, diameterMm: 1 }],
             },
             position: zero,
             rotation: zero,
@@ -110,17 +94,16 @@ const fixture = (): ModelCAD => ({
             shape: {
               kind: 'boolean',
               size: { x: 4, y: 4, z: 12 },
-              holes: [],
               boolean: {
                 operation: 'intersection',
                 operands: [
                   {
-                    shape: { kind: 'cylinder', size: { x: 4, y: 4, z: 12 }, holes: [] },
+                    shape: { kind: 'cylinder', size: { x: 4, y: 4, z: 12 } },
                     position: zero,
                     rotation: zero,
                   },
                   {
-                    shape: { kind: 'box', size: { x: 4, y: 4, z: 12 }, holes: [] },
+                    shape: { kind: 'box', size: { x: 4, y: 4, z: 12 } },
                     position: zero,
                     rotation: zero,
                   },
@@ -150,14 +133,13 @@ test('OpenSCAD uses per-body RGB overrides while retaining geometry and opacity'
   assert.equal(exportModelCadScad(input), original);
 });
 
-test('OpenSCAD export writes every solid kind with intrinsic XYZ poses, holes and nested Booleans', () => {
+test('OpenSCAD export writes every solid kind with intrinsic XYZ poses and nested Booleans', () => {
   const model = fixture();
   const original = structuredClone(model);
   assert.equal(
     exportModelCadScad(model),
     [
       ...header,
-      ...throughHoles,
       '// Post',
       'color([0.467, 0.486, 0.51, 1])',
       '  translate([1, 2, 3])',
@@ -168,9 +150,8 @@ test('OpenSCAD export writes every solid kind with intrinsic XYZ poses, holes an
       '',
       '// Plate',
       'color([0.863, 0.925, 0.937, 0.5])',
-      '  through_holes(2, [[5, 0, 2]])',
-      '    linear_extrude(height = 2, center = true)',
-      '      square([20, 10], center = true);',
+      '  linear_extrude(height = 2, center = true)',
+      '    square([20, 10], center = true);',
       '',
       '// Disc',
       'color([0.749, 0.765, 0.776, 1])',
@@ -190,8 +171,7 @@ test('OpenSCAD export writes every solid kind with intrinsic XYZ poses, holes an
       '  translate([50, 60, 5])',
       '    rotate([0, 0, 45])',
       '      difference() {',
-      '        through_holes(10, [[3, 3, 1]])',
-      '          cube([10, 10, 10], center = true);',
+      '        cube([10, 10, 10], center = true);',
       '        translate([-1, 0, 0])',
       '          rotate([90, 0, 0])',
       '            intersection() {',
@@ -212,8 +192,8 @@ test('OpenSCAD export reproduces the EMC Flyback enclosure from its native Model
   const model = JSON.parse(native.text_variables.OPENPE_MODEL_CAD) as ModelCAD;
   const original = structuredClone(model);
   const scad = exportModelCadScad(model);
-  assert.ok(scad.startsWith([...header, ...throughHoles].join('\n')));
-  assert.equal(scad.match(/^module through_holes/gm)?.length, 1);
+  assert.ok(scad.startsWith(header.join('\n')));
+  assert.doesNotMatch(scad, /through_holes/);
   assert.deepEqual(
     scad.match(/^\/\/ (?!OpenPE|Units|OpenSCAD|Cuts).+$/gm),
     model.objects.map((object) => `// ${object.name}`),
@@ -225,20 +205,17 @@ test('OpenSCAD export reproduces the EMC Flyback enclosure from its native Model
       ),
     );
     assert.ok(
-      scad.includes(`cube([${object.size.x}, ${object.size.y}, ${object.size.z}], center = true);`),
+      scad.includes(
+        object.kind === 'box'
+          ? `cube([${object.size.x}, ${object.size.y}, ${object.size.z}], center = true);`
+          : `square([${object.size.x}, ${object.size.y}], center = true);`,
+      ),
     );
-    if (object.holes.length)
-      assert.ok(
-        scad.includes(
-          `through_holes(${object.size.z}, [${object.holes
-            .map((hole) => `[${hole.x}, ${hole.y}, ${hole.diameterMm}]`)
-            .join(', ')}])`,
-        ),
-      );
   }
   assert.equal(scad.match(/^color\(\[0\.749, 0\.765, 0\.776, 1\]\)$/gm)?.length, 3);
   assert.equal(scad.match(/^color\(\[0\.863, 0\.925, 0\.937, 0\.3\]\)$/gm)?.length, 1);
-  assert.equal(scad.match(/through_holes\(3, /g)?.length, 2);
+  assert.equal(scad.match(/difference\(\)/g)?.length, 8);
+  assert.equal(scad.match(/circle\(d = 3\.2\)/g)?.length, 8);
   assert.ok(!scad.includes('rotate('));
   assert.deepEqual(model, original);
 });
@@ -279,7 +256,6 @@ test('OpenSCAD export rejects edge treatments, empty models and invalid Model CA
   );
   const nested = fixture();
   const operand = nested.objects[4].boolean!.operands[0].shape;
-  operand.holes = [];
   operand.edgeTreatment = { kind: 'fillet', distanceMm: 0.5, edges: ['side:0'] };
   assert.throws(
     () => exportModelCadScad(nested),

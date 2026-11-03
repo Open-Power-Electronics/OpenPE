@@ -247,7 +247,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding: 12px;
+  padding: var(--properties-inset);
   overflow: auto;
 }
 .model-property-list {
@@ -634,8 +634,8 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--properties-row-gap);
+  padding: var(--properties-inset);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -643,7 +643,6 @@
 }
 .layout-part-inspector .layout-inspector-content {
   gap: 0;
-  padding-top: 0;
 }
 .layout-inspector-footer .property-fill-action {
   width: 30px;
@@ -659,7 +658,7 @@
 .layout-footprint-geometry {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--properties-row-gap);
 }
 .layout-property-value {
   display: flex;
@@ -727,13 +726,13 @@
 .layout-property-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--properties-row-gap);
   min-width: 0;
 }
 .layout-property-section + .layout-property-section {
   border-top: 1px solid var(--line-soft);
   margin-top: 2px;
-  padding-top: 8px;
+  padding-top: var(--properties-section-gap);
 }
 .layout-property-section + .layout-property-section > .layout-property-details:first-child {
   border-top: 0;
@@ -767,9 +766,10 @@
 }
 .layout-inspector .layout-field,
 .layout-inspector .layout-property-select {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  align-items: center;
+  gap: var(--properties-label-gap);
   min-width: 0;
   color: var(--muted);
   font-size: var(--font-small);
@@ -778,7 +778,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
-  gap: 8px;
+  gap: var(--properties-row-gap) var(--properties-column-gap);
   min-width: 0;
 }
 .layout-property-grid[data-columns='3'] {
@@ -797,7 +797,7 @@
   margin-top: auto;
 }
 .layout-property-primary {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
 }
 .layout-property-readout output {
@@ -862,7 +862,7 @@
 .layout-property-details {
   border-top: 1px solid var(--line-soft);
   min-width: 0;
-  padding-top: 4px;
+  padding-top: 0;
 }
 .layout-property-details summary {
   cursor: pointer;
@@ -891,6 +891,45 @@
 .layout-property-section > .layout-field:has(> textarea) {
   display: flex;
   align-items: stretch;
+}
+.inspector,
+.layout-inspector,
+.model-properties-content {
+  container: properties / inline-size;
+}
+:is(.inspector-body, .layout-inspector-content, .model-properties-body)
+  :is(.geometry-fields, .layout-property-grid, .layout-two-fields) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--properties-row-gap) var(--properties-column-gap);
+}
+:is(.inspector-body, .layout-inspector-content, .model-properties-body)
+  :is(.layout-field, .layout-property-select),
+.inspector-body > label,
+.field-properties > label,
+.geometry-fields > label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  align-items: center;
+  gap: var(--properties-label-gap);
+}
+.inspector-body > label,
+.field-properties > label {
+  margin: 0 0 var(--properties-row-gap);
+}
+@container properties (min-width: 400px) {
+  :is(.inspector-body, .layout-inspector-content, .model-properties-body)
+    :is(.property-primary, .geometry-fields, .layout-property-grid, .layout-two-fields) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  :is(.inspector-body, .layout-inspector-content, .model-properties-body)
+    :is(.property-primary > label, .layout-field, .layout-property-select),
+  .geometry-fields > label {
+    grid-template-columns: auto minmax(112px, 1fr);
+  }
+  .geometry-fields.component-geometry > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  }
 }
 .layout-inspector .quantity-input > input {
   font-size: var(--font-control);

@@ -89,7 +89,6 @@ test('warm owned footprint identities are rechecked against sheets, CAD, boards 
                 size: { x: 10, y: 10, z: 10 },
                 material: 'plastic',
                 opacity: 1,
-                holes: [],
               },
             ],
           },

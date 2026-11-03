@@ -2,9 +2,15 @@
 import QuantityInput from './QuantityInput';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Focus, RotateCcw, X } from 'lucide-react';
+import { Check, Focus, RotateCcw, Undo2, X } from 'lucide-react';
 import type { Point } from '@/lib/circuit';
-import { validateModelCadObject, type ModelCadObject } from '@/lib/model-cad';
+import type { ModelCadObject, ModelCadBooleanOperation } from '@/lib/model-cad';
+import {
+  extrudeModelCadSketch,
+  prepareModelCadSketchContour,
+  type ModelCadSketchContour,
+  type ModelCadSketchExtrusion,
+} from '@/lib/model-cad-sketch';
 import type { PCB } from '@/lib/pcb';
 import Select from './Select';
 import { parseNumericInput } from './numeric-input';
@@ -21,6 +27,7 @@ export type ModelCadSketch = {
   points: readonly Point[];
   cursor: Point | null;
   closed: boolean;
+  contours: readonly ModelCadSketchContour[];
 };
 export type ModelCadSketchInput = {
   down: (point: Point | null) => void;
@@ -30,6 +37,7 @@ export type ModelCadSketchInput = {
   closeProfile: () => void;
   keyDown: (key: string) => boolean;
   finish: () => void;
+  retainContour: () => void;
 };
 const snapPoint = (point: Point): Point => ({
   x: Math.round(point.x * 2) / 2,
@@ -80,6 +88,8 @@ export default function ModelCadSketchPanel({
     YZ: '0',
   });
   const [points, setPoints] = useState<Point[]>([]);
+  const [contours, setContours] = useState<ModelCadSketchContour[]>([]);
+  const [operation, setOperation] = useState<ModelCadBooleanOperation>('union');
   const [cursor, setCursor] = useState<Point | null>(null);
   const [closed, setClosed] = useState(false);
   const [depth, setDepth] = useState('10');
@@ -112,93 +122,74 @@ export default function ModelCadSketchPanel({
     }
   }, [plane, offsets, seed.position.x, seed.position.y, board.thickness]);
   const origin = workplane.origin;
-  const profile = useMemo(() => {
-    if (shape === 'polygon' && points.length < 3) return null;
-    if (shape !== 'polygon' && points.length < 2) return null;
-    if (shape === 'circle') {
-      const radius = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
-      if (!radius) return null;
-      return { center: points[0], width: radius * 2, height: radius * 2 };
+  const currentContour = useMemo(() => {
+    try {
+      return {
+        contour: prepareModelCadSketchContour(shape, points, contours.length ? operation : 'union'),
+        error: '',
+      };
+    } catch (cause) {
+      return { contour: null, error: points.length ? (cause as Error).message : '' };
     }
-    const minX = Math.min(...points.map((point) => point.x)),
-      maxX = Math.max(...points.map((point) => point.x));
-    const minY = Math.min(...points.map((point) => point.y)),
-      maxY = Math.max(...points.map((point) => point.y));
-    if (shape === 'rectangle' && (minX === maxX || minY === maxY)) return null;
-    return {
-      center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
-      width: maxX - minX,
-      height: maxY - minY,
-    };
-  }, [points, shape]);
+  }, [shape, points, contours.length, operation]);
+  const combined = useMemo(
+    () => [...contours, ...(currentContour.contour ? [currentContour.contour] : [])],
+    [contours, currentContour.contour],
+  );
+  const pendingContour =
+    points.length > 0 && (!currentContour.contour || (!closed && shape !== 'polygon'));
+  const parameters = useMemo<ModelCadSketchExtrusion | null>(
+    () =>
+      origin && combined.length
+        ? {
+            id: seed.id,
+            name: 'Extrusion',
+            plane,
+            origin,
+            contours: combined,
+            distance: 1,
+            direction: 'symmetric',
+            material: seed.material,
+            opacity: seed.opacity,
+            ...(seed.color === undefined ? {} : { color: seed.color }),
+          }
+        : null,
+    [origin, combined, plane, seed],
+  );
   const profileResult = useMemo(() => {
     try {
-      if (!origin) throw new Error(workplane.error);
-      if (!profile) throw new Error('Draw a closed profile.');
-      const { x, y } = profile.center;
-      const position =
-        plane === 'XY'
-          ? { x: origin.x + x, y: origin.y + y, z: origin.z }
-          : plane === 'XZ'
-            ? { x: origin.x + x, y: origin.y, z: origin.z + y }
-            : { x: origin.x, y: origin.y + x, z: origin.z + y };
-      const rotation =
-        plane === 'XY'
-          ? { x: 0, y: 0, z: 0 }
-          : plane === 'XZ'
-            ? { x: 90, y: 0, z: 0 }
-            : { x: 90, y: 90, z: 0 };
-      return {
-        object: validateModelCadObject({
-          ...seed,
-          kind: 'extrusion',
-          name: 'Extrusion',
-          profile:
-            shape === 'polygon'
-              ? {
-                  kind: 'polygon',
-                  points: points.map((point) => ({ x: point.x - x, y: point.y - y })),
-                }
-              : { kind: shape },
-          position,
-          rotation,
-          size: { x: profile.width, y: profile.height, z: 1 },
-          holes: [],
-        }),
-        error: '',
-      };
+      if (!parameters) throw new Error(workplane.error || 'Draw a closed sketch contour.');
+      if (pendingContour)
+        throw new Error(currentContour.error || 'Close the current sketch contour.');
+      return { object: extrudeModelCadSketch(parameters), error: '' };
     } catch (cause) {
       return { object: null, error: (cause as Error).message };
     }
-  }, [seed, origin, workplane.error, profile, points, shape, plane]);
+  }, [parameters, workplane.error, pendingContour, currentContour.error]);
+  const profile = profileResult.object
+    ? { width: profileResult.object.size.x, height: profileResult.object.size.y }
+    : null;
   const parsed = useMemo(() => {
     try {
-      if (!profileResult.object) throw new Error(profileResult.error);
-      const distance = parseNumericInput(depth, 'Extrusion distance');
-      const offset =
-        direction === 'symmetric' ? 0 : distance * (direction === 'positive' ? 0.5 : -0.5);
-      const base = profileResult.object;
-      return {
-        object: validateModelCadObject({
-          ...base,
-          position: {
-            x: base.position.x + (plane === 'YZ' ? offset : 0),
-            y: base.position.y - (plane === 'XZ' ? offset : 0),
-            z: base.position.z + (plane === 'XY' ? offset : 0),
-          },
-          size: { ...base.size, z: distance },
-        }),
-        error: '',
+      if (!parameters || !profileResult.object) throw new Error(profileResult.error);
+      const input: ModelCadSketchExtrusion = {
+        ...parameters,
+        distance: parseNumericInput(depth, 'Extrusion distance'),
+        direction,
       };
+      return { object: extrudeModelCadSketch(input), input, error: '' };
     } catch (cause) {
-      return { object: null, error: (cause as Error).message };
+      return { object: null, input: null, error: (cause as Error).message };
     }
-  }, [profileResult, plane, depth, direction]);
-  const ready = Boolean(profileResult.object && (closed || shape === 'polygon'));
+  }, [parameters, profileResult, depth, direction]);
+  const ready = Boolean(profileResult.object && !pendingContour);
   useLayoutEffect(() => onReadyChange(ready && !blocked), [ready, blocked, onReadyChange]);
   const sketch = useMemo<ModelCadSketch | null>(
-    () => (!stale && origin ? { phase, plane, origin, shape, points, cursor, closed } : null),
-    [phase, stale, plane, origin, shape, points, cursor, closed],
+    () =>
+      !stale && origin
+        ? { phase, plane, origin, shape, points, cursor, closed, contours: combined }
+        : null,
+    [phase, stale, plane, origin, shape, points, cursor, closed, combined],
   );
   useEffect(() => {
     onSketchChange(sketch);
@@ -208,18 +199,28 @@ export default function ModelCadSketchPanel({
     onPreview(phase === 'extrude' && !stale ? parsed.object : null);
   }, [phase, stale, parsed.object, onPreview]);
   useEffect(() => () => onPreview(null), [onPreview]);
-  function clearSketch() {
+  function clearCurrent() {
     drag.current = null;
     setPoints([]);
     setClosed(false);
     setCursor(null);
     setError('');
   }
+  function clearSketch() {
+    setContours([]);
+    setOperation('union');
+    clearCurrent();
+  }
+  function retainCurrent() {
+    if (currentContour.contour && (closed || shape === 'polygon'))
+      setContours((previous) => [...previous, currentContour.contour!]);
+    clearCurrent();
+  }
   const previousShape = useRef(shape);
   useLayoutEffect(() => {
     if (previousShape.current === shape) return;
     previousShape.current = shape;
-    clearSketch();
+    clearCurrent();
   }, [shape]);
   function enterSketch() {
     if (blocked || !origin || composition.current) return;
@@ -248,9 +249,20 @@ export default function ModelCadSketchPanel({
         : {
             down: (raw) => {
               if (blocked) return;
+              if (contours.length >= 6) {
+                setError('A sketch supports up to six contours. Undo a contour to continue.');
+                return;
+              }
               if (!raw) {
                 setError('The sketch plane is edge-on. Align the view to draw.');
                 return;
+              }
+              if (closed && currentContour.contour) {
+                if (contours.length >= 5) {
+                  setError('A sketch supports up to six contours. Undo a contour to continue.');
+                  return;
+                }
+                setContours((previous) => [...previous, currentContour.contour!]);
               }
               const point = snapPoint(raw);
               setCursor(point);
@@ -307,7 +319,7 @@ export default function ModelCadSketchPanel({
               drag.current = null;
             },
             cancelPointer: () => {
-              if (drag.current) clearSketch();
+              if (drag.current) clearCurrent();
             },
             closeProfile: () => {
               if (!blocked && shape === 'polygon' && points.length >= 3) setClosed(true);
@@ -315,7 +327,7 @@ export default function ModelCadSketchPanel({
             keyDown: (key) => {
               if (blocked) return false;
               if (key === 'Escape') {
-                if (drag.current || (!closed && points.length)) clearSketch();
+                if (drag.current || (!closed && points.length)) clearCurrent();
                 setCursor(null);
                 return true;
               }
@@ -331,6 +343,7 @@ export default function ModelCadSketchPanel({
               return false;
             },
             finish: finishSketch,
+            retainContour: retainCurrent,
           },
     );
     return () => onInput(null);
@@ -340,7 +353,8 @@ export default function ModelCadSketchPanel({
     setBusy(true);
     setError('');
     try {
-      await onApply({ kind: 'solid', object: parsed.object });
+      if (!parsed.input) return;
+      await onApply({ kind: 'sketch', sketch: parsed.input });
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -354,7 +368,9 @@ export default function ModelCadSketchPanel({
         ? workplane.error
         : phase === 'extrude'
           ? parsed.error
-          : profile
+          : closed ||
+              (shape === 'polygon' && points.length >= 3) ||
+              (!points.length && contours.length)
             ? profileResult.error
             : '');
   const title =
@@ -455,6 +471,38 @@ export default function ModelCadSketchPanel({
               <span>
                 {plane} · {normalAxis} = {Number(offsets[plane]).toFixed(2)} mm
               </span>
+              <label>
+                <span>Operation</span>
+                <Select
+                  label="Sketch Boolean operation"
+                  value={operation}
+                  options={[
+                    { value: 'union', label: 'Union' },
+                    { value: 'difference', label: 'Difference' },
+                    { value: 'intersection', label: 'Intersection' },
+                  ]}
+                  disabled={blocked || !combined.length}
+                  onChange={(value) => {
+                    if (composition.current) return;
+                    retainCurrent();
+                    setOperation(value as ModelCadBooleanOperation);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                className="tool-button"
+                aria-label="Undo sketch contour"
+                title="Undo contour"
+                disabled={blocked || (!points.length && !contours.length)}
+                onClick={() => {
+                  if (composition.current) return;
+                  if (points.length) clearCurrent();
+                  else setContours((previous) => previous.slice(0, -1));
+                }}
+              >
+                <Undo2 size={17} aria-hidden />
+              </button>
               <button
                 type="button"
                 className="tool-button"
@@ -532,7 +580,7 @@ export default function ModelCadSketchPanel({
         </div>
         <footer className={styles.footer}>
           {phase === 'plane' ? (
-            <button type="submit" className="primary" disabled={blocked || !origin}>
+            <button type="submit" className="dialog-button primary" disabled={blocked || !origin}>
               Start sketch
             </button>
           ) : phase === 'sketch' ? (
@@ -552,8 +600,15 @@ export default function ModelCadSketchPanel({
                 Edit sketch
               </button>
               {phase === 'extrude' && (
-                <button type="submit" className="primary" disabled={blocked || !parsed.object}>
-                  {busy ? 'Applying…' : 'Apply'}
+                <button
+                  type="submit"
+                  className="icon-button property-apply-action"
+                  aria-label="Apply"
+                  title={busy ? 'Applying…' : 'Apply'}
+                  aria-busy={busy}
+                  disabled={blocked || !parsed.object}
+                >
+                  <Check size={17} aria-hidden="true" />
                 </button>
               )}
             </>

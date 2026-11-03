@@ -5,6 +5,11 @@
   --radius-control: 8px;
   --radius-panel: 12px;
   --radius-composer: 16px;
+  --properties-inset: 8px 12px;
+  --properties-row-gap: 4px;
+  --properties-column-gap: 8px;
+  --properties-label-gap: 4px;
+  --properties-section-gap: 3px;
 }
 
 body {
@@ -2512,15 +2517,11 @@ body[data-workspace-resizing='true'] * {
 .inspector-body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0 12px 12px;
+  padding: var(--properties-inset);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-}
-
-.field-inspector .inspector-body {
-  padding-bottom: 20px;
 }
 
 .inspector-resize {
@@ -2596,9 +2597,9 @@ body[data-workspace-resizing='true'] * {
 }
 
 .inspector-symbol {
-  gap: 8px;
-  padding: 8px 0;
-  margin-bottom: 8px;
+  gap: var(--properties-column-gap);
+  padding: 6px 0;
+  margin-bottom: 6px;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -2617,6 +2618,7 @@ body[data-workspace-resizing='true'] * {
 
 .inspector-symbol strong {
   font-family: var(--ui-font);
+  font-size: var(--font-small);
   font-weight: 600;
 }
 
@@ -2632,8 +2634,8 @@ body[data-workspace-resizing='true'] * {
 }
 
 .inspector-symbol .component-preview {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-control);
 }
 
@@ -2649,8 +2651,8 @@ body[data-workspace-resizing='true'] * {
 }
 
 .inspector-symbol .component-preview svg {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
 }
 
 .component-preview .symbol-graphic > :not(text) {
@@ -2681,9 +2683,9 @@ body[data-workspace-resizing='true'] * {
 
 .geometry-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 8px 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--properties-row-gap) var(--properties-column-gap);
+  margin: var(--properties-section-gap) 0;
 }
 
 .geometry-fields label {
@@ -2691,18 +2693,10 @@ body[data-workspace-resizing='true'] * {
 }
 
 .component-geometry {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 8px 0 0;
-  padding-top: 8px;
+  margin: var(--properties-section-gap) 0 0;
+  padding-top: var(--properties-section-gap);
   border-top: 1px solid var(--line-soft);
 }
-.component-geometry > .layout-field:last-child {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
-  align-items: center;
-}
-
 .geometry-fields input {
   padding: 4px 8px;
   font-family: var(--code-font);
@@ -2715,7 +2709,8 @@ body[data-workspace-resizing='true'] * {
   margin: 0;
 }
 
-.property-delete-action {
+.property-delete-action,
+.property-apply-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2727,7 +2722,13 @@ body[data-workspace-resizing='true'] * {
   border-radius: var(--radius-control);
   background: transparent;
   align-self: center;
+  color: var(--text-strong);
+}
+.property-delete-action {
   color: var(--error-ink);
+}
+.property-apply-action:hover:not(:disabled) {
+  background: var(--surface-hover);
 }
 .property-delete-action > svg {
   width: 16px;
@@ -5260,7 +5261,7 @@ body[data-workspace-resizing='true'] * {
   font-size: var(--font-control);
 }
 .part-properties .property-primary {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 .part-properties label {
   margin: 0;
@@ -5268,13 +5269,15 @@ body[data-workspace-resizing='true'] * {
 }
 .property-primary {
   display: grid;
-  gap: 8px;
-  margin: 0 0 8px;
+  gap: var(--properties-row-gap) var(--properties-column-gap);
+  margin: 0 0 var(--properties-section-gap);
 }
 .property-primary label {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  gap: var(--properties-label-gap);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  align-items: center;
   font-size: var(--font-small);
 }
 .property-primary input,
@@ -5294,11 +5297,11 @@ body[data-workspace-resizing='true'] * {
 }
 .property-fields {
   display: grid;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: var(--properties-row-gap);
+  margin-bottom: var(--properties-section-gap);
 }
 .part-properties > .property-fields {
-  padding-top: 8px;
+  padding-top: var(--properties-section-gap);
   border-top: 1px solid var(--line-soft);
 }
 .property-field {
@@ -5447,7 +5450,7 @@ body[data-workspace-resizing='true'] * {
   gap: 8px;
   margin-top: 8px;
 }
-.property-model-mapping-actions button {
+.property-model-mapping-actions button:not(.property-apply-action) {
   min-height: var(--control-height);
   padding: 4px 8px;
   border: 1px solid var(--field-border);

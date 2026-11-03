@@ -14,15 +14,10 @@ const body = (): ModelCadObject => ({
   name: 'Body',
   kind: 'box',
   size: { x: 20, y: 16, z: 8 },
-  holes: [],
   position: { x: 0, y: 0, z: 0 },
   rotation: { x: 0, y: 0, z: 0 },
   material: 'aluminium',
   opacity: 1,
-});
-const drilled = () => ({
-  ...body(),
-  holes: [{ id: '7d6a9000-0000-4000-a000-000000000002', x: 2, y: 1, diameterMm: 4 }],
 });
 const polygon = (): ModelCadObject => ({
   ...body(),
@@ -42,9 +37,8 @@ const polygon = (): ModelCadObject => ({
   },
 });
 
-test('face catalogs identify bounded analytic caps, profile walls and independent bore walls', () => {
+test('face catalogs identify bounded analytic caps and profile walls', () => {
   assert.equal(modelCadSelectableFaces(body()).length, 6);
-  assert.equal(modelCadSelectableFaces(drilled()).length, 7);
   assert.equal(modelCadSelectableFaces(polygon()).length, 10);
   const cylinder = { ...body(), kind: 'cylinder' as const, size: { x: 20, y: 20, z: 8 } };
   assert.deepEqual(
@@ -83,17 +77,7 @@ test('local hit normals distinguish adjoining caps and walls without selecting t
   );
 });
 
-test('drilled cap picking respects real voids and the inward-facing hole wall', () => {
-  const object = drilled();
-  assert.equal(modelCadFaceAtPoint(object, { x: 2, y: 1, z: 4 }, { x: 0, y: 0, z: 1 }), null);
-  assert.equal(
-    modelCadFaceAtPoint(object, { x: 4, y: 1, z: 0 }, { x: -1, y: 0, z: 0 })?.id,
-    'hole:0',
-  );
-  assert.equal(
-    modelCadFaceAtPoint(object, { x: 4, y: 1, z: 4 }, { x: 0, y: 0, z: 1 })?.id,
-    'profile:top',
-  );
+test('concave cap picking respects profile voids and analytic side walls', () => {
   assert.equal(
     modelCadFaceAtPoint(polygon(), { x: 0, y: 4, z: 4 }),
     null,
@@ -111,9 +95,9 @@ test('drilled cap picking respects real voids and the inward-facing hole wall', 
   );
 });
 
-test('cap face paint retains through holes and wall paint has no fabricated end caps', () => {
-  const object = drilled();
-  const group = createModelCadFaceHighlight(object, ['profile:top', 'hole:0']);
+test('cap and wall paint have no fabricated end caps', () => {
+  const object = body();
+  const group = createModelCadFaceHighlight(object, ['profile:top', 'side:0']);
   const cap = group.children[0] as THREE.Mesh;
   const wall = group.children[1] as THREE.Mesh;
   const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
@@ -123,7 +107,7 @@ test('cap face paint retains through holes and wall paint has no fabricated end 
   wallProbe.updateMatrixWorld(true);
   try {
     const holeRay = new THREE.Raycaster(new THREE.Vector3(2, -1, 20), new THREE.Vector3(0, 0, -1));
-    assert.equal(holeRay.intersectObject(capProbe).length, 0);
+    assert.ok(holeRay.intersectObject(capProbe).length > 0);
     assert.equal(holeRay.intersectObject(wallProbe).length, 0);
     assert.ok(
       new THREE.Raycaster(new THREE.Vector3(0, 0, 20), new THREE.Vector3(0, 0, -1)).intersectObject(
@@ -131,7 +115,7 @@ test('cap face paint retains through holes and wall paint has no fabricated end 
       ).length > 0,
     );
     assert.ok(
-      new THREE.Raycaster(new THREE.Vector3(2, -1, 0), new THREE.Vector3(1, 0, 0)).intersectObject(
+      new THREE.Raycaster(new THREE.Vector3(0, 20, 0), new THREE.Vector3(0, -1, 0)).intersectObject(
         wallProbe,
       ).length > 0,
     );
@@ -180,7 +164,7 @@ test('treated and Boolean topology exposes no fabricated semantic faces', () => 
   const overlay = createModelCadFaceHighlight(object, ['profile:top']);
   assert.equal(overlay.children.length, 0);
   disposeModelCadFaceHighlight(overlay);
-  const box = { kind: 'box' as const, size: { x: 10, y: 8, z: 4 }, holes: [] };
+  const box = { kind: 'box' as const, size: { x: 10, y: 8, z: 4 } };
   const operand = () => ({
     shape: box,
     position: { x: 0, y: 0, z: 0 },

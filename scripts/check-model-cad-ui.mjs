@@ -131,7 +131,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
           return {
             contents: source.replace(
               marker,
-              '  window.modelCadGui = { drill: hole, canvasClick, sketch };\n' + marker,
+              '  window.modelCadGui = { canvasClick, sketch };\n' + marker,
             ),
             loader: 'tsx',
             resolveDir: path.dirname(args.path),
@@ -160,6 +160,7 @@ const browser = await chromium.launch({
   channel:
     process.env.OPENPE_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
 });
+const sketchBooleanOnly = process.argv.includes('--sketch-boolean');
 const colorOnly = process.argv.includes('--color');
 const sketchInputOnly = process.argv.includes('--sketch-input');
 const deleteActionsOnly = process.argv.includes('--delete-actions');
@@ -440,10 +441,7 @@ try {
     exact: true,
   });
   await componentProperties.waitFor();
-  await componentProperties
-    .locator('.inspector-symbol strong')
-    .filter({ hasText: /^J1$/ })
-    .waitFor();
+  await componentProperties.getByLabel('Reference', { exact: true }).waitFor();
   await page.waitForFunction(() =>
     window.originalComponentMaterials.every(({ mesh, material }) => mesh.material !== material),
   );
@@ -523,14 +521,89 @@ try {
     );
     throw sketchPlaneComplete;
   }
-  for (const name of [
-    'Place box',
-    'Place cylinder',
-    'Create sketch',
-    'Drill through hole',
-    'Undo',
-    'Redo',
-  ])
+  if (sketchBooleanOnly) {
+    const before = await state();
+    const nativeBefore = await page.evaluate(() => window.cad.core.getNativeFiles());
+    assert.equal(await button('Drill through hole').count(), 0);
+    await button('Create sketch').click();
+    const plane = page.getByRole('complementary', { name: 'Sketch plane settings', exact: true });
+    await plane.getByRole('button', { name: 'Start sketch', exact: true }).click();
+    await page.waitForFunction(() => window.modelCadGui.sketch?.phase === 'sketch');
+    const point = (x, y) =>
+      page.evaluate(
+        ({ x, y }) => {
+          const sketch = window.modelCadGui.sketch;
+          const world = new window.THREE.Vector3(
+            sketch.origin.x + x,
+            -sketch.origin.y - y,
+            sketch.origin.z,
+          ).project(window.camera);
+          const rect = document.querySelector('.pcb-model-canvas canvas').getBoundingClientRect();
+          return {
+            x: rect.left + ((world.x + 1) * rect.width) / 2,
+            y: rect.top + ((1 - world.y) * rect.height) / 2,
+          };
+        },
+        { x, y },
+      );
+    const draw = async (a, b) => {
+      const start = await point(...a),
+        end = await point(...b);
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(end.x, end.y, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForFunction(() => window.modelCadGui.sketch?.closed);
+    };
+    await draw([-14, -10], [14, 10]);
+    const drawing = page.getByRole('complementary', { name: 'Sketch settings', exact: true });
+    await drawing.getByRole('combobox', { name: 'Sketch Boolean operation', exact: true }).click();
+    await page.getByRole('option', { name: 'Difference', exact: true }).click();
+    await button('Draw circle').click();
+    await page.waitForFunction(() => window.modelCadGui.sketch?.shape === 'circle');
+    await draw([2, -1], [5, -1]);
+    assert.equal(await page.evaluate(() => window.modelCadGui.sketch.contours.length), 2);
+    assert.equal(
+      await page.evaluate(() => window.modelCadGui.sketch.contours[1].operation),
+      'difference',
+    );
+    await button('Finish sketch').click();
+    await page.waitForFunction(() => window.modelCadGui.sketch?.phase === 'profile');
+    await preview.screenshot({ path: 'test-results/model-sketch-boolean-profile.png' });
+    assert.deepEqual(await state(), before, 'Planar Boolean drawing remains a local draft.');
+    await button('Extrude sketch').click();
+    const extrude = page.getByRole('complementary', { name: 'Extrude settings', exact: true });
+    const distance = extrude.getByLabel('Extrusion distance (mm)', { exact: true });
+    await distance.fill('6');
+    await distance.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+    assert.deepEqual(await state(), before, 'Composing Enter cannot commit extrusion.');
+    await extrude.getByRole('button', { name: 'Apply', exact: true }).click();
+    await waitObjects(1);
+    const object = (await solids())[0];
+    assert.equal(object.kind, 'boolean');
+    assert.equal(object.boolean.operation, 'difference');
+    assert.equal(object.boolean.operands[0].shape.profile.kind, 'rectangle');
+    assert.equal(object.boolean.operands[1].shape.profile.kind, 'circle');
+    assert.equal(object.boolean.operands[1].shape.size.x, 6);
+    assert.equal(object.boolean.operands[0].shape.size.z, 6);
+    assert.equal(object.boolean.operands[1].shape.size.z, 6);
+    assert.equal((await state()).revision, before.revision + 1);
+    assert.doesNotMatch(JSON.stringify(object), /holes|diameterMm/);
+    assert.equal(await page.getByRole('button', { name: 'Add hole', exact: true }).count(), 0);
+    const native = await page.evaluate(() => window.cad.core.getNativeFiles());
+    await button('Undo').click();
+    await waitObjects(0);
+    assert.deepEqual(await page.evaluate(() => window.cad.core.getNativeFiles()), nativeBefore);
+    await button('Redo').click();
+    await waitObjects(1);
+    assert.deepEqual(await page.evaluate(() => window.cad.core.getNativeFiles()), native);
+    assert.deepEqual(errors, []);
+    console.log(
+      'PASS: real Sketch rectangle/circle Difference drawing, local draft, one prepared extrusion command, IME, native undo/redo and no dedicated Hole UI (kernel mocked).',
+    );
+    throw sketchPlaneComplete;
+  }
+  for (const name of ['Place box', 'Place cylinder', 'Create sketch', 'Undo', 'Redo'])
     assert.equal(
       await button(name).count(),
       1,
@@ -566,7 +639,7 @@ try {
   const modifications = toolbar.getByRole('group', { name: 'Solid modifications', exact: true });
   assert.equal(
     await modifications.getByRole('button', { name: 'Drill through hole', exact: true }).count(),
-    1,
+    0,
   );
   assert.equal(
     await modifications.getByRole('combobox', { name: 'Modify solids', exact: true }).count(),
@@ -902,17 +975,6 @@ try {
       element.scrollTop = scrollTop;
     }, originalInspectorScroll);
   }
-  await button('Drill through hole').click();
-  const cleanHolePanel = page.getByRole('complementary', { name: 'Hole settings', exact: true });
-  await cleanHolePanel.waitFor();
-  await page.evaluate(() => {
-    window.earlierDrillClick = window.modelCadGui.canvasClick;
-  });
-  await cleanHolePanel.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await inspector.waitFor();
-  await page.evaluate(() => {
-    window.earlierDrillStart = window.modelCadGui.drill;
-  });
   await inspector.getByLabel('Solid name', { exact: true }).fill('Aluminium bracket');
   await inspector.getByLabel('Length (mm)', { exact: true }).fill('26');
   await inspector
@@ -988,7 +1050,10 @@ try {
       `Turning Pan ${enabled ? 'on' : 'off'} retains the complete unapplied solid preview.`,
     );
     assert.equal(await inspector.isVisible(), true, 'Pan retains the selected solid inspector.');
-    assert.equal(await inspector.getByText('Unapplied', { exact: true }).isVisible(), true);
+    assert.equal(
+      await inspector.getByRole('status', { name: 'Unapplied changes', exact: true }).isVisible(),
+      true,
+    );
     assert.deepEqual(
       await inspector
         .locator('input')
@@ -1009,13 +1074,7 @@ try {
       'Selecting Pan alone does not move the camera.',
     );
   }
-  for (const name of [
-    'Drill through hole',
-    'Move solid',
-    'Rotate solid 90°',
-    'Duplicate solid',
-    'Delete solid',
-  ])
+  for (const name of ['Move solid', 'Rotate solid 90°', 'Duplicate solid', 'Delete solid'])
     assert.equal(
       !(await modelToolAvailable(page, name)),
       true,
@@ -1026,33 +1085,7 @@ try {
     true,
     'Footer Delete retains unapplied solid drafts.',
   );
-  async function attemptDrillWithDraft() {
-    // Retained GUI handlers must consult the live dirty ref even when the DOM
-    // disabled state or the closure predates the current Properties input.
-    await page.evaluate(() => window.earlierDrillStart());
-    assert.equal(await canvas.getAttribute('data-cad-tool'), 'select');
-    await page.evaluate(
-      (id) => window.earlierDrillClick(null, { id, local: { x: 0, y: 0, z: 0 } }),
-      first.id,
-    );
-    assert.equal(await canvas.getAttribute('data-cad-tool'), 'select');
-    assert.equal(await inspector.isVisible(), true);
-    assert.equal(await inspector.getByText('Unapplied', { exact: true }).isVisible(), true);
-    assert.deepEqual(
-      await state(),
-      beforeDraftToggle,
-      'GUI Drill handlers cannot bypass unapplied Properties to start a tool or commit a hole.',
-    );
-  }
-  await attemptDrillWithDraft();
-  assert.deepEqual(
-    await sceneMeshState({ modelCadId: first.id, modelCadPreview: true }),
-    stagedPreview,
-    'Rejected drilling retains the exact valid Properties preview.',
-  );
   await inspector.getByLabel('Length (mm)', { exact: true }).fill('-');
-  assert.equal(await button('Drill through hole').isDisabled(), true);
-  await attemptDrillWithDraft();
   assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '-');
   assert.equal(await sceneMeshState({ modelCadId: first.id, modelCadPreview: true }), null);
   await inspector.getByLabel('Length (mm)', { exact: true }).fill('26');
@@ -1113,42 +1146,6 @@ try {
   );
   await rightToggle.click();
 
-  await button('Drill through hole').click();
-  const holePanel = page.getByRole('complementary', { name: 'Hole settings' });
-  await holePanel.getByLabel('Hole diameter (mm)', { exact: true }).fill('4');
-  const beforeHole = await state();
-  await clickSolid(first.id);
-  await page.waitForFunction(() => window.cad.state().modelCad.objects[0].holes.length === 1);
-  assert.equal((await state()).revision, beforeHole.revision + 1);
-  assert.equal((await solids())[0].holes[0].diameterMm, 4);
-  assert.equal(
-    await page.evaluate((id) => {
-      const THREE = window.THREE,
-        body = window.cad.state().modelCad.objects.find((item) => item.id === id);
-      let mesh;
-      window.scene.traverse((node) => {
-        if (node.userData.modelCadId === id && !node.userData.modelCadPreview) mesh = node;
-      });
-      window.scene.updateMatrixWorld(true);
-      const hole = body.holes[0];
-      const origin = mesh.localToWorld(new THREE.Vector3(hole.x, -hole.y, body.size.z / 2 + 10));
-      const direction = new THREE.Vector3(0, 0, -1).transformDirection(mesh.matrixWorld);
-      const holeHits = new THREE.Raycaster(origin, direction).intersectObject(mesh).length;
-      const solidOrigin = mesh.localToWorld(
-        new THREE.Vector3(body.size.x / 2 - 1, 0, body.size.z / 2 + 10),
-      );
-      return (
-        holeHits === 0 &&
-        new THREE.Raycaster(solidOrigin, direction).intersectObject(mesh).length > 0
-      );
-    }, first.id),
-    true,
-    'The rotated solid has a genuine through hole in its own local coordinates.',
-  );
-  if (await holePanel.isVisible())
-    await holePanel.getByRole('button', { name: 'Cancel', exact: true }).click();
-  else if (await inspector.isVisible()) await rightToggle.click();
-
   const moveTargetPoint = await clickSolid(first.id, { x: 5, y: 0, z: null });
   const moveSelection = await page.evaluate(
     ({ id, point }) => {
@@ -1169,7 +1166,7 @@ try {
         inspectorVisible: Boolean(inspector?.getClientRects().length),
         inspectedName: inspector?.querySelector('[aria-label="Solid name"]')?.value,
         inspectedX: inspector?.querySelector('[aria-label="Solid X position (mm)"]')?.value,
-        unapplied: inspector?.textContent.includes('Unapplied') ?? false,
+        unapplied: Boolean(inspector?.querySelector('[aria-label="Unapplied changes"]')),
         cadTool: host.dataset.cadTool,
         hostRect: rect(host),
         canvasRect: rect(canvas),
@@ -1217,7 +1214,6 @@ try {
   await chooseModelTool(page, 'Duplicate solid');
   await waitObjects(2);
   const duplicated = (await solids()).find((body) => body.id !== first.id);
-  assert.notEqual(duplicated.holes[0].id, (await solids())[0].holes[0].id);
   assert.equal(
     await sidebar.isVisible(),
     true,
@@ -1422,7 +1418,6 @@ try {
   for (const name of [
     'Place box',
     'Place cylinder',
-    'Drill through hole',
     'Move solid',
     'Rotate solid 90°',
     'Duplicate solid',
@@ -2776,7 +2771,13 @@ try {
   const beforeChamfer = await state();
   await chooseModelTool(page, 'Chamfer edges');
   const chamfer = page.getByRole('complementary', { name: 'Chamfer settings', exact: true });
-  assert.equal(await chamfer.getByRole('combobox').count(), 0, 'Edges are picked on the solid.');
+  assert.deepEqual(
+    await chamfer
+      .getByRole('combobox')
+      .evaluateAll((controls) => controls.map((control) => control.getAttribute('aria-label'))),
+    ['Chamfer distance (mm) unit'],
+    'Only the quantity unit uses a menu; edges are picked on the solid.',
+  );
   assert.equal(
     await chamfer.getByRole('button', { name: 'Apply', exact: true }).isDisabled(),
     true,
@@ -2948,7 +2949,7 @@ try {
   await preview.screenshot({ path: 'test-results/model-cad-shared-sketch-ui.png' });
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: shared PCB-canvas draw/extrude/chamfer/fillet/Boolean controls, one-edit Core/undo semantics, docked properties/drafts, primitive edits/holes, Source/IME guards, visible-only Fit, STEP and retained WebGL/caches (geometry service mocked).',
+    'PASS: shared PCB-canvas draw/extrude/chamfer/fillet/Boolean controls, one-edit Core/undo semantics, docked properties/drafts, primitive edits and sketch cutouts, Source/IME guards, visible-only Fit, STEP and retained WebGL/caches (geometry service mocked).',
   );
 } catch (cause) {
   if (cause !== sketchPlaneComplete) throw cause;

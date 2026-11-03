@@ -1,6 +1,6 @@
 import { compileCapabilitySchema, type CapabilityValidation } from '../api/capability-schema';
 import type { CapabilityLevel } from '../api/capabilities';
-import { type Circuit, type Point, snap, uid } from '../lib/circuit';
+import { type Circuit, type Point, uid } from '../lib/circuit';
 import {
   appendSchematic,
   createProject,
@@ -16,17 +16,23 @@ import {
 } from '../lib/project';
 import { type PCB, invalidatePCBFill } from '../lib/pcb';
 import { partFields, displayPartValue } from '../lib/library';
-import { preparePartProperties, type FieldRow } from '../lib/part-properties';
+import { preparePartGeometry, preparePartProperties, type FieldRow } from '../lib/part-properties';
 import { applyProposal, extractProposal } from '../lib/proposals';
 import {
   duplicateSelection,
   moveSelection,
+  moveText,
+  placeNoConnect,
   removeSelection,
   saveAnnotation,
+  saveLabel,
+  simplifyWires,
   transformSelection,
 } from '../lib/schematic-edit';
 import { commitWireRoute } from '../lib/wiring';
 import { val } from '../lib/sexpr';
+import { schematicTexts } from '../lib/schematic-text';
+import { displayName, MAX_DISPLAY_NAME_LENGTH } from '../lib/display-name';
 import { ownProject } from '../lib/immutable-project';
 import { defaultPCBDesignRules } from '../lib/design-rule-checks';
 import {
@@ -41,6 +47,7 @@ import {
   type ModelCadObject,
   type ModelCadShape,
 } from '../lib/model-cad';
+import { extrudeModelCadSketch, modelCadSketchExtrusionSchema } from '../lib/model-cad-sketch';
 import {
   projectNativeFiles,
   projectWithNativeFiles,
@@ -142,7 +149,7 @@ export const coreQueryDefinitions: CoreDefinition[] = [
   ...layoutQueryDefinitions,
   definition(
     'modelCad.get',
-    'Read the bounded box and cylinder CAD objects for the PCB.',
+    'Read the bounded box, cylinder, extrusion and Boolean CAD objects for the PCB.',
     object({ boardId: identity }, ['boardId']),
   ),
   definition(
@@ -174,6 +181,11 @@ export const coreQueryDefinitions: CoreDefinition[] = [
 ];
 export const coreCommandDefinitions: CoreDefinition[] = [
   ...layoutCommandDefinitions,
+  operationCommand(
+    'modelCad.sketch.extrude',
+    'Extrude up to six ordered analytic sketch contours with planar Union, Difference or Intersection as one prepared undo edit.',
+    object({ boardId: identity, sketch: modelCadSketchExtrusionSchema }, ['boardId', 'sketch']),
+  ),
   objectCommand(
     'modelCad.add',
     'Add a validated CAD solid, preparing advanced geometry before one undo edit.',
@@ -181,7 +193,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'modelCad.update',
-    'Update a CAD object, its transform, material, color and local through holes as one undo edit.',
+    'Update a CAD object, its transform, material and color as one undo edit.',
     object({ boardId: identity, object: modelCadObjectSchema }, ['boardId', 'object']),
   ),
   objectCommand(
@@ -221,6 +233,13 @@ export const coreCommandDefinitions: CoreDefinition[] = [
       },
       ['boardId', 'operation', 'targetId', 'toolId'],
     ),
+  ),
+  objectCommand(
+    'project.rename',
+    'Rename the project and native project settings as one undo edit.',
+    object({ name: { type: 'string', minLength: 1, maxLength: MAX_DISPLAY_NAME_LENGTH } }, [
+      'name',
+    ]),
   ),
   definition(
     'project.replace',
@@ -338,6 +357,36 @@ export const coreCommandDefinitions: CoreDefinition[] = [
     object({ ...sheet, text, position: point, id: identity }, ['schematicId', 'text', 'position']),
   ),
   objectCommand(
+    'schematic.label',
+    'Create a local/global net label or edit its name, position and global shape using Properties rules.',
+    object(
+      {
+        ...sheet,
+        id: identity,
+        text,
+        position: point,
+        scope: { const: 'global' },
+        shape: { enum: ['input', 'output', 'bidirectional', 'tri_state', 'passive'] },
+      },
+      ['schematicId'],
+    ),
+  ),
+  objectCommand(
+    'schematic.noConnect',
+    'Place a no-connect marker on an existing component pin; an existing marker is retained.',
+    object({ ...sheet, position: point }, ['schematicId', 'position']),
+  ),
+  objectCommand(
+    'schematic.text.position',
+    'Set a component Reference/Value/Sim.Params or annotation text position on the schematic grid.',
+    object({ ...sheet, id: identity, position: point }, ['schematicId', 'id', 'position']),
+  ),
+  operationCommand(
+    'schematic.simplify',
+    'Simplify wires using the same topology-preserving preparation as the canvas menu.',
+    object(sheet, ['schematicId']),
+  ),
+  objectCommand(
     'part.properties',
     'Edit a component and its shared units by stable ID using the same value/field rules as Properties.',
     object(
@@ -359,7 +408,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
           ),
         },
         position: point,
-        rotation: { type: 'number' },
+        rotation: { type: 'number', minimum: -360, maximum: 360 },
       },
       ['schematicId', 'partId'],
     ),
@@ -848,8 +897,11 @@ export class ProjectCore {
     let objects = modelCadFromProject(project)?.objects ?? [];
     let changed: ModelCadObject | undefined;
     let duplicates: ModelCadObject[] | undefined;
-    if (id === 'modelCad.add') {
-      changed = validateModelCadObject(args.object);
+    if (id === 'modelCad.add' || id === 'modelCad.sketch.extrude') {
+      changed =
+        id === 'modelCad.add'
+          ? validateModelCadObject(args.object)
+          : extrudeModelCadSketch(args.sketch);
       if (objects.some((body) => body.id.toLowerCase() === changed!.id.toLowerCase()))
         throw new Error('This CAD object identity already exists.');
       objects = [...objects, changed];
@@ -886,7 +938,6 @@ export class ProjectCore {
               y: body.position.y + args.offset.y,
               z: body.position.z + args.offset.z,
             },
-            holes: body.holes.map((hole) => ({ ...hole, id: uid() })),
           }));
         objects = [...objects, ...duplicates];
       }
@@ -997,6 +1048,10 @@ export class ProjectCore {
       return this.query('project.snapshot');
     }
     const project = this.requireProject();
+    if (id === 'project.rename') {
+      this.commitProject({ ...project, name: displayName(args.name) });
+      return this.query('project.snapshot');
+    }
     if (id.startsWith('modelCad.')) {
       const preview = this.buildModelCadCommand(id, args);
       this.commitProject(preview.project);
@@ -1058,6 +1113,29 @@ export class ProjectCore {
       case 'schematic.annotation':
         next = saveAnnotation(schematic, args.text, args.position as Point, args.id).circuit;
         break;
+      case 'schematic.label': {
+        const result = saveLabel(schematic, args);
+        next = result.circuit;
+        selection = [result.id];
+        break;
+      }
+      case 'schematic.noConnect': {
+        const result = placeNoConnect(schematic, args.position);
+        next = result.circuit;
+        selection = [result.id];
+        break;
+      }
+      case 'schematic.text.position':
+        if (
+          !args.id.startsWith('field/') &&
+          !schematicTexts(schematic.original).some((text) => text.id === args.id)
+        )
+          throw new Error('Select a component field or annotation text.');
+        next = moveText(schematic, args.id, args.position);
+        break;
+      case 'schematic.simplify':
+        next = simplifyWires(schematic);
+        break;
       case 'part.properties':
       case 'part.participation': {
         const part = schematic.parts.find((part) => part.id === args.partId);
@@ -1097,11 +1175,11 @@ export class ProjectCore {
                 );
             }
             if (args.position && unit.id === part.id) {
-              edited.x = snap(args.position.x);
-              edited.y = snap(args.position.y);
+              edited.x = preparePartGeometry('x', args.position.x);
+              edited.y = preparePartGeometry('y', args.position.y);
             }
             if (args.rotation !== undefined && unit.id === part.id)
-              edited.rotation = ((args.rotation % 360) + 360) % 360;
+              edited.rotation = preparePartGeometry('rotation', args.rotation);
             return edited;
           }),
         };

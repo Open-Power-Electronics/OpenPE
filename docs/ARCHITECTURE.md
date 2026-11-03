@@ -53,7 +53,7 @@ Queries/infrastructure/view controls need no Core level. Metadata grants no perm
 
 ### Supported artifacts
 
-The host reads/writes bounded native KiCad projects, exports manufacturing Gerber/drill ZIP and assembly CSV, and exports Model CAD as analytical STEP or OpenSCAD text. Source edits supporting text and displays local PDFs through grant-bound host adapters. Recovery, Git history and SPICE/thermal records remain private stores; snapshots are internal adapters, never public design formats. PE Layout Skill supplies bundled guidance. Transient SPICE and steady PCB thermal execution remain distinct from whole-assembly 3D simulation.
+Sketch Boolean extrusion uses pure `lib/model-cad-sketch.ts` through `modelCad.sketch.extrude`, then the shared prepared-shape gate; analytic operands persist as bounded solid recipes. Dedicated local-hole fields are unsupported. The host reads/writes bounded native KiCad projects, exports manufacturing Gerber/drill ZIP and assembly CSV, and exports Model CAD as analytical STEP or OpenSCAD text. Source edits supporting text and displays local PDFs through grant-bound host adapters. Recovery, Git history and SPICE/thermal records remain private stores; snapshots are internal adapters, never public design formats. PE Layout Skill supplies bundled guidance. Transient SPICE and steady PCB thermal execution remain distinct from whole-assembly 3D simulation.
 
 ## Repository management
 
@@ -108,7 +108,7 @@ Model CAD parameters belong to Core and native `.kicad_pro` settings. Sketches o
 
 File Export selects a manufacturing/exchange format independently of native Save. Pure `lib/manufacturing-export.ts`, `lib/manufacturing-gerber.ts` and `lib/export-zip.ts` compile the current native backing into bounded Gerber X2/Excellon ZIP, JLCPCB ZIP or assembly CSV; `server/manufacturing-format.mjs` is their generated host facade sharing the project validator. `electron/native-export.cjs` validates requests, protects open sources/linked destinations and writes one compiled file after a format-specific picker. The renderer browser download uses the same pure compiler. Pinned Newstroke glyphs and their source/license travel with the application; no runtime KiCad CLI, network lookup or supplier mapping is used. Export leaves design destination/baseline unchanged; Source application remains a Core transaction. [Format](FORMAT.md#manufacturing-export) owns coverage and bounds.
 
-Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable; meshes and preparation receipts never enter native design or recovery. This host geometry service is independent of simulation plugins and runs no solve. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve; ambiguous or missing edges fail. No arbitrary programs, executables, paths, imported/Boolean topology editing or new simulation authority are exposed. File Export's OpenSCAD type runs pure `lib/model-cad-scad.ts` in the Electron export adapter over the host-parsed snapshot: boxes, cylinders, extrusions, local-Z holes and Boolean recipes keep their XYZ poses, edge treatments are rejected and circles are faceted. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it.
+Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable; meshes and preparation receipts never enter native design or recovery. This host geometry service is independent of simulation plugins and runs no solve. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve; ambiguous or missing edges fail. No arbitrary programs, executables, paths, imported/Boolean topology editing or new simulation authority are exposed. File Export's OpenSCAD type runs pure `lib/model-cad-scad.ts` in the Electron export adapter over the host-parsed snapshot: boxes, cylinders, extrusions and Boolean cutout recipes keep their XYZ poses, edge treatments are rejected and circles are faceted. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it.
 
 ERC/DRC are pure, lazy Core queries. Reports, thresholds and locate markers are presentation, independent of simulation lifecycle. [Design rules](DESIGN-RULES.md) defines supported coverage and partial-report semantics.
 
@@ -240,6 +240,14 @@ Host example discovery lives in `server/example-discovery.mjs`, with native file
 
 ## Verification
 
+GUI/Agent design parity is exercised by `tests/gui-agent-parity.test.ts`: shared
+preparations produce matching native KiCad files and undo results behind the
+same revision, Source and close gates. PCB property capability schemas are
+generated from the canonical format definitions into
+`core/layout-property-schemas.json`; the API interpreter accepts their bounded
+nonrecursive shapes, while Core retains full document validation. Ownership and
+host grants remain unchanged by these object commands.
+
 Use the feature contracts for focused tests and [AGENTS](../AGENTS.md#verification-and-delivery) for required checks/authorization. Documentation-only changes need content, links, commands and formatting review without app/provider/solver runs.
 
 `scripts/test.mjs` discovers the complete `tests/*.test.ts` set and uses Node's
@@ -254,18 +262,18 @@ Long exhaustive comparisons may split into interleaved shard files, such as
 `tests/pcb-point-index-emc-*.test.ts`, whose union covers every sampled query
 with the complete variant sequence.
 
-| Concern                     | Representative checks                                                                                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                            |
-| Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                 |
-| Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                  |
-| Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                          |
-| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`                                                       |
-| Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                               |
-| Domain/runtime measurements | `benchmark-emc-interaction.mjs`; `benchmark-project-runtime.ts`; `benchmark-startup.mjs`                                                                                          |
-| Plugin/solver boundary      | Workbench-plugin, participation, runtime and model-adapter tests; isolated simulation/thermal/Agent UI checks                                                                     |
-| CAD geometry and admission  | `tests/model-cad.test.ts`; `tests/model-cad-host.test.ts`; `tests/model-cad-kernel.test.ts`; `tests/model-cad-step.test.ts`; opt-in `OPENPE_TEST_MODEL_CAD=1` native-kernel tests |
-| Explicit desktop checks     | `check-desktop-startup.mjs`; `benchmark-desktop-startup.mjs`; `benchmark-desktop-interaction.mjs`; `benchmark-editor-experience.mjs`                                              |
+| Concern                     | Representative checks                                                                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                              |
+| Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                   |
+| Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                    |
+| Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                            |
+| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`                                                                                         |
+| Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                                                                 |
+| Domain/runtime measurements | `benchmark-emc-interaction.mjs`; `benchmark-project-runtime.ts`; `benchmark-startup.mjs`                                                                                                                            |
+| Plugin/solver boundary      | Workbench-plugin, participation, runtime and model-adapter tests; isolated simulation/thermal/Agent UI checks                                                                                                       |
+| CAD geometry and admission  | `tests/model-cad.test.ts`; `tests/model-cad-sketch.test.ts`; `tests/model-cad-host.test.ts`; `tests/model-cad-kernel.test.ts`; `tests/model-cad-step.test.ts`; opt-in `OPENPE_TEST_MODEL_CAD=1` native-kernel tests |
+| Explicit desktop checks     | `check-desktop-startup.mjs`; `benchmark-desktop-startup.mjs`; `benchmark-desktop-interaction.mjs`; `benchmark-editor-experience.mjs`                                                                                |
 
 Script basenames are under `scripts/`. Isolated renderer checks use fixture services/native pickers and do not establish live CLI authentication, desktop dispatch latency or GPU presentation. Model performance uses pinned offline STEP assets. Runtime measurements establish only their asserted workloads.
 

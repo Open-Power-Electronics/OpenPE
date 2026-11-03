@@ -8277,6 +8277,7 @@ var keywords = /* @__PURE__ */ new Set([
   "maximum",
   "exclusiveMinimum",
   "exclusiveMaximum",
+  "multipleOf",
   "enum",
   "const",
   "anyOf",
@@ -8323,6 +8324,8 @@ function compileCapabilitySchema(schema) {
       if (s[key] !== void 0 && (typeof s[key] !== "number" || !Number.isFinite(s[key])))
         throw new Error(`Invalid schema ${key}.`);
     }
+    if (s.multipleOf !== void 0 && (typeof s.multipleOf !== "number" || !Number.isFinite(s.multipleOf) || s.multipleOf <= 0))
+      throw new Error("Invalid schema multipleOf.");
     if (s.required !== void 0 && (!Array.isArray(s.required) || s.required.some((key) => typeof key !== "string")))
       throw new Error("Invalid schema required fields.");
     if (s.properties !== void 0 && !plain(s.properties))
@@ -8372,6 +8375,11 @@ function compileCapabilitySchema(schema) {
         if (not && !not(value, path, budget)) return error("matches a forbidden shape");
         if (typeof value === "number") {
           if (!Number.isFinite(value)) return error("must be finite");
+          if (s.multipleOf !== void 0) {
+            const quotient = value / s.multipleOf;
+            if (!Number.isFinite(quotient) || Math.abs(Math.round(quotient) - quotient) > 1e-4)
+              return error("has unsupported precision");
+          }
           if (s.minimum !== void 0 && value < s.minimum || s.maximum !== void 0 && value > s.maximum || s.exclusiveMinimum !== void 0 && value <= s.exclusiveMinimum || s.exclusiveMaximum !== void 0 && value >= s.exclusiveMaximum)
             return error("is outside the supported bounds");
         } else if (typeof value === "string") {
@@ -8529,19 +8537,13 @@ var modelCadEdgeTreatmentSchema = object({
     items: {
       type: "string",
       maxLength: 32,
-      pattern: "^(?:(?:profile|hole):(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$"
+      pattern: "^(?:profile:(?:top|bottom):[0-9]{1,3}|side:[0-9]{1,3})$"
     }
   }
 });
-var shapeHolesSchema = {
-  type: "array",
-  maxItems: 32,
-  items: object({ x: number2(-500, 500), y: number2(-500, 500), diameterMm: number2(0.5, 500) })
-};
 function shapeSchema(depth) {
   const common = {
     size: vector2(0.5, 1e3),
-    holes: shapeHolesSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema
   };
   const alternatives = [
@@ -8587,16 +8589,6 @@ var modelCadObjectSchema = object(
     material: { enum: ["aluminium", "pmma", "plastic"] },
     opacity: number2(0.05, 1),
     color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", minLength: 7, maxLength: 7 },
-    holes: {
-      type: "array",
-      maxItems: 32,
-      items: object({
-        id: identity,
-        x: number2(-500, 500),
-        y: number2(-500, 500),
-        diameterMm: number2(0.5, 500)
-      })
-    },
     profile: modelCadProfileSchema,
     edgeTreatment: modelCadEdgeTreatmentSchema,
     boolean: {
@@ -8637,19 +8629,6 @@ function intersects(a, b, c, d) {
   ].some(
     ([area, point2, start, end]) => Math.abs(area) <= epsilon ? segmentDistance(point2, start, end) <= epsilon : false
   );
-}
-function profileClearance(profile, size, point2) {
-  if (profile.kind === "circle") return size.x / 2 - Math.hypot(point2.x, point2.y);
-  if (profile.kind === "rectangle")
-    return Math.min(size.x / 2 - Math.abs(point2.x), size.y / 2 - Math.abs(point2.y));
-  let inside = false, distance = Infinity;
-  for (let i = 0; i < profile.points.length; i++) {
-    const a = profile.points[i], b = profile.points[(i + 1) % profile.points.length];
-    distance = Math.min(distance, segmentDistance(point2, a, b));
-    if (a.y > point2.y !== b.y > point2.y && point2.x < (b.x - a.x) * (point2.y - a.y) / (b.y - a.y) + a.x)
-      inside = !inside;
-  }
-  return inside || distance <= epsilon ? distance : -distance;
 }
 function validateModelCadProfile(input, size) {
   const result = checkProfile(input);
@@ -8717,14 +8696,6 @@ function selectableEdges(shape) {
           start: { ...points2[index], z },
           end: { ...points2[(index + 1) % points2.length], z }
         });
-    for (let index = 0; index < shape.holes.length; index++)
-      edges.push({
-        id: `hole:${side}:${index}`,
-        label: `Hole ${index + 1} ${side} rim`,
-        kind: "circle",
-        center: { x: shape.holes[index].x, y: shape.holes[index].y, z },
-        radiusMm: shape.holes[index].diameterMm / 2
-      });
   }
   if (profile.kind !== "circle")
     for (let index = 0; index < points2.length; index++)
@@ -8740,11 +8711,11 @@ function selectableEdges(shape) {
 function validateModelCadShape(input) {
   const result = checkShape(input);
   if (!result.valid) return fail2(`Invalid shape: ${result.error}.`);
-  let operations = 0, holes = 0;
+  let operations = 0;
   const visit = (shape, depth) => {
     if (shape.kind === "cylinder" && shape.size.x !== shape.size.y)
       return fail2("A cylinder must have equal X and Y diameters.");
-    const profile = shape.kind === "extrusion" ? validateModelCadProfile(shape.profile, shape.size) : shape.kind === "box" ? { kind: "rectangle" } : shape.kind === "cylinder" ? { kind: "circle" } : null;
+    if (shape.kind === "extrusion") validateModelCadProfile(shape.profile, shape.size);
     if (shape.edgeTreatment) {
       const treatment = shape.edgeTreatment;
       const selected = treatment.edges;
@@ -8754,20 +8725,6 @@ function validateModelCadShape(input) {
       const d = treatment.distanceMm, count = Number(selected.some((edge) => edge.includes(":top:"))) + Number(selected.some((edge) => edge.includes(":bottom:")));
       if (count * d >= shape.size.z - epsilon || 2 * d >= Math.min(shape.size.x, shape.size.y) - epsilon)
         return fail2("The edge treatment must leave positive body height and profile area.");
-    }
-    holes += shape.holes.length;
-    if (holes > 256) return fail2("A shape supports at most 256 through holes.");
-    if (!profile && shape.holes.length)
-      return fail2("Boolean bodies use subtractive solids instead of local through holes.");
-    for (let i = 0; i < shape.holes.length; i++) {
-      const hole = shape.holes[i];
-      if (profile && profileClearance(profile, shape.size, hole) + epsilon < hole.diameterMm / 2 + 0.5)
-        return fail2("Each hole needs at least 0.5 mm of material to the object edge.");
-      for (let j = i + 1; j < shape.holes.length; j++) {
-        const other = shape.holes[j];
-        if (Math.hypot(other.x - hole.x, other.y - hole.y) < (other.diameterMm + hole.diameterMm) / 2 + 0.5)
-          return fail2("Through holes must leave at least 0.5 mm between them.");
-      }
     }
     if (shape.kind === "boolean") {
       if (depth > 4 || ++operations > 32)
@@ -8785,8 +8742,7 @@ function validateModelCadShape(input) {
 function modelCadShape(body) {
   const shape = {
     kind: body.kind,
-    size: { x: body.size.x, y: body.size.y, z: body.size.z },
-    holes: body.holes.map(({ x, y, diameterMm }) => ({ x, y, diameterMm }))
+    size: { x: body.size.x, y: body.size.y, z: body.size.z }
   };
   if (body.profile)
     shape.profile = body.profile.kind === "polygon" ? { kind: "polygon", points: body.profile.points.map(({ x, y }) => ({ x, y })) } : { kind: body.profile.kind };
@@ -8841,11 +8797,6 @@ function validateModelCadObject(input) {
   const body = input;
   if (!body.name.trim()) return fail2("An object name is required.");
   validateModelCadShape(modelCadShape(body));
-  const identities = /* @__PURE__ */ new Set([body.id.toLowerCase()]);
-  for (const hole of body.holes) {
-    if (identities.has(hole.id.toLowerCase())) return fail2("Feature identities must be unique.");
-    identities.add(hole.id.toLowerCase());
-  }
   return body;
 }
 function validateModelCad(input) {
@@ -8855,17 +8806,10 @@ function validateModelCad(input) {
   if (JSON.stringify(model).length > 256e3)
     return fail2("Model parameters exceed the supported 256,000-character native limit.");
   const identities = /* @__PURE__ */ new Set();
-  let holeCount = 0;
-  const countHoles = (shape) => shape.holes.length + (shape.boolean?.operands.reduce((count, operand) => count + countHoles(operand.shape), 0) ?? 0);
   for (const body of model.objects) {
     validateModelCadObject(body);
-    holeCount += countHoles(body);
-    if (holeCount > 256) return fail2("A model supports at most 256 through holes.");
-    for (const id of [body.id, ...body.holes.map((hole) => hole.id)]) {
-      if (identities.has(id.toLowerCase()))
-        return fail2("Object and feature identities must be unique.");
-      identities.add(id.toLowerCase());
-    }
+    if (identities.has(body.id.toLowerCase())) return fail2("Object identities must be unique.");
+    identities.add(body.id.toLowerCase());
   }
   return model;
 }
@@ -10304,9 +10248,6 @@ function posed(position2, rotation, body) {
       body = nest(`rotate(${list([0, 1, 2].map((index) => index === axis ? angle3 : 0))})`, body);
   return position2.x !== 0 || position2.y !== 0 || position2.z !== 0 ? nest(`translate(${list([position2.x, position2.y, position2.z])})`, body) : body;
 }
-function drilled(shape) {
-  return shape.holes.length > 0 || !!shape.boolean?.operands.some((operand) => drilled(operand.shape));
-}
 function solid(shape, name) {
   if (shape.edgeTreatment)
     return fail4(`${name} has chamfered or filleted edges, which OpenSCAD cannot represent.`);
@@ -10330,11 +10271,6 @@ function solid(shape, name) {
       "}"
     ];
   }
-  if (shape.holes.length)
-    body = nest(
-      `through_holes(${number3(size.z)}, [${shape.holes.map((hole) => list([hole.x, hole.y, hole.diameterMm])).join(", ")}])`,
-      body
-    );
   return body;
 }
 function exportModelCadScad(input) {
@@ -10362,18 +10298,6 @@ function exportModelCadScad(input) {
     "",
     "$fn = 96;",
     "",
-    ...shapes.some(drilled) ? [
-      "// Cuts [x, y, diameter] holes along local Z through a centred child of this depth.",
-      "module through_holes(depth, holes) {",
-      "  difference() {",
-      "    children();",
-      "    for (hole = holes)",
-      "      translate([hole[0], hole[1], 0])",
-      "        cylinder(h = depth + 0.02, d = hole[2], center = true);",
-      "  }",
-      "}",
-      ""
-    ] : [],
     ...bodies
   ].join("\n");
 }

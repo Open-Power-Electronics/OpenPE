@@ -29,12 +29,6 @@ function posed(position: ModelCadVector, rotation: ModelCadVector, body: string[
     : body;
 }
 
-function drilled(shape: ModelCadShape): boolean {
-  return (
-    shape.holes.length > 0 || !!shape.boolean?.operands.some((operand) => drilled(operand.shape))
-  );
-}
-
 function solid(shape: ModelCadShape, name: string): string[] {
   if (shape.edgeTreatment)
     return fail(`${name} has chamfered or filleted edges, which OpenSCAD cannot represent.`);
@@ -62,13 +56,6 @@ function solid(shape: ModelCadShape, name: string): string[] {
       '}',
     ];
   }
-  if (shape.holes.length)
-    body = nest(
-      `through_holes(${number(size.z)}, [${shape.holes
-        .map((hole) => list([hole.x, hole.y, hole.diameterMm]))
-        .join(', ')}])`,
-      body,
-    );
   return body;
 }
 
@@ -98,20 +85,6 @@ export function exportModelCadScad(input: unknown): string {
     '',
     '$fn = 96;',
     '',
-    ...(shapes.some(drilled)
-      ? [
-          '// Cuts [x, y, diameter] holes along local Z through a centred child of this depth.',
-          'module through_holes(depth, holes) {',
-          '  difference() {',
-          '    children();',
-          '    for (hole = holes)',
-          '      translate([hole[0], hole[1], 0])',
-          '        cylinder(h = depth + 0.02, d = hole[2], center = true);',
-          '  }',
-          '}',
-          '',
-        ]
-      : []),
     ...bodies,
   ].join('\n');
 }

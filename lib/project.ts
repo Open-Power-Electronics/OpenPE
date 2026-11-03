@@ -240,7 +240,6 @@ function validateProjectContent(input: unknown): void {
   if (modelCad)
     for (const body of modelCad.objects) {
       id(body.id);
-      for (const hole of body.holes) id(hole.id);
     }
   for (const d of projectSchematics(project)) {
     const owned = isOwnedCircuit(d);

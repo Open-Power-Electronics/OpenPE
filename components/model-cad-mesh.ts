@@ -31,11 +31,7 @@ export function modelCadMesh(object: ModelCadObject, preview = false) {
     outline.lineTo(-size.x / 2, size.y / 2);
     outline.closePath();
   }
-  for (const hole of object.holes) {
-    const cut = new THREE.Path();
-    cut.absarc(hole.x, -hole.y, hole.diameterMm / 2, 0, 2 * Math.PI, false);
-    outline.holes.push(cut);
-  }
+
   const geometry = new THREE.ExtrudeGeometry(outline, {
     depth: size.z,
     bevelEnabled: false,
@@ -52,7 +48,7 @@ export function modelCadMesh(object: ModelCadObject, preview = false) {
       transparent: opacity < 1,
       opacity,
       depthWrite: opacity === 1,
-      // Extrusion already supplies every exterior face, including hole walls.
+      // Extrusion already supplies every exterior face, without duplicate interior caps.
       side: THREE.FrontSide,
     }),
   );

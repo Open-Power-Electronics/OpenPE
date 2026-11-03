@@ -1,15 +1,18 @@
 // Isolated renderer and controlled SSE fixture. No Electron, providers or user files.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { readNativeProject } from './source-editor-test-helpers.mjs';
+import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
 const { emptyCircuit, createPart, uid } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const { createProject, serializeProject } = await tsImport('../lib/project.ts', import.meta.url);
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
+const { defaultAppearance } = await tsImport('../lib/appearance.ts', import.meta.url);
 const circuit = emptyCircuit();
 circuit.parts.push(createPart(circuit, 'R', 25.4, 25.4));
 circuit.wires.push({ id: uid(), a: { x: 12.7, y: 40.64 }, b: { x: 63.5, y: 40.64 } });
@@ -50,7 +53,7 @@ let state = {
       source,
       sourceDraft: null,
       dirty: false,
-      filename: null,
+      filename: 'interaction.kicad_pro',
       sessions: [{ id: 'interaction-session', messages: [], draft: '' }],
       activeSessionId: 'interaction-session',
     },
@@ -59,7 +62,7 @@ let state = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: defaultAgentPreferences.models,
 };
 const streams = [];
 const server = createServer((req, res) => {
@@ -114,7 +117,7 @@ try {
     window.openpe = {
       titleBarOverlay: false,
       writeWorkspaceRecovery: async (content) => {
-        await fetch('http://localhost/api/state', {
+        await fetch(base + '/api/state', {
           method: content === null ? 'DELETE' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: content ?? undefined,
@@ -122,6 +125,8 @@ try {
       },
       connection: async () => ({ base, token: 'fixture' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -134,14 +139,18 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
-    if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
+    if (url.pathname === '/api/appearance') return route.fulfill({ json: defaultAppearance });
     if (url.pathname === '/api/agents')
       return route.fulfill({ json: [{ id: 'codex', available: true, supportsEffort: true }] });
     if (url.pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });
-    if (url.pathname === '/api/workbench-plugins') return route.fulfill({ json: { plugins: [] } });
+    if (url.pathname === '/api/workbench-plugins')
+      return route.fulfill({ json: bundledWorkbenchCatalog() });
     if (/^\/(brand|agents|cursors)\/[\w.-]+\.(svg|png)$/.test(url.pathname))
-      return route.fulfill({ body: await readFile('public' + url.pathname) });
+      return route.fulfill({
+        body: await readFile('public' + url.pathname),
+        contentType: url.pathname.endsWith('.svg') ? 'image/svg+xml' : 'image/png',
+      });
     if (url.pathname.startsWith('/api/')) throw new Error(`Unexpected API call: ${url.pathname}`);
     return route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
   });
@@ -220,8 +229,10 @@ try {
   await grid.press('Escape');
   const pad = await at(layout, { x: 10, y: 10 });
   await page.mouse.click(pad.x, pad.y);
+  await layout.press('e');
+  await button('Footprint properties').click();
   await layout.press('ArrowRight');
-  const x = page.getByRole('spinbutton', { name: 'X (mm)', exact: true });
+  const x = page.getByLabel('X (mm)', { exact: true });
   await x.waitFor();
   await x.fill('11.2');
   await append();
@@ -242,7 +253,7 @@ try {
   await button('Layout').click();
 
   await button('Settings').click();
-  const settingsMenu = page.getByRole('menu', { name: 'OpenPE menu', exact: true });
+  const settingsMenu = page.getByRole('dialog', { name: 'Settings', exact: true });
   await append();
   assert.equal(await settingsMenu.isVisible(), true);
   assert.equal(await settingsMenu.evaluate((el) => el.contains(document.activeElement)), true);
@@ -292,23 +303,43 @@ try {
     el.scrollTop = 0;
     el.dispatchEvent(new Event('scroll'));
   });
-  await page.waitForTimeout(50);
+  await button('Latest messages').waitFor();
   await append();
   assert.equal(await chat.evaluate((el) => el.scrollTop), 0);
   await chat.evaluate((el) => {
     el.scrollTop = el.scrollHeight;
     el.dispatchEvent(new Event('scroll'));
   });
-  await page.waitForTimeout(50);
+  await button('Latest messages').waitFor({ state: 'hidden' });
   await append();
-  assert.ok(await chat.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight < 2));
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('.chat-scroll');
+      return el.scrollHeight - el.scrollTop - el.clientHeight < 2;
+    },
+    undefined,
+    { timeout: 3000 },
+  );
   event({ type: 'done', outcome: 'completed' });
   streams.at(-1).end();
   await button('Send message').waitFor();
   assert.deepEqual(errors, []);
+  await mkdir('test-results/agent-interaction', { recursive: true });
+  await page.screenshot({ path: 'test-results/agent-interaction/success.png' });
   console.log(
     'Agent streaming preserves editor menus, focus, wire gestures and viewports; Layout uses 0.5 mm; popup anchor dismissal and chat following pass.',
   );
+} catch (error) {
+  const page = browser?.contexts()[0]?.pages()[0];
+  if (page) {
+    await mkdir('test-results/agent-interaction', { recursive: true });
+    await page.screenshot({ path: 'test-results/agent-interaction/failure.png' }).catch(() => {});
+    await writeFile(
+      'test-results/agent-interaction/failure.txt',
+      await page.locator('body').innerText(),
+    );
+  }
+  throw error;
 } finally {
   for (const stream of streams) stream.destroy();
   await browser?.close();

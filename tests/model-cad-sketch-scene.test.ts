@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { prepareModelCadSketchContour } from '../lib/model-cad-sketch';
 import * as THREE from 'three';
 import {
   createModelCadSketchScene,
@@ -9,6 +10,7 @@ import type { ModelCadSketch } from '../components/ModelCadSketchPanel';
 
 const sketch: ModelCadSketch = {
   phase: 'sketch',
+  contours: [],
   plane: 'XZ',
   origin: { x: 12, y: 18, z: 4 },
   shape: 'polygon',
@@ -83,7 +85,15 @@ test('only drawing shows a dense grid, vertices and cursor; plane setup retains 
     assert.ok(root.children.some((object) => object.userData.modelCadSketchPlane));
 
     for (const phase of ['profile', 'extrude'] as const) {
-      scene.update({ ...sketch, phase, closed: true }, true);
+      scene.update(
+        {
+          ...sketch,
+          phase,
+          closed: true,
+          contours: [prepareModelCadSketchContour(sketch.shape, sketch.points)],
+        },
+        true,
+      );
       updateGrid();
       assert.equal(grid(), undefined);
       assert.equal(root.children.length, 1);

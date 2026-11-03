@@ -4,21 +4,19 @@ import PropertyDeleteButton from './PropertyDeleteButton';
 import { quantityLabel } from './quantity-units';
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RotateCcw, Trash2, X } from 'lucide-react';
-import { uid } from '@/lib/circuit';
+import { Check, RotateCcw, X } from 'lucide-react';
 import { modelCadColor, validateModelCadObject, type ModelCadObject } from '@/lib/model-cad';
 import Select from './Select';
 import { parseNumericInput as numeric } from './numeric-input';
 import styles from './ModelCadPanel.module.css';
 
-type ModelCadPanelMode = 'box' | 'cylinder' | 'move' | 'edit' | 'hole';
+type ModelCadPanelMode = 'box' | 'cylinder' | 'move' | 'edit';
 type NumericKey = 'length' | 'width' | 'height' | 'x' | 'y' | 'z' | 'rx' | 'ry' | 'rz' | 'opacity';
 type Draft = {
   name: string;
   values: Record<NumericKey, string>;
   material: ModelCadObject['material'];
   color?: string;
-  holes: { id: string; x: string; y: string; diameterMm: string }[];
 };
 
 function draftFor(object: ModelCadObject | null): Draft {
@@ -38,13 +36,6 @@ function draftFor(object: ModelCadObject | null): Draft {
     },
     material: object?.material ?? 'aluminium',
     color: object?.color,
-    holes:
-      object?.holes.map((hole) => ({
-        id: hole.id,
-        x: String(hole.x),
-        y: String(hole.y),
-        diameterMm: String(hole.diameterMm),
-      })) ?? [],
   };
 }
 
@@ -79,12 +70,6 @@ function objectFor(draft: Draft, base: ModelCadObject) {
     },
     material: draft.material,
     opacity: numeric(draft.values.opacity, 'Opacity') / 100,
-    holes: draft.holes.map((hole, index) => ({
-      id: hole.id,
-      x: numeric(hole.x, `Hole ${index + 1} X`),
-      y: numeric(hole.y, `Hole ${index + 1} Y`),
-      diameterMm: numeric(hole.diameterMm, `Hole ${index + 1} diameter`),
-    })),
   };
   if (draft.color === undefined) delete next.color;
   else next.color = draft.color;
@@ -98,8 +83,6 @@ export default function ModelCadPanel({
   docked = false,
   disabled,
   revision,
-  holeDiameterMm = 3.2,
-  onHoleDiameterChange,
   onClose,
   onDraftChange,
   onDirtyChange,
@@ -113,8 +96,6 @@ export default function ModelCadPanel({
   docked?: boolean;
   disabled: boolean;
   revision: string;
-  holeDiameterMm?: number | null;
-  onHoleDiameterChange?: (diameterMm: number | null) => void;
   onClose: () => void;
   onToggleSidebar?: () => void;
   onDraftChange: (draft: ModelCadObject | null, positionEdited?: boolean) => void;
@@ -134,20 +115,16 @@ export default function ModelCadPanel({
   currentDirty.current = dirty;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [holeDiameter, setHoleDiameter] = useState(String(holeDiameterMm ?? 3.2));
   const focusedInput = useRef<{
     input: HTMLInputElement;
     draft: Draft;
     dirty: boolean;
     error: string;
-    holeDiameter: string;
   } | null>(null);
   const draftCallback = useRef(onDraftChange);
   draftCallback.current = onDraftChange;
   const dirtyCallback = useRef(onDirtyChange);
   dirtyCallback.current = onDirtyChange;
-  const holeCallback = useRef(onHoleDiameterChange);
-  holeCallback.current = onHoleDiameterChange;
   const baseOutdated = base.key !== incomingKey || base.revision !== revision;
   const stale = dirty && baseOutdated;
   const changedSelection = base.object?.id !== object?.id || base.mode !== mode;
@@ -170,26 +147,11 @@ export default function ModelCadPanel({
       setDraft(next);
       updateDirty(false);
       setError('');
-      if (base.mode !== mode) {
-        const diameter = holeDiameterMm ?? 3.2;
-        setHoleDiameter(String(diameter));
-        if (mode === 'hole') holeCallback.current?.(diameter);
-      }
     }
-  }, [
-    incomingKey,
-    revision,
-    mode,
-    changedSelection,
-    dirty,
-    holeDiameterMm,
-    object,
-    baseOutdated,
-    base.mode,
-  ]);
+  }, [incomingKey, revision, mode, changedSelection, dirty, object, baseOutdated, base.mode]);
 
   const parsed = useMemo(() => {
-    if (!base.object || mode === 'hole') return { object: null, error: '' };
+    if (!base.object) return { object: null, error: '' };
     try {
       return { object: objectFor(draft, base.object), error: '' };
     } catch (cause) {
@@ -211,15 +173,14 @@ export default function ModelCadPanel({
       !parsed.object
     )
       return;
-    // Rotate the same form draft that owns dimensions, holes and pose. Changing
+    // Rotate the same form draft that owns dimensions and pose. Changing
     // only the preview would leave the settings stale or lose the turn on edit.
     const degrees = parsed.object.rotation.z + rotationRequest.degrees - previousDegrees;
     const z = ((((degrees + 180) % 360) + 360) % 360) - 180;
     edit((previous) => ({ ...previous, values: { ...previous.values, rz: String(z) } }));
   }, [rotationRequest, placement, blocked, baseOutdated, changedSelection, parsed.object]);
   useLayoutEffect(() => {
-    if (mode !== 'hole')
-      draftCallback.current(blocked || baseOutdated || changedSelection ? null : parsed.object);
+    draftCallback.current(blocked || baseOutdated || changedSelection ? null : parsed.object);
   }, [validKey, blocked, baseOutdated, changedSelection, mode]);
   useLayoutEffect(() => () => draftCallback.current(null), []);
 
@@ -235,14 +196,12 @@ export default function ModelCadPanel({
     // An input and a canvas key can share a browser event batch. Publish that
     // input's validated object now, rather than letting a prior valid draft
     // place after a newer invalid value or lose the latest valid parameters.
-    if (mode !== 'hole') {
-      let object: ModelCadObject | null = null;
-      if (!blocked && !baseOutdated && !changedSelection && base.object)
-        try {
-          object = objectFor(next, base.object);
-        } catch {}
-      draftCallback.current(object, positionEdited);
-    }
+    let object: ModelCadObject | null = null;
+    if (!blocked && !baseOutdated && !changedSelection && base.object)
+      try {
+        object = objectFor(next, base.object);
+      } catch {}
+    draftCallback.current(object, positionEdited);
   }
   function reset() {
     focusedInput.current = null;
@@ -297,28 +256,6 @@ export default function ModelCadPanel({
       setBusy(false);
     }
   }
-  function addHole() {
-    if (!parsed.object) return;
-    const diameterMm = 3.2;
-    const points = Array.from({ length: 121 }, (_, step) => ({
-      x: ((step % 11) - 5) * Math.max(4, parsed.object!.size.x / 12),
-      y: (Math.floor(step / 11) - 5) * Math.max(4, parsed.object!.size.y / 12),
-    })).sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
-    for (const { x, y } of points) {
-      const hole = { id: uid(), x, y, diameterMm };
-      try {
-        validateModelCadObject({ ...parsed.object, holes: [...parsed.object.holes, hole] });
-      } catch {
-        continue;
-      }
-      edit((previous) => ({
-        ...previous,
-        holes: [...previous.holes, { ...hole, x: String(x), y: String(y), diameterMm: '3.2' }],
-      }));
-      return;
-    }
-    setError('No free hole position is available. Adjust the current holes or solid dimensions.');
-  }
   function numberField(key: NumericKey, label: string, accessibleLabel = label) {
     return (
       <label key={key}>
@@ -344,20 +281,17 @@ export default function ModelCadPanel({
     stale || changedSelection
       ? 'The project changed. Reload parameters before applying this draft.'
       : error || (dirty ? parsed.error : '');
-  const title =
-    mode === 'hole'
-      ? 'Hole'
-      : placement
-        ? mode === 'move'
-          ? 'Move solid'
-          : mode === 'box'
-            ? 'Box'
-            : 'Cylinder'
-        : 'Solid properties';
-  const toolSheet = !docked && (placement || mode === 'hole');
+  const title = placement
+    ? mode === 'move'
+      ? 'Move solid'
+      : mode === 'box'
+        ? 'Box'
+        : 'Cylinder'
+    : 'Solid properties';
+  const toolSheet = !docked && placement;
   const primitiveSheet = toolSheet && (mode === 'box' || mode === 'cylinder');
   const DraftDetails = toolSheet ? 'div' : 'details';
-  const panelError = mode === 'hole' ? error : validationError;
+  const panelError = validationError;
   const circular =
     base.object?.kind === 'cylinder' ||
     (base.object?.kind === 'extrusion' && base.object.profile?.kind === 'circle');
@@ -375,7 +309,7 @@ export default function ModelCadPanel({
 
   return (
     <aside
-      className={`${styles.panel} ${docked ? styles.docked : placement || mode === 'hole' ? styles.placement : styles.inspector}${primitiveSheet ? ` ${styles.primitive}` : ''}${toolSheet ? ' editor-tool-sheet' : ''}`}
+      className={`${styles.panel} ${docked ? styles.docked : placement ? styles.placement : styles.inspector}${primitiveSheet ? ` ${styles.primitive}` : ''}${toolSheet ? ' editor-tool-sheet' : ''}`}
       data-cad-mode={toolSheet ? mode : undefined}
       hidden={!visible}
       aria-label={`${title} settings`}
@@ -392,7 +326,6 @@ export default function ModelCadPanel({
             draft: currentDraft.current,
             dirty: currentDirty.current,
             error,
-            holeDiameter,
           };
       }}
       onKeyDown={(event) => {
@@ -411,23 +344,13 @@ export default function ModelCadPanel({
           const snapshot = focusedInput.current;
           if (!snapshot || snapshot.input !== event.target) return;
           setError(snapshot.error);
-          if (mode === 'hole') {
-            setHoleDiameter(snapshot.holeDiameter);
-            let diameter: number | null = null;
-            try {
-              const value = numeric(snapshot.holeDiameter, 'Hole diameter');
-              if (value >= 0.5 && value <= 500) diameter = value;
-            } catch {}
-            holeCallback.current?.(diameter);
-          } else {
-            const positionEdited =
-              currentDraft.current.values.x !== snapshot.draft.values.x ||
-              currentDraft.current.values.y !== snapshot.draft.values.y;
-            currentDraft.current = snapshot.draft;
-            setDraft(snapshot.draft);
-            updateDirty(snapshot.dirty);
-            publishDraft(snapshot.draft, positionEdited);
-          }
+          const positionEdited =
+            currentDraft.current.values.x !== snapshot.draft.values.x ||
+            currentDraft.current.values.y !== snapshot.draft.values.y;
+          currentDraft.current = snapshot.draft;
+          setDraft(snapshot.draft);
+          updateDirty(snapshot.dirty);
+          publishDraft(snapshot.draft, positionEdited);
           return;
         }
         onClose();
@@ -435,9 +358,7 @@ export default function ModelCadPanel({
     >
       {!docked && !primitiveSheet && (
         <header className={styles.header}>
-          <h2 aria-description={toolSheet ? title : undefined}>
-            {toolSheet ? (mode === 'hole' ? 'Diameter' : 'Name') : title}
-          </h2>
+          <h2 aria-description={toolSheet ? title : undefined}>{toolSheet ? 'Name' : title}</h2>
           <span>{mode === 'edit' && dirty ? 'Unapplied' : ''}</span>
           {!toolSheet && (
             <button
@@ -465,114 +386,63 @@ export default function ModelCadPanel({
               {panelError}
             </p>
           )}
-          {docked && (
-            <div className={styles.sectionHeader}>
-              <h3>{base.object?.name ?? title}</h3>
-              <span>{mode === 'edit' && dirty ? 'Unapplied' : ''}</span>
-              <button
-                type="button"
-                className="tool-button"
-                aria-label="Close solid settings"
-                title="Close"
-                disabled={busy}
-                onClick={onClose}
-              >
-                <X size={17} />
-              </button>
-            </div>
-          )}
-          {mode === 'hole' ? (
-            <>
-              {object && <div className={styles.target}>{object.name}</div>}
-              <label className={styles.field}>
-                <span>Diameter</span>
-                <QuantityInput
-                  unit={'mm'}
-                  aria-label="Hole diameter (mm)"
-                  inputMode="decimal"
-                  value={holeDiameter}
-                  disabled={blocked}
-                  onValueChange={(inputValue) => {
-                    const value = inputValue;
-                    setHoleDiameter(value);
-                    try {
-                      const next = numeric(value, 'Hole diameter');
-                      if (next < 0.5 || next > 500)
-                        throw new Error('Hole diameter must be between 0.5 and 500 mm.');
-                      setError('');
-                      onHoleDiameterChange?.(next);
-                    } catch (cause) {
-                      setError((cause as Error).message);
-                      onHoleDiameterChange?.(null);
-                    }
-                  }}
-                />
-              </label>
-            </>
-          ) : !base.object ? (
-            <p className={styles.empty}>Select a solid to edit its properties.</p>
-          ) : primitiveSheet ? (
+          {primitiveSheet ? (
             <section className={styles.section} aria-label="Solid dimensions">
               {dimensionFields}
             </section>
           ) : (
             <>
-              <label className={styles.field}>
-                <span>Name</span>
-                <input
-                  aria-label="Solid name"
-                  value={draft.name}
-                  disabled={blocked || stale}
-                  onChange={(event) => {
-                    const name = event.target.value;
-                    edit((previous) => ({ ...previous, name }));
-                  }}
-                />
-              </label>
+              <div className={styles.nameField}>
+                <label className={styles.field}>
+                  <span>Name</span>
+                  <input
+                    aria-label="Solid name"
+                    value={draft.name}
+                    disabled={blocked || stale}
+                    onChange={(event) => {
+                      const name = event.target.value;
+                      edit((previous) => ({ ...previous, name }));
+                    }}
+                  />
+                </label>
+                {docked && mode === 'edit' && dirty && (
+                  <span
+                    className={styles.draftIndicator}
+                    role="status"
+                    aria-label="Unapplied changes"
+                    title="Unapplied changes"
+                  />
+                )}
+                {docked && (
+                  <button
+                    type="button"
+                    className="tool-button"
+                    aria-label="Close solid settings"
+                    title="Close"
+                    disabled={busy}
+                    onClick={onClose}
+                  >
+                    <X size={17} />
+                  </button>
+                )}
+              </div>
               <section className={styles.section} aria-label="Solid dimensions">
                 {fixedProfile && (
                   <dl className="model-property-list">
                     <dt>Length</dt>
-                    <dd>{base.object.size.x} mm</dd>
+                    <dd>{base.object!.size.x} mm</dd>
                     <dt>Width</dt>
-                    <dd>{base.object.size.y} mm</dd>
-                    {base.object.kind === 'boolean' && (
+                    <dd>{base.object!.size.y} mm</dd>
+                    {base.object!.kind === 'boolean' && (
                       <>
                         <dt>Height</dt>
-                        <dd>{base.object.size.z} mm</dd>
+                        <dd>{base.object!.size.z} mm</dd>
                       </>
                     )}
                   </dl>
                 )}
                 {dimensionFields}
               </section>
-              <DraftDetails className={styles.transforms}>
-                {!toolSheet && <summary>Placement</summary>}
-                <section className={styles.section} aria-label="Solid position">
-                  <h3>Position</h3>
-                  <div className={styles.axes}>
-                    {(['x', 'y', 'z'] as const).map((axis) =>
-                      numberField(
-                        axis,
-                        axis.toUpperCase(),
-                        `Solid ${axis.toUpperCase()} position (mm)`,
-                      ),
-                    )}
-                  </div>
-                </section>
-                <section className={styles.section} aria-label="Solid rotation">
-                  <h3>Rotation</h3>
-                  <div className={styles.axes}>
-                    {(['rx', 'ry', 'rz'] as const).map((axis) =>
-                      numberField(
-                        axis,
-                        axis.slice(1).toUpperCase(),
-                        `Solid ${axis.slice(1).toUpperCase()} rotation (degrees)`,
-                      ),
-                    )}
-                  </div>
-                </section>
-              </DraftDetails>
               <section className={styles.section} aria-label="Solid appearance">
                 <div className={styles.fields}>
                   <div className={styles.field}>
@@ -632,76 +502,33 @@ export default function ModelCadPanel({
                   </div>
                 </div>
               </section>
-              {base.object.kind !== 'boolean' && (
-                <DraftDetails className={styles.holeDetails} aria-label="Solid holes">
-                  {!toolSheet && (
-                    <summary>
-                      Holes (local Z) <span>{draft.holes.length}</span>
-                    </summary>
-                  )}
-                  <div className={styles.sectionHeader}>
-                    {toolSheet && <h3>Holes</h3>}
-                    <button
-                      type="button"
-                      className="tool-button"
-                      aria-label="Add hole"
-                      title="Add hole"
-                      disabled={blocked || stale || !parsed.object || draft.holes.length >= 32}
-                      onClick={addHole}
-                    >
-                      <Plus size={17} />
-                    </button>
+              <DraftDetails className={styles.transforms}>
+                {!toolSheet && <summary>Placement</summary>}
+                <section className={styles.section} aria-label="Solid position">
+                  <h3>Position</h3>
+                  <div className={styles.axes}>
+                    {(['x', 'y', 'z'] as const).map((axis) =>
+                      numberField(
+                        axis,
+                        axis.toUpperCase(),
+                        `Solid ${axis.toUpperCase()} position (mm)`,
+                      ),
+                    )}
                   </div>
-                  <div className={styles.holes}>
-                    {draft.holes.map((hole, index) => (
-                      <fieldset key={hole.id} className={styles.hole}>
-                        <legend>Hole {index + 1}</legend>
-                        <div className={styles.holeHeader}>
-                          {toolSheet && <span>Hole {index + 1}</span>}
-                          <button
-                            type="button"
-                            className="tool-button"
-                            aria-label={`Remove hole ${index + 1}`}
-                            title="Remove hole"
-                            disabled={blocked || stale}
-                            onClick={() =>
-                              edit((previous) => ({
-                                ...previous,
-                                holes: previous.holes.filter((item) => item.id !== hole.id),
-                              }))
-                            }
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                        <div className={styles.axes}>
-                          {(['x', 'y', 'diameterMm'] as const).map((key) => (
-                            <label key={key}>
-                              <span>{key === 'diameterMm' ? 'Diameter' : key.toUpperCase()}</span>
-                              <QuantityInput
-                                unit={'mm'}
-                                aria-label={`Hole ${index + 1} ${key === 'diameterMm' ? 'diameter' : key.toUpperCase()} (mm)`}
-                                inputMode="decimal"
-                                value={hole[key]}
-                                disabled={blocked || stale}
-                                onValueChange={(inputValue) => {
-                                  const value = inputValue;
-                                  edit((previous) => ({
-                                    ...previous,
-                                    holes: previous.holes.map((item) =>
-                                      item.id === hole.id ? { ...item, [key]: value } : item,
-                                    ),
-                                  }));
-                                }}
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      </fieldset>
-                    ))}
+                </section>
+                <section className={styles.section} aria-label="Solid rotation">
+                  <h3>Rotation</h3>
+                  <div className={styles.axes}>
+                    {(['rx', 'ry', 'rz'] as const).map((axis) =>
+                      numberField(
+                        axis,
+                        axis.slice(1).toUpperCase(),
+                        `Solid ${axis.slice(1).toUpperCase()} rotation (degrees)`,
+                      ),
+                    )}
                   </div>
-                </DraftDetails>
-              )}
+                </section>
+              </DraftDetails>
             </>
           )}
         </div>
@@ -722,14 +549,10 @@ export default function ModelCadPanel({
               )}
             </div>
           )}
-          {placement || mode === 'hole' ? (
+          {placement ? (
             <>
               <p className={styles.instruction}>
-                {mode === 'hole'
-                  ? 'Click a solid to place a hole'
-                  : mode === 'move'
-                    ? 'Click the canvas to move'
-                    : 'Click the canvas to place'}
+                {mode === 'move' ? 'Click the canvas to move' : 'Click the canvas to place'}
               </p>
               <button
                 type="button"
@@ -746,10 +569,12 @@ export default function ModelCadPanel({
             <>
               <button
                 type="submit"
-                className="dialog-button primary"
+                className="icon-button property-apply-action"
+                aria-label="Apply"
+                title="Apply"
                 disabled={blocked || stale || changedSelection || !dirty || !parsed.object}
               >
-                Apply
+                <Check size={17} aria-hidden="true" />
               </button>
               <PropertyDeleteButton
                 disabled={

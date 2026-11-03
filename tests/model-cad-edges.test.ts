@@ -16,7 +16,6 @@ const body = (): ModelCadObject => ({
   position: { x: 0, y: 0, z: 0 },
   rotation: { x: 0, y: 0, z: 0 },
   size: { x: 20, y: 16, z: 8 },
-  holes: [],
   material: 'aluminium',
   opacity: 1,
 });
@@ -55,12 +54,11 @@ function transformed(object: ModelCadObject, p: { x: number; y: number; z: numbe
   );
 }
 
-test('edge paths retain exact semantic lines and bounded reflected circular and hole rims', () => {
+test('edge paths retain exact semantic lines and bounded reflected circular rims', () => {
   const object = body();
-  object.holes = [{ id: '7d6a9000-0000-4000-a000-000000000002', x: 2, y: 1, diameterMm: 3 }];
   const before = JSON.stringify(object);
   const paths = modelCadEdgePaths(object);
-  assert.equal(paths.length, 14);
+  assert.equal(paths.length, 12);
   assert.deepEqual(
     paths.find(({ edge }) => edge.id === 'side:0')!.points.map((p) => p.toArray()),
     [
@@ -68,10 +66,6 @@ test('edge paths retain exact semantic lines and bounded reflected circular and 
       [-10, 8, 4],
     ],
   );
-  const hole = paths.find(({ edge }) => edge.id === 'hole:top:0')!;
-  assert.equal(hole.points.length, 65);
-  assert.ok(hole.points[0].distanceTo(hole.points.at(-1)!) < 1e-12);
-  assert.deepEqual(hole.points[0].toArray(), [3.5, -1, 4]);
   paths[0].points[0].x = 999;
   assert.notEqual(modelCadEdgePaths(object)[0].points[0].x, 999);
   assert.equal(JSON.stringify(object), before);
@@ -206,7 +200,7 @@ test('scene obstacles occlude edge picks while hidden ancestors and replacement 
   }
 });
 
-test('circle, drilled and polygon extrusion edges use the same raw-base visibility without kernel meshes', () => {
+test('circle and polygon extrusion edges use the same raw-base visibility without kernel meshes', () => {
   const camera = cameraAt();
   const scene = new THREE.Group();
   const cylinder = { ...body(), kind: 'cylinder' as const, size: { x: 20, y: 20, z: 8 } };
@@ -219,18 +213,6 @@ test('circle, drilled and polygon extrusion edges use the same raw-base visibili
       point: screen(new THREE.Vector3(10, 0, 4), camera),
     }),
     'profile:top:0',
-  );
-  const drilled = body();
-  drilled.holes = [{ id: '7d6a9000-0000-4000-a000-000000000002', x: 0, y: 0, diameterMm: 4 }];
-  assert.equal(
-    pickModelCadEdge({
-      object: drilled,
-      camera,
-      viewport,
-      scene,
-      point: screen(new THREE.Vector3(2, 0, 4), camera),
-    }),
-    'hole:top:0',
   );
   const polygon: ModelCadObject = {
     ...body(),
@@ -299,7 +281,7 @@ test('perspective edge picks retain compound native poses and the saved object',
 });
 
 test('Boolean topology cannot acquire fabricated tessellation edge identities', () => {
-  const box = { kind: 'box' as const, size: { x: 10, y: 8, z: 4 }, holes: [] };
+  const box = { kind: 'box' as const, size: { x: 10, y: 8, z: 4 } };
   const operand = () => ({
     shape: box,
     position: { x: 0, y: 0, z: 0 },

@@ -69,16 +69,16 @@ Native `.kicad_pro` text variables retain application-owned project metadata:
 | Variable / private extension                | Content                                                                                                                                                                                         |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OPENPE_PROJECT_NAME`                       | Project display name, a string of 1–4096 characters. Absent names use the native entry's filename stem. Rename retains filenames and unrelated settings; Save as controls the destination stem. |
-| `OPENPE_MODEL_CAD` / `org.openpe.model-cad` | Version 1; up to 64 identified box/cylinder/extrusion/Boolean bodies with XYZ pose, dimensions, material, optional RGB color, opacity and bounded geometry recipes                                                  |
+| `OPENPE_MODEL_CAD` / `org.openpe.model-cad` | Version 1; up to 64 identified box/cylinder/extrusion/Boolean bodies with XYZ pose, dimensions, material, optional RGB color, opacity and bounded geometry recipes                              |
 
-Model CAD retains unchanged version-1 boxes/cylinders. Each body may retain a
+Model CAD stores current version-1 boxes/cylinders and bounded analytic recipes. Each body may retain a
 `color` override as a six-digit RGB hex string (`#RRGGBB`); absent color uses the
 selected material palette. Color is independent of material and opacity, survives
 native Save/Source/history and is excluded from geometry recipes and kernel keys. Extrusions use local XY
 rectangle/circle profiles or 3–128-point simple implicitly closed polygons;
 polygon bounds are centred and match X/Y dimensions. Z is extrusion depth.
 Optional chamfer/fillet stores 1–448 unique semantic base-edge IDs; profile rims,
-vertical edges and hole rims are resolved against the unchanged base geometry.
+and vertical edges are resolved against the unchanged base geometry.
 Retired rim-group strings are rejected. Explicit selections do not infer Boolean
 topology or persist mesh/kernel entity tags. Boolean
 recipes contain two geometry-only operands with local pose and
@@ -86,17 +86,9 @@ union/difference/intersection; operand trees omit document identities/material,
 with Boolean depth at most four below the root and at most 32 operations.
 Boolean size is a conservative centred envelope, not construction geometry.
 Body/face/edge/line selection and Boolean operand roles are presentation state;
-only the committed two-solid recipe enters the native CAD variable. Independent
-curve or surface Boolean results are outside this solid document format.
+only committed solid recipes enter the native CAD variable. Sketch contour Booleans compile equal-depth extrusions into the same bounded Boolean tree; plane, draft contours and drawing state stay local until Apply. Independent curve or surface artifacts are outside this solid document format.
 
-The EMC Flyback example uses four editable box bodies and eight local-Z holes
-in `OPENPE_MODEL_CAD`, without an enclosure variable. Its original
-MECH1/MECH2 model assignments retain native paths/transforms with `(hide yes)`;
-all pinned model assets remain available.
-
-Each shape permits 32 local-Z holes and the model permits 256 across all nested
-operands, with 0.5 mm edge/cut clearance. Boolean bodies have no local holes;
-subtract a cylinder instead. Cylinder/circle X/Y extents are equal diameters.
+The EMC Flyback example stores two box walls and two sketch-derived Boolean panels, with eight analytical circular cutouts, in `OPENPE_MODEL_CAD`. Its original MECH1/MECH2 assignments retain paths/transforms with `(hide yes)` and all pinned assets remain available. Dedicated `holes` fields, including empty arrays, and retired hole-rim IDs are unsupported and rejected without importing or rewriting their native files. Cylinder/circle X/Y extents are equal diameters.
 The complete CAD JSON is at most 256,000 characters. UUIDs remain unique across
 the project. Native admission validates current geometry and rejects retired enclosure data.
 Source validates the CAD variable against the complete project; new advanced
@@ -192,7 +184,7 @@ into the project. Open project sources and linked destinations are protected.
 Gerbers (including drill files) and JLCPCB are ZIP archives; BOM and
 CPL are separate CSV outputs. See [manufacturing export](#manufacturing-export).
 When the project has a PCB and Model CAD solids, Export also offers an OpenSCAD model. Its millimetre text uses native PCB
-X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, through holes, Boolean
+X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, Boolean cutouts and
 recipes, per-body color overrides or material colors, and opacity; circles are faceted with `$fn = 96`.
 Fillets and chamfers have no OpenSCAD equivalent, so they reject the export without
 writing. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it. Portable `.lib`, footprint and STEP

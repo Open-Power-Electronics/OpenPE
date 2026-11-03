@@ -6,7 +6,6 @@ import {
   ArrowUpFromLine,
   Check,
   Circle,
-  CircleDot,
   Combine,
   Copy,
   Cylinder,
@@ -23,7 +22,6 @@ import {
   Undo2,
 } from 'lucide-react';
 import type { CapabilityHost } from '@/api/capabilities';
-import { uid } from '@/lib/circuit';
 import {
   modelCadSelectableEdges,
   newModelCadObject,
@@ -59,7 +57,7 @@ import ModelCadSketchPanel, {
 import styles from './ModelCadTools.module.css';
 
 export type CadHit = { id: string; local: { x: number; y: number; z: number } };
-type Tool = 'box' | 'cylinder' | 'move' | 'hole' | ModelCadFeatureMode | null;
+type Tool = 'box' | 'cylinder' | 'move' | ModelCadFeatureMode | null;
 const featureTool = (tool: Tool): tool is ModelCadFeatureMode =>
   tool === 'sketch' || tool === 'chamfer' || tool === 'fillet' || tool === 'boolean';
 const snap = (n: number) => Math.round(n * 2) / 2;
@@ -214,7 +212,6 @@ export function useModelCadTools({
   const inspectorDirtyRef = useRef(inspectorDirty);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  const [holeDiameter, setHoleDiameter] = useState<number | null>(3.2);
   const [pan, setPan] = useState(false);
   const baseRevision = useRef(revision);
   const object = modelCad?.objects.find((body) => body.id === selected) ?? null;
@@ -419,22 +416,6 @@ export function useModelCadTools({
     setError('');
     baseRevision.current = revision;
   }
-  function hole() {
-    if (
-      blocked ||
-      tool === 'sketch' ||
-      !(selectionFilters.bodies || selectionFilters.faces) ||
-      !modelCad?.objects.some((body) => body.kind !== 'boolean') ||
-      inspectorDirtyRef.current
-    )
-      return;
-    onInteraction();
-    setPan(false);
-    setTool('hole');
-    setOpened(true);
-    setError('');
-    baseRevision.current = revision;
-  }
   function dismissTool() {
     cancel();
     onReturnCanvasFocus?.();
@@ -442,7 +423,7 @@ export function useModelCadTools({
   const preview = useMemo(
     () =>
       draft &&
-      ((tool && tool !== 'hole') ||
+      (tool ||
         (!tool &&
           opened &&
           object &&
@@ -452,39 +433,10 @@ export function useModelCadTools({
         : null,
     [draft, tool, opened, object, cursor],
   );
-  async function canvasClick(
-    point: { x: number; y: number } | null,
-    hit: CadHit | null,
-    snapToGrid = true,
-  ) {
-    if (
-      blocked ||
-      !tool ||
-      featureTool(tool) ||
-      baseRevision.current !== revision ||
-      (tool === 'hole' && inspectorDirtyRef.current)
-    )
-      return;
+  async function canvasClick(point: { x: number; y: number } | null, snapToGrid = true) {
+    if (blocked || !tool || featureTool(tool) || baseRevision.current !== revision) return;
     try {
-      if (tool === 'hole') {
-        if (!hit || holeDiameter === null) return;
-        const target = modelCad?.objects.find((body) => body.id === hit.id);
-        if (!target) return;
-        if (target.kind === 'boolean') {
-          setError('Use Difference with a cylinder to cut this solid.');
-          return;
-        }
-        const next = validateModelCadObject({
-          ...target,
-          holes: [
-            ...target.holes,
-            { id: uid(), x: snap(hit.local.x), y: snap(hit.local.y), diameterMm: holeDiameter },
-          ],
-        });
-        await execute('modelCad.update', { boardId: board.id, object: next }, baseRevision.current);
-        cancel();
-        select(target.id);
-      } else if (point && currentDraft.current) {
+      if (point && currentDraft.current) {
         const next = validateModelCadObject({
           ...currentDraft.current,
           position: {
@@ -510,7 +462,7 @@ export function useModelCadTools({
       sketchInput.current?.move(point);
       return;
     }
-    if (!tool || tool === 'hole' || featureTool(tool) || blocked) return;
+    if (!tool || featureTool(tool) || blocked) return;
     const next = point ? { x: snap(point.x), y: snap(point.y) } : null;
     updateCursor(next);
   }
@@ -521,8 +473,19 @@ export function useModelCadTools({
   async function applyFeature(action: ModelCadFeatureAction) {
     if (blocked || !tool || !featureTool(tool) || baseRevision.current !== revision)
       throw new Error('The project changed. Start the operation again.');
-    const id = action.kind === 'boolean' ? action.resultId : action.object.id;
-    if (action.kind === 'boolean') {
+    const id =
+      action.kind === 'boolean'
+        ? action.resultId
+        : action.kind === 'sketch'
+          ? action.sketch.id
+          : action.object.id;
+    if (action.kind === 'sketch') {
+      await execute(
+        'modelCad.sketch.extrude',
+        { boardId: board.id, sketch: action.sketch },
+        baseRevision.current,
+      );
+    } else if (action.kind === 'boolean') {
       await execute(
         'modelCad.boolean',
         {
@@ -659,21 +622,30 @@ export function useModelCadTools({
             {button(
               'Draw rectangle',
               Square,
-              () => setSketchShape('rectangle'),
+              () => {
+                sketchInput.current?.retainContour();
+                setSketchShape('rectangle');
+              },
               blocked,
               sketchShape === 'rectangle',
             )}
             {button(
               'Draw circle',
               Circle,
-              () => setSketchShape('circle'),
+              () => {
+                sketchInput.current?.retainContour();
+                setSketchShape('circle');
+              },
               blocked,
               sketchShape === 'circle',
             )}
             {button(
               'Draw polyline',
               Pentagon,
-              () => setSketchShape('polygon'),
+              () => {
+                sketchInput.current?.retainContour();
+                setSketchShape('polygon');
+              },
               blocked,
               sketchShape === 'polygon',
             )}
@@ -739,17 +711,6 @@ export function useModelCadTools({
           aria-label="Solid modifications"
           title="Solid modifications"
         >
-          {button(
-            'Drill through hole',
-            CircleDot,
-            hole,
-            blocked ||
-              tool === 'sketch' ||
-              !(selectionFilters.bodies || selectionFilters.faces) ||
-              !modelCad?.objects.some((body) => body.kind !== 'boolean') ||
-              inspectorDirty,
-            tool === 'hole',
-          )}
           <div className={`tool-menu${modifying ? ' active' : ''}`}>
             <Select
               label="Modify solids"
@@ -939,7 +900,7 @@ export function useModelCadTools({
       />
     ) : tool && !featureTool(tool) ? (
       <ModelCadPanel
-        object={tool !== 'hole' ? seed : object}
+        object={seed}
         mode={tool}
         visible={active}
         disabled={blocked}
@@ -948,8 +909,6 @@ export function useModelCadTools({
         onDraftChange={updateDraft}
         rotationRequest={rotationRequest}
         onApply={apply}
-        holeDiameterMm={holeDiameter}
-        onHoleDiameterChange={setHoleDiameter}
       />
     ) : null;
   return {
@@ -1059,7 +1018,7 @@ export function useModelCadTools({
       )
         return true;
       if (tool === 'sketch' && sketchInput.current?.keyDown(event.key)) return true;
-      if (key === 'r' && tool && tool !== 'hole' && !featureTool(tool)) {
+      if (key === 'r' && tool && !featureTool(tool)) {
         if (currentDraft.current && baseRevision.current === revision)
           setRotationRequest((previous) => ({
             sequence: (previous?.sequence ?? 0) + 1,
@@ -1075,9 +1034,9 @@ export function useModelCadTools({
         void rotate(event.shiftKey ? -90 : 90).catch(() => {});
         return true;
       }
-      if (event.key === 'Enter' && tool && tool !== 'hole' && !featureTool(tool)) {
+      if (event.key === 'Enter' && tool && !featureTool(tool)) {
         if (currentDraft.current)
-          void canvasClick(currentCursor.current ?? currentDraft.current.position, null, false);
+          void canvasClick(currentCursor.current ?? currentDraft.current.position, false);
         return true;
       }
       if (

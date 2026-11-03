@@ -124,13 +124,12 @@ The generated native project is in `recent/emc-flyback/`; it uses KiCad 10, with
 source UUIDs, electrical connectivity, footprint placement and copper retained.
 One custom pad is represented by an exact same-number rectangle union and
 multi-layer keepouts by per-layer zones. Native polylines, bold text, inert datasheet
-links and lock metadata survive import and save. The enclosure is four editable
-OpenPE Model CAD boxes: a 112 × 94 × 3 mm aluminium base, two 3 × 30 mm side walls
+links and lock metadata survive import and save. The enclosure is four OpenPE Model CAD bodies: a 112 × 94 × 3 mm aluminium base, two 3 × 30 mm side walls
 and a 3 mm PMMA cover at 30% opacity. Their eight through holes retain the base's
 four PCB mounting positions and the cover's four fastener positions. The original
 MECH1/MECH2 STEP instances are hidden in native PCB data; their references,
 transforms and bundled assets remain intact. Model's general construction tools
-edit these bodies, materials, opacity and holes without a dedicated enclosure mode.
+edit bodies, materials and opacity; sketch contour Difference creates the eight cutouts before extrusion, without dedicated enclosure or Hole modes.
 The example ships no SCAD file; File > Export writes the current panels, holes and
 opacity as OpenSCAD on request ([Format](FORMAT.md)).
 The 31 STEP files include 28 unchanged upstream assets and three exact

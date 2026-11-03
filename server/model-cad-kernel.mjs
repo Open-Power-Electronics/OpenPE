@@ -188,21 +188,6 @@ export function appendModelCadShape(lines, input, prefix = 'cad') {
       );
     }
     ensureVolume(result);
-    if (body.holes.length) {
-      const tools = body.holes.map((hole) => {
-        const tag = allocate('hole', 'newv');
-        lines.push(
-          `Cylinder(${tag}) = {${hole.x},${hole.y},${-size.z / 2 - 0.01},0,0,${size.z + 0.02},${hole.diameterMm / 2},2*Pi};`,
-        );
-        return tag;
-      });
-      const next = name('cut');
-      lines.push(
-        `${next}() = BooleanDifference{ Volume{${result}()}; Delete; }{ Volume{${tools.join(',')}}; Delete; };`,
-      );
-      result = next;
-      ensureVolume(result);
-    }
     if (body.edgeTreatment) result = selectedEdges(result, body);
     return result;
   };

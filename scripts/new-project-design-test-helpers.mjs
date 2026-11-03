@@ -173,6 +173,10 @@ export async function exerciseNewProjectDesign(page, step) {
   });
   await inspector.waitFor();
   await inspector.getByLabel('Solid name', { exact: true }).fill('Test mounting block');
+  await inspector
+    .locator('summary')
+    .filter({ hasText: /^Placement$/ })
+    .click();
   for (const [name, value] of [
     ['Length (mm)', 26],
     ['Solid X position (mm)', 30],
@@ -193,8 +197,6 @@ export async function exerciseNewProjectDesign(page, step) {
   await material.press('End');
   await material.press('Enter');
   assert.equal(await material.innerText(), 'Plastic');
-  await inspector.getByRole('button', { name: 'Add hole', exact: true }).click();
-  await inspector.getByLabel('Hole 1 diameter (mm)', { exact: true }).fill('4');
   await inspector.getByRole('button', { name: 'Apply', exact: true }).click();
   const finished = await read('Model');
   assertModel(finished);
@@ -215,7 +217,7 @@ export async function exerciseNewProjectDesign(page, step) {
       `Model edits preserve exact ${extension} bytes`,
     );
   step(
-    'Create and edit a Model box with a hole, dimensions, position, rotation, material and opacity; undo and redo retain PCB bytes',
+    'Create and edit a Model box with dimensions, position, rotation, material and opacity; undo and redo retain PCB bytes',
   );
   return assertNewProjectDesign(projectFromNativeFiles(afterModel));
 }
@@ -281,8 +283,6 @@ function assertModel(project) {
   assert.deepEqual(body.rotation, { x: 0, y: 0, z: 30 });
   assert.equal(body.material, 'plastic');
   assert.equal(body.opacity, 0.85);
-  assert.equal(body.holes.length, 1);
-  assert.equal(body.holes[0].diameterMm, 4);
 }
 
 export function assertNewProjectDesign(project) {

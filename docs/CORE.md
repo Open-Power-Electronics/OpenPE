@@ -60,15 +60,25 @@ Reviewed datasheet JSON is a host reference adapter. `project.datasheet` and sub
 | Project/Source/history | Canonical reads/replacement, Source draft/apply/discard and project undo/redo            |
 | Schematic              | Sheet management, component/property/connectivity edits, wires/labels/transforms and ERC |
 | Layout                 | Board queries, checked routing/vias/transforms/drag, zones/fills/properties and DRC      |
-| Model CAD              | Independent solid queries/edits                                                          |
+| Model CAD              | Independent solids, analytic sketch Boolean extrusion and prepared edits                 |
 | Host/library           | Verified placement/assignment, UI context, native save/export and local Git              |
 | Plugin                 | Lifecycle, SPICE settings/results/waveforms and Thermal settings/fields/probes           |
 
 The PCB links to the primary schematic; commands identify sheet/board explicitly. Complete canonical replacement still validates supported bounded content. Native access resolves opaque grants in Electron; no command accepts arbitrary paths, executables or download URLs.
 
+GUI design operations and Agent commands share domain preparation, not only the
+final validator. Label placement/Properties and no-connect placement use
+`saveLabel`/`placeNoConnect`; text placement and wire simplification use the canvas
+functions. Layout pad and track-endpoint Properties use `lib/pcb-properties.ts`;
+via edits and footprint side/model changes share its preparation with GUI
+Properties. Boundary resizing and official footprint placement reuse the canvas
+geometry functions. Discoverable object queries supply retained native metadata.
+Generated PCB command schemas reuse canonical format definitions rather than a
+second document validator. [API](API.md) owns exact command parameters/results.
+
 `schematic.drag` shares canvas connection-preserving geometry, while `schematic.move` leaves unselected wires. Both use the same revision/Source gates and preserve no-op/rejection atomicity. Track locks, connected drag, collapse handling and copper invalidation follow [Layout](LAYOUT.md).
 
-`modelCad.add/update/remove/duplicate` are ordinary whole-project Core transactions. Box, cylinder, extrusion and Boolean bodies live in `org.openpe.model-cad`. Validation checks finite bounded geometry and global UUIDs; duplication allocates fresh body/hole IDs. Model CAD permits up to 64 bodies, 32 local-Z holes per non-Boolean body and 256 holes across all nested operands. Identical replacements are clean; read-only CAD queries remain available with pending Source. Rendering and analytical STEP share geometry; CAD adds no electrical/thermal simulation. [Format](FORMAT.md#document-ownership) owns native persistence and complete geometry limits.
+`modelCad.add/update/remove/duplicate`, `modelCad.sketch.extrude` and `modelCad.boolean` are ordinary whole-project Core transactions. Box, cylinder, extrusion and Boolean bodies live in `org.openpe.model-cad`. Validation checks finite bounded geometry and global UUIDs; duplication allocates fresh body IDs. Model CAD permits up to 64 bodies; sketch extrusion accepts up to six ordered analytic contours and shares the prepared Boolean-solid path. Dedicated local-hole fields are rejected. Identical replacements are clean; read-only CAD queries remain available with pending Source. Rendering and analytical STEP share geometry; CAD adds no electrical/thermal simulation. [Format](FORMAT.md#document-ownership) owns native persistence and complete geometry limits.
 
 ## Read-only rule checks
 
@@ -99,6 +109,15 @@ Bundled SPICE/Thermal handlers share the host with human controls, independently
 Simulation attributes and verified portable references are document data, independent of plugin availability. Solver settings/results/probes/waveforms are session data. Completed records persist only through grant-bound host adapters under generated `spice/` / `thermal/` directories excluded from native discovery. Load-only restore validates current inputs/resources without changing Core/Source/undo/dirty state. See [Simulation](SIMULATION.md), [Thermal](THERMAL.md#completed-desktop-records) and [provider management](PLUGINS.md#provider-discovery-and-management).
 
 ## Verification
+
+`tests/gui-agent-parity.test.ts` compares the native KiCad files produced by GUI
+preparation and Agent commands, including creation identity mapping, project
+renaming, labels, text positions, no-connects, wire simplification, pad/via/track
+Properties, footprint flips/models, drawings, boundary resizing and official
+footprint placement. It checks whole-project undo, invalid/stale inputs, Source
+and close barriers, asynchronous placement and public-result isolation. These
+checks establish the exercised design operations; provider transport availability
+and native file grants retain their separate contracts.
 
 Core/capability/lifecycle/transport tests cover ownership, structural sharing, mutation isolation, revision conflicts, Source/close barriers and cancellation. Owned-validation, native materialization/cache, admission and save tests protect private derivation boundaries. Rule-check capability/ERC/DRC tests cover read-only reports and incomplete coverage.
 

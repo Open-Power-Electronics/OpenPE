@@ -1,5 +1,19 @@
 import { exampleModelPath } from '../lib/example-model-paths';
 import test from 'node:test';
+import type { ModelCadObject, ModelCadShape } from '../lib/model-cad';
+const panelCuts = (body: ModelCadObject) => {
+  const collect = (shape: ModelCadShape): { x: number; y: number; diameterMm: number }[] => {
+    if (shape.kind !== 'boolean') return [];
+    assert.equal(shape.boolean!.operation, 'difference');
+    const [target, tool] = shape.boolean!.operands;
+    assert.equal(tool.shape.profile?.kind, 'circle');
+    return [
+      ...collect(target.shape),
+      { x: tool.position.x, y: tool.position.y, diameterMm: tool.shape.size.x },
+    ];
+  };
+  return collect(body);
+};
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHomeExample } from '../lib/create-home-example';
@@ -115,8 +129,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.equal(Object.hasOwn(a.extensions, 'org.openpe.enclosure'), false);
   assert.equal(cadA.objects.length, 4);
   assert.notEqual(cadA.objects[0].id, cadB.objects[0].id);
-  assert.notEqual(cadA.objects[0].holes[0].id, cadB.objects[0].holes[0].id);
-  assert.equal(cadA.objects.flatMap((body) => body.holes).length, 8);
+  assert.equal(cadA.objects.flatMap(panelCuts).length, 8);
   assert.equal(a.schematic.parts.length, 145);
   assert.equal(a.pcb!.footprints.length, 90);
   assert.equal(a.pcb!.tracks.length, 359);
@@ -155,7 +168,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.deepEqual(JSON.parse(settings.text_variables[MODEL_CAD_NATIVE_VARIABLE]), cadA);
 });
 
-test('EMC enclosure uses editable Model boxes with exact panel bounds, materials and through holes', () => {
+test('EMC enclosure uses Model sketch differences with exact panel bounds, materials and cut contours', () => {
   const project = createHomeExample('emc-flyback-demo'),
     bodies = modelCadFromProject(project)!.objects;
   assert.deepEqual(
@@ -166,17 +179,17 @@ test('EMC enclosure uses editable Model boxes with exact panel bounds, materials
       rotation: body.rotation,
       material: body.material,
       opacity: body.opacity,
-      holes: body.holes.map(({ x, y, diameterMm }) => ({ x, y, diameterMm })),
+      cuts: panelCuts(body),
     })),
     [
       {
-        kind: 'box',
+        kind: 'boolean',
         size: { x: 112, y: 94, z: 3 },
         position: { x: 100, y: 88, z: -10.3 },
         rotation: { x: 0, y: 0, z: 0 },
         material: 'aluminium',
         opacity: 1,
-        holes: [
+        cuts: [
           [-46.2, -34.2],
           [46.2, 34.2],
           [46.2, -34.2],
@@ -190,16 +203,16 @@ test('EMC enclosure uses editable Model boxes with exact panel bounds, materials
         rotation: { x: 0, y: 0, z: 0 },
         material: 'aluminium',
         opacity: 1,
-        holes: [],
+        cuts: [],
       })),
       {
-        kind: 'box',
+        kind: 'boolean',
         size: { x: 112, y: 94, z: 3 },
         position: { x: 100, y: 88, z: 22.7 },
         rotation: { x: 0, y: 0, z: 0 },
         material: 'pmma',
         opacity: 0.3,
-        holes: [
+        cuts: [
           [-48, -41],
           [-48, 41],
           [48, -41],

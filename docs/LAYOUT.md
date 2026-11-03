@@ -14,6 +14,13 @@ routing checks and export do not establish manufacturing readiness.
 [FORMAT.md](FORMAT.md) native preservation and Source, and [CORE.md](CORE.md)
 shared validation, revision and undo.
 
+Agent object Properties expose the same pad preparation, exact track endpoints,
+via edits, footprint flips/model transforms, board drawing records and boundary
+resize functions as the GUI. Official footprint placement shares the chooser's
+bounded parser and one assignment/board undo transaction. [API](API.md#layout-object-properties)
+documents the direct commands and generated property schemas; these do not add
+collision checks to numerical Properties beyond their documented Core validation.
+
 ## Project integrity and schematic synchronization
 
 Every edit and accepted synchronization is a complete-project Core transaction.
@@ -599,9 +606,10 @@ Start sketch aligns the retained camera orthographically
 to that exact plane; contextual drawing tools operate on the shared Model PCB
 canvas. Finish sketch restores the previous 3D camera/projection and retains
 the outline. Extrude is a separate 3D action: its distance/direction preview
-commits only on Apply, as one existing solid-add transaction. Cancel extrusion
+commits only on Apply, as one `modelCad.sketch.extrude` transaction. Cancel extrusion
 returns to the outline; Edit sketch returns to drawing without losing the profile.
 Profile validation does not depend on a hidden extrusion distance.
+Sketch Boolean operation selects Union, Difference or Intersection for each next closed contour, with Union required for the first. Up to six ordered contours share the workplane. Drawing-tool changes retain completed contours; Undo contour removes the current or last contour, and Clear sketch clears all draft contours. The region outline is a bounded tessellation for display. Pure `lib/model-cad-sketch.ts` distributes extrusion over planar Booleans and retains analytic circle/polygon operands in the existing solid recipe. GUI and Agent call `modelCad.sketch.extrude`; host preparation verifies the exact result before one undo edit. Empty and invalid results remain retryable. There is no dedicated Hole tool, local-hole parameter or hole-rim topology.
 Rectangle and Circle support drag-and-release or two-click drawing with a live
 anchored preview. Coincident points and zero-area rectangles remain incomplete
 without validating a zero-size solid. Escape clears an unfinished gesture;
@@ -613,7 +621,7 @@ touching edges, and a centred local XY envelope matching its dimensions.
 Extrusion follows local Z; the selected workplane maps that axis into world space.
 [Format](FORMAT.md#document-ownership) defines native variables and aggregate
 bounds. Properties edits XYZ pose/intrinsic rotations, dimensions, material,
-RGB color, opacity and local-Z through holes. Properties Color previews an optional
+RGB color and opacity. Properties Color previews an optional
 per-body `#RRGGBB` override; Use material color returns to the material palette.
 Apply saves one validated undo edit, independently of opacity and physical material.
 Native reopening, duplication and OpenSCAD retain custom color; STEP remains geometry-only. Pick a visible analytic edge directly, or
@@ -624,12 +632,9 @@ selection. Set radius/distance and Apply the exact prepared preview once.
 Edge selection disables whole-solid move/rotate/copy/delete actions and their
 shortcuts; select the solid interior to inspect and edit the whole body again.
 Boxes expose twelve edges; polygon/rectangle extrusions expose profile and
-vertical edges; cylinders/circle extrusions expose circular rims. Hole rims are
-individually selectable. Edge picking uses a bounded pixel tolerance and rejects
+vertical edges; cylinders/circle extrusions expose circular rims. Edge picking uses a bounded pixel tolerance and rejects
 occluded/back edges. Boolean results have no editable edge topology catalogue;
 their edge tools remain unavailable. Edge treatments require explicit semantic edge IDs.
-Canvas drilling
-transforms hits into body-local coordinates and validates material clearance.
 Field drafts/previews remain local until Apply; stale drafts require Reload.
 Source/revision/deactivation cancels tools without stealing external focus.
 
@@ -639,7 +644,7 @@ analytic faces, edges or straight edges as lines on the canvas; ordinary
 Interaction picks among the enabled categories. Modifiers add/toggle entities
 and the Properties readout names the selected type. Selection is presentation
 state and cannot mutate a parent body through a face/edge shortcut. Untreated
-primitives/extrusions expose analytic faces with holes; treated and Boolean
+primitives/extrusions expose analytic faces; treated and Boolean
 results remain selectable as whole solids.
 
 Boolean operands come from ordered canvas body selection, before or during the
@@ -656,7 +661,7 @@ Difference uses the first body as its
 target. The result occupies the target's list position, receives a fresh UUID and
 replaces both inputs in one undo edit. Its dimensions are a read-only conservative
 envelope; nested operand transforms construct the actual result. Boolean bodies
-use subtractive solids instead of local through holes. Recipes have bounded depth
+retain cutouts through Boolean operand recipes. Recipes have bounded depth
 and operation counts, not arbitrary executable CAD programs.
 
 Advanced draft meshes come from authenticated `/api/model-cad/preview`: the host
@@ -671,28 +676,27 @@ apply pending Source through the same preflight and revision checks. No thermal
 or electrical solve runs for CAD preparation.
 
 M moves a selected solid; R/Shift+R rotates local Z by ±90°; Enter commits a valid
-placement/move once, retaining dimensions/holes. Numeric X/Y replaces pointer
+placement/move once, retaining dimensions. Numeric X/Y replaces pointer
 placement in Move/Properties with exact entered coordinates, retained during camera navigation;
 pointer placement uses 0.5 mm snapping. Wheel/middle/right navigation remains
-available during placement/drilling without committing, with current camera/
+available during placement without committing, with current camera/
 bounds refreshing pointer previews. IME, text drafts, dialogs and active gestures
 block conflicting shortcuts. Field Escape restores only edits since focus;
 composing Enter/Escape/code 229 does nothing. Explicit Cancel/Close restores
 Properties/canvas focus. Box and Cylinder placement expose only dimensions and
 Close, omitting a title/name prefix. Fields fit without horizontal scrolling and
-wrap only on narrow canvases. Name, position, rotation, material, opacity and holes
+wrap only on narrow canvases. Name, position, rotation, material and opacity
 remain in Properties after placement. Docked Properties retains its disclosures.
 
 Pan retains inspection and unapplied Properties drafts/previews while cancelling
 an active tool. Placement/duplication reveals the new solid's Properties without
 stealing action/canvas focus and replaces component inspection. Tool start/cancel
-retains component inspection. Unapplied solid drafts block drilling at toolbar,
-start and commit. CAD/component visibility and scene resources remain
+retains component inspection. Unapplied solid drafts block conflicting toolbar and canvas edits. CAD/component visibility and scene resources remain
 independent; hidden Model defers rebuilds.
 
-EMC Flyback builds its enclosure with four ordinary editable CAD boxes: an
+EMC Flyback builds its enclosure with four CAD bodies: an
 aluminium base, two side walls and a transparent PMMA cover. Base/cover holes
-use the same local-Z cuts as manually placed solids. The example stores these
+use sketch contour Difference before extrusion, retaining analytical circles in the shared solid recipe. The example stores these
 bodies in `OPENPE_MODEL_CAD`; its original MECH1/MECH2 STEP assignments retain
 their paths and transforms with native visibility disabled. Editing or deleting
 CAD bodies therefore does not reveal a duplicate static enclosure. Independent
@@ -783,29 +787,30 @@ not establish hardware qualification. [Examples](EXAMPLES.md) owns
 regeneration/assets and [EMC verification](EMC-FLYBACK.md) owns recorded numerical
 comparisons.
 
-| Check                                                                                                                                                                                                                      | Scope                                                                                                                                                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`                                                                                                        | Synchronization, geometry, routing/fill transactions                                                                                                                     |
-| `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                           |
-| `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Fixed deletion footers for selected objects/groups, icon-only fill, rejection and IME guards                                                                             |
-| `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo |
-| `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                   | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                             |
-| `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared delete button/footer across all three views; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                    |
-| `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                    |
-| `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                                      |
-| `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                     |
-| `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                                                                                  |
-| `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking                                                                |
-| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                                                                                         |
-| `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                                                                                      |
-| `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                                                                                              |
-| `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                                                                                            |
-| `node scripts/check-model-cad-ui.mjs --sketch-plane`, `tests/model-cad-sketch-scene.test.ts`                                                                                                                               | Live workplane coordinates/surfaces, distant-plane clipping/start alignment, draft/IME guards, camera restoration and preview resource disposal                          |
-| `node scripts/check-model-cad-ui.mjs --color`, `tests/model-cad-mesh.test.ts`, `tests/model-cad-scad.test.ts`                                                                                                              | Solid color drafts/preview, material reset, undo, native persistence, appearance rendering and OpenSCAD color                                                            |
-| `node scripts/check-model-cad-ui.mjs --sketch-input`                                                                                                                                                                       | Zero-offset rectangle/circle click and drag gestures, incomplete previews, Escape/IME guards, extrusion Apply and native-file undo                                       |
-| `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                           | Offline real native Save/reopen, CAD/STEP and cross-view undo                                                                                                            |
-| `node scripts/e2e-new-project.mjs`                                                                                                                                                                                         | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process             |
-| `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                                                                                |
+| Check                                                                                                                                                                                                                      | Scope                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`                                                                                                        | Synchronization, geometry, routing/fill transactions                                                                                                                                                         |
+| `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                                                               |
+| `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Fixed deletion footers for selected objects/groups, icon-only fill, rejection and IME guards                                                                                                                 |
+| `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                     |
+| `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                   | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                 |
+| `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared delete button/footer across all three views; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                        |
+| `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                        |
+| `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                                                                          |
+| `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                                                         |
+| `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                                                                                                                      |
+| `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking                                                                                                    |
+| `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                                                                                                                             |
+| `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                                                                                                                          |
+| `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                                                                                                                                  |
+| `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                                                                                                                                |
+| `node scripts/check-model-cad-ui.mjs --sketch-plane`, `tests/model-cad-sketch-scene.test.ts`                                                                                                                               | Live workplane coordinates/surfaces, distant-plane clipping/start alignment, draft/IME guards, camera restoration and preview resource disposal                                                              |
+| `node scripts/check-model-cad-ui.mjs --color`, `tests/model-cad-mesh.test.ts`, `tests/model-cad-scad.test.ts`                                                                                                              | Solid color drafts/preview, material reset, undo, native persistence, appearance rendering and OpenSCAD color                                                                                                |
+| `node scripts/check-model-cad-ui.mjs --sketch-boolean`, `tests/model-cad-sketch.test.ts`                                                                                                                                   | Planar contour Difference before extrusion, shared human/Agent command, exact native round trips, one undo transaction, IME and lifecycle barriers; native cut/volume evidence is in the opt-in kernel suite |
+| `node scripts/check-model-cad-ui.mjs --sketch-input`                                                                                                                                                                       | Zero-offset rectangle/circle click and drag gestures, incomplete previews, Escape/IME guards, extrusion Apply and native-file undo                                                                           |
+| `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                           | Offline real native Save/reopen, CAD/STEP and cross-view undo                                                                                                                                                |
+| `node scripts/e2e-new-project.mjs`                                                                                                                                                                                         | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process                                                 |
+| `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                                                                                                                    |
 
 After explicit desktop-test authorization, measure the current built renderer
 with EMC Flyback using PowerShell:

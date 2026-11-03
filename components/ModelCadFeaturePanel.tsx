@@ -1,8 +1,9 @@
 'use client';
 import QuantityInput from './QuantityInput';
+import type { ModelCadSketchExtrusion } from '@/lib/model-cad-sketch';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { uid } from '@/lib/circuit';
 import {
   modelCadSelectableEdges,
@@ -17,6 +18,7 @@ import styles from './ModelCadFeaturePanel.module.css';
 export type ModelCadFeatureMode = 'sketch' | 'chamfer' | 'fillet' | 'boolean';
 export type ModelCadFeatureAction =
   | { kind: 'solid'; object: ModelCadObject }
+  | { kind: 'sketch'; sketch: ModelCadSketchExtrusion }
   | {
       kind: 'boolean';
       operation: 'union' | 'difference' | 'intersection';
@@ -351,10 +353,13 @@ export default function ModelCadFeaturePanel({
         <footer className={styles.footer}>
           <button
             type="submit"
-            className="primary"
+            className="icon-button property-apply-action"
+            aria-label="Apply"
+            title={busy ? 'Applying…' : 'Apply'}
+            aria-busy={busy}
             disabled={disabled || stale || busy || !parsed.object}
           >
-            {busy ? 'Applying…' : 'Apply'}
+            <Check size={17} aria-hidden="true" />
           </button>
           <button
             type="button"

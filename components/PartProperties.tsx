@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ChevronRight, FolderSearch, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, FolderSearch, Plus, Trash2 } from 'lucide-react';
 import { type Part, type Circuit } from '@/lib/circuit';
 import { displayPartValue, partFields } from '@/lib/library';
 import {
@@ -126,6 +126,7 @@ function PartProperties({
   circuit,
   onSave,
   modelFields,
+  geometryFields,
   onRequestSave,
   capabilityHost,
   active = true,
@@ -135,6 +136,7 @@ function PartProperties({
 }: {
   part: Part;
   modelFields?: ReactNode;
+  geometryFields?: ReactNode;
   circuit?: Circuit;
   active?: boolean;
   /** Shared component controls owned by the installed and enabled SPICE plugin. */
@@ -224,6 +226,7 @@ function PartProperties({
   const modelBrowseButton = useRef<HTMLButtonElement>(null);
   const modelBrowseRequest = useRef(0);
   const composing = useRef(false);
+  const geometryContainer = useRef<HTMLDivElement>(null);
   const update = (i: number, key: 'name' | 'value', text: string) =>
     active &&
     setRows((r) =>
@@ -655,17 +658,26 @@ function PartProperties({
               </label>
             ))}
             <div className="property-model-mapping-actions">
-              <button type="button" onClick={applyMapping} disabled={!active || !spiceAvailable}>
-                Apply model
+              <button
+                type="button"
+                className="icon-button property-apply-action"
+                aria-label="Apply model"
+                title="Apply model"
+                onClick={applyMapping}
+                disabled={!active || !spiceAvailable}
+              >
+                <Check size={17} aria-hidden="true" />
               </button>
               <button
                 type="button"
+                className="dialog-button secondary"
+                aria-label="Cancel mapping"
                 disabled={!active || !spiceAvailable}
                 onClick={() => {
                   if (!composing.current) setMapping(null);
                 }}
               >
-                Cancel mapping
+                Cancel
               </button>
             </div>
           </details>
@@ -795,16 +807,20 @@ function PartProperties({
     <>
       <div
         className="part-properties"
-        onCompositionStart={() => {
+        onCompositionStart={(event) => {
+          if (geometryContainer.current?.contains(event.target as Node)) return;
           composing.current = true;
         }}
-        onCompositionEnd={() => {
+        onCompositionEnd={(event) => {
+          if (geometryContainer.current?.contains(event.target as Node)) return;
           composing.current = false;
         }}
         onBlur={(event) => {
+          if (geometryContainer.current?.contains(event.target)) return;
           if (event.target instanceof HTMLInputElement) save();
         }}
         onKeyDown={(event) => {
+          if (geometryContainer.current?.contains(event.target as Node)) return;
           if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
             event.preventDefault();
             event.stopPropagation();
@@ -858,6 +874,7 @@ function PartProperties({
           </label>
         </div>
         <div className="property-fields">{renderFields(false)}</div>
+        {geometryFields && <div ref={geometryContainer}>{geometryFields}</div>}
         <details className="layout-property-details property-additional-fields">
           <summary>Fields</summary>
           <div className="property-fields">{renderFields(false, true)}</div>

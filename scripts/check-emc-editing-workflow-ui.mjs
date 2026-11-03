@@ -758,8 +758,6 @@ try {
   await box.getByLabel('Length (mm)', { exact: true }).fill('24');
   await box.getByLabel('Width (mm)', { exact: true }).fill('18');
   await box.getByLabel('Height (mm)', { exact: true }).fill('4');
-  await box.getByRole('button', { name: 'Add hole', exact: true }).click();
-  await box.getByLabel('Hole 1 diameter (mm)', { exact: true }).fill('3.2');
   const modelCanvas = page.locator('.pcb-model-canvas');
   await modelCanvas.focus();
   await page.keyboard.press('r');
@@ -772,8 +770,6 @@ try {
   assert.ok(plate);
   assert.deepEqual(plate.size, { x: 24, y: 18, z: 4 });
   assert.equal(plate.rotation.z, 90);
-  assert.equal(plate.holes.length, 1);
-  assert.equal(plate.holes[0].diameterMm, 3.2);
   assert.deepEqual(current.pcb, baseline.pcb);
   const plateFiles = await readNativeFiles(page);
   await button('Model').click();
@@ -783,22 +779,18 @@ try {
   });
   await plateProperties.getByLabel('Length (mm)', { exact: true }).fill('26');
   assert.equal(
-    await button('Drill through hole').isDisabled(),
-    true,
-    'Unapplied EMC plate dimensions block drilling.',
+    await button('Drill through hole').count(),
+    0,
+    'The dedicated drilling tool is absent.',
   );
   assert.equal(
     await page.getByRole('complementary', { name: 'Hole settings', exact: true }).count(),
     0,
   );
-  assert.deepEqual(
-    await native(),
-    plateFiles,
-    'A local plate draft and its drill guard preserve every native file.',
-  );
+  assert.deepEqual(await native(), plateFiles, 'A local plate draft preserve every native file.');
   await button('Model').click();
   assert.equal(await plateProperties.getByLabel('Length (mm)', { exact: true }).inputValue(), '26');
-  assert.equal(await button('Drill through hole').isDisabled(), true);
+  assert.equal(await button('Drill through hole').count(), 0);
 
   // Apply a real native CAD change while Model retains a different local draft.
   // The accepted Source revision must invalidate, rather than replace, that draft.
@@ -851,15 +843,15 @@ try {
     true,
     'A retained EMC Properties draft cannot overwrite the newer Source revision.',
   );
-  assert.equal(await button('Drill through hole').isDisabled(), true);
+  assert.equal(await button('Drill through hole').count(), 0);
   await plateProperties
     .getByRole('button', { name: 'Reload solid parameters', exact: true })
     .click();
   assert.equal(await plateProperties.getByLabel('Length (mm)', { exact: true }).inputValue(), '25');
   assert.equal(
-    await button('Drill through hole').isEnabled(),
-    true,
-    'Reloading the accepted plate restores drilling.',
+    await button('Drill through hole').count(),
+    0,
+    'Reloading the accepted plate does not add a drilling tool.',
   );
 
   await button('Layout').click();
@@ -902,7 +894,7 @@ try {
           (node) => node.textContent === 'Retry 3D preview',
         ),
         disabled: Object.fromEntries(
-          ['Zoom in', 'Place box', 'Drill through hole'].map((name) => [
+          ['Zoom in', 'Place box', 'Create sketch'].map((name) => [
             name,
             preview?.querySelector(`button[aria-label="${name}"]`)?.disabled ?? null,
           ]),
@@ -930,7 +922,7 @@ try {
     const zoom = preview?.querySelector('button[aria-label="Zoom in"]');
     return zoom && !zoom.disabled;
   });
-  assert.equal(await button('Drill through hole').isEnabled(), true);
+  assert.equal(await button('Drill through hole').count(), 0);
   // The following standoff commit clears only this undone Source edit's redo;
   // the cover edit, plate and standoff construction still undo in three steps.
   await button('Place cylinder').click();
@@ -953,8 +945,6 @@ try {
   await cylinder
     .getByLabel('Solid Z position (mm)', { exact: true })
     .fill(String(-baseline.pcb.thickness / 2 - 6));
-  await cylinder.getByRole('button', { name: 'Add hole', exact: true }).click();
-  await cylinder.getByLabel('Hole 1 diameter (mm)', { exact: true }).fill('3.2');
   await modelCanvas.focus();
   await page.keyboard.press('Enter');
   await cylinder.waitFor({ state: 'hidden' });
@@ -968,8 +958,6 @@ try {
     ...mountingHole.position,
     z: -baseline.pcb.thickness / 2 - 6,
   });
-  assert.equal(standoff.holes.length, 1);
-  assert.equal(standoff.holes[0].diameterMm, 3.2);
   assert.deepEqual(current.pcb, baseline.pcb);
   const mechanicalFiles = await readNativeFiles(page);
   await button('Model').click();
@@ -1077,7 +1065,7 @@ try {
         'three-view navigation',
         'enclosure',
         'dimensioned drilled plate',
-        'mounting-hole-aligned drilled standoff',
+        'mounting-hole-aligned standoff',
         'rotation preview',
         'native Save/reopen',
         'STEP export',

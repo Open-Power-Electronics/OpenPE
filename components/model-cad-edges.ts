@@ -69,7 +69,7 @@ export function disposeModelCadEdgeHighlight(group: THREE.Group): void {
   materials.forEach((material) => material.dispose());
 }
 
-/** Reconstruct only the untampered base profile for visibility, including polygon/hole cuts. */
+/** Reconstruct only the untampered analytic base profile for visibility. */
 function basePickProxy(object: ModelCadObject): THREE.Mesh | null {
   if (object.kind === 'boolean') return null;
   const profile =
@@ -94,11 +94,7 @@ function basePickProxy(object: ModelCadObject): THREE.Mesh | null {
     for (const point of points.slice(1)) shape.lineTo(point.x, -point.y);
     shape.closePath();
   }
-  for (const hole of object.holes) {
-    const cut = new THREE.Path();
-    cut.absarc(hole.x, -hole.y, hole.diameterMm / 2, 0, 2 * Math.PI, false);
-    shape.holes.push(cut);
-  }
+
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: object.size.z,
     bevelEnabled: false,

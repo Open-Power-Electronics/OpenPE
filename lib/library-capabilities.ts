@@ -11,6 +11,7 @@ import {
 import { tiDcdcParts } from './ti-dcdc';
 import { findSchematic } from './project';
 import { val } from './sexpr';
+import { createPCBFootprint, flipPCBFootprint } from './pcb-layout';
 
 const kind = { enum: ['symbols', 'footprints'] };
 const identity = { type: 'string', minLength: 1, maxLength: 500 };
@@ -159,6 +160,66 @@ export function registerLibraryCapabilities(host: CapabilityHost, core: ProjectC
           },
           { expectedRevision: snapshot.revision },
         );
+      },
+    }),
+    host.register<any>({
+      id: 'layout.place',
+      kind: 'command',
+      owner: 'host',
+      level: 'object',
+      mutation: 'document',
+      review: 'optional',
+      description:
+        'Place a verified official footprint for an unplaced primary-schematic component, sharing the Layout chooser preparation and assignment transaction.',
+      inputSchema: object(
+        {
+          boardId: identity,
+          partId: identity,
+          libraryId: identity,
+          position: object(
+            {
+              x: { type: 'number', minimum: -100000, maximum: 100000 },
+              y: { type: 'number', minimum: -100000, maximum: 100000 },
+            },
+            ['x', 'y'],
+          ),
+          rotation: { type: 'number', minimum: -360, maximum: 360 },
+          side: { enum: ['front', 'back'] },
+        },
+        ['boardId', 'partId', 'libraryId', 'position'],
+      ),
+      available: () => {
+        const snapshot = core.getSnapshot();
+        return (
+          snapshot.editingBlocked ??
+          (snapshot.sourceDraft !== null
+            ? 'Apply Source edits before placing a footprint.'
+            : !!snapshot.project?.pcb || 'This project has no PCB layout.')
+        );
+      },
+      handler: async (
+        { boardId, partId, libraryId, position, rotation = 0, side = 'front' },
+        context,
+      ) => {
+        const snapshot = core.getSnapshot();
+        const board = snapshot.project?.pcb;
+        if (!board || board.id !== boardId) throw new Error('Choose a board in this project.');
+        if (
+          context.expectedRevision !== undefined &&
+          context.expectedRevision !== String(snapshot.revision)
+        )
+          throw new Error('The project changed. Query it before placing a footprint.');
+        if (board.footprints.some((footprint) => footprint.symbolId === partId))
+          throw new Error('This component already has a placed footprint.');
+        const resolved = await detail('footprints', libraryId, context.signal);
+        context.signal.throwIfAborted();
+        if (core.getSnapshot().revision !== snapshot.revision)
+          throw new Error('The project changed while loading the footprint. Try again.');
+        let footprint = createPCBFootprint(resolved, snapshot.project!.schematic, partId, position);
+        footprint.rotation = rotation;
+        if (side === 'back') footprint = flipPCBFootprint(footprint);
+        core.replaceBoard({ ...board, footprints: [...board.footprints, footprint] });
+        return { id: footprint.id, revision: String(core.getSnapshot().revision) };
       },
     }),
   ];

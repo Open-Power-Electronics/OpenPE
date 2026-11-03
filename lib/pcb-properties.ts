@@ -1,4 +1,58 @@
-import { invalidatePCBFill, type Pad, type PCB } from './pcb';
+import { invalidatePCBFill, type Pad, type PCB, type Footprint } from './pcb';
+import { flipPCBFootprint } from './pcb-layout';
+
+export type PCBFootprintProperties = Partial<
+  Pick<
+    Footprint,
+    | 'x'
+    | 'y'
+    | 'rotation'
+    | 'side'
+    | 'reference'
+    | 'value'
+    | 'models'
+    | 'solderMaskMargin'
+    | 'solderPasteMargin'
+    | 'solderPasteMarginRatio'
+  >
+>;
+
+/** Side changes transform local pads, artwork and models together. */
+export function preparePCBFootprintProperties(
+  footprint: Footprint,
+  changes: PCBFootprintProperties,
+): Footprint {
+  const retainedPaths = new Set(footprint.models?.map((model) => model.path));
+  for (const model of changes.models ?? [])
+    if (!retainedPaths.has(model.path)) validateFootprintModelPath(model.path);
+  const basis =
+    changes.side && changes.side !== footprint.side ? flipPCBFootprint(footprint) : footprint;
+  const next = { ...basis, ...changes };
+  for (const key of Object.keys(next) as (keyof Footprint)[])
+    if (next[key] === undefined) delete next[key];
+  return next;
+}
+
+export function validateFootprintModelPath(path: string): void {
+  if (
+    path.length > 4096 ||
+    !/^\$\{(?:KIPRJMOD|KICAD\d+_3DMODEL_DIR)\}\/[^\0\r\n]+\.(?:step|stp|wrl)$/i.test(path) ||
+    path.split(/[\\/]/).some((part) => part === '..')
+  )
+    throw new Error('Use a project-relative STEP file or a library model.');
+}
+
+export function setPCBViaProperties(
+  board: PCB,
+  viaId: string,
+  changes: Partial<Omit<PCB['vias'][number], 'id'>>,
+): PCB {
+  if (!board.vias.some((via) => via.id === viaId)) fail('This via no longer exists.');
+  return {
+    ...board,
+    vias: board.vias.map((via) => (via.id === viaId ? { ...via, ...changes } : via)),
+  };
+}
 
 export type PCBPadProperties = Partial<
   Omit<Pad, 'id' | 'number' | 'netId' | 'type' | 'layers' | 'unconnected'>

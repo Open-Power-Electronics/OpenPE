@@ -17,7 +17,6 @@ const body = (kind: ModelCadObject['kind'] = 'box'): ModelCadObject =>
     size: { x: 20, y: kind === 'box' ? 16 : 20, z: 10 },
     material: 'aluminium',
     opacity: 1,
-    holes: [{ id: uid(), x: 3, y: 2, diameterMm: 3.2 }],
   });
 
 test('custom colors reach primitive, kernel and translucent preview materials and survive selection', () => {
@@ -83,26 +82,16 @@ function localRay(object: ModelCadObject, x: number, y: number, direction = -1) 
   return new THREE.Raycaster(start, end.sub(start).normalize());
 }
 
-test('box and cylinder meshes have real local through cuts and retain the surrounding solid', () => {
+test('box and cylinder meshes retain solid caps and native-axis bounds', () => {
   for (const kind of ['box', 'cylinder'] as const) {
     const object = body(kind),
-      mesh = modelCadMesh(object),
-      hole = object.holes[0];
+      mesh = modelCadMesh(object);
     mesh.updateMatrixWorld(true);
     try {
       for (const direction of [-1, 1]) {
-        assert.equal(
-          localRay(object, hole.x, hole.y, direction).intersectObject(mesh).length,
-          0,
-          `${kind} mounting hole must pass through both faces`,
-        );
         assert.ok(
           localRay(object, 0, 0, direction).intersectObject(mesh).length >= 1,
           `${kind} material outside the cut must remain solid`,
-        );
-        assert.ok(
-          localRay(object, hole.x, -hole.y, direction).intersectObject(mesh).length >= 1,
-          'A local positive-Y cut must not move to the opposite side of the object',
         );
       }
     } finally {
@@ -111,12 +100,11 @@ test('box and cylinder meshes have real local through cuts and retain the surrou
   }
 });
 
-test('compound XYZ poses and asymmetric holes match independently transformed native geometry', () => {
+test('compound XYZ poses match independently transformed native geometry', () => {
   const object = body();
   object.position = { x: 10, y: 20, z: 30 };
   object.size = { x: 12, y: 8, z: 6 };
   object.rotation = { x: 17, y: 31, z: 43 };
-  object.holes = [{ id: uid(), x: 2, y: 1, diameterMm: 2 }];
   const mesh = modelCadMesh(validateModelCadObject(object));
   mesh.updateMatrixWorld(true);
   try {
@@ -130,9 +118,9 @@ test('compound XYZ poses and asymmetric holes match independently transformed na
     assert.ok(actual.max.distanceTo(expected.max) < 1e-6);
     assert.ok(actual.max.y < 0, 'The complete native world pose must be reflected across scene Y');
     assert.equal(
-      localRay(object, 2, 1).intersectObject(mesh).length,
-      0,
-      'The mounting cut rotates and translates with its body',
+      localRay(object, 2, 1).intersectObject(mesh).length >= 1,
+      true,
+      'The primitive surface rotates and translates with its body',
     );
     assert.ok(localRay(object, -2, -1).intersectObject(mesh).length >= 1);
   } finally {
@@ -149,8 +137,6 @@ test('preview opacity belongs to independent presentation materials and never ch
     Object.freeze(object.position);
     Object.freeze(object.rotation);
     Object.freeze(object.size);
-    object.holes.forEach(Object.freeze);
-    Object.freeze(object.holes);
     Object.freeze(object);
     const original = modelCadMesh(object),
       preview = modelCadMesh(object, true);

@@ -7,7 +7,11 @@ import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
 import { padPosition, type PCBBounds } from '@/lib/pcb-layout';
 import { padCopperLayers } from '@/lib/pcb-connectivity';
 import { pcbPadShapeLabel, pcbPadTypeLabel } from '@/lib/pcb-display';
-import { setPCBPadProperties, setPCBTrackEndpoints } from '@/lib/pcb-properties';
+import {
+  setPCBPadProperties,
+  setPCBTrackEndpoints,
+  setPCBViaProperties,
+} from '@/lib/pcb-properties';
 import type { PCBRectangle } from '@/lib/pcb-outline-resize';
 import type { CapabilityHost } from '@/api/capabilities';
 import type { FootprintDetail } from './LibraryChooser';
@@ -132,12 +136,7 @@ export default function LayoutProperties({
   const padChange = (changes: Parameters<typeof setPCBPadProperties>[2]) =>
     pad ? attempt(() => setPCBPadProperties(board, pad.id, changes)) : false;
   const viaChange = (changes: Partial<PCB['vias'][number]>) =>
-    via
-      ? onCommit({
-          ...board,
-          vias: board.vias.map((item) => (item.id === via.id ? { ...item, ...changes } : item)),
-        })
-      : false;
+    via ? onCommit(setPCBViaProperties(board, via.id, changes)) : false;
   const endpoint = (end: 'start' | 'end', axis: 'x' | 'y', value: number) =>
     track
       ? attempt(() =>
@@ -249,42 +248,6 @@ export default function LayoutProperties({
                 />
               )}
             </PropertyGrid>
-            {pad.shape === 'roundrect' && (
-              <PropertyDetails title="Corners">
-                <NumberField
-                  {...field}
-                  label="Corner radius ratio"
-                  value={pad.roundrectRatio ?? 0.25}
-                  min={0}
-                  max={0.5}
-                  onCommit={(roundrectRatio) => padChange({ roundrectRatio })}
-                />
-                <OptionalNumberField
-                  {...field}
-                  label="Chamfer ratio"
-                  value={pad.chamferRatio}
-                  min={0}
-                  max={0.5}
-                  onCommit={(chamferRatio) => padChange({ chamferRatio })}
-                />
-                {(['top_left', 'top_right', 'bottom_left', 'bottom_right'] as const).map(
-                  (corner) => (
-                    <PropertyToggle
-                      key={corner}
-                      active={active}
-                      label={`Chamfer ${corner.replace('_', ' ')}`}
-                      checked={pad.chamfer?.includes(corner) ?? false}
-                      onChange={(checked) => {
-                        const chamfer = checked
-                          ? [...(pad.chamfer ?? []), corner]
-                          : (pad.chamfer ?? []).filter((value) => value !== corner);
-                        padChange({ chamfer: chamfer.length ? chamfer : undefined });
-                      }}
-                    />
-                  ),
-                )}
-              </PropertyDetails>
-            )}
             {pad.type !== 'smd' && (
               <>
                 <NumberField
@@ -295,29 +258,61 @@ export default function LayoutProperties({
                   max={pad.type === 'thru_hole' ? Math.min(pad.size.x, pad.size.y) - 0.0001 : 1000}
                   onCommit={(drill) => padChange({ drill })}
                 />
-                <PropertyDetails title="Drill offset">
-                  <PropertyGrid>
-                    <NumberField
-                      {...field}
-                      label="Drill offset X (mm)"
-                      value={pad.drillOffset?.x ?? 0}
-                      onCommit={(x) =>
-                        padChange({ drillOffset: { x, y: pad.drillOffset?.y ?? 0 } })
-                      }
-                    />
-                    <NumberField
-                      {...field}
-                      label="Drill offset Y (mm)"
-                      value={pad.drillOffset?.y ?? 0}
-                      onCommit={(y) =>
-                        padChange({ drillOffset: { x: pad.drillOffset?.x ?? 0, y } })
-                      }
-                    />
-                  </PropertyGrid>
-                </PropertyDetails>
               </>
             )}
           </PropertySection>
+          {pad.shape === 'roundrect' && (
+            <PropertyDetails title="Corners">
+              <NumberField
+                {...field}
+                label="Corner radius ratio"
+                value={pad.roundrectRatio ?? 0.25}
+                min={0}
+                max={0.5}
+                onCommit={(roundrectRatio) => padChange({ roundrectRatio })}
+              />
+              <OptionalNumberField
+                {...field}
+                label="Chamfer ratio"
+                value={pad.chamferRatio}
+                min={0}
+                max={0.5}
+                onCommit={(chamferRatio) => padChange({ chamferRatio })}
+              />
+              {(['top_left', 'top_right', 'bottom_left', 'bottom_right'] as const).map((corner) => (
+                <PropertyToggle
+                  key={corner}
+                  active={active}
+                  label={`Chamfer ${corner.replace('_', ' ')}`}
+                  checked={pad.chamfer?.includes(corner) ?? false}
+                  onChange={(checked) => {
+                    const chamfer = checked
+                      ? [...(pad.chamfer ?? []), corner]
+                      : (pad.chamfer ?? []).filter((value) => value !== corner);
+                    padChange({ chamfer: chamfer.length ? chamfer : undefined });
+                  }}
+                />
+              ))}
+            </PropertyDetails>
+          )}
+          {pad.type !== 'smd' && (
+            <PropertyDetails title="Drill offset">
+              <PropertyGrid>
+                <NumberField
+                  {...field}
+                  label="Drill offset X (mm)"
+                  value={pad.drillOffset?.x ?? 0}
+                  onCommit={(x) => padChange({ drillOffset: { x, y: pad.drillOffset?.y ?? 0 } })}
+                />
+                <NumberField
+                  {...field}
+                  label="Drill offset Y (mm)"
+                  value={pad.drillOffset?.y ?? 0}
+                  onCommit={(y) => padChange({ drillOffset: { x: pad.drillOffset?.x ?? 0, y } })}
+                />
+              </PropertyGrid>
+            </PropertyDetails>
+          )}
           <PropertyDetails title="Fabrication">
             <OptionalNumberField
               {...field}
@@ -391,6 +386,11 @@ export default function LayoutProperties({
         </>
       ) : (
         <>
+          {selectionCount > 1 && !rectangle && (
+            <PropertySection title="Selection">
+              <PropertyRow label="Items" value={selectionCount} />
+            </PropertySection>
+          )}
           {footprint && (
             <ComponentProperties
               footprint={footprint}
@@ -425,6 +425,7 @@ export default function LayoutProperties({
                   <Select
                     active={active}
                     label="Track net"
+                    displayLabel="Net"
                     disabled={track.locked}
                     value={track.netId}
                     options={netOptions}
@@ -433,6 +434,7 @@ export default function LayoutProperties({
                   <Select
                     active={active}
                     label="Track layer"
+                    displayLabel="Layer"
                     disabled={track.locked}
                     value={track.layer}
                     options={layerOptions}
@@ -441,23 +443,6 @@ export default function LayoutProperties({
                 </PropertyGrid>
               </PropertySection>
               <PropertySection title="Geometry" showTitle={false}>
-                <PropertyDetails title="Endpoints">
-                  {(['start', 'end'] as const).map((end) => (
-                    <PropertyGrid key={end}>
-                      {(['x', 'y'] as const).map((axis) => (
-                        <NumberField
-                          {...field}
-                          key={`${end}-${axis}`}
-                          disabled={track.locked}
-                          label={`${end === 'start' ? 'Start' : 'End'} ${axis.toUpperCase()} (mm)`}
-                          value={track[end][axis]}
-                          normalize={snap}
-                          onCommit={(value) => endpoint(end, axis, value)}
-                        />
-                      ))}
-                    </PropertyGrid>
-                  ))}
-                </PropertyDetails>
                 <NumberField
                   {...field}
                   label="Width (mm)"
@@ -474,16 +459,33 @@ export default function LayoutProperties({
                   )}
                 />
               </PropertySection>
+              <PropertyDetails title="Endpoints">
+                {(['start', 'end'] as const).map((end) => (
+                  <PropertyGrid key={end}>
+                    {(['x', 'y'] as const).map((axis) => (
+                      <NumberField
+                        {...field}
+                        key={`${end}-${axis}`}
+                        disabled={track.locked}
+                        label={`${end === 'start' ? 'Start' : 'End'} ${axis.toUpperCase()} (mm)`}
+                        value={track[end][axis]}
+                        normalize={snap}
+                        onCommit={(value) => endpoint(end, axis, value)}
+                      />
+                    ))}
+                  </PropertyGrid>
+                ))}
+              </PropertyDetails>
             </>
           )}
           {via && (
             <>
               <PropertySection title="Via">
-                <PropertyRow label="Type" value="Through via" />
                 <PropertyRow label="Copper layers" value={board.layers.join(', ')} />
                 <Select
                   active={active}
                   label="Via net"
+                  displayLabel="Net"
                   value={via.netId}
                   options={netOptions}
                   onChange={(netId) => viaChange({ netId })}
@@ -767,11 +769,6 @@ export default function LayoutProperties({
                 Select an object to view its properties.
               </PropertiesEmptyState>
             )}
-          {selectionCount > 1 && !rectangle && (
-            <PropertySection title="Selection">
-              <PropertyRow label="Items" value={selectionCount} />
-            </PropertySection>
-          )}
         </>
       )}
     </>

@@ -21,7 +21,6 @@ const body = (id = '7d6a9000-0000-4000-a000-000000000001'): ModelCadObject => ({
   name: 'Body',
   kind: 'box',
   size: { x: 20, y: 16, z: 8 },
-  holes: [],
   position: { x: 0, y: 0, z: 0 },
   rotation: { x: 0, y: 0, z: 0 },
   material: 'aluminium',
@@ -63,7 +62,6 @@ test('solid operands contain explicit body selections only, never owning bodies 
 
 test('pruning removes stale topology and distinguishes circular edges from straight lines', () => {
   const object = body();
-  object.holes = [{ id: '7d6a9000-0000-4000-a000-000000000002', x: 0, y: 0, diameterMm: 2 }];
   const selection: ModelCadSelection[] = [
     { kind: 'body', objectId: object.id },
     { kind: 'face', objectId: object.id, faceId: 'profile:top' },
@@ -77,11 +75,9 @@ test('pruning removes stale topology and distinguishes circular edges from strai
   assert.deepEqual(pruneModelCadSelection(selection, [object]), [
     selection[0],
     selection[1],
-    selection[2],
-    selection[3],
     selection[5],
   ]);
-  assert.deepEqual(pruneModelCadSelection(selection, [{ ...object, holes: [] }]), [
+  assert.deepEqual(pruneModelCadSelection(selection, [{ ...object }]), [
     selection[0],
     selection[1],
     selection[5],
@@ -90,7 +86,7 @@ test('pruning removes stale topology and distinguishes circular edges from strai
     pruneModelCadSelection(selection, [
       { ...object, edgeTreatment: { kind: 'fillet', distanceMm: 0.5, edges: ['side:0'] } },
     ]),
-    [selection[0], selection[3], selection[5]],
+    [selection[0], selection[5]],
   );
   assert.deepEqual(pruneModelCadSelection(selection, []), []);
 });
