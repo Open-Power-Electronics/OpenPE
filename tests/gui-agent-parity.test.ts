@@ -30,6 +30,7 @@ import { displayName } from '../lib/display-name';
 import { preparePartGeometry } from '../lib/part-properties';
 import type { PCB } from '../lib/pcb';
 import { findPCBRectangle, resizePCBRectangle } from '../lib/pcb-outline-resize';
+import { setPCBLocked } from '../lib/pcb-lock';
 import { registerLibraryCapabilities } from '../lib/library-capabilities';
 import { parseSExpr } from '../lib/sexpr';
 
@@ -173,12 +174,50 @@ async function parity(
   host.dispose();
 }
 
+test('GUI and Agent object locks preserve the same native files and whole-project undo', async () => {
+  await parity(
+    'layout.lock',
+    (project) => ({
+      boardId: project.pcb!.id,
+      targets: [
+        { kind: 'footprint', id: project.pcb!.footprints[0].id },
+        { kind: 'via', id: project.pcb!.vias[0].id },
+        { kind: 'zone', id: project.pcb!.zones[0].id },
+      ],
+      locked: true,
+    }),
+    (core, project) => {
+      core.replaceBoard(
+        setPCBLocked(
+          project.pcb!,
+          [
+            { kind: 'footprint', id: project.pcb!.footprints[0].id },
+            { kind: 'via', id: project.pcb!.vias[0].id },
+            { kind: 'zone', id: project.pcb!.zones[0].id },
+          ],
+          true,
+        ),
+      );
+    },
+  );
+});
+
 test('GUI and Agent project rename preserve the same native files and whole-project undo', async () => {
   await parity(
     'project.rename',
     () => ({ name: '  Converter  ' }),
     (core, project) => {
       core.commitProject({ ...project, name: displayName('  Converter  ') });
+    },
+  );
+});
+
+test('Model board thickness and Agent board Properties share native bytes, undo and edit barriers', async () => {
+  await parity(
+    'layout.properties',
+    (project) => ({ boardId: project.pcb!.id, thickness: 2.4 }),
+    (core, project) => {
+      core.replaceBoard({ ...project.pcb!, thickness: 2.4 });
     },
   );
 });

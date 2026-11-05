@@ -1518,7 +1518,7 @@ try {
     });
     return found;
   }, first.id);
-  const fitLabels = ['Show CAD solids', 'Show component models'];
+  const fitLabels = ['Show CAD solids', 'Show components'];
   await selectModelVisualizationTab(page, 'Display');
   const displayBeforeFit = await Promise.all(
     fitLabels.map((name) => page.getByRole('checkbox', { name, exact: true }).isChecked()),
@@ -1569,12 +1569,12 @@ try {
   );
   await setFitDisplay('Show CAD solids', false);
   await assertBoardOnlyFit();
-  await setFitDisplay('Show component models', true);
+  await setFitDisplay('Show components', true);
   assert.ok(
     Math.abs((await fitCamera()).position[2] - boardOnlyFit.position[2]) > 0.1,
     'A visible component contributes its height to Fit.',
   );
-  await setFitDisplay('Show component models', false);
+  await setFitDisplay('Show components', false);
   await assertBoardOnlyFit();
   assert.deepEqual(
     await page.evaluate(() => window.cad.core.getNativeFiles()),
@@ -2183,30 +2183,10 @@ try {
       else document.documentElement.setAttribute('data-theme', theme);
     }, sketchGridTheme);
   }
-  await sketchPanel.getByRole('button', { name: 'Change plane', exact: true }).click();
-  await waitSketchPhase('plane');
-  await waitSketchGrid(false);
-  await assertSketchCameraRestored(beforeSketchCamera, 'Change plane leaves the 2D drawing view');
-  const revisedOffset = planePanel.getByLabel('Sketch plane offset (mm)', { exact: true });
-  await revisedOffset.fill(String(sketchPlaneOffset + 3));
-  await page.waitForFunction(
-    (offset) => window.modelCadGui.sketch?.origin.z === offset,
-    sketchPlaneOffset + 3,
+  assert.equal(
+    await sketchPanel.getByRole('button', { name: 'Change plane', exact: true }).count(),
+    0,
   );
-  await revisedOffset.press('Escape');
-  await page.waitForFunction(
-    (offset) => window.modelCadGui.sketch?.origin.z === offset,
-    sketchPlaneOffset,
-  );
-  assert.equal(Number(await revisedOffset.inputValue()), sketchPlaneOffset);
-  assert.deepEqual(
-    await contourGeometry(),
-    drawnContour,
-    'Escape restores the workplane offset without discarding the drawn contour.',
-  );
-  assert.deepEqual(await state(), beforeSketch);
-  await planePanel.getByRole('button', { name: 'Start sketch', exact: true }).click();
-  await waitSketchPhase('sketch');
   assert.equal(await button('Finish sketch').isEnabled(), true);
   await preview.screenshot({ path: 'test-results/model-sketch-flow-sketch.png' });
   await button('Finish sketch').click();

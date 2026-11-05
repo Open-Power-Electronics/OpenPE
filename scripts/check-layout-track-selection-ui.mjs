@@ -505,17 +505,24 @@ try {
   );
 
   await run(
-    'net panel buttons toggle individual highlights and clear all without writes',
+    'net names replace and toggle highlights like layer names without writes',
     async ({ page, button, opacity, clean }) => {
       await toggleLayoutVisualization(page, 'Net visibility');
       await button('Highlight OUT').click();
-      await button('Highlight GND').click();
       assert.equal(await opacity('a'), '1');
+      assert.equal(await opacity('foreign'), '0.2');
+      await button('Highlight GND').click();
+      assert.equal(await opacity('a'), '0.2');
       assert.equal(await opacity('foreign'), '1');
       assert.equal(await opacity('auxTrack'), '0.2');
       await button('Highlight OUT').click();
-      assert.equal(await opacity('a'), '0.2');
+      assert.equal(await opacity('a'), '1');
+      assert.equal(await opacity('foreign'), '0.2');
+      await button('Highlight OUT').click();
+      assert.equal(await opacity('a'), '1');
       assert.equal(await opacity('foreign'), '1');
+      assert.equal(await button('Clear net highlight').count(), 0);
+      await button('Highlight GND').click();
       await button('Clear net highlight').click();
       assert.equal(await opacity('a'), '1');
       assert.equal(await opacity('auxTrack'), '1');

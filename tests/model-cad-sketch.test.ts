@@ -11,6 +11,9 @@ import {
   extrudeModelCadSketch,
   modelCadSketchOutlines,
   prepareModelCadSketchContour,
+  prepareModelCadSketchCorners,
+  modelCadSketchContourOutline,
+  pickModelCadSketchContour,
   type ModelCadSketchExtrusion,
 } from '../lib/model-cad-sketch';
 
@@ -170,6 +173,11 @@ test('sketch extrusion rejects unsupported fields, open/degenerate/crossing cont
 test('human and Agent sketch extrusion share exact preparation, native files, one undo edit and lifecycle gates', async () => {
   const input = sketch(),
     initial = project();
+  input.contours[0] = prepareModelCadSketchCorners(input.contours[0], {
+    kind: 'fillet',
+    distanceMm: 2,
+    corners: [0, 1, 2, 3],
+  });
   const executions = [];
   for (const actor of ['human', 'agent'] as const) {
     const core = new ProjectCore(initial),
@@ -244,6 +252,151 @@ test('human and Agent sketch extrusion share exact preparation, native files, on
     }
   }
   assert.deepEqual(executions[0], executions[1]);
+});
+
+test('sketch fillets/chamfers retain analytic selected-corner recipes and preview tangent geometry', () => {
+  const contour = sketch().contours[0];
+  const before = structuredClone(contour);
+  const rounded = prepareModelCadSketchCorners(contour, {
+    kind: 'fillet',
+    distanceMm: 2,
+    corners: [0, 1, 2, 3],
+  });
+  const outline = modelCadSketchContourOutline(rounded);
+  assert.ok(outline.length > 40);
+  const near = (point: { x: number; y: number }, x: number, y: number) =>
+    Math.hypot(point.x - x, point.y - y) < 1e-6;
+  assert.ok(outline.some((point) => near(point, -10, -6)));
+  assert.ok(outline.some((point) => near(point, -8, -8)));
+  assert.ok(!outline.some((point) => near(point, -10, -8)));
+  const arcCenter = { x: -8, y: -6 };
+  for (const point of outline.filter((point) => point.x <= -8 && point.y <= -6))
+    assert.ok(Math.abs(Math.hypot(point.x - arcCenter.x, point.y - arcCenter.y) - 2) < 1e-6);
+  const chamfered = prepareModelCadSketchCorners(contour, {
+    kind: 'chamfer',
+    distanceMm: 2,
+    corners: [0],
+  });
+  assert.deepEqual(modelCadSketchContourOutline(chamfered), [
+    { x: -10, y: -6 },
+    { x: -8, y: -8 },
+    { x: 10, y: -8 },
+    { x: 10, y: 8 },
+    { x: -10, y: 8 },
+  ]);
+  const input = { ...sketch(), contours: [rounded] };
+  const body = extrudeModelCadSketch(input);
+  assert.deepEqual(body.profile, { kind: 'rectangle' });
+  assert.deepEqual(body.edgeTreatment, {
+    kind: 'fillet',
+    distanceMm: 2,
+    edges: ['side:0', 'side:1', 'side:2', 'side:3'],
+  });
+  assert.deepEqual(prepareModelCadSketchCorners(chamfered, null), contour);
+  assert.deepEqual(contour, before);
+  rounded.cornerTreatment!.corners[0] = 3;
+  assert.equal(body.edgeTreatment!.edges[0], 'side:0');
+});
+
+test('polygon corner treatments support both windings and reject missing, reflex, collinear and overlapping corners', () => {
+  const points = [
+    { x: 0, y: 0 },
+    { x: 20, y: 0 },
+    { x: 20, y: 20 },
+    { x: 0, y: 20 },
+  ];
+  for (const vertices of [points, [...points].reverse()]) {
+    const contour = prepareModelCadSketchContour('polygon', vertices);
+    const rounded = prepareModelCadSketchCorners(contour, {
+      kind: 'fillet',
+      distanceMm: 2,
+      corners: [0, 1, 2, 3],
+    });
+    const outline = modelCadSketchContourOutline(rounded);
+    assert.ok(
+      outline.every(
+        (point) =>
+          point.x >= -1e-6 && point.x <= 20 + 1e-6 && point.y >= -1e-6 && point.y <= 20 + 1e-6,
+      ),
+    );
+    const area =
+      outline.reduce((sum, point, index) => {
+        const next = outline[(index + 1) % outline.length];
+        return sum + point.x * next.y - point.y * next.x;
+      }, 0) / 2;
+    assert.ok(Math.abs(Math.abs(area) - (400 - 4 * (4 - Math.PI))) < 0.2);
+  }
+  const contour = sketch().contours[0];
+  for (const treatment of [
+    { kind: 'fillet', distanceMm: 0, corners: [0] },
+    { kind: 'fillet', distanceMm: NaN, corners: [0] },
+    { kind: 'fillet', distanceMm: 8, corners: [0] },
+    { kind: 'fillet', distanceMm: 1, corners: [4] },
+    { kind: 'fillet', distanceMm: 1, corners: [0, 0] },
+    { kind: 'fillet', distanceMm: 1, corners: [] },
+    { kind: 'fillet', distanceMm: 1, corners: [0.5] },
+    { kind: 'unsupported', distanceMm: 1, corners: [0] },
+    { kind: 'fillet', distanceMm: 1, corners: [0], extra: true },
+  ])
+    assert.throws(() =>
+      extrudeModelCadSketch({
+        ...sketch(),
+        contours: [{ ...contour, cornerTreatment: treatment }],
+      }),
+    );
+  assert.throws(
+    () =>
+      prepareModelCadSketchCorners(sketch().contours[1], {
+        kind: 'fillet',
+        distanceMm: 1,
+        corners: [0],
+      }),
+    /Circles/,
+  );
+  const concave = prepareModelCadSketchContour('polygon', [
+    { x: 0, y: 0 },
+    { x: 20, y: 0 },
+    { x: 10, y: 10 },
+    { x: 20, y: 20 },
+    { x: 0, y: 20 },
+  ]);
+  assert.throws(
+    () => prepareModelCadSketchCorners(concave, { kind: 'fillet', distanceMm: 1, corners: [2] }),
+    /convex/,
+  );
+  const shortEdge = prepareModelCadSketchContour('polygon', [
+    { x: 0, y: 0 },
+    { x: 20, y: 0 },
+    { x: 20, y: 20 },
+    { x: 19.5, y: 20 },
+    { x: 0, y: 10 },
+  ]);
+  assert.throws(
+    () =>
+      prepareModelCadSketchCorners(shortEdge, { kind: 'fillet', distanceMm: 1, corners: [2, 3] }),
+    /overlap/,
+  );
+});
+
+test('sketch operation picking prioritizes indexed corners and nearest outlines before nested interiors', () => {
+  const outer = prepareModelCadSketchCorners(sketch().contours[0], {
+    kind: 'fillet',
+    distanceMm: 2,
+    corners: [0, 1, 2, 3],
+  });
+  const cut = sketch().contours[1];
+  assert.deepEqual(pickModelCadSketchContour([outer, cut], { x: -9.9, y: -8 }, 0.2), {
+    contour: 0,
+    corner: 0,
+  });
+  assert.deepEqual(pickModelCadSketchContour([outer, cut], { x: -9.99, y: 0 }, 0.2), {
+    contour: 0,
+  });
+  assert.deepEqual(pickModelCadSketchContour([outer, cut], { x: 2, y: 1 }, 0.2), { contour: 1 });
+  assert.deepEqual(pickModelCadSketchContour([outer, cut], { x: 7, y: 0 }, 0.2), { contour: 0 });
+  assert.equal(pickModelCadSketchContour([outer, cut], { x: 99, y: 99 }, 0.2), null);
+  assert.equal(pickModelCadSketchContour([outer], { x: NaN, y: 0 }, 1), null);
+  assert.equal(pickModelCadSketchContour([outer], { x: 0, y: 0 }, -1), null);
 });
 
 test('native admission rejects retired local-hole parameters without changing the supplied files', () => {

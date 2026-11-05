@@ -116,7 +116,15 @@ function fixture(side, orthographic) {
       extent: 58,
       orthographic,
       modelsVisible: true,
-      silkscreenVisible: true,
+      boardDisplay: {
+        substrate: true,
+        tracks: true,
+        pads: true,
+        vias: true,
+        zones: true,
+        mask: true,
+        silkscreen: true,
+      },
     },
   };
 }

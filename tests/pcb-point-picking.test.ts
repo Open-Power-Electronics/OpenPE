@@ -6,6 +6,7 @@ import type { Footprint, PCB } from '../lib/pcb';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import { defaultPCBDisplay } from '../lib/pcb-display';
 import { parseProject } from '../lib/project';
+import { parseKiCadPCB } from '../lib/kicad-pcb';
 import {
   choosePCBPointCandidate,
   selectPCBPoint,
@@ -504,8 +505,13 @@ test('caption DOM hits remain selectable without enlarging ordinary footprint ta
   );
 });
 
-test('the real EMC MECH1 body does not trap either track from the reported shared-corner case', async () => {
-  const board = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8')).pcb!,
+test('the pinned EMC MECH1 fixture does not trap either track from the reported shared-corner case', async () => {
+  const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+  const board = parseKiCadPCB(
+      await readFile('tests/fixtures/emc-track-drag-kicad10-source.kicad_pcb', 'utf8'),
+      project.schematic,
+      'emc-flyback-demo',
+    ).board,
     layers = defaultPCBDisplay();
   const upper = board.tracks.find(
       (item) =>

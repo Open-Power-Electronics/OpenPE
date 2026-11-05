@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prepareModelCadSketchContour } from '../lib/model-cad-sketch';
+import {
+  prepareModelCadSketchContour,
+  prepareModelCadSketchCorners,
+} from '../lib/model-cad-sketch';
 import * as THREE from 'three';
 import {
   createModelCadSketchScene,
@@ -22,6 +25,34 @@ const sketch: ModelCadSketch = {
   cursor: { x: 4, y: 9 },
   closed: false,
 };
+
+test('sketch modification highlights the selected rounded contour and original indexed corners only while drawing', () => {
+  const root = new THREE.Group(),
+    scene = createModelCadSketchScene(root, 100);
+  const contour = prepareModelCadSketchCorners(
+    prepareModelCadSketchContour('rectangle', [
+      { x: 0, y: 0 },
+      { x: 20, y: 16 },
+    ]),
+    { kind: 'fillet', distanceMm: 2, corners: [0, 1, 2, 3] },
+  );
+  const selected = { ...sketch, points: [], contours: [contour], selectedContour: 0 };
+  try {
+    scene.update(selected, false);
+    const highlights = root.children.filter((node) => node.userData.modelCadSketchSelection);
+    assert.equal(highlights.length, 2);
+    const line = highlights.find((node) => node instanceof THREE.Line) as THREE.Line;
+    assert.ok(line.geometry.getAttribute('position').count > 40);
+    assert.deepEqual(new THREE.Raycaster().intersectObjects(highlights, true), []);
+    scene.update({ ...selected, phase: 'profile' }, true);
+    assert.equal(
+      root.children.some((node) => node.userData.modelCadSketchSelection),
+      false,
+    );
+  } finally {
+    scene.dispose();
+  }
+});
 
 test('sketch workplanes use the exact native origin and reflected native Y', () => {
   for (const [plane, u, v, normal] of [

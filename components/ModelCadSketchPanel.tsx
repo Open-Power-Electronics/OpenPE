@@ -8,6 +8,9 @@ import type { ModelCadObject, ModelCadBooleanOperation } from '@/lib/model-cad';
 import {
   extrudeModelCadSketch,
   prepareModelCadSketchContour,
+  prepareModelCadSketchCorners,
+  modelCadSketchVertices,
+  pickModelCadSketchContour,
   type ModelCadSketchContour,
   type ModelCadSketchExtrusion,
 } from '@/lib/model-cad-sketch';
@@ -28,9 +31,11 @@ export type ModelCadSketch = {
   cursor: Point | null;
   closed: boolean;
   contours: readonly ModelCadSketchContour[];
+  selectedContour?: number;
+  selectedCorners?: readonly number[];
 };
 export type ModelCadSketchInput = {
-  down: (point: Point | null) => void;
+  down: (point: Point | null, tolerance?: number) => void;
   move: (point: Point | null) => void;
   up: (point: Point | null) => void;
   cancelPointer: () => void;
@@ -38,6 +43,7 @@ export type ModelCadSketchInput = {
   keyDown: (key: string) => boolean;
   finish: () => void;
   retainContour: () => void;
+  modify: (kind: 'fillet' | 'chamfer' | 'boolean') => void;
 };
 const snapPoint = (point: Point): Point => ({
   x: Math.round(point.x * 2) / 2,
@@ -89,6 +95,12 @@ export default function ModelCadSketchPanel({
   });
   const [points, setPoints] = useState<Point[]>([]);
   const [contours, setContours] = useState<ModelCadSketchContour[]>([]);
+  const [contourHistory, setContourHistory] = useState<ModelCadSketchContour[][]>([]);
+  const [editing, setEditing] = useState<'fillet' | 'chamfer' | 'boolean' | null>(null);
+  const [selectedContour, setSelectedContour] = useState(0);
+  const [cornerSelection, setCornerSelection] = useState('all');
+  const [cornerDistance, setCornerDistance] = useState('1');
+  const [contourOperation, setContourOperation] = useState<ModelCadBooleanOperation>('union');
   const [operation, setOperation] = useState<ModelCadBooleanOperation>('union');
   const [cursor, setCursor] = useState<Point | null>(null);
   const [closed, setClosed] = useState(false);
@@ -100,6 +112,7 @@ export default function ModelCadSketchPanel({
   const composition = useRef(false);
   const focusDepth = useRef(depth);
   const focusOffset = useRef(offsets[plane]);
+  const focusCornerDistance = useRef(cornerDistance);
   const leaveView = useRef(onLeaveView);
   leaveView.current = onLeaveView;
   useEffect(() => () => leaveView.current(), []);
@@ -132,10 +145,48 @@ export default function ModelCadSketchPanel({
       return { contour: null, error: points.length ? (cause as Error).message : '' };
     }
   }, [shape, points, contours.length, operation]);
-  const combined = useMemo(
+  const acceptedContours = useMemo(
     () => [...contours, ...(currentContour.contour ? [currentContour.contour] : [])],
     [contours, currentContour.contour],
   );
+  const editingResult = useMemo(() => {
+    if (!editing) return { contours: acceptedContours, error: '' };
+    try {
+      const target = contours[selectedContour];
+      if (!target) throw new Error('Draw a closed contour before modifying the sketch.');
+      if (editing === 'boolean' && selectedContour === 0 && contourOperation !== 'union')
+        throw new Error('The first sketch contour must use Union.');
+      const next =
+        editing === 'boolean'
+          ? { ...target, operation: contourOperation }
+          : prepareModelCadSketchCorners(target, {
+              kind: editing,
+              distanceMm: parseNumericInput(
+                cornerDistance,
+                editing === 'fillet' ? 'Fillet radius' : 'Chamfer distance',
+              ),
+              corners:
+                cornerSelection === 'all'
+                  ? modelCadSketchVertices(target).map((_, index) => index)
+                  : cornerSelection.split(',').map(Number),
+            });
+      return {
+        contours: contours.map((contour, index) => (index === selectedContour ? next : contour)),
+        error: '',
+      };
+    } catch (cause) {
+      return { contours: null, error: (cause as Error).message };
+    }
+  }, [
+    editing,
+    acceptedContours,
+    contours,
+    selectedContour,
+    cornerSelection,
+    cornerDistance,
+    contourOperation,
+  ]);
+  const combined = editingResult.contours ?? acceptedContours;
   const pendingContour =
     points.length > 0 && (!currentContour.contour || (!closed && shape !== 'polygon'));
   const parameters = useMemo<ModelCadSketchExtrusion | null>(
@@ -158,6 +209,7 @@ export default function ModelCadSketchPanel({
   );
   const profileResult = useMemo(() => {
     try {
+      if (editingResult.error) throw new Error(editingResult.error);
       if (!parameters) throw new Error(workplane.error || 'Draw a closed sketch contour.');
       if (pendingContour)
         throw new Error(currentContour.error || 'Close the current sketch contour.');
@@ -165,7 +217,7 @@ export default function ModelCadSketchPanel({
     } catch (cause) {
       return { object: null, error: (cause as Error).message };
     }
-  }, [parameters, workplane.error, pendingContour, currentContour.error]);
+  }, [parameters, workplane.error, pendingContour, currentContour.error, editingResult.error]);
   const profile = profileResult.object
     ? { width: profileResult.object.size.x, height: profileResult.object.size.y }
     : null;
@@ -183,13 +235,54 @@ export default function ModelCadSketchPanel({
     }
   }, [parameters, profileResult, depth, direction]);
   const ready = Boolean(profileResult.object && !pendingContour);
-  useLayoutEffect(() => onReadyChange(ready && !blocked), [ready, blocked, onReadyChange]);
+  useLayoutEffect(
+    () => onReadyChange(ready && !blocked && !editing),
+    [ready, blocked, editing, onReadyChange],
+  );
   const sketch = useMemo<ModelCadSketch | null>(
     () =>
       !stale && origin
-        ? { phase, plane, origin, shape, points, cursor, closed, contours: combined }
+        ? {
+            phase,
+            plane,
+            origin,
+            shape,
+            points,
+            cursor,
+            closed,
+            contours: combined,
+            ...(editing
+              ? {
+                  selectedContour,
+                  ...(editing !== 'boolean'
+                    ? {
+                        selectedCorners:
+                          cornerSelection === 'all'
+                            ? modelCadSketchVertices(contours[selectedContour]).map(
+                                (_, index) => index,
+                              )
+                            : cornerSelection.split(',').map(Number),
+                      }
+                    : {}),
+                }
+              : {}),
+          }
         : null,
-    [phase, stale, plane, origin, shape, points, cursor, closed, combined],
+    [
+      phase,
+      stale,
+      plane,
+      origin,
+      shape,
+      points,
+      cursor,
+      closed,
+      combined,
+      editing,
+      selectedContour,
+      cornerSelection,
+      contours,
+    ],
   );
   useEffect(() => {
     onSketchChange(sketch);
@@ -207,14 +300,76 @@ export default function ModelCadSketchPanel({
     setError('');
   }
   function clearSketch() {
-    setContours([]);
+    replaceContours([]);
+    setEditing(null);
     setOperation('union');
     clearCurrent();
   }
+  function replaceContours(next: ModelCadSketchContour[]) {
+    setContourHistory((previous) => [...previous.slice(-31), contours]);
+    setContours(next);
+  }
   function retainCurrent() {
     if (currentContour.contour && (closed || shape === 'polygon'))
-      setContours((previous) => [...previous, currentContour.contour!]);
+      replaceContours([...contours, currentContour.contour]);
+    setEditing(null);
     clearCurrent();
+  }
+  function beginModify(kind: 'fillet' | 'chamfer' | 'boolean') {
+    if (blocked || composition.current || drag.current) return;
+    if (pendingContour) {
+      setError('Close the current sketch contour before modifying it.');
+      return;
+    }
+    const targetIndex = currentContour.contour ? contours.length : Math.max(0, contours.length - 1);
+    const target = acceptedContours[targetIndex];
+    if (!target) {
+      setError('Draw a closed contour before modifying the sketch.');
+      return;
+    }
+    retainCurrent();
+    setSelectedContour(targetIndex);
+    setCornerSelection(target.cornerTreatment?.corners.join(',') ?? 'all');
+    setCornerDistance(String(target.cornerTreatment?.distanceMm ?? 1));
+    setContourOperation(target.operation);
+    setEditing(kind);
+  }
+  function applySketchEdit() {
+    if (
+      blocked ||
+      composition.current ||
+      !editing ||
+      !editingResult.contours ||
+      !profileResult.object
+    )
+      return;
+    replaceContours(editingResult.contours);
+    setEditing(null);
+    setError('');
+    onReturnCanvasFocus?.();
+  }
+  function selectContour(index: number, corner?: number) {
+    if (blocked || composition.current) return;
+    const target = contours[index];
+    if (!target) return;
+    if (index !== selectedContour)
+      setCornerDistance(String(target.cornerTreatment?.distanceMm ?? 1));
+    setSelectedContour(index);
+    setCornerSelection(
+      corner === undefined ? (target.cornerTreatment?.corners.join(',') ?? 'all') : String(corner),
+    );
+    setContourOperation(target.operation);
+    setError('');
+  }
+  function undoSketchEdit() {
+    if (blocked || composition.current) return;
+    setEditing(null);
+    if (points.length) clearCurrent();
+    else if (contourHistory.length) {
+      setContours(contourHistory.at(-1)!);
+      setContourHistory((previous) => previous.slice(0, -1));
+      setError('');
+    }
   }
   const previousShape = useRef(shape);
   useLayoutEffect(() => {
@@ -229,26 +384,30 @@ export default function ModelCadSketchPanel({
     onAlignView(plane, origin);
     onReturnCanvasFocus?.();
   }
-  function leaveSketch(next: 'plane' | 'profile') {
-    drag.current = null;
+  function finishSketch() {
+    if (blocked || !ready || editing || composition.current || drag.current) return;
+    setClosed(true);
     setCursor(null);
     setError('');
     onLeaveView();
-    onPhaseChange(next);
+    onPhaseChange('profile');
     onReturnCanvasFocus?.();
-  }
-  function finishSketch() {
-    if (blocked || !ready || composition.current || drag.current) return;
-    setClosed(true);
-    leaveSketch('profile');
   }
   useLayoutEffect(() => {
     onInput(
       phase !== 'sketch'
         ? null
         : {
-            down: (raw) => {
+            down: (raw, tolerance = 0.75) => {
               if (blocked) return;
+              if (editing) {
+                if (raw) {
+                  const hit = pickModelCadSketchContour(contours, raw, tolerance);
+                  if (hit)
+                    selectContour(hit.contour, editing === 'boolean' ? undefined : hit.corner);
+                }
+                return;
+              }
               if (contours.length >= 6) {
                 setError('A sketch supports up to six contours. Undo a contour to continue.');
                 return;
@@ -262,7 +421,7 @@ export default function ModelCadSketchPanel({
                   setError('A sketch supports up to six contours. Undo a contour to continue.');
                   return;
                 }
-                setContours((previous) => [...previous, currentContour.contour!]);
+                replaceContours([...contours, currentContour.contour]);
               }
               const point = snapPoint(raw);
               setCursor(point);
@@ -297,7 +456,7 @@ export default function ModelCadSketchPanel({
               setError('');
             },
             move: (raw) => {
-              if (blocked || !raw) return;
+              if (blocked || editing || !raw) return;
               const point = snapPoint(raw);
               setCursor((previous) =>
                 previous?.x === point.x && previous?.y === point.y ? previous : point,
@@ -327,15 +486,24 @@ export default function ModelCadSketchPanel({
             keyDown: (key) => {
               if (blocked) return false;
               if (key === 'Escape') {
+                if (editing) {
+                  setEditing(null);
+                  setError('');
+                  return true;
+                }
                 if (drag.current || (!closed && points.length)) clearCurrent();
                 setCursor(null);
                 return true;
               }
               if (key === 'Enter') {
+                if (editing) {
+                  applySketchEdit();
+                  return true;
+                }
                 finishSketch();
                 return true;
               }
-              if (key === 'Backspace' && shape === 'polygon') {
+              if (key === 'Backspace' && shape === 'polygon' && !editing) {
                 setPoints((previous) => previous.slice(0, -1));
                 setClosed(false);
                 return true;
@@ -344,6 +512,7 @@ export default function ModelCadSketchPanel({
             },
             finish: finishSketch,
             retainContour: retainCurrent,
+            modify: beginModify,
           },
     );
     return () => onInput(null);
@@ -364,6 +533,7 @@ export default function ModelCadSketchPanel({
   const errorText = stale
     ? 'The project changed. Start the sketch again.'
     : error ||
+      editingResult.error ||
       (phase === 'plane'
         ? workplane.error
         : phase === 'extrude'
@@ -413,12 +583,16 @@ export default function ModelCadSketchPanel({
         if (event.key === 'Escape' && !busy) {
           event.preventDefault();
           if (event.target instanceof HTMLInputElement) {
-            if (phase === 'plane')
+            if (editing) setCornerDistance(focusCornerDistance.current);
+            else if (phase === 'plane')
               setOffsets((previous) => ({ ...previous, [plane]: focusOffset.current }));
             else setDepth(focusDepth.current);
             return;
           }
-          if (phase !== 'sketch') close();
+          if (editing) {
+            setEditing(null);
+            setError('');
+          } else if (phase !== 'sketch') close();
         }
       }}
     >
@@ -429,6 +603,7 @@ export default function ModelCadSketchPanel({
         onSubmit={(event) => {
           event.preventDefault();
           if (phase === 'plane') enterSketch();
+          else if (phase === 'sketch' && editing) applySketchEdit();
           else if (phase === 'extrude') void apply();
         }}
       >
@@ -466,6 +641,134 @@ export default function ModelCadSketchPanel({
                 />
               </label>
             </div>
+          ) : phase === 'sketch' && editing ? (
+            <div className={styles.fields}>
+              <label>
+                <span>Contour</span>
+                <Select
+                  label="Sketch contour"
+                  value={String(selectedContour)}
+                  disabled={blocked}
+                  options={contours.map((contour, index) => ({
+                    value: String(index),
+                    label: `Contour ${index + 1} · ${contour.profile.kind}`,
+                  }))}
+                  onChange={(value) => {
+                    if (composition.current) return;
+                    selectContour(Number(value));
+                  }}
+                />
+              </label>
+              {editing === 'boolean' ? (
+                <Select
+                  label="Contour Boolean operation"
+                  value={contourOperation}
+                  disabled={blocked || selectedContour === 0}
+                  options={[
+                    { value: 'union', label: 'Union' },
+                    { value: 'difference', label: 'Difference' },
+                    { value: 'intersection', label: 'Intersection' },
+                  ]}
+                  onChange={(value) => {
+                    if (!composition.current) {
+                      setContourOperation(value as ModelCadBooleanOperation);
+                      setError('');
+                    }
+                  }}
+                />
+              ) : (
+                <>
+                  <Select
+                    label="Sketch corners"
+                    value={cornerSelection}
+                    disabled={blocked}
+                    options={[
+                      { value: 'all', label: 'All corners' },
+                      ...(cornerSelection.includes(',')
+                        ? [{ value: cornerSelection, label: 'Selected corners' }]
+                        : []),
+                      ...modelCadSketchVertices(contours[selectedContour]).map((_, index) => ({
+                        value: String(index),
+                        label: `Corner ${index + 1}`,
+                      })),
+                    ]}
+                    onChange={(value) => {
+                      if (!composition.current) {
+                        setCornerSelection(value);
+                        setError('');
+                      }
+                    }}
+                  />
+                  <label>
+                    <span>{editing === 'fillet' ? 'Radius' : 'Distance'}</span>
+                    <QuantityInput
+                      unit="mm"
+                      aria-label={
+                        editing === 'fillet'
+                          ? 'Sketch fillet radius (mm)'
+                          : 'Sketch chamfer distance (mm)'
+                      }
+                      inputMode="decimal"
+                      value={cornerDistance}
+                      disabled={blocked}
+                      onFocus={() => {
+                        focusCornerDistance.current = cornerDistance;
+                      }}
+                      onValueChange={(value) => {
+                        setCornerDistance(value);
+                        setError('');
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="tool-button"
+                    aria-label="Remove sketch corner treatment"
+                    title="Remove corner treatment"
+                    disabled={blocked || !contours[selectedContour]?.cornerTreatment}
+                    onClick={() => {
+                      if (composition.current) return;
+                      const next = prepareModelCadSketchCorners(contours[selectedContour], null);
+                      replaceContours(
+                        contours.map((contour, index) =>
+                          index === selectedContour ? next : contour,
+                        ),
+                      );
+                      setEditing(null);
+                      setError('');
+                      onReturnCanvasFocus?.();
+                    }}
+                  >
+                    <RotateCcw size={17} aria-hidden />
+                  </button>
+                </>
+              )}
+              <button
+                type="submit"
+                className="icon-button property-apply-action"
+                aria-label="Apply sketch operation"
+                title="Apply sketch operation"
+                disabled={blocked || !editingResult.contours || !profileResult.object}
+              >
+                <Check size={17} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="tool-button"
+                aria-label="Cancel sketch operation"
+                title="Cancel sketch operation"
+                disabled={busy}
+                onClick={() => {
+                  if (!composition.current) {
+                    setEditing(null);
+                    setError('');
+                    onReturnCanvasFocus?.();
+                  }
+                }}
+              >
+                <X size={17} aria-hidden />
+              </button>
+            </div>
           ) : phase === 'sketch' ? (
             <div className={styles.fields}>
               <span>
@@ -492,14 +795,10 @@ export default function ModelCadSketchPanel({
               <button
                 type="button"
                 className="tool-button"
-                aria-label="Undo sketch contour"
-                title="Undo contour"
-                disabled={blocked || (!points.length && !contours.length)}
-                onClick={() => {
-                  if (composition.current) return;
-                  if (points.length) clearCurrent();
-                  else setContours((previous) => previous.slice(0, -1));
-                }}
+                aria-label="Undo sketch edit"
+                title="Undo sketch edit"
+                disabled={blocked || (!points.length && !contourHistory.length)}
+                onClick={undoSketchEdit}
               >
                 <Undo2 size={17} aria-hidden />
               </button>
@@ -580,21 +879,16 @@ export default function ModelCadSketchPanel({
         </div>
         <footer className={styles.footer}>
           {phase === 'plane' ? (
-            <button type="submit" className="dialog-button primary" disabled={blocked || !origin}>
-              Start sketch
-            </button>
-          ) : phase === 'sketch' ? (
             <button
-              type="button"
-              disabled={blocked}
-              onClick={(event) => {
-                event.preventDefault();
-                if (!composition.current) leaveSketch('plane');
-              }}
+              type="submit"
+              className="icon-button property-apply-action"
+              aria-label="Start sketch"
+              title="Start sketch"
+              disabled={blocked || !origin}
             >
-              Change plane
+              <Check size={17} aria-hidden="true" />
             </button>
-          ) : (
+          ) : phase !== 'sketch' ? (
             <>
               <button type="button" disabled={blocked} onClick={enterSketch}>
                 Edit sketch
@@ -612,7 +906,7 @@ export default function ModelCadSketchPanel({
                 </button>
               )}
             </>
-          )}
+          ) : null}
           <button
             type="button"
             className={styles.close}

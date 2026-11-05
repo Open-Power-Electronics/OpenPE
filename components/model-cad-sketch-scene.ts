@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import type { ModelCadSketch, ModelCadSketchPlane } from './ModelCadSketchPanel';
 import { createModelGridScene } from './model-grid-scene';
-import { modelCadSketchOutlines } from '@/lib/model-cad-sketch';
+import {
+  modelCadSketchOutlines,
+  modelCadSketchContourOutline,
+  modelCadSketchVertices,
+} from '@/lib/model-cad-sketch';
 
 /** Workplanes use native PCB axes; the Model renderer reflects native Y. */
 export function modelCadSketchFrame(plane: ModelCadSketchPlane, origin: ModelCadSketch['origin']) {
@@ -189,6 +193,62 @@ export function createModelCadSketchScene(root: THREE.Group, extent: number) {
         line.renderOrder = 22;
         line.userData.modelCadSketch = true;
         root.add(line);
+      }
+      const selectedContour =
+        drawing && sketch.selectedContour !== undefined
+          ? sketch.contours[sketch.selectedContour]
+          : null;
+      if (selectedContour) {
+        const outline = modelCadSketchContourOutline(selectedContour);
+        const highlight = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([...outline, outline[0]].map(world)),
+          new THREE.LineBasicMaterial({
+            color: dark ? 0x82d0ac : 0x26734f,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        highlight.renderOrder = 23;
+        highlight.userData.modelCadSketchSelection = true;
+        highlight.raycast = () => {};
+        root.add(highlight);
+        const corners = new THREE.Points(
+          new THREE.BufferGeometry().setFromPoints(
+            modelCadSketchVertices(selectedContour).map((point) =>
+              world({
+                x: point.x + selectedContour.position.x,
+                y: point.y + selectedContour.position.y,
+              }),
+            ),
+          ),
+          new THREE.PointsMaterial({
+            color: dark ? 0x82d0ac : 0x26734f,
+            size: 7,
+            sizeAttenuation: false,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        const vertices = modelCadSketchVertices(selectedContour);
+        const selected = new Set(sketch.selectedCorners ?? vertices.map((_, index) => index));
+        corners.geometry.setAttribute(
+          'color',
+          new THREE.Float32BufferAttribute(
+            vertices.flatMap((_, index) => {
+              const color = new THREE.Color(
+                selected.has(index) ? (dark ? 0x82d0ac : 0x26734f) : dark ? 0x777f83 : 0xa0a7a3,
+              );
+              return color.toArray();
+            }),
+            3,
+          ),
+        );
+        corners.material.color.set(0xffffff);
+        corners.material.vertexColors = true;
+        corners.renderOrder = 24;
+        corners.userData.modelCadSketchSelection = true;
+        corners.raycast = () => {};
+        root.add(corners);
       }
       if (points.length > 1 && !sketch.closed) {
         const line = new THREE.Line(

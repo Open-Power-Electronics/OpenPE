@@ -3,6 +3,7 @@ import { useRef, useState, type InputHTMLAttributes } from 'react';
 import Select from './Select';
 import {
   convertQuantity,
+  formatFixedQuantity,
   preferredQuantityUnit,
   quantityUnits,
   readQuantity,
@@ -14,6 +15,7 @@ type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> &
   onValueChange: (value: string) => void;
   autoScale?: boolean;
   precision?: number;
+  decimalPlaces?: number;
 };
 
 export default function QuantityInput({
@@ -22,6 +24,8 @@ export default function QuantityInput({
   onValueChange,
   autoScale = false,
   precision = autoScale ? 5 : undefined,
+  decimalPlaces,
+  onFocus,
   onBlur,
   onCompositionStart,
   onCompositionEnd,
@@ -36,6 +40,7 @@ export default function QuantityInput({
   );
   const [edit, setEdit] = useState<{ source: string; unit: string; display: string } | null>(null);
   const composing = useRef(false);
+  const [focused, setFocused] = useState(false);
   const container = useRef<HTMLSpanElement>(null);
   const options = unit ? quantityUnits(unit) : [];
   const canonical = options.find((entry) => entry.label === unit);
@@ -44,12 +49,18 @@ export default function QuantityInput({
   function displayNumber(number: number) {
     return String(Number(number.toPrecision(precision ?? 8)));
   }
-  const display =
+  const displayedNumber =
+    selected && canonical ? convertQuantity(number, canonical, selected) : number;
+  const rawDisplay =
     selected && canonical && Number.isFinite(number)
       ? selected.label === unit && precision === undefined && Number.isFinite(Number(source))
         ? source
-        : displayNumber(convertQuantity(number, canonical, selected))
+        : displayNumber(displayedNumber)
       : source;
+  const display =
+    decimalPlaces !== undefined && source.trim() && Number.isFinite(displayedNumber)
+      ? formatFixedQuantity(displayedNumber, decimalPlaces)
+      : rawDisplay;
   const bound = (value: string | number | undefined) => {
     if (value === undefined || !selected || !canonical || !Number.isFinite(Number(value)))
       return value;
@@ -60,7 +71,16 @@ export default function QuantityInput({
       {...props}
       inputMode={props.inputMode ?? (unit ? 'decimal' : undefined)}
       value={
-        edit && edit.source === source && edit.unit === selected?.label ? edit.display : display
+        edit &&
+        edit.source === source &&
+        edit.unit === (selected?.label ?? '') &&
+        (decimalPlaces === undefined ||
+          focused ||
+          composing.current ||
+          props['aria-invalid'] === true ||
+          props['aria-invalid'] === 'true')
+          ? edit.display
+          : display
       }
       min={bound(min)}
       max={bound(max)}
@@ -71,6 +91,10 @@ export default function QuantityInput({
             ? (Number(step) * canonical.factor) / selected.factor
             : step
       }
+      onFocus={(event) => {
+        if (decimalPlaces !== undefined) setFocused(true);
+        onFocus?.(event);
+      }}
       onCompositionStart={(event) => {
         composing.current = true;
         onCompositionStart?.(event);
@@ -92,6 +116,7 @@ export default function QuantityInput({
         onValueChange(next);
       }}
       onBlur={(event) => {
+        if (decimalPlaces !== undefined) setFocused(false);
         if (container.current?.contains(event.relatedTarget as Node | null)) {
           event.stopPropagation();
           return;
@@ -140,6 +165,7 @@ export default function QuantityInput({
       {input}
       <Select
         compact
+        showChevron={false}
         label={`${label} unit`}
         value={selected.label}
         disabled={props.disabled || props.readOnly || options.length === 1 || composing.current}

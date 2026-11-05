@@ -79,6 +79,7 @@ export type BoardLine = {
   };
 };
 export type Pad = Point & {
+  locked?: true;
   id: string;
   number: string;
   rotation: number;
@@ -129,6 +130,7 @@ export type Footprint = Point & {
   solderPasteMarginRatio?: number;
 };
 export type BoardZone = {
+  locked?: true;
   id: string;
   netId: string | null;
   layer: BoardLayer;
@@ -195,22 +197,25 @@ export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
   const copperGraphics = (graphics: BoardLine[]) =>
     graphics.filter((g) => g.layer === 'Edge.Cuts' || g.layer.endsWith('.Cu'));
   const inputs = (board: PCB) =>
-    JSON.stringify([
-      board.layers,
-      board.tracks.map(({ locked: _locked, ...track }) => track),
-      board.vias,
-      copperGraphics(board.graphics),
-      zoneInputs(board.zones),
-      board.footprints.map((f) => [
-        f.x,
-        f.y,
-        f.rotation,
-        f.side,
-        f.pads,
-        copperGraphics(f.graphics),
-        zoneInputs(f.zones ?? []),
-      ]),
-    ]);
+    JSON.stringify(
+      [
+        board.layers,
+        board.tracks.map(({ locked: _locked, ...track }) => track),
+        board.vias,
+        copperGraphics(board.graphics),
+        zoneInputs(board.zones),
+        board.footprints.map((f) => [
+          f.x,
+          f.y,
+          f.rotation,
+          f.side,
+          f.pads,
+          copperGraphics(f.graphics),
+          zoneInputs(f.zones ?? []),
+        ]),
+      ],
+      (key, value) => (key === 'locked' ? undefined : value),
+    );
   if (!trackCopperChanged && inputs(previous) === inputs(next)) return next;
   const clear = (z: BoardZone): BoardZone => {
     if (z.filledPolygons === undefined) return z;
@@ -243,7 +248,7 @@ export type PCB = {
     /** Native editing lock; omitted for unlocked segments. */
     locked?: true;
   }[];
-  vias: (Point & { id: string; diameter: number; drill: number; netId: string })[];
+  vias: (Point & { id: string; diameter: number; drill: number; netId: string; locked?: true })[];
   graphics: BoardLine[];
   zones: BoardZone[];
 };
@@ -357,7 +362,7 @@ function serializePCBContent(
     return `(${prefix}_line (start ${xy(g.start)}) (end ${xy(g.end)}) ${stroke} ${tail}`;
   };
   const zone = (z: BoardZone, transform = (p: Point) => p) =>
-    `(zone ${z.netId ? `(net ${q(netName.get(z.netId)!)}) ` : ''}(layer ${q(z.layer)}) (uuid ${q(z.id)}) (hatch edge 0.5)${z.priority === undefined ? '' : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ''} (clearance ${fmt(z.clearance)})) (min_thickness ${fmt(z.minThickness)})${
+    `(zone ${z.netId ? `(net ${q(netName.get(z.netId)!)}) ` : ''}(layer ${q(z.layer)}) (uuid ${q(z.id)})${z.locked ? ' (locked yes)' : ''} (hatch edge 0.5)${z.priority === undefined ? '' : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ''} (clearance ${fmt(z.clearance)})) (min_thickness ${fmt(z.minThickness)})${
       z.keepout
         ? ` (keepout ${Object.entries(z.keepout)
             .map(([key, disabled]) => `(${key} ${disabled ? 'not_allowed' : 'allowed'})`)
@@ -448,7 +453,7 @@ function serializePCBContent(
             : pad.type !== 'smd'
               ? '"*.Cu" "*.Mask"'
               : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
-          const extras: string[] = [];
+          const extras: string[] = pad.locked ? ['(locked yes)'] : [];
           for (const [key, native] of [
             ['roundrectRatio', 'roundrect_rratio'],
             ['chamferRatio', 'chamfer_ratio'],
@@ -492,7 +497,7 @@ function serializePCBContent(
         v,
         netName.get(v.netId)!,
         () =>
-          `  (via (at ${xy(v)}) (size ${fmt(v.diameter)}) (drill ${fmt(v.drill)}) (layers "F.Cu" "B.Cu") (net ${q(netName.get(v.netId)!)}) (uuid ${q(v.id)}))`,
+          `  (via (at ${xy(v)}) (size ${fmt(v.diameter)}) (drill ${fmt(v.drill)}) (layers "F.Cu" "B.Cu") (net ${q(netName.get(v.netId)!)}) (uuid ${q(v.id)})${v.locked ? ' (locked yes)' : ''})`,
       ),
     );
   chunks.push(

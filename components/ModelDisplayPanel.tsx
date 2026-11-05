@@ -13,7 +13,14 @@ import {
 } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ModelCadSelectionFilters } from '@/lib/model-cad-selection';
+import {
+  componentModelEstimateColor,
+  modelBoardDisplayLayers,
+  type ModelBoardDisplay,
+} from '@/lib/model-board-display';
 import EditorDisplayDrawer from './EditorDisplayDrawer';
+import type { ModelExplodedView } from '@/lib/model-exploded-view';
+import { NumberField, PropertySelect } from './LayoutPropertyFields';
 
 const filterCategories = [
   ['bodies', 'Solids'],
@@ -21,7 +28,7 @@ const filterCategories = [
   ['edges', 'Edges'],
   ['lines', 'Lines'],
 ] as const;
-const visualizationTabs = ['Views', 'Display'] as const;
+const visualizationTabs = ['Views', 'Display', 'Explosion'] as const;
 const modelViews = [
   { view: 'top', label: 'Top view', Icon: PanelTop },
   { view: 'bottom', label: 'Bottom view', Icon: PanelBottom },
@@ -38,56 +45,68 @@ export default function ModelDisplayPanel({
   orthographic,
   onOrthographicChange,
   cadVisible,
+  cadColors,
   modelsVisible,
-  silkscreenVisible,
+  boardDisplay,
   onCadVisibleChange,
   onModelsVisibleChange,
-  onSilkscreenVisibleChange,
+  onBoardDisplayChange,
   selectionDisabled = false,
   filters,
   onFiltersChange,
   onView,
+  exploded,
+  onExplodedChange,
+  explodedDisabled,
 }: {
   ready: boolean;
   orthographic: boolean;
   onOrthographicChange: (value: boolean) => void;
   cadVisible: boolean;
+  cadColors: readonly number[];
   modelsVisible: boolean;
-  silkscreenVisible: boolean;
+  boardDisplay: ModelBoardDisplay;
   onCadVisibleChange: (visible: boolean) => void;
   onModelsVisibleChange: (visible: boolean) => void;
-  onSilkscreenVisibleChange: (visible: boolean) => void;
+  onBoardDisplayChange: (display: ModelBoardDisplay) => void;
   selectionDisabled?: boolean;
   filters: ModelCadSelectionFilters;
   onFiltersChange: (filters: ModelCadSelectionFilters) => void;
   onView: (view: ModelView) => void;
+  exploded: ModelExplodedView;
+  onExplodedChange: (settings: ModelExplodedView) => void;
+  explodedDisabled: boolean;
 }) {
   const id = useId();
   const [tab, setTab] = useState<(typeof visualizationTabs)[number]>('Views');
   const allItemsChecked = filterCategories.every(([key]) => filters[key]);
   const someItemsChecked = filterCategories.some(([key]) => filters[key]);
+  const cadSwatches = cadColors.map((color) => `#${color.toString(16).padStart(6, '0')}`);
   const visibilityRows = [
     {
       label: 'CAD solids',
       ariaLabel: 'Show CAD solids',
       checked: cadVisible,
       onChange: onCadVisibleChange,
-      color: 'var(--muted)',
+      color:
+        cadSwatches.length === 1
+          ? cadSwatches[0]
+          : `linear-gradient(135deg, ${cadSwatches.join(', ')})`,
     },
     {
-      label: 'Component models',
-      ariaLabel: 'Show component models',
+      label: 'Components',
+      ariaLabel: 'Show components',
       checked: modelsVisible,
       onChange: onModelsVisibleChange,
-      color: 'var(--text-strong)',
+      color: `#${componentModelEstimateColor.toString(16)}`,
     },
-    {
-      label: 'Silkscreen',
-      ariaLabel: 'Show silkscreen',
-      checked: silkscreenVisible,
-      onChange: onSilkscreenVisibleChange,
-      color: 'var(--soft)',
-    },
+    ...modelBoardDisplayLayers.map(({ key, label, color }) => ({
+      label,
+      ariaLabel: `Show ${label.toLowerCase()}`,
+      checked: boardDisplay[key],
+      onChange: (visible: boolean) => onBoardDisplayChange({ ...boardDisplay, [key]: visible }),
+      color: `#${color.toString(16).padStart(6, '0')}`,
+    })),
   ];
 
   return (
@@ -170,6 +189,36 @@ export default function ModelDisplayPanel({
                   </button>
                 </div>
               </>
+            )}
+            {tab === 'Explosion' && (
+              <div className="model-exploded-controls" role="group" aria-label="Explosion settings">
+                <div className="model-exploded-fields">
+                  <NumberField
+                    label="Distance (mm)"
+                    value={exploded.distance}
+                    min={0}
+                    max={1000}
+                    active={ready && !explodedDisabled}
+                    onCommit={(distance) => onExplodedChange({ ...exploded, distance })}
+                  />
+                  <PropertySelect
+                    label="Explosion direction"
+                    displayLabel="Direction"
+                    value={exploded.direction}
+                    disabled={!ready || explodedDisabled}
+                    options={[
+                      { value: 'vertical', label: 'Vertical' },
+                      { value: 'radial', label: 'Radial' },
+                    ]}
+                    onChange={(direction) =>
+                      onExplodedChange({
+                        ...exploded,
+                        direction: direction as ModelExplodedView['direction'],
+                      })
+                    }
+                  />
+                </div>
+              </div>
             )}
             {tab === 'Display' && (
               <div className="model-visibility-list">

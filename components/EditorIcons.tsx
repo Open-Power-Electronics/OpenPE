@@ -26,3 +26,9 @@ export const ModelIcon = createLucideIcon('Model', [
   ['path', { d: 'm3 8 6-5h7v8h5v5l-6 5', key: 'extrusion' }],
   ['path', { d: 'm10 8 6-5m-6 13 6-5m-1 5 6-5', key: 'edges' }],
 ]);
+
+export const ExtrudeIcon = createLucideIcon('Extrude', [
+  ['path', { d: 'm3 13 9-5 9 5-9 5Z', key: 'profile' }],
+  ['path', { d: 'M3 13v5l9 5 9-5v-5m-9 5v5', key: 'depth' }],
+  ['path', { d: 'M12 11V2m-4 4 4-4 4 4', key: 'direction' }],
+]);

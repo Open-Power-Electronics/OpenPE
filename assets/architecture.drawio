@@ -34,7 +34,7 @@
                 <mxCell id="pcb" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="PCB Layout&#xa;Shared drag / Properties" vertex="1">
                     <mxGeometry height="54" width="160" x="200" y="140" as="geometry"/>
                 </mxCell>
-                <mxCell id="cad" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Model CAD&#xa;Sketch Booleans → extrusion · Semantic edges" vertex="1">
+                <mxCell id="cad" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Model CAD&#xa;Sketch corners / Booleans → extrusion" vertex="1">
                     <mxGeometry height="54" width="160" x="380" y="140" as="geometry"/>
                 </mxCell>
                 <mxCell id="domain" parent="core" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=14;fontColor=#5c5c5c;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Geometry · Validation · ERC / DRC" vertex="1">
@@ -67,7 +67,7 @@
                 <mxCell id="execution" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Execution&#xa;Solvers · Convergence retry&#xa;STEP parser workers" vertex="1">
                     <mxGeometry height="65" width="270" x="900" y="55" as="geometry"/>
                 </mxCell>
-                <mxCell id="cad-kernel" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="CAD preparation · Authenticated /api/model-cad/preview&#xa;Fixed bundled Gmsh / OCC → analytical STEP → bounded local meshes · No solve" vertex="1">
+                <mxCell id="cad-kernel" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="CAD preparation · Desktop authenticated /api/model-cad/preview&#xa;Browser dev: authenticated CAD / read-only library previews · Shared STEP pool&#xa;Fixed bundled Gmsh / OCC → analytical STEP → bounded local meshes · No solve" vertex="1">
                     <mxGeometry height="55" width="1150" x="20" y="135" as="geometry"/>
                 </mxCell>
                 <mxCell id="native" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Project directory · Actual filenames&#xa;.kicad_pro · .kicad_sch · .kicad_pcb&#xa;Native libraries / models · SPICE benches&#xa;Supporting text · Local PDFs" vertex="1">

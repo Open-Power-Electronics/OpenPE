@@ -190,6 +190,26 @@ async function run(name, check) {
 
 try {
   await run(
+    'locking with the default selection filter retains Properties and permits immediate unlock',
+    async ({ page, point, snapshot, selected }) => {
+      await point({ x: 30, y: 30 }, true);
+      const lock = page.getByRole('checkbox', { name: 'Locked', exact: true });
+      const width = page.getByRole('spinbutton', { name: 'Width (mm)', exact: true });
+      await lock.check();
+      assert.deepEqual(await selected(), [freeId]);
+      assert.equal(await lock.isChecked(), true);
+      assert.equal(await width.isDisabled(), true);
+      assert.equal(
+        await page.getByRole('checkbox', { name: 'Locked items', exact: true }).isChecked(),
+        false,
+      );
+      await lock.uncheck();
+      assert.equal(await width.isEnabled(), true);
+      assert.equal((await snapshot()).commits, 2);
+    },
+  );
+
+  await run(
     'native locked tracks require selection opt-in while editing gestures stay blocked',
     async ({ page, canvas, point, drag, selected, clean, enableLockedItems }) => {
       assert.equal(
@@ -197,10 +217,10 @@ try {
         false,
       );
       await point({ x: 30, y: 20 }, true);
-      assert.deepEqual(
-        await selected(),
-        [fixture.pcb.zones[0].id],
-        'Default filtering picks the underlying copper zone instead of the locked track.',
+      assert.equal(
+        (await selected()).includes(lockedId),
+        false,
+        'Default filtering excludes the locked track from point picks.',
       );
       await clean();
       await enableLockedItems();
@@ -242,7 +262,7 @@ try {
     async ({ page, point, snapshot, initial, enableLockedItems }) => {
       await enableLockedItems();
       await point({ x: 30, y: 20 }, true);
-      const lock = page.getByRole('checkbox', { name: 'Locked track', exact: true });
+      const lock = page.getByRole('checkbox', { name: 'Locked', exact: true });
       const width = page.getByRole('spinbutton', { name: 'Width (mm)', exact: true });
       assert.equal(await lock.isChecked(), true);
       assert.equal(await width.isDisabled(), true);
@@ -282,7 +302,7 @@ try {
     async ({ page, point, snapshot, initial, enableLockedItems }) => {
       await enableLockedItems();
       await point({ x: 30, y: 20 }, true);
-      const lock = page.getByRole('checkbox', { name: 'Locked track', exact: true });
+      const lock = page.getByRole('checkbox', { name: 'Locked', exact: true });
       const width = page.getByRole('spinbutton', { name: 'Width (mm)', exact: true });
       await lock.uncheck();
       await width.fill('0.8');

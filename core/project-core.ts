@@ -1,5 +1,6 @@
 import { compileCapabilitySchema, type CapabilityValidation } from '../api/capability-schema';
 import type { CapabilityLevel } from '../api/capabilities';
+import { assertPCBLockedEdits } from '../lib/pcb-lock';
 import { type Circuit, type Point, uid } from '../lib/circuit';
 import {
   appendSchematic,
@@ -183,7 +184,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
   ...layoutCommandDefinitions,
   operationCommand(
     'modelCad.sketch.extrude',
-    'Extrude up to six ordered analytic sketch contours with planar Union, Difference or Intersection as one prepared undo edit.',
+    'Extrude up to six ordered analytic sketch contours with selected-corner fillet/chamfer and planar Union, Difference or Intersection as one prepared undo edit.',
     object({ boardId: identity, sketch: modelCadSketchExtrusionSchema }, ['boardId', 'sketch']),
   ),
   objectCommand(
@@ -681,6 +682,7 @@ export class ProjectCore {
   replaceBoard(board: PCB): boolean {
     this.requireAppliedSource();
     const latest = this.requireProject();
+    if (latest.pcb) assertPCBLockedEdits(latest.pcb, board);
     // The current document recursively owns this immutable footprint array.
     // Copper-only previews cannot change assignments through the same array;
     // the complete candidate still passes the normal commit validation.

@@ -1,3 +1,9 @@
+.toolbarSubgroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .finishSketch {
   display: inline-flex;
   align-items: center;

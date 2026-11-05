@@ -39,6 +39,10 @@ const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase()
 if (
   manifest.version !== 1 ||
   footprints.size !== manifest.footprints.length ||
+  !Array.isArray(manifest.mechanicalSources) ||
+  manifest.mechanicalSources.some(
+    (entry) => typeof entry.file !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sha256),
+  ) ||
   !Array.isArray(supplementalLicenses) ||
   ([...models.values()].some((entry) => entry.supplemental) && !supplementalLicenses.length) ||
   supplementalLicenses.some(
@@ -111,7 +115,11 @@ export async function verifyEmcFlybackAssets(
   manufacturerRoot = supplementalRoot,
 ) {
   const entries = [...models.values()].filter((entry) => !entry.missing);
-  entries.push(...manifest.footprints.filter((entry) => entry.file), ...manifest.licenses);
+  entries.push(
+    ...manifest.footprints.filter((entry) => entry.file),
+    ...manifest.mechanicalSources,
+    ...manifest.licenses,
+  );
   for (const entry of entries)
     await readAsset(entry, entry.supplemental ? manufacturerRoot : assetRoot);
   for (const entry of supplementalLicenses) await readAsset(entry, manufacturerRoot);

@@ -334,6 +334,7 @@ export function parseKiCadPCB(
         'filled_polygon',
         'keepout',
         'placement',
+        'locked',
       ],
       'zone',
     );
@@ -359,6 +360,7 @@ export function parseKiCadPCB(
       fail('Enabled placement rule is unsupported.');
     return {
       id: id(n, key),
+      ...(nativeLocked(n) ? { locked: true as const } : {}),
       netId: net(n),
       layer: val(child(n, 'layer')) as BoardLayer,
       outline: polygons[0],
@@ -486,6 +488,7 @@ export function parseKiCadPCB(
           'zone_connect',
           'pinfunction',
           'pintype',
+          'locked',
         ],
         'pad',
       );
@@ -503,6 +506,7 @@ export function parseKiCadPCB(
         fail('Slotted drills are not supported by the editor. The original file was not modified.');
       const result: Pad = {
         id: id(p, `fp:${fi}:pad:${pi}`),
+        ...(nativeLocked(p) ? { locked: true as const } : {}),
         number: val(p),
         type: val(p, 2) as Pad['type'],
         shape: val(p, 3) as Pad['shape'],
@@ -629,6 +633,7 @@ export function parseKiCadPCB(
       fail('Only through vias are supported.');
     return {
       id: id(n, `via:${i}`),
+      ...(nativeLocked(n) ? { locked: true as const } : {}),
       ...point(child(n, 'at')),
       diameter: number(child(n, 'size')),
       drill: number(child(n, 'drill')),

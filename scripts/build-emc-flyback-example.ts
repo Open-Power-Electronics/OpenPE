@@ -115,18 +115,17 @@ function preparePCB(source: string) {
     );
   }
   for (const fp of children(board, 'footprint')) {
-    // OpenPE's editable CAD panels replace only the two original static case
-    // instances. Keep their native model references and transforms intact.
+    // The enclosure belongs to Model CAD, not the PCB's footprint collection.
     const reference = children(fp, 'property').find((node) => val(node) === 'Reference');
     if (
       (val(reference, 2) === 'MECH1' && val(fp) === 'EMC_Demo:Case_UChannel_revD') ||
       (val(reference, 2) === 'MECH2' && val(fp) === 'EMC_Demo:Cover_PMMA_revD')
-    )
-      for (const model of children(fp, 'model')) {
-        const hidden = child(model, 'hide');
-        if (hidden) hidden[1] = 'yes';
-        else model.push(['hide', 'yes']);
-      }
+    ) {
+      if (children(fp, 'pad').length)
+        throw new Error('An enclosure placeholder contains PCB pads.');
+      board.splice(board.indexOf(fp), 1);
+      continue;
+    }
     for (const name of ['reference', 'value']) {
       const label = children(fp, 'fp_text').find((n) => val(n) === name);
       let property = children(fp, 'property').find(
@@ -276,7 +275,7 @@ project.extensions['org.openpe.emc-flyback-example'] = {
   license: 'CC-BY-4.0',
   attribution: 'Chengmin Li and AI-PCB-layout contributors; KiCad library contributors',
   changes:
-    'Native KiCad 7 board normalized to supported KiCad 10 records. Electrical and PCB geometry, UUIDs, nets and libraries are retained. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the hidden MECH1/MECH2 model instances, whose references and transforms are retained. Original source files are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
+    'Native KiCad 7 board normalized to supported KiCad 10 records. Electrical geometry, copper, UUIDs, nets and physical packages are retained. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
 };
 const filename = path.basename(homeExampleNativePath('emc-flyback-demo'));
 const stem = filename.replace(/\.kicad_pro$/, '');
@@ -309,6 +308,7 @@ for (const file of await readdir(`${root}/design`, { withFileTypes: true })) {
   if (file.isDirectory() && file.name.endsWith('.pretty'))
     for (const name of await readdir(`${root}/design/${file.name}`)) {
       if (!name.endsWith('.kicad_mod')) throw new Error('Unexpected custom footprint asset.');
+      if (['Case_UChannel_revD.kicad_mod', 'Cover_PMMA_revD.kicad_mod'].includes(name)) continue;
       const footprint = parseSExpr(await readFile(`${root}/design/${file.name}/${name}`, 'utf8'));
       child(footprint, 'version')![1] = '20260206';
       native.files.push({

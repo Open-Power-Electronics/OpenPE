@@ -1,5 +1,10 @@
 export type QuantityUnit = { label: string; factor: number; offset?: number };
 
+export function formatFixedQuantity(value: number, decimalPlaces = 2): string {
+  const display = value.toFixed(decimalPlaces);
+  return Number(display) === 0 ? (0).toFixed(decimalPlaces) : display;
+}
+
 const prefixes = [
   ['p', 1e-12],
   ['n', 1e-9],

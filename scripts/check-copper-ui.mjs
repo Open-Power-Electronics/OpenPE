@@ -199,7 +199,7 @@ try {
     const clearance = page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
     await clearance.fill('0.5');
     await clearance.press('Enter');
-    await page.getByRole('checkbox', { name: 'Filled', exact: true }).check();
+    await page.getByRole('button', { name: 'Fill zone', exact: true }).click();
   }
   await setLayoutVisibility(page, 'F.Cu', true);
   await setLayoutVisibility(page, 'B.Cu', true);

@@ -362,6 +362,35 @@ async function run(name, check) {
 
 try {
   await run(
+    'locked component keeps Properties and a visible screen-size lock marker',
+    async ({ page, panel, click, state, frames }) => {
+      await click(20, 15);
+      await panel.getByRole('button', { name: 'Footprint properties', exact: true }).click();
+      const before = await state();
+      const lock = panel.getByRole('checkbox', { name: 'Locked', exact: true });
+      await lock.check();
+      await frames();
+      assert.equal(await lock.isChecked(), true);
+      const marker = page.locator(`[data-layout-lock="${ids.footprint}"]`);
+      await marker.waitFor();
+      assert.equal(await marker.getAttribute('aria-label'), 'J1 locked');
+      const markerSize = await marker.locator(':scope > rect').boundingBox();
+      assert.ok(Math.abs(markerSize.width - 16) < 0.1);
+      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      await frames();
+      const zoomed = await marker.locator(':scope > rect').boundingBox();
+      assert.ok(
+        Math.abs(zoomed.width - 16) < 0.1,
+        `The zoomed marker stays 16 px wide (${zoomed.width}).`,
+      );
+      await lock.uncheck();
+      await frames();
+      assert.equal(await marker.count(), 0);
+      assert.equal((await state()).revision, before.revision + 2);
+    },
+  );
+
+  await run(
     'unlinked footprint identity shares Schematic spacing without native edits',
     async ({ page, panel, click, state, frames }) => {
       await page.getByRole('button', { name: 'Source', exact: true }).click();
@@ -419,8 +448,8 @@ try {
         layout,
         {
           gap: '8px',
-          top: '6px',
-          bottom: '6px',
+          top: '0px',
+          bottom: '0px',
           offset: 8,
           thumbnail: [32, 32],
           preview: [26, 26],
@@ -451,6 +480,13 @@ try {
       await click(20, 15);
       assert.match(await panel.innerText(), /Surface-mount pad/);
       assert.equal(
+        await panel
+          .locator('summary')
+          .filter({ hasText: /^(Drill offset|Fabrication|Pad details)$/ })
+          .count(),
+        0,
+      );
+      assert.equal(
         await panel.getByRole('combobox', { name: 'Pad net', exact: true }).count(),
         0,
         'Pad electrical associations remain schematic-owned.',
@@ -463,6 +499,11 @@ try {
       await number('Pad width (mm)', 4);
       assert.equal((await state()).revision, before.revision + 1);
       assert.equal(pad(await native()).size.x, 4);
+      assert.equal(
+        pad(await native()).solderMaskMargin,
+        pad(before.board).solderMaskMargin,
+        'Hidden fabrication data survives ordinary geometry edits.',
+      );
       await undo();
       assert.deepEqual((await state()).board, before.board);
       await number('Pad X (mm)', 1.5);
@@ -534,7 +575,7 @@ try {
       await selection.click();
       await page.getByRole('checkbox', { name: 'Locked items', exact: true }).check();
       await selection.click();
-      await panel.getByRole('checkbox', { name: 'Locked track', exact: true }).check();
+      await panel.getByRole('checkbox', { name: 'Locked', exact: true }).check();
       assert.equal(
         await panel.getByRole('spinbutton', { name: 'Start X (mm)', exact: true }).isDisabled(),
         true,
@@ -652,21 +693,6 @@ try {
       };
       await width.fill('5');
       await composingSave(width);
-      await panel
-        .locator('summary')
-        .filter({ hasText: /^Fabrication$/ })
-        .click();
-      const margin = panel.getByRole('textbox', { name: 'Solder mask margin (mm)', exact: true });
-      await margin.fill('.05');
-      await margin.press('Enter');
-      await margin.press('Tab');
-      await frames();
-      assert.equal(
-        (await state()).revision,
-        accepted.revision,
-        'Equivalent optional numbers stay clean.',
-      );
-      assert.equal(await margin.getAttribute('aria-invalid'), null);
 
       await click(35, 40);
       const content = panel.getByRole('textbox', { name: 'Text content', exact: true });

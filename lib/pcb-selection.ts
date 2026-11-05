@@ -38,12 +38,14 @@ export function defaultPCBSelectionFilters(): Required<PCBSelectionFilters> {
 
 /** Omitted additive filters retain the original combined graphic/zone behavior. */
 export function pcbGraphicSelectionEligible(graphic: BoardLine, filters: PCBSelectionFilters) {
+  if (graphic.locked && filters.locked === false) return false;
   if (graphic.kind === 'text') return filters.text ?? filters.graphic;
   if (graphic.kind === 'dimension') return filters.dimension ?? filters.graphic;
   return filters.graphic;
 }
 
 export function pcbZoneSelectionEligible(zone: BoardZone, filters: PCBSelectionFilters) {
+  if (zone.locked && filters.locked === false) return false;
   return zone.keepout ? (filters.ruleArea ?? filters.zone) : filters.zone;
 }
 
@@ -55,13 +57,23 @@ export function pcbSelectionEligible(
 ): boolean {
   switch (selection.kind) {
     case 'footprint':
-      return filters.footprint && board.footprints.some((item) => item.id === selection.id);
+      return (
+        filters.footprint &&
+        board.footprints.some(
+          (item) => item.id === selection.id && (!item.locked || filters.locked !== false),
+        )
+      );
     case 'track': {
       const track = board.tracks.find((item) => item.id === selection.id);
       return !!track && filters.track && (!track.locked || filters.locked !== false);
     }
     case 'via':
-      return filters.via && board.vias.some((item) => item.id === selection.id);
+      return (
+        filters.via &&
+        board.vias.some(
+          (item) => item.id === selection.id && (!item.locked || filters.locked !== false),
+        )
+      );
     case 'graphic': {
       const graphic = board.graphics.find((item) => item.id === selection.id);
       return !!graphic && pcbGraphicSelectionEligible(graphic, filters);
@@ -529,7 +541,13 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
   for (const candidate of candidates) {
     if (candidate.padId) {
       const found = allObjects().pads.get(candidate.padId);
-      if (!found || !filters.pad || !layers.footprints) continue;
+      if (
+        !found ||
+        !filters.pad ||
+        !layers.footprints ||
+        ((found.pad.locked || found.owner.locked) && filters.locked === false)
+      )
+        continue;
       const { owner, pad } = found,
         visible =
           pad.type === 'np_thru_hole'
@@ -568,7 +586,13 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       accept(candidate, score);
     } else if (object.kind === 'via') {
       const via = allObjects().vias.get(object.id);
-      if (!via || !filters.via || !board.layers.some((layer) => layers[layer])) continue;
+      if (
+        !via ||
+        !filters.via ||
+        (via.locked && filters.locked === false) ||
+        !board.layers.some((layer) => layers[layer])
+      )
+        continue;
       const d = Math.hypot(at.x - via.x, at.y - via.y);
       accept(candidate, {
         distance: Math.max(0, d - via.diameter / 2),
@@ -638,7 +662,13 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       fallback.push({ candidate, zones: [zone], body });
     } else {
       const owner = allObjects().footprints.get(object.id);
-      if (!owner || !filters.footprint || !layers.footprints) continue;
+      if (
+        !owner ||
+        !filters.footprint ||
+        (owner.locked && filters.locked === false) ||
+        !layers.footprints
+      )
+        continue;
       const bounds = pcbFootprintBodyBounds(board, owner, layers),
         area = bounds
           ? Math.max(epsilon, (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY))
@@ -786,6 +816,7 @@ function selectPCBGeometry(
   const selected: PCBSelection[] = [];
   if (filters.footprint)
     for (const footprint of board.footprints) {
+      if (footprint.locked && filters.locked === false) continue;
       const bounds = pcbFootprintBodyBounds(board, footprint, layers);
       const shapes: Shape[] = bounds
         ? [
@@ -832,7 +863,10 @@ function selectPCBGeometry(
         selected.push({ kind: 'track', id: track.id });
   if (filters.via && board.layers.some((layer) => layers[layer]))
     for (const via of board.vias)
-      if (diskMatches(via, via.diameter / 2, rectangle, contained))
+      if (
+        (!via.locked || filters.locked !== false) &&
+        diskMatches(via, via.diameter / 2, rectangle, contained)
+      )
         selected.push({ kind: 'via', id: via.id });
   for (const graphic of board.graphics) {
     if (
@@ -1153,7 +1187,8 @@ export function selectPCBPoint(
     shapeMatches({ paths: [], polygons: fills.get(zone.id) ?? [], radius: 0 }, rectangle, false);
   if (filters.footprint && layers.footprints)
     for (const footprint of board.footprints)
-      if (footprint.zones?.some(hits)) selected.push({ kind: 'footprint', id: footprint.id });
+      if ((!footprint.locked || filters.locked !== false) && footprint.zones?.some(hits))
+        selected.push({ kind: 'footprint', id: footprint.id });
   for (const zone of board.zones) if (hits(zone)) selected.push({ kind: 'zone', id: zone.id });
   return selected;
 }

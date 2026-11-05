@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Point } from '@/lib/circuit';
 import type { BoardLayer, BoardLine, BoardText } from '@/lib/pcb';
 import {
@@ -55,7 +55,8 @@ export default function LayoutGraphicProperties({
     <NumberField
       key={label}
       {...field}
-      label={label}
+      label={label.replace(/^(Text|Dimension) ([a-z])/, (_, _prefix, first) => first.toUpperCase())}
+      accessibleLabel={label}
       value={value}
       onCommit={onChange}
       {...options}
@@ -72,12 +73,22 @@ export default function LayoutGraphicProperties({
     value: string,
     options: { value: string; label: string }[],
     onChange: (value: string) => void,
-  ) => <Select active={active} label={label} value={value} options={options} onChange={onChange} />;
+  ) => (
+    <Select
+      active={active}
+      label={label}
+      displayLabel={label === 'Graphic layer' ? 'Layer' : label}
+      value={value}
+      options={options}
+      onChange={onChange}
+    />
+  );
   const textFields = (
     text: BoardText,
     onChange: (text: BoardText) => boolean,
     hideable: boolean,
     editableContent = true,
+    positionFields?: ReactNode,
   ) => {
     const change = (changes: Partial<BoardText>) => onChange({ ...text, ...changes });
     const align = (axis: 'horizontal' | 'vertical', value: string) => {
@@ -99,6 +110,7 @@ export default function LayoutGraphicProperties({
         ) : (
           <PropertyRow label="Text content" value={text.value} />
         )}
+        {positionFields}
         <PropertyGrid>
           {number('Text rotation (°)', text.rotation, (rotation) => change({ rotation }), {
             min: -360,
@@ -185,67 +197,66 @@ export default function LayoutGraphicProperties({
   const updateDimension = (changes: Partial<NonNullable<BoardLine['dimension']>>) =>
     dimension ? update({ dimension: { ...dimension, ...changes } }) : false;
 
+  const geometryFields = geometry ? (
+    <PropertySection title="Geometry" showTitle={false}>
+      {point(
+        graphic.kind === 'text' ? 'Position' : graphic.kind === 'circle' ? 'Center' : 'Start',
+        graphic.start,
+        (start) => update(graphic.kind === 'text' ? { start, end: { ...start } } : { start }),
+      )}
+      {graphic.kind !== 'text' &&
+        point(graphic.kind === 'circle' ? 'Radius point' : 'End', graphic.end, (end) =>
+          update({ end }),
+        )}
+      {graphic.mid && point('Middle', graphic.mid, (mid) => update({ mid }))}
+      {dimension &&
+        point('Text position', dimension.caption, (position) =>
+          updateDimension({ caption: { ...dimension.caption, ...position } }),
+        )}
+    </PropertySection>
+  ) : null;
+
   return (
     <>
       <PropertySection title="Appearance" showTitle={false}>
-        <PropertyGrid>
-          {select(
-            'Graphic layer',
-            graphic.layer,
-            [...new Set([graphic.layer, ...layers])].map((value) => ({ value, label: value })),
-            (layer) => update({ layer: layer as BoardLayer }),
+        {select(
+          'Graphic layer',
+          graphic.layer,
+          [...new Set([graphic.layer, ...layers])].map((value) => ({ value, label: value })),
+          (layer) => update({ layer: layer as BoardLayer }),
+        )}
+        {graphic.kind !== 'text' &&
+          number('Line width (mm)', graphic.width, (width) => update({ width }), {
+            min: 0,
+            max: 100,
+          })}
+        {graphic.kind !== 'text' &&
+          graphic.kind !== 'dimension' &&
+          select(
+            'Line style',
+            graphic.stroke ?? 'default',
+            [
+              { value: 'default', label: 'Default' },
+              { value: 'solid', label: 'Solid' },
+              { value: 'dash', label: 'Dashed' },
+              { value: 'dot', label: 'Dotted' },
+              { value: 'dash_dot', label: 'Dash dot' },
+              { value: 'dash_dot_dot', label: 'Dash dot dot' },
+            ],
+            (stroke) => update({ stroke: stroke as BoardLine['stroke'] }),
           )}
-          {graphic.kind !== 'text' &&
-            number('Line width (mm)', graphic.width, (width) => update({ width }), {
-              min: 0,
-              max: 100,
-            })}
-        </PropertyGrid>
-        <PropertyGrid>
-          {graphic.kind !== 'text' &&
-            graphic.kind !== 'dimension' &&
-            select(
-              'Line style',
-              graphic.stroke ?? 'default',
-              [
-                { value: 'default', label: 'Default' },
-                { value: 'solid', label: 'Solid' },
-                { value: 'dash', label: 'Dashed' },
-                { value: 'dot', label: 'Dotted' },
-                { value: 'dash_dot', label: 'Dash dot' },
-                { value: 'dash_dot_dot', label: 'Dash dot dot' },
-              ],
-              (stroke) => update({ stroke: stroke as BoardLine['stroke'] }),
-            )}
-          {(graphic.kind === 'circle' || graphic.kind === 'polygon') && (
-            <PropertyToggle
-              active={active}
-              label="Filled"
-              checked={Boolean(graphic.fill)}
-              onChange={(fill) => update({ fill })}
-            />
-          )}
-        </PropertyGrid>
+        {(graphic.kind === 'circle' || graphic.kind === 'polygon') && (
+          <PropertyToggle
+            active={active}
+            label="Filled"
+            checked={Boolean(graphic.fill)}
+            onChange={(fill) => update({ fill })}
+          />
+        )}
       </PropertySection>
-      {geometry && (
-        <PropertySection title="Geometry" showTitle={false}>
-          {point(
-            graphic.kind === 'text' ? 'Position' : graphic.kind === 'circle' ? 'Center' : 'Start',
-            graphic.start,
-            (start) => update(graphic.kind === 'text' ? { start, end: { ...start } } : { start }),
-          )}
-          {graphic.kind !== 'text' &&
-            point(graphic.kind === 'circle' ? 'Radius point' : 'End', graphic.end, (end) =>
-              update({ end }),
-            )}
-          {graphic.mid && point('Middle', graphic.mid, (mid) => update({ mid }))}
-          {dimension &&
-            point('Text position', dimension.caption, (position) =>
-              updateDimension({ caption: { ...dimension.caption, ...position } }),
-            )}
-        </PropertySection>
-      )}
-      {graphic.text && textFields(graphic.text, (text) => update({ text }), true)}
+      {!graphic.text && !dimension && geometryFields}
+      {graphic.text &&
+        textFields(graphic.text, (text) => update({ text }), true, true, geometryFields)}
       {dimension && (
         <>
           <PropertySection title="Dimension" showTitle={false}>
@@ -282,6 +293,7 @@ export default function LayoutGraphicProperties({
                 updateDimension({ leaderLength }),
               )}
           </PropertySection>
+          {geometryFields}
           {textFields(
             dimension.caption,
             (caption) => updateDimension({ caption: { ...dimension.caption, ...caption } }),

@@ -56,6 +56,27 @@ Pad nets are read-only. Conflicts/no-connect errors require schematic fixes.
 Unambiguous net merges/renames carry copper; splits retain previous copper nets
 with a review notice. Replacement never moves track endpoints.
 
+## Object locking
+
+Properties exposes one Locked control at the right of the object identity/title row for footprints, individual pads, tracks,
+vias, graphics, text, dimensions, copper zones, rule areas and mixed selections.
+`lib/pcb-lock.ts` prepares the same atomic change for GUI Properties and
+`layout.lock`. Canonical `locked:true` is serialized using the native KiCad lock
+flag; unlocked objects omit it. Native parsing and retained-source merging keep
+unchanged lock spelling while accepting explicit lock/unlock edits.
+Locked items gates all supported categories, including point and marquee picks.
+Locking the current selection retains its Properties and selection for immediate
+unlocking; explicit filter changes still clear ineligible selections. Visible
+locked footprints show a constant-screen-size lock marker in Layout, outside
+native geometry and image exports.
+Locked footprint pads inherit their owner's editing barrier; pad-local locks
+protect edits within the footprint without preventing its owner's movement.
+Core board replacement and object commands reject locked geometry/property
+changes and removal; Source remains explicit native editing. Lock-only changes
+retain saved copper fills, identifiers and whole-project undo.
+`tests/pcb-object-lock.test.ts` and `tests/gui-agent-parity.test.ts` cover native
+reopening, selection, rejected edits, fills and GUI/Agent lock parity.
+
 ## Layout tools and navigation
 
 Lazy Layout stays mounted with selection, camera and tool preferences. Hidden
@@ -213,7 +234,7 @@ Selection independently gates footprints, tracks, vias, pads, text,
 graphics, dimensions, zones and rule areas. These supported categories default
 checked, so All items starts checked and reports a mixed state only when their
 eligibility differs. Locked items defaults unchecked, independently gates picking
-locked tracks without unlocking them, and is excluded from All items. Unsupported
+locked footprints, pads, tracks, vias, graphics, text, dimensions, zones and rule areas without unlocking them, and is excluded from All items. Unsupported
 Points stays disabled and unchecked. Direct nearest-geometry picking works through disabled
 categories and footprint overlays. Explicit inspection reveals a collapsed dock.
 
@@ -320,8 +341,8 @@ tracks stay fixed during canvas edits/Shove until explicitly unlocked.
 
 ### Airwires and copper display
 
-Airwires are bounded geometric connectivity observations, not DRC. Copper preview
-shows saved fills independently of zone outlines; selected fills retain their
+Airwires are bounded geometric connectivity observations, not DRC. The Filled zones
+control shows saved fills independently of zone outlines; selected fills retain their
 layer hues. Display/highlight changes never refill, rewrite nets or dirty data.
 
 ## Routing and copper zones
@@ -480,17 +501,92 @@ creates solid/thermal contacts. Curves use nominal 0.01 mm tessellation within
 caps. Invalid/open/excessive geometry fails. Islands remain; complete KiCad
 island/fabrication rules are unsupported.
 
-There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The Filled switch can also enable fill; disabling it removes the fill. Unfilled/stale contours show the switch off and the footer offers Fill. The default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones but publishes contours only for its target. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Enabling a zone or changing effective copper rules invalidates other affected fills once. Failed calculation leaves all design data unchanged. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so filling applies the explicit minimum. Viewing and Properties disclosure never calculate fills.
+There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled/stale contours use the footer Fill action. The default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones but publishes contours only for its target. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Enabling a zone or changing effective copper rules invalidates other affected fills once. Failed calculation leaves all design data unchanged. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so filling applies the explicit minimum. Viewing and Properties disclosure never calculate fills.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
 bridges. Viewing/saving/display never recomputes fills. Copper/rule edits clear
 stale fills in the same transaction. Refill/check in KiCad before manufacturing.
 
+## Distance measurement
+
+Layout and Model share the bounded two-point presentation store in
+`lib/canvas-measurement.ts`. It reports Euclidean distance and signed native-axis
+deltas in millimetres, copies endpoints and rejects nonfinite/coincident completion.
+An invalid surface hit clears the pending endpoint so Enter cannot fix an older
+preview. Two clicks complete a measurement; a new click replaces the prior result.
+Escape clears first and exits when empty, with composition barriers on canvas.
+Layout places the ruler in its own Measurement group before Edit/history; Model keeps it immediately before Undo. Its status-bar readout directly shows
+distance, signed ΔX/ΔY and angle from native +X toward +Y. Model also shows ΔZ,
+XY angle and elevation from the XY plane; undefined angles show an em dash.
+Estimated bodies retain an Estimated suffix. The readout wraps in narrow editors.
+Measurement never calls Core or changes native data/history.
+
+Layout converts through the exact current camera transform. It reuses the visible
+copper anchor resolver and prepares visible native component placement centers
+and exact drawing anchors with
+`lib/pcb-measurement.ts`; candidates within eight screen pixels attract endpoints,
+otherwise the selected grid applies. The nearest candidate wins across centers,
+copper and drawing anchors. Hidden component bodies provide no center. Model
+attracts to the visible rendered component body bounds center within eight screen
+pixels before trying the hit triangle's visible vertices. A center's projection must
+hit that same component first; vertices recheck surface visibility at the candidate.
+Alt bypasses attraction and grid snapping. A dashed ring previews the candidate
+before either endpoint is fixed. World-space SVG markers retain screen-size paint during
+camera changes and are excluded from exports. Both overlays draw perpendicular
+unnumbered equal-length graduations. `canvasScaleLength` selects the same length
+as the lower-left Layout scale bar (the largest supported length within 100 px).
+Each tick interval equals one scale-bar length, without minor subdivisions. Model uses the same selection with
+the camera-target units per pixel and projects interpolated XYZ points, retaining
+true spatial spacing. Very long offscreen rulers thin intervals by powers of
+ten to at most 201 ticks. Model's `lib/model-measurement.ts`
+uses the same displayed scene ray, rejecting hidden ancestors, helper geometry
+and CAD previews. Text-plane alpha samples reject transparent background pixels.
+Points use native XYZ axes; measurements of estimated component
+bodies are explicitly labelled. They describe rendered mesh surfaces, not analytical
+CAD tolerances. A projected SVG overlay follows camera changes without entering
+scene picking, physical bounds, screenshots exported from WebGL or saved annotations.
+Navigation remains available. Display/document changes and deactivation clear the
+readout; other tools remain exclusive, and unapplied CAD property drafts block entry.
+
 ## Model rendering and lifetime
 
+Browser development connects CAD preview through the same-origin authenticated preview transport described in [API](API.md#browser-development-preview-transport). The existing kernel prepares exact Boolean/extrusion geometry for EMC Flyback's base and cover as well as other supported CAD solids. Preview meshes remain presentation data; native project parameters and undo retain their existing ownership. Missing/changed bundled resources produce retryable errors rather than substitute geometry.
+
+### Exploded presentation
+
+Model Visualization has an independent Explosion tab beside Views and Display.
+Distance defaults to 0 mm (assembled) and accepts 0–1,000 mm
+through the shared quantity control. Positive distance explodes the stack without a separate toggle. Vertical and Radial change assembly spread.
+Component separation automatically evaluates transformed STEP triangles in the assembled PCB frame, including nested rotation, offset, positive scale and back-side flipping. There is no component-side setting. Triangle surface area is clipped against the two laminate surfaces, avoiding vertex-density bias. More than 10% of total surface area must lie outside the laminate and one side must exceed the other by more than 3:1 before geometry determines the side. Otherwise, missing, balanced, embedded or estimated bodies automatically retain the native footprint side. This is a bounded side estimate, not semantic body/pin recognition, collision checking or validated disassembly.
+All real model instances of one footprint contribute to the same side decision. Their assembled surface-area centre supplies radial XY displacement, while radial Z retains the resolved side. Geometry summaries are cached per immutable scene instance; newly loaded instances update the combined decision. Every instance returns to its exact assembly pose before the decision is applied, so repeated settings and late model loading cannot feed exploded coordinates into classification. Hidden estimates do not vote. No board, reference or package names determine direction.
+PCB copper layers always separate along native Z in physical front-to-back order,
+with front/back solder mask and silkscreen outside the copper. Tracks, pad/via
+annuli and saved pours on one copper layer share one displacement. Four-layer
+boards include both internal copper layers; their assembled display Z positions
+are evenly spaced within the board thickness, not a material stackup calculation.
+Exploded solder mask retains the assembled transparent multiply-blended lacquer over a dedicated opaque backing using the same laminate color, roughness and lighting as the board. The backing shares the coating geometry and transform, including pad/drill apertures, supplies its own depth, and is hidden at zero distance. Detaching the coating cannot expose unrelated layers or substitute the brighter raw lacquer color. Both material identities and shader settings remain stable; no geometry is rebuilt or repeatedly recompiled. The coating owns picking; the backing is paint only.
+The existing laminate core remains fixed. Components separate toward their resolved
+side beyond the corresponding layer stack. CAD solids, including the EMC Flyback enclosure base, walls and cover,
+retain their original assembly poses, geometry and visibility in both directions.
+Radial spreads components away from the board center while retaining the PCB's Z stack.
+
+`lib/model-exploded-view.ts` owns only scene-local offsets. Reapplying settings
+cannot accumulate movement; late STEP instances follow their footprint and
+zero distance restores exact current assembly poses. Category visibility,
+selection highlighting, edge picking, measurement, Fit, clipping, image export
+and annotation capture use the displayed positions. Changing the explosion clears
+measurements and updates annotation fingerprints without moving the camera.
+Settings survive hidden views in the mounted project, outside native data, undo
+and recovery. Board thickness remains editable during exploded inspection through the same validated PCB transaction as assembled editing; project Undo/Redo stays available without collapsing the explosion. Source, stale-board, close, active-tool and Properties-draft barriers still apply. The refreshed scene recalculates laminate, copper/coating depths and component bases from the new thickness, reapplies the current explosion distance/direction and restores the retained camera. Other geometry editing is disabled during exploded inspection; camera, visibility, selection and measurement remain available. Pending CAD drafts or
+active tools block changing the settings. No Core edit or STEP output is changed.
+`tests/model-exploded-view.test.ts` covers restoration, physical layer order,
+transformed geometry, opposite-side bodies, fine-tessellated leads, ambiguous/estimated bodies, combined late models, radial centres, scene bounds, picking and stationary CAD edge identities.
+
+### Scene lifetime and rendering
+
 Model uses bounded STEP parsing/Three.js without installed KiCad. It renders
-board thickness, closed edges/cutouts, drills, outer copper, pads, silk and
+board thickness, closed edges/cutouts, drills, two-/four-layer copper, pads, silk and
 available packages in mm. Clicking visible laminate, copper, mask or silk selects the board in Model and exposes its thickness field; Layout empty Properties has no thickness setting. Component/CAD occlusion and the body filter govern board picking. The field uses the existing validated PCB replacement transaction with the exact current board and Source/close guards, retaining its draft while hidden. Native thickness, 3D geometry and whole-project undo stay in agreement. Neutral fallback bodies are estimates; late real
 models replace them without camera movement. Filled silk and mask artwork retain
 their native stroke as well as their interior; closed strokes keep their inner
@@ -534,7 +630,18 @@ current scene, including after view or project restoration.
 Tabs support arrow keys and Home/End and retain
 their selection across drawer, view and project switches. Only the active panel
 is exposed. Display uses the shared compact visibility rows, colour swatches and
-eye controls for CAD solids, component models and silkscreen. View,
+eye controls for CAD solids, components, board body, copper, solder mask and
+silkscreen. Copper jointly controls tracks, pads, vias and filled zones on all
+copper layers. Each category controls both board sides
+and defaults visible. `lib/model-board-display.ts` defines the board material
+palette and scene-local groups; swatches share the rendered material colours.
+CAD swatches reflect current solid colours (the material palette when empty);
+component models uses the neutral fallback-body colour without recolouring
+loaded packages. Visibility updates existing groups without rebuilding geometry,
+refetching assets, changing the camera or editing native content. Hidden surfaces
+cannot occlude picks or contribute to Fit; annotation display fingerprints include
+every board category. Mask and silk groups preserve their compositing order before
+transparent assemblies. View,
 projection and visibility actions keep Visualization expanded. Selection uses the shared two-column
 checkbox grid with 14 px checkboxes, 30 px rows and 8 px label gaps: All items,
 Solids, Faces, Edges and Lines. All items occupies the first cell, followed by the
@@ -567,7 +674,12 @@ poses retain geometry. Solid pose/name changes retain meshes; changed shape,
 holes or appearance replace only affected resources. Commit/preview groups own
 separate resources. Replacement/close aborts obsolete work and disposes WebGL
 resources. Missing models show notices without blocking the board or offering a
-retry action. Failed 3D preview initialization retains its retry action.
+retry action. Notices expand in the lower-right corner above zoom controls, within
+a height-bounded scrollable list. The lower-left scale bar shares Layout's
+`canvasScaleLength` selection and styling. Its camera-target-plane units per pixel
+follow zoom, projection and resize through an isolated readout, outside scene
+geometry, picking and image export. Failed 3D preview initialization retains its
+retry action.
 
 Initialization yields between bounded geometry/mesh batches; hidden views pause
 checkpoints and cancellation disposes partial work. Shader preparation precedes
@@ -585,8 +697,8 @@ owns the category layout and contextual drawing controls.
 
 Model shows intersecting grid lines only during sketch drawing, aligned and
 anchored to the selected workplane. Plane setup shows a translucent surface with
-its boundary/axes; normal 3D, finished profiles and extrusion have no grid. The Grid selector uses
-independently saved 0.5/1/2/5/10 mm spacing, default 0.5 mm, and the shared Off
+its boundary/axes; normal 3D, finished profiles and extrusion have no grid or Grid selector. The selector appears only during sketch drawing and uses
+independently saved 0.5/1/2/5/10 mm spacing, default 1 mm, and the shared Off
 setting. Lines coarsen by powers of two for the current camera scale; bounded
 display geometry is retained between unchanged updates. Grid visibility/density
 never changes CAD's 0.5 mm snap, native files or undo, and the grid is excluded
@@ -601,15 +713,24 @@ Offset in millimetres along the plane normal from the model origin, defaulting t
 input updates its surface and status
 bar plane/coordinate readout without blur or confirmation; invalid input hides the
 preview and disables Start sketch. The one-row strip exposes Plane, Offset,
-Start sketch and Close, preserving the 3D camera until drawing begins.
+an icon-only Start sketch checkmark and Close, preserving the 3D camera until drawing begins.
 Start sketch aligns the retained camera orthographically
 to that exact plane; contextual drawing tools operate on the shared Model PCB
-canvas. Finish sketch restores the previous 3D camera/projection and retains
+canvas. The plane remains fixed while drawing. The status bar's isolated
+`ModelSketchCoordinates` subscriber displays the exact snapped local preview
+cursor with X/Y, X/Z or Y/Z axes for the selected workplane; no pointer updates
+are routed through Workbench state. Leaving drawing clears the readout, and
+finished profiles and extrusion retain distinct mode labels.
+Finish sketch restores the previous 3D camera/projection and retains
 the outline. Extrude is a separate 3D action: its distance/direction preview
 commits only on Apply, as one `modelCad.sketch.extrude` transaction. Cancel extrusion
 returns to the outline; Edit sketch returns to drawing without losing the profile.
 Profile validation does not depend on a hidden extrusion distance.
-Sketch Boolean operation selects Union, Difference or Intersection for each next closed contour, with Union required for the first. Up to six ordered contours share the workplane. Drawing-tool changes retain completed contours; Undo contour removes the current or last contour, and Clear sketch clears all draft contours. The region outline is a bounded tessellation for display. Pure `lib/model-cad-sketch.ts` distributes extrusion over planar Booleans and retains analytic circle/polygon operands in the existing solid recipe. GUI and Agent call `modelCad.sketch.extrude`; host preparation verifies the exact result before one undo edit. Empty and invalid results remain retryable. There is no dedicated Hole tool, local-hole parameter or hole-rim topology.
+Sketch Boolean operation selects Union, Difference or Intersection for each next closed contour, with Union required for the first. Up to six ordered contours share the workplane. Drawing-tool changes retain completed contours; Undo sketch edit restores the previous local contour/edit state (up to 32 states), or cancels an unfinished stroke. Clear sketch is also undoable. The region outline is a bounded tessellation for display. Pure `lib/model-cad-sketch.ts` distributes extrusion over planar Booleans and retains analytic circle/polygon operands in the existing solid recipe. GUI and Agent call `modelCad.sketch.extrude`; host preparation verifies the exact result before one undo edit. Empty and invalid results remain retryable. There is no dedicated Hole tool, local-hole parameter or hole-rim topology.
+The sketch toolbar also exposes Fillet sketch corners, Chamfer sketch corners and Sketch Boolean operations. Each operation selects an existing contour through the canvas (eight-pixel tolerance) or the contour selector. Corner tools accept one/all original indexed convex, non-collinear vertices with a positive radius/distance. Circles, unavailable corners, adjacent overlap and treatments consuming the profile are rejected. The selected contour/corners highlight independently of the combined region. A bounded outline previews the proposed change; Apply sketch operation accepts the exact valid contour draft, Cancel leaves accepted draft contours intact, and invalid/unapplied operations block Finish sketch. Remove corner treatment restores original corners. IME composition and key code 229 cannot apply/cancel fields or tools.
+
+`cornerTreatment` on a sketch contour compiles to the existing analytical extrusion `edgeTreatment` on its selected `side:N` edges before ordered Booleans. Fillet arcs are tessellated only for planar outline display. Host preview/STEP still uses analytical OCC edge treatment and the same prepared-key admission gate; no new native sketch artifact or polygonal fillet approximation is stored. Native OpenSCAD export rejects these treated solids through its existing explicit limit.
+
 Rectangle and Circle support drag-and-release or two-click drawing with a live
 anchored preview. Coincident points and zero-area rectangles remain incomplete
 without validating a zero-size solid. Escape clears an unfinished gesture;
@@ -697,9 +818,7 @@ independent; hidden Model defers rebuilds.
 EMC Flyback builds its enclosure with four CAD bodies: an
 aluminium base, two side walls and a transparent PMMA cover. Base/cover holes
 use sketch contour Difference before extrusion, retaining analytical circles in the shared solid recipe. The example stores these
-bodies in `OPENPE_MODEL_CAD`; its original MECH1/MECH2 STEP assignments retain
-their paths and transforms with native visibility disabled. Editing or deleting
-CAD bodies therefore does not reveal a duplicate static enclosure. Independent
+bodies in `OPENPE_MODEL_CAD`. MECH1/MECH2 model-only placeholders are absent from Layout, the PCB footprint collection and project footprint libraries. Their upstream source files and static models remain pinned evidence outside the active footprint catalog. Editing or deleting CAD bodies therefore does not reveal a duplicate static enclosure. Independent
 panels stay separate in STEP until explicitly united.
 
 Model's toolbar has no STEP export button. Host `enclosure.exportStep` exports current independent CAD
@@ -811,6 +930,16 @@ comparisons.
 | `node scripts/check-emc-editing-workflow-ui.mjs`                                                                                                                                                                           | Offline real native Save/reopen, CAD/STEP and cross-view undo                                                                                                                                                |
 | `node scripts/e2e-new-project.mjs`                                                                                                                                                                                         | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process                                                 |
 | `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                                                                                                                    |
+
+Model display groups, hidden-surface picking/Fit and material preservation are also
+covered by `tests/model-board-display.test.ts`. Plane-aware live readouts, independent
+project snapshots and unchanged-pointer notification suppression are covered by
+`tests/model-sketch-coordinates.test.ts`.
+Two-point measurement state, finite/invalid picks, visible signed deltas/angles,
+unnumbered scale-bar-aligned graduations, visible component centers and
+surface/estimated-body picking, snap candidates and visible drawing anchors are
+covered by `tests/canvas-measurement.test.ts`, `tests/model-measurement.test.ts`
+and `tests/pcb-measurement.test.ts`.
 
 After explicit desktop-test authorization, measure the current built renderer
 with EMC Flyback using PowerShell:

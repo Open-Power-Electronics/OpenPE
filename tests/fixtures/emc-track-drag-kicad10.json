@@ -2,7 +2,7 @@
   "reference": {
     "application": "KiCad",
     "version": "10.0.1",
-    "sourceBoard": "recent/emc-flyback/emc-flyback.kicad_pcb",
+    "sourceBoard": "tests/fixtures/emc-track-drag-kicad10-source.kicad_pcb",
     "sourceBoardSha256": "1c0a831df7e023552ca861d24aa7b1ae48cbcdb0aff1bedd512086a43f8a7d5e",
     "mode": "shove",
     "clearanceMM": 0.25,

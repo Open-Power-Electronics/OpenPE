@@ -456,8 +456,7 @@ function SourceEditor({
             <span className="status-format">PDF</span>
           ) : (
             <span className="status-format">
-              Spaces: 2 <span aria-hidden="true">·</span> {format} <span aria-hidden="true">·</span>{' '}
-              {encoding}
+              {format} <span aria-hidden="true">·</span> {encoding}
             </span>
           )
         }

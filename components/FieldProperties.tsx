@@ -122,6 +122,7 @@ export default function FieldProperties({
           <label key={axis}>
             {axis.toUpperCase()}
             <QuantityInput
+              decimalPlaces={2}
               unit={'mm'}
               aria-label={`Text ${axis.toUpperCase()} position`}
               type="number"

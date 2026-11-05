@@ -354,80 +354,6 @@
       ]
     },
     {
-      "id": "EMC_Demo:Case_UChannel_revD",
-      "models": [
-        {
-          "path": "${KIPRJMOD}/models/Case_UChannel_revD.step",
-          "offset": [
-            "offset",
-            [
-              "xyz",
-              "0",
-              "0",
-              "0"
-            ]
-          ],
-          "scale": [
-            "scale",
-            [
-              "xyz",
-              "1",
-              "1",
-              "1"
-            ]
-          ],
-          "rotate": [
-            "rotate",
-            [
-              "xyz",
-              "0",
-              "0",
-              "0"
-            ]
-          ]
-        }
-      ],
-      "file": "design/EMC_Demo.pretty/Case_UChannel_revD.kicad_mod",
-      "sha256": "378bb94e30b63d21171610bc36c6fb0a89ffc6cc355eee3e1a2d80840f9ce1fa"
-    },
-    {
-      "id": "EMC_Demo:Cover_PMMA_revD",
-      "models": [
-        {
-          "path": "${KIPRJMOD}/models/Cover_PMMA_revD.step",
-          "offset": [
-            "offset",
-            [
-              "xyz",
-              "0",
-              "0",
-              "0"
-            ]
-          ],
-          "scale": [
-            "scale",
-            [
-              "xyz",
-              "1",
-              "1",
-              "1"
-            ]
-          ],
-          "rotate": [
-            "rotate",
-            [
-              "xyz",
-              "0",
-              "0",
-              "0"
-            ]
-          ]
-        }
-      ],
-      "file": "design/EMC_Demo.pretty/Cover_PMMA_revD.kicad_mod",
-      "sha256": "d054e66a12c8d90752fb45a278262173c714dd06d8147770487430940dd69c37"
-    },
-    {
       "id": "EMC_Demo:Jack_4mm_RA_Cliff_FCR7350",
       "models": [
         {
@@ -1092,6 +1018,16 @@
           ]
         }
       ]
+    }
+  ],
+  "mechanicalSources": [
+    {
+      "file": "design/EMC_Demo.pretty/Case_UChannel_revD.kicad_mod",
+      "sha256": "378bb94e30b63d21171610bc36c6fb0a89ffc6cc355eee3e1a2d80840f9ce1fa"
+    },
+    {
+      "file": "design/EMC_Demo.pretty/Cover_PMMA_revD.kicad_mod",
+      "sha256": "d054e66a12c8d90752fb45a278262173c714dd06d8147770487430940dd69c37"
     }
   ],
   "models": {

@@ -361,7 +361,7 @@ const layoutObjectVisibility = new Set([
   'Pad net names',
   'Airwires',
   'Zone outlines',
-  'Copper preview',
+  'Filled zones',
 ]);
 const layoutAppearance = (page) =>
   page.locator('section.layout-appearance[aria-label="Appearance"]');

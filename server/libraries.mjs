@@ -108,6 +108,8 @@ export function createStepParserPool({
   };
 }
 
+/** @param {{root?: string, dataDir?: string, allowModelDownloads?: boolean,
+ * stepParserPool?: ReturnType<typeof createStepParserPool>}} options */
 export function createLibraryService({
   root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -115,6 +117,8 @@ export function createLibraryService({
     LIBRARY_VERSION,
   ),
   dataDir,
+  allowModelDownloads = true,
+  stepParserPool,
 }) {
   let worker,
     serial = 0,
@@ -122,7 +126,7 @@ export function createLibraryService({
     modelJobs = 0;
   const pending = new Map(),
     downloads = new Map();
-  const stepParsers = createStepParserPool();
+  const stepParsers = stepParserPool ?? createStepParserPool();
   const shutdown = new AbortController();
   function request(message) {
     if (closed) return Promise.reject(new Error('Library service closed.'));
@@ -172,8 +176,8 @@ export function createLibraryService({
     // Only official footprint model references, never paths supplied by the renderer.
     if (!/^[\w.+-]+\.3dshapes\/[\w.+(), -]+\.(?:step|stp)$/i.test(relative))
       throw new Error('This model reference is not a supported official STEP path.');
-    const cache = path.join(dataDir, 'library-models', LIBRARY_VERSION);
-    for (const dir of [path.join(root, 'models'), cache]) {
+    const cache = dataDir ? path.join(dataDir, 'library-models', LIBRARY_VERSION) : undefined;
+    for (const dir of [path.join(root, 'models'), ...(cache ? [cache] : [])]) {
       const file = path.join(dir, relative);
       try {
         const actual = await realpath(file),
@@ -186,6 +190,8 @@ export function createLibraryService({
         if (e.code !== 'ENOENT') throw e;
       }
     }
+    if (!allowModelDownloads || !cache)
+      throw new Error('Prepare the bundled KiCad 3D models before previewing this package.');
     if (!downloads.has(relative))
       downloads.set(
         relative,
@@ -285,7 +291,7 @@ export function createLibraryService({
         p.reject(new Error('Library service closed.'));
       }
       pending.clear();
-      stepParsers.close();
+      if (!stepParserPool) stepParsers.close();
     },
   };
 }

@@ -1,6 +1,6 @@
 import QuantityInput from './QuantityInput';
 import { quantityUnitFromLabel, quantityLabel } from './quantity-units';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Select from './Select';
 
 export function PropertySelect({
@@ -29,6 +29,7 @@ export function NumberField({
   resetKey = true,
   accessibleLabel = label,
   format = String,
+  decimalPlaces = step === '1' ? undefined : 2,
   onRequestSave,
 }: {
   label: string;
@@ -41,6 +42,7 @@ export function NumberField({
   resetKey?: boolean;
   accessibleLabel?: string;
   format?: (value: number) => string;
+  decimalPlaces?: number;
   onRequestSave?: (saveAs: boolean) => void;
   onCommit: (value: number) => boolean | void;
   normalize?: (value: number) => number;
@@ -85,6 +87,7 @@ export function NumberField({
     <label className="layout-field">
       <span>{quantityLabel(label)}</span>
       <QuantityInput
+        decimalPlaces={decimalPlaces}
         unit={quantityUnitFromLabel(label)}
         type="number"
         disabled={disabled || !active}
@@ -156,6 +159,7 @@ export function TextField({
   multiline = false,
   placeholder,
   disabled = false,
+  decimalPlaces,
 }: {
   label: string;
   value: string;
@@ -165,6 +169,7 @@ export function TextField({
   multiline?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  decimalPlaces?: number;
 }) {
   const [draft, setDraft] = useState(value);
   const [invalid, setInvalid] = useState(false);
@@ -223,9 +228,10 @@ export function TextField({
       <span>{label}</span>
       {multiline ? (
         <textarea {...props} rows={2} />
-      ) : quantityUnitFromLabel(label) ? (
+      ) : quantityUnitFromLabel(label) || decimalPlaces !== undefined ? (
         <QuantityInput
           {...props}
+          decimalPlaces={decimalPlaces ?? 2}
           unit={quantityUnitFromLabel(label)}
           onValueChange={(value) => {
             setDraft(value);
@@ -257,6 +263,7 @@ export function OptionalNumberField({
   return (
     <TextField
       {...props}
+      decimalPlaces={2}
       value={value === undefined ? '' : String(value)}
       placeholder="Inherit"
       onCommit={(draft) => {
@@ -325,9 +332,11 @@ export function PropertyDetails({ title, children }: { title: string; children: 
   );
 }
 
-export function PropertyGrid({ columns = 2, children }: { columns?: 2 | 3; children: ReactNode }) {
+export function PropertyGrid({ columns, children }: { columns?: 2 | 3; children: ReactNode }) {
+  const count = Children.toArray(children).length;
+  const preferredColumns = columns ?? (count === 3 || count >= 5 ? 3 : 2);
   return (
-    <div className="layout-property-grid" data-columns={columns}>
+    <div className="layout-property-grid" data-columns={preferredColumns}>
       {children}
     </div>
   );

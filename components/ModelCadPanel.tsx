@@ -1,7 +1,7 @@
 'use client';
 import QuantityInput from './QuantityInput';
 import PropertyDeleteButton from './PropertyDeleteButton';
-import { quantityLabel } from './quantity-units';
+import { formatFixedQuantity, quantityLabel } from './quantity-units';
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, RotateCcw, X } from 'lucide-react';
@@ -261,6 +261,7 @@ export default function ModelCadPanel({
       <label key={key}>
         <span>{quantityLabel(label)}</span>
         <QuantityInput
+          decimalPlaces={2}
           unit={key === 'opacity' ? '%' : key.startsWith('r') ? '°' : 'mm'}
           aria-label={accessibleLabel}
           inputMode="decimal"
@@ -300,7 +301,7 @@ export default function ModelCadPanel({
     (base.object?.kind === 'extrusion' && base.object.profile?.kind === 'polygon');
   const color = `#${modelCadColor(draft).toString(16).padStart(6, '0')}`;
   const dimensionFields = (
-    <div className={styles.fields}>
+    <div className={`${styles.fields} ${styles.dimensions}`}>
       {!fixedProfile && numberField('length', circular ? 'Diameter (mm)' : 'Length (mm)')}
       {!fixedProfile && !circular && numberField('width', 'Width (mm)')}
       {base.object?.kind !== 'boolean' && numberField('height', 'Height (mm)')}
@@ -426,23 +427,6 @@ export default function ModelCadPanel({
                   </button>
                 )}
               </div>
-              <section className={styles.section} aria-label="Solid dimensions">
-                {fixedProfile && (
-                  <dl className="model-property-list">
-                    <dt>Length</dt>
-                    <dd>{base.object!.size.x} mm</dd>
-                    <dt>Width</dt>
-                    <dd>{base.object!.size.y} mm</dd>
-                    {base.object!.kind === 'boolean' && (
-                      <>
-                        <dt>Height</dt>
-                        <dd>{base.object!.size.z} mm</dd>
-                      </>
-                    )}
-                  </dl>
-                )}
-                {dimensionFields}
-              </section>
               <section className={styles.section} aria-label="Solid appearance">
                 <div className={styles.fields}>
                   <div className={styles.field}>
@@ -501,6 +485,23 @@ export default function ModelCadPanel({
                     </div>
                   </div>
                 </div>
+              </section>
+              <section className={styles.section} aria-label="Solid dimensions">
+                {fixedProfile && (
+                  <dl className="model-property-list">
+                    <dt>Length</dt>
+                    <dd>{formatFixedQuantity(base.object!.size.x)} mm</dd>
+                    <dt>Width</dt>
+                    <dd>{formatFixedQuantity(base.object!.size.y)} mm</dd>
+                    {base.object!.kind === 'boolean' && (
+                      <>
+                        <dt>Height</dt>
+                        <dd>{formatFixedQuantity(base.object!.size.z)} mm</dd>
+                      </>
+                    )}
+                  </dl>
+                )}
+                {dimensionFields}
               </section>
               <DraftDetails className={styles.transforms}>
                 {!toolSheet && <summary>Placement</summary>}

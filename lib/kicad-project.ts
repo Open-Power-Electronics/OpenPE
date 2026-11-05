@@ -612,7 +612,14 @@ function mergeBoardSource(
   }
   if (oldGeneral && newGeneral)
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== 'thickness'));
-  const retain = (old: SExpr, node: SExpr, keys: string[], retainLocks = true) => {
+  const nativeLock = (node: SExpr) =>
+    node.includes('locked') || val(child(node, 'locked')) === 'yes';
+  const retain = (
+    old: SExpr,
+    node: SExpr,
+    keys: string[],
+    retainLocks = nativeLock(old) === nativeLock(node),
+  ) => {
     for (const key of new Set([...keys, ...(retainLocks ? ['locked', 'unlocked'] : [])])) {
       const source = children(old, key);
       if (!source.length) continue;

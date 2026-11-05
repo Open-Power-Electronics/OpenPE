@@ -442,10 +442,15 @@ try {
       [projects[0].pcb.id, type],
     );
   await openVisualization();
-  assert.deepEqual(await visualization.getByRole('tab').allTextContents(), ['Views', 'Display']);
+  assert.deepEqual(await visualization.getByRole('tab').allTextContents(), [
+    'Views',
+    'Display',
+    'Explosion',
+  ]);
   const beforeTabCamera = await camera();
   const viewsTab = visualization.getByRole('tab', { name: 'Views', exact: true });
   const displayTab = visualization.getByRole('tab', { name: 'Display', exact: true });
+  const explodedTab = visualization.getByRole('tab', { name: 'Explosion', exact: true });
   assert.equal(await viewsTab.getAttribute('aria-selected'), 'true');
   assert.equal(await projection.isVisible(), true, 'Views contains the projection control.');
   assert.equal(await projection.getAttribute('aria-label'), 'Orthographic projection');
@@ -543,14 +548,16 @@ try {
   assert.equal(await displayTab.getAttribute('aria-selected'), 'true');
   assert.equal(await projection.count(), 0, 'Only the active visualization panel is exposed.');
   assert.equal(await button('Top view').count(), 0);
-  assert.equal(await checkbox('Show component models').isVisible(), true);
+  assert.equal(await checkbox('Show components').isVisible(), true);
   await displayTab.press('Home');
   assert.equal(await viewsTab.getAttribute('aria-selected'), 'true');
   await viewsTab.press('ArrowLeft');
-  assert.equal(await displayTab.getAttribute('aria-selected'), 'true');
-  await displayTab.press('ArrowRight');
+  assert.equal(await explodedTab.getAttribute('aria-selected'), 'true');
+  await explodedTab.press('ArrowRight');
   assert.equal(await viewsTab.getAttribute('aria-selected'), 'true');
   await viewsTab.press('End');
+  assert.equal(await explodedTab.getAttribute('aria-selected'), 'true');
+  await explodedTab.press('ArrowLeft');
   assert.equal(await displayTab.getAttribute('aria-selected'), 'true');
   await closeVisualization();
   await openVisualization();
@@ -824,7 +831,7 @@ try {
   assert.ok(await page.evaluate(() => window.originalScene === Object.values(window.scenes)[0]));
   assert.deepEqual(requests, { models: 2, details: 2 });
   await openVisualization('Display');
-  await checkbox('Show component models').click();
+  await checkbox('Show components').click();
   await checkbox('Show silkscreen').click();
   assert.equal(await visualization.isVisible(), true, 'Visibility toggles retain their drawer.');
   await closeVisualization();
@@ -868,7 +875,7 @@ try {
     'true',
     'View switches retain the Model visualization tab.',
   );
-  assert.equal(await checkbox('Show component models').isChecked(), false);
+  assert.equal(await checkbox('Show components').isChecked(), false);
   assert.equal(await checkbox('Show silkscreen').isChecked(), false);
   await openVisualization('Views');
   assert.equal(await projection.getAttribute('aria-pressed'), 'false');

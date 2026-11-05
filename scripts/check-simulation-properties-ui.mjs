@@ -106,7 +106,7 @@ try {
   for (const [name, value] of Object.entries({
     'OpenPE.InitialVoltage': '1.2',
   })) {
-    assert.equal(await field(labels[name]).inputValue(), value);
+    assert.equal(await field(labels[name]).inputValue(), Number(value).toFixed(2));
     assert.equal(await field(labels[name]).isEditable(), true);
     assert.equal(component(original).fields?.[name], undefined);
   }
@@ -153,7 +153,7 @@ try {
   await page.waitForFunction(() => window.propertiesState.undoDepth === 0);
   await field('Initial voltage (V)').fill('8');
   await field('Initial voltage (V)').press('Escape');
-  assert.equal(await field('Initial voltage (V)').inputValue(), '1.2');
+  assert.equal(await field('Initial voltage (V)').inputValue(), '1.20');
   assert.equal((await state()).source, original.source);
   await field('Initial voltage (V)').dispatchEvent('compositionstart');
   await field('Initial voltage (V)').fill('6');
@@ -179,17 +179,17 @@ try {
 
   await page.evaluate(() => window.changeSimulationField('OpenPE.InitialVoltage', '2.4'));
   await page.waitForFunction(
-    () => document.querySelector('[aria-label="Initial voltage (V)"]')?.value === '2.4',
+    () => document.querySelector('[aria-label="Initial voltage (V)"]')?.value === '2.40',
   );
   assert.equal((await state()).undoDepth, 1, 'Inputs follow accepted Core edits.');
   await button('Undo').click();
   await page.waitForFunction(
-    () => document.querySelector('[aria-label="Initial voltage (V)"]')?.value === '1.2',
+    () => document.querySelector('[aria-label="Initial voltage (V)"]')?.value === '1.20',
   );
   assert.equal((await state()).source, original.source);
   await button('Reopen').click();
   assert.equal((await state()).source, original.source);
-  assert.equal(await field(labels['OpenPE.InitialVoltage']).inputValue(), '1.2');
+  assert.equal(await field(labels['OpenPE.InitialVoltage']).inputValue(), '1.20');
   assert.equal(await disclosure.locator('.property-simulation-parameter input').count(), 1);
 
   const beforeAppearance = await state();

@@ -84,14 +84,84 @@ declare global {
   }
 }
 let connection: Promise<{ base: string; token: string }> | undefined;
-export async function api(route: string, options: RequestInit = {}) {
-  if (!window.openpe) throw new Error('Use the Electron desktop app to connect to local services.');
-  connection ??= window.openpe.connection();
-  const c = await connection;
-  const response = await fetch(c.base + '/api/' + route, {
+let browserPreviewToken: Promise<string> | undefined;
+async function browserPreviewRequest(route: string, options: RequestInit) {
+  const unavailable = () => new Error('Use the Electron desktop app to connect to local services.');
+  let endpoint: string;
+  let body: BodyInit | null | undefined;
+  if (route === 'model-cad/preview' && options.method === 'POST') {
+    endpoint = 'cad';
+    body = options.body;
+  } else {
+    const prefix = route.startsWith('libraries/footprints?')
+      ? 'libraries/footprints?'
+      : route.startsWith('library-model?')
+        ? 'library-model?'
+        : null;
+    if (!prefix || (options.method ?? 'GET') !== 'GET' || options.body !== undefined)
+      throw unavailable();
+    const query = new URLSearchParams(route.slice(prefix.length));
+    if (!query.has('id') || query.size !== (prefix === 'library-model?' ? 2 : 1))
+      throw unavailable();
+    if (prefix === 'library-model?') {
+      const index = query.get('index');
+      if (index === null || !/^\d{1,2}$/.test(index)) throw unavailable();
+      endpoint = 'model';
+      body = JSON.stringify({ id: query.get('id'), index: Number(index) });
+    } else {
+      endpoint = 'footprint';
+      body = JSON.stringify({ id: query.get('id') });
+    }
+  }
+  options.signal?.throwIfAborted();
+  browserPreviewToken ??= fetch('/api/browser-preview/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-OpenPE-Browser': 'preview' },
+    body: '{}',
+    cache: 'no-store',
+  })
+    .then(async (response) => {
+      if (!response.ok)
+        throw new Error('Browser preview service is unavailable. Retry the preview.');
+      const session = await response.json();
+      if (!session || typeof session.token !== 'string' || !/^[0-9a-f]{64}$/.test(session.token))
+        throw new Error('Invalid browser preview session.');
+      return session.token as string;
+    })
+    .catch((error: unknown) => {
+      browserPreviewToken = undefined;
+      throw error;
+    });
+  const token = await browserPreviewToken;
+  options.signal?.throwIfAborted();
+  const response = await fetch(`/api/browser-preview/${endpoint}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', 'X-OpenPE-Token': c.token, ...options.headers },
+    method: 'POST',
+    body,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-OpenPE-Browser': 'preview',
+      'X-OpenPE-Token': token,
+    },
+    cache: 'no-store',
   });
+  if (response.status === 401) browserPreviewToken = undefined;
+  return response;
+}
+export async function api(route: string, options: RequestInit = {}) {
+  let response: Response;
+  if (window.openpe) {
+    connection ??= window.openpe.connection();
+    const c = await connection;
+    response = await fetch(c.base + '/api/' + route, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-OpenPE-Token': c.token,
+        ...options.headers,
+      },
+    });
+  } else response = await browserPreviewRequest(route, options);
   if (!response.ok) {
     const error = await response
       .json()

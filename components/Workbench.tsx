@@ -103,6 +103,9 @@ import Canvas, {
   type SchematicNavigationRequest,
 } from './Canvas';
 import CanvasCoordinates, { createCanvasCoordinates } from './CanvasCoordinates';
+import ModelSketchCoordinates, { createModelSketchCoordinates } from './ModelSketchCoordinates';
+import { MeasurementReadout } from './CanvasMeasurement';
+import { createCanvasMeasurement } from '@/lib/canvas-measurement';
 import type { Agent } from './Chat';
 import ConversationSession from './ConversationSession';
 import {
@@ -436,6 +439,7 @@ export default function Workbench({
   const [propertiesDismissed, setPropertiesDismissed] = useState(false);
   const [tool, setTool] = useState<Tool>('select');
   const [modelMode, setModelMode] = useState('Interaction mode');
+  const [modelErrorTarget, setModelErrorTarget] = useState<HTMLSpanElement | null>(null);
   const moveRequestSequence = useRef(0);
   const [schematicMoveMode, setSchematicMoveMode] = useState<'move' | 'drag' | null>(null);
   const [schematicMoveRequest, setSchematicMoveRequest] = useState<SchematicMoveRequest | null>(
@@ -916,6 +920,8 @@ export default function Workbench({
   }, [selectableIds, selection, setCanvasSelection]);
   const [fitKey, setFitKey] = useState(1);
   const [coordinates] = useState(createCanvasCoordinates);
+  const [modelSketchCoordinates] = useState(createModelSketchCoordinates);
+  const [modelMeasurement] = useState(createCanvasMeasurement);
   const [pcbSynchronizer] = useState(() => new PCBProjectSync(project));
   const pcbSync = useRef(pcbSynchronizer);
   const [layoutRetry, setLayoutRetry] = useState(0);
@@ -3556,7 +3562,9 @@ export default function Workbench({
                           <div className="inspector-body">
                             {part ? (
                               <>
-                                <PartIdentity part={part} library={doc.libraries[part.libId]} />
+                                {!inspectedField && (
+                                  <PartIdentity part={part} library={doc.libraries[part.libId]} />
+                                )}
                                 {inspectedField && fieldPosition && activeSelection ? (
                                   <FieldProperties
                                     active={propertiesActive}
@@ -3670,8 +3678,8 @@ export default function Workbench({
                                 Edit annotation
                               </button>
                             ) : label ? (
-                              <>
-                                <label>
+                              <div className="layout-property-section">
+                                <label className="layout-field">
                                   Net name
                                   <input
                                     aria-label="Net name"
@@ -3711,36 +3719,42 @@ export default function Workbench({
                                   />
                                 </label>
                                 {label.scope === 'global' && (
-                                  <Select
-                                    label="Global label shape"
-                                    disabled={!propertiesActive}
-                                    value={label.shape || 'input'}
-                                    options={labelShapes.map((value) => ({
-                                      value,
-                                      label: value.replace('_', ' '),
-                                    }))}
-                                    onChange={(shape) => {
-                                      if (!canEditProperties()) return;
-                                      commit(
-                                        saveLabel(doc, {
-                                          id: label.id,
-                                          shape: shape as (typeof labelShapes)[number],
-                                        }).circuit,
-                                      );
-                                    }}
-                                  />
+                                  <div className="layout-property-select">
+                                    <span>Shape</span>
+                                    <Select
+                                      label="Global label shape"
+                                      disabled={!propertiesActive}
+                                      value={label.shape || 'input'}
+                                      options={labelShapes.map((value) => ({
+                                        value,
+                                        label: value.replace('_', ' '),
+                                      }))}
+                                      onChange={(shape) => {
+                                        if (!canEditProperties()) return;
+                                        commit(
+                                          saveLabel(doc, {
+                                            id: label.id,
+                                            shape: shape as (typeof labelShapes)[number],
+                                          }).circuit,
+                                        );
+                                      }}
+                                    />
+                                  </div>
                                 )}
-                              </>
+                              </div>
                             ) : (
-                              <div className="wire-properties">
+                              <div className="wire-properties layout-property-section">
                                 <strong>Wire</strong>
-                                <p>
-                                  Length{' '}
-                                  {Math.hypot(wire!.a.x - wire!.b.x, wire!.a.y - wire!.b.y).toFixed(
-                                    2,
-                                  )}{' '}
-                                  mm
-                                </p>
+                                <div className="layout-property-readout">
+                                  <span>Length</span>
+                                  <output>
+                                    {Math.hypot(
+                                      wire!.a.x - wire!.b.x,
+                                      wire!.a.y - wire!.b.y,
+                                    ).toFixed(2)}{' '}
+                                    mm
+                                  </output>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -3905,11 +3919,14 @@ export default function Workbench({
                           onRequestSave={requestPropertiesSave}
                           onBoardThicknessChange={saveModelBoardThickness}
                           onModeChange={setModelMode}
+                          onSketchPointerChange={modelSketchCoordinates.update}
+                          distanceMeasurement={modelMeasurement}
                           schematic={project.schematic}
                           grid={grid}
                           gridSpacing={modelGridSpacing}
                           viewState={pcb3DView}
                           toolbarRef={objectPanelsAnchor}
+                          errorTarget={modelErrorTarget}
                           listAction={projectWindowActions}
                           sidebarAction={rightSidebarAction}
                           annotationProps={modelAnnotationProps}
@@ -4029,14 +4046,26 @@ export default function Workbench({
                         }[tool]
                 }
                 coordinates={
-                  view === 'canvas' ? <CanvasCoordinates coordinates={coordinates} /> : undefined
+                  view === 'canvas' ? (
+                    <CanvasCoordinates coordinates={coordinates} />
+                  ) : view === '3d' && modelMode === 'Measure distance' ? (
+                    <MeasurementReadout measurement={modelMeasurement} spatial />
+                  ) : view === '3d' && modelMode === 'Draw sketch' ? (
+                    <ModelSketchCoordinates coordinates={modelSketchCoordinates} />
+                  ) : undefined
                 }
                 controls={
-                  view === 'canvas' || (view === '3d' && project?.pcb)
+                  view === 'canvas' ||
+                  (view === '3d' && project?.pcb && modelMode === 'Draw sketch')
                     ? gridDensityControl
                     : undefined
                 }
                 status={draftStatus || undefined}
+                actions={
+                  view === '3d' ? (
+                    <span className="model-error-target" ref={setModelErrorTarget} />
+                  ) : undefined
+                }
               />
             </section>
           </div>

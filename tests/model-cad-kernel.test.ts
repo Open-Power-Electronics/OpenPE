@@ -5,6 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { uid } from '../lib/circuit';
 import { modelCadGeometryKey, type ModelCadObject, type ModelCadShape } from '../lib/model-cad';
+import {
+  extrudeModelCadSketch,
+  prepareModelCadSketchContour,
+  prepareModelCadSketchCorners,
+} from '../lib/model-cad-sketch';
 import { createModelCadPreviewService, modelCadStepGeometry } from '../server/model-cad-kernel.mjs';
 import { startServer } from '../server/index.mjs';
 
@@ -37,6 +42,47 @@ const mesh = () => ({
 });
 const parseStep = async () => ({ meshes: [mesh()] });
 const createStep = async () => Buffer.from('mock STEP bytes');
+
+test('sketch corner operations compile to analytical side-edge treatments before contour Booleans', () => {
+  for (const kind of ['fillet', 'chamfer'] as const) {
+    const contour = prepareModelCadSketchCorners(
+      prepareModelCadSketchContour('rectangle', [
+        { x: -10, y: -8 },
+        { x: 10, y: 8 },
+      ]),
+      { kind, distanceMm: 2, corners: [0, 2] },
+    );
+    const object = extrudeModelCadSketch({
+      id: uid(),
+      name: 'Corner sketch',
+      plane: 'XZ',
+      origin: { x: 5, y: 0, z: 7 },
+      distance: 1,
+      direction: 'symmetric',
+      material: 'aluminium',
+      opacity: 1,
+      contours: [
+        contour,
+        prepareModelCadSketchContour(
+          'circle',
+          [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+          ],
+          'difference',
+        ),
+      ],
+    });
+    const source = modelCadStepGeometry(object);
+    assert.ok(source.indexOf('Extrude') < source.indexOf(kind === 'fillet' ? 'Fillet' : 'Chamfer'));
+    assert.ok(
+      source.indexOf(kind === 'fillet' ? 'Fillet' : 'Chamfer') <
+        source.indexOf('BooleanDifference'),
+    );
+    assert.deepEqual(object.boolean!.operands[0].shape.edgeTreatment!.edges, ['side:0', 'side:2']);
+    assert.match(source, /The selected edge is missing or ambiguous/);
+  }
+});
 
 test('local kernel source closes polygon profiles and prepares rim operations after extrusion', () => {
   const target = body();

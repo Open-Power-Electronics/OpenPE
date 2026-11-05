@@ -1336,7 +1336,7 @@ var defaultAppearance = {
   schematicLayers: { ...defaultSchematicLayers },
   gridSpacing: 2,
   layoutGridSpacing: defaultLayoutGridSpacing,
-  modelGridSpacing: 0.5,
+  modelGridSpacing: 1,
   theme: "light",
   textSize: "standard",
   motion: "system",

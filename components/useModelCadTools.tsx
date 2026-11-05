@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
-  ArrowUpFromLine,
   Check,
   Circle,
   Combine,
@@ -17,6 +16,7 @@ import {
   Radius,
   CornerDownRight,
   Redo2,
+  Ruler,
   RotateCw,
   Trash2,
   Undo2,
@@ -43,6 +43,7 @@ import {
 } from '@/lib/model-cad-selection';
 import { modelCadSelectableFaces } from './model-cad-faces';
 import Select from './Select';
+import { ExtrudeIcon } from './EditorIcons';
 import ModelCadPanel from './ModelCadPanel';
 import ModelCadFeaturePanel, {
   type ModelCadFeatureAction,
@@ -81,6 +82,9 @@ export function useModelCadTools({
   onReturnCanvasFocus,
   onAlignSketchView,
   onLeaveSketchView,
+  measuring = false,
+  onMeasure,
+  viewOnly = false,
 }: {
   board: PCB;
   modelCad: ModelCAD | null;
@@ -100,6 +104,9 @@ export function useModelCadTools({
   onReturnCanvasFocus?: () => void;
   onAlignSketchView: (plane: ModelCadSketchPlane, origin: ModelCadSketch['origin']) => void;
   onLeaveSketchView: () => void;
+  measuring?: boolean;
+  onMeasure?: () => void;
+  viewOnly?: boolean;
 }) {
   const [sketch, setSketch] = useState<ModelCadSketch | null>(null);
   const [sketchPhase, setSketchPhase] = useState<ModelCadSketchPhase>('plane');
@@ -225,7 +232,8 @@ export function useModelCadTools({
     [object, selectionFilters.edges, selectionFilters.lines],
   );
   const staged = Boolean(!tool && object && inspectorDirty);
-  const blocked = !host || !active || disabled || busy || annotating;
+  const baseBlocked = !host || !active || disabled || busy || annotating;
+  const blocked = baseBlocked || viewOnly;
   const cancel = useCallback(() => {
     sketchInput.current = null;
     setSketch(null);
@@ -616,127 +624,163 @@ export function useModelCadTools({
   const drawingSketch = tool === 'sketch' && sketchPhase === 'sketch';
   const toolbar = (
     <>
-      <div className="editor-tool-group" role="group" aria-label="2D drawing" title="2D drawing">
-        {drawingSketch ? (
-          <>
-            {button(
-              'Draw rectangle',
-              Square,
-              () => {
-                sketchInput.current?.retainContour();
-                setSketchShape('rectangle');
-              },
-              blocked,
-              sketchShape === 'rectangle',
-            )}
-            {button(
-              'Draw circle',
-              Circle,
-              () => {
-                sketchInput.current?.retainContour();
-                setSketchShape('circle');
-              },
-              blocked,
-              sketchShape === 'circle',
-            )}
-            {button(
-              'Draw polyline',
-              Pentagon,
-              () => {
-                sketchInput.current?.retainContour();
-                setSketchShape('polygon');
-              },
-              blocked,
-              sketchShape === 'polygon',
-            )}
-            <button
-              type="button"
-              className={`dialog-button primary ${styles.finishSketch}`}
-              disabled={blocked || !sketchReady}
-              onClick={() => sketchInput.current?.finish()}
-            >
-              <Check size={17} aria-hidden />
-              Finish sketch
-            </button>
-          </>
-        ) : (
-          button(
-            'Create sketch',
-            PencilRuler,
-            () => startFeature('sketch'),
-            blocked || Boolean(tool) || staged,
-            tool === 'sketch' && sketchPhase === 'plane',
-          )
-        )}
-      </div>
-      {!drawingSketch && (
+      <div className="editor-tool-group">
         <div
-          className="editor-tool-group"
+          className={styles.toolbarSubgroup}
           role="group"
-          aria-label="3D primitives"
-          title="3D primitives"
+          aria-label="2D drawing"
+          title="2D drawing"
         >
-          {button(
-            'Place box',
-            Box,
-            () => start('box'),
-            blocked || tool === 'sketch',
-            tool === 'box',
-          )}
-          {button(
-            'Place cylinder',
-            Cylinder,
-            () => start('cylinder'),
-            blocked || tool === 'sketch',
-            tool === 'cylinder',
+          {drawingSketch ? (
+            <>
+              {button(
+                'Draw rectangle',
+                Square,
+                () => {
+                  sketchInput.current?.retainContour();
+                  setSketchShape('rectangle');
+                },
+                blocked,
+                sketchShape === 'rectangle',
+              )}
+              {button(
+                'Draw circle',
+                Circle,
+                () => {
+                  sketchInput.current?.retainContour();
+                  setSketchShape('circle');
+                },
+                blocked,
+                sketchShape === 'circle',
+              )}
+              {button(
+                'Draw polyline',
+                Pentagon,
+                () => {
+                  sketchInput.current?.retainContour();
+                  setSketchShape('polygon');
+                },
+                blocked,
+                sketchShape === 'polygon',
+              )}
+              {button(
+                'Fillet sketch corners',
+                Radius,
+                () => sketchInput.current?.modify('fillet'),
+                blocked || !sketchReady,
+              )}
+              {button(
+                'Chamfer sketch corners',
+                CornerDownRight,
+                () => sketchInput.current?.modify('chamfer'),
+                blocked || !sketchReady,
+              )}
+              {button(
+                'Sketch Boolean operations',
+                Combine,
+                () => sketchInput.current?.modify('boolean'),
+                blocked || !sketchReady,
+              )}
+              <button
+                type="button"
+                className={`dialog-button primary ${styles.finishSketch}`}
+                disabled={blocked || !sketchReady}
+                onClick={() => sketchInput.current?.finish()}
+              >
+                <Check size={17} aria-hidden />
+                Finish sketch
+              </button>
+            </>
+          ) : (
+            button(
+              'Create sketch',
+              PencilRuler,
+              () => startFeature('sketch'),
+              blocked || Boolean(tool) || staged,
+              tool === 'sketch' && sketchPhase === 'plane',
+            )
           )}
         </div>
-      )}
-      <div className="editor-tool-group" role="group" aria-label="2D to 3D" title="2D to 3D">
-        {button(
-          'Extrude sketch',
-          ArrowUpFromLine,
-          () => {
-            if (!blocked && tool === 'sketch' && sketchReady && sketchPhase === 'profile')
-              setSketchPhase('extrude');
-          },
-          blocked || tool !== 'sketch' || !sketchReady || sketchPhase !== 'profile',
-          tool === 'sketch' && sketchPhase === 'extrude',
+        {!drawingSketch && (
+          <div
+            className={styles.toolbarSubgroup}
+            role="group"
+            aria-label="3D primitives"
+            title="3D primitives"
+          >
+            {button(
+              'Place box',
+              Box,
+              () => start('box'),
+              blocked || tool === 'sketch',
+              tool === 'box',
+            )}
+            {button(
+              'Place cylinder',
+              Cylinder,
+              () => start('cylinder'),
+              blocked || tool === 'sketch',
+              tool === 'cylinder',
+            )}
+          </div>
+        )}
+        <div className={styles.toolbarSubgroup} role="group" aria-label="2D to 3D" title="2D to 3D">
+          {button(
+            'Extrude sketch',
+            ExtrudeIcon,
+            () => {
+              if (!blocked && tool === 'sketch' && sketchReady && sketchPhase === 'profile')
+                setSketchPhase('extrude');
+            },
+            blocked || tool !== 'sketch' || !sketchReady || sketchPhase !== 'profile',
+            tool === 'sketch' && sketchPhase === 'extrude',
+          )}
+        </div>
+        {!drawingSketch && (
+          <div
+            className={styles.toolbarSubgroup}
+            role="group"
+            aria-label="Solid modifications"
+            title="Solid modifications"
+          >
+            <div className={`tool-menu${modifying ? ' active' : ''}`}>
+              <Select
+                label="Modify solids"
+                value={modifying ? tool : ''}
+                icon={<Combine size={17} />}
+                compact
+                iconOnly
+                showChevron={false}
+                active={active}
+                disabled={!featureOptions.length}
+                placeholder={
+                  tool === 'chamfer'
+                    ? 'Chamfer edges'
+                    : tool === 'fillet'
+                      ? 'Fillet edges'
+                      : tool === 'boolean'
+                        ? 'Boolean solids'
+                        : 'Select geometry to modify'
+                }
+                options={featureOptions}
+                onChange={(value) => {
+                  if (value === 'chamfer' || value === 'fillet' || value === 'boolean')
+                    startFeature(value);
+                }}
+              />
+            </div>
+          </div>
         )}
       </div>
-      {!drawingSketch && (
-        <div
-          className="editor-tool-group"
-          role="group"
-          aria-label="Solid modifications"
-          title="Solid modifications"
-        >
-          <div className={`tool-menu${modifying ? ' active' : ''}`}>
-            <Select
-              label="Modify solids"
-              value={modifying ? tool : ''}
-              icon={<Combine size={17} />}
-              compact
-              iconOnly
-              showChevron={false}
-              active={active}
-              disabled={!featureOptions.length}
-              placeholder={
-                tool === 'chamfer'
-                  ? 'Chamfer edges'
-                  : tool === 'fillet'
-                    ? 'Fillet edges'
-                    : tool === 'boolean'
-                      ? 'Boolean solids'
-                      : 'Select geometry to modify'
-              }
-              options={featureOptions}
-              onChange={(value) => {
-                if (value === 'chamfer' || value === 'fillet' || value === 'boolean')
-                  startFeature(value);
-              }}
-            />
-          </div>
+      {tool !== 'sketch' && onMeasure && (
+        <div className="editor-tool-group" role="group" aria-label="Measurement">
+          {button(
+            'Measure distance',
+            Ruler,
+            onMeasure,
+            baseBlocked || Boolean(tool) || inspectorDirtyRef.current,
+            measuring,
+          )}
         </div>
       )}
       {tool !== 'sketch' && (
@@ -768,7 +812,7 @@ export function useModelCadTools({
               cancel();
               await execute('history.undo', {});
             },
-            blocked || undoDepth === 0,
+            baseBlocked || undoDepth === 0,
           )}
           {button(
             'Redo',
@@ -777,7 +821,7 @@ export function useModelCadTools({
               cancel();
               await execute('history.redo', {});
             },
-            blocked || redoDepth === 0,
+            baseBlocked || redoDepth === 0,
           )}
         </div>
       )}

@@ -22,6 +22,7 @@ import {
   setPCBViaProperties,
 } from '../lib/pcb-properties';
 import { findPCBRectangle, resizePCBRectangle } from '../lib/pcb-outline-resize';
+import { assertPCBLockedEdits, setPCBLocked } from '../lib/pcb-lock';
 
 // Property inputs derive from the same shapes as the full document validator.
 // null explicitly clears an optional override; omission retains it.
@@ -114,6 +115,22 @@ export const layoutQueryDefinitions: CoreDefinition[] = [
   ),
 ];
 export const layoutCommandDefinitions: CoreDefinition[] = [
+  objectCommand(
+    'layout.lock',
+    'Lock or unlock existing board objects or individual footprint pads in one undo transaction. Lock changes preserve saved fills.',
+    {
+      targets: {
+        ...selection,
+        minItems: 1,
+        items: object(
+          { kind: { enum: ['footprint', 'pad', 'track', 'via', 'graphic', 'zone'] }, id: identity },
+          ['kind', 'id'],
+        ),
+      },
+      locked: { type: 'boolean' },
+    },
+    ['targets', 'locked'],
+  ),
   objectCommand(
     'layout.rectangle.resize',
     'Resize an Edge.Cuts rectangle or one zone and its holes through the shared canvas/Properties preparation.',
@@ -284,6 +301,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
           'type',
           'layers',
           'unconnected',
+          'locked',
         ]),
       ),
     },
@@ -292,7 +310,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   objectCommand(
     'layout.via.properties',
     'Edit an existing via position, net, diameter or drill using Properties validation.',
-    { viaId: identity, changes: object(propertyShape(propertySchemas.via, ['id'])) },
+    { viaId: identity, changes: object(propertyShape(propertySchemas.via, ['id', 'locked'])) },
     ['viaId', 'changes'],
   ),
   objectCommand(
@@ -413,6 +431,9 @@ export function executeLayout(
   let next = board;
   let result: Record<string, unknown> | undefined;
   switch (id) {
+    case 'layout.lock':
+      next = setPCBLocked(board, args.targets, args.locked);
+      break;
     case 'layout.move':
       next = movePCBSelection(board, args.selection, args.delta);
       break;
@@ -695,5 +716,6 @@ export function executeLayout(
     default:
       throw new Error(`Unknown Layout command: ${id}.`);
   }
+  assertPCBLockedEdits(board, next);
   return { board: next, ...(result ? { result } : {}) };
 }

@@ -183,10 +183,6 @@
   color: var(--text);
   white-space: nowrap;
 }
-.footer :global(.primary) {
-  background: var(--accent-strong);
-  color: var(--on-accent);
-}
 .footer .close {
   display: grid;
   place-items: center;

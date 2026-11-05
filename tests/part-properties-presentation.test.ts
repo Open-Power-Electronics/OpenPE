@@ -226,6 +226,8 @@ test('Layout linked component properties omit SPICE controls while preserving or
       resetKey: false,
       rectangle: null,
       selectionCount: 1,
+      lockTargets: [{ kind: 'footprint', id: footprint.id }],
+      onLock: () => {},
       snap: (value) => value,
       onCommit: () => true,
       onFootprint: () => true,

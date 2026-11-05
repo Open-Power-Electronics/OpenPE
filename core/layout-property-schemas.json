@@ -459,6 +459,9 @@
   "zone": {
     "type": "object",
     "properties": {
+      "locked": {
+        "const": true
+      },
       "id": {
         "type": "string",
         "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -693,6 +696,9 @@
   "pad": {
     "type": "object",
     "properties": {
+      "locked": {
+        "const": true
+      },
       "id": {
         "type": "string",
         "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -978,6 +984,9 @@
         "items": {
           "type": "object",
           "properties": {
+            "locked": {
+              "const": true
+            },
             "id": {
               "type": "string",
               "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -1666,6 +1675,9 @@
         "items": {
           "type": "object",
           "properties": {
+            "locked": {
+              "const": true
+            },
             "id": {
               "type": "string",
               "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -2061,6 +2073,9 @@
       "netId": {
         "type": "string",
         "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "locked": {
+        "const": true
       }
     },
     "required": [

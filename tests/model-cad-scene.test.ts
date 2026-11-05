@@ -536,7 +536,37 @@ test('hidden advanced scenes defer new work and failed preparation has an explic
     jobs[1].resolve(kernelFaces());
     await flushFaces();
     assert.ok(advancedMesh(root).mesh.geometry.getAttribute('position').count > 0);
-    assert.equal(errors.length, 1);
+    assert.deepEqual(errors, ['Kernel feature failed.', '']);
+  } finally {
+    scene.dispose();
+  }
+});
+
+test('one failed CAD body stays reported while another loads and through unchanged updates', async () => {
+  const root = new THREE.Group();
+  const jobs: ReturnType<typeof pendingFaces>[] = [],
+    errors: string[] = [];
+  const scene = createModelCadScene(root, () => {}, false, {
+    loadAdvanced: () => {
+      const job = pendingFaces();
+      jobs.push(job);
+      return job.promise;
+    },
+    onError: (message) => errors.push(message),
+  });
+  const first = advancedBody(),
+    second = { ...advancedBody(), id: uid() };
+  try {
+    scene.update([first, second]);
+    jobs[0].reject(new Error('Base preview unavailable.'));
+    await flushFaces();
+    jobs[1].resolve(kernelFaces());
+    await flushFaces();
+    scene.update([first, second]);
+    assert.deepEqual(errors, ['Base preview unavailable.']);
+    assert.equal(jobs.length, 2, 'View updates retain the retry gate.');
+    scene.update([second]);
+    assert.deepEqual(errors, ['Base preview unavailable.', '']);
   } finally {
     scene.dispose();
   }

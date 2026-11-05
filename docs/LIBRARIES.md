@@ -113,6 +113,8 @@ authoritative.
 
 ## STEP access and previews
 
+Browser development exposes only read-only footprint detail and model mesh previews through the [authenticated preview transport](API.md#browser-development-preview-transport). It resolves fixed bundled example assets and prepared official library IDs/model indices through the existing library service. It performs no downloads, cache writes, model imports or reads of arbitrary project-local paths. Missing official models require explicit build-time preparation with `npm run libraries:download-models`. Browser CAD and component previews share a serial parse queue and bounded STEP worker pool; model scale, pose, material, visibility, picking and scene caches retain their existing renderer behavior.
+
 Native model paths/transforms/visibility are design metadata, not filesystem
 grants. Runtime resolves fixed example identities, official footprint/model indices, or validated component model references through the local STEP asset store. Explicit native STEP selection and Save portability follow [Layout](LAYOUT.md#model-resolution-and-alignment). Without instance links, alignment is permitted only when all numbered
 embedded pads share one translation; unsafe alignment errors without rewriting
@@ -126,7 +128,7 @@ geometry; network failures remain retryable. Custom unsupported pad previews
 report limits rather than inventing geometry.
 
 The reference examples bundle 46 hash-verified STEP files and the source-extracted WE-DD
-footprint under `resources/example-catalog/footprints/`. EMC separately pins 31 files in
+footprint under `resources/example-catalog/footprints/`. EMC separately pins 31 files (29 current component models and two static enclosure source models outside the footprint catalog) in
 `resources/example-catalog/emc-flyback-assets.json`: 28 upstream and three
 [manufacturer supplements](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md).
 T1/L2 retain original official bytes; L1 has a marked reproducible rigid
@@ -204,16 +206,16 @@ unpacked to support replacement. Do not package missing notices/source.
 
 ## Verification
 
-| Check                                                                                     | Scope                                                                                                                              |
-| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run libraries:verify`                                                                | Prepared catalogs, symbols, fields and starter models                                                                              |
-| `node scripts/download-kicad-models.mjs --verify`                                         | Complete archive/inventory, offline                                                                                                |
-| `npm run examples:check-models -- --render`                                               | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 83 visible EMC model instances, five mounting-hole notices |
-| `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts` | Catalog/access boundaries, placement/assignment and atomic synchronization                                                         |
-| `tests/step-parser-pool.test.ts`, `node scripts/check-step-parser-reuse.mjs`              | Worker bounds/recovery and exact 31-file mesh parity                                                                               |
-| `node scripts/check-library-scroll-ui.mjs`, `node scripts/check-object-retention-ui.mjs`  | Mocked isolated chooser/state retention                                                                                            |
-| `node scripts/check-assignment-preview-ui.mjs` | Opt-in real STEP previews in both assignment dialogs, model-index selection, retry, retained placement scene, IME, narrow layout and native undo |
-| `node scripts/e2e-libraries.mjs`                                                          | Opt-in desktop interaction                                                                                                         |
+| Check                                                                                     | Scope                                                                                                                                            |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run libraries:verify`                                                                | Prepared catalogs, symbols, fields and starter models                                                                                            |
+| `node scripts/download-kicad-models.mjs --verify`                                         | Complete archive/inventory, offline                                                                                                              |
+| `npm run examples:check-models -- --render`                                               | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 83 visible EMC model instances, five mounting-hole notices               |
+| `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts` | Catalog/access boundaries, placement/assignment and atomic synchronization                                                                       |
+| `tests/step-parser-pool.test.ts`, `node scripts/check-step-parser-reuse.mjs`              | Worker bounds/recovery and exact 31-file mesh parity                                                                                             |
+| `node scripts/check-library-scroll-ui.mjs`, `node scripts/check-object-retention-ui.mjs`  | Mocked isolated chooser/state retention                                                                                                          |
+| `node scripts/check-assignment-preview-ui.mjs`                                            | Opt-in real STEP previews in both assignment dialogs, model-index selection, retry, retained placement scene, IME, narrow layout and native undo |
+| `node scripts/e2e-libraries.mjs`                                                          | Opt-in desktop interaction                                                                                                                       |
 
 `KICAD_CLI` is test-only for `libraries:verify` and must report KiCad 10.x.
 Documentation changes need static checks, without downloads/previews; desktop

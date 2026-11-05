@@ -26,6 +26,25 @@ import emcManifest from '../resources/example-catalog/emc-flyback-assets.json';
 
 const prefix = '${KIPRJMOD}/models/';
 
+test('enclosure sources stay pinned without being exposed as PCB footprint resources', async () => {
+  assert.equal(emcManifest.mechanicalSources.length, 2);
+  assert.equal(Object.keys(emcManifest.models).length, 31);
+  for (const name of ['Case_UChannel_revD', 'Cover_PMMA_revD']) {
+    const id = `EMC_Demo:${name}`;
+    assert.equal(
+      emcManifest.footprints.some((entry) => entry.id === id),
+      false,
+    );
+    assert.equal(await exampleFootprintDetail(id), null);
+    assert.equal(await exampleModelBytes(id, `emc-flyback-demo/${name}.step`), null);
+    const evidence = emcManifest.mechanicalSources.find((entry) =>
+      entry.file.endsWith(`/${name}.kicad_mod`),
+    )!;
+    const bytes = await readFile(`resources/example-catalog/sources/emc-flyback/${evidence.file}`);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), evidence.sha256);
+  }
+});
+
 test('EMC assets retain standard footprint identity and original fixed model choices', async () => {
   assert.equal(await verifyEmcFlybackAssets(), 40 + emcManifest.supplementalLicenses.length);
   const detail = {
@@ -86,7 +105,7 @@ test('every EMC board model resolves and its exact bytes travel with a whole-pro
   try {
     const expected = new Map<string, Buffer>();
     const assigned = project.pcb!.footprints.filter((footprint) => footprint.models?.length);
-    assert.equal(assigned.length, 85);
+    assert.equal(assigned.length, 83);
     assert.deepEqual(
       project
         .pcb!.footprints.filter((footprint) => !footprint.models?.length)
@@ -106,9 +125,9 @@ test('every EMC board model resolves and its exact bytes travel with a whole-pro
         assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
         assert.equal(bytes.length, entry.size);
       }
-    assert.equal(expected.size, 31);
+    assert.equal(expected.size, 29);
     const assets = await emcProjectAssets(project);
-    assert.equal(assets.filter((asset) => asset.file.startsWith('models/')).length, 31);
+    assert.equal(assets.filter((asset) => asset.file.startsWith('models/')).length, 29);
     for (const entry of emcManifest.supplementalLicenses)
       assert.ok(
         assets.some(

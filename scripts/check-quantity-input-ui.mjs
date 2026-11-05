@@ -10,10 +10,13 @@ const bundle = await build({
       import QuantityInput from './components/QuantityInput';
       import {NumberField} from './components/LayoutPropertyFields';
       import AnalysisComponents from './components/AnalysisComponents';
-      function App(){const [values,setValues]=useState({time:'0.000438592396388',temperature:'25',voltage:'12',power:'0.025',conductivity:'400'});const [length,setLength]=useState(25.4);
+      function App(){const [values,setValues]=useState({time:'0.000438592396388',temperature:'25',voltage:'12',power:'0.025',conductivity:'400'});const [length,setLength]=useState(25.4),[exact,setExact]=useState(25.41234567);
+      window.exactLength=exact;window.exactCommits??=0;
       window.quantityValues=values;window.quantityLength=length;window.quantityCommits??=0;window.quantityChanges??=0;
       return <main><h2>Engineering values</h2>{[['time','Delay','s'],['voltage','Voltage','V'],['power','Power','W'],['temperature','Ambient','°C'],['conductivity','Conductivity','W/m·K']].map(([key,label,unit])=><label className="demo-field" key={key}><span>{label}</span><QuantityInput aria-label={label} unit={unit} value={values[key]} autoScale={key==='time'||key==='power'} onValueChange={value=>{window.quantityChanges++;setValues(previous=>({...previous,[key]:value}));}}/></label>)}
       <NumberField label="Length (mm)" value={length} onCommit={value=>{window.quantityCommits++;setLength(value);return true;}}/>
+      <NumberField label="Exact length (mm)" value={exact} onCommit={value=>{window.exactCommits++;setExact(value);return true;}}/>
+      <NumberField label="Loaded limit (mm)" value={20000.12345} min={0} max={1000} onCommit={()=>{throw Error('Untouched loaded values cannot commit')}}/>
       <button>Done</button><div className="power-panel"><AnalysisComponents visible items={[{id:'C1',reference:'C1'},{id:'C2',reference:'C2'}]} locateDescription="Locate footprint" onLocate={()=>true} renderControl={item=><QuantityInput aria-label={item.reference+' power'} unit="W" value="0" onValueChange={()=>{}}/>}/></div></main>};createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -98,7 +101,7 @@ try {
   const length = page.getByRole('spinbutton', { name: 'Length (mm)', exact: true });
   await length.focus();
   await choose('Length (mm)', 'in');
-  assert.equal(await length.inputValue(), '1');
+  assert.equal(await length.inputValue(), '1.00');
   assert.equal(
     await page.evaluate(() => window.quantityCommits),
     0,
@@ -110,8 +113,33 @@ try {
   assert.equal(await page.evaluate(() => window.quantityCommits), 1);
   await length.fill('3');
   await length.press('Escape');
-  assert.equal(await length.inputValue(), '2');
+  assert.equal(await length.inputValue(), '2.00');
   assert.equal(await page.evaluate(() => window.quantityCommits), 1);
+  const exact = page.getByRole('spinbutton', { name: 'Exact length (mm)', exact: true });
+  assert.equal(await exact.inputValue(), '25.41');
+  await exact.focus();
+  await exact.press('Tab');
+  await choose('Exact length (mm)', 'in');
+  assert.equal(await exact.inputValue(), '1.00');
+  await exact.focus();
+  await exact.press('Tab');
+  assert.equal(await page.evaluate(() => window.exactLength), 25.41234567);
+  assert.equal(
+    await page.evaluate(() => window.exactCommits),
+    0,
+    'Rounded display and unit changes preserve every untouched native digit.',
+  );
+  await exact.fill('1.234567');
+  await exact.press('Enter');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  assert.equal(await exact.inputValue(), '1.23');
+  assert.ok(Math.abs((await page.evaluate(() => window.exactLength)) - 31.3580018) < 1e-10);
+  assert.equal(await page.evaluate(() => window.exactCommits), 1);
+  const loaded = page.getByRole('spinbutton', { name: 'Loaded limit (mm)', exact: true });
+  assert.equal(await loaded.inputValue(), '20000.12');
+  await loaded.focus();
+  await loaded.press('Tab');
+  assert.equal(await loaded.getAttribute('aria-invalid'), null);
   const voltage = page.getByRole('textbox', { name: 'Voltage', exact: true });
   await voltage.fill('-');
   await choose('Voltage', 'mV');

@@ -264,7 +264,7 @@ try {
   const original = await native();
   const baseline = await readNativeProject(page);
   assert.equal(baseline.schematic.parts.length, 140);
-  assert.equal(baseline.pcb.footprints.length, 90);
+  assert.equal(baseline.pcb.footprints.length, 88);
   assert.equal(baseline.pcb.tracks.length, 359);
   await clean();
 
@@ -523,7 +523,7 @@ try {
   await page.mouse.click(location.x, location.y);
   const locked = page
     .getByRole('complementary', { name: 'Layout properties', exact: true })
-    .getByRole('checkbox', { name: 'Locked track', exact: true });
+    .getByRole('checkbox', { name: 'Locked', exact: true });
   await locked.check();
   current = await nativeProject();
   assert.equal(current.pcb.tracks.find((item) => item.id === track.id).locked, true);
@@ -1055,7 +1055,7 @@ try {
     JSON.stringify({
       workflow: 'EMC Flyback',
       symbols: 140,
-      footprints: 90,
+      footprints: 88,
       tracks: 359,
       offlineModels: modelRequests.size,
       covered: [

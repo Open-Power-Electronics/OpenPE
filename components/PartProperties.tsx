@@ -719,6 +719,7 @@ function PartProperties({
               {simulationParameterLabels.has(row.name) || row.sourceKey ? (
                 <div className="property-simulation-value">
                   <QuantityInput
+                    decimalPlaces={2}
                     unit={row.unit || simulationParameterUnits.get(row.name)}
                     autoScale
                     className="property-field-value"

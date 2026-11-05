@@ -121,18 +121,16 @@ identity and official sources.
 EMC Flyback comes from the [pinned AI-PCB-layout demonstration](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo)
 under CC BY 4.0. Its originals and source hashes stay in `resources/example-catalog/sources/emc-flyback/`.
 The generated native project is in `recent/emc-flyback/`; it uses KiCad 10, with
-source UUIDs, electrical connectivity, footprint placement and copper retained.
+source UUIDs, electrical connectivity, physical-package placement and copper retained. The two model-only enclosure placeholders are omitted from the PCB.
 One custom pad is represented by an exact same-number rectangle union and
 multi-layer keepouts by per-layer zones. Native polylines, bold text, inert datasheet
 links and lock metadata survive import and save. The enclosure is four OpenPE Model CAD bodies: a 112 × 94 × 3 mm aluminium base, two 3 × 30 mm side walls
 and a 3 mm PMMA cover at 30% opacity. Their eight through holes retain the base's
-four PCB mounting positions and the cover's four fastener positions. The original
-MECH1/MECH2 STEP instances are hidden in native PCB data; their references,
-transforms and bundled assets remain intact. Model's general construction tools
+four PCB mounting positions and the cover's four fastener positions. The original MECH1/MECH2 enclosure placeholders are absent from native PCB data and project footprint libraries; their source records and static STEP assets remain pinned evidence outside the active footprint catalog. Model's general construction tools
 edit bodies, materials and opacity; sketch contour Difference creates the eight cutouts before extrusion, without dedicated enclosure or Hole modes.
 The example ships no SCAD file; File > Export writes the current panels, holes and
 opacity as OpenSCAD on request ([Format](FORMAT.md)).
-The 31 STEP files include 28 unchanged upstream assets and three exact
+The 31 pinned STEP files include two archived static enclosure sources and 29 models linked to the 83 component instances. They comprise 28 unchanged upstream assets and three exact
 manufacturer models pinned in [the supplementary model manifest](../resources/example-catalog/footprints/emc-flyback/manifest.json).
 T1 and L2 retain official STEP bytes; L1 uses the exact Würth WE-CMB-S geometry
 with a reproducible rigid assembly-frame alignment. Generated native model paths

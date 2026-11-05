@@ -6937,7 +6937,8 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
         "polygon",
         "filled_polygon",
         "keepout",
-        "placement"
+        "placement",
+        "locked"
       ],
       "zone"
     );
@@ -6961,6 +6962,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
       fail("Enabled placement rule is unsupported.");
     return {
       id: id(n, key),
+      ...nativeLocked(n) ? { locked: true } : {},
       netId: net(n),
       layer: val(child(n, "layer")),
       outline: polygons[0],
@@ -7071,7 +7073,8 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
           "chamfer",
           "zone_connect",
           "pinfunction",
-          "pintype"
+          "pintype",
+          "locked"
         ],
         "pad"
       );
@@ -7086,6 +7089,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
         fail("Slotted drills are not supported by the editor. The original file was not modified.");
       const result = {
         id: id(p, `fp:${fi}:pad:${pi}`),
+        ...nativeLocked(p) ? { locked: true } : {},
         number: val(p),
         type: val(p, 2),
         shape: val(p, 3),
@@ -7179,6 +7183,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
       fail("Only through vias are supported.");
     return {
       id: id(n, `via:${i}`),
+      ...nativeLocked(n) ? { locked: true } : {},
       ...point(child(n, "at")),
       diameter: number(child(n, "size")),
       drill: number(child(n, "drill")),
@@ -8134,7 +8139,7 @@ function serializePCBContent(board, schematic, parts) {
       return `(${prefix}_poly (pts ${[g.start, ...g.points ?? [], g.end].map((p) => `(xy ${xy2(p)})`).join(" ")}) ${stroke} (fill ${g.fill ? "yes" : "no"}) ${tail}`;
     return `(${prefix}_line (start ${xy2(g.start)}) (end ${xy2(g.end)}) ${stroke} ${tail}`;
   };
-  const zone = (z, transform = (p) => p) => `(zone ${z.netId ? `(net ${quote(netName.get(z.netId))}) ` : ""}(layer ${quote(z.layer)}) (uuid ${quote(z.id)}) (hatch edge 0.5)${z.priority === void 0 ? "" : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ""} (clearance ${fmt2(z.clearance)})) (min_thickness ${fmt2(z.minThickness)})${z.keepout ? ` (keepout ${Object.entries(z.keepout).map(([key, disabled]) => `(${key} ${disabled ? "not_allowed" : "allowed"})`).join(" ")}) (placement (enabled no) (sheetname ""))` : ""} (fill${z.fillEnabled === false ? "" : " yes"} (thermal_gap ${fmt2(z.thermalGap)}) (thermal_bridge_width ${fmt2(z.thermalBridge)})${z.islandRemovalMode === void 0 ? "" : ` (island_removal_mode ${z.islandRemovalMode})`}) ${[z.outline, ...z.holes ?? []].map((outline) => `(polygon (pts ${outline.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join(" ")}${(z.filledPolygons ?? []).map((polygon) => ` (filled_polygon (layer ${quote(z.layer)})${polygon.island ? " (island)" : ""} (pts ${polygon.points.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join("")})`;
+  const zone = (z, transform = (p) => p) => `(zone ${z.netId ? `(net ${quote(netName.get(z.netId))}) ` : ""}(layer ${quote(z.layer)}) (uuid ${quote(z.id)})${z.locked ? " (locked yes)" : ""} (hatch edge 0.5)${z.priority === void 0 ? "" : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ""} (clearance ${fmt2(z.clearance)})) (min_thickness ${fmt2(z.minThickness)})${z.keepout ? ` (keepout ${Object.entries(z.keepout).map(([key, disabled]) => `(${key} ${disabled ? "not_allowed" : "allowed"})`).join(" ")}) (placement (enabled no) (sheetname ""))` : ""} (fill${z.fillEnabled === false ? "" : " yes"} (thermal_gap ${fmt2(z.thermalGap)}) (thermal_bridge_width ${fmt2(z.thermalBridge)})${z.islandRemovalMode === void 0 ? "" : ` (island_removal_mode ${z.islandRemovalMode})`}) ${[z.outline, ...z.holes ?? []].map((outline) => `(polygon (pts ${outline.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join(" ")}${(z.filledPolygons ?? []).map((polygon) => ` (filled_polygon (layer ${quote(z.layer)})${polygon.island ? " (island)" : ""} (pts ${polygon.points.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join("")})`;
   const technicalLayers = [
     [1, "F.Mask"],
     [3, "B.Mask"],
@@ -8207,7 +8212,7 @@ function serializePCBContent(board, schematic, parts) {
         );
         for (const pad of f.pads) {
           const layers = pad.layers ? pad.layers.map(quote).join(" ") : pad.type !== "smd" ? '"*.Cu" "*.Mask"' : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
-          const extras = [];
+          const extras = pad.locked ? ["(locked yes)"] : [];
           for (const [key, native] of [
             ["roundrectRatio", "roundrect_rratio"],
             ["chamferRatio", "chamfer_ratio"],
@@ -8249,7 +8254,7 @@ function serializePCBContent(board, schematic, parts) {
       retain(
         v,
         netName.get(v.netId),
-        () => `  (via (at ${xy2(v)}) (size ${fmt2(v.diameter)}) (drill ${fmt2(v.drill)}) (layers "F.Cu" "B.Cu") (net ${quote(netName.get(v.netId))}) (uuid ${quote(v.id)}))`
+        () => `  (via (at ${xy2(v)}) (size ${fmt2(v.diameter)}) (drill ${fmt2(v.drill)}) (layers "F.Cu" "B.Cu") (net ${quote(netName.get(v.netId))}) (uuid ${quote(v.id)})${v.locked ? " (locked yes)" : ""})`
       )
     );
   chunks.push(
@@ -9515,7 +9520,8 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
   }
   if (oldGeneral && newGeneral)
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== "thickness"));
-  const retain = (old, node, keys2, retainLocks = true) => {
+  const nativeLock = (node) => node.includes("locked") || val(child(node, "locked")) === "yes";
+  const retain = (old, node, keys2, retainLocks = nativeLock(old) === nativeLock(node)) => {
     for (const key of /* @__PURE__ */ new Set([...keys2, ...retainLocks ? ["locked", "unlocked"] : []])) {
       const source2 = children(old, key);
       if (!source2.length) continue;

@@ -186,6 +186,7 @@ const line = object(
 );
 const zone = object(
   {
+    locked: { const: true },
     id: uuid,
     netId: { anyOf: [uuid, { type: 'null' }] },
     layer: graphicLayer,
@@ -216,6 +217,7 @@ const zone = object(
     ),
   },
   [
+    'locked',
     'holes',
     'filledPolygons',
     'priority',
@@ -335,7 +337,17 @@ const schema = {
         ),
       ),
       vias: array(
-        object({ id: uuid, ...pcbXY, diameter: pcbPositive, drill: pcbPositive, netId: uuid }),
+        object(
+          {
+            id: uuid,
+            ...pcbXY,
+            diameter: pcbPositive,
+            drill: pcbPositive,
+            netId: uuid,
+            locked: { const: true },
+          },
+          ['locked'],
+        ),
       ),
       graphics: array(line),
       zones: array(zone, 1000),
@@ -394,6 +406,7 @@ const schema = {
     ),
     pad: object(
       {
+        locked: { const: true },
         id: uuid,
         number: text,
         ...pcbXY,
@@ -425,6 +438,7 @@ const schema = {
         unconnected: { const: true },
       },
       [
+        'locked',
         'drill',
         'layers',
         'drillOffset',

@@ -352,7 +352,7 @@ try {
         const panel = page.getByRole('complementary', { name: 'Layout properties' });
         if (kind === 'footprint') {
           await mkdir('test-results/layout-properties-actions', { recursive: true });
-          await panel.locator('.layout-footprint-geometry').screenshot({
+          await panel.locator('.geometry-fields.component-geometry').screenshot({
             path: 'test-results/layout-properties-actions/footprint-geometry.png',
           });
         }
@@ -544,22 +544,23 @@ try {
             { kind: copper ? 'zone' : 'graphic', id: region.id },
           ]);
           const filled = page.getByRole('checkbox', { name: 'Filled', exact: true });
-          await filled.waitFor();
-          assert.equal(await filled.isChecked(), false);
           if (copper) {
+            assert.equal(await filled.count(), 0);
             assert.equal(
               await page.getByRole('combobox', { name: 'Region net', exact: true }).count(),
               0,
             );
-            await filled.click();
+            await page.getByRole('button', { name: 'Fill zone', exact: true }).click();
             await page.getByRole('alert').filter({ hasText: 'Assign a net' }).waitFor();
             assert.equal((await snapshot()).commits, 1);
             const net = page.getByRole('combobox', { name: 'Zone net', exact: true });
             await net.click();
             await page.getByRole('option', { name: 'SIGNAL', exact: true }).click();
-            await filled.check();
+            await page.getByRole('button', { name: 'Fill zone', exact: true }).click();
             assert.ok((await snapshot()).board.zones.at(-1).filledPolygons.length);
           } else {
+            await filled.waitFor();
+            assert.equal(await filled.isChecked(), false);
             await filled.check();
             assert.equal((await snapshot()).board.graphics.at(-1).fill, true);
           }

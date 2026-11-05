@@ -1,11 +1,10 @@
 'use client';
 
 import { useId, useLayoutEffect, useMemo, useRef, type Ref } from 'react';
-import { Eraser, Eye, EyeOff, Scan, X } from 'lucide-react';
+import { Eraser, Eye, EyeOff, X } from 'lucide-react';
 import type { PCB, BoardLayer } from '@/lib/pcb';
-import { pcbLayerColor, type PCBDisplay } from '@/lib/pcb-display';
+import { copperFillOpacity, pcbLayerColor, type PCBDisplay } from '@/lib/pcb-display';
 import type { PCBSelectionFilters } from '@/lib/pcb-selection';
-import { VisualizationToggle } from './VisualizationMenu';
 import EditorDisplayDrawer from './EditorDisplayDrawer';
 
 export type LayoutAppearanceTab = 'layers' | 'objects' | 'nets';
@@ -51,7 +50,6 @@ export default function LayoutAppearancePanel({
   netSearch,
   onNetSearchChange,
   netEdges,
-  airwireCount,
   connectivityError,
 }: {
   panelRef?: Ref<HTMLElement>;
@@ -76,7 +74,6 @@ export default function LayoutAppearancePanel({
   netSearch: string;
   onNetSearchChange: (value: string) => void;
   netEdges: readonly { netId: string }[];
-  airwireCount: number;
   connectivityError?: string;
 }) {
   const id = useId();
@@ -141,6 +138,21 @@ export default function LayoutAppearancePanel({
             : Boolean(filters[key]);
   const allItemsChecked = selectionCategories.every(([key]) => categoryChecked(key));
   const someItemsChecked = selectionCategories.some(([key]) => categoryChecked(key));
+  const fillColors = board.layers
+    .filter((layer) => layer.endsWith('.Cu'))
+    .map(
+      (layer) =>
+        `color-mix(in srgb, ${pcbLayerColor(layer, true)} ${copperFillOpacity * 100}%, transparent)`,
+    );
+  const fillSwatch =
+    fillColors.length > 1
+      ? `linear-gradient(135deg, ${fillColors
+          .map(
+            (color, index) =>
+              `${color} ${(index * 100) / fillColors.length}% ${((index + 1) * 100) / fillColors.length}%`,
+          )
+          .join(', ')})`
+      : (fillColors[0] ?? 'transparent');
 
   // Keep controls intact while their display data agrees; actions read current props.
   const body = useMemo(
@@ -243,7 +255,7 @@ export default function LayoutAppearancePanel({
                     ['padNets', 'Pad net names', 'var(--pcb-through)'],
                     ['airwires', 'Airwires', 'var(--pcb-airwire)'],
                     ['zoneOutlines', 'Zone outlines', 'var(--pcb-zone)'],
-                    ['copper', 'Copper preview', 'var(--pcb-front)'],
+                    ['copper', 'Filled zones', fillSwatch],
                   ] as const
                 ).map(([key, label, color]) => (
                   <label className="editor-visibility-row" key={key}>
@@ -323,71 +335,51 @@ export default function LayoutAppearancePanel({
                     )}
                   </div>
                 </div>
-                <div className="layout-net-summary">
-                  <VisualizationToggle
-                    label="All nets"
-                    ariaLabel="All nets"
-                    checked={
-                      board.nets.length > 0 && board.nets.every((net) => !hiddenNets.has(net.id))
-                    }
-                    disabled={!board.nets.length}
-                    indeterminate={
-                      board.nets.some((net) => hiddenNets.has(net.id)) &&
-                      board.nets.some((net) => !hiddenNets.has(net.id))
-                    }
-                    icon={
-                      board.nets.some((net) => !hiddenNets.has(net.id)) ? (
-                        <Eye size={16} aria-hidden />
-                      ) : (
-                        <EyeOff size={16} aria-hidden />
-                      )
-                    }
-                    detail={netEdges.length ? `${airwireCount} / ${netEdges.length}` : undefined}
-                    onChange={(checked) =>
-                      actions.onHiddenNetsChange(
-                        new Set(checked ? [] : board.nets.map((net) => net.id)),
-                      )
-                    }
-                  />
-                  <span aria-hidden />
-                </div>
                 {matchingNets.map((net) => (
-                  <div className="layout-net-row" key={net.id}>
-                    <VisualizationToggle
-                      label={net.name}
-                      ariaLabel={`Show airwires for ${net.name}`}
-                      description={net.name}
-                      checked={!hiddenNets.has(net.id)}
-                      icon={
-                        hiddenNets.has(net.id) ? (
-                          <EyeOff size={16} aria-hidden />
-                        ) : (
-                          <Eye size={16} aria-hidden />
-                        )
-                      }
-                      detail={netCounts.get(net.id) || undefined}
-                      onChange={(checked) => {
-                        const next = new Set(hiddenNets);
-                        if (checked) next.delete(net.id);
-                        else next.add(net.id);
-                        actions.onHiddenNetsChange(next);
-                      }}
-                    />
+                  <div
+                    className="layout-net-row editor-visibility-row"
+                    key={net.id}
+                    data-active={highlightNets.has(net.id)}
+                  >
                     <button
                       type="button"
-                      className={highlightNets.has(net.id) ? 'active' : ''}
+                      className="layout-net-name editor-visibility-name"
                       aria-label={`Highlight ${net.name}`}
-                      title="Highlight net"
                       aria-pressed={highlightNets.has(net.id)}
-                      onClick={() => {
-                        const next = new Set(highlightNets);
-                        if (next.has(net.id)) next.delete(net.id);
-                        else next.add(net.id);
-                        actions.onHighlightNetsChange(next);
-                      }}
+                      onClick={() =>
+                        actions.onHighlightNetsChange(
+                          new Set(highlightNets.has(net.id) ? [] : [net.id]),
+                        )
+                      }
                     >
-                      <Scan size={16} aria-hidden />
+                      <span>{net.name}</span>
+                      {!!netCounts.get(net.id) && (
+                        <small className="layout-net-count">{netCounts.get(net.id)}</small>
+                      )}
                     </button>
+                    <label
+                      className="editor-visibility-toggle"
+                      aria-description={
+                        hiddenNets.has(net.id) ? `Show ${net.name}` : `Hide ${net.name}`
+                      }
+                    >
+                      {hiddenNets.has(net.id) ? (
+                        <EyeOff size={15} aria-hidden />
+                      ) : (
+                        <Eye size={15} aria-hidden />
+                      )}
+                      <input
+                        type="checkbox"
+                        aria-label={`Show airwires for ${net.name}`}
+                        checked={!hiddenNets.has(net.id)}
+                        onChange={(event) => {
+                          const next = new Set(hiddenNets);
+                          if (event.target.checked) next.delete(net.id);
+                          else next.add(net.id);
+                          actions.onHiddenNetsChange(next);
+                        }}
+                      />
+                    </label>
                   </div>
                 ))}
                 {!board.nets.length && (
@@ -462,7 +454,6 @@ export default function LayoutAppearancePanel({
       highlightNets,
       netSearch,
       netEdges,
-      airwireCount,
       tab === 'nets' ? connectivityError : undefined,
       actions,
     ],

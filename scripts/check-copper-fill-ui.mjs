@@ -78,9 +78,8 @@ try {
   );
   await page.mouse.click(screen.x, screen.y);
   const panel = page.getByRole('complementary', { name: 'Layout properties' });
-  const filledToggle = panel.getByRole('checkbox', { name: 'Filled', exact: true });
-  await filledToggle.waitFor();
-  assert.equal(await filledToggle.isChecked(), false);
+  assert.equal(await panel.getByRole('checkbox', { name: 'Filled', exact: true }).count(), 0);
+  await panel.getByRole('button', { name: 'Fill zone', exact: true }).waitFor();
   const clearance = panel.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
   await clearance.fill('0.4');
   await clearance.dispatchEvent('keydown', {
@@ -135,7 +134,7 @@ try {
   await page.screenshot({ path: 'test-results/copper-fill/properties-filled.png' });
   await panel.screenshot({ path: 'test-results/copper-fill/compact-properties.png' });
   // Drawing either region on top of saved copper must preserve the existing
-  // pour. New outlines are intentionally inactive until Filled is requested.
+  // pour. New outlines are intentionally inactive until Fill zone is requested.
   const zone = filled.board.zones.find((item) => item.id === zoneId);
   const xs = zone.outline.map((point) => point.x),
     ys = zone.outline.map((point) => point.y);
@@ -184,7 +183,8 @@ try {
     assert.deepEqual((await state()).board, filled.board);
   }
   await page.mouse.click(screen.x, screen.y);
-  await filledToggle.uncheck();
+  await clearance.fill('0.5');
+  await clearance.press('Enter');
   assert.equal((await state()).undoDepth, 3);
   await page.evaluate(() => window.pendingSource());
   await panel.getByRole('button', { name: 'Delete object', exact: true }).click();

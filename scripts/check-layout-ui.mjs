@@ -378,8 +378,8 @@ try {
     Buffer.from(images[1].dataUrl.split(',')[1], 'base64'),
   );
   await page.screenshot({ path: 'test-results/pcb-3d-components.png' });
-  await toggleModelVisibility(page, 'Show component models');
-  assert.equal(await readModelVisibility(page, 'Show component models'), false);
+  await toggleModelVisibility(page, 'Show components');
+  assert.equal(await readModelVisibility(page, 'Show components'), false);
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/pcb-3d.png' });
   await button('Source').click();
@@ -399,7 +399,7 @@ try {
   await button('Model').click();
   await page.locator('.pcb-model-canvas canvas').waitFor();
   assert.equal(
-    await readModelVisibility(page, 'Show component models'),
+    await readModelVisibility(page, 'Show components'),
     false,
     '3D visibility survives view switches.',
   );
@@ -662,7 +662,7 @@ try {
   assert.equal(poured.pcb.zones.at(-1).filledPolygons, undefined);
   assert.deepEqual(poured.schematic, moved.schematic);
   await button('Layout').click();
-  await page.getByRole('checkbox', { name: 'Filled', exact: true }).check();
+  await page.getByRole('button', { name: 'Fill zone', exact: true }).click();
   await button('Source').click();
   const filled = await readNativeProject(page);
   assert.ok(filled.pcb.zones.at(-1).filledPolygons.length);

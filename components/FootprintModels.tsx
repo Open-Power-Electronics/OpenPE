@@ -6,13 +6,7 @@ import { api } from '@/lib/bridge';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import { validateFootprintModelPath } from '@/lib/pcb-properties';
 import type { CapabilityHost } from '@/api/capabilities';
-import {
-  TextField,
-  NumberField,
-  PropertyGrid,
-  PropertyToggle,
-  PropertySection,
-} from './LayoutPropertyFields';
+import { TextField, NumberField, PropertyGrid, PropertyToggle } from './LayoutPropertyFields';
 import Dialog from './Dialog';
 import DeferredDialog from './DeferredDialog';
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
@@ -204,7 +198,7 @@ export default function FootprintModels({
         >
           <div className="component-model-browser assignment-browser">
             <div className="component-model-settings">
-              <PropertySection title="Model files">
+              <div>
                 {models.map((model, index) => (
                   <section
                     key={index}
@@ -216,19 +210,13 @@ export default function FootprintModels({
                       className="component-model-select"
                       aria-label={`Preview model ${index + 1}`}
                       aria-pressed={index === selectedIndex}
+                      title={model.path}
                       onClick={() => setPreviewIndex(index)}
                     >
                       <Box size={15} />
-                      <strong>{model.path.split('/').at(-1)}</strong>
-                      <span>{index + 1}</span>
+                      <strong>{model.path.split(/[\\/]/).at(-1)}</strong>
+                      {models.length > 1 && <span>{index + 1}</span>}
                     </button>
-                    <TextField
-                      label={`Model ${index + 1} file`}
-                      value={model.path}
-                      active={active && !busy}
-                      resetKey={active}
-                      onCommit={(path) => change(index, path)}
-                    />
                     <div className="component-model-actions">
                       <button
                         type="button"
@@ -262,6 +250,16 @@ export default function FootprintModels({
                         <Trash2 size={14} />
                       </button>
                     </div>
+                    <details className="component-model-path">
+                      <summary>File path</summary>
+                      <TextField
+                        label={`Model ${index + 1} file`}
+                        value={model.path}
+                        active={active && !busy}
+                        resetKey={active}
+                        onCommit={(path) => change(index, path)}
+                      />
+                    </details>
                     <details>
                       <summary>Placement</summary>
                       {(['offset', 'rotation', 'scale'] as const).map((group) => (
@@ -348,35 +346,12 @@ export default function FootprintModels({
                     />
                   </DeferredDialog>
                 )}
-              </PropertySection>
+              </div>
             </div>
             <section
               className="component-model-preview assignment-detail"
               aria-label="Selected model preview"
             >
-              <div>
-                <strong className="library-detail-title">
-                  {selectedPath?.split(/[\\/]/).at(-1) ??
-                    (footprint.models === undefined
-                      ? footprint.libraryId.split(':').at(-1)
-                      : 'No model selected')}
-                </strong>
-                {(selectedPath || footprint.models === undefined) && (
-                  <small className="library-detail-id" title={selectedPath ?? footprint.libraryId}>
-                    {selectedPath ?? footprint.libraryId}
-                  </small>
-                )}
-              </div>
-              <div className="component-model-preview-heading preview-tabs">
-                <strong>3D preview</strong>
-                <span>
-                  {selectedModel
-                    ? `Model ${selectedIndex + 1} of ${models.length}`
-                    : footprint.models === undefined
-                      ? 'Footprint library'
-                      : 'Unassigned'}
-                </span>
-              </div>
               <div className="assignment-preview-stage">
                 {selectedModel || footprint.models === undefined ? (
                   <Suspense fallback={<p role="status">Loading preview…</p>}>
@@ -393,11 +368,6 @@ export default function FootprintModels({
                   </div>
                 )}
               </div>
-              {selectedModel && (
-                <p className="component-model-preview-note">
-                  Placement uses the footprint origin. XYZ axes show its local coordinates.
-                </p>
-              )}
             </section>
           </div>
         </Dialog>

@@ -43,7 +43,7 @@ npm run examples:prepare
 npm run dev:web
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. Desktop development uses the same port; run one development server at a time. Restart the app after Electron or service changes, preserving unsaved work first.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. The browser development server includes authenticated CAD previews using the same bundled Gmsh/OpenCASCADE and STEP parser as Electron; prepare those resources with `npm run thermal:prepare` if they are missing. CAD solids with Boolean holes, including the EMC Flyback base and cover, use their original geometry. The browser also previews bundled example and prepared official KiCad component models through library IDs; run `npm run libraries:download-models` to prepare missing official models. Browser previews do not download models or access custom project files. Other local services and native file dialogs require Electron. Desktop development uses the same port; run one development server at a time. Restart the app after Electron or service changes, preserving unsaved work first.
 
 | Command                    | Purpose                                               |
 | -------------------------- | ----------------------------------------------------- |

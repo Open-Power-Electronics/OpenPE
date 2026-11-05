@@ -1,6 +1,6 @@
 import type { Point } from './circuit';
 import type { BoardLine, PCB } from './pcb';
-import type { PCBBounds, PCBSelection } from './pcb-layout';
+import { assertPCBSelectionUnlocked, type PCBBounds, type PCBSelection } from './pcb-layout';
 
 export type PCBRectangle = { ids: string[]; bounds: PCBBounds; zoneId?: string };
 export type PCBRectangleHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
@@ -93,6 +93,10 @@ export function findPCBRectangle(
 }
 
 export function resizePCBRectangle(board: PCB, rectangle: PCBRectangle, bounds: PCBBounds): PCB {
+  assertPCBSelectionUnlocked(
+    board,
+    rectangle.ids.map((id) => ({ kind: rectangle.zoneId ? 'zone' : 'graphic', id })),
+  );
   const current = findPCBRectangle(
     board,
     rectangle.ids.map((id) => ({ kind: rectangle.zoneId ? 'zone' : 'graphic', id })),

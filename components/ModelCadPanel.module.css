@@ -221,9 +221,8 @@
   gap: var(--properties-row-gap) var(--properties-column-gap);
 }
 .section {
-  margin-top: var(--properties-section-gap);
-  padding-top: var(--properties-section-gap);
-  border-top: 1px solid var(--line-soft);
+  margin-top: var(--properties-group-gap);
+  padding-top: 0;
 }
 .section h3 {
   margin: 0 0 6px;
@@ -260,48 +259,91 @@
 .docked .fields > label,
 .docked .fields > .field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
   align-items: center;
   gap: var(--properties-label-gap);
 }
 .docked .fields > label > span:first-child,
 .docked .fields > .field > span:first-child {
-  white-space: nowrap;
+  white-space: normal;
 }
-.docked .fields > label:last-child:nth-child(odd),
-.docked .nameField > .field {
+.docked .fields > label:last-child:nth-child(odd) {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
   align-items: center;
-  gap: 8px;
+  gap: var(--properties-label-gap);
+}
+.docked .nameField {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--properties-value-width) - 34px)) 30px;
+  gap: var(--properties-label-gap);
+}
+.docked .nameField > .field {
+  display: contents;
+}
+.docked .nameField > .draftIndicator {
+  position: absolute;
+  top: -3px;
+  right: 34px;
+  width: 6px;
+  height: 6px;
+}
+.docked .body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--properties-group-gap);
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+.docked .body > * {
+  flex: 0 0 auto;
 }
 .docked .section {
-  margin-top: var(--properties-section-gap);
-  padding-top: var(--properties-section-gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--properties-row-gap);
+  margin: 0;
+  padding: 0;
+}
+.docked .section h3 {
+  margin: 0;
 }
 .docked .transforms {
-  margin-top: var(--properties-section-gap);
-  padding-top: 0;
+  margin: 0;
+  padding: 0;
 }
-@container (min-width: 400px) {
-  .docked .fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .docked .fields > label,
-  .docked .fields > .field {
-    grid-template-columns: auto minmax(112px, 1fr);
-  }
-  .docked .transforms .axes > label {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-  }
+.docked .transforms .section {
+  margin-top: var(--properties-row-gap);
 }
+.docked .fields.dimensions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.docked .fields.dimensions > label,
+.docked .fields.dimensions > label:last-child:nth-child(odd) {
+  grid-column: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  align-items: start;
+  gap: var(--properties-label-gap);
+}
+.docked .fields.dimensions > label:only-child {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-rows: auto;
+  align-items: center;
+}
+.fields:empty {
+  display: none;
+}
+.docked :is(.fields.dimensions, .transforms .axes) :global(.quantity-input) > input {
+  padding: 4px 2px;
+}
+
 .transforms {
   margin-top: 6px;
   padding-top: 2px;
-  border-top: 1px solid var(--line-soft);
 }
 .transforms > summary {
   min-height: 30px;
@@ -321,11 +363,17 @@
   border: 0;
 }
 .docked .transforms .axes {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--properties-row-gap) var(--properties-column-gap);
 }
 .docked .transforms .axes > label {
   gap: var(--properties-label-gap);
+}
+@container (min-width: 21em) {
+  .docked .fields.dimensions:has(> label:nth-child(3)),
+  .docked .transforms .axes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .placement .transforms {
   display: contents;
@@ -447,9 +495,9 @@
 .colorField {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 56%);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
   align-items: center;
-  gap: 8px;
+  gap: var(--properties-label-gap);
   color: var(--muted);
   font-size: var(--font-small);
 }

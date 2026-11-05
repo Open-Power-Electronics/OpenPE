@@ -1,4 +1,3 @@
-import { exampleModelPath } from '../lib/example-model-paths';
 import test from 'node:test';
 import type { ModelCadObject, ModelCadShape } from '../lib/model-cad';
 const panelCuts = (body: ModelCadObject) => {
@@ -15,7 +14,7 @@ const panelCuts = (body: ModelCadObject) => {
   return collect(body);
 };
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createHomeExample } from '../lib/create-home-example';
 import { homeExampleCatalog, homeExamples, homeRecent } from '../lib/home-examples';
 import { validExampleKey } from '../lib/workspace-example';
@@ -131,7 +130,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.notEqual(cadA.objects[0].id, cadB.objects[0].id);
   assert.equal(cadA.objects.flatMap(panelCuts).length, 8);
   assert.equal(a.schematic.parts.length, 145);
-  assert.equal(a.pcb!.footprints.length, 90);
+  assert.equal(a.pcb!.footprints.length, 88);
   assert.equal(a.pcb!.tracks.length, 359);
   assert.equal(a.pcb!.vias.length, 155);
   const q = a.schematic.parts.find((p) => p.ref === 'Q1')!;
@@ -158,7 +157,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
     124,
   );
   const nativeCopy = projectFromNativeFiles(bundle);
-  assert.equal(nativeCopy.pcb!.footprints.length, 90);
+  assert.equal(nativeCopy.pcb!.footprints.length, 88);
   assert.equal(Object.hasOwn(nativeCopy.extensions, 'org.openpe.enclosure'), false);
   assert.deepEqual(modelCadFromProject(nativeCopy), cadA);
   const settings = JSON.parse(
@@ -226,7 +225,7 @@ test('EMC enclosure uses Model sketch differences with exact panel bounds, mater
   assert.deepEqual(bodies[3].position, { x: 100, y: 88, z: 22.7 });
 });
 
-test('EMC replacement hides only the two original case instances and retains their model transforms', () => {
+test('EMC enclosure exists only in Model CAD, outside PCB footprints and project footprint libraries', () => {
   const project = createHomeExample('emc-flyback-demo');
   const original = parseSExpr(
     readFileSync(
@@ -234,9 +233,7 @@ test('EMC replacement hides only the two original case instances and retains the
       'utf8',
     ),
   );
-  const generated = parseSExpr(
-    projectNativeFiles(project).files.find((file) => file.name.endsWith('.kicad_pcb'))!.source,
-  );
+  const generated = parseSExpr(readFileSync('recent/emc-flyback/emc-flyback.kicad_pcb', 'utf8'));
   const reference = (footprint: ReturnType<typeof parseSExpr>) => {
     const property = children(footprint, 'property').find((node) => val(node) === 'Reference');
     return property
@@ -246,23 +243,45 @@ test('EMC replacement hides only the two original case instances and retains the
           2,
         );
   };
-  const hidden = project.pcb!.footprints.flatMap((footprint) =>
-    (footprint.models ?? []).filter((model) => model.hidden).map(() => footprint.reference),
-  );
-  assert.deepEqual(hidden.sort(), ['MECH1', 'MECH2']);
   for (const ref of ['MECH1', 'MECH2']) {
     const before = children(original, 'footprint').find((fp) => reference(fp) === ref)!,
-      after = children(generated, 'footprint').find((fp) => reference(fp) === ref)!,
-      beforeModel = child(before, 'model')!,
-      afterModel = child(after, 'model')!;
+      after = children(generated, 'footprint').find((fp) => reference(fp) === ref);
+    assert.ok(before, 'Original upstream enclosure evidence remains pinned.');
+    assert.equal(children(before, 'pad').length, 0);
+    assert.equal(after, undefined);
     assert.equal(
-      val(afterModel),
-      '${KIPRJMOD}/' + exampleModelPath('emc-flyback-demo/' + val(beforeModel).split('/').at(-1)!),
+      project.pcb!.footprints.some((fp) => fp.reference === ref),
+      false,
     );
-    for (const key of ['offset', 'scale', 'rotate', 'opacity'])
-      assert.deepEqual(child(afterModel, key), child(beforeModel, key));
-    assert.equal(val(child(afterModel, 'hide')), 'yes');
   }
+  const native = projectNativeFiles(project);
+  assert.equal(
+    native.files.some((file) =>
+      /(?:Case_UChannel_revD|Cover_PMMA_revD)\.kicad_mod$/.test(file.name),
+    ),
+    false,
+  );
+  for (const name of ['Case_UChannel_revD', 'Cover_PMMA_revD'])
+    assert.equal(
+      existsSync(`recent/emc-flyback/footprints/emc-flyback.pretty/${name}.kicad_mod`),
+      false,
+    );
+  assert.equal(modelCadFromProject(project)!.objects.length, 4);
+  const before = parseSExpr(
+    readFileSync('tests/fixtures/emc-track-drag-kicad10-source.kicad_pcb', 'utf8'),
+  );
+  const withoutCases = (board: ReturnType<typeof parseSExpr>) =>
+    board.filter(
+      (node) =>
+        !Array.isArray(node) ||
+        node[0] !== 'footprint' ||
+        !['MECH1', 'MECH2'].includes(reference(node)),
+    );
+  assert.deepEqual(
+    generated,
+    withoutCases(before),
+    'All other native PCB records retain exact geometry, ordering and metadata.',
+  );
 });
 
 test('native schematic note outlines reject unsupported or malformed geometry', () => {

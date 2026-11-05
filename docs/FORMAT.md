@@ -86,9 +86,9 @@ union/difference/intersection; operand trees omit document identities/material,
 with Boolean depth at most four below the root and at most 32 operations.
 Boolean size is a conservative centred envelope, not construction geometry.
 Body/face/edge/line selection and Boolean operand roles are presentation state;
-only committed solid recipes enter the native CAD variable. Sketch contour Booleans compile equal-depth extrusions into the same bounded Boolean tree; plane, draft contours and drawing state stay local until Apply. Independent curve or surface artifacts are outside this solid document format.
+only committed solid recipes enter the native CAD variable. Sketch contour Booleans compile equal-depth extrusions into the same bounded Boolean tree; selected-corner sketch fillets/chamfers become existing analytical `side:N` edge treatments on those operands, without persisting the draft-only `cornerTreatment` field; plane, draft contours and drawing state stay local until Apply. Independent curve or surface artifacts are outside this solid document format.
 
-The EMC Flyback example stores two box walls and two sketch-derived Boolean panels, with eight analytical circular cutouts, in `OPENPE_MODEL_CAD`. Its original MECH1/MECH2 assignments retain paths/transforms with `(hide yes)` and all pinned assets remain available. Dedicated `holes` fields, including empty arrays, and retired hole-rim IDs are unsupported and rejected without importing or rewriting their native files. Cylinder/circle X/Y extents are equal diameters.
+The EMC Flyback example stores two box walls and two sketch-derived Boolean panels, with eight analytical circular cutouts, in `OPENPE_MODEL_CAD`. The MECH1/MECH2 enclosure placeholders are absent from PCB footprints and native footprint-library files. Their original records and static assets remain pinned upstream evidence outside the active footprint catalog. Dedicated `holes` fields, including empty arrays, and retired hole-rim IDs are unsupported and rejected without importing or rewriting their native files. Cylinder/circle X/Y extents are equal diameters.
 The complete CAD JSON is at most 256,000 characters. UUIDs remain unique across
 the project. Native admission validates current geometry and rejects retired enclosure data.
 Source validates the CAD variable against the complete project; new advanced

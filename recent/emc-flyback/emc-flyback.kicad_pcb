@@ -3480,75 +3480,6 @@
         (xyz 1 1 1))
       (rotate
         (xyz 0 0 0))))
-  (footprint "EMC_Demo:Case_UChannel_revD"
-    (layer "F.Cu")
-    (uuid "5ca25cc4-4fcd-50ff-ae1b-b768e761cd4e")
-    (at 50 50)
-    (descr "Rev D aluminium U-channel case (Q1 heatsink) with stand-offs, screws and feet - 3D model only; origin = PCB top-left corner")
-    (property "Reference" "MECH1"
-      (at 50 -3 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "4d540636-ee48-4463-b4df-00a5101b053f")
-      (effects
-        (font
-          (size 1 1)
-          (thickness 0.15))))
-    (property "Value" "Case_UChannel_revD"
-      (at 50 79 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "f921e0ac-f4fc-42fc-913b-4e99d6ff9435")
-      (effects
-        (font
-          (size 1 1)
-          (thickness 0.15))))
-    (property "Datasheet" ""
-      (at 0 0 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "22594a9b-f32e-5c16-a9e9-06add6a3532b")
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Description" ""
-      (at 0 0 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "a795ffc8-5f72-567e-a31f-0300095b5720")
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (path "/5ca25cc4-4fcd-50ff-ae1b-b768e761cd4e")
-    (sheetfile "emc_flyback.kicad_sch")
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (duplicate_pad_numbers_are_jumpers no)
-    (fp_rect
-      (start -6 -9)
-      (end 106 85)
-      (stroke
-        (width 0.1)
-        (type dash))
-      (fill no)
-      (layer "F.Fab")
-      (uuid "1e45c50b-6ed5-4994-af90-8b9d85271a6b"))
-    (fp_text user "ALU CASE (3D only)"
-      (at 50 83 0)
-      (layer "F.Fab")
-      (uuid "7ce83527-9247-441d-a57b-21d9944f1c74")
-      (effects
-        (font
-          (size 1 1)
-          (thickness 0.15))))
-    (embedded_fonts no)
-    (model "${KIPRJMOD}/models/Case_UChannel_revD.step"
-      (offset
-        (xyz 0 0 0))
-      (scale
-        (xyz 1 1 1))
-      (rotate
-        (xyz 0 0 0))
-      (hide yes)))
   (footprint "EMC_Demo:TO-220-3_BottomMount_CaseHeatsink"
     (layer "F.Cu")
     (uuid "5d7739f9-5a72-4da0-bc6d-5197c190c470")
@@ -12178,59 +12109,6 @@
         (xyz 1 1 1))
       (rotate
         (xyz 0 0 0))))
-  (footprint "EMC_Demo:Cover_PMMA_revD"
-    (layer "F.Cu")
-    (uuid "be4b9a10-ccbb-59d2-b20b-9d0322ad3a60")
-    (at 50 50)
-    (descr "Rev D transparent PMMA cover on the case walls - 3D model only; origin = PCB top-left corner")
-    (property "Reference" "MECH2"
-      (at 50 -5 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "79079d2d-df46-4f2c-99e1-52315ed4e0e4")
-      (effects
-        (font
-          (size 1 1)
-          (thickness 0.15))))
-    (property "Value" "Cover_PMMA_revD"
-      (at 50 81 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "422a977c-2c87-4d4a-acb2-ea6afa926b42")
-      (effects
-        (font
-          (size 1 1)
-          (thickness 0.15))))
-    (property "Datasheet" ""
-      (at 0 0 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "6a764c45-7f34-5e1e-a725-9accd736e198")
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Description" ""
-      (at 0 0 0)
-      (layer "F.Fab")
-      (hide yes)
-      (uuid "ab43b007-a4e9-5c4e-ae28-d5d4cdd351fd")
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (path "/be4b9a10-ccbb-59d2-b20b-9d0322ad3a60")
-    (sheetfile "emc_flyback.kicad_sch")
-    (attr board_only exclude_from_pos_files exclude_from_bom)
-    (duplicate_pad_numbers_are_jumpers no)
-    (embedded_fonts no)
-    (model "${KIPRJMOD}/models/Cover_PMMA_revD.step"
-      (opacity 0.3000)
-      (offset
-        (xyz 0 0 0))
-      (scale
-        (xyz 1 1 1))
-      (rotate
-        (xyz 0 0 0))
-      (hide yes)))
   (footprint "Resistor_SMD:R_0603_1608Metric"
     (layer "F.Cu")
     (uuid "be4ee02f-a4b6-4574-9211-c5b51ce5071c")

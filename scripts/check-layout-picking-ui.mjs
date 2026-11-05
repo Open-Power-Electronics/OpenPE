@@ -8,6 +8,7 @@ import { toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 const { emptyCircuit } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const { parseProject } = await tsImport('../lib/project.ts', import.meta.url);
+const { parseKiCadPCB } = await tsImport('../lib/kicad-pcb.ts', import.meta.url);
 
 // Coordinate-based pointer input in an isolated renderer, without native access,
 // services or user projects. Selection and cancelled previews must stay clean.
@@ -493,6 +494,11 @@ try {
   );
 
   const emc = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+  emc.pcb = parseKiCadPCB(
+    await readFile('tests/fixtures/emc-track-drag-kicad10-source.kicad_pcb', 'utf8'),
+    emc.schematic,
+    'emc-flyback-demo',
+  ).board;
   const mechanical = emc.pcb.footprints.find((footprint) => footprint.reference === 'MECH1');
   const actualTrack = emc.pcb.tracks.find(
     (track) =>

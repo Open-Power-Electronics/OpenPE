@@ -18,7 +18,7 @@ type Entry = {
   mesh: THREE.Object3D;
   key: string;
   control?: AbortController;
-  failed?: boolean;
+  failed?: string;
   pendingMeshes?: readonly MeshData[];
 };
 type Options = {
@@ -38,6 +38,13 @@ export function createModelCadScene(
   const entries = new Map<string, Entry>();
   let order: string[] = [];
   let disposed = false;
+  let reportedError = '';
+  function reportErrors() {
+    const message = [...entries.values()].find((entry) => entry.failed)?.failed ?? '';
+    if (message === reportedError) return;
+    reportedError = message;
+    options.onError?.(message);
+  }
   function reorder() {
     const ordered = order.map((id) => entries.get(id)?.mesh).filter((mesh) => !!mesh);
     if (root.children.some((child, index) => child !== ordered[index]))
@@ -57,11 +64,12 @@ export function createModelCadScene(
     root.add(mesh);
     reorder();
     options.onChange?.();
+    reportErrors();
   }
   function failed(entry: Entry, error: unknown) {
     if (disposed || entry.control?.signal.aborted || entries.get(entry.body.id) !== entry) return;
-    entry.failed = true;
-    options.onError?.(error instanceof Error ? error.message : 'CAD preview failed.');
+    entry.failed = error instanceof Error ? error.message : 'CAD preview failed.';
+    reportErrors();
   }
   function load(entry: Entry) {
     if (entry.failed || options.active?.() === false) return;
@@ -130,14 +138,16 @@ export function createModelCadScene(
       // Preserve native order for equal-depth picks without detach/attach work
       // during the usual pose update or append-only creation.
       reorder();
+      reportErrors();
     },
     retry() {
       for (const entry of entries.values()) {
         if (!entry.failed) continue;
-        entry.failed = false;
+        entry.failed = undefined;
         entry.control = undefined;
         load(entry);
       }
+      reportErrors();
     },
     dispose() {
       if (disposed) return;

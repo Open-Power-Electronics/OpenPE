@@ -60,7 +60,8 @@ def footprints(board, source_values=False):
         ref = f.GetReference()
         return f.GetValue().split()[0] if source_values and ref[:1] in ('R', 'C', 'L') and ref[1:].isdigit() else f.GetValue()
     return sorted((f.m_Uuid.AsString(), f.GetReference(), nominal(f), point(f.GetPosition()),
-                   f.GetOrientationDegrees(), f.GetLayer()) for f in board.GetFootprints())
+                   f.GetOrientationDegrees(), f.GetLayer()) for f in board.GetFootprints()
+                  if f.GetReference() not in {'MECH1', 'MECH2'})
 assert footprints(before, source_values=True) == footprints(after), 'Footprint positions/identity or nominal values changed.'
 
 def pads(board):

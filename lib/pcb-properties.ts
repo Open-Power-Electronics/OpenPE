@@ -22,6 +22,13 @@ export function preparePCBFootprintProperties(
   footprint: Footprint,
   changes: PCBFootprintProperties,
 ): Footprint {
+  if (
+    footprint.locked &&
+    Object.entries(changes).some(
+      ([key, value]) => JSON.stringify(value) !== JSON.stringify(footprint[key as keyof Footprint]),
+    )
+  )
+    fail('Unlock the footprint before editing.');
   const retainedPaths = new Set(footprint.models?.map((model) => model.path));
   for (const model of changes.models ?? [])
     if (!retainedPaths.has(model.path)) validateFootprintModelPath(model.path);
@@ -48,6 +55,14 @@ export function setPCBViaProperties(
   changes: Partial<Omit<PCB['vias'][number], 'id'>>,
 ): PCB {
   if (!board.vias.some((via) => via.id === viaId)) fail('This via no longer exists.');
+  const via = board.vias.find((via) => via.id === viaId)!;
+  if (
+    via.locked &&
+    Object.entries(changes).some(
+      ([key, value]) => JSON.stringify(value) !== JSON.stringify(via[key as keyof typeof via]),
+    )
+  )
+    fail('Unlock the via before editing.');
   return {
     ...board,
     vias: board.vias.map((via) => (via.id === viaId ? { ...via, ...changes } : via)),
@@ -87,6 +102,7 @@ export function setPCBPadProperties(board: PCB, padId: string, changes: PCBPadPr
   const footprint = board.footprints.find((item) => item.pads.some((pad) => pad.id === padId));
   const pad = footprint?.pads.find((item) => item.id === padId);
   if (!footprint || !pad) fail('The inspected pad is no longer on this board.');
+  if (pad.locked || footprint.locked) fail('Unlock the pad and its footprint before editing.');
   for (const key of Object.keys(changes)) {
     if (!padPropertyKeys.has(key))
       fail('Pad identity, connectivity, type and layers cannot be changed here.');

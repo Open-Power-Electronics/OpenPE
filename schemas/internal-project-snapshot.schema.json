@@ -1204,6 +1204,9 @@
           "items": {
             "type": "object",
             "properties": {
+              "locked": {
+                "const": true
+              },
               "id": {
                 "type": "string",
                 "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -1977,6 +1980,9 @@
           "items": {
             "type": "object",
             "properties": {
+              "locked": {
+                "const": true
+              },
               "id": {
                 "type": "string",
                 "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -2343,6 +2349,9 @@
     "pad": {
       "type": "object",
       "properties": {
+        "locked": {
+          "const": true
+        },
         "id": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -2958,6 +2967,9 @@
                 "maximum": 1000,
                 "multipleOf": 0.000001
               },
+              "locked": {
+                "const": true
+              },
               "order": {
                 "type": "integer",
                 "minimum": 0,
@@ -2981,6 +2993,9 @@
           "items": {
             "type": "object",
             "properties": {
+              "locked": {
+                "const": true
+              },
               "id": {
                 "type": "string",
                 "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"

@@ -32,6 +32,8 @@ for (const name of (await readdir(path.join(root, 'design/EMC_Demo.3dshapes'))).
   models[`emc-flyback-demo/${name}`] = { file, sha256: hash(bytes), size: bytes.length };
 }
 const footprints = new Map();
+const mechanicalIds = new Set(['EMC_Demo:Case_UChannel_revD', 'EMC_Demo:Cover_PMMA_revD']);
+const mechanicalSources = [];
 const descriptor = (model) => {
   const original = val(model);
   if (!original.startsWith(sourcePrefix)) throw new Error('Unexpected EMC model reference.');
@@ -49,6 +51,7 @@ const descriptor = (model) => {
 const board = parseSExpr(await readFile(path.join(root, 'design/emc_flyback.kicad_pcb'), 'utf8'));
 for (const footprint of children(board, 'footprint')) {
   const id = val(footprint);
+  if (mechanicalIds.has(id)) continue;
   const entry = footprints.get(id) ?? { id, models: [] };
   for (const model of children(footprint, 'model')) {
     const value = descriptor(model);
@@ -63,6 +66,10 @@ for (const name of (await readdir(path.join(root, 'design/EMC_Demo.pretty'))).so
   const id = `EMC_Demo:${name.slice(0, -'.kicad_mod'.length)}`;
   const file = `design/EMC_Demo.pretty/${name}`,
     bytes = await readFile(path.join(root, file));
+  if (mechanicalIds.has(id)) {
+    mechanicalSources.push({ file, sha256: hash(bytes) });
+    continue;
+  }
   const entry = footprints.get(id) ?? { id, models: [] };
   Object.assign(entry, { file, sha256: hash(bytes) });
   footprints.set(id, entry);
@@ -156,6 +163,7 @@ const manifest = {
   source: 'https://github.com/ChengminLi/AI-PCB-layout/tree/main/examples/emc-flyback-demo',
   commit: sourceManifest.commit,
   footprints: [...footprints.values()].sort((a, b) => a.id.localeCompare(b.id, 'en')),
+  mechanicalSources,
   models: Object.fromEntries(Object.entries(models).sort(([a], [b]) => a.localeCompare(b, 'en'))),
   licenses,
   supplementalLicenses: supplemental.licenses,

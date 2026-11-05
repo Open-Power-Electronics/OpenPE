@@ -1330,11 +1330,11 @@ try {
   await nextFrame();
   assert.ok((await page.evaluate(() => window.expectedNetEdgeCount())) > 0);
   assert.equal(
-    Number(
-      (
-        await page.getByText('All nets', { exact: true }).locator('..').locator('small').innerText()
-      ).split('/')[1],
-    ),
+    await page
+      .locator('.layout-net-count')
+      .evaluateAll((counts) =>
+        counts.reduce((total, count) => total + Number(count.textContent), 0),
+      ),
     await page.evaluate(() => window.expectedNetEdgeCount()),
     'Revealing Nets reads the current board connectivity.',
   );

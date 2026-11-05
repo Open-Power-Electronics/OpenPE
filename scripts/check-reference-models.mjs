@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import nativeProject from '../electron/native-project.cjs';
-import { createLibraryService } from '../server/libraries.mjs';
+import { createLibraryService, createStepParserPool } from '../server/libraries.mjs';
 
 const manifest = JSON.parse(
   await readFile('resources/example-catalog/footprints/manifest.json', 'utf8'),
@@ -63,6 +63,24 @@ try {
       renderedModels.set(requestKey, result);
       console.log(`${entry.id}: ${result.meshes.length} real STEP meshes, offline`);
     }
+  }
+  assert.equal(emcResults.size, 29);
+  // Static enclosure originals remain pinned evidence, never PCB footprint entries.
+  const mechanicalParser = createStepParserPool();
+  try {
+    for (const [relative, entry] of Object.entries(emcManifest.models)) {
+      if (emcResults.has(relative)) continue;
+      const result = await mechanicalParser.run(
+        await readFile(path.join('resources/example-catalog/sources/emc-flyback', entry.file)),
+      );
+      assert.ok(result.meshes.length, `${relative}: empty pinned mechanical source`);
+      emcResults.set(relative, result);
+      console.log(
+        `${relative}: pinned mechanical source parsed offline, outside footprint catalog`,
+      );
+    }
+  } finally {
+    mechanicalParser.close();
   }
   assert.equal(emcResults.size, 31);
   console.log('EMC Flyback: 31/31 models available and tessellated offline.');

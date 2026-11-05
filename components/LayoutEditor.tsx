@@ -22,6 +22,7 @@ import {
   CircuitBoard,
   Cpu,
   ImageDown,
+  LockKeyhole,
   Maximize,
   MessageSquareText,
   Minus,
@@ -30,6 +31,7 @@ import {
   Plus,
   RotateCw,
   Route,
+  Ruler,
   Square,
   Trash2,
   Pentagon,
@@ -38,6 +40,10 @@ import {
   X,
 } from 'lucide-react';
 import CanvasContextMenu from './CanvasContextMenu';
+import { MeasurementDrawing, MeasurementReadout } from './CanvasMeasurement';
+import { canvasScaleLength, createCanvasMeasurement } from '@/lib/canvas-measurement';
+import { pcbLockObject, setPCBLocked } from '@/lib/pcb-lock';
+import { nearestMeasurementAnchor, pcbMeasurementAnchors } from '@/lib/pcb-measurement';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import { type Circuit, type Point, uid } from '@/lib/circuit';
 import { defaultLayoutGridSpacing } from '@/lib/layout-grid';
@@ -127,6 +133,7 @@ import {
   assertPCBSelectionUnlocked,
   deletePCBSelection,
   flipPCBFootprint,
+  footprintPoint,
   movePCBSelection,
   padPosition,
   pcbBounds,
@@ -196,7 +203,8 @@ type Selection = { kind: 'footprint' | 'track' | 'via' | 'graphic' | 'zone'; id:
 type SelectionCandidate = { id: string; directFootprintCaption?: boolean } & (
   { selection: Selection; padId?: never } | { padId: string; selection?: never }
 );
-type Tool = 'select' | 'hand' | 'place' | 'route' | 'via' | 'outline' | 'zone' | 'annotate';
+type Tool =
+  'select' | 'hand' | 'place' | 'route' | 'via' | 'outline' | 'zone' | 'annotate' | 'measure';
 type View = { x: number; y: number; width: number };
 type RouteLeg = {
   points: Point[];
@@ -442,6 +450,11 @@ function LayoutEditor({
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
   const cursorPosition = useRef(cursor);
   const [coordinates] = useState(createCanvasCoordinates);
+  const [measurement] = useState(createCanvasMeasurement);
+  useEffect(() => {
+    measurement.clear();
+    if (!active || !visible) setTool((current) => (current === 'measure' ? 'select' : current));
+  }, [active, visible, pcb, layers, measurement]);
   const [routePointer, setRoutePointer] = useState<{
     raw: Point;
     gridDisabled: boolean;
@@ -724,7 +737,12 @@ function LayoutEditor({
     [trackDragPreview],
   );
   const routeAnchorResolver = useMemo(
-    () => (tool === 'route' ? createPCBRouteAnchorResolver(pcb, layers) : null),
+    () =>
+      tool === 'route' || tool === 'measure' ? createPCBRouteAnchorResolver(pcb, layers) : null,
+    [pcb, layers, tool],
+  );
+  const measurementAnchors = useMemo(
+    () => (tool === 'measure' ? pcbMeasurementAnchors(pcb, layers) : []),
     [pcb, layers, tool],
   );
   const routeAnchor = useMemo<PCBRouteAnchorResult>(
@@ -1251,6 +1269,7 @@ function LayoutEditor({
       const pad = owner?.pads.find((item) => item.id === current);
       return owner &&
         pad &&
+        (!(owner.locked || pad.locked) || filters.locked !== false) &&
         layers.footprints &&
         (pad.type === 'np_thru_hole'
           ? layers['Edge.Cuts']
@@ -1279,7 +1298,9 @@ function LayoutEditor({
     setGesture(null);
     releasePointer();
     setSelection((current) => {
-      const next = current.filter((s) => pcbSelectionEligible(pcb, s, filters));
+      // Locking an inspected object keeps it available for immediate unlocking.
+      // New picks and explicit filter changes still enforce Locked items.
+      const next = current.filter((s) => pcbLockObject(pcb, s));
       return next.length === current.length ? current : next;
     });
     setHighlightNets((current) => {
@@ -1439,6 +1460,7 @@ function LayoutEditor({
     }
   }
   function activate(next: Tool, retainAnalysisProbe = false) {
+    measurement.clear();
     if (!retainAnalysisProbe) onAnalysisProbe?.(null);
     cancelGesture();
     setTool(next);
@@ -1614,6 +1636,33 @@ function LayoutEditor({
     const current =
       transform && presented ? rebaseLayoutCameraPoint(p, presented, camera.getSnapshot()) : p;
     return snapped ? { x: snap(current.x), y: snap(current.y) } : current;
+  }
+  function measurementPoint(e: { clientX: number; clientY: number; altKey?: boolean }) {
+    const raw = canvasPoint(e, false);
+    if (e.altKey) return { ...raw, z: 0 };
+    const gridPoint = { x: snap(raw.x), y: snap(raw.y) };
+    const anchor = routeAnchorResolver?.resolve(raw, {
+      layer,
+      tolerance: (view.width / size.width) * 8,
+      gridPoint,
+    });
+    const drawing = nearestMeasurementAnchor(
+      measurementAnchors,
+      raw,
+      (view.width / size.width) * 8,
+    );
+    if (
+      drawing &&
+      (!anchor?.target ||
+        Math.hypot(drawing.x - raw.x, drawing.y - raw.y) <=
+          Math.hypot(anchor.point.x - raw.x, anchor.point.y - raw.y))
+    )
+      return { ...drawing, z: 0, snapped: true as const };
+    return {
+      ...(anchor?.point ?? gridPoint),
+      z: 0,
+      ...(anchor?.target ? { snapped: true as const } : {}),
+    };
   }
   function updateCursor(next: Point, preview = true) {
     cursorPosition.current = next;
@@ -2580,6 +2629,7 @@ function LayoutEditor({
       host.current?.classList.add('is-panning');
       return;
     }
+    if (tool === 'measure') return;
     if (onAnalysisProbe || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
       return;
     const p =
@@ -2756,13 +2806,7 @@ function LayoutEditor({
           : mergePCBSelection(selection, [object], mode);
       setSelection(ids);
       setInspector(true);
-      if (
-        mode === 'replace' &&
-        !pcb.tracks.some(
-          (track) =>
-            track.locked && ids.some((item) => item.kind === 'track' && item.id === track.id),
-        )
-      )
+      if (mode === 'replace' && !ids.some((item) => pcbLockObject(pcb, item)?.locked))
         setDrag({
           start: p,
           current: p,
@@ -2821,6 +2865,15 @@ function LayoutEditor({
         ? routeFreePoint(raw)
         : { x: snap(raw.x), y: snap(raw.y) };
     const overlayOpen = hasOpenOverlay();
+    if (tool === 'measure') {
+      const point = measurementPoint(e);
+      updateCursor(point, false);
+      if (!overlayOpen) measurement.move(point);
+      if (pointer.current === e.pointerId && pointerStart.current)
+        pointerMoved.current ||=
+          Math.hypot(e.clientX - pointerStart.current.x, e.clientY - pointerStart.current.y) > 4;
+      return;
+    }
     // Idle pointer motion only updates the coordinate subscriber. Tools keep
     // their live cursor preview without rebuilding the entire board on hover.
     updateCursor(p, !overlayOpen && tool !== 'select' && tool !== 'hand' && tool !== 'annotate');
@@ -2948,6 +3001,14 @@ function LayoutEditor({
       if (trackDrag?.pointer) setTrackDrag(null);
       setMarquee(null);
       setGesture(null);
+      return;
+    }
+    if (tool === 'measure') {
+      if (!moved && e.button === 0) {
+        const point = measurementPoint(e);
+        updateCursor(point, false);
+        measurement.place(point);
+      }
       return;
     }
     if (outlineResize) {
@@ -3088,6 +3149,19 @@ function LayoutEditor({
       return;
     flushLayoutCamera(svg.current);
     const key = e.key.toLowerCase();
+    if (tool === 'measure' && key !== ' ' && key !== 'home') {
+      if (key === 'escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (measurement.getSnapshot().start) measurement.clear();
+        else activate('select');
+      } else if (key === 'enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        measurement.confirm();
+      }
+      return;
+    }
     if (outlineResize) {
       e.preventDefault();
       e.stopPropagation();
@@ -3412,7 +3486,6 @@ function LayoutEditor({
     committedAirwires.current = airwirePresentation;
   }, [airwirePresentation]);
   const airwires = airwirePresentation.wires;
-  const appearanceAirwireCount = appearanceTab === 'nets' ? airwires.length : 0;
   const visibleLayer = (layer: string) => Boolean(layers[layer as BoardLayer]);
   function footprintBody(f: Footprint) {
     const bounds = footprintBounds.get(f.id);
@@ -3834,7 +3907,6 @@ function LayoutEditor({
         netSearch={netSearch}
         onNetSearchChange={setNetSearch}
         netEdges={appearanceEdges}
-        airwireCount={appearanceAirwireCount}
         connectivityError={connectivity.error}
       />
     ),
@@ -3855,7 +3927,6 @@ function LayoutEditor({
       netSearch,
       appearanceEdges,
       connectivity.error,
-      appearanceAirwireCount,
     ],
   );
   const currentToolbarActions = {
@@ -3975,6 +4046,18 @@ function LayoutEditor({
         {modeToolGroup}
         <div className="editor-tool-group" role="group" aria-label="Place and connect">
           {connectToolButtons}
+        </div>
+        <div className="editor-tool-group" role="group" aria-label="Measurement">
+          <button
+            type="button"
+            className={`tool-button${tool === 'measure' ? ' active' : ''}`}
+            aria-label="Measure distance"
+            title="Measure distance"
+            aria-pressed={tool === 'measure'}
+            onClick={() => activate(tool === 'measure' ? 'select' : 'measure')}
+          >
+            <Ruler size={17} />
+          </button>
         </div>
         <div className="editor-tool-group" role="group" aria-label="Edit and history">
           <div className={`tool-menu${tool === 'hand' ? ' active' : ''}`}>
@@ -4111,8 +4194,10 @@ function LayoutEditor({
                 event.clientY < bounds.top ||
                 event.clientY > bounds.bottom ||
                 (under !== viewport && !(under && svg.current?.contains(under)))
-              )
+              ) {
                 pointerPosition.current = null;
+                if (tool === 'measure') measurement.move(null);
+              }
             }}
             onContextMenu={(e) => e.preventDefault()}
             onKeyDown={key}
@@ -4200,7 +4285,34 @@ function LayoutEditor({
             <LayoutCameraScaleRender camera={camera}>
               {(view) => (
                 <>
+                  {displayBoard.footprints.map((footprint) => {
+                    const bounds = footprint.locked && footprintBounds.get(footprint.id);
+                    if (!bounds) return null;
+                    const at = footprintPoint(footprint, { x: bounds.maxX, y: bounds.minY });
+                    return (
+                      <g
+                        key={footprint.id}
+                        data-annotation-overlay
+                        data-layout-lock={footprint.id}
+                        aria-label={`${footprint.reference || 'Component'} locked`}
+                        pointerEvents="none"
+                        transform={`translate(${at.x} ${at.y}) scale(${view.width / size.width})`}
+                      >
+                        <rect x={-8} y={-8} width={16} height={16} rx={4} fill="var(--panel)" />
+                        <LockKeyhole
+                          x={-6}
+                          y={-6}
+                          width={12}
+                          height={12}
+                          color="var(--text-strong)"
+                        />
+                      </g>
+                    );
+                  })}
                   {analysisMarkers?.(view.width / size.width)}
+                  {tool === 'measure' && (
+                    <MeasurementDrawing measurement={measurement} scale={view.width / size.width} />
+                  )}
                   {analysisComponentDetail &&
                     selectedFootprint &&
                     selectedFootprint.side === analysisComponentSurface &&
@@ -4696,10 +4808,7 @@ function LayoutEditor({
           )}
           <LayoutCameraScaleRender camera={camera}>
             {(view) => {
-              const scaleLength =
-                [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]
-                  .filter((n) => (n * size.width) / view.width <= 100)
-                  .at(-1) ?? 0.1;
+              const scaleLength = canvasScaleLength(view.width / size.width);
               return (
                 <div className="layout-scale" aria-label="Layout scale">
                   <i style={{ width: (scaleLength * size.width) / view.width }} />
@@ -4846,6 +4955,22 @@ function LayoutEditor({
                         padOwner={inspectedFootprint}
                         rectangle={selectedRectangle}
                         selectionCount={selection.length}
+                        lockTargets={
+                          inspectedPad ? [{ kind: 'pad', id: inspectedPad.id }] : selection
+                        }
+                        onLock={(locked) => {
+                          try {
+                            commit(
+                              setPCBLocked(
+                                pcb,
+                                inspectedPad ? [{ kind: 'pad', id: inspectedPad.id }] : selection,
+                                locked,
+                              ),
+                            );
+                          } catch (error) {
+                            setError((error as Error).message);
+                          }
+                        }}
                         showEmptyState={tool === 'select' || tool === 'hand'}
                         snap={snap}
                         onCommit={commit}
@@ -4859,7 +4984,6 @@ function LayoutEditor({
                         capabilityHost={capabilityHost}
                         onTrack={updateTrack}
                         onZone={updateZone}
-                        onFillZone={fillZone}
                         onRectangle={updateRectangle}
                         onError={setError}
                         onInspectFootprint={(id) => {
@@ -4906,6 +5030,7 @@ function LayoutEditor({
                         <PropertyDeleteButton
                           disabled={
                             !propertiesActive ||
+                            selection.some((item) => pcbLockObject(pcb, item)?.locked) ||
                             fillBusy ||
                             tool !== 'select' ||
                             !!drag ||
@@ -4974,11 +5099,19 @@ function LayoutEditor({
                           ? 'Place through via'
                           : tool === 'annotate'
                             ? 'Annotation mode'
-                            : tool === 'hand'
-                              ? 'Pan'
-                              : 'Interaction mode'
+                            : tool === 'measure'
+                              ? 'Measure distance'
+                              : tool === 'hand'
+                                ? 'Pan'
+                                : 'Interaction mode'
         }
-        coordinates={<CanvasCoordinates coordinates={coordinates} />}
+        coordinates={
+          tool === 'measure' ? (
+            <MeasurementReadout measurement={measurement} />
+          ) : (
+            <CanvasCoordinates coordinates={coordinates} />
+          )
+        }
         controls={gridControl}
         status={
           outlineResizePreview?.error ||
