@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import { openVisualization, toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -211,12 +212,14 @@ try {
       );
     });
   const stroke = await screenStroke();
-  const previousZoom = await page.locator('.layout-editor .zoom-value').innerText();
-  await button('Zoom in').click();
-  await page.waitForFunction(
-    (value) => document.querySelector('.layout-editor .zoom-value')?.textContent !== value,
-    previousZoom,
+  const previousZoom = await canvas.evaluate(
+    (svg) => svg.getAttribute('data-layout-camera-view') ?? svg.getAttribute('viewBox'),
   );
+  await runCanvasAction(page, 'Zoom in');
+  await page.waitForFunction((value) => {
+    const svg = document.querySelector('[data-testid="layout-canvas"]');
+    return (svg.getAttribute('data-layout-camera-view') ?? svg.getAttribute('viewBox')) !== value;
+  }, previousZoom);
   assert.ok(
     Math.abs((await screenStroke()) - stroke) < 0.001,
     'Camera composition retains screen stroke width.',

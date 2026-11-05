@@ -549,8 +549,17 @@ try {
     .getByRole('button', { name: 'V(net_1) time axis', exact: true })
     .click({ button: 'right' });
   const otherTimeDialog = page.getByRole('dialog', { name: 'Time axis', exact: true });
-  await otherTimeDialog.getByLabel('Minimum (s)', { exact: true }).fill('2m');
-  await otherTimeDialog.getByLabel('Maximum (s)', { exact: true }).fill('8m');
+  async function fillQuantity(input, value) {
+    await input.focus();
+    // Focus restores the complete draft before Playwright selects/replaces it.
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    await input.fill(value);
+    assert.equal(await input.inputValue(), value);
+  }
+  await fillQuantity(otherTimeDialog.getByLabel('Minimum (s)', { exact: true }), '2m');
+  await fillQuantity(otherTimeDialog.getByLabel('Maximum (s)', { exact: true }), '8m');
   await otherTimeDialog.getByRole('button', { name: 'Apply', exact: true }).click();
   assert.equal(await otherChart.getAttribute('data-time-min'), '0.002');
   await layout('2 columns × 3 rows');
@@ -640,18 +649,18 @@ try {
   await page.getByRole('button', { name: 'V(net_1) vertical axis', exact: true }).click();
   assert.equal(await axisDialog.count(), 0);
   const otherDialog = page.getByRole('dialog', { name: 'V(net_1) axis', exact: true });
-  await otherDialog.getByLabel('Minimum (V)', { exact: true }).fill('123');
+  await fillQuantity(otherDialog.getByLabel('Minimum (V)', { exact: true }), '123');
   await page.getByRole('button', { name: 'V(net_0) time axis', exact: true }).click();
   assert.equal(await otherDialog.count(), 0);
   assert.notEqual(await axisDialog.getByLabel('Minimum (s)', { exact: true }).inputValue(), '123');
-  await axisDialog.getByLabel('Minimum (s)', { exact: true }).fill('9m');
-  await axisDialog.getByLabel('Maximum (s)', { exact: true }).fill('1m');
+  await fillQuantity(axisDialog.getByLabel('Minimum (s)', { exact: true }), '9m');
+  await fillQuantity(axisDialog.getByLabel('Maximum (s)', { exact: true }), '1m');
   await axisDialog.getByRole('button', { name: 'Apply', exact: true }).click();
   assert.equal(await axisDialog.getByRole('alert').count(), 1);
   assert.equal(Number(await chart.getAttribute('data-time-min')), zoomMin);
-  await axisDialog.getByLabel('Minimum (s)', { exact: true }).fill('1m');
-  await axisDialog.getByLabel('Maximum (s)', { exact: true }).fill('9m');
-  await axisDialog.getByLabel('Tick spacing (s)', { exact: true }).fill('2m');
+  await fillQuantity(axisDialog.getByLabel('Minimum (s)', { exact: true }), '1m');
+  await fillQuantity(axisDialog.getByLabel('Maximum (s)', { exact: true }), '9m');
+  await fillQuantity(axisDialog.getByLabel('Tick spacing (s)', { exact: true }), '2m');
   await axisDialog.getByRole('button', { name: 'Apply', exact: true }).click();
   assert.equal(await chart.getAttribute('data-time-min'), '0.001');
   assert.equal(await chart.getAttribute('data-time-max'), '0.009');
@@ -662,9 +671,9 @@ try {
   );
   await page.getByRole('button', { name: 'V(net_0) vertical axis', exact: true }).click();
   axisDialog = page.getByRole('dialog', { name: 'V(net_0) axis', exact: true });
-  await axisDialog.getByLabel('Minimum (V)', { exact: true }).fill('-500m');
-  await axisDialog.getByLabel('Maximum (V)', { exact: true }).fill('500m');
-  await axisDialog.getByLabel('Tick spacing (V)', { exact: true }).fill('100m');
+  await fillQuantity(axisDialog.getByLabel('Minimum (V)', { exact: true }), '-500m');
+  await fillQuantity(axisDialog.getByLabel('Maximum (V)', { exact: true }), '500m');
+  await fillQuantity(axisDialog.getByLabel('Tick spacing (V)', { exact: true }), '100m');
   await axisDialog.getByRole('button', { name: 'Apply', exact: true }).click();
   assert.equal(await chart.getAttribute('data-value-min'), '-0.5');
   assert.equal(await chart.getAttribute('data-value-max'), '0.5');

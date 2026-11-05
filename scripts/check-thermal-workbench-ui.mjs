@@ -238,7 +238,7 @@ try {
   );
   await page.getByRole('button', { name: 'Layout', exact: true }).click();
   const nativeSidebar = page.getByRole('complementary', { name: 'Layout sidebar', exact: true });
-  const sidebarResize = nativeSidebar.getByRole('button', {
+  const sidebarResize = nativeSidebar.locator('..').getByRole('button', {
     name: 'Resize layout sidebar width',
     exact: true,
   });

@@ -176,7 +176,6 @@ function SourceEditor({
   applyLabel = 'Apply',
   onCopy,
   status,
-  listAction,
   trailingAction,
   active = true,
   visible = true,
@@ -195,7 +194,6 @@ function SourceEditor({
   applyLabel?: string;
   onCopy: () => void;
   status?: string;
-  listAction?: ReactNode;
   trailingAction?: ReactNode;
   active?: boolean;
   visible?: boolean;
@@ -372,7 +370,6 @@ function SourceEditor({
           >
             <Check size={17} aria-hidden="true" />
           </button>
-          {listAction}
           {trailingAction}
           {onRefreshFiles && (
             <button

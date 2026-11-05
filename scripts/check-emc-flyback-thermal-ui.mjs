@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
@@ -696,7 +697,7 @@ try {
   );
   report.render.compact = { viewport: { width: 1280, height: 800 }, layoutBox, panelBox };
   await screenshot('emc-flyback-layout-thermal-compact.png');
-  await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+  await runCanvasAction(page, 'Fit board to canvas');
   const fitted = await raster.boundingBox();
   assert.ok(
     fitted.x >= layoutBox.x - 1 &&

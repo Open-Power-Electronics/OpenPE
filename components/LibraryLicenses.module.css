@@ -1,7 +1,7 @@
 .licenses {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -94,7 +94,7 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   background: var(--panel);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   color: var(--text);
   font-size: var(--font-small);
   line-height: 1.6;

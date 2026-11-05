@@ -99,7 +99,7 @@
 .operandSelection button {
   min-height: 30px;
   padding: 4px 6px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--tint);
   color: var(--text);
   font: inherit;
@@ -178,7 +178,7 @@
   flex: none;
   min-height: var(--control-height);
   padding: 4px 8px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--tint);
   color: var(--text);
   white-space: nowrap;

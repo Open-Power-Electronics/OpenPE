@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import { closeDisplayDrawer, toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -188,12 +189,12 @@ try {
     // The interior remains selectable without requiring a click directly on copper.
     if (!test.overlap) await clickA({ x: 20.75, y: 20.75 });
     await closeDisplayDrawer(page, 'Properties');
-    await button('Actual size (100%)').click();
+    await runCanvasAction(page, 'Actual size (100%)');
     await page.setViewportSize({ width: 900, height: 640 });
     await page.waitForTimeout(100);
     await clickA();
     await closeDisplayDrawer(page, 'Properties');
-    await button('Fit board to canvas').click();
+    await runCanvasAction(page, 'Fit board to canvas');
     await canvas.press('Control+Home');
     const at = await screenPoint({ x: 20, y: 20 });
     await page.mouse.move(at.x, at.y);

@@ -8,9 +8,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const { readNativeProject } = require('../electron/native-project.cjs');
 const { readSpiceModelFile } = require('../electron/spice-model-picker.cjs');
-const emcFiles = await readNativeProject(
-  path.resolve('recent/emc-flyback/emc-flyback.kicad_pro'),
-);
+const emcFiles = await readNativeProject(path.resolve('recent/emc-flyback/emc-flyback.kicad_pro'));
 const emcModels = await readSpiceModelFile(
   path.resolve('recent/emc-flyback/circuits/EMC_flyback_control.lib'),
 );
@@ -224,8 +222,9 @@ try {
   assert.equal((await state()).source, original.source);
   assert.equal(await page.getByLabel('Model library', { exact: true }).inputValue(), 'vendor.lib');
   assert.equal(
-    await page.locator('.property-model-file[role="status"]').textContent(),
-    '2 models · 2 compatible',
+    await page.locator('.property-model-file[role="status"]').count(),
+    0,
+    'Library model counts do not add a caption between File and Model.',
   );
   await open('circuits/vendor.lib', [resistanceCatalog[1]]);
   assert.equal(
@@ -406,11 +405,11 @@ try {
   await field('Pulsed voltage (V)').press('Enter');
   await pick('SIN voltage source');
   assert.equal(await field('Frequency (Hz)').isVisible(), true);
-  assert.equal(await field('Amplitude (V)').inputValue(), '12');
+  assert.equal(await field('Amplitude (V)').inputValue(), '12.00');
   await reopen();
   assert.equal(await model.textContent(), 'SIN voltage source');
   await pick('DC voltage source');
-  assert.equal(await field('Voltage (V)').inputValue(), '12');
+  assert.equal(await field('Voltage (V)').inputValue(), '12.00');
   await undoTo(0);
   assert.equal((await state()).source, sourceOriginal.source);
   await model.click();
@@ -468,12 +467,15 @@ try {
     await page.evaluate((reference) => window.openEmcModelFixture(reference), reference);
     await ensureOpen();
     await page.waitForFunction(
-      () =>
-        document.querySelector('.property-model-file')?.textContent === '3 models · 1 compatible',
+      (name) => document.querySelector('[aria-label="Simulation model"]')?.textContent === name,
+      name,
     );
     await ensureOpen();
     assert.equal(await model.textContent(), name);
     await model.click();
+    await page.waitForFunction(
+      () => document.querySelectorAll('.property-model-menu [role="option"]').length === 3,
+    );
     assert.equal(await popup.getByRole('option').count(), 3);
     assert.equal(await popup.locator('.select-option.muted').count(), 2);
     assert.equal(await popup.locator('[aria-disabled="true"]').count(), 2);
@@ -487,7 +489,9 @@ try {
     window.openLmModelFixture();
   }, lm5001Models);
   await page.waitForFunction(
-    () => document.querySelector('.property-model-file')?.textContent === '1 model · 1 compatible',
+    () =>
+      document.querySelector('[aria-label="Model library"]')?.value === 'LM5001.lib' &&
+      document.querySelector('[aria-label="Simulation model"]')?.textContent === 'LM5001_TRANS',
   );
   await ensureOpen();
   assert.equal(await model.textContent(), 'LM5001_TRANS');

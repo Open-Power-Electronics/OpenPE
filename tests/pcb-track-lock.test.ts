@@ -230,7 +230,7 @@ test('Core rejects locked mixed edits atomically and lock changes have whole-pro
     width: project.pcb!.tracks[0].width + 0.1,
   });
   assert.equal(core.getSnapshot().undoDepth, 2);
-  assert.equal(core.getSnapshot().project!.pcb!.zones[0].filledPolygons, undefined);
+  assert.ok(core.getSnapshot().project!.pcb!.zones[0].filledPolygons!.length > 0);
   core.execute('history.undo');
   assert.deepEqual(core.getSnapshot().project, unlocked.project);
   core.execute('history.undo');

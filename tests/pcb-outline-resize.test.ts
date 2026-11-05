@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createEmptyPCB } from '../lib/pcb-layout';
-import { parseProject, serializeProject } from '../lib/project';
+import { parseProject, projectFromNativeFiles, serializeProject } from '../lib/project';
 import { ProjectCore } from '../core/project-core';
 import {
   findPCBRectangle,
@@ -199,11 +199,12 @@ test('zone resize scales its polygon and holes while preserving network, rules, 
     'Resizing height retains exact native X coordinates.',
   );
 });
-test('actual LM2596 outline resize is one Core undo, preserves native identities and clears fills once', async () => {
+test('actual LM2596 outline resize refreshes native fills in one Core undo while retaining identities', async () => {
   const sources = JSON.parse(await readFile('lib/reference-examples.json', 'utf8'));
   const project = parseProject(sources['reference-lm2596-to220-5-buck']);
   const core = new ProjectCore(project),
     board = core.getSnapshot().project!.pcb!;
+  const initialNative = core.getNativeFiles();
   const frame = board.graphics.find((g) => g.layer === 'Edge.Cuts')!;
   const rectangle = findPCBRectangle(board, [{ kind: 'graphic', id: frame.id }])!;
   const resized = resizePCBRectangle(board, rectangle, {
@@ -213,13 +214,31 @@ test('actual LM2596 outline resize is one Core undo, preserves native identities
   const next = invalidatePCBFill(board, resized);
   assert.equal(core.replaceBoard(next), true);
   const accepted = core.getSnapshot().project!.pcb!;
+  assert.equal(core.getSnapshot().undoDepth, 1);
   assert.equal(accepted.graphics.find((g) => g.id === frame.id)!.id, frame.id);
+  assert.equal(
+    findPCBRectangle(accepted, [{ kind: 'graphic', id: frame.id }])!.bounds.maxX,
+    rectangle.bounds.maxX + 5,
+  );
   assert.deepEqual(accepted.tracks, board.tracks);
   assert.deepEqual(accepted.footprints, board.footprints);
-  assert.ok(accepted.zones.every((z) => z.filledPolygons === undefined));
+  assert.ok(accepted.zones.every((zone) => zone.filledPolygons!.length > 0));
+  assert.ok(accepted.zones.every((zone) => zone.clearance === 0.25));
+  assert.notDeepEqual(
+    accepted.zones.map((zone) => zone.filledPolygons),
+    board.zones.map((zone) => zone.filledPolygons),
+  );
+  const acceptedNative = core.getNativeFiles();
+  const reopened = projectFromNativeFiles(acceptedNative).pcb!;
+  assert.deepEqual(
+    reopened.zones.map((zone) => zone.filledPolygons),
+    accepted.zones.map((zone) => zone.filledPolygons),
+  );
   assert.deepEqual(parseProject(serializeProject({ ...project, pcb: accepted })).pcb, accepted);
   core.undo();
   assert.deepEqual(core.getSnapshot().project!.pcb, board);
+  assert.deepEqual(core.getNativeFiles(), initialNative);
   core.redo();
   assert.deepEqual(core.getSnapshot().project!.pcb, accepted);
+  assert.deepEqual(core.getNativeFiles(), acceptedNative);
 });

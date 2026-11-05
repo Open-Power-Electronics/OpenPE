@@ -948,7 +948,7 @@ export default function SimulationDialog({
               )}
               {running ? (
                 <button
-                  className="dialog-button secondary"
+                  className="dialog-button secondary analysis-run-button"
                   onClick={() => {
                     executeSimulation('simulation.cancel');
                   }}
@@ -957,7 +957,7 @@ export default function SimulationDialog({
                 </button>
               ) : (
                 <button
-                  className="dialog-button primary"
+                  className="dialog-button primary analysis-run-button"
                   disabled={
                     !preview.deck ||
                     !status?.available ||

@@ -383,16 +383,17 @@ try {
           ),
       };
     }, track);
-  await button('Actual size (100%)').click();
+  assert.equal(await page.locator('.layout-editor .zoom-controls').count(), 0);
+  await runCanvasAction(page, 'Actual size (100%)');
   for (const zoom of [100, 144]) {
     if (zoom !== 100) {
-      await button('Zoom in').click();
-      await button('Zoom in').click();
+      await runCanvasAction(page, 'Zoom in');
+      await runCanvasAction(page, 'Zoom in');
     }
-    await page.waitForFunction(
-      (zoom) => document.querySelector('.layout-editor .zoom-value')?.textContent === `${zoom}%`,
-      zoom,
-    );
+    await page.waitForFunction((zoom) => {
+      const matrix = document.querySelector('[data-testid="layout-canvas"]')?.getScreenCTM();
+      return matrix && Math.round((Math.hypot(matrix.a, matrix.b) / (96 / 25.4)) * 100) === zoom;
+    }, zoom);
     await button('Interaction mode').click();
     const interactionPoint = await nearTrack();
     assert.equal(interactionPoint.directlyHit, false, 'The pointer misses the trace DOM stroke.');
@@ -469,7 +470,7 @@ try {
   await openDisplayDrawer(page, 'Selection');
   await layoutFilters.getByRole('checkbox', { name: 'All items', exact: true }).check();
   await closeDisplayDrawer(page, 'Selection');
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await button('Interaction mode').click();
   await button('Source').click();
   assert.deepEqual(await readNativeFiles(page), nativeBaseline);
@@ -861,7 +862,7 @@ try {
   assert.equal(await page.locator('.file-tab .dirty-dot').count(), 0);
   // Cancellation and removal never create another provider request.
   // Resizing preserves drawing scale/origin; bring the test target back inside the compact canvas.
-  await button('Fit to canvas').click();
+  await runCanvasAction(page, 'Fit to canvas');
   await button('Select elements').click();
   await page.getByTestId('part-C1').click();
   await comment.waitFor();
@@ -953,17 +954,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 960 });
   await button('Interaction mode').click();
   const schematicModeBox = await button('Annotation mode').boundingBox();
-  const schematicZoomStyle = await page.locator('.zoom-controls:visible').evaluate((node) => {
-    const style = getComputedStyle(node),
-      button = node.querySelector('button').getBoundingClientRect();
-    return {
-      bottom: style.bottom,
-      right: style.right,
-      radius: style.borderRadius,
-      width: button.width,
-      height: button.height,
-    };
-  });
+  assert.equal(await page.locator('.schematic-drawing .zoom-controls').count(), 0);
   await button('Model').click();
   try {
     await page.waitForFunction(
@@ -988,58 +979,48 @@ try {
   const objectModeBox = await button('Annotation mode').boundingBox();
   assert.equal(objectModeBox.width, schematicModeBox.width);
   assert.equal(objectModeBox.height, schematicModeBox.height);
-  const objectZoom = page.getByRole('group', { name: '3D zoom controls', exact: true });
-  assert.deepEqual(
-    await objectZoom.evaluate((node) => {
-      const style = getComputedStyle(node),
-        button = node.querySelector('button').getBoundingClientRect();
-      return {
-        bottom: style.bottom,
-        right: style.right,
-        radius: style.borderRadius,
-        width: button.width,
-        height: button.height,
-      };
-    }),
-    schematicZoomStyle,
-    'Model reuses the schematic zoom controls sizing and corner placement.',
-  );
-  const zoomValue = objectZoom.getByRole('button', { name: 'Actual size (100%)', exact: true });
-  await zoomValue.click();
-  await page.waitForFunction(
-    () => document.querySelector('.pcb-model-preview .zoom-value')?.textContent === '100%',
-  );
+  assert.equal(await page.locator('.pcb-model-preview .zoom-controls').count(), 0);
   const boardCanvas = page.locator('.pcb-model-canvas canvas');
-  const unzoomed = await boardCanvas.screenshot();
-  await objectZoom.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  const readModelScale = () => page.locator('.pcb-model-preview .model-spatial-scale').innerHTML();
+  const beforeActualSize = await page
+    .locator('.pcb-model-canvas')
+    .getAttribute('data-render-count');
+  await runCanvasAction(page, 'Actual size (100%)');
   await page.waitForFunction(
-    () => document.querySelector('.pcb-model-preview .zoom-value')?.textContent === '120%',
+    (before) =>
+      Number(document.querySelector('.pcb-model-canvas')?.dataset.renderCount) > Number(before),
+    beforeActualSize,
+  );
+  const actualScale = await readModelScale();
+  const unzoomed = await boardCanvas.screenshot();
+  await runCanvasAction(page, 'Zoom in');
+  await page.waitForFunction(
+    (previous) =>
+      document.querySelector('.pcb-model-preview .model-spatial-scale')?.innerHTML !== previous,
+    actualScale,
   );
   assert.ok(
     !unzoomed.equals(await boardCanvas.screenshot()),
     'Zoom changes the rendered board scale.',
   );
-  await objectZoom.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await runCanvasAction(page, 'Zoom out');
   await page.waitForFunction(
-    () => document.querySelector('.pcb-model-preview .zoom-value')?.textContent === '100%',
+    (previous) =>
+      document.querySelector('.pcb-model-preview .model-spatial-scale')?.innerHTML === previous,
+    actualScale,
   );
   await boardCanvas.hover();
   await page.mouse.wheel(0, -200);
   await page.waitForFunction(
-    () => parseInt(document.querySelector('.pcb-model-preview .zoom-value')?.textContent) > 100,
+    (previous) =>
+      document.querySelector('.pcb-model-preview .model-spatial-scale')?.innerHTML !== previous,
+    actualScale,
   );
-  const retainedZoom = await zoomValue.innerText();
+  const retainedScale = await readModelScale();
   await button('Source').click();
   await button('Model').click();
-  assert.equal(
-    await zoomValue.innerText(),
-    retainedZoom,
-    'Model retains zoom through view switches.',
-  );
-  assert.equal(
-    await objectZoom.getByRole('button', { name: 'Fit 3D board', exact: true }).count(),
-    0,
-  );
+  assert.equal(await readModelScale(), retainedScale, 'Model retains zoom through view switches.');
+  assert.equal(await page.locator('.pcb-model-preview .zoom-controls').count(), 0);
   await runCanvasAction(page, 'Fit 3D board');
   assert.equal(
     await page
@@ -1173,7 +1154,7 @@ try {
   assert.deepEqual(sent[1].annotations, objectQueued);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: complete schematic PNG export, overlay-free pixels, cancellation/errors, shared mode/zoom controls, Model annotations, recovery and clean project data.',
+    'PASS: complete schematic PNG export, overlay-free pixels, cancellation/errors, shared mode controls, context-menu/wheel zoom without floating controls, Model annotations, recovery and clean project data.',
   );
 } finally {
   await browser.close();

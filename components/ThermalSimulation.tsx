@@ -786,14 +786,22 @@ export default function ThermalSimulation({
     }
   }
   function field(key: string, label: string, unit: string, collapsed = false, inputOnly = false) {
+    const power = key.startsWith('power:');
+    const draft = drafts[key] ?? '';
     const input = (
       <QuantityInput
         unit={unit}
+        autoScale={power}
+        precision={power ? 3 : undefined}
         type="text"
         inputMode="decimal"
         aria-label={`${label} (${unit})`}
+        aria-invalid={
+          (power && (!draft.trim() || !Number.isFinite(Number(draft)) || Number(draft) < 0)) ||
+          undefined
+        }
         title={drafts[key]}
-        value={drafts[key] ?? ''}
+        value={draft}
         disabled={
           !visible ||
           sourcePending ||
@@ -1212,13 +1220,16 @@ export default function ThermalSimulation({
         )}
         {loadingSaved && <SavedResultLoading analysis="thermal" stage={savedResultStage} />}
         {session.status === 'running' || importingSpice ? (
-          <button className="dialog-button secondary" onClick={() => execute('thermal.cancel')}>
+          <button
+            className="dialog-button secondary analysis-run-button"
+            onClick={() => execute('thermal.cancel')}
+          >
             <Square size={15} />
             Stop
           </button>
         ) : (
           <button
-            className="dialog-button primary"
+            className="dialog-button primary analysis-run-button"
             disabled={
               sourcePending ||
               !project.pcb ||

@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -558,8 +559,8 @@ try {
       beforeEdit[group][ids[0]],
       `${group} JSX survives undo and selection clearing.`,
     );
-  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-  await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await runCanvasAction(page, 'Zoom in');
+  await runCanvasAction(page, 'Zoom out');
   await settled();
   const afterCamera = await counts();
   for (const group of [

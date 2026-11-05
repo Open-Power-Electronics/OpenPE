@@ -1,9 +1,11 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { parseProject, serializeProject } from '../server/project-format.mjs';
+import { defaultAgentPreferences } from '../server/workspace-format.mjs';
 import { readNativeFiles, readNativeProject } from './source-editor-test-helpers.mjs';
 import {
   assertEditorViewControls,
@@ -86,7 +88,7 @@ let state = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: { ...defaultAgentPreferences.models },
 };
 const bundle = await build({
   stdin: {
@@ -123,6 +125,7 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -522,31 +525,37 @@ try {
   };
   const schematic = page.getByTestId('schematic-canvas');
   await schematic.waitFor();
-  const assertWindowActions = async (toolbar, plugin, rule) => {
-    const group = toolbar.locator('.editor-tool-group-end');
+  const assertSharedRuleAction = async (mode) => {
+    const actions = page.locator('.editor-mode-actions:visible');
+    const rule = actions.getByRole('button', { name: 'Rule', exact: true });
+    assert.equal(await page.getByRole('button', { name: 'Rule', exact: true }).count(), 1);
+    assert.equal(await rule.locator('.lucide-clipboard-check').count(), 1);
+    assert.equal((await rule.textContent()).trim(), '', 'Rule uses one icon-only trigger.');
+    assert.equal(await rule.getAttribute('aria-haspopup'), 'dialog');
+    assert.deepEqual(
+      await actions
+        .locator('button:visible')
+        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
+      mode === 'Source' ? ['Rule', 'List', 'Git'] : ['Rule', 'List', 'Git', 'Toggle right sidebar'],
+      'Rule precedes List in the shared mode-row project actions.',
+    );
+  };
+  const assertWindowActions = async (toolbar, plugin) => {
+    await assertSharedRuleAction();
+    assert.equal(await toolbar.locator('.editor-tool-group-end').count(), 0);
+    for (const name of ['Rule', 'Electrical rules (ERC)', 'Design rules (DRC)'])
+      assert.equal(await toolbar.locator(`button[aria-label="${name}"]`).count(), 0);
     const pluginGroup = toolbar.getByRole('group', { name: 'Plugins', exact: true });
     const pluginButton = pluginGroup.getByRole('button', { name: plugin, exact: true });
     await pluginButton.waitFor();
-    assert.deepEqual(
-      await group
-        .getByRole('button')
-        .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-      [rule, 'Parts list', 'Toggle right sidebar'],
-    );
-    assert.equal(await group.getByRole('button', { name: plugin, exact: true }).count(), 0);
-    assert.equal(await group.locator('.editor-tool-divider').count(), 0);
-    assert.deepEqual(
-      await group.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return [style.borderLeftWidth, style.paddingLeft];
-      }),
-      ['0px', '0px'],
-      'The right-aligned actions have no leading separator or separator padding.',
+    assert.equal(
+      await page
+        .locator('.editor-mode-actions')
+        .getByRole('button', { name: plugin, exact: true })
+        .count(),
+      0,
     );
     const placement = await pluginGroup.evaluate((element) => {
-      const actions = element.parentElement.querySelector('.editor-tool-group-end');
-      const pluginBounds = element.getBoundingClientRect();
-      const actionBounds = actions.getBoundingClientRect();
       const style = getComputedStyle(element);
       return {
         leftGroup:
@@ -554,19 +563,13 @@ try {
           !element.classList.contains('editor-tool-group-end'),
         followsEditing:
           element.previousElementSibling?.getAttribute('aria-label') === 'Edit and history',
-        precedesWindows: Boolean(
-          element.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ),
-        leftOfWindows: pluginBounds.right <= actionBounds.left,
+        drawingToolbar: Boolean(element.closest('.editor-drawing-region .editor-toolbar')),
         separator: parseFloat(style.borderLeftWidth),
         inset: parseFloat(style.paddingLeft),
       };
     });
     assert.equal(
-      placement.leftGroup &&
-        placement.followsEditing &&
-        placement.precedesWindows &&
-        placement.leftOfWindows,
+      placement.leftGroup && placement.followsEditing && placement.drawingToolbar,
       true,
       'Plugin actions follow editing tools on the left, separate from window actions.',
     );
@@ -575,14 +578,13 @@ try {
       'The left plugin group retains a quiet separator and clearance.',
     );
     assert.equal(
-      await page.locator('.status-bar').getByRole('button', { name: rule, exact: true }).count(),
+      await page.locator('.status-bar').getByRole('button', { name: 'Rule', exact: true }).count(),
       0,
     );
   };
   await assertWindowActions(
     page.getByRole('group', { name: 'Schematic tools', exact: true }),
     'SPICE Simulation',
-    'Electrical rules (ERC)',
   );
   await assertEditorViewControls(page, 'Schematic');
   const rightToggle = button('Toggle right sidebar');
@@ -599,11 +601,10 @@ try {
     await rightToggle.evaluate(
       (element) =>
         element.classList.contains('editor-sidebar-toggle') &&
-        !!element.closest('.editor-toolbar .editor-view-controls') &&
-        !element.closest('.schematic-properties-dock, .layout-sidebar, .model-properties-dock'),
+        !!element.closest('.editor-mode-actions'),
     ),
     true,
-    'The persistent right toggle belongs to the separated toolbar view-control group.',
+    'The right toggle belongs to the shared project actions in the mode row.',
   );
   const assertSidebarTogglePlacement = async (toolbar) => {
     await assertToolbarSidebarPlacement(toolbar);
@@ -613,6 +614,7 @@ try {
   );
   await button('Source').click();
   await assertEditorViewControls(page, 'Source');
+  await assertSharedRuleAction('Source');
   assert.equal(await rightToggle.count(), 0, 'Source has no right dock to toggle.');
   assert.equal(
     await page
@@ -666,6 +668,7 @@ try {
   await checkDrawerSharing(schematicSidebar, schematic, true);
   const schematicDisplayStyle = await displayContentStyle(schematicSidebar);
   await schematicSidebar
+    .locator('..')
     .getByRole('button', { name: 'Resize properties width', exact: true })
     .press('Home');
   assert.ok(
@@ -761,7 +764,7 @@ try {
   };
   await assertDocked(schematic, schematicSidebar);
   const initialWidth = (await schematicSidebar.boundingBox()).width;
-  const resize = schematicSidebar.getByRole('button', {
+  const resize = schematicSidebar.locator('..').getByRole('button', {
     name: 'Resize properties width',
     exact: true,
   });
@@ -969,7 +972,7 @@ try {
   await button('Layout').click();
   const canvas = page.getByTestId('layout-canvas');
   await canvas.waitFor();
-  await assertWindowActions(page.locator('.layout-toolbar'), 'Thermal FEM', 'Design rules (DRC)');
+  await assertWindowActions(page.locator('.layout-toolbar'), 'Thermal FEM');
   const sidebar = page.getByRole('complementary', { name: 'Layout sidebar', exact: true });
   await sidebar.waitFor();
   await checkDrawerSharing(sidebar, canvas, true);
@@ -983,7 +986,7 @@ try {
     schematicDisplayStyle,
     'Schematic Visualization and Selection share Layout row typography, controls, spacing and insets.',
   );
-  const layoutResize = sidebar.getByRole('button', {
+  const layoutResize = sidebar.locator('..').getByRole('button', {
     name: 'Resize layout sidebar width',
     exact: true,
   });
@@ -1437,7 +1440,7 @@ try {
     false,
   );
   await backLayer.check();
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await canvas.press('ControlOrMeta+Home');
   await clean();
   await page.screenshot({ path: 'test-results/editor-sidebar-layout.png' });

@@ -12,6 +12,7 @@ import { createProject } from '../lib/project';
 import { projectFromNativeFiles } from '../lib/kicad-project';
 import { child, children, num, parseSExpr, val } from '../lib/sexpr';
 import { ProjectCore } from '../core/project-core';
+import { fillCopperZones } from '../lib/pcb-polygons';
 
 function fixture() {
   const netId = uid();
@@ -130,11 +131,19 @@ test('shape edits keep circles valid and reconcile rounded-corner data while rej
   assert.throws(() => setPCBPadProperties(board, uid(), {}), /no longer/);
 });
 
-test('pad edits commit one native board revision and undo restores exact source including saved fills', () => {
+test('pad edits refresh native fills in one board revision and undo restores exact source', () => {
   const { board, pad } = fixture();
   board.footprints[0] = flipPCBFootprint(board.footprints[0]);
+  const outline = board.zones[0].outline;
+  board.graphics = outline.map((start, index) => ({
+    id: uid(),
+    layer: 'Edge.Cuts',
+    width: 0.05,
+    start,
+    end: outline[(index + 1) % outline.length],
+  }));
   const project = createProject();
-  project.pcb = board;
+  project.pcb = fillCopperZones(board);
   const core = new ProjectCore(project);
   const initial = core.getNativeFiles();
   const owned = core.getSnapshot().project!.pcb!;
@@ -158,13 +167,21 @@ test('pad edits commit one native board revision and undo restores exact source 
   assert.equal(num(child(native, 'solder_mask_margin')), 0.08);
   const reopened = projectFromNativeFiles(files);
   const restoredPad = reopened.pcb!.footprints[0].pads[0];
-  const acceptedPad = core.getSnapshot().project!.pcb!.footprints[0].pads[0];
+  const accepted = core.getSnapshot().project!.pcb!;
+  const acceptedPad = accepted.footprints[0].pads[0];
   // Native nets have names; import derives their private IDs independently.
   assert.deepEqual({ ...restoredPad, netId: acceptedPad.netId }, acceptedPad);
   assert.equal(reopened.pcb!.nets.find((net) => net.id === restoredPad.netId)?.name, 'SIGNAL');
-  assert.equal(reopened.pcb!.zones[0].filledPolygons, undefined);
+  assert.ok(accepted.zones[0].filledPolygons!.length > 0);
+  assert.notDeepEqual(accepted.zones[0].filledPolygons, owned.zones[0].filledPolygons);
+  assert.deepEqual(reopened.pcb!.zones[0].filledPolygons, accepted.zones[0].filledPolygons);
+  assert.ok(
+    children(children(parseSExpr(nativeFile.source), 'zone')[0], 'filled_polygon').length > 0,
+  );
   core.undo();
   assert.deepEqual(core.getNativeFiles(), initial);
+  core.redo();
+  assert.deepEqual(core.getNativeFiles(), files);
 });
 
 test('track endpoint edits retain exact anchors and metadata, invalidate fills and respect locks', () => {

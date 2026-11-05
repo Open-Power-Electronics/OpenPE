@@ -57,6 +57,8 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running.
 
 See [verification](docs/ARCHITECTURE.md#verification) for focused tests and opt-in checks. [Engineering rules](AGENTS.md#verification-and-delivery) define required validation and authorization for desktop checks.
 
+`test-results/` holds verification artifacts; `tmp/` holds local experiments. Cleanup can remove superseded test profiles, duplicate reports and temporary compiler caches after checking their consumers. Retain current verification evidence and builds. Projects, recovery/history, offline resources and original solver results have separate [storage boundaries](docs/ARCHITECTURE.md#storage-and-build-boundaries); ignored directories are not blanket cleanup targets.
+
 ## Scope
 
 OpenPE is a preview supporting a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Save/Save as retain native KiCad projects. Export provides bounded Gerber/drill ZIP, JLCPCB manufacturing ZIP, BOM and placement CSV, plus OpenSCAD for supported CAD solids. Gerber requires a closed board outline and saved zone fills; review CAM and assembly output before manufacturing. See [manufacturing export coverage](docs/FORMAT.md#manufacturing-export).

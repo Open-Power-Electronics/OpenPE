@@ -19,6 +19,8 @@ flowchart TB
     GUI <--> API
     API --> Core[Core: ProjectCore]
     Core --> Domain[Pure domain models / geometry: lib]
+    GUI <--> CopperWorker[Renderer copper preview Worker]
+    CopperWorker --> Domain
     API --> Plugin[Plugin: SPICE / Thermal / PCB guidance]
     API --> Ports[Host adapters: files / Git / libraries / CAD preparation]
     Plugin --> Ports
@@ -78,7 +80,7 @@ Changes identify their layer, update the owning contract and regenerate formats 
 ## Process and trust boundaries
 
 - Electron starts the service and owns native dialogs, resource roots and live opaque project grants. It establishes application data under `OpenPE`, or the explicit `OPENPE_DATA_DIR` override, before applying the native OpenPE name. Former-brand directories and contracts have no migration or fallback.
-- The renderer is static-exported in packaged builds, or uses the local Next.js dev server. It imports no Node APIs; Electron keeps context isolation/sandboxing.
+- The renderer is static-exported in packaged builds, or uses the local Next.js dev server. It imports no Node APIs; Electron keeps context isolation/sandboxing. Layout calculates gesture copper paths in a renderer Worker using pure shared fill geometry; this worker has no host, native file or document authority.
 - `window.openpe` is a narrow preload bridge. Native calls verify the originating main frame and resolve grants. Host filesystem destinations and grant IDs never enter projects or recovery; native model paths and portable relative references remain valid design metadata.
 - `electron/spice-model-picker.cjs` opens a single native SPICE file picker for a live project grant, including an unsaved project. The current library may supply a bounded display-only dialog location. Explicit local selection returns its path and bounded declaration metadata, with frame/grant and regular-file checks; it creates no general renderer file-read or solver authority. The same module automatically inspects project-relative libraries through a private bounded directory observation and the shared declaration scanner. The scanner hides helper dependencies and uses generated exact-hash public-entry metadata from canonical TI/reference records for pinned vendor libraries; absolute external references require native selection. This read returns metadata only and leaves Core, undo and native bytes unchanged. Properties applies the selected binding through Core. External references stay external through Save, recovery and history.
 - Express binds loopback and validates hosts/origins/request bounds. Renderer APIs/SSE/tool results require process authentication. The separate Agent bridge uses a scoped turn token; one-time result tokens also bind request/run/session/origin.
@@ -143,6 +145,21 @@ avoidance and picked corners. The command exposes the same input parameters;
 constrained placement requires explicit consent and reports the accepted
 displacement. Model Properties deletes CAD bodies through `modelCad.remove` and
 physical components through `layout.delete`, sharing the Agent command paths.
+
+Layout pointer geometry stays on the renderer thread while
+`components/pcbFill.worker.ts` computes fills and display paths from the shared
+pure `lib/pcb-polygons.ts` preparation. `pcbFillWorkerProtocol.ts`,
+`pcbFillWorkerClient.ts` and `usePCBFillWorker.ts` define the renderer-only
+messages, bounded client and retained view lifecycle. The preview client retains one gesture basis, one in-flight request
+and the latest pending candidate. Request IDs and generations guard responses;
+the newest completed result can advance presentation while newer motion remains
+pending. `components/pcbFillPreview.ts` prepares temporary conservative masks that adapt the solved fill to immediate pointer
+geometry. Source, revision, visibility, cancellation and disposal gates discard
+inapplicable results. Airwire analysis stays on the renderer thread using the
+fill-free candidate during motion. Neither worker results nor masks enter Core,
+capability data or native files: placement independently prepares current fills
+and validates geometry plus contours as one Core transaction. See
+[Layout](LAYOUT.md#saved-zone-fills) for geometry limits and preserved rules.
 
 The service validates the complete submitted workspace, then uses the browser-safe `context/agent-prompt-context.ts` projection for semantic provider context: active-sheet components/pins/connections, selected geometry, sheet/PCB/Model summaries and observed UI/results. Native and draft text, duplicate circuit data and detailed drawing/copper geometry stay outside initial provider context. Complete native/canonical queries remain available on demand through the same scoped host; revision checks prefer `core.state`. Prompt assembly checks its character bound before starting a provider process; the projection never becomes Core input.
 
@@ -264,13 +281,16 @@ Long exhaustive comparisons may split into interleaved shard files, such as
 `tests/pcb-point-index-emc-*.test.ts`, whose union covers every sampled query
 with the complete variant sequence.
 
+`npm test -- --test-concurrency=2` lowers memory pressure without changing the
+complete test set. Focused runs pass test paths after `npm test --`.
+
 | Concern                     | Representative checks                                                                                                                                                                                               |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                              |
 | Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                   |
 | Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                    |
 | Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                            |
-| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`                                                                                         |
+| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`; `check-analysis-sidebar-resize-ui.mjs` (SPICE/Thermal grips, shared widths and camera/native retention) |
 | Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                                                                 |
 | Domain/runtime measurements | `benchmark-emc-interaction.mjs`; `benchmark-project-runtime.ts`; `benchmark-startup.mjs`                                                                                                                            |
 | Plugin/solver boundary      | Workbench-plugin, participation, runtime and model-adapter tests; isolated simulation/thermal/Agent UI checks                                                                                                       |

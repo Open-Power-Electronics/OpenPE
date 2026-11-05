@@ -89,11 +89,11 @@ inventing a board outline or surface. Boards with artwork, packages or copper
 still require valid closed Edge.Cuts for physical preview.
 
 Equal X/Y millimetre scaling and the current SVG transform govern pointers,
-hit geometry, annotations and export. 100% uses CSS 96 px/in, not monitor
-calibration. Resize retains scale. Space/Home and Fit board use closed Edge.Cuts;
+hit geometry, annotations and export. Camera scale uses CSS 96 px/in, independently
+of monitor calibration. Resize retains scale. Space/Home and the canvas-menu Fit board action use closed Edge.Cuts;
 Ctrl/Cmd+Home fits visible objects. These camera bindings remain available during
 thermal probing. Middle/right drag pans; a stationary right click opens canvas actions without changing design geometry.
-The status bar reports absolute mm, zoom and a scale bar. Horizontal-only wheel
+The drawing reports absolute mm in its status bar and distance through a scale bar. Horizontal-only wheel
 input does not zoom; bounded zoom
 retains its pointer/centre anchor, and pan retains tool world coordinates.
 
@@ -161,11 +161,25 @@ collision checks; changed, mutable and caller-frozen tracks recompute their keys
 Failed calculations remain retryable. Public airwire anchors and
 track-contact polygons stay independent; mutable and caller-frozen inputs
 recompute their geometry and connectivity.
-Track previews hide saved fills after displacement, restore them on cancellation
-and invalidate them only on committed copper changes. Repeated track poses from
-one owned basis retain its fill-free stationary zone/package owners after normal
-invalidation; changed owners prepare independently. Each pose remains a distinct
-board and receives complete Core validation before commit. Airwire analysis retains
+Track and boundary gestures update geometry immediately on the renderer thread
+and calculate actual fill paths in a dedicated renderer Worker using the same
+pure fill preparation as Core. The worker retains one gesture basis with one
+request in flight and only the latest pending candidate. Request IDs and gesture
+generations reject obsolete outputs. The newest completed output can advance
+the displayed copper while a newer candidate is pending, so continuous motion
+does not starve fill updates.
+While a result is pending, lightweight conservative SVG masks adapt the latest
+solved fill to current geometry. Masks cut clearances around changed foreign
+tracks, pads, vias and keepouts and clip to current zone and board outlines.
+Vacated gaps and expanded areas update with the next completed fill rather than
+remaining unchanged throughout the gesture. Worker output and masks are
+presentation only: airwires use fill-free candidate geometry on the renderer
+thread during motion, and previews never enter native files, connectivity or
+capability data. Source, revision, visibility, cancellation and disposal gates
+discard inapplicable results. Cancellation restores the original display without
+writes. Placement calculates exact fills for the current geometry once and
+commits them with the checked geometry in one Core transaction; worker output
+has no commit authority. Failure preserves the accepted board. Airwire analysis retains
 its two-million-operation bound. Divider resize cursors release on cancellation,
 deactivation and unmount.
 
@@ -179,7 +193,7 @@ view-local presentation through hiding and project navigation, preserving scale,
 drafts and native content.
 Properties retains the same object's drafts through sidebar hiding/deactivation,
 with inactive controls; closing it/changing subject resets drafts. Appearance's
-Visualization contains Layers, Objects and Nets tabs with retained display choices. Properties, Visualization and Selection share contrasting collapsible headers and default open above their independently scrolling content. Their order stays fixed through every expansion/collapse combination. Visualization and Selection each fit their own content without stretching, capped at 60% with internal scrolling when constrained. Their combined height is the sum of those sections, with Properties filling the remaining space above. Each collapsed section reserves only its header in place; the complete section stack stays at the bottom when Properties is collapsed. Collapsing Properties retains its mounted drafts. The right toolbar actions use 4 px gaps. The sidebar toggle follows Parts list at the far right, separated by one centered 18 px soft divider with an 8 px inset and 4 px outer gap. Toolbar padding remains 6 px vertically, 8 px left and 15 px right at compact and wide widths. File tabs and New file stay at the document bar's left; the view tabs stay at its far right with 44 px minimum widths, 6 px gaps and a 12 px inset without another vertical rule. File/view tabs and New file use 36 px profiles in a document row that grows from 44 px; file close/action targets are at least 34 px. Both tab types use rounded top corners and square bottoms, with the selected surface joined to the toolbar below. The selected view keeps its label visible with soft side borders and a transparent top border; inactive views rest as transparent icons and retain animated label expansion on hover/focus, immediate under reduced motion. Neither display section has a toolbar button. Nets keeps search and
+Visualization contains Layers, Objects and Nets tabs with retained display choices. Properties, Visualization and Selection share contrasting collapsible headers and default open above their independently scrolling content. Their order stays fixed through every expansion/collapse combination. Visualization and Selection each fit their own content without stretching, capped at 60% with internal scrolling when constrained. Their combined height is the sum of those sections, with Properties filling the remaining space above. Each collapsed section reserves only its header in place; the complete section stack stays at the bottom when Properties is collapsed. Collapsing Properties retains its mounted drafts. The shared mode row right-aligns Toggle right sidebar, List, Git and Close project as 30 px controls with 4 px gaps. Source and views without a dock omit the sidebar toggle. The right dock starts with Properties, without a separate action toolbar. Schematic ERC and Layout DRC remain at the right edge of the left drawing toolbar. Drawing toolbar padding remains 6 px vertically, 8 px left and 15 px right. There is no project tab; New file belongs to File. The four editor modes sit at the left above the drawing tools, with 44 px minimum widths, 6 px gaps and 36 px profiles in a mode row that grows from 44 px. Schematic file tabs appear separately for projects with multiple schematics. Mode and schematic-file controls use rounded top corners and square bottoms, joining the surface below. Selected modes retain their label, soft side borders and transparent top border; inactive modes reveal their labels on hover/focus, immediately under reduced motion. Neither display section has a toolbar button. Nets keeps search and
 independent search/highlight clearing accessible while scrolling; clearing search
 restores its focus. Layers/filters never edit design data.
 
@@ -210,7 +224,7 @@ footprint artwork as the thumbnail; they acquire no schematic symbol or link.
 Layout chooser assignments preflight the complete replacement before committing
 once. Unsupported choices leave both assignment and PCB unchanged. Existing
 package identity, pose, side, matching pad identities/nets and unrelated copper
-survive replacement; affected saved fills are invalidated in that same undo edit.
+survive replacement; already-filled enabled zones refresh in that same undo edit.
 Pads belong to footprints: surface-mount pads, plated through-hole pads and
 non-plated mechanical holes are distinct from independent through vias.
 Pad number, type, layer membership and schematic-derived net are read-only;
@@ -225,7 +239,7 @@ edit native geometry, layer, stroke/fill and text; dimension override edits upda
 both the native override and stored caption, retaining affixes and unit settings.
 Dimension styles expose fields applicable to their type. Zone fields include bounds, fill rules and individual
 rule-area exclusions; native corners/cutouts are retained without coordinate lists. These fields retain UUIDs, pin/net associations and
-unrelated records. Geometry/copper edits invalidate fills in the same Core undo;
+unrelated records. Geometry/copper edits refresh already-filled enabled zones in the same Core undo;
 readouts, unchanged fields and viewing create no transaction. Dimension metadata
 is preserved in native output; the bounded preview does not render all native
 dimension decorations or recalculate its stored caption from formatting rules.
@@ -265,8 +279,8 @@ retains native object UUIDs, ordering, widths and metadata, and moves only the
 frame vertices. Fixed opposite edges retain exact coordinates; dragged axes use
 the selected grid (Ctrl/Cmd bypasses it). Four-pixel jitter remains clean and
 crossing an opposite edge clamps to a positive size. Pointer preview does not
-write; release commits its exact checked bounds once and invalidates fills in
-that undo. Escape, pointer cancellation, layer/tool/board changes and deactivation
+write; release commits its exact checked bounds and refreshed enabled fills once
+in that undo. Escape, pointer cancellation, layer/tool/board changes and deactivation
 cancel without writes. Source and Core revision gates still reject publication.
 Nonrectangular/open/branched outlines retain ordinary graphic editing.
 
@@ -274,8 +288,10 @@ Selected board copper zones and rule areas use the same handles and numeric
 bounds. Resize their polygon and hole vertices together within the new bounding
 rectangle, preserving shape proportions on each axis, UUID, net, layer and rules.
 Board edges, components and other copper do not scale. Existing vertex fields
-remain available. Saved fills become stale only in the committed transaction;
-explicit refill uses the resized boundaries. Embedded footprint zones retain
+remain available. Worker-prepared fills follow the resized area; temporary masks
+clip the latest solved fill while newer geometry is pending. Placement validates
+and fills the exact current area. Unfilled/disabled zones stay
+unfilled. Embedded footprint zones retain
 footprint ownership rather than acquiring independent box handles.
 
 `tests/pcb-outline-resize.test.ts` covers geometry, metadata and Core undo;
@@ -356,7 +372,7 @@ artwork/dimension strokes, holes, keepouts and closed edges/cutouts, including
 hidden geometry. Same-net contact respects SMD layers/through-hole anchors.
 Standalone copper text/dimension captions are omitted from new-track checks;
 via/drag checks retain conservative lettering envelopes. Saved pours do not
-obstruct routes; committed changes invalidate them for explicit refilling.
+obstruct routes; accepted copper changes refresh already-filled enabled zones.
 Manual routing uses Walk Around with H/V/45 segments and a fixed 0.25 mm clearance
 plus half track width. Colliding drafts cannot commit. New-track Shove is
 unsupported; interactive connected track drag uses Shove independently.
@@ -468,8 +484,8 @@ project or gesture replacement cannot reuse old displacement history. Setup,
 range and budget failures remain blocked; `layout.drag` rejects an invalid
 exact requested pose unless the caller explicitly requests a constrained result.
 
-Pours are neither obstacles nor fixed contacts; accepted edits invalidate fills
-once. Bounds: 256 selected tracks, 15,000 copper objects, 512 reconnect sites,
+Pours are neither obstacles nor fixed contacts; accepted edits refresh already-filled
+enabled zones in the same transaction. Bounds: 256 selected tracks, 15,000 copper objects, 512 reconnect sites,
 120,000 anchor vertices and two million work units. Shove additionally limits
 256 displaced tracks/512 fixed sites and eight directional attempts per span.
 Interactive chain assembly retains at most 512 spans; each planner uses its own
@@ -495,18 +511,31 @@ Zone completion by Enter/double-click/closed polygon commits once and
 restores canvas focus; rejection retains the draft/focus for retry. Properties
 edits net/layer, clearance, minimum width, thermals, priority and bounds.
 
-Fill copper zones is explicit and undoable. Bounded Clipper geometry clips closed
+Enabling unfilled copper zones is explicit and undoable. Already-filled enabled
+zones refresh automatically when copper geometry, board boundaries or effective
+zone rules change, including footprint-owned zones. Geometry and refreshed contours
+share one Core validation, revision and undo transaction for human and Agent edits.
+Interactive motion uses the worker-prepared fills and temporary conservative
+masks described above; accepted contours are calculated independently once for
+placement. For internally owned snapshots,
+track-only changes recalculate affected copper layers and retain other-layer
+contours and rules, including when an intermediate candidate cleared its fills.
+Unrelated captions, models, locks, viewing, opening and saving retain native fills;
+Source applies the entered native contours without automatic refill.
+Bounded Clipper geometry clips closed
 edges/cutouts, subtracts foreign copper/holes/keepouts, resolves priority and
 creates solid/thermal contacts. Curves use nominal 0.01 mm tessellation within
 caps. Invalid/open/excessive geometry fails. Islands remain; complete KiCad
 island/fabrication rules are unsupported.
 
-There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled/stale contours use the footer Fill action. The default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones but publishes contours only for its target. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Enabling a zone or changing effective copper rules invalidates other affected fills once. Failed calculation leaves all design data unchanged. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so filling applies the explicit minimum. Viewing and Properties disclosure never calculate fills.
+There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the footer Fill action. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
-bridges. Viewing/saving/display never recomputes fills. Copper/rule edits clear
-stale fills in the same transaction. Refill/check in KiCad before manufacturing.
+bridges. Viewing/saving/display never recomputes fills. Copper/rule edits replace
+stale contours with refreshed fills in the same transaction. Refill/check in KiCad before manufacturing.
+Dense refreshed contours can exceed the separate airwire-analysis operation limit;
+Layout retains their copper and reports unavailable connectivity without clearing fills.
 
 ## Distance measurement
 
@@ -618,7 +647,7 @@ and occlusion rules; drills/annotations use their own current rays. Selection
 uses hue-preserving contrast without boxes or native edits; export restores
 original paint.
 
-Visualization uses Layout-styled Views and Display tabs, initially Views.
+Visualization uses Layout-styled Views, Display and Explosion tabs, initially Views.
 Views offers Top, Bottom, Front, Back, Left, Right and Isometric presets in a
 compact two-column grid, with Isometric spanning the final row. An Orthographic
 projection toggle follows a soft divider. Controls retain visible labels and
@@ -629,7 +658,11 @@ retain the orbit target, zoom and projection mode and explicitly redraw the
 current scene, including after view or project restoration.
 Tabs support arrow keys and Home/End and retain
 their selection across drawer, view and project switches. Only the active panel
-is exposed. Display uses the shared compact visibility rows, colour swatches and
+is exposed. Display ends with a Reference plane eye control and a 14 px grid icon,
+using the same row spacing without a separate divider and defaulting to visible.
+The fixed XY plane stays below the PCB. This per-project presentation setting retains
+the camera, native bytes, undo and model resources through tab/view/sidebar
+switches. Display uses the shared compact visibility rows, colour swatches and
 eye controls for CAD solids, components, board body, copper, solder mask and
 silkscreen. Copper jointly controls tracks, pads, vias and filled zones on all
 copper layers. Each category controls both board sides
@@ -665,6 +698,19 @@ drafts and busy commits disable filter changes so input remains retryable.
 Visibility and selection eligibility remain independent; filtering retains the
 same depth and transparent-cover occlusion rules.
 
+Schematic, Layout and Model use two bordered regions separated by 12 px. The left
+region owns its editing toolbar, drawing and status row; the right region owns
+its retained Properties/Visualization/Selection panels. The shared mode row
+orders project actions as Rule, List, Git and Toggle right sidebar; Close project
+belongs to the application header. Hiding or resizing the right dock
+expands or shrinks the left drawing and footer together while retaining camera
+scale and drafts. Grid remains the final status control after recovery text and
+preview errors, 4 px inside the drawing footer right edge. It has no chevron or
+resting border/fill and uses the regular interface font. Schematic, Layout and
+Model omit floating zoom controls and percentage readouts. Wheel zoom, canvas-menu
+zoom/Fit and each view's keyboard Fit bindings remain available without changing
+native data.
+
 ### Retained scenes and requests
 
 Model retains each project's scene/camera/projection/visibility across
@@ -674,12 +720,19 @@ poses retain geometry. Solid pose/name changes retain meshes; changed shape,
 holes or appearance replace only affected resources. Commit/preview groups own
 separate resources. Replacement/close aborts obsolete work and disposes WebGL
 resources. Missing models show notices without blocking the board or offering a
-retry action. Notices expand in the lower-right corner above zoom controls, within
-a height-bounded scrollable list. The lower-left scale bar shares Layout's
-`canvasScaleLength` selection and styling. Its camera-target-plane units per pixel
-follow zoom, projection and resize through an isolated readout, outside scene
-geometry, picking and image export. Failed 3D preview initialization retains its
-retry action.
+retry action. The notice summary sits in the lower-right drawing corner, 12 px
+inside the right edge and 14 px above the status row. Notices expand above it within
+a height-bounded scrollable list that stays inside narrow drawing bounds. The lower-left 3D ruler shows native
+X/Y/Z axes with rounded strokes and one circular labelled endpoint per axis,
+following camera orientation and scaling around a fixed overlay origin.
+The overlay sits 4 px above the drawing bottom. Its 112 × 116 px area uses
+preferred engineering lengths to retain 28–42 px arms before camera projection
+at all camera scales, matching Model measurement tick intervals. Axis strokes
+are 1.25 px with 5.5 px radius endpoint markers. Its
+number uses the same font size, family and weight as the Layout scale. Its millimetre label stays centered below the axes, 18 px above the drawing bottom.
+Camera-target-plane units per pixel follow zoom, projection and resize through
+an isolated readout, outside scene geometry, picking and image
+export. Failed 3D preview initialization retains its retry action.
 
 Initialization yields between bounded geometry/mesh batches; hidden views pause
 checkpoints and cancellation disposes partial work. Shader preparation precedes
@@ -695,16 +748,31 @@ with solid modifications kept in their own group. Extrude sketch stays visible
 and enables only for a completed valid profile; [Design](../DESIGN.md#toolbar-and-retained-view)
 owns the category layout and contextual drawing controls.
 
-Model shows intersecting grid lines only during sketch drawing, aligned and
-anchored to the selected workplane. Plane setup shows a translucent surface with
-its boundary/axes; normal 3D, finished profiles and extrusion have no grid or Grid selector. The selector appears only during sketch drawing and uses
-independently saved 0.5/1/2/5/10 mm spacing, default 1 mm, and the shared Off
-setting. Lines coarsen by powers of two for the current camera scale; bounded
-display geometry is retained between unchanged updates. Grid visibility/density
-never changes CAD's 0.5 mm snap, native files or undo, and the grid is excluded
-from picking, Fit, physical clipping bounds and exports with the transient sketch.
-The finite plane boundary extends camera clipping only while setting up or drawing
-a sketch, keeping distant planes visible without adding the grid to physical bounds.
+Model shows a finite XY reference plane in ordinary 3D, finished
+profiles and extrusion, 0.05 mm below the PCB bottom face. Its frame uses native
+axes, including reflected native Y. Its position is independent of CAD/component
+bounds and board visibility. Minor/major
+lines, a boundary and thicker colored axis strips follow the current theme: X
+is red and Y green. There are no letter annotations on the plane. Axis strips use flat meshes
+for real WebGL width rather than platform-dependent line widths. The ground
+grid and axis intersection are centered on the PCB outline bounds. Plane size
+comes from those same bounds; its exact symmetric world-space edges remain
+fixed through zoom and grid-density changes, independent of component/CAD bounds. This display reference
+does not change native coordinates. Ground resources are retained outside the
+physical scene group, so they cannot affect picking, measurement or
+Fit. Finite ground display bounds extend camera clipping separately; PNG export
+includes the visible ground. Plane setup replaces the ground with its translucent
+workplane surface and boundary/axes. Sketch drawing uses intersecting lines
+aligned and anchored to that workplane, excluding its transient grid from exports.
+The footer Grid selector remains available throughout Model and uses independently
+saved 0.5/1/2/5/10 mm spacing, default 5 mm, and the shared Off setting. Off hides
+reference grid lines while retaining its surface/axes, or hides the sketch grid
+while drawing. Reference plane visibility independently hides its complete
+surface, grid and axes. Visibility enters annotation fingerprints
+and stays outside project recovery. Visibility changes reuse retained grid resources. Lines coarsen by powers of two for
+the current camera scale; bounded geometry is retained between unchanged updates.
+Grid visibility/density never changes CAD's 0.5 mm snap, native files or undo.
+The finite workplane boundary extends camera clipping only during setup/drawing.
 
 Model adds independent boxes/cylinders and rectangle, circle or polygon sketch
 extrusions. Sketch first previews an XY, XZ or YZ workplane with an editable
@@ -876,7 +944,7 @@ opacity, without an extra blue bounds box. Their drag rectangles share the
 directional selection paint. Numbered pins and comments remain available;
 explicit rectangle/freehand annotations retain their blue region marks.
 
-Schematic, Layout and Model expose Export image through the canvas context menu, alongside view-specific camera and selection commands. The bottom-right controls retain zoom; Schematic and Layout also retain Fit, while Model exposes Fit through its context menu and Space. Right dragging never opens the menu; stale/deactivated menus cannot execute.
+Schematic, Layout and Model expose Export image through the canvas context menu, alongside view-specific zoom, Fit and selection commands. Wheel zoom and keyboard Fit remain available without floating camera controls. Right dragging never opens the menu; stale/deactivated menus cannot execute.
 
 Native PNG export preserves live selection/camera/destination and omits controls,
 selection paint, annotations and gestures. Longest side is capped at 4096 px:
@@ -908,13 +976,15 @@ comparisons.
 
 | Check                                                                                                                                                                                                                      | Scope                                                                                                                                                                                                        |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`                                                                                                        | Synchronization, geometry, routing/fill transactions                                                                                                                                                         |
+| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`, `tests/pcb-dynamic-fill.test.ts`                                                                      | Synchronization, geometry, routing and dynamic fill transactions                                                                                                                                             |
 | `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                                                               |
 | `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Fixed deletion footers for selected objects/groups, icon-only fill, rejection and IME guards                                                                                                                 |
 | `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                     |
 | `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                   | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                 |
 | `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared delete button/footer across all three views; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                        |
 | `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                        |
+| `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                         | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                            |
+| `node --import tsx scripts/check-pcb-fill-worker-bundle.mjs` after `npm run build`                                                                                                                                         | Emitted production Worker bootstrap and chunks calculate changed copper and SVG paths in an isolated Node worker; no Electron, host service or native solver                                                 |
 | `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                                                                          |
 | `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                                                         |
 | `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                                                                                                                      |
@@ -923,6 +993,8 @@ comparisons.
 | `tests/model-cad-selection.test.ts`, `tests/model-cad-faces.test.ts`, `tests/model-cad-operand-ghosts.test.ts`                                                                                                             | Typed selection, analytic face hits/paint and selectable operand resource ownership                                                                                                                          |
 | `node scripts/check-layout-ui.mjs`, `node scripts/check-layout-routing-ui.mjs`, `node scripts/check-layout-track-drag-ui.mjs`                                                                                              | Isolated Layout editing/preview integration                                                                                                                                                                  |
 | `node scripts/check-model-cad-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                                                                                                                                        | Isolated CAD focus/drafts and retained scenes                                                                                                                                                                |
+| `node scripts/check-object-retention-ui.mjs --status-layout`                                                                                                                                                               | Three drawing/inspector regions, drawing-only footers, aligned actions, mode header, sidebar resize/visibility, retained cameras and Grid keyboard/IME focus                                                 |
+| `node scripts/check-model-cad-ui.mjs --ground`, `tests/model-ground-scene.test.ts`                                                                                                                                         | Fixed XY reference frame, independent visibility/Grid Off, retained resources/camera, keyboard/IME, zoom-stable centered extents and bounded compact ruler scaling without native edits                      |
 | `node scripts/check-model-cad-ui.mjs --sketch-plane`, `tests/model-cad-sketch-scene.test.ts`                                                                                                                               | Live workplane coordinates/surfaces, distant-plane clipping/start alignment, draft/IME guards, camera restoration and preview resource disposal                                                              |
 | `node scripts/check-model-cad-ui.mjs --color`, `tests/model-cad-mesh.test.ts`, `tests/model-cad-scad.test.ts`                                                                                                              | Solid color drafts/preview, material reset, undo, native persistence, appearance rendering and OpenSCAD color                                                                                                |
 | `node scripts/check-model-cad-ui.mjs --sketch-boolean`, `tests/model-cad-sketch.test.ts`                                                                                                                                   | Planar contour Difference before extrusion, shared human/Agent command, exact native round trips, one undo transaction, IME and lifecycle barriers; native cut/volume evidence is in the opt-in kernel suite |

@@ -299,16 +299,17 @@ try {
       );
     });
   assert.equal(await visibleResistor(), false, 'The EMC resistor starts outside the panned view.');
-  await button('Parts list').click();
-  const partsList = page.getByRole('dialog', { name: 'Parts list', exact: true });
+  await button('List').click();
+  const partsList = page.getByRole('dialog', { name: 'List', exact: true });
   const partsSearch = partsList.getByRole('textbox', { name: 'Search parts', exact: true });
   assert.equal(await partsList.locator('.parts-panel-row').count(), 88);
   assert.equal(await partsSearch.evaluate((node) => document.activeElement === node), true);
   const partsWidth = partsList.getByRole('button', {
-    name: 'Resize parts list width',
+    name: 'Resize list left',
     exact: true,
   });
-  for (let i = 0; i < 9; i++) await partsWidth.press('ArrowRight');
+  for (let i = 0; i < 40 && (await partsList.boundingBox()).width > 340; i++)
+    await partsWidth.press('ArrowRight');
   assert.ok(Math.abs((await partsList.boundingBox()).width - 340) < 1);
   const partsHeader = partsList.locator('.parts-panel-navigation');
   const headerBeforeScroll = await partsHeader.boundingBox();
@@ -379,7 +380,7 @@ try {
   assert.deepEqual(await native(), original, 'Locating EMC content never edits native files.');
   await clean();
   await button('Schematic').click();
-  await button('Parts list').click();
+  await button('List').click();
   assert.equal(await partsSearch.inputValue(), '', 'Reopening starts with all current components.');
   await partsSearch.fill('R1');
   await partsList.getByRole('button', { name: 'Edit R1', exact: true }).click();
@@ -423,7 +424,7 @@ try {
     { key: 'ArrowDown', x: 165.1, y: 77.47 },
   ]) {
     await button('Schematic').click();
-    await button('Parts list').click();
+    await button('List').click();
     await partsSearch.fill('R1');
     await partsList.getByRole('button', { name: 'Locate R1', exact: true }).click();
     await page.waitForFunction(
@@ -894,7 +895,7 @@ try {
           (node) => node.textContent === 'Retry 3D preview',
         ),
         disabled: Object.fromEntries(
-          ['Zoom in', 'Place box', 'Create sketch'].map((name) => [
+          ['Place box', 'Create sketch'].map((name) => [
             name,
             preview?.querySelector(`button[aria-label="${name}"]`)?.disabled ?? null,
           ]),
@@ -919,8 +920,8 @@ try {
     const preview = [...document.querySelectorAll('[aria-label="3D board preview"]')].find(
       (node) => node.getClientRects().length,
     );
-    const zoom = preview?.querySelector('button[aria-label="Zoom in"]');
-    return zoom && !zoom.disabled;
+    const canvas = preview?.querySelector('.pcb-model-canvas canvas');
+    return canvas?.width > 0 && !preview?.querySelector('.pcb-model-status');
   });
   assert.equal(await button('Drill through hole').count(), 0);
   // The following standoff commit clears only this undone Source edit's redo;

@@ -13,6 +13,7 @@ const bundle = await build({
       function App(){const [values,setValues]=useState({time:'0.000438592396388',temperature:'25',voltage:'12',power:'0.025',conductivity:'400'});const [length,setLength]=useState(25.4),[exact,setExact]=useState(25.41234567);
       window.exactLength=exact;window.exactCommits??=0;
       window.quantityValues=values;window.quantityLength=length;window.quantityCommits??=0;window.quantityChanges??=0;
+      window.setQuantityPower=value=>setValues(previous=>({...previous,power:value}));
       return <main><h2>Engineering values</h2>{[['time','Delay','s'],['voltage','Voltage','V'],['power','Power','W'],['temperature','Ambient','°C'],['conductivity','Conductivity','W/m·K']].map(([key,label,unit])=><label className="demo-field" key={key}><span>{label}</span><QuantityInput aria-label={label} unit={unit} value={values[key]} autoScale={key==='time'||key==='power'} onValueChange={value=>{window.quantityChanges++;setValues(previous=>({...previous,[key]:value}));}}/></label>)}
       <NumberField label="Length (mm)" value={length} onCommit={value=>{window.quantityCommits++;setLength(value);return true;}}/>
       <NumberField label="Exact length (mm)" value={exact} onCommit={value=>{window.exactCommits++;setExact(value);return true;}}/>
@@ -84,6 +85,65 @@ try {
     await page.getByRole('combobox', { name: label + ' unit', exact: true }).click();
     await page.getByRole('option', { name: unit, exact: true }).click();
   }
+  const power = page.getByRole('textbox', { name: 'Power', exact: true });
+  const powerUnit = page.getByRole('combobox', { name: 'Power unit', exact: true });
+  async function receivePower(value) {
+    await page.evaluate(async (value) => {
+      window.setQuantityPower(value);
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }, value);
+  }
+  for (const [value, display, unit] of [
+    ['0', '0', 'W'],
+    ['0.003456', '3.456', 'mW'],
+    ['0.0000023', '2.3', 'µW'],
+    ['2500', '2.5', 'kW'],
+    ['0.003456', '3.456', 'mW'],
+  ]) {
+    await receivePower(value);
+    assert.equal(await power.inputValue(), display);
+    assert.equal(await powerUnit.getAttribute('aria-description'), unit);
+  }
+  assert.equal(await page.evaluate(() => window.quantityChanges), 0);
+  await power.fill('0.0023');
+  assert.equal(await power.inputValue(), '0.0023');
+  assert.equal(await powerUnit.getAttribute('aria-description'), 'mW', 'Typing holds the unit.');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  assert.equal(await power.inputValue(), '2.3');
+  assert.equal(await powerUnit.getAttribute('aria-description'), 'µW');
+  assert.equal(await page.evaluate(() => window.quantityValues.power), '0.0000023');
+  await receivePower('0.003456');
+  await power.fill('3.456789123');
+  assert.equal(await power.inputValue(), '3.456789123');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  assert.equal(await power.inputValue(), '3.4568');
+  assert.equal(await page.evaluate(() => window.quantityValues.power), '0.003456789123');
+  await power.focus();
+  assert.equal(await power.inputValue(), '3.456789123', 'Refocusing restores the complete draft.');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await receivePower('0.0000023');
+  await power.fill('-');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  assert.equal(await power.inputValue(), '-');
+  assert.equal(await powerUnit.getAttribute('aria-description'), 'µW');
+  await power.fill('');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  assert.equal(await power.inputValue(), '');
+  assert.equal(await powerUnit.getAttribute('aria-description'), 'µW');
+  await receivePower('0.003456');
+  await choose('Power', 'W');
+  const changes = await page.evaluate(() => window.quantityChanges);
+  await receivePower('0.0000023');
+  assert.equal(
+    await powerUnit.getAttribute('aria-description'),
+    'W',
+    'Manual units stay retained.',
+  );
+  assert.equal(await power.inputValue(), '0.0000023');
+  assert.equal(await page.evaluate(() => window.quantityChanges), changes);
+  await page.evaluate(() => {
+    window.quantityChanges = 0;
+  });
   await choose('Delay', 'ms');
   assert.equal(await delay.inputValue(), '0.43859');
   assert.equal(await page.evaluate(() => window.quantityChanges), 0);

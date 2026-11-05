@@ -10,7 +10,7 @@
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-floating);
 }
 .panel[hidden] {
@@ -200,7 +200,7 @@
   min-height: 30px;
   padding: 4px 8px;
   border: 1px solid var(--field-border);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--field-surface);
   color: var(--text-strong);
   font: inherit;
@@ -334,11 +334,16 @@
   grid-template-rows: auto;
   align-items: center;
 }
+.docked .fields.dimensions:has(> label:nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 4px;
+}
 .fields:empty {
   display: none;
 }
 .docked :is(.fields.dimensions, .transforms .axes) :global(.quantity-input) > input {
   padding: 4px 2px;
+  font-size: var(--font-small);
 }
 
 .transforms {
@@ -348,7 +353,7 @@
 .transforms > summary {
   min-height: 30px;
   padding: 5px 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   color: var(--text-strong);
   font-size: var(--font-small);
   line-height: 1.4;
@@ -363,16 +368,34 @@
   border: 0;
 }
 .docked .transforms .axes {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--properties-row-gap) var(--properties-column-gap);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--properties-row-gap) 4px;
 }
 .docked .transforms .axes > label {
   gap: var(--properties-label-gap);
 }
-@container (min-width: 21em) {
-  .docked .fields.dimensions:has(> label:nth-child(3)),
-  .docked .transforms .axes {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@container (max-width: 17em) {
+  .docked
+    :is(.fields.dimensions:has(> label:nth-child(3)), .transforms .axes)
+    :global(.quantity-input) {
+    flex-direction: column;
+  }
+  .docked
+    :is(.fields.dimensions:has(> label:nth-child(3)), .transforms .axes)
+    :global(.quantity-input.quantity-input)
+    > input {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .docked
+    :is(.fields.dimensions:has(> label:nth-child(3)), .transforms .axes)
+    :global(.quantity-input.quantity-input)
+    > :global(.select-trigger) {
+    flex: 0 0 auto;
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+    border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
   }
 }
 .placement .transforms {
@@ -446,7 +469,7 @@
 .placement .footer > button:not(:global(.property-apply-action)) {
   min-height: var(--control-height);
   padding: 4px 8px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
 }
 .placement .footer > .close {
   display: grid;
@@ -519,7 +542,7 @@
 }
 .colorControls input::-webkit-color-swatch {
   border: 0;
-  border-radius: 3px;
+  border-radius: calc(var(--radius) - 4px);
 }
 .colorValue {
   flex: 1;

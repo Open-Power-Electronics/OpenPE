@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import { projectFromNativeFiles } from '../server/project-format.mjs';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 import { fileMenuAction } from './file-menu-test-helpers.mjs';
@@ -75,7 +76,7 @@ try {
   const originalProjectId = await projects()
     .locator('[data-project-id]')
     .getAttribute('data-project-id');
-  await button('New file').click();
+  await fileMenuAction(page, 'New file');
   await tabs()
     .getByRole('tab', { name: /^Schematic 2,/ })
     .waitFor();
@@ -100,7 +101,7 @@ try {
   await selectSourceFile(page, secondaryFilename);
   const canonical = await readSource(page);
   await button('Schematic').click();
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
   const secondView = await page.getByTestId('schematic-canvas').getAttribute('viewBox');
   await tabs()
     .getByRole('tab', { name: /^Input stage/ })
@@ -124,7 +125,7 @@ try {
   await tabs().getByRole('button', { name: 'Close Output stage', exact: true }).click();
   assert.equal(await tabs().getByRole('tab').count(), 2);
   assert.equal(await readSource(page), '{unfinished');
-  await button('New file').click();
+  await fileMenuAction(page, 'New file');
   assert.equal(await tabs().getByRole('tab').count(), 2);
   assert.equal(await readSource(page), '{unfinished');
   await tabs()
@@ -176,7 +177,7 @@ try {
     0,
     'Switching files does not dirty the project.',
   );
-  await button('New file').click();
+  await fileMenuAction(page, 'New file');
   assert.equal(await tabs().getByRole('tab').count(), 3);
   await button('Undo').click();
   assert.equal(await tabs().getByRole('tab').count(), 2);

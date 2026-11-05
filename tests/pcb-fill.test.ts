@@ -16,6 +16,7 @@ import {
   filledCopperPolygons,
   fillCopperZones,
   fillCopperZone,
+  refreshPCBFill,
   copperFillContour,
   subtractPolygons,
   offsetPolygons,
@@ -25,6 +26,7 @@ import { child, children, parseSExpr, val, writeSExpr } from '../lib/sexpr';
 import { convertExamplePCB } from '../scripts/example-pcb';
 import { referenceExamples, createReferenceExample } from '../lib/reference-examples';
 import { runPCBDesignRules } from '../lib/pcb-drc';
+import { isOwnedPCB, ownProjectData } from '../lib/immutable-project';
 
 const rectangle = (x: number, y: number, w: number, h: number) => [
   { x, y },
@@ -400,6 +402,287 @@ test('saved fills are authoritative and survive display; edits invalidate them a
     contains(filledCopperPolygons(source).get(source.zones[0].id)!, 20, 15),
     'Native saved copper is preserved even if its source boundary changed later.',
   );
+});
+
+test('dynamic fills follow a moved foreign track, including pre-cleared candidates, and retain fine rules', () => {
+  const board = fixture();
+  board.zones[0].clearance = 0.1;
+  const filled = fillCopperZones(board, 0.1);
+  const before = structuredClone(filled);
+  const moved = movePCBSelection(
+    filled,
+    { kind: 'track', id: filled.tracks[0].id },
+    { x: 0, y: 3 },
+  );
+  const candidate = structuredClone(moved);
+  for (const next of [moved, invalidatePCBFill(filled, moved)]) {
+    const refreshed = refreshPCBFill(filled, next);
+    const copper = filledCopperPolygons(refreshed).get(filled.zones[0].id)!;
+    assert.ok(contains(copper, 15, 10), 'The old route channel becomes copper again.');
+    assert.ok(!contains(copper, 15, 13), 'The new route has its own clearance channel.');
+    assert.equal(refreshed.zones[0].clearance, 0.1);
+    assert.deepEqual(
+      refreshed.zones[0].filledPolygons,
+      fillCopperZones(next, 0.0001).zones[0].filledPolygons,
+    );
+  }
+  assert.deepEqual(filled, before);
+  assert.deepEqual(moved, candidate);
+});
+
+test('LM2596 dynamic fill resolves native inherited clearance without flooding foreign copper', () => {
+  const board = createReferenceExample('reference-lm2596-to220-5-buck').pcb!;
+  const before = structuredClone(board);
+  assert.ok(board.zones.some((zone) => zone.clearance === 0 && zone.filledPolygons !== undefined));
+  const track = board.tracks.find(
+    (item) =>
+      item.start.x === 32 && item.start.y === 45.5 && item.end.x === 38.3 && item.end.y === 45.5,
+  )!;
+  assert.notEqual(track.netId, board.zones[0].netId);
+  const moved = movePCBSelection(board, { kind: 'track', id: track.id }, { x: 0, y: 0.25 });
+  const refreshed = refreshPCBFill(board, moved);
+  const active = refreshed.zones.filter((zone) => zone.filledPolygons !== undefined);
+  assert.equal(active.length, 2);
+  assert.ok(active.every((zone) => zone.clearance === 0.25 && zone.filledPolygons!.length > 0));
+  const report = runPCBDesignRules(refreshed);
+  assert.equal(report.truncated, false);
+  assert.deepEqual(
+    report.issues.filter((issue) => ['pcb.short', 'pcb.clearance'].includes(issue.ruleId)),
+    [],
+  );
+  assert.deepEqual(board, before, 'Imported native contours and inherited rules remain unchanged.');
+});
+
+test('dynamic fills use edited zone bounds, board edges and copper-pour keepouts', () => {
+  const filled = fillCopperZones(fixture());
+  const keepout: BoardZone = {
+    ...filled.zones[0],
+    id: uid(),
+    netId: null,
+    outline: rectangle(18, 4, 4, 3),
+    fillEnabled: false,
+    keepout: { tracks: false, vias: false, pads: false, copperpour: true, footprints: false },
+  };
+  delete keepout.filledPolygons;
+  const next = {
+    ...filled,
+    zones: [{ ...filled.zones[0], outline: rectangle(2, 2, 24, 15) }, keepout],
+  };
+  const copper = filledCopperPolygons(refreshPCBFill(filled, next)).get(filled.zones[0].id)!;
+  assert.ok(!contains(copper, 1, 8), 'The previous zone extent disappears.');
+  assert.ok(contains(copper, 15, 15));
+  assert.ok(!contains(copper, 20, 5), 'Disabled rule areas still remove copper.');
+  const resized = {
+    ...filled,
+    graphics: filled.graphics.map((graphic) => ({
+      ...graphic,
+      start: { ...graphic.start, x: graphic.start.x / 2 },
+      end: { ...graphic.end, x: graphic.end.x / 2 },
+    })),
+  };
+  const resizedCopper = filledCopperPolygons(refreshPCBFill(filled, resized)).get(
+    filled.zones[0].id,
+  )!;
+  assert.ok(!contains(resizedCopper, 20, 15), 'Board outline changes clip the accepted fill.');
+  assert.ok(contains(resizedCopper, 12, 15));
+});
+
+test('dynamic updates preserve unfinished zones while respecting their priority and refresh completed empty fills', () => {
+  const filled = fillCopperZones(fixture());
+  const unfinished: BoardZone = {
+    ...filled.zones[0],
+    id: uid(),
+    netId: null,
+    priority: 10,
+    outline: rectangle(18, 4, 4, 3),
+  };
+  delete unfinished.filledPolygons;
+  const next = { ...filled, zones: [...filled.zones, unfinished] };
+  const refreshed = refreshPCBFill(filled, next);
+  assert.equal(refreshed.zones[1].filledPolygons, undefined);
+  assert.equal(refreshed.zones[1], unfinished);
+  const copper = filledCopperPolygons(refreshed).get(filled.zones[0].id)!;
+  assert.ok(
+    !contains(copper, 20, 5),
+    'Higher-priority unfinished zones remain calculation inputs.',
+  );
+  const outside = {
+    ...fixture(),
+    zones: [{ ...filled.zones[0], outline: rectangle(40, 40, 2, 2) }],
+  };
+  const empty = fillCopperZones(outside);
+  assert.deepEqual(empty.zones[0].filledPolygons, []);
+  const inside = { ...empty, zones: [{ ...empty.zones[0], outline: rectangle(2, 2, 4, 4) }] };
+  assert.ok(refreshPCBFill(empty, inside).zones[0].filledPolygons!.length);
+});
+
+test('dynamic fills refresh embedded zones in their owner coordinates and retain newly filled zones', () => {
+  const board = fixture();
+  board.footprints = [
+    {
+      id: uid(),
+      symbolId: null,
+      libraryId: 'Test:DynamicZones',
+      x: 10,
+      y: 10,
+      rotation: 90,
+      side: 'back',
+      pads: [],
+      graphics: [],
+      zones: [{ ...board.zones[0], id: uid(), layer: 'B.Cu', outline: rectangle(-3, -3, 6, 6) }],
+    },
+  ];
+  const filled = fillCopperZones(board);
+  const moved = {
+    ...filled,
+    footprints: filled.footprints.map((footprint) => ({ ...footprint, x: footprint.x + 2 })),
+  };
+  const refreshed = refreshPCBFill(filled, invalidatePCBFill(filled, moved));
+  assert.deepEqual(
+    refreshed.footprints[0].zones,
+    fillCopperZones(moved, 0.0001).footprints[0].zones,
+  );
+  assert.ok(refreshed.zones[0].filledPolygons!.length);
+  const disabled: BoardZone = {
+    ...filled.zones[0],
+    id: uid(),
+    layer: 'B.Cu',
+    fillEnabled: false,
+    outline: rectangle(18, 3, 5, 5),
+  };
+  delete disabled.filledPolygons;
+  const beforeFill = { ...filled, zones: [...filled.zones, disabled] };
+  const selectedFill = fillCopperZone(beforeFill, disabled.id);
+  assert.equal(selectedFill.zones[0].filledPolygons, undefined);
+  const allActive = refreshPCBFill(beforeFill, selectedFill);
+  assert.ok(allActive.zones.every((zone) => zone.filledPolygons!.length));
+  assert.ok(allActive.footprints[0].zones![0].filledPolygons!.length);
+});
+
+test('dynamic fill no-ops preserve native contours and disabled outlines; failed updates retain every input', () => {
+  const filled = fillCopperZones(fixture());
+  const contourOnly = { ...filled, zones: [{ ...filled.zones[0], filledPolygons: [] }] };
+  for (const next of [
+    filled,
+    { ...filled, thickness: 2 },
+    { ...filled, tracks: filled.tracks.map((track) => ({ ...track, locked: true as const })) },
+    contourOnly,
+    { ...contourOnly, id: uid() },
+    invalidatePCBFill(filled, { ...filled, zones: [] }),
+  ])
+    assert.equal(refreshPCBFill(filled, next), next);
+  const disabled = {
+    ...filled,
+    zones: filled.zones.map((zone) => ({ ...zone, fillEnabled: false })),
+  };
+  assert.equal(refreshPCBFill(filled, disabled).zones[0].filledPolygons, undefined);
+  const unassigned = {
+    ...filled,
+    zones: filled.zones.map((zone) => ({ ...zone, netId: null })),
+  };
+  const before = structuredClone({ filled, unassigned });
+  assert.throws(() => refreshPCBFill(filled, unassigned), /Assign a net/);
+  assert.deepEqual({ filled, unassigned }, before);
+  const fillFree = invalidatePCBFill(filled, {
+    ...filled,
+    tracks: filled.tracks.map((track) => ({ ...track, end: { x: 24, y: 10 } })),
+  });
+  assert.equal(
+    refreshPCBFill(fillFree, { ...fillFree, thickness: 2 }).zones[0].filledPolygons,
+    undefined,
+  );
+});
+
+test('owned dynamic fill previews reuse exact refreshed results while mutable inputs remain retryable', () => {
+  const basis = ownProjectData(fillCopperZones(fixture()));
+  const next = {
+    ...basis,
+    tracks: basis.tracks.map((track) => ({
+      ...track,
+      start: { ...track.start, y: 12 },
+      end: { ...track.end, y: 12 },
+    })),
+  };
+  const refreshed = refreshPCBFill(basis, next);
+  assert.equal(isOwnedPCB(refreshed), true);
+  assert.equal(refreshPCBFill(basis, refreshed), refreshed);
+  const mutable = structuredClone(refreshed);
+  mutable.tracks[0].start.y = mutable.tracks[0].end.y = 14;
+  const retried = refreshPCBFill(basis, mutable);
+  assert.notDeepEqual(retried.zones[0].filledPolygons, refreshed.zones[0].filledPolygons);
+  const copper = filledCopperPolygons(retried).get(basis.zones[0].id)!;
+  assert.ok(!contains(copper, 15, 14));
+  assert.ok(contains(copper, 15, 12));
+});
+
+test('owned track-only updates retain opposite-layer native pours after candidate invalidation', () => {
+  const board = fixture();
+  board.zones.push({ ...board.zones[0], id: uid(), layer: 'B.Cu' });
+  const filled = fillCopperZones(board);
+  // An imported layer may retain inherited rules and different saved contours.
+  filled.zones[1].clearance = 0;
+  const basis = ownProjectData(filled);
+  const moved = movePCBSelection(basis, { kind: 'track', id: basis.tracks[0].id }, { x: 0, y: 3 });
+  const candidate = ownProjectData(invalidatePCBFill(basis, moved), basis);
+  assert.equal(candidate.zones[1].filledPolygons, undefined);
+  const refreshed = refreshPCBFill(basis, candidate);
+  assert.equal(refreshed.zones[1], basis.zones[1]);
+  assert.equal(refreshed.zones[1].filledPolygons, basis.zones[1].filledPolygons);
+  assert.equal(refreshed.zones[1].clearance, 0);
+  assert.notDeepEqual(refreshed.zones[0].filledPolygons, basis.zones[0].filledPolygons);
+  assert.equal(refreshPCBFill(basis, refreshed), refreshed);
+  const explicit = ownProjectData(
+    {
+      ...candidate,
+      zones: [candidate.zones[0], { ...basis.zones[1], filledPolygons: [] }],
+    },
+    basis,
+  );
+  const explicitResult = refreshPCBFill(basis, explicit);
+  assert.equal(explicitResult.zones[1].filledPolygons, explicit.zones[1].filledPolygons);
+  assert.deepEqual(explicitResult.zones[1].filledPolygons, []);
+  const mutable = structuredClone(candidate);
+  const fullyCalculated = refreshPCBFill(basis, mutable);
+  assert.equal(
+    fullyCalculated.zones[1].clearance,
+    0.25,
+    'Mutable candidates take the complete fill path.',
+  );
+});
+
+test('owned layer transfers refresh both layers and retain complete-board fill bounds', () => {
+  const board = fixture();
+  board.zones.push({ ...board.zones[0], id: uid(), layer: 'B.Cu' });
+  const basis = ownProjectData(fillCopperZones(board));
+  const candidate = ownProjectData(
+    {
+      ...basis,
+      tracks: basis.tracks.map((track) => ({ ...track, layer: 'B.Cu' as const })),
+    },
+    basis,
+  );
+  const refreshed = refreshPCBFill(basis, candidate);
+  for (const layer of ['F.Cu', 'B.Cu']) {
+    const zone = refreshed.zones.find((item) => item.layer === layer)!;
+    const copper = filledCopperPolygons(refreshed).get(zone.id)!;
+    assert.equal(contains(copper, 15, 10), layer === 'F.Cu');
+  }
+  const excessive = ownProjectData({
+    ...basis,
+    zones: Array.from({ length: 65 }, (_, index) => ({
+      ...basis.zones[0],
+      id: uid(),
+      layer: (index ? 'B.Cu' : 'F.Cu') as 'F.Cu' | 'B.Cu',
+    })),
+  });
+  const moved = ownProjectData(
+    {
+      ...excessive,
+      tracks: excessive.tracks.map((track) => ({ ...track, width: track.width + 0.1 })),
+    },
+    excessive,
+  );
+  assert.throws(() => refreshPCBFill(excessive, moved), /geometry limit/);
 });
 
 test('adding or editing disabled zone outlines retains existing copper on either layer, including overlapping regions', () => {

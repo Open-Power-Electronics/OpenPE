@@ -1949,24 +1949,6 @@ export default function Canvas({
           },
         ]}
       />
-      <div className="zoom-controls">
-        <button aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1.2)}>
-          <Minus size={15} />
-        </button>
-        <span>{Math.round(((185 * zoomScale) / view.width) * 100)}%</span>
-        <button aria-label="Zoom in" title="Zoom in" onClick={() => zoom(0.8)}>
-          <Plus size={15} />
-        </button>
-        <i />
-        <button
-          aria-description="Recenter / fit to canvas"
-          aria-label="Fit to canvas"
-          title="Fit to canvas"
-          onClick={fit}
-        >
-          <Maximize size={15} />
-        </button>
-      </div>
     </div>
   );
 }

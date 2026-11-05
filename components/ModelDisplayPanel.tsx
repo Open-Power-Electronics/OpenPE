@@ -4,6 +4,7 @@ import {
   Box,
   Eye,
   EyeOff,
+  Grid3X3,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -11,7 +12,7 @@ import {
   Square,
   SquareDashed,
 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { ModelCadSelectionFilters } from '@/lib/model-cad-selection';
 import {
   componentModelEstimateColor,
@@ -51,6 +52,8 @@ export default function ModelDisplayPanel({
   onCadVisibleChange,
   onModelsVisibleChange,
   onBoardDisplayChange,
+  referencePlaneVisible,
+  onReferencePlaneVisibleChange,
   selectionDisabled = false,
   filters,
   onFiltersChange,
@@ -69,6 +72,8 @@ export default function ModelDisplayPanel({
   onCadVisibleChange: (visible: boolean) => void;
   onModelsVisibleChange: (visible: boolean) => void;
   onBoardDisplayChange: (display: ModelBoardDisplay) => void;
+  referencePlaneVisible: boolean;
+  onReferencePlaneVisibleChange: (visible: boolean) => void;
   selectionDisabled?: boolean;
   filters: ModelCadSelectionFilters;
   onFiltersChange: (filters: ModelCadSelectionFilters) => void;
@@ -82,7 +87,15 @@ export default function ModelDisplayPanel({
   const allItemsChecked = filterCategories.every(([key]) => filters[key]);
   const someItemsChecked = filterCategories.some(([key]) => filters[key]);
   const cadSwatches = cadColors.map((color) => `#${color.toString(16).padStart(6, '0')}`);
-  const visibilityRows = [
+  const visibilityRows: {
+    label: string;
+    ariaLabel: string;
+    checked: boolean;
+    onChange: (visible: boolean) => void;
+    color?: string;
+    icon?: ReactNode;
+    disabled?: boolean;
+  }[] = [
     {
       label: 'CAD solids',
       ariaLabel: 'Show CAD solids',
@@ -107,6 +120,14 @@ export default function ModelDisplayPanel({
       onChange: (visible: boolean) => onBoardDisplayChange({ ...boardDisplay, [key]: visible }),
       color: `#${color.toString(16).padStart(6, '0')}`,
     })),
+    {
+      label: 'Reference plane',
+      ariaLabel: 'Show reference plane',
+      checked: referencePlaneVisible,
+      onChange: onReferencePlaneVisibleChange,
+      icon: <Grid3X3 size={14} className="editor-visibility-icon" aria-hidden />,
+      disabled: !ready,
+    },
   ];
 
   return (
@@ -222,30 +243,41 @@ export default function ModelDisplayPanel({
             )}
             {tab === 'Display' && (
               <div className="model-visibility-list">
-                {visibilityRows.map(({ label, ariaLabel, checked, color, onChange }) => (
-                  <label className="editor-visibility-row" key={ariaLabel}>
-                    <span className="editor-visibility-name">
+                {visibilityRows.map(
+                  ({ label, ariaLabel, checked, color, icon, disabled, onChange }) => (
+                    <label className="editor-visibility-row" key={ariaLabel}>
+                      <span className="editor-visibility-name">
+                        {icon ?? (
+                          <span
+                            className="editor-visibility-swatch"
+                            style={{ background: color }}
+                            aria-hidden
+                          />
+                        )}
+                        <span>{label}</span>
+                      </span>
                       <span
-                        className="editor-visibility-swatch"
-                        style={{ background: color }}
-                        aria-hidden
-                      />
-                      <span>{label}</span>
-                    </span>
-                    <span
-                      className="editor-visibility-toggle"
-                      aria-description={`${checked ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
-                    >
-                      {checked ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
-                      <input
-                        type="checkbox"
-                        aria-label={ariaLabel}
-                        checked={checked}
-                        onChange={(event) => onChange(event.target.checked)}
-                      />
-                    </span>
-                  </label>
-                ))}
+                        className="editor-visibility-toggle"
+                        aria-description={`${checked ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
+                      >
+                        {checked ? <Eye size={15} aria-hidden /> : <EyeOff size={15} aria-hidden />}
+                        <input
+                          type="checkbox"
+                          aria-label={ariaLabel}
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={(event) => onChange(event.target.checked)}
+                          onKeyDown={(event) => {
+                            if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                              event.preventDefault();
+                              event.stopPropagation();
+                            }
+                          }}
+                        />
+                      </span>
+                    </label>
+                  ),
+                )}
               </div>
             )}
           </div>

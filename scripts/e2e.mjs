@@ -1,3 +1,4 @@
+import { runCanvasAction, openCanvasContextMenu } from './canvas-context-menu-test-helpers.mjs';
 import {
   parseProject,
   serializeProject,
@@ -355,7 +356,7 @@ async function checkHome(page) {
         await page.locator('.project-navigation [aria-current="page"]').getAttribute('aria-label')
       ).includes(title),
     );
-    await page.getByRole('button', { name: 'Fit to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit to canvas');
     await page.waitForFunction(() => {
       const canvas = document.querySelector('[data-testid="schematic-canvas"]');
       if (!canvas) return false;
@@ -410,7 +411,7 @@ async function checkHome(page) {
   await canvas.waitFor();
   {
     const first = JSON.parse(await source());
-    await page.getByRole('button', { name: 'Fit to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit to canvas');
     const clickBody = async (ref, modifiers = false) => {
       const p = first.schematic.components.find((p) => p.reference === ref);
       const at = await canvas.evaluate((svg, p) => {
@@ -424,7 +425,7 @@ async function checkHome(page) {
     };
     // A real pointer click on D1 must not hit C1's transparent target.
     for (const zoom of [false, true]) {
-      if (zoom) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      if (zoom) await runCanvasAction(page, 'Zoom in');
       await clickBody('D1');
       assert.doesNotMatch(await page.getByTestId('part-C1').getAttribute('class'), /is-selected/);
       assert.equal(
@@ -1130,8 +1131,8 @@ async function checkSchematicPanels(page) {
   await button('Source').click();
   const original = await readSnapshotFromNative(page);
   await button('Schematic').click();
-  await openSchematicPanel(page, 'Parts list');
-  const list = page.getByRole('dialog', { name: 'Parts list', exact: true });
+  await openSchematicPanel(page, 'List');
+  const list = page.getByRole('dialog', { name: 'List', exact: true });
   assert.equal(
     await page.getByTestId('schematic-canvas').count(),
     1,
@@ -1159,7 +1160,7 @@ async function checkSchematicPanels(page) {
       .inputValue()) !== 'Cancelled edit',
     true,
   );
-  for (const name of ['Parts list', 'Visible layers']) {
+  for (const name of ['List', 'Visible layers']) {
     await openSchematicPanel(page, name);
     assert.equal(await properties.count(), 0, `${name} closes the properties inspector.`);
     await page.keyboard.press('Escape');
@@ -1193,7 +1194,7 @@ async function checkSimulationProperties(page) {
   await button('Apply').click();
   const fixture = await readSnapshotFromNative(page);
   await button('Schematic').click();
-  await openSchematicPanel(page, 'Parts list');
+  await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   const properties = page.getByRole('complementary', { name: 'Object properties', exact: true });
   const simulation = properties.locator('.property-simulation summary');
@@ -1249,18 +1250,18 @@ async function checkPartsListEditing(page) {
   const footprint = 'TestLibrary:' + 'LongFootprintName'.repeat(12);
   await button('Schematic').click();
   if (another) {
-    await openSchematicPanel(page, 'Parts list');
+    await openSchematicPanel(page, 'List');
     await button('Locate ' + another.reference).click();
   }
-  await openSchematicPanel(page, 'Parts list');
+  await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   let properties = page.getByRole('complementary', { name: 'Object properties', exact: true });
   await properties
     .getByRole('textbox', { name: 'Footprint', exact: true })
     .fill('Cancelled footprint');
   await properties.getByRole('textbox', { name: 'Footprint', exact: true }).press('Escape');
-  assert.equal(await page.getByRole('dialog', { name: 'Parts list', exact: true }).count(), 0);
-  await openSchematicPanel(page, 'Parts list');
+  assert.equal(await page.getByRole('dialog', { name: 'List', exact: true }).count(), 0);
+  await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   properties = page.getByRole('complementary', { name: 'Object properties', exact: true });
   assert.notEqual(
@@ -1294,9 +1295,9 @@ async function checkPartsListEditing(page) {
   assert.equal(await properties.getByLabel('Component rotation', { exact: true }).count(), 1);
   assert.equal(await properties.getByRole('button', { name: /^(Apply|Cancel)$/ }).count(), 0);
   assert.equal(await properties.isVisible(), true);
-  await openSchematicPanel(page, 'Parts list');
+  await openSchematicPanel(page, 'List');
   assert.ok((await button('Edit ' + editedRef).innerText()).includes(footprint));
-  const list = page.getByRole('dialog', { name: 'Parts list', exact: true });
+  const list = page.getByRole('dialog', { name: 'List', exact: true });
   const content = list.locator('.dialog-content');
   assert.equal(
     await content.evaluate((el) => el.scrollWidth <= el.clientWidth),
@@ -1346,7 +1347,7 @@ async function checkPartsListEditing(page) {
   await openSchematicPanel(page, 'Visible layers');
   await page.getByRole('checkbox', { name: 'References', exact: true }).uncheck();
   await button('Close dialog').click();
-  await openSchematicPanel(page, 'Parts list');
+  await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   assert.equal(
     await properties.getByLabel('Component reference', { exact: true }).inputValue(),
@@ -1468,7 +1469,7 @@ async function checkAnnotationSelection(page) {
   await page.mouse.up({ button: 'right' });
   assert.notEqual(await canvas.getAttribute('viewBox'), panBefore);
   assert.equal(await source(), before, 'Panning over annotations does not edit the document.');
-  await button('Fit to canvas').click();
+  await runCanvasAction(page, 'Fit to canvas');
   await page.getByTestId('label-SW').locator('text').click();
   assert.equal(await page.getByLabel('Net name', { exact: true }).inputValue(), 'SW');
   await capture('test-results/selection-net-label.png');
@@ -1552,7 +1553,6 @@ async function checkSelectionEdits(page) {
 
 async function checkCanvasNavigation(page) {
   const canvas = page.getByTestId('schematic-canvas');
-  const fit = page.getByRole('button', { name: 'Fit to canvas', exact: true });
   const view = () =>
     canvas.evaluate((el) => {
       const { x, y, width, height } = el.viewBox.baseVal;
@@ -1647,7 +1647,7 @@ async function checkCanvasNavigation(page) {
   const fittedView = async () => {
     await page.evaluate(() => document.fonts.ready);
     const before = await textGeometry();
-    await fit.click();
+    await runCanvasAction(page, 'Fit to canvas');
     // Canvas schedules a fit after its 60 ms layout delay; observe the resulting viewport.
     await page.waitForTimeout(100);
     fittedGeometry = { before, after: await textGeometry() };
@@ -1709,7 +1709,8 @@ async function checkCanvasNavigation(page) {
   assert.equal(await chat.inputValue(), 'A ');
   assert.deepEqual(await view(), panned, 'Chat typing does not recenter');
   await chat.fill('');
-  await page.getByRole('button', { name: 'Zoom in', exact: true }).focus();
+  await openCanvasContextMenu(page);
+  await page.getByRole('menuitem', { name: 'Zoom in', exact: true }).focus();
   await page.keyboard.press('Space');
   assert.ok((await view()).width < panned.width, 'Space still activates focused buttons');
   await canvas.focus();

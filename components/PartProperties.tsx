@@ -590,11 +590,6 @@ function PartProperties({
             </button>
           </div>
         </div>
-        {catalog?.path === libraryPath && (
-          <span className="property-model-file" role="status">
-            {`${declarations.length} ${declarations.length === 1 ? 'model' : 'models'} · ${declarations.filter((model) => !modelOptionDisabled(model)).length} compatible`}
-          </span>
-        )}
         <div className="property-file-models">
           <span>Model</span>
           <Select
@@ -686,12 +681,11 @@ function PartProperties({
     );
   }
 
-  function renderFields(simulation: boolean, additional = false) {
+  function renderFields(simulation: boolean) {
     const displayedRows = rows.map((row, i) => ({ row, i }));
     return displayedRows.map(
       ({ row, i }) =>
         row.simulation === simulation &&
-        (simulation || (row.name !== 'Footprint') === additional) &&
         visibleRow(row) && (
           <Fragment key={i}>
             <div
@@ -874,11 +868,8 @@ function PartProperties({
             />
           </label>
         </div>
-        <div className="property-fields">{renderFields(false)}</div>
-        {geometryFields && <div ref={geometryContainer}>{geometryFields}</div>}
-        <details className="layout-property-details property-additional-fields">
-          <summary>Fields</summary>
-          <div className="property-fields">{renderFields(false, true)}</div>
+        <div className="property-fields">
+          {renderFields(false)}
           <button
             type="button"
             className="property-add-field"
@@ -890,7 +881,8 @@ function PartProperties({
             <Plus size={15} />
             Add field
           </button>
-        </details>
+        </div>
+        {geometryFields && <div ref={geometryContainer}>{geometryFields}</div>}
         {spiceAvailable && (
           <details className="property-simulation">
             <summary className="property-simulation-heading">

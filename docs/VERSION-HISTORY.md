@@ -8,7 +8,7 @@ in-memory undo. [FORMAT.md](FORMAT.md) defines snapshot content;
 
 ## Creating, comparing and restoring versions
 
-Click Git immediately to the right of Parts list in the editor toolbar to open the history window while retaining the current editor mode:
+Click Git immediately to the right of List in the editor toolbar to open the history window while retaining the current editor mode:
 
 1. Establish a native destination with Save; Home examples already have
    one and an initial version.
@@ -19,17 +19,25 @@ Click Git immediately to the right of Parts list in the editor toolbar to open t
 3. Select Worktree on the left to compare the latest version with the current
    validated project. Selecting a version compares the next older version
    with it, or itself for the initial version. Compare from can choose
-   any loaded version or Worktree. The right side immediately shows synchronized
-   read-only schematic pan/zoom/Fit with green additions, red removals and yellow
-   changes; missing sheets are explicit. Initial Fit measures visible drawings
+   any loaded version or Worktree. The four comparison controls use the editor's
+   Schematic, Layout, Model and Source icons and retain the same revision pair.
+   Schematic opens by default with synchronized read-only pan/zoom/Fit, green
+   additions, red removals and yellow changes; missing sheets are explicit. Initial Fit measures visible drawings
    after the window opens, including unchanged versions. Reopening the same
    comparison retains its camera; sheets changed while hidden fit when revealed.
    Stable IDs identify schematic additions/removals, values and order changes.
    The upper-left Changes list compares complete current native exports by filename
    and bytes/encoding, with A/M/D status; private snapshot fields are not file rows.
-   Worktree and the linear local version timeline appear below. Selecting a file opens read-only
-   Before/After native text with line numbers and change-region highlighting.
-   Comparison never analyses connectivity.
+   Worktree and the linear local version timeline appear below. Layout shows
+   Before/After PCB artwork with synchronized pan/zoom/Fit, using saved packages,
+   tracks, vias and copper fills without refilling or analysing connectivity.
+   Model shows each snapshot's board, assigned component models and Model CAD
+   in equal Before/After panes with independent orbit/zoom/Fit. Model previews
+   expose no design tools or editable properties; resource failures remain visible
+   and retryable. Missing PCBs are explicit in both modes. Selecting a changed
+   file switches to Source, showing read-only Before/After native text with line
+   numbers and change-region highlighting. Graphical previews load on first use;
+   mode switches and closing/reopening retain their cameras.
 4. Restore validates the complete snapshot and commits one undo edit, retaining
    destination, save baseline and conversations. Save explicitly to write it.
 
@@ -148,15 +156,16 @@ Shutdown terminates children. Missing Git/history never invalidates native files
 
 ## Verification
 
-| Check                                                                                                                                    | Scope                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `tests/project-history.test.ts`                                                                                                          | Real Git in temporary repositories: bounds, reachability, persistence, comparison and grants        |
-| `tests/example-projects.test.ts`                                                                                                         | Original native bytes/filenames, directory grants, private seeds and bounded opening/retry          |
-| `tests/project-core.test.ts`, `tests/core-integration.test.ts`                                                                           | Shared undo/revision/Source/close gates                                                             |
-| `node scripts/check-project-history-ui.mjs`, `node scripts/check-example-refresh-ui.mjs`                                                 | Mocked isolated history/recovery UI                                                                 |
-| `node scripts/check-schematic-comparison-ui.mjs`                                                                                         | Native LM5001/TPS61046 comparisons: visible initial Fit, themes, retained camera and hidden changes |
-| `node scripts/benchmark-startup.mjs [samples]`                                                                                           | 1–5 separate Node samples (default 3), prepared assets and real Git; no first-paint measurement     |
-| `node scripts/check-desktop-startup.mjs`, `node scripts/benchmark-desktop-startup.mjs [samples] [label]`, `node scripts/e2e-history.mjs` | Opt-in isolated Electron startup/history                                                            |
+| Check                                                                                                                                    | Scope                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `tests/project-history.test.ts`                                                                                                          | Real Git in temporary repositories: bounds, reachability, persistence, comparison and grants           |
+| `tests/example-projects.test.ts`                                                                                                         | Original native bytes/filenames, directory grants, private seeds and bounded opening/retry             |
+| `tests/project-core.test.ts`, `tests/core-integration.test.ts`                                                                           | Shared undo/revision/Source/close gates                                                                |
+| `node scripts/check-project-history-ui.mjs`, `node scripts/check-example-refresh-ui.mjs`                                                 | Mocked isolated history/recovery UI                                                                    |
+| `node scripts/check-schematic-comparison-ui.mjs`                                                                                         | Native LM5001/TPS61046 comparisons: visible initial Fit, themes, retained camera and hidden changes    |
+| `node scripts/check-history-previews-ui.mjs`                                                                                             | Four comparison modes, native PCB/CAD snapshots, read-only navigation, retained state and missing PCBs |
+| `node scripts/benchmark-startup.mjs [samples]`                                                                                           | 1–5 separate Node samples (default 3), prepared assets and real Git; no first-paint measurement        |
+| `node scripts/check-desktop-startup.mjs`, `node scripts/benchmark-desktop-startup.mjs [samples] [label]`, `node scripts/e2e-history.mjs` | Opt-in isolated Electron startup/history                                                               |
 
 Documentation changes need static checks only. Desktop runs require explicit
 authorization; [AGENTS.md](../AGENTS.md) defines verification boundaries.

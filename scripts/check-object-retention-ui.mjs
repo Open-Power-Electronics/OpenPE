@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -11,10 +12,12 @@ import {
   closeDisplayDrawer,
   assertEditorViewControls,
   assertToolbarSidebarPlacement,
+  assertProjectCloseReveal,
 } from './visualization-test-helpers.mjs';
 import {
   readSource,
   readNativeProject,
+  readNativeFiles,
   fillNativeProject,
   selectSourceFile,
 } from './source-editor-test-helpers.mjs';
@@ -25,6 +28,7 @@ const { createProject, serializeProject, projectNativeFiles, projectFromNativeFi
   await tsImport('../lib/project.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const { defaultAppearance } = await tsImport('../lib/appearance.ts', import.meta.url);
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const projects = ['First board', 'Second board'].map((name, index) => {
   const project = createProject();
   project.name = name;
@@ -80,7 +84,9 @@ const projects = ['First board', 'Second board'].map((name, index) => {
   return native;
 });
 const ids = projects.map(() => crypto.randomUUID());
+const statusLayoutComplete = Symbol('status-layout-complete');
 let recovery = {
+  ...defaultAgentPreferences,
   version: 2,
   documents: projects.map((project, i) => ({
     id: ids[i],
@@ -92,10 +98,6 @@ let recovery = {
     activeSessionId: `session-${i}`,
   })),
   activeDocumentId: ids[0],
-  provider: 'codex',
-  effort: 'low',
-  approvalMode: 'review',
-  models: {},
 };
 const bundle = await build({
   stdin: {
@@ -127,6 +129,10 @@ const bundle = await build({
             contents.includes('renderer.dispose();'),
             'Observe the live renderer disposal path.',
           );
+          assert.ok(
+            contents.includes('          updateScale.current();'),
+            'Observe the current Model render callback.',
+          );
           return {
             contents: contents
               .replace(
@@ -134,8 +140,8 @@ const bundle = await build({
                 'window.created++; host.current.appendChild(renderer.domElement);',
               )
               .replace(
-                'renderer?.render(scene, camera);',
-                `renderer?.render(scene, camera);
+                '          updateScale.current();',
+                `
               const span = (depth) => {
                 const center = orbit.target.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), depth);
                 const above = center.clone().add(new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion));
@@ -143,7 +149,8 @@ const bundle = await build({
               };
               window.cameras[board.id] = {position:camera.position.toArray(), target:orbit.target.toArray(),
                 up:camera.up.toArray(), zoom:camera.zoom, type:camera.type, span:span(0), depths:[span(-5), span(5)]};
-              window.scenes[board.id] = scene;`,
+              window.scenes[board.id] = scene;
+          updateScale.current();`,
               )
               .replace('renderer.dispose();', 'window.disposed++; renderer.dispose();'),
             loader: 'tsx',
@@ -180,6 +187,8 @@ try {
     window.scenes = {};
     window.openpe = {
       titleBarOverlay: false,
+      projectDirectory: async () => ({ entries: [], truncated: false }),
+      listExamples: async () => ({ entries: [], warnings: [] }),
       writeWorkspaceRecovery: async (content) => {
         await fetch('http://localhost/api/state', {
           method: content === null ? 'DELETE' : 'POST',
@@ -242,7 +251,7 @@ try {
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const button = (name) => page.getByRole('button', { name, exact: true });
   const checkbox = (name) => page.getByRole('checkbox', { name, exact: true });
-  const partsList = page.getByRole('dialog', { name: 'Parts list', exact: true });
+  const partsList = page.getByRole('dialog', { name: 'List', exact: true });
   const selectionFilters = page
     .getByRole('group', { name: 'Selection', exact: true })
     .locator('.editor-display-drawer-body');
@@ -293,22 +302,42 @@ try {
   };
   const inspectSource = () => page.evaluate(() => window.inspectSource());
   const assertToolbarOrder = async (mode) => {
-    const toolbar = page.locator(
-      mode === 'Source' ? '.source-editor-toolbar:visible' : '.editor-toolbar:visible',
-    );
-    assert.equal(await toolbar.count(), 1, `${mode} has one visible toolbar.`);
+    const toolbar = page.locator('.editor-mode-actions:visible');
+    assert.equal(await toolbar.count(), 1, `${mode} has one visible document-action toolbar.`);
     const labels = await toolbar
       .locator('button:visible')
       .evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label')));
-    const expected = mode === 'Source' ? ['Parts list'] : ['Parts list', 'Toggle right sidebar'];
+    const expected =
+      mode === 'Source' ? ['Rule', 'List', 'Git'] : ['Rule', 'List', 'Git', 'Toggle right sidebar'];
     assert.deepEqual(
-      labels.slice(-expected.length),
+      labels,
       expected,
-      `${mode} retains document actions followed by its dock visibility control.`,
+      `${mode} keeps Rule, List and Git before the rightmost dock visibility control.`,
     );
+    const rules = toolbar.getByRole('button', { name: 'Rule', exact: true });
+    assert.equal(
+      await page.getByRole('button', { name: 'Rule', exact: true }).count(),
+      1,
+      `${mode} has one shared rule-check trigger.`,
+    );
+    assert.equal(await rules.locator('.lucide-clipboard-check').count(), 1);
+    assert.equal((await rules.textContent()).trim(), '', 'Rule stays icon-only in every view.');
+    assert.equal(await rules.getAttribute('aria-haspopup'), 'dialog');
+    for (const name of ['Rule', 'Electrical rules (ERC)', 'Design rules (DRC)'])
+      assert.equal(
+        await page
+          .locator('.editor-toolbar:visible')
+          .locator(`button[aria-label="${name}"]`)
+          .count(),
+        0,
+        `${mode} has no separate drawing-toolbar rule control.`,
+      );
     if (mode === 'Source') assert.equal(labels.includes('Toggle right sidebar'), false);
-    else await assertToolbarSidebarPlacement(toolbar);
-    assert.equal(labels.filter((label) => label === 'Parts list').length, 1);
+    else
+      await assertToolbarSidebarPlacement(
+        page.locator('.editor-drawing-region:visible .editor-toolbar'),
+      );
+    assert.equal(labels.filter((label) => label === 'List').length, 1);
     assert.equal(labels.filter((label) => label === 'Selection').length, 0);
     assert.equal(labels.filter((label) => label === 'Visualization').length, 0);
     for (const name of ['Selection', 'Visualization']) {
@@ -383,6 +412,390 @@ try {
       };
     });
   await page.getByTestId('schematic-canvas').waitFor();
+  if (process.argv.includes('--status-layout')) {
+    await button('Source').click();
+    const originalNative = await readNativeFiles(page);
+    await button('Schematic').click();
+    const assertStatusModeControls = async (view) => {
+      const mode = page.getByRole('combobox', { name: 'Editor mode', exact: true });
+      const grid = page.getByRole('combobox', { name: 'Grid density', exact: true });
+      const [modeBox, gridBox] = await Promise.all([mode.boundingBox(), grid.boundingBox()]);
+      assert.ok(
+        Math.abs(modeBox.height - gridBox.height) < 1,
+        `${view} mode and Grid share control height.`,
+      );
+      assert.equal(await mode.locator('svg').count(), 0);
+      const spacing = await grid.evaluate((element) => {
+        const label = element.querySelector(':scope > span[aria-hidden="true"]');
+        const value = element.querySelector('.select-value');
+        return {
+          gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
+          align: getComputedStyle(value).textAlign,
+        };
+      });
+      assert.ok(Math.abs(spacing.gap - 4) < 1, `${view} Grid label and value use a compact gap.`);
+      assert.equal(spacing.align, 'left');
+      for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
+        await mode.dispatchEvent('keydown', { key: 'Enter', ...event });
+        assert.equal(await mode.getAttribute('aria-expanded'), 'false');
+      }
+      await mode.click();
+      const menu = page.getByRole('listbox', { name: 'Editor mode', exact: true });
+      assert.equal(await menu.getByRole('option').count(), 2);
+      for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
+        await mode.dispatchEvent('keydown', { key: 'Escape', ...event });
+        assert.equal(await mode.getAttribute('aria-expanded'), 'true');
+      }
+      await mode.press('Escape');
+      assert.equal(await mode.getAttribute('aria-expanded'), 'false');
+      assert.equal(await mode.evaluate((element) => element === document.activeElement), true);
+      await mode.press('Enter');
+      await mode.press('ArrowDown');
+      await mode.press('Enter');
+      await page.waitForFunction(
+        () =>
+          [...document.querySelectorAll('[aria-label="Editor mode"]')]
+            .find((element) => element.getClientRects().length)
+            ?.getAttribute('aria-description') === 'Annotation mode',
+      );
+      assert.equal(await button('Annotation mode').getAttribute('aria-pressed'), 'true');
+      await mode.click();
+      await menu.getByRole('option', { name: 'Interaction mode', exact: true }).click();
+      await page.waitForFunction(
+        () =>
+          [...document.querySelectorAll('[aria-label="Editor mode"]')]
+            .find((element) => element.getClientRects().length)
+            ?.getAttribute('aria-description') === 'Interaction mode',
+      );
+      assert.equal(await button('Interaction mode').getAttribute('aria-pressed'), 'true');
+      await mode.press('Space');
+      await menu.waitFor();
+      await mode.press('Escape');
+    };
+    const assertSidebarDragResize = async (view) => {
+      const sidebar = page.locator('.editor-sidebar-sections:visible');
+      const handle = sidebar.locator('..').locator(':scope > .inspector-resize-gutter:visible');
+      const original = await sidebar.boundingBox();
+      const hit = await handle.boundingBox();
+      assert.equal(hit.width, 12, `${view} exposes the full gap as its resize target.`);
+      assert.ok(Math.abs(hit.height - original.height) <= 1);
+      const grip = await handle.evaluate((element) => {
+        const style = getComputedStyle(element, '::after');
+        return { opacity: Number(style.opacity), width: style.width, height: style.height };
+      });
+      assert.ok(grip.opacity > 0 && grip.opacity < 0.5);
+      assert.deepEqual([grip.width, grip.height], ['2px', '32px']);
+      for (const fraction of [0.15, 0.5, 0.85]) {
+        const edge = await handle.boundingBox();
+        const start = { x: edge.x + edge.width / 2, y: edge.y + edge.height * fraction };
+        await page.mouse.move(start.x, start.y);
+        await page.mouse.down();
+        await page.mouse.move(start.x - 48, start.y, { steps: 6 });
+        assert.ok(
+          Math.abs((await sidebar.boundingBox()).width - original.width - 48) <= 1,
+          `${view} resizes from the full-height left edge.`,
+        );
+        await page.keyboard.press('Escape');
+        await page.mouse.up();
+        assert.ok(
+          Math.abs((await sidebar.boundingBox()).width - original.width) <= 1,
+          `${view} Escape restores the width before dragging.`,
+        );
+      }
+      await handle.focus();
+      for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
+        await handle.dispatchEvent('keydown', { key: 'ArrowLeft', ...event });
+        assert.equal(
+          (await sidebar.boundingBox()).width,
+          original.width,
+          `${view} IME navigation leaves the sidebar width unchanged.`,
+        );
+      }
+      const edge = await handle.boundingBox();
+      const start = { x: edge.x + edge.width / 2, y: edge.y + edge.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x - 64, start.y, { steps: 6 });
+      await page.mouse.up();
+      const resized = (await sidebar.boundingBox()).width;
+      assert.ok(Math.abs(resized - original.width - 64) <= 1);
+      await button('Toggle right sidebar').click();
+      await button('Toggle right sidebar').click();
+      assert.equal(
+        (await sidebar.boundingBox()).width,
+        resized,
+        `${view} keeps its dragged width while hidden.`,
+      );
+      await handle.dblclick();
+      assert.equal(
+        (await sidebar.boundingBox()).width,
+        original.width,
+        `${view} double-click resets the sidebar width.`,
+      );
+    };
+    const assertDrawingRegions = async (view) => {
+      await assertEditorViewControls(page, view);
+      const region = page.locator('.editor-drawing-region:visible');
+      assert.equal(await region.locator('.zoom-controls').count(), 0);
+      const dock = page.locator('.editor-sidebar-sections:visible');
+      const geometry = await region.evaluate((element) => {
+        const bounds = element.getBoundingClientRect(),
+          status = element.querySelector('.status-bar').getBoundingClientRect(),
+          grid = element.querySelector('.grid-density').getBoundingClientRect();
+        return {
+          left: bounds.left,
+          right: bounds.right,
+          bottom: bounds.bottom,
+          statusRight: status.right,
+          gridRight: grid.right,
+        };
+      });
+      const sidebar = await dock.boundingBox();
+      assert.ok(Math.abs(sidebar.x - geometry.right - 12) <= 1);
+      assert.ok(Math.abs(sidebar.y + sidebar.height - geometry.bottom) <= 1);
+      assert.ok(geometry.gridRight <= geometry.statusRight && geometry.statusRight < sidebar.x);
+      await assertToolbarSidebarPlacement(region.locator('.editor-toolbar'));
+      const rule = page
+        .locator('.editor-mode-actions:visible')
+        .getByRole('button', { name: 'Rule', exact: true });
+      assert.equal(await rule.count(), 1);
+      assert.equal(await rule.locator('.lucide-clipboard-check').count(), 1);
+      assert.equal(await region.locator('.editor-tool-group-end').count(), 0);
+      for (const name of ['Rule', 'Electrical rules (ERC)', 'Design rules (DRC)'])
+        assert.equal(await region.locator(`button[aria-label="${name}"]`).count(), 0);
+      assert.equal(await page.getByRole('button', { name: 'List', exact: true }).count(), 1);
+      await page.screenshot({
+        path: 'test-results/editor-regions-' + view.toLowerCase() + '.png',
+        animations: 'disabled',
+      });
+    };
+    for (const view of ['Schematic', 'Layout']) {
+      await button(view).click();
+      await page.getByTestId(view === 'Layout' ? 'layout-canvas' : 'schematic-canvas').waitFor();
+      await assertDrawingRegions(view);
+      await assertStatusModeControls(view);
+      await assertSidebarDragResize(view);
+      {
+        const canvasId = view === 'Layout' ? 'layout-canvas' : 'schematic-canvas';
+        const canvas = page.getByTestId(canvasId);
+        await button('Source').click();
+        const native = await readNativeFiles(page);
+        await button(view).click();
+        const width = () =>
+          canvas.evaluate((svg) => {
+            const matrix = svg.getScreenCTM();
+            return svg.closest('.canvas-wrap').clientWidth / Math.hypot(matrix.a, matrix.b);
+          });
+        await runCanvasAction(page, view === 'Layout' ? 'Fit board to canvas' : 'Fit to canvas');
+        await page.evaluate(
+          () =>
+            new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+        );
+        const fittedWidth = await width();
+        const before = await width();
+        await runCanvasAction(page, 'Zoom in');
+        await waitForAsync(
+          page,
+          ([id, value]) => {
+            const svg = document.querySelector(`[data-testid="${id}"]`);
+            const matrix = svg.getScreenCTM();
+            return svg.closest('.canvas-wrap').clientWidth / Math.hypot(matrix.a, matrix.b) < value;
+          },
+          [canvasId, before],
+        );
+        await canvas.hover();
+        const zoomed = await width();
+        await page.mouse.wheel(0, 100);
+        await page.waitForFunction(
+          ([id, value]) => {
+            const svg = document.querySelector(`[data-testid="${id}"]`);
+            const matrix = svg.getScreenCTM();
+            return svg.closest('.canvas-wrap').clientWidth / Math.hypot(matrix.a, matrix.b) > value;
+          },
+          [canvasId, zoomed],
+        );
+        await canvas.focus();
+        await canvas.press('Space');
+        await page.waitForFunction(
+          ([id, value]) => {
+            const svg = document.querySelector(`[data-testid="${id}"]`);
+            const matrix = svg.getScreenCTM();
+            const current =
+              svg.closest('.canvas-wrap').clientWidth / Math.hypot(matrix.a, matrix.b);
+            return Math.abs(current - value) < value * 1e-6;
+          },
+          [canvasId, fittedWidth],
+        );
+        await button('Source').click();
+        assert.deepEqual(
+          await readNativeFiles(page),
+          native,
+          'Camera navigation leaves native design unchanged.',
+        );
+        await button(view).click();
+      }
+      await button('Toggle right sidebar').click();
+      assert.equal(await page.locator('.editor-sidebar-sections:visible').count(), 0);
+      await assertToolbarSidebarPlacement(
+        page.locator('.editor-drawing-region:visible .editor-toolbar'),
+      );
+      await button('Toggle right sidebar').click();
+      await assertDrawingRegions(view);
+    }
+    await button('Model').click();
+    await firstRequest;
+    releaseFirstModel();
+    await ready();
+    const dismiss = button('Dismiss notification');
+    if (await dismiss.isVisible()) await dismiss.click();
+    const footer = page.locator('footer[aria-label="Editor status"]:visible');
+    const dock = page.getByRole('complementary', { name: 'Model sidebar', exact: true });
+    const canvas = page.locator('.pcb-model-canvas:visible');
+    const grid = page.getByRole('combobox', { name: 'Grid density', exact: true });
+    assert.equal(
+      await grid.getAttribute('aria-description'),
+      '5 mm',
+      'Model starts with the default 5 mm grid.',
+    );
+    const assertStatusLayout = async () => {
+      const [status, properties, drawing] = await Promise.all([
+        footer.boundingBox(),
+        dock.boundingBox(),
+        canvas.boundingBox(),
+      ]);
+      assert.equal(await page.locator('.status-bar:visible').count(), 1);
+      assert.ok(Math.abs(status.x - drawing.x) <= 1);
+      assert.ok(
+        Math.abs(status.x + status.width - drawing.x - drawing.width) <= 1,
+        'Status spans only the drawing region, leaving the inspector independent.',
+      );
+      assert.ok(Math.abs(status.y - drawing.y - drawing.height) <= 1);
+      assert.ok(
+        Math.abs(properties.x - drawing.x - drawing.width - 14) <= 1,
+        'Two bordered regions retain a 12 px gap.',
+      );
+      assert.ok(
+        Math.abs(properties.y + properties.height - status.y - status.height - 1) <= 1,
+        'Properties extends to the drawing region bottom, beside its status row.',
+      );
+      const control = await grid.boundingBox();
+      assert.equal(await page.locator('.pcb-model-preview .zoom-controls').count(), 0);
+      assert.ok(
+        Math.abs(control.x + control.width - status.x - status.width + 4) <= 1,
+        'Grid remains at the right edge of the drawing footer.',
+      );
+    };
+    await footer.waitFor();
+    await assertDrawingRegions('Model');
+    await assertStatusModeControls('Model');
+    await assertSidebarDragResize('Model');
+    await assertStatusLayout();
+    const beforeFitRender = Number(await canvas.getAttribute('data-render-count'));
+    await runCanvasAction(page, 'Fit 3D board');
+    await waitForAsync(
+      page,
+      (before) => Number(document.querySelector('.pcb-model-canvas')?.dataset.renderCount) > before,
+      beforeFitRender,
+    );
+    const fittedCamera = await camera();
+    await runCanvasAction(page, 'Zoom in');
+    await waitForAsync(page, ([id, span]) => window.cameras[id].span > span, [
+      projects[0].pcb.id,
+      fittedCamera.span,
+    ]);
+    const zoomedCamera = await camera();
+    await canvas.hover();
+    await page.mouse.wheel(0, 100);
+    await waitForAsync(page, ([id, span]) => window.cameras[id].span < span, [
+      projects[0].pcb.id,
+      zoomedCamera.span,
+    ]);
+    await canvas.focus();
+    await canvas.press('Space');
+    await waitForAsync(page, ([id, span]) => Math.abs(window.cameras[id].span - span) < 1e-8, [
+      projects[0].pcb.id,
+      fittedCamera.span,
+    ]);
+    sameCamera(await camera(), fittedCamera);
+    const before = await camera();
+    const resize = button('Resize model properties width');
+    await resize.press('ArrowLeft');
+    await assertStatusLayout();
+    await resize.press('Home');
+    await button('Toggle right sidebar').click();
+    await dock.waitFor({ state: 'hidden' });
+    assert.ok(
+      Math.abs((await footer.boundingBox()).width - (await canvas.boundingBox()).width) <= 1,
+    );
+    await button('Toggle right sidebar').click();
+    await assertStatusLayout();
+    sameCamera(await camera(), before);
+    await grid.focus();
+    for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
+      await grid.dispatchEvent('keydown', { key: 'Enter', ...event });
+      assert.equal(
+        await grid.getAttribute('aria-expanded'),
+        'false',
+        'IME Enter cannot open Grid.',
+      );
+    }
+    await grid.press('Enter');
+    await page.getByRole('listbox', { name: 'Grid density', exact: true }).waitFor();
+    await grid.press('Escape');
+    assert.equal(await grid.evaluate((node) => node === document.activeElement), true);
+    const numberStyle = (element) => {
+      const style = getComputedStyle(element);
+      return [style.fontSize, style.fontFamily, style.fontWeight, style.fontStyle];
+    };
+    const modelNumberStyle = await page.locator('.model-scale-value:visible').evaluate(numberStyle);
+    await button('Layout').click();
+    await page.getByTestId('layout-canvas').waitFor();
+    assert.deepEqual(
+      await page.getByLabel('Layout scale', { exact: true }).evaluate(numberStyle),
+      modelNumberStyle,
+      'Model and Layout scale numbers share typography.',
+    );
+    await button('Schematic').click();
+    await page.getByTestId('schematic-canvas').waitFor();
+    await button('Model').click();
+    await ready();
+    await assertStatusLayout();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (theme) => document.documentElement.setAttribute('data-theme', theme),
+        theme,
+      );
+      await page.screenshot({
+        path: `test-results/model-status-layout-${theme}.png`,
+        animations: 'disabled',
+      });
+      await assertProjectCloseReveal(page, theme);
+    }
+    await page.setViewportSize({ width: 1120, height: 740 });
+    await assertStatusLayout();
+    await page.screenshot({
+      path: 'test-results/model-status-layout-compact.png',
+      animations: 'disabled',
+    });
+    await page.setViewportSize({ width: 1000, height: 740 });
+    for (let step = 0; step < 16; step++) await resize.press('ArrowLeft');
+    await assertStatusLayout();
+    await page.screenshot({
+      path: 'test-results/model-status-layout-narrow.png',
+      animations: 'disabled',
+    });
+    assert.deepEqual(errors, []);
+    await button('Source').click();
+    assert.deepEqual(
+      await readNativeFiles(page),
+      originalNative,
+      'Status mode selection and Grid presentation preserve all native files.',
+    );
+    console.log(
+      'PASS: Model drawing-only footer beside independent Properties, control insets, Grid/IME/focus, resize, hidden sidebar and retained view switching.',
+    );
+    throw statusLayoutComplete;
+  }
   await openVisualization();
   const schematicVisibilityStyle = await visibilityStyle(visualization);
   await closeVisualization();
@@ -580,13 +993,13 @@ try {
   const initialCamera = await camera();
   assert.equal(initialCamera.type, 'OrthographicCamera');
   assert.ok(Math.abs(initialCamera.depths[0] - initialCamera.depths[1]) < 1e-8);
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
   await page.waitForFunction(
     ([id, span]) => window.cameras[id].span > span,
     [projects[0].pcb.id, initialCamera.span],
   );
   const orthographicZoomed = await camera();
-  const zoomLabel = await button('Actual size (100%)').textContent();
+  assert.equal(await page.locator('.pcb-model-preview .zoom-controls').count(), 0);
   await page.screenshot({ path: 'test-results/model-orthographic.png' });
   await openVisualization('Views');
   await projection.click();
@@ -603,7 +1016,7 @@ try {
   );
   assert.equal(await projection.getAttribute('aria-pressed'), 'false');
   await closeVisualization();
-  assert.equal(await button('Actual size (100%)').textContent(), zoomLabel);
+  assert.equal(await page.locator('.pcb-model-preview .zoom-controls').count(), 0);
   await page.screenshot({ path: 'test-results/model-perspective.png' });
   await openVisualization('Views');
   await projection.click();
@@ -614,13 +1027,13 @@ try {
   await waitProjection('PerspectiveCamera');
   await closeVisualization();
   const beforeZoom = await camera();
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
   await page.waitForFunction(
     ([id, span]) => window.cameras[id].span > span,
     [projects[0].pcb.id, beforeZoom.span],
   );
   assert.ok(Math.abs((await camera()).span / beforeZoom.span - 1.2) < 1e-8);
-  await button('Zoom out').click();
+  await runCanvasAction(page, 'Zoom out');
   await page.waitForFunction(
     ([id, span]) => Math.abs(window.cameras[id].span - span) < 1e-8,
     [projects[0].pcb.id, beforeZoom.span],
@@ -631,9 +1044,13 @@ try {
     ([id, span]) => window.cameras[id].span > span,
     [projects[0].pcb.id, beforeZoom.span],
   );
-  await button('Actual size (100%)').click();
+  await runCanvasAction(page, 'Actual size (100%)');
   await page.waitForFunction(
-    () => document.querySelector('.pcb-model-preview .zoom-value').textContent === '100%',
+    ([id, height]) => Math.abs((window.cameras[id].span * height) / 2 - 96 / 25.4) < 1e-8,
+    [
+      projects[0].pcb.id,
+      await page.locator('.pcb-model-canvas').evaluate((node) => node.clientHeight),
+    ],
   );
   const beforeTop = await camera();
   await openVisualization('Views');
@@ -679,7 +1096,7 @@ try {
   const captureViewPixels = async (stage, label) => {
     const path = `test-results/model-view-${stage}-${label.toLowerCase().replaceAll(' ', '-')}.png`;
     const bounds = await orbitCanvas.boundingBox();
-    // Sample the rendered scene without the recovery toast or floating zoom controls.
+    // Sample the rendered scene without the recovery toast.
     const clip = {
       x: bounds.x + bounds.width * 0.1,
       y: bounds.y + bounds.height * 0.1,
@@ -904,7 +1321,7 @@ try {
     );
   };
 
-  // Every mode keeps Parts list/Git windows; drawing modes keep display drawers.
+  // Every mode keeps List/Git windows; drawing modes keep display drawers.
   // Exercise their bounds at both sizes and surface themes.
   const screenshotSidebar = async (mode, width, theme) => {
     const dock = page.locator(
@@ -942,7 +1359,7 @@ try {
           await page.getByRole('textbox', { name: 'Project file source', exact: true }).waitFor();
         await assertEditorViewControls(page, mode);
         await assertToolbarOrder(mode);
-        await button('Parts list').click();
+        await button('List').click();
         await partsList.waitFor();
         const listBounds = await partsList.boundingBox();
         assert.ok(listBounds.x >= 24 && listBounds.y >= 24);
@@ -953,9 +1370,9 @@ try {
         await page.keyboard.press('Escape');
         await partsList.waitFor({ state: 'hidden' });
         assert.equal(
-          await button('Parts list').evaluate((element) => element === document.activeElement),
+          await button('List').evaluate((element) => element === document.activeElement),
           true,
-          `${mode} restores focus to the Parts list trigger.`,
+          `${mode} restores focus to the List trigger.`,
         );
         if (mode === 'Layout') {
           const sidebar = page.getByRole('complementary', { name: 'Layout sidebar', exact: true });
@@ -1165,12 +1582,12 @@ try {
   await page.locator('.project-navigation .dirty-dot').waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
 
-  // Opening Parts list shares Source's existing validated-transaction boundary.
+  // Opening List shares Source's existing validated-transaction boundary.
   // An invalid draft remains editable in Source instead of opening the list.
   await sourceEditor.press('ControlOrMeta+End');
   await page.keyboard.insertText(' invalid');
   const invalidSource = await inspectSource();
-  await button('Parts list').click();
+  await button('List').click();
   await page.locator('.source-editor-error').waitFor();
   assert.equal(await sourceEditor.isVisible(), true);
   assert.equal(await partsList.count(), 0);
@@ -1319,8 +1736,18 @@ try {
   await page.waitForFunction((before) => window.disposed > before, disposed);
   assert.deepEqual(errors, []);
   console.log(
-    'Selection and Visualization: four-mode Parts list/Git toolbar order, retained drawing-mode display drawers, current-mode filter categories, window/drawer bounds at 1120/1480 px in light/dark themes, Escape/focus restoration, Source without display drawers and retained editor/text/selection/undo/dirty invariants passed. Model: orthographic/perspective projection, preserved camera/scale, button/wheel zoom, retained scenes/camera/display/selection filters, paused hidden rendering, project/Home/Layout/Source round trips, shared model cache, deferred edits, undo, retry and renderer disposal passed.',
+    'Selection and Visualization: four-mode List/Git toolbar order, retained drawing-mode display drawers, current-mode filter categories, window/drawer bounds at 1120/1480 px in light/dark themes, Escape/focus restoration, Source without display drawers and retained editor/text/selection/undo/dirty invariants passed. Model: orthographic/perspective projection, preserved camera/scale, context-menu/wheel zoom without floating controls, retained scenes/camera/display/selection filters, paused hidden rendering, project/Home/Layout/Source round trips, shared model cache, deferred edits, undo, retry and renderer disposal passed.',
   );
+} catch (cause) {
+  if (cause !== statusLayoutComplete) {
+    if (process.argv.includes('--status-layout')) {
+      const failedPage = browser.contexts()[0]?.pages()[0];
+      await mkdir('test-results', { recursive: true });
+      await failedPage?.screenshot({ path: 'test-results/model-status-layout-failure.png' });
+      console.error((await failedPage?.locator('body').innerText())?.slice(-3000));
+    }
+    throw cause;
+  }
 } finally {
   await browser.close();
 }

@@ -133,7 +133,7 @@ try {
   let spiceRequests = 0;
   let holdSpice = false;
   const heldSpice = [];
-  const importedPower = 0.750000123456;
+  const importedPower = 0.00375000123456;
   const spiceSources = {
     heatSources: [{ footprintId: project.pcb.footprints[0].id, powerW: importedPower }],
     spiceSource: {
@@ -310,7 +310,14 @@ try {
   assert.equal(requests, 1, 'Default Run starts Thermal after importing verified power.');
   assert.equal(
     await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).inputValue(),
-    '0.75',
+    '3.75',
+  );
+  assert.equal(
+    await page
+      .getByRole('combobox', { name: 'U1 (W) unit', exact: true })
+      .getAttribute('aria-description'),
+    'mW',
+    'SPICE import updates the initially zero-W control to a readable power unit.',
   );
   assert.equal(await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).isDisabled(), true);
   assert.match(
@@ -318,6 +325,9 @@ try {
     /8 to 10 ms.*original sampling resolution/,
   );
   await page.screenshot({ path: 'test-results/thermal-spice-ui.png' });
+  await panel.locator('.simulation-components').screenshot({
+    path: 'test-results/thermal-component-power-units.png',
+  });
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await panel.getByRole('img', { name: /board temperature map/ }).waitFor();
   assert.equal(
@@ -390,6 +400,8 @@ try {
     originalSource,
     'SPICE heat import remains outside design data.',
   );
+  await page.getByRole('combobox', { name: 'U1 (W) unit', exact: true }).click();
+  await page.getByRole('option', { name: 'W', exact: true }).click();
   await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).fill('1');
   await page.getByRole('textbox', { name: 'U1 (W)', exact: true }).blur();
   await page.getByRole('textbox', { name: 'Ambient (°C)', exact: true }).fill('40');

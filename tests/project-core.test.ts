@@ -1054,7 +1054,7 @@ test('Layout selection commands preserve identities, assign fresh copies, clear 
   assert.deepEqual(linkedCore.getSnapshot().project!.pcb!.tracks, linked.project.pcb!.tracks);
 });
 
-test('Layout zone filling is a complete undo edit and copper edits invalidate saved fills in that same edit', () => {
+test('Layout zone filling and automatic copper refresh each commit one complete undo edit', () => {
   const { project, boardId, netId } = layoutFixture();
   const core = new ProjectCore(project);
   const result = core.execute('layout.zone', {
@@ -1082,7 +1082,7 @@ test('Layout zone filling is a complete undo edit and copper edits invalidate sa
     clearance: 0.25,
   });
   assert.equal(core.getSnapshot().undoDepth, 3);
-  assert.equal(core.getSnapshot().project!.pcb!.zones[0].filledPolygons, undefined);
+  assert.ok(core.getSnapshot().project!.pcb!.zones[0].filledPolygons!.length > 0);
   core.undo();
   assert.equal(core.getSnapshot().source, filled);
   const snapshot = core.query('layout.get', { boardId }) as {

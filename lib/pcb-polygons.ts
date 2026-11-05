@@ -1,9 +1,10 @@
 import Clipper from 'clipper-lib';
 import type { Point } from './circuit';
-import type { BoardLine, BoardZone, Footprint, Pad, PCB } from './pcb';
+import type { BoardLine, BoardZone, CopperLayer, Footprint, Pad, PCB } from './pcb';
 import { pcbArc, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
-import { invalidatePCBFill } from './pcb';
+import { invalidatePCBFill, pcbFillInputsChanged } from './pcb';
 import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pcb-layout';
+import { isOwnedPCB, ownProjectData } from './immutable-project';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
 const scale = 10000;
@@ -259,6 +260,14 @@ export function copperPolygons(
   board: PCB,
   minimumClearance = defaultCopperFillClearance,
 ): Map<string, Polygon[]> {
+  return calculateCopperPolygons(board, minimumClearance);
+}
+
+function calculateCopperPolygons(
+  board: PCB,
+  minimumClearance: number,
+  affectedLayers?: ReadonlySet<CopperLayer>,
+): Map<string, Polygon[]> {
   if (!Number.isFinite(minimumClearance) || minimumClearance < 0.0001 || minimumClearance > 1000)
     throw new Error('Copper fill clearance must be from 0.0001 to 1000 mm.');
   const zones = worldZones(board).filter((z) => z.layer.endsWith('.Cu'));
@@ -274,6 +283,7 @@ export function copperPolygons(
     throw new Error(
       'Copper fill exceeds the geometry limit. Reduce zone complexity or refill the exported board in KiCad.',
     );
+  if (affectedLayers && !affectedLayers.size) return result;
   const boundary = boardPolygons(board);
   const pads = board.footprints.flatMap((f) =>
     f.pads.map((p) => ({ f, p, shape: padPolygon(f, p) })),
@@ -289,6 +299,7 @@ export function copperPolygons(
   ];
   const ordered = [...fills].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   for (const z of ordered) {
+    if (affectedLayers && !affectedLayers.has(z.layer as CopperLayer)) continue;
     // Native zero clearance can inherit KiCad rules we do not import. Always
     // apply the explicit fill minimum, measured from the copper's outer edge.
     const clearance = Math.max(z.clearance, minimumClearance);
@@ -450,32 +461,153 @@ export function fillCopperZones(board: PCB, minimumClearance = defaultCopperFill
   if (zones.some((z) => !z.netId))
     throw new Error('Assign a net to each copper zone before filling.');
   const calculated = copperPolygons(board, minimumClearance);
+  return withCopperFills(board, calculated, minimumClearance);
+}
+
+function withCopperFills(
+  board: PCB,
+  calculated: ReadonlyMap<string, Polygon[]>,
+  minimumClearance: number,
+  targets?: ReadonlySet<string>,
+): PCB {
   let vertices = 0;
   const fill = (z: BoardZone, local = (p: Point) => p): BoardZone => {
-    const polygons = calculated.get(z.id);
-    if (!polygons) return z;
-    const filledPolygons = polygons.map((p) => ({ points: copperFillContour(p).map(local) }));
-    vertices += filledPolygons.reduce((n, p) => n + p.points.length, 0);
+    const polygons = !targets || targets.has(z.id) ? calculated.get(z.id) : undefined;
+    const result = polygons
+      ? {
+          ...z,
+          clearance: Math.max(z.clearance, minimumClearance),
+          filledPolygons: polygons.map((p) => ({ points: copperFillContour(p).map(local) })),
+        }
+      : z;
+    vertices += (result.filledPolygons ?? []).reduce((n, p) => n + p.points.length, 0);
     if (vertices > 60000) throw new Error('Copper fill exceeds the 60000-vertex board limit.');
-    return { ...z, clearance: Math.max(z.clearance, minimumClearance), filledPolygons };
+    return result;
   };
   return {
     ...board,
     zones: board.zones.map((z) => fill(z)),
-    footprints: board.footprints.map((f) => ({
-      ...f,
-      ...(f.zones
-        ? {
-            zones: f.zones.map((z) =>
-              fill(z, (p) =>
-                footprintPoint(
-                  { ...f, x: 0, y: 0, rotation: -f.rotation },
-                  { x: p.x - f.x, y: p.y - f.y },
-                ),
-              ),
-            ),
-          }
-        : {}),
-    })),
+    footprints: board.footprints.map((f) => {
+      if (!f.zones) return f;
+      const zones = f.zones.map((z) =>
+        fill(z, (p) =>
+          footprintPoint(
+            { ...f, x: 0, y: 0, rotation: -f.rotation },
+            { x: p.x - f.x, y: p.y - f.y },
+          ),
+        ),
+      );
+      return zones.every((zone, index) => zone === f.zones![index]) ? f : { ...f, zones };
+    }),
   };
+}
+
+// A refreshed immutable preview can pass through Core without calculating the
+// same contours twice. Neither abandoned poses nor older undo bases are retained.
+const refreshedFillBases = new WeakMap<PCB, WeakRef<PCB>>();
+const localZones = (board: PCB) => [
+  ...board.zones,
+  ...board.footprints.flatMap((footprint) => footprint.zones ?? []),
+];
+
+/** Other-layer pours are independent of a track-only edit. This shortcut is
+ * private to internally owned boards; external candidates use the full fill. */
+function changedTrackLayers(previous: PCB, next: PCB): ReadonlySet<CopperLayer> | undefined {
+  if (
+    !isOwnedPCB(previous) ||
+    !isOwnedPCB(next) ||
+    pcbFillInputsChanged({ ...previous, tracks: next.tracks }, next)
+  )
+    return undefined;
+  const remaining = new Map(previous.tracks.map((track) => [track.id, track]));
+  const changed = new Set<CopperLayer>();
+  for (const track of next.tracks) {
+    const prior = remaining.get(track.id);
+    remaining.delete(track.id);
+    if (
+      prior &&
+      prior.netId === track.netId &&
+      prior.layer === track.layer &&
+      prior.width === track.width &&
+      prior.start.x === track.start.x &&
+      prior.start.y === track.start.y &&
+      prior.end.x === track.end.x &&
+      prior.end.y === track.end.y
+    )
+      continue;
+    changed.add(track.layer);
+    if (prior) changed.add(prior.layer);
+  }
+  for (const track of remaining.values()) changed.add(track.layer);
+  return changed;
+}
+
+/** Refresh active saved pours for a copper edit, without enabling other zones.
+ * Geometry, effective rules and contours form one complete board candidate.
+ * Explicit native contour edits with unchanged copper inputs stay authoritative. */
+export function refreshPCBFill(previous: PCB, next: PCB): PCB {
+  if (
+    previous === next ||
+    previous.id !== next.id ||
+    refreshedFillBases.get(next)?.deref() === previous
+  )
+    return next;
+  const previousZones = localZones(previous);
+  const nextZones = localZones(next);
+  if (
+    (!previousZones.some((zone) => zone.filledPolygons !== undefined) &&
+      !nextZones.some((zone) => zone.filledPolygons !== undefined)) ||
+    !pcbFillInputsChanged(previous, next)
+  )
+    return next;
+  const previouslyFilled = new Set(
+    previousZones.filter((zone) => zone.filledPolygons !== undefined).map((zone) => zone.id),
+  );
+  const targets = nextZones.filter(
+    (zone) =>
+      zone.layer.endsWith('.Cu') &&
+      !zone.keepout &&
+      zone.fillEnabled !== false &&
+      (previouslyFilled.has(zone.id) || zone.filledPolygons !== undefined),
+  );
+  if (targets.some((zone) => !zone.netId))
+    throw new Error('Assign a net to each active copper zone before updating its fill.');
+  const invalidated = invalidatePCBFill(previous, next);
+  if (!targets.length) return invalidated;
+  const targetIds = new Set(targets.map((zone) => zone.id));
+  const affectedLayers = changedTrackLayers(previous, next);
+  const previousById = new Map(previousZones.map((zone) => [zone.id, zone]));
+  const nextById = new Map(nextZones.map((zone) => [zone.id, zone]));
+  // Native zero inherits board/net-class rules that this bounded format does
+  // not import. Use the same explicit default as manual Fill for those targets;
+  // positive fine-clearance rules retain their existing value.
+  const effectiveZone = (zone: BoardZone) => {
+    if (!targetIds.has(zone.id)) return zone;
+    if (affectedLayers && !affectedLayers.has(zone.layer as CopperLayer)) {
+      // Pre-cleared previews retain their exact accepted contours on layers
+      // whose copper inputs did not change. Current explicit contours win.
+      const saved =
+        nextById.get(zone.id)?.filledPolygons ?? previousById.get(zone.id)?.filledPolygons;
+      return saved === undefined ? zone : { ...zone, filledPolygons: saved };
+    }
+    return zone.clearance === 0 ? { ...zone, clearance: defaultCopperFillClearance } : zone;
+  };
+  const effective = {
+    ...invalidated,
+    zones: invalidated.zones.map(effectiveZone),
+    footprints: invalidated.footprints.map((footprint) => {
+      if (!footprint.zones) return footprint;
+      const zones = footprint.zones.map(effectiveZone);
+      return zones.every((zone, index) => zone === footprint.zones![index])
+        ? footprint
+        : { ...footprint, zones };
+    }),
+  };
+  const minimumClearance = 0.0001;
+  const calculated = calculateCopperPolygons(effective, minimumClearance, affectedLayers);
+  const refreshed = withCopperFills(effective, calculated, minimumClearance, targetIds);
+  if (!isOwnedPCB(previous)) return refreshed;
+  const owned = ownProjectData(refreshed, previous);
+  refreshedFillBases.set(owned, new WeakRef(previous));
+  return owned;
 }

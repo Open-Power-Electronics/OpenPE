@@ -9,7 +9,9 @@ export async function checkInspectorResize(page, inspector) {
     'Schematic Properties uses the docked inspector.',
   );
   const dock = inspector.locator('xpath=ancestor::*[@data-testid="schematic-properties-panel"]');
-  const handle = dock.getByRole('button', { name: 'Resize properties width', exact: true });
+  const handle = dock
+    .locator('..')
+    .getByRole('button', { name: 'Resize properties width', exact: true });
   const initial = await dock.boundingBox();
   const input = inspector.getByLabel('Component value', { exact: true });
   await input.focus();
@@ -113,7 +115,7 @@ export async function checkFieldProperties(page, inspector) {
 
 export async function checkPanelResize(page, name, defaultWidth) {
   const open = () =>
-    ['Parts list', 'Selection', 'Visible layers'].includes(name)
+    ['List', 'Selection', 'Visible layers'].includes(name)
       ? openSchematicPanel(page, name)
       : page.getByRole('button', { name, exact: true }).click();
   const panelName = name === 'Visible layers' ? 'Visualization' : name;
@@ -239,7 +241,7 @@ export async function checkPanelResize(page, name, defaultWidth) {
   }
   const panel = page.getByRole('dialog', { name: panelName, exact: true });
   const corner = panel.getByRole('button', {
-    name: `Resize ${panelName.toLowerCase()}`,
+    name: `Resize ${panelName.toLowerCase()} bottom right`,
     exact: true,
   });
   await open();
@@ -258,7 +260,7 @@ export async function checkPanelResize(page, name, defaultWidth) {
   );
   assert.ok(Math.abs(initial.x + initial.width / 2 - viewport.width / 2) < 2);
   const start = await corner.boundingBox();
-  assert.equal(await panel.locator('.inspector-resize').count(), 1);
+  assert.equal(await panel.locator('.dialog-resize-edge').count(), 8);
   assert.ok(Math.abs(start.x + start.width - initial.x - initial.width) < 2);
   assert.ok(Math.abs(start.y + start.height - initial.y - initial.height) < 2);
   const x = start.x + start.width / 2,

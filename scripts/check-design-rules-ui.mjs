@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -235,6 +236,7 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'rules-test' }),
       newFile: async () => crypto.randomUUID(),
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -325,27 +327,31 @@ try {
       .click();
     await settled();
   };
-  const panel = (kind) => page.getByRole('dialog', { name: `${kind} checks`, exact: true });
-  const assertRulePlacement = async (kind, label) => {
-    const action = page.locator(`button[aria-label="${label}"]`);
+  const panel = () => page.getByRole('dialog', { name: 'Rule', exact: true });
+  const ruleButton = button('Rule');
+  const assertRulePlacement = async (kind) => {
+    const action = page.locator('button[aria-label="Rule"]');
+    assert.equal(await action.count(), 1, 'Both checks share one project action.');
     assert.equal(
-      await action.evaluate(
-        (element) => !!element.closest('.editor-toolbar .editor-tool-group-end'),
-      ),
+      await action.evaluate((element) => !!element.closest('.editor-mode-actions')),
       true,
-      `${kind} belongs to the upper-right toolbar group.`,
+      'Rule belong to the shared upper-right project actions.',
     );
-    assert.equal(
-      (await action.textContent()).trim(),
-      '',
-      'Rule checks use the shared icon controls.',
-    );
+    assert.equal((await action.textContent()).trim(), '', 'Rule use the shared icon controls.');
     const order = await action.evaluate((element) =>
-      [...element.parentElement.querySelectorAll('button')]
-        .map((button) => button.getAttribute('aria-label'))
-        .slice(-4),
+      [...element.closest('.editor-mode-actions').querySelectorAll('button')].map((button) =>
+        button.getAttribute('aria-label'),
+      ),
     );
-    assert.deepEqual(order, [label, 'Parts list', 'Toggle right sidebar']);
+    const sourceView =
+      (await page.locator('.editor').getAttribute('data-editor-view')) === 'source';
+    assert.deepEqual(order, [
+      'Rule',
+      'List',
+      'Git',
+      ...(sourceView ? [] : ['Toggle right sidebar']),
+    ]);
+    assert.equal(await page.locator('.editor-toolbar [aria-label="Rule"]').count(), 0);
     assert.equal(await panel(kind).getAttribute('aria-modal'), 'true');
     assert.equal(await panel(kind).evaluate((dialog) => dialog.matches(':modal')), true);
     const bounds = await panel(kind).boundingBox();
@@ -354,39 +360,55 @@ try {
       Math.abs(bounds.x + bounds.width / 2 - viewport.width / 2) <= 1,
       `${kind} opens as an independent centered window: ${JSON.stringify({ bounds, viewport })}`,
     );
-    assert.equal(await panel(kind).locator('.inspector-resize').count(), 1);
-    const grip = await panel(kind).locator('.inspector-resize').boundingBox();
+    assert.equal(await panel(kind).locator('.dialog-resize-edge').count(), 8);
+    const grip = await panel(kind)
+      .locator('.dialog-resize-edge[data-direction="se"]')
+      .boundingBox();
     assert.ok(Math.abs(grip.x + grip.width - bounds.x - bounds.width) <= 2);
     assert.ok(Math.abs(grip.y + grip.height - bounds.y - bounds.height) <= 2);
   };
   const runCount = (id) =>
     page.evaluate((id) => window.ruleTestRuns.filter((value) => value === id).length, id);
+  const assertDefaultTab = async () => {
+    const view = await page.locator('.editor').getAttribute('data-editor-view');
+    const expected = view === 'layout' || view === '3d' ? 'DRC' : 'ERC';
+    assert.equal(
+      await panel().getByRole('tab', { name: expected, exact: true }).getAttribute('aria-selected'),
+      'true',
+    );
+  };
   const openERC = async (wait = true, keyboard = false) => {
     const count = await runCount('schematic.erc');
     if (keyboard) {
-      await button('Electrical rules (ERC)').focus();
+      await ruleButton.focus();
       await page.keyboard.press('Enter');
-    } else await button('Electrical rules (ERC)').click();
+    } else await ruleButton.click();
     await panel('ERC').waitFor();
-    await assertRulePlacement('ERC', 'Electrical rules (ERC)');
+    await assertDefaultTab();
+    const tab = panel().getByRole('tab', { name: 'ERC', exact: true });
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await assertRulePlacement('ERC');
     if (wait)
       await panel('ERC').getByText('Checking ERC…', { exact: true }).waitFor({ state: 'hidden' });
     assert.equal(
       await runCount('schematic.erc'),
       count + 1,
-      'Each ERC toolbar activation runs exactly one check.',
+      'Opening or selecting ERC runs exactly one ERC check.',
     );
   };
   const openDRC = async () => {
     const count = await runCount('layout.drc');
-    await button('Design rules (DRC)').click();
+    await ruleButton.click();
     await panel('DRC').waitFor();
-    await assertRulePlacement('DRC', 'Design rules (DRC)');
+    await assertDefaultTab();
+    const tab = panel().getByRole('tab', { name: 'DRC', exact: true });
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await assertRulePlacement('DRC');
     await panel('DRC').getByText('Checking DRC…', { exact: true }).waitFor({ state: 'hidden' });
     assert.equal(
       await runCount('layout.drc'),
       count + 1,
-      'Each DRC toolbar activation runs exactly one check.',
+      'Opening or selecting DRC runs exactly one DRC check.',
     );
   };
   const unchanged = async (index, baseline, reason) =>
@@ -416,7 +438,7 @@ try {
   assert.equal(
     await button('SPICE Simulation').count(),
     0,
-    'Rule checks remain independent of disabled simulation plugins.',
+    'Rule remain independent of disabled simulation plugins.',
   );
   assert.equal(
     await page
@@ -429,7 +451,7 @@ try {
   assert.equal(requested.has(ercChunk), false);
   assert.equal(requested.has(drcChunk), false);
   assert.equal(
-    await button('Electrical rules (ERC)').evaluate((element) => {
+    await ruleButton.evaluate((element) => {
       for (const key of ['Enter', ' ']) {
         const event = new KeyboardEvent('keydown', {
           key,
@@ -449,11 +471,18 @@ try {
   assert.equal(await panel('ERC').count(), 0);
   await openERC(false);
   assert.equal(
+    await panel().getByRole('tab', { name: 'ERC', exact: true }).getAttribute('aria-selected'),
+    'true',
+  );
+  assert.equal(await panel().getByRole('tab', { name: 'DRC', exact: true }).isDisabled(), true);
+  assert.equal(
     requested.has(ercChunk),
     true,
     'Clicking ERC immediately loads and runs the engine.',
   );
-  assert.equal(Math.round((await panel('ERC').boundingBox()).width), 600);
+  const defaultRuleBounds = await panel('ERC').boundingBox();
+  assert.equal(Math.round(defaultRuleBounds.width), 720);
+  assert.equal(Math.round(defaultRuleBounds.height), 560);
 
   // Hold the first engine import to exercise the actual close barrier while a
   // query is pending. Availability changes may advance revision, never content.
@@ -465,6 +494,7 @@ try {
   );
   await panel('ERC').getByText('Project is closing.', { exact: true }).waitFor();
   assert.equal(await button('Run ERC').isDisabled(), true);
+  assert.equal(await page.locator('button[aria-label="Rule"]').isDisabled(), true);
   releaseERC();
   await page.waitForFunction(
     (id) => window.ruleTestCores[id].getSnapshot().editingBlocked !== null,
@@ -483,13 +513,22 @@ try {
     name: /Locate issue: Q1 pin 1 .*is unconnected/,
   });
   await ercIssue.waitFor();
+  assert.equal(await ercIssue.getAttribute('title'), null);
+  assert.equal(await ercIssue.locator('button, input, a').count(), 0);
+  assert.equal(await panel('ERC').locator('.lucide-locate-fixed').count(), 0);
+  const ercRowBox = await ercIssue.boundingBox();
+  const ercItemBox = await ercIssue.locator('..').boundingBox();
+  assert.ok(
+    Math.abs(ercRowBox.x - ercItemBox.x) <= 1 && Math.abs(ercRowBox.width - ercItemBox.width) <= 1,
+    'ERC locating covers the entire issue row.',
+  );
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/design-rules-window-erc.png' });
   assert.equal(requested.has(ercChunk), true);
   await unchanged(0, afterBarrier, 'ERC queries do not change native files, revision or undo.');
   const schematic = page.getByTestId('schematic-canvas');
   const beforeView = await schematic.getAttribute('viewBox');
-  await ercIssue.click();
+  await ercIssue.click({ position: { x: ercRowBox.width / 2, y: ercRowBox.height / 2 } });
   await schematic.locator('[data-rule-check-marker]').waitFor();
   await markerUncovered('ERC', 'schematic-canvas');
   assert.equal(
@@ -510,7 +549,7 @@ try {
   );
   await unchanged(0, afterBarrier, 'Locating an issue changes presentation only.');
   await openERC();
-  await button('Resize electrical rules').focus();
+  await button('Resize rule bottom right').focus();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   await ercIssue.click();
@@ -527,6 +566,7 @@ try {
   }, projectIds[0]);
   await panel('ERC').getByText('Apply Source edits before checking rules.').waitFor();
   assert.equal(await button('Recheck ERC').isDisabled(), true);
+  assert.equal(await page.locator('button[aria-label="Rule"]').isDisabled(), true);
   assert.equal(await ercIssue.isDisabled(), true);
   assert.equal(await schematic.locator('[data-rule-check-marker]').count(), 0);
   await page.evaluate((id) => window.ruleTestCores[id].updateSource(null), projectIds[0]);
@@ -577,18 +617,21 @@ try {
   await openERC();
   await clean('ERC').waitFor();
   await button('Close dialog').click();
-  await button('Layout').click();
   const layout = page.getByTestId('layout-canvas');
-  await layout.waitFor();
   const boardBaseline = await snapshot(1);
   assert.equal(requested.has(drcChunk), false);
   await openDRC();
+  assert.equal(
+    await page.locator('.editor').getAttribute('data-editor-view'),
+    'canvas',
+    'Selecting the DRC tab leaves the editor view unchanged.',
+  );
   assert.equal(
     requested.has(drcChunk),
     true,
     'Clicking DRC immediately loads and runs its geometry engine.',
   );
-  assert.ok((await panel('DRC').boundingBox()).width >= 600);
+  assert.ok((await panel('DRC').boundingBox()).width >= 720);
   const widthIssue = panel('DRC').getByRole('button', {
     name: 'Locate issue: Track width 0.1 mm is below 0.2 mm.',
     exact: true,
@@ -606,6 +649,7 @@ try {
     'DRC inspects current copper without modifying its native bytes or undo.',
   );
   await shortIssue.click();
+  await layout.waitFor();
   await layout.locator('[data-rule-check-marker]').waitFor();
   await markerUncovered('DRC', 'layout-canvas');
   assert.equal(
@@ -650,13 +694,28 @@ try {
     name: 'Minimum annular ring (mm)',
     exact: true,
   });
+  const beforeInvalidTab = await runCount('layout.drc');
+  await annular.fill('1000.1');
+  await panel().getByRole('tab', { name: 'ERC', exact: true }).click();
+  await clean('ERC').waitFor();
+  await panel().getByRole('tab', { name: 'DRC', exact: true }).click();
+  assert.equal(Number(await annular.inputValue()), 1000.1);
+  assert.equal(await annular.getAttribute('aria-invalid'), 'true');
+  assert.equal(await button('Recheck DRC').isDisabled(), true);
+  assert.equal(
+    await runCount('layout.drc'),
+    beforeInvalidTab,
+    'Returning to invalid DRC drafts cannot run with older accepted limits.',
+  );
   await annular.fill('1');
   await button('Recheck DRC').click();
   const padIssue = panel('DRC').getByRole('button', {
     name: /Locate issue: J1 pad 1 has .*minimum annular ring/,
   });
   await padIssue.waitFor();
-  await padIssue.click();
+  assert.equal(await padIssue.locator('button').count(), 0);
+  await padIssue.focus();
+  await padIssue.press('Enter');
   await markerUncovered('DRC', 'layout-canvas');
   assert.deepEqual(
     (await layoutContext()).selection,
@@ -738,15 +797,16 @@ try {
       project = core.getSnapshot().project;
     core.commitProject({ ...project, pcb: { ...project.pcb, graphics: [] } });
   }, projectIds[1]);
-  await button('Zoom in').click();
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
+  await runCanvasAction(page, 'Zoom in');
   const beforeOutlineFit = await layout.getAttribute('viewBox');
   const noOutline = await snapshot(1);
   await openDRC();
   await button('Recheck DRC').click();
   const outlineIssue = panel('DRC').locator('li:has(span[aria-description="pcb.outline"]) button');
   await outlineIssue.waitFor();
-  await outlineIssue.click();
+  await outlineIssue.focus();
+  await outlineIssue.press('Space');
   await page.waitForFunction(
     (previous) =>
       document.querySelector('[data-testid="layout-canvas"]').getAttribute('viewBox') !== previous,
@@ -766,6 +826,22 @@ try {
   await panel('DRC').waitFor({ state: 'detached' });
   await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[1]);
   await settled();
+  const navigationBaseline = await snapshot(1);
+  await openERC();
+  await clean('ERC').waitFor();
+  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'layout');
+  await button('Close dialog').click();
+  await button('Source').click();
+  await openDRC();
+  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'source');
+  await shortIssue.click();
+  await layout.waitFor();
+  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'layout');
+  await unchanged(
+    1,
+    navigationBaseline,
+    'Switching check tabs and locating across views preserves native files and undo.',
+  );
   await selectProject(0);
   await openERC(true, true);
   await ercIssue.waitFor();

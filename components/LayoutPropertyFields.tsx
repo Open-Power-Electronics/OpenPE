@@ -1,6 +1,6 @@
 import QuantityInput from './QuantityInput';
 import { quantityUnitFromLabel, quantityLabel } from './quantity-units';
-import { Children, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Select from './Select';
 
 export function PropertySelect({
@@ -332,11 +332,9 @@ export function PropertyDetails({ title, children }: { title: string; children: 
   );
 }
 
-export function PropertyGrid({ columns, children }: { columns?: 2 | 3; children: ReactNode }) {
-  const count = Children.toArray(children).length;
-  const preferredColumns = columns ?? (count === 3 || count >= 5 ? 3 : 2);
+export function PropertyGrid({ columns = 2, children }: { columns?: 2 | 3; children: ReactNode }) {
   return (
-    <div className="layout-property-grid" data-columns={preferredColumns}>
+    <div className="layout-property-grid" data-columns={columns}>
       {children}
     </div>
   );

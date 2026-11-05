@@ -35,17 +35,26 @@ export default function QuantityInput({
   ...props
 }: Props) {
   const source = String(value);
-  const [chosen, setChosen] = useState(() =>
-    unit && autoScale ? preferredQuantityUnit(source, unit) : unit,
-  );
+  const [chosen, setChosen] = useState<string>();
   const [edit, setEdit] = useState<{ source: string; unit: string; display: string } | null>(null);
   const composing = useRef(false);
   const [focused, setFocused] = useState(false);
+  const focusedUnit = useRef<string | undefined>(undefined);
   const container = useRef<HTMLSpanElement>(null);
   const options = unit ? quantityUnits(unit) : [];
   const canonical = options.find((entry) => entry.label === unit);
-  const selected = options.find((entry) => entry.label === chosen) ?? canonical;
   const number = unit ? readQuantity(source, unit) : Number(source);
+  const invalid =
+    !Number.isFinite(number) || props['aria-invalid'] === true || props['aria-invalid'] === 'true';
+  const retainedUnit =
+    focused || composing.current
+      ? focusedUnit.current
+      : invalid && edit?.source === source
+        ? edit.unit
+        : undefined;
+  const displayUnit =
+    chosen ?? (unit && autoScale ? (retainedUnit ?? preferredQuantityUnit(source, unit)) : unit);
+  const selected = options.find((entry) => entry.label === displayUnit) ?? canonical;
   function displayNumber(number: number) {
     return String(Number(number.toPrecision(precision ?? 8)));
   }
@@ -74,11 +83,7 @@ export default function QuantityInput({
         edit &&
         edit.source === source &&
         edit.unit === (selected?.label ?? '') &&
-        (decimalPlaces === undefined ||
-          focused ||
-          composing.current ||
-          props['aria-invalid'] === true ||
-          props['aria-invalid'] === 'true')
+        ((decimalPlaces === undefined && !autoScale) || focused || composing.current || invalid)
           ? edit.display
           : display
       }
@@ -92,7 +97,10 @@ export default function QuantityInput({
             : step
       }
       onFocus={(event) => {
-        if (decimalPlaces !== undefined) setFocused(true);
+        if (autoScale || decimalPlaces !== undefined) {
+          focusedUnit.current = selected?.label;
+          setFocused(true);
+        }
         onFocus?.(event);
       }}
       onCompositionStart={(event) => {
@@ -116,7 +124,7 @@ export default function QuantityInput({
         onValueChange(next);
       }}
       onBlur={(event) => {
-        if (decimalPlaces !== undefined) setFocused(false);
+        if (autoScale || decimalPlaces !== undefined) setFocused(false);
         if (container.current?.contains(event.relatedTarget as Node | null)) {
           event.stopPropagation();
           return;

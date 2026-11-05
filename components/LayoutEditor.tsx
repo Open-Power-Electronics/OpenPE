@@ -12,7 +12,6 @@ import {
   useState,
   type ReactNode,
   type SetStateAction,
-  type Ref,
   type RefObject,
   type ComponentProps,
   type CSSProperties,
@@ -104,6 +103,8 @@ import {
   type PCBDisplay,
 } from '@/lib/pcb-display';
 import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
+import { preparePCBFillPreview } from './pcbFillPreview';
+import { usePCBFillWorker } from './usePCBFillWorker';
 import {
   boardPolygons,
   defaultCopperFillClearance,
@@ -236,8 +237,6 @@ type Props = {
   onAnnotationsChange: (annotations: AgentAnnotation[]) => void;
   onAnnotationAdd?: () => void;
   annotationDisabled?: boolean;
-  sidebarAction?: ReactNode;
-  ruleAction?: ReactNode;
   analysisAction?: ReactNode;
   analysisDrawing?: ReactNode;
   analysisOutlineSurface?: 'front' | 'back';
@@ -247,10 +246,9 @@ type Props = {
   onAnalysisComponentChange?: (footprint: Footprint | null) => void;
   analysisReadout?: ReactNode;
   analysisPanel?: ReactNode;
+  analysisPanelVisible?: boolean;
   onAnalysisProbe?: (point: Point | null) => void;
-  listAction?: ReactNode;
   undoAction?: ReactNode;
-  toolbarRef?: Ref<HTMLDivElement>;
   grid?: boolean;
   gridSpacing?: number;
   leftButtonDrag?: LeftButtonDrag;
@@ -301,8 +299,6 @@ function LayoutEditor({
   onAnnotationsChange,
   onAnnotationAdd,
   annotationDisabled = false,
-  sidebarAction,
-  ruleAction,
   analysisAction,
   analysisDrawing,
   analysisOutlineSurface,
@@ -312,10 +308,9 @@ function LayoutEditor({
   onAnalysisComponentChange,
   analysisReadout,
   analysisPanel,
+  analysisPanelVisible = false,
   onAnalysisProbe,
-  listAction,
   undoAction,
-  toolbarRef,
   grid = true,
   gridSpacing = defaultLayoutGridSpacing,
   leftButtonDrag = defaultLeftButtonDrag,
@@ -337,7 +332,6 @@ function LayoutEditor({
   const [trackDrag, setTrackDrag] = useState<{
     mode: 'connected' | 'corner';
     pointer?: boolean;
-    fillsHidden: boolean;
     start: Point;
     current: Point;
     pickup: Point;
@@ -380,6 +374,7 @@ function LayoutEditor({
   const [selectionFiltersOpen, setSelectionFiltersOpen] = useState(true);
   const [sidebarSize, setSidebarSize] = useState<InspectorSize>({});
   const sidebarDock = useRef<HTMLElement>(null);
+  const analysisDock = useRef<HTMLDivElement>(null);
   const appearancePanel = useRef<HTMLElement>(null);
   const [hiddenNets, setHiddenNets] = useState<Set<string>>(new Set());
   const [highlightNets, writeHighlightNets] = useState<Set<string>>(new Set());
@@ -795,7 +790,42 @@ function LayoutEditor({
         : placed,
     [placed, placement, cursor],
   );
+  // Pointer geometry stays immediate; a worker progressively solves real fills.
+  // Masks cover only the movement since the last completed background frame.
   const presentationBoard = useMemo(() => invalidatePCBFill(pcb, placed), [pcb, placed]);
+  const acceptedFillPreview = useMemo(() => {
+    try {
+      return { ...preparePCBFillPreview(pcb, placed), error: '' };
+    } catch (error) {
+      return { zones: [], changed: true, error: (error as Error).message };
+    }
+  }, [pcb, placed]);
+  const backgroundFill = usePCBFillWorker(
+    pcb,
+    placed,
+    active &&
+      visible &&
+      !annotationDisabled &&
+      layers.copper &&
+      acceptedFillPreview.changed &&
+      !acceptedFillPreview.error &&
+      !outlineResizePreview?.error &&
+      !trackDragPreview?.error,
+    getRevision?.(),
+  );
+  const fillPreview = useMemo(() => {
+    const completed = backgroundFill.completed;
+    if (!completed?.board) return acceptedFillPreview;
+    try {
+      return { ...preparePCBFillPreview(completed.board, placed), error: '' };
+    } catch (error) {
+      return { zones: [], changed: true, error: (error as Error).message };
+    }
+  }, [acceptedFillPreview, backgroundFill.completed, placed]);
+  const fillPreviewZones = useMemo(
+    () => new Map(fillPreview.zones.map((zone) => [zone.id, zone])),
+    [fillPreview.zones],
+  );
   const [presentationAnalysis] = useState(createPCBPresentationAnalysis);
   // Keep the original board's expensive fill/connectivity results independently
   // of the current preview so crossing the pickup or cancelling reuses them.
@@ -929,23 +959,13 @@ function LayoutEditor({
     () => new Map([...baselineCopper.fills].map(([id, polygons]) => [id, polygonPath(polygons)])),
     [baselineCopper.fills],
   );
-  const fillsHidden = Boolean(trackDrag?.fillsHidden);
-  const copper = useMemo(() => {
-    if (!layers.copper || fillsHidden) return emptyCopper;
-    if (presentationBoard === pcb) return baselineCopper;
-    try {
-      const fills = presentationAnalysis.copper(presentationBoard);
-      return fills.size ? { fills, error: '' } : emptyCopper;
-    } catch (e) {
-      return { fills: new Map<string, Polygon[]>(), error: (e as Error).message };
-    }
-  }, [pcb, presentationBoard, baselineCopper, layers.copper, fillsHidden, emptyCopper]);
+  const copper = baselineCopper;
   const copperPaths = useMemo(
     () =>
-      copper === baselineCopper
-        ? baselineCopperPaths
-        : new Map([...copper.fills].map(([id, polygons]) => [id, polygonPath(polygons)])),
-    [copper, baselineCopper, baselineCopperPaths],
+      backgroundFill.completed?.paths
+        ? new Map(backgroundFill.completed.paths)
+        : baselineCopperPaths,
+    [backgroundFill.completed, baselineCopperPaths],
   );
   const nativeZones = useMemo(() => worldZones(pcb), [pcb.footprints, pcb.zones]);
   const selectionZones = useMemo(
@@ -962,13 +982,8 @@ function LayoutEditor({
     [pcb.footprints],
   );
   const copperZones = useMemo(
-    () =>
-      layers.copper
-        ? placed.footprints === pcb.footprints && placed.zones === pcb.zones
-          ? nativeZones
-          : worldZones(placed)
-        : [],
-    [placed.footprints, placed.zones, pcb.footprints, pcb.zones, nativeZones, layers.copper],
+    () => (layers.copper ? (fillPreview.changed ? fillPreview.zones : nativeZones) : []),
+    [nativeZones, layers.copper, fillPreview],
   );
   const committedDisplayLayers = useRef<BoardLayer[]>([]);
   const displayLayers = useMemo(() => {
@@ -1117,14 +1132,21 @@ function LayoutEditor({
       selectionFiltersOpen: sidebarVisible && selectionFiltersOpen,
       mouseDragTrackBehavior: mouseDragTracks,
       error,
-      previewError: outlineResizePreview?.error || trackDragPreview?.error || routingIssue,
+      previewError:
+        outlineResizePreview?.error ||
+        trackDragPreview?.error ||
+        fillPreview.error ||
+        backgroundFill.error ||
+        routingIssue,
       boardOutlineResize:
         outlineResize && !outlineResize.rectangle.zoneId
           ? {
               graphicIds: [...outlineResize.rectangle.ids],
               handle: outlineResize.handle,
               bounds: outlineResizePreview ? { ...outlineResizePreview.bounds } : undefined,
-              blocked: Boolean(outlineResizePreview?.error),
+              blocked: Boolean(
+                outlineResizePreview?.error || fillPreview.error || backgroundFill.error,
+              ),
             }
           : null,
       zoneResize: outlineResize?.rectangle.zoneId
@@ -1132,7 +1154,9 @@ function LayoutEditor({
             zoneId: outlineResize.rectangle.zoneId,
             handle: outlineResize.handle,
             bounds: outlineResizePreview ? { ...outlineResizePreview.bounds } : undefined,
-            blocked: Boolean(outlineResizePreview?.error),
+            blocked: Boolean(
+              outlineResizePreview?.error || fillPreview.error || backgroundFill.error,
+            ),
           }
         : null,
       connectedTrackDrag: trackDrag
@@ -1433,7 +1457,7 @@ function LayoutEditor({
     if (!active || next === pcb || (!knownChanged && JSON.stringify(next) === JSON.stringify(pcb)))
       return false;
     try {
-      const accepted = onCommit(invalidatePCBFill(pcb, next));
+      const accepted = onCommit(next);
       if (accepted) setError('');
       return accepted;
     } catch (e) {
@@ -2119,7 +2143,6 @@ function LayoutEditor({
     setInspector(false);
     setTrackDrag({
       mode,
-      fillsHidden: false,
       start: at,
       current: at,
       pickup,
@@ -2138,8 +2161,6 @@ function LayoutEditor({
     const previousDraft = {
       ...trackDrag,
       current,
-      fillsHidden:
-        trackDrag.fillsHidden || current.x !== trackDrag.start.x || current.y !== trackDrag.start.y,
     };
     const requestedDelta = {
       x: (at ?? trackDrag.current).x - trackDrag.start.x,
@@ -2176,7 +2197,7 @@ function LayoutEditor({
     setInspector(true);
     // A synchronous Core publication must render the new board without its old
     // gesture. Rejected explicit placement restores the exact retryable draft.
-    if (changed && !commit(proposal.board, true)) {
+    if (changed && !commit(preview === trackDragPreview ? placed : proposal.board, true)) {
       setInspector(inspector);
       if (!previousDraft.pointer) setTrackDrag(previousDraft);
     }
@@ -2191,7 +2212,10 @@ function LayoutEditor({
       const changed = JSON.stringify(next) !== JSON.stringify(pcb);
       const previousDraft = { ...drag, current: at };
       setDrag(null);
-      if (changed && !commit(next, true)) {
+      if (
+        changed &&
+        !commit(at.x === drag.current.x && at.y === drag.current.y ? placed : next, true)
+      ) {
         if (previousDraft.mode !== 'pointer') setDrag(previousDraft);
         return;
       }
@@ -2925,8 +2949,6 @@ function LayoutEditor({
       setTrackDrag({
         ...trackDrag,
         current: p,
-        fillsHidden:
-          trackDrag.fillsHidden || p.x !== trackDrag.start.x || p.y !== trackDrag.start.y,
       });
     if (marquee && pointer.current === e.pointerId)
       setMarquee({ ...marquee, end: canvasPoint(e, false) });
@@ -2944,7 +2966,6 @@ function LayoutEditor({
         setTrackDrag({
           mode: mouseDragTracks,
           pointer: true,
-          fillsHidden: p.x !== start.x || p.y !== start.y,
           start,
           current: p,
           pickup,
@@ -3023,7 +3044,13 @@ function LayoutEditor({
           e.ctrlKey || e.metaKey ? 0 : gridSpacing,
         );
         const next = resizePCBRectangle(pcb, outlineResize.rectangle, bounds);
-        if (next !== pcb) commit(next);
+        if (next !== pcb)
+          commit(
+            outlineResizePreview &&
+              JSON.stringify(bounds) === JSON.stringify(outlineResizePreview.bounds)
+              ? placed
+              : next,
+          );
       } catch (error) {
         setError((error as Error).message);
       }
@@ -3228,10 +3255,6 @@ function LayoutEditor({
         setTrackDrag({
           ...trackDrag,
           current,
-          fillsHidden:
-            trackDrag.fillsHidden ||
-            current.x !== trackDrag.start.x ||
-            current.y !== trackDrag.start.y,
         });
         updateCursor(current);
         return;
@@ -3519,6 +3542,9 @@ function LayoutEditor({
     layers,
     copperZones,
     copperPaths,
+    fillPreview,
+    fillPreviewZones,
+    boardSurface,
     zoneOwners,
     selectionPaint,
     highlightNets,
@@ -3535,6 +3561,9 @@ function LayoutEditor({
     layers,
     copperZones,
     copperPaths,
+    fillPreview,
+    fillPreviewZones,
+    boardSurface,
     zoneOwners,
     zoneOutlinePaths,
     selectionPaint,
@@ -3602,7 +3631,11 @@ function LayoutEditor({
         drawings.set(
           copperLayer,
           copperZones
-            .filter((zone) => zone.layer === copperLayer)
+            .filter(
+              (zone) =>
+                zone.layer === copperLayer &&
+                (!fillPreview.changed || fillPreviewZones.has(zone.id)),
+            )
             .map((zone) =>
               retainFill(
                 {
@@ -3612,6 +3645,14 @@ function LayoutEditor({
                   netId: zone.netId,
                   ownerId: zoneOwners.get(zone.id) ?? zone.id,
                   path: copperPaths.get(zone.id) ?? '',
+                  preview:
+                    fillPreview.changed && fillPreviewZones.get(zone.id)?.needsMask
+                      ? {
+                          ...fillPreviewZones.get(zone.id)!,
+                          id: `${pattern}-fill-preview-${zone.id}`,
+                          boardOutline: boardSurface,
+                        }
+                      : undefined,
                   selection: selectionPaint,
                   highlightNets,
                 },
@@ -4010,20 +4051,6 @@ function LayoutEditor({
     ),
     [tool, viaTarget, connectionSettingsVisible, toolSettingsId, choosing],
   );
-  const displayToolGroup = useMemo(
-    () => (
-      <div
-        className="editor-tool-group editor-tool-group-end"
-        role="group"
-        aria-label="Layout display"
-      >
-        {ruleAction}
-        {listAction}
-        {sidebarAction}
-      </div>
-    ),
-    [ruleAction, listAction, sidebarAction],
-  );
   const moving = Boolean(
     outlineResize ||
     (drag &&
@@ -4038,118 +4065,6 @@ function LayoutEditor({
   return (
     <div className="layout-editor" data-layout-editor data-pcb-theme={darkBoard ? 'dark' : 'light'}>
       <div
-        className="editor-toolbar layout-toolbar"
-        ref={toolbarRef}
-        role="group"
-        aria-label="Layout tools"
-      >
-        {modeToolGroup}
-        <div className="editor-tool-group" role="group" aria-label="Place and connect">
-          {connectToolButtons}
-        </div>
-        <div className="editor-tool-group" role="group" aria-label="Measurement">
-          <button
-            type="button"
-            className={`tool-button${tool === 'measure' ? ' active' : ''}`}
-            aria-label="Measure distance"
-            title="Measure distance"
-            aria-pressed={tool === 'measure'}
-            onClick={() => activate(tool === 'measure' ? 'select' : 'measure')}
-          >
-            <Ruler size={17} />
-          </button>
-        </div>
-        <div className="editor-tool-group" role="group" aria-label="Edit and history">
-          <div className={`tool-menu${tool === 'hand' ? ' active' : ''}`}>
-            <Select
-              label="Edit layout"
-              value=""
-              icon={<RotateCw size={17} />}
-              compact
-              iconOnly
-              showChevron={false}
-              options={[
-                ...(tool === 'select' && selection.length && !drag && !trackDrag
-                  ? [{ value: 'move', label: 'Move selection' }]
-                  : []),
-                ...(tool === 'select' &&
-                !drag &&
-                !trackDrag &&
-                selection.some((s) => s.kind === 'track' || s.kind === 'via')
-                  ? [
-                      { value: 'expand', label: 'Expand track selection' },
-                      { value: 'highlight', label: 'Highlight selected nets' },
-                    ]
-                  : []),
-                ...(tool === 'select' &&
-                !drag &&
-                !trackDrag &&
-                selection.length &&
-                selection.every((s) => s.kind === 'track')
-                  ? [
-                      { value: 'track-drag', label: 'Drag connected tracks' },
-                      { value: 'corner-drag', label: 'Drag track corner' },
-                    ]
-                  : []),
-                ...((tool === 'select' && selection.length && !trackDrag) || placement
-                  ? [{ value: 'rotate', label: 'Rotate selection' }]
-                  : []),
-                ...(placement ||
-                (tool === 'select' && !trackDrag && selection.some((s) => s.kind === 'footprint'))
-                  ? [{ value: 'flip', label: 'Flip footprint' }]
-                  : []),
-                ...(tool === 'select' && selection.length && !drag && !trackDrag
-                  ? [{ value: 'delete', label: 'Delete selection' }]
-                  : []),
-                { value: 'hand', label: 'Pan' },
-              ]}
-              onChange={(value) => {
-                if (value === 'move') beginMove();
-                else if (value === 'track-drag') beginTrackDrag();
-                else if (value === 'corner-drag') beginTrackDrag('corner');
-                else if (value === 'expand') expandTracks();
-                else if (value === 'highlight') highlightSelectionNet();
-                else if (value === 'rotate') rotate();
-                else if (value === 'flip') flip();
-                else if (value === 'delete') remove();
-                else activate('hand');
-              }}
-            />
-          </div>
-          {undoAction}
-        </div>
-        {analysisAction && (
-          <div
-            className="editor-tool-group editor-plugin-actions"
-            role="group"
-            aria-label="Plugins"
-          >
-            {analysisAction}
-          </div>
-        )}
-        {displayToolGroup}
-      </div>
-      {syncStatus?.pending && (
-        <div className="layout-sync-status" role="status">
-          Loading assigned footprints…
-        </div>
-      )}
-      {syncStatus?.error && (
-        <div className="layout-sync-status" role="alert">
-          {syncStatus.error}
-        </div>
-      )}
-      {!!syncStatus?.warnings.length && !syncStatus.error && (
-        <details className="layout-sync-status">
-          <summary>{syncStatus.warnings.length} layout notices</summary>
-          <ul>
-            {syncStatus.warnings.map((warning, index) => (
-              <li key={index}>{warning}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-      <div
         className="layout-main"
         style={
           {
@@ -4158,763 +4073,966 @@ function LayoutEditor({
           } as CSSProperties
         }
       >
-        <div
-          ref={host}
-          className={`canvas-wrap layout-canvas tool-${tool}${onAnalysisProbe ? ' is-analysis-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
-        >
-          <svg
-            ref={svg}
-            viewBox={`${view.x} ${view.y} ${view.width} ${view.width / ratio}`}
-            preserveAspectRatio="xMinYMin meet"
-            tabIndex={0}
-            role="application"
-            aria-label="PCB layout editor"
-            data-testid="layout-canvas"
-            onPointerDown={start}
-            onPointerMove={move}
-            onPointerUp={end}
-            onPointerCancel={cancelGesture}
-            onLostPointerCapture={(e) => {
-              if (pointer.current === e.pointerId) cancelGesture();
-            }}
-            onPointerLeave={(event) => {
-              // A transient SVG border box can shrink around a stationary
-              // pointer. Hover belongs to the actual drawing viewport, while
-              // tool panels, docks and real outside leaves still clear it.
-              const viewport = host.current;
-              const bounds = viewport?.getBoundingClientRect();
-              const under = document.elementFromPoint(event.clientX, event.clientY);
-              if (
-                !active ||
-                !document.hasFocus() ||
-                hasOpenOverlay() ||
-                !bounds ||
-                event.clientX < bounds.left ||
-                event.clientX > bounds.right ||
-                event.clientY < bounds.top ||
-                event.clientY > bounds.bottom ||
-                (under !== viewport && !(under && svg.current?.contains(under)))
-              ) {
-                pointerPosition.current = null;
-                if (tool === 'measure') measurement.move(null);
-              }
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            onKeyDown={key}
-            onDoubleClick={(e) => {
-              if (!active || hasOpenOverlay()) return;
-              e.preventDefault();
-              if (onAnalysisProbe) return;
-              if (trackDrag || drag?.mode === 'move') return;
-              if (route) finishRoute();
-              else if (drawing) finishShape();
-              else setInspector(true);
-            }}
-            onWheel={(e) => {
-              if (!active || hasOpenOverlay() || e.deltaY === 0) return;
-              const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
-              const width = camera.getSnapshot().width;
-              if (layoutZoomWidth(width, factor) === width) zoom(factor);
-              else zoom(factor, canvasPoint(e, false));
-            }}
-          >
-            <defs>
-              <pattern
-                id={`layout-grid-${pattern}`}
-                data-layout-grid-pattern
-                data-layout-grid-spacing={gridSpacing}
-                x={-renderedGrid.spacing / 2}
-                y={-renderedGrid.spacing / 2}
-                width={renderedGrid.spacing}
-                height={renderedGrid.spacing}
-                patternUnits="userSpaceOnUse"
+        <div className="layout-drawing-region editor-drawing-region">
+          <div className="editor-toolbar layout-toolbar" role="group" aria-label="Layout tools">
+            {modeToolGroup}
+            <div className="editor-tool-group" role="group" aria-label="Place and connect">
+              {connectToolButtons}
+            </div>
+            <div className="editor-tool-group" role="group" aria-label="Measurement">
+              <button
+                type="button"
+                className={`tool-button${tool === 'measure' ? ' active' : ''}`}
+                aria-label="Measure distance"
+                title="Measure distance"
+                aria-pressed={tool === 'measure'}
+                onClick={() => activate(tool === 'measure' ? 'select' : 'measure')}
               >
-                <circle
-                  cx={renderedGrid.spacing / 2}
-                  cy={renderedGrid.spacing / 2}
-                  r={renderedGrid.radius}
-                  fill="var(--grid-dot)"
+                <Ruler size={17} />
+              </button>
+            </div>
+            <div className="editor-tool-group" role="group" aria-label="Edit and history">
+              <div className={`tool-menu${tool === 'hand' ? ' active' : ''}`}>
+                <Select
+                  label="Edit layout"
+                  value=""
+                  icon={<RotateCw size={17} />}
+                  compact
+                  iconOnly
+                  showChevron={false}
+                  options={[
+                    ...(tool === 'select' && selection.length && !drag && !trackDrag
+                      ? [{ value: 'move', label: 'Move selection' }]
+                      : []),
+                    ...(tool === 'select' &&
+                    !drag &&
+                    !trackDrag &&
+                    selection.some((s) => s.kind === 'track' || s.kind === 'via')
+                      ? [
+                          { value: 'expand', label: 'Expand track selection' },
+                          { value: 'highlight', label: 'Highlight selected nets' },
+                        ]
+                      : []),
+                    ...(tool === 'select' &&
+                    !drag &&
+                    !trackDrag &&
+                    selection.length &&
+                    selection.every((s) => s.kind === 'track')
+                      ? [
+                          { value: 'track-drag', label: 'Drag connected tracks' },
+                          { value: 'corner-drag', label: 'Drag track corner' },
+                        ]
+                      : []),
+                    ...((tool === 'select' && selection.length && !trackDrag) || placement
+                      ? [{ value: 'rotate', label: 'Rotate selection' }]
+                      : []),
+                    ...(placement ||
+                    (tool === 'select' &&
+                      !trackDrag &&
+                      selection.some((s) => s.kind === 'footprint'))
+                      ? [{ value: 'flip', label: 'Flip footprint' }]
+                      : []),
+                    ...(tool === 'select' && selection.length && !drag && !trackDrag
+                      ? [{ value: 'delete', label: 'Delete selection' }]
+                      : []),
+                    { value: 'hand', label: 'Pan' },
+                  ]}
+                  onChange={(value) => {
+                    if (value === 'move') beginMove();
+                    else if (value === 'track-drag') beginTrackDrag();
+                    else if (value === 'corner-drag') beginTrackDrag('corner');
+                    else if (value === 'expand') expandTracks();
+                    else if (value === 'highlight') highlightSelectionNet();
+                    else if (value === 'rotate') rotate();
+                    else if (value === 'flip') flip();
+                    else if (value === 'delete') remove();
+                    else activate('hand');
+                  }}
                 />
-              </pattern>
-            </defs>
-            <rect
-              data-layout-background
-              x={view.x}
-              y={view.y}
-              width={view.width}
-              height={view.width / ratio}
-              fill="var(--canvas)"
-            />
-            {boardSurface && (
-              <path
-                data-board-surface
-                d={boardSurface}
-                fill="var(--pcb-substrate)"
-                fillRule="evenodd"
-                pointerEvents="none"
-              />
+              </div>
+              {undoAction}
+            </div>
+            {analysisAction && (
+              <div
+                className="editor-tool-group editor-plugin-actions"
+                role="group"
+                aria-label="Plugins"
+              >
+                {analysisAction}
+              </div>
             )}
-            {grid && (
+          </div>
+          {syncStatus?.pending && (
+            <div className="layout-sync-status" role="status">
+              Loading assigned footprints…
+            </div>
+          )}
+          {syncStatus?.error && (
+            <div className="layout-sync-status" role="alert">
+              {syncStatus.error}
+            </div>
+          )}
+          {!!syncStatus?.warnings.length && !syncStatus.error && (
+            <details className="layout-sync-status">
+              <summary>{syncStatus.warnings.length} layout notices</summary>
+              <ul>
+                {syncStatus.warnings.map((warning, index) => (
+                  <li key={index}>{warning}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+          <div
+            ref={host}
+            className={`canvas-wrap layout-canvas tool-${tool}${onAnalysisProbe ? ' is-analysis-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
+          >
+            <svg
+              ref={svg}
+              viewBox={`${view.x} ${view.y} ${view.width} ${view.width / ratio}`}
+              preserveAspectRatio="xMinYMin meet"
+              tabIndex={0}
+              role="application"
+              aria-label="PCB layout editor"
+              data-testid="layout-canvas"
+              onPointerDown={start}
+              onPointerMove={move}
+              onPointerUp={end}
+              onPointerCancel={cancelGesture}
+              onLostPointerCapture={(e) => {
+                if (pointer.current === e.pointerId) cancelGesture();
+              }}
+              onPointerLeave={(event) => {
+                // A transient SVG border box can shrink around a stationary
+                // pointer. Hover belongs to the actual drawing viewport, while
+                // tool panels, docks and real outside leaves still clear it.
+                const viewport = host.current;
+                const bounds = viewport?.getBoundingClientRect();
+                const under = document.elementFromPoint(event.clientX, event.clientY);
+                if (
+                  !active ||
+                  !document.hasFocus() ||
+                  hasOpenOverlay() ||
+                  !bounds ||
+                  event.clientX < bounds.left ||
+                  event.clientX > bounds.right ||
+                  event.clientY < bounds.top ||
+                  event.clientY > bounds.bottom ||
+                  (under !== viewport && !(under && svg.current?.contains(under)))
+                ) {
+                  pointerPosition.current = null;
+                  if (tool === 'measure') measurement.move(null);
+                }
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+              onKeyDown={key}
+              onDoubleClick={(e) => {
+                if (!active || hasOpenOverlay()) return;
+                e.preventDefault();
+                if (onAnalysisProbe) return;
+                if (trackDrag || drag?.mode === 'move') return;
+                if (route) finishRoute();
+                else if (drawing) finishShape();
+                else setInspector(true);
+              }}
+              onWheel={(e) => {
+                if (!active || hasOpenOverlay() || e.deltaY === 0) return;
+                const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+                const width = camera.getSnapshot().width;
+                if (layoutZoomWidth(width, factor) === width) zoom(factor);
+                else zoom(factor, canvasPoint(e, false));
+              }}
+            >
+              <defs>
+                <pattern
+                  id={`layout-grid-${pattern}`}
+                  data-layout-grid-pattern
+                  data-layout-grid-spacing={gridSpacing}
+                  x={-renderedGrid.spacing / 2}
+                  y={-renderedGrid.spacing / 2}
+                  width={renderedGrid.spacing}
+                  height={renderedGrid.spacing}
+                  patternUnits="userSpaceOnUse"
+                >
+                  <circle
+                    cx={renderedGrid.spacing / 2}
+                    cy={renderedGrid.spacing / 2}
+                    r={renderedGrid.radius}
+                    fill="var(--grid-dot)"
+                  />
+                </pattern>
+              </defs>
               <rect
-                data-layout-grid
+                data-layout-background
                 x={view.x}
                 y={view.y}
                 width={view.width}
                 height={view.width / ratio}
-                fill={`url(#layout-grid-${pattern})`}
-                pointerEvents="none"
+                fill="var(--canvas)"
               />
-            )}
-            <g data-layout-drawing>
-              {/* Body targets stay behind every footprint's visible artwork and pads. */}
-              {footprintBodyDrawing}
-              {detailDrawing}
-            </g>
-            {analysisDrawing && (
-              <g data-annotation-overlay pointerEvents="none">
-                {analysisDrawing}
-                {analysisOutlineSurface && (
-                  <ThermalComponentOutlines
-                    footprints={pcb.footprints}
-                    surface={analysisOutlineSurface}
-                    layers={layers}
-                  />
-                )}
+              {boardSurface && (
+                <path
+                  data-board-surface
+                  d={boardSurface}
+                  fill="var(--pcb-substrate)"
+                  fillRule="evenodd"
+                  pointerEvents="none"
+                />
+              )}
+              {grid && (
+                <rect
+                  data-layout-grid
+                  x={view.x}
+                  y={view.y}
+                  width={view.width}
+                  height={view.width / ratio}
+                  fill={`url(#layout-grid-${pattern})`}
+                  pointerEvents="none"
+                />
+              )}
+              <g data-layout-drawing>
+                {/* Body targets stay behind every footprint's visible artwork and pads. */}
+                {footprintBodyDrawing}
+                {detailDrawing}
               </g>
-            )}
-            <LayoutCameraScaleRender camera={camera}>
-              {(view) => (
-                <>
-                  {displayBoard.footprints.map((footprint) => {
-                    const bounds = footprint.locked && footprintBounds.get(footprint.id);
-                    if (!bounds) return null;
-                    const at = footprintPoint(footprint, { x: bounds.maxX, y: bounds.minY });
-                    return (
-                      <g
-                        key={footprint.id}
-                        data-annotation-overlay
-                        data-layout-lock={footprint.id}
-                        aria-label={`${footprint.reference || 'Component'} locked`}
-                        pointerEvents="none"
-                        transform={`translate(${at.x} ${at.y}) scale(${view.width / size.width})`}
-                      >
-                        <rect x={-8} y={-8} width={16} height={16} rx={4} fill="var(--panel)" />
-                        <LockKeyhole
-                          x={-6}
-                          y={-6}
-                          width={12}
-                          height={12}
-                          color="var(--text-strong)"
-                        />
-                      </g>
-                    );
-                  })}
-                  {analysisMarkers?.(view.width / size.width)}
-                  {tool === 'measure' && (
-                    <MeasurementDrawing measurement={measurement} scale={view.width / size.width} />
+              {analysisDrawing && (
+                <g data-annotation-overlay pointerEvents="none">
+                  {analysisDrawing}
+                  {analysisOutlineSurface && (
+                    <ThermalComponentOutlines
+                      footprints={pcb.footprints}
+                      surface={analysisOutlineSurface}
+                      layers={layers}
+                    />
                   )}
-                  {analysisComponentDetail &&
-                    selectedFootprint &&
-                    selectedFootprint.side === analysisComponentSurface &&
-                    pcbSelectionEligible(
-                      pcb,
-                      { kind: 'footprint', id: selectedFootprint.id },
-                      filters,
-                    ) &&
-                    analysisComponentDetail(selectedFootprint, layers, view.width / size.width)}
-                  {active &&
-                    tool === 'select' &&
-                    !onAnalysisProbe &&
-                    selectedRectangle &&
-                    (selectedRectangle.zoneId
-                      ? selectedZone &&
-                        layers[selectedZone.layer] &&
-                        pcbZoneSelectionEligible(selectedZone, filters) &&
-                        (layers.zoneOutlines || layers.copper)
-                      : layers['Edge.Cuts'] && filters.graphic) &&
-                    !drag &&
-                    !trackDrag &&
-                    !marquee &&
-                    (() => {
-                      const b = outlineResizePreview?.bounds ?? selectedRectangle.bounds;
-                      const handleSize = (view.width / size.width) * 8;
-                      const midX = (b.minX + b.maxX) / 2,
-                        midY = (b.minY + b.maxY) / 2;
+                </g>
+              )}
+              <LayoutCameraScaleRender camera={camera}>
+                {(view) => (
+                  <>
+                    {displayBoard.footprints.map((footprint) => {
+                      const bounds = footprint.locked && footprintBounds.get(footprint.id);
+                      if (!bounds) return null;
+                      const at = footprintPoint(footprint, { x: bounds.maxX, y: bounds.minY });
                       return (
                         <g
+                          key={footprint.id}
                           data-annotation-overlay
-                          data-board-outline-resize={selectedRectangle.zoneId ? undefined : ''}
-                          data-zone-resize={selectedRectangle.zoneId}
-                          data-layout-region-resize
+                          data-layout-lock={footprint.id}
+                          aria-label={`${footprint.reference || 'Component'} locked`}
+                          pointerEvents="none"
+                          transform={`translate(${at.x} ${at.y}) scale(${view.width / size.width})`}
                         >
-                          <rect
-                            x={b.minX}
-                            y={b.minY}
-                            width={b.maxX - b.minX}
-                            height={b.maxY - b.minY}
-                            fill="none"
-                            stroke="var(--selection-edge)"
-                            strokeWidth={1}
-                            vectorEffect="non-scaling-stroke"
-                            strokeDasharray="4 3"
-                            pointerEvents="none"
+                          <rect x={-8} y={-8} width={16} height={16} rx={4} fill="var(--panel)" />
+                          <LockKeyhole
+                            x={-6}
+                            y={-6}
+                            width={12}
+                            height={12}
+                            color="var(--text-strong)"
                           />
-                          {(
-                            [
-                              ['nw', b.minX, b.minY],
-                              ['n', midX, b.minY],
-                              ['ne', b.maxX, b.minY],
-                              ['e', b.maxX, midY],
-                              ['se', b.maxX, b.maxY],
-                              ['s', midX, b.maxY],
-                              ['sw', b.minX, b.maxY],
-                              ['w', b.minX, midY],
-                            ] as const
-                          ).map(([handle, x, y]) => (
-                            <rect
-                              key={handle}
-                              data-outline-resize-handle={
-                                selectedRectangle.zoneId ? undefined : handle
-                              }
-                              data-zone-resize-handle={
-                                selectedRectangle.zoneId ? handle : undefined
-                              }
-                              role="button"
-                              aria-label={`Resize ${selectedRectangle.zoneId ? 'copper zone' : 'board outline'} ${handle}`}
-                              x={x - handleSize / 2}
-                              y={y - handleSize / 2}
-                              width={handleSize}
-                              height={handleSize}
-                              rx={handleSize / 8}
-                              fill="var(--canvas)"
-                              stroke="var(--pcb-outline)"
-                              strokeWidth={1}
-                              vectorEffect="non-scaling-stroke"
-                              style={{
-                                cursor: `${handle === 'n' || handle === 's' ? 'ns' : handle === 'e' || handle === 'w' ? 'ew' : handle === 'nw' || handle === 'se' ? 'nwse' : 'nesw'}-resize`,
-                              }}
-                              onPointerDown={(e) => beginOutlineResize(e, handle)}
-                            />
-                          ))}
                         </g>
                       );
-                    })()}
-                  {trackDrag && (
-                    <g
-                      data-annotation-overlay
-                      data-track-drag-preview
-                      data-track-drag-blocked={Boolean(trackDragPreview?.error)}
-                      data-track-drag-constrained={Boolean(trackDragPreview?.constraint)}
-                      data-track-drag-mode={trackDrag.mode}
-                      pointerEvents="none"
-                    >
-                      {(trackDragPreview?.error || trackDragPreview?.constraint) && (
-                        <circle
-                          cx={trackDrag.current.x}
-                          cy={trackDrag.current.y}
-                          r={(view.width / size.width) * 6}
+                    })}
+                    {analysisMarkers?.(view.width / size.width)}
+                    {tool === 'measure' && (
+                      <MeasurementDrawing
+                        measurement={measurement}
+                        scale={view.width / size.width}
+                      />
+                    )}
+                    {analysisComponentDetail &&
+                      selectedFootprint &&
+                      selectedFootprint.side === analysisComponentSurface &&
+                      pcbSelectionEligible(
+                        pcb,
+                        { kind: 'footprint', id: selectedFootprint.id },
+                        filters,
+                      ) &&
+                      analysisComponentDetail(selectedFootprint, layers, view.width / size.width)}
+                    {active &&
+                      tool === 'select' &&
+                      !onAnalysisProbe &&
+                      selectedRectangle &&
+                      (selectedRectangle.zoneId
+                        ? selectedZone &&
+                          layers[selectedZone.layer] &&
+                          pcbZoneSelectionEligible(selectedZone, filters) &&
+                          (layers.zoneOutlines || layers.copper)
+                        : layers['Edge.Cuts'] && filters.graphic) &&
+                      !drag &&
+                      !trackDrag &&
+                      !marquee &&
+                      (() => {
+                        const b = outlineResizePreview?.bounds ?? selectedRectangle.bounds;
+                        const handleSize = (view.width / size.width) * 8;
+                        const midX = (b.minX + b.maxX) / 2,
+                          midY = (b.minY + b.maxY) / 2;
+                        return (
+                          <g
+                            data-annotation-overlay
+                            data-board-outline-resize={selectedRectangle.zoneId ? undefined : ''}
+                            data-zone-resize={selectedRectangle.zoneId}
+                            data-layout-region-resize
+                          >
+                            <rect
+                              x={b.minX}
+                              y={b.minY}
+                              width={b.maxX - b.minX}
+                              height={b.maxY - b.minY}
+                              fill="none"
+                              stroke="var(--selection-edge)"
+                              strokeWidth={1}
+                              vectorEffect="non-scaling-stroke"
+                              strokeDasharray="4 3"
+                              pointerEvents="none"
+                            />
+                            {(
+                              [
+                                ['nw', b.minX, b.minY],
+                                ['n', midX, b.minY],
+                                ['ne', b.maxX, b.minY],
+                                ['e', b.maxX, midY],
+                                ['se', b.maxX, b.maxY],
+                                ['s', midX, b.maxY],
+                                ['sw', b.minX, b.maxY],
+                                ['w', b.minX, midY],
+                              ] as const
+                            ).map(([handle, x, y]) => (
+                              <rect
+                                key={handle}
+                                data-outline-resize-handle={
+                                  selectedRectangle.zoneId ? undefined : handle
+                                }
+                                data-zone-resize-handle={
+                                  selectedRectangle.zoneId ? handle : undefined
+                                }
+                                role="button"
+                                aria-label={`Resize ${selectedRectangle.zoneId ? 'copper zone' : 'board outline'} ${handle}`}
+                                x={x - handleSize / 2}
+                                y={y - handleSize / 2}
+                                width={handleSize}
+                                height={handleSize}
+                                rx={handleSize / 8}
+                                fill="var(--canvas)"
+                                stroke="var(--pcb-outline)"
+                                strokeWidth={1}
+                                vectorEffect="non-scaling-stroke"
+                                style={{
+                                  cursor: `${handle === 'n' || handle === 's' ? 'ns' : handle === 'e' || handle === 'w' ? 'ew' : handle === 'nw' || handle === 'se' ? 'nwse' : 'nesw'}-resize`,
+                                }}
+                                onPointerDown={(e) => beginOutlineResize(e, handle)}
+                              />
+                            ))}
+                          </g>
+                        );
+                      })()}
+                    {trackDrag && (
+                      <g
+                        data-annotation-overlay
+                        data-track-drag-preview
+                        data-track-drag-blocked={Boolean(trackDragPreview?.error)}
+                        data-track-drag-constrained={Boolean(trackDragPreview?.constraint)}
+                        data-track-drag-mode={trackDrag.mode}
+                        pointerEvents="none"
+                      >
+                        {(trackDragPreview?.error || trackDragPreview?.constraint) && (
+                          <circle
+                            cx={trackDrag.current.x}
+                            cy={trackDrag.current.y}
+                            r={(view.width / size.width) * 6}
+                            fill="none"
+                            stroke="var(--pcb-route-blocked)"
+                            strokeWidth={2}
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        )}
+                      </g>
+                    )}
+                    {route?.legs.map((leg) => (
+                      <g key={leg.via.id} data-annotation-overlay pointerEvents="none">
+                        <polyline
+                          data-route-leg={leg.layer}
+                          points={pointString(leg.points)}
                           fill="none"
-                          stroke="var(--pcb-route-blocked)"
-                          strokeWidth={2}
-                          vectorEffect="non-scaling-stroke"
+                          stroke={
+                            fixedRouteIssue ? 'var(--pcb-route-blocked)' : layerColor(leg.layer)
+                          }
+                          strokeWidth={width}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          opacity="0.85"
                         />
-                      )}
-                    </g>
-                  )}
-                  {route?.legs.map((leg) => (
-                    <g key={leg.via.id} data-annotation-overlay pointerEvents="none">
+                        <g data-route-locked-via>
+                          <circle
+                            cx={leg.via.x}
+                            cy={leg.via.y}
+                            r={leg.via.diameter / 2}
+                            fill={
+                              fixedRouteIssue ? 'var(--pcb-route-blocked)' : 'var(--pcb-through)'
+                            }
+                          />
+                          <circle
+                            cx={leg.via.x}
+                            cy={leg.via.y}
+                            r={leg.via.drill / 2}
+                            fill="var(--canvas)"
+                          />
+                        </g>
+                      </g>
+                    ))}
+                    {route && (
                       <polyline
-                        data-route-leg={leg.layer}
-                        points={pointString(leg.points)}
+                        data-annotation-overlay
+                        data-route-preview
+                        data-route-blocked={Boolean(routingIssue)}
+                        points={pointString(previewRoute)}
                         fill="none"
-                        stroke={
-                          fixedRouteIssue ? 'var(--pcb-route-blocked)' : layerColor(leg.layer)
-                        }
+                        stroke={routingIssue ? 'var(--pcb-route-blocked)' : layerColor(route.layer)}
                         strokeWidth={width}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         opacity="0.85"
+                        pointerEvents="none"
                       />
-                      <g data-route-locked-via>
-                        <circle
-                          cx={leg.via.x}
-                          cy={leg.via.y}
-                          r={leg.via.diameter / 2}
-                          fill={fixedRouteIssue ? 'var(--pcb-route-blocked)' : 'var(--pcb-through)'}
-                        />
-                        <circle
-                          cx={leg.via.x}
-                          cy={leg.via.y}
-                          r={leg.via.drill / 2}
-                          fill="var(--canvas)"
-                        />
-                      </g>
-                    </g>
-                  ))}
-                  {route && (
-                    <polyline
-                      data-annotation-overlay
-                      data-route-preview
-                      data-route-blocked={Boolean(routingIssue)}
-                      points={pointString(previewRoute)}
-                      fill="none"
-                      stroke={routingIssue ? 'var(--pcb-route-blocked)' : layerColor(route.layer)}
-                      strokeWidth={width}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      opacity="0.85"
-                      pointerEvents="none"
-                    />
-                  )}
-                  {route && routingIssue && (!viaTarget || viaPreviewVisible) && (
-                    <circle
-                      data-route-obstacle
-                      data-annotation-overlay
-                      cx={(viaTarget ? cursor : routeHead).x}
-                      cy={(viaTarget ? cursor : routeHead).y}
-                      r={(view.width / size.width) * 6}
-                      fill="none"
-                      stroke="var(--pcb-route-blocked)"
-                      strokeWidth={2}
-                      vectorEffect="non-scaling-stroke"
-                      pointerEvents="none"
-                    />
-                  )}
-                  {tool === 'route' && !viaTarget && routeAnchor.target && (
-                    <rect
-                      data-annotation-overlay
-                      data-route-snap-target={routeAnchor.target.kind}
-                      data-route-snap-id={routeAnchor.target.id}
-                      x={routeHead.x - (view.width / size.width) * 3}
-                      y={routeHead.y - (view.width / size.width) * 3}
-                      width={(view.width / size.width) * 6}
-                      height={(view.width / size.width) * 6}
-                      fill="none"
-                      stroke={
-                        routeAnchor.error ? 'var(--pcb-route-blocked)' : 'var(--pcb-selected)'
-                      }
-                      strokeWidth={1}
-                      vectorEffect="non-scaling-stroke"
-                      pointerEvents="none"
-                    />
-                  )}
-                  {outline &&
-                    layers[outlineLayer] &&
-                    (outlineShape === 'rectangle' ? (
+                    )}
+                    {route && routingIssue && (!viaTarget || viaPreviewVisible) && (
+                      <circle
+                        data-route-obstacle
+                        data-annotation-overlay
+                        cx={(viaTarget ? cursor : routeHead).x}
+                        cy={(viaTarget ? cursor : routeHead).y}
+                        r={(view.width / size.width) * 6}
+                        fill="none"
+                        stroke="var(--pcb-route-blocked)"
+                        strokeWidth={2}
+                        vectorEffect="non-scaling-stroke"
+                        pointerEvents="none"
+                      />
+                    )}
+                    {tool === 'route' && !viaTarget && routeAnchor.target && (
                       <rect
                         data-annotation-overlay
-                        data-shape-preview="rectangle"
-                        data-outline-layer={outlineLayer}
-                        x={Math.min(outline.x, cursor.x)}
-                        y={Math.min(outline.y, cursor.y)}
-                        width={Math.abs(outline.x - cursor.x)}
-                        height={Math.abs(outline.y - cursor.y)}
+                        data-route-snap-target={routeAnchor.target.kind}
+                        data-route-snap-id={routeAnchor.target.id}
+                        x={routeHead.x - (view.width / size.width) * 3}
+                        y={routeHead.y - (view.width / size.width) * 3}
+                        width={(view.width / size.width) * 6}
+                        height={(view.width / size.width) * 6}
                         fill="none"
-                        stroke={layerColor(outlineLayer)}
-                        strokeWidth={
-                          outlineLayer === 'Edge.Cuts'
-                            ? Math.max(boardOutlineMinWidth, outlineWidth)
-                            : outlineWidth
+                        stroke={
+                          routeAnchor.error ? 'var(--pcb-route-blocked)' : 'var(--pcb-selected)'
                         }
-                        strokeDasharray="0.5 0.35"
+                        strokeWidth={1}
+                        vectorEffect="non-scaling-stroke"
                         pointerEvents="none"
                       />
-                    ) : (
-                      <polyline
-                        data-annotation-overlay
-                        data-shape-preview="polygon"
-                        data-outline-layer={outlineLayer}
-                        points={pointString([...outlinePoints, cursor, outlinePoints[0]])}
-                        fill="none"
-                        stroke={layerColor(outlineLayer)}
-                        strokeWidth={
-                          outlineLayer === 'Edge.Cuts'
-                            ? Math.max(boardOutlineMinWidth, outlineWidth)
-                            : outlineWidth
-                        }
-                        strokeDasharray="0.5 0.35"
-                        pointerEvents="none"
-                      />
-                    ))}
-                  {viaPreviewVisible && (
-                    <g
-                      data-annotation-overlay
-                      data-via-preview
-                      data-route-via-preview={viaTarget ? viaTarget : undefined}
-                      data-route-blocked={Boolean(routingIssue)}
-                      pointerEvents="none"
-                      opacity="0.65"
-                    >
-                      <circle
-                        cx={cursor.x}
-                        cy={cursor.y}
-                        r={viaDiameter / 2}
-                        fill={routingIssue ? 'var(--pcb-route-blocked)' : 'var(--pcb-through)'}
-                      />
-                      <circle cx={cursor.x} cy={cursor.y} r={viaDrill / 2} fill="var(--canvas)" />
-                    </g>
-                  )}
-                  {gesture && (
-                    <g
-                      data-annotation-overlay
-                      pointerEvents="none"
-                      fill={annotationMode === 'element' ? 'var(--pcb-selected)' : 'none'}
-                      fillOpacity={annotationMode === 'element' ? 0.08 : undefined}
-                      stroke={
-                        annotationMode === 'element'
-                          ? 'var(--pcb-selected)'
-                          : 'var(--annotation-mark)'
-                      }
-                      strokeWidth={
-                        annotationMode === 'element' ? 1 : (view.width / size.width) * 1.5
-                      }
-                      strokeDasharray={
-                        annotationMode === 'element' && gesture.end.x < gesture.start.x
-                          ? '5 3'
-                          : undefined
-                      }
-                    >
-                      {annotationMode === 'freehand' ? (
-                        <polyline points={pointString(gesture.points)} />
-                      ) : (
+                    )}
+                    {outline &&
+                      layers[outlineLayer] &&
+                      (outlineShape === 'rectangle' ? (
                         <rect
-                          data-selection-box={
-                            annotationMode === 'element'
-                              ? gesture.end.x < gesture.start.x
-                                ? 'crossing'
-                                : 'window'
-                              : undefined
+                          data-annotation-overlay
+                          data-shape-preview="rectangle"
+                          data-outline-layer={outlineLayer}
+                          x={Math.min(outline.x, cursor.x)}
+                          y={Math.min(outline.y, cursor.y)}
+                          width={Math.abs(outline.x - cursor.x)}
+                          height={Math.abs(outline.y - cursor.y)}
+                          fill="none"
+                          stroke={layerColor(outlineLayer)}
+                          strokeWidth={
+                            outlineLayer === 'Edge.Cuts'
+                              ? Math.max(boardOutlineMinWidth, outlineWidth)
+                              : outlineWidth
                           }
-                          x={Math.min(gesture.start.x, gesture.end.x)}
-                          y={Math.min(gesture.start.y, gesture.end.y)}
-                          width={Math.abs(gesture.start.x - gesture.end.x)}
-                          height={Math.abs(gesture.start.y - gesture.end.y)}
-                          vectorEffect={
-                            annotationMode === 'element' ? 'non-scaling-stroke' : undefined
-                          }
+                          strokeDasharray="0.5 0.35"
+                          pointerEvents="none"
                         />
-                      )}
-                    </g>
-                  )}
-                  <RuleCheckMarker
-                    location={ruleFocus?.location}
-                    radius={(view.width / size.width) * 8}
-                  />
-                  {marquee && (
-                    <rect
-                      data-annotation-overlay
-                      data-selection-box={marquee.end.x < marquee.start.x ? 'crossing' : 'window'}
-                      x={Math.min(marquee.start.x, marquee.end.x)}
-                      y={Math.min(marquee.start.y, marquee.end.y)}
-                      width={Math.abs(marquee.end.x - marquee.start.x)}
-                      height={Math.abs(marquee.end.y - marquee.start.y)}
-                      fill="var(--pcb-selected)"
-                      fillOpacity="0.08"
-                      stroke="var(--pcb-selected)"
-                      strokeWidth={1}
-                      strokeDasharray={marquee.end.x < marquee.start.x ? '5 3' : undefined}
-                      vectorEffect="non-scaling-stroke"
-                      pointerEvents="none"
+                      ) : (
+                        <polyline
+                          data-annotation-overlay
+                          data-shape-preview="polygon"
+                          data-outline-layer={outlineLayer}
+                          points={pointString([...outlinePoints, cursor, outlinePoints[0]])}
+                          fill="none"
+                          stroke={layerColor(outlineLayer)}
+                          strokeWidth={
+                            outlineLayer === 'Edge.Cuts'
+                              ? Math.max(boardOutlineMinWidth, outlineWidth)
+                              : outlineWidth
+                          }
+                          strokeDasharray="0.5 0.35"
+                          pointerEvents="none"
+                        />
+                      ))}
+                    {viaPreviewVisible && (
+                      <g
+                        data-annotation-overlay
+                        data-via-preview
+                        data-route-via-preview={viaTarget ? viaTarget : undefined}
+                        data-route-blocked={Boolean(routingIssue)}
+                        pointerEvents="none"
+                        opacity="0.65"
+                      >
+                        <circle
+                          cx={cursor.x}
+                          cy={cursor.y}
+                          r={viaDiameter / 2}
+                          fill={routingIssue ? 'var(--pcb-route-blocked)' : 'var(--pcb-through)'}
+                        />
+                        <circle cx={cursor.x} cy={cursor.y} r={viaDrill / 2} fill="var(--canvas)" />
+                      </g>
+                    )}
+                    {gesture && (
+                      <g
+                        data-annotation-overlay
+                        pointerEvents="none"
+                        fill={annotationMode === 'element' ? 'var(--pcb-selected)' : 'none'}
+                        fillOpacity={annotationMode === 'element' ? 0.08 : undefined}
+                        stroke={
+                          annotationMode === 'element'
+                            ? 'var(--pcb-selected)'
+                            : 'var(--annotation-mark)'
+                        }
+                        strokeWidth={
+                          annotationMode === 'element' ? 1 : (view.width / size.width) * 1.5
+                        }
+                        strokeDasharray={
+                          annotationMode === 'element' && gesture.end.x < gesture.start.x
+                            ? '5 3'
+                            : undefined
+                        }
+                      >
+                        {annotationMode === 'freehand' ? (
+                          <polyline points={pointString(gesture.points)} />
+                        ) : (
+                          <rect
+                            data-selection-box={
+                              annotationMode === 'element'
+                                ? gesture.end.x < gesture.start.x
+                                  ? 'crossing'
+                                  : 'window'
+                                : undefined
+                            }
+                            x={Math.min(gesture.start.x, gesture.end.x)}
+                            y={Math.min(gesture.start.y, gesture.end.y)}
+                            width={Math.abs(gesture.start.x - gesture.end.x)}
+                            height={Math.abs(gesture.start.y - gesture.end.y)}
+                            vectorEffect={
+                              annotationMode === 'element' ? 'non-scaling-stroke' : undefined
+                            }
+                          />
+                        )}
+                      </g>
+                    )}
+                    <RuleCheckMarker
+                      location={ruleFocus?.location}
+                      radius={(view.width / size.width) * 8}
                     />
-                  )}
-                </>
-              )}
-            </LayoutCameraScaleRender>
-            <rect
-              data-layout-interaction-surface
-              data-annotation-overlay
-              x={view.x}
-              y={view.y}
-              width={view.width}
-              height={view.width / ratio}
-              fill="transparent"
-            />
-          </svg>
-          {analysisReadout}
-          <LayoutCameraRender camera={camera}>
-            {(view) => (
-              <CanvasAnnotations
-                ref={controller}
-                svg={svg}
-                doc={schematic}
-                board={pcb}
-                active={active && !annotationDisabled && tool === 'annotate'}
-                sessionId={annotationSessionId}
-                annotations={annotations}
-                onChange={onAnnotationsChange}
-                onAdd={onAnnotationAdd}
-                onSelection={setAnnotationIds}
-                selectionIds={annotationIds}
-                selectableIds={annotationSelectableIds}
-                view={view}
-                ratio={1 / ratio}
-                mode={annotationMode}
-                onMode={setAnnotationMode}
-                onExit={() => activate('select')}
+                    {marquee && (
+                      <rect
+                        data-annotation-overlay
+                        data-selection-box={marquee.end.x < marquee.start.x ? 'crossing' : 'window'}
+                        x={Math.min(marquee.start.x, marquee.end.x)}
+                        y={Math.min(marquee.start.y, marquee.end.y)}
+                        width={Math.abs(marquee.end.x - marquee.start.x)}
+                        height={Math.abs(marquee.end.y - marquee.start.y)}
+                        fill="var(--pcb-selected)"
+                        fillOpacity="0.08"
+                        stroke="var(--pcb-selected)"
+                        strokeWidth={1}
+                        strokeDasharray={marquee.end.x < marquee.start.x ? '5 3' : undefined}
+                        vectorEffect="non-scaling-stroke"
+                        pointerEvents="none"
+                      />
+                    )}
+                  </>
+                )}
+              </LayoutCameraScaleRender>
+              <rect
+                data-layout-interaction-surface
+                data-annotation-overlay
+                x={view.x}
+                y={view.y}
+                width={view.width}
+                height={view.width / ratio}
+                fill="transparent"
               />
-            )}
-          </LayoutCameraRender>
-          {toolSettings && (
-            <aside
-              id={toolSettingsId}
-              className="layout-tool-settings editor-tool-sheet"
-              data-tool={tool}
-              aria-label={
-                tool === 'route' ? 'Routing settings' : drawing ? 'Region settings' : 'Via settings'
-              }
-              onKeyDown={(e) => {
-                if (
-                  !active ||
-                  e.nativeEvent.isComposing ||
-                  e.nativeEvent.keyCode === 229 ||
-                  e.key !== 'Escape' ||
-                  e.defaultPrevented
-                )
-                  return;
-                e.preventDefault();
-                e.stopPropagation();
-                activate('select');
-              }}
-            >
-              <header>
-                <strong>{tool === 'route' ? 'Track width' : trackDrag ? 'Diameter' : 'Net'}</strong>
-              </header>
-              <div className="layout-tool-settings-content">
-                {drawing && (
-                  <>
+            </svg>
+            {analysisReadout}
+            <LayoutCameraRender camera={camera}>
+              {(view) => (
+                <CanvasAnnotations
+                  ref={controller}
+                  svg={svg}
+                  doc={schematic}
+                  board={pcb}
+                  active={active && !annotationDisabled && tool === 'annotate'}
+                  sessionId={annotationSessionId}
+                  annotations={annotations}
+                  onChange={onAnnotationsChange}
+                  onAdd={onAnnotationAdd}
+                  onSelection={setAnnotationIds}
+                  selectionIds={annotationIds}
+                  selectableIds={annotationSelectableIds}
+                  view={view}
+                  ratio={1 / ratio}
+                  mode={annotationMode}
+                  onMode={setAnnotationMode}
+                  onExit={() => activate('select')}
+                />
+              )}
+            </LayoutCameraRender>
+            {toolSettings && (
+              <aside
+                id={toolSettingsId}
+                className="layout-tool-settings editor-tool-sheet"
+                data-tool={tool}
+                aria-label={
+                  tool === 'route'
+                    ? 'Routing settings'
+                    : drawing
+                      ? 'Region settings'
+                      : 'Via settings'
+                }
+                onKeyDown={(e) => {
+                  if (
+                    !active ||
+                    e.nativeEvent.isComposing ||
+                    e.nativeEvent.keyCode === 229 ||
+                    e.key !== 'Escape' ||
+                    e.defaultPrevented
+                  )
+                    return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  activate('select');
+                }}
+              >
+                <header>
+                  <strong>
+                    {tool === 'route' ? 'Track width' : trackDrag ? 'Diameter' : 'Net'}
+                  </strong>
+                </header>
+                <div className="layout-tool-settings-content">
+                  {drawing && (
+                    <>
+                      <label className="layout-field">
+                        <span>Net</span>
+                        <Select
+                          label="Region net"
+                          active={active && visible}
+                          disabled={!copperLayers.includes(outlineLayer as CopperLayer)}
+                          onClosedEscape={active ? () => activate('select') : undefined}
+                          value={regionNetId}
+                          options={[{ value: '', label: 'Unassigned' }, ...netOptions]}
+                          onChange={(value) => {
+                            if (value === regionNetId) return;
+                            setOutline(null);
+                            setError('');
+                            setRegionNet(value);
+                          }}
+                        />
+                      </label>
+                      <label className="layout-field">
+                        <span>Layer</span>
+                        <Select
+                          label="Region layer"
+                          active={active && visible}
+                          onClosedEscape={active ? () => activate('select') : undefined}
+                          value={outlineLayer}
+                          options={displayLayers.map((value) => ({ value, label: value }))}
+                          onChange={(value) => {
+                            changePriorityLayer(value as BoardLayer);
+                            setLayers((current) => ({ ...current, [value]: true }));
+                          }}
+                        />
+                      </label>
+                    </>
+                  )}
+                  {tool === 'via' && !trackDrag && (
                     <label className="layout-field">
                       <span>Net</span>
                       <Select
-                        label="Region net"
-                        active={active && visible}
-                        disabled={!copperLayers.includes(outlineLayer as CopperLayer)}
+                        label="Via placement net"
                         onClosedEscape={active ? () => activate('select') : undefined}
-                        value={regionNetId}
-                        options={[{ value: '', label: 'Unassigned' }, ...netOptions]}
-                        onChange={(value) => {
-                          if (value === regionNetId) return;
-                          setOutline(null);
+                        value={validNet}
+                        options={netOptions}
+                        placeholder="Choose a net"
+                        onChange={(v) => {
+                          setRoute(null);
+                          setViaTarget(null);
                           setError('');
-                          setRegionNet(value);
+                          setNet(v);
                         }}
                       />
                     </label>
-                    <label className="layout-field">
-                      <span>Layer</span>
-                      <Select
-                        label="Region layer"
-                        active={active && visible}
-                        onClosedEscape={active ? () => activate('select') : undefined}
-                        value={outlineLayer}
-                        options={displayLayers.map((value) => ({ value, label: value }))}
-                        onChange={(value) => {
-                          changePriorityLayer(value as BoardLayer);
-                          setLayers((current) => ({ ...current, [value]: true }));
-                        }}
+                  )}
+                  {tool === 'route' ? (
+                    <>
+                      <NumberField
+                        label="Track width (mm)"
+                        value={width}
+                        min={0.05}
+                        max={20}
+                        onCommit={setWidth}
+                        onCancel={focusCanvas}
                       />
-                    </label>
-                  </>
-                )}
-                {tool === 'via' && !trackDrag && (
-                  <label className="layout-field">
-                    <span>Net</span>
-                    <Select
-                      label="Via placement net"
-                      onClosedEscape={active ? () => activate('select') : undefined}
-                      value={validNet}
-                      options={netOptions}
-                      placeholder="Choose a net"
-                      onChange={(v) => {
-                        setRoute(null);
-                        setViaTarget(null);
-                        setError('');
-                        setNet(v);
-                      }}
-                    />
-                  </label>
-                )}
-                {tool === 'route' ? (
-                  <>
-                    <NumberField
-                      label="Track width (mm)"
-                      value={width}
-                      min={0.05}
-                      max={20}
-                      onCommit={setWidth}
-                      onCancel={focusCanvas}
-                    />
-                    <NumberField
-                      label="Diameter (mm)"
-                      accessibleLabel="Via diameter (mm)"
-                      value={viaDiameter}
-                      min={Math.max(0.2, viaDrill + 0.01)}
-                      max={20}
-                      onCommit={setViaDiameter}
-                      onCancel={focusCanvas}
-                    />
-                    <NumberField
-                      label="Drill (mm)"
-                      accessibleLabel="Via drill (mm)"
-                      value={viaDrill}
-                      min={0.1}
-                      max={viaDiameter - 0.01}
-                      onCommit={setViaDrill}
-                      onCancel={focusCanvas}
-                    />
-                  </>
-                ) : tool === 'via' ? (
-                  <div className="layout-two-fields">
-                    <NumberField
-                      label="Diameter (mm)"
-                      value={viaDiameter}
-                      min={Math.max(0.2, viaDrill + 0.01)}
-                      max={20}
-                      onCommit={setViaDiameter}
-                      onCancel={focusCanvas}
-                    />
-                    <NumberField
-                      label="Drill (mm)"
-                      value={viaDrill}
-                      min={0.1}
-                      max={viaDiameter - 0.01}
-                      onCommit={setViaDrill}
-                      onCancel={focusCanvas}
-                    />
-                  </div>
-                ) : null}
-              </div>
-              <button
-                className="layout-tool-settings-close"
-                aria-label="Close tool settings"
-                title="Close"
-                onClick={() => activate('select')}
-              >
-                <X size={15} />
-              </button>
-            </aside>
-          )}
-          {error && (
-            <div role="alert" className="layout-error">
-              <span>{error}</span>
-              <button aria-label="Dismiss error" title="Dismiss error" onClick={() => setError('')}>
-                <X size={14} />
-              </button>
-            </div>
-          )}
-          {copper.error && !error && (
-            <div className="layout-error" role="status">
-              {copper.error}
-            </div>
-          )}
-          <LayoutCameraScaleRender camera={camera}>
-            {(view) => {
-              const scaleLength = canvasScaleLength(view.width / size.width);
-              return (
-                <div className="layout-scale" aria-label="Layout scale">
-                  <i style={{ width: (scaleLength * size.width) / view.width }} />
-                  {scaleLength} mm
+                      <NumberField
+                        label="Diameter (mm)"
+                        accessibleLabel="Via diameter (mm)"
+                        value={viaDiameter}
+                        min={Math.max(0.2, viaDrill + 0.01)}
+                        max={20}
+                        onCommit={setViaDiameter}
+                        onCancel={focusCanvas}
+                      />
+                      <NumberField
+                        label="Drill (mm)"
+                        accessibleLabel="Via drill (mm)"
+                        value={viaDrill}
+                        min={0.1}
+                        max={viaDiameter - 0.01}
+                        onCommit={setViaDrill}
+                        onCancel={focusCanvas}
+                      />
+                    </>
+                  ) : tool === 'via' ? (
+                    <div className="layout-two-fields">
+                      <NumberField
+                        label="Diameter (mm)"
+                        value={viaDiameter}
+                        min={Math.max(0.2, viaDrill + 0.01)}
+                        max={20}
+                        onCommit={setViaDiameter}
+                        onCancel={focusCanvas}
+                      />
+                      <NumberField
+                        label="Drill (mm)"
+                        value={viaDrill}
+                        min={0.1}
+                        max={viaDiameter - 0.01}
+                        onCommit={setViaDrill}
+                        onCancel={focusCanvas}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              );
-            }}
-          </LayoutCameraScaleRender>
-          <CanvasContextMenu
-            target={svg}
-            active={active}
-            identity={pcb}
-            onError={setError}
-            actions={[
-              {
-                id: 'fit-board',
-                label: 'Fit board to canvas',
-                icon: Maximize,
-                run: () => fit('board'),
-              },
-              { id: 'fit-all', label: 'Fit all objects', icon: Maximize, run: () => fit('all') },
-              {
-                id: 'actual-size',
-                label: 'Actual size (100%)',
-                icon: Maximize,
-                run: () => zoom(size.width / (view.width * pixelsPerMM)),
-              },
-              { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(1 / 1.2) },
-              { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
-              {
-                id: 'export',
-                label: 'Export image',
-                icon: ImageDown,
-                disabled: exporting,
-                run: exportImage,
-              },
-              {
-                id: 'select-all',
-                label: 'Select all',
-                icon: Scan,
-                separated: true,
-                disabled: tool !== 'select' || Boolean(onAnalysisProbe),
-                run: () => {
-                  cancelGesture();
-                  setSelection(allVisibleSelections());
-                  setInspectedPadId('');
+                <button
+                  className="layout-tool-settings-close"
+                  aria-label="Close tool settings"
+                  title="Close"
+                  onClick={() => activate('select')}
+                >
+                  <X size={15} />
+                </button>
+              </aside>
+            )}
+            {error && (
+              <div role="alert" className="layout-error">
+                <span>{error}</span>
+                <button
+                  aria-label="Dismiss error"
+                  title="Dismiss error"
+                  onClick={() => setError('')}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+            {copper.error && !error && (
+              <div className="layout-error" role="status">
+                {copper.error}
+              </div>
+            )}
+            <LayoutCameraScaleRender camera={camera}>
+              {(view) => {
+                const scaleLength = canvasScaleLength(view.width / size.width);
+                return (
+                  <div className="layout-scale" aria-label="Layout scale">
+                    <i style={{ width: (scaleLength * size.width) / view.width }} />
+                    {scaleLength} mm
+                  </div>
+                );
+              }}
+            </LayoutCameraScaleRender>
+            <CanvasContextMenu
+              target={svg}
+              active={active}
+              identity={pcb}
+              onError={setError}
+              actions={[
+                {
+                  id: 'fit-board',
+                  label: 'Fit board to canvas',
+                  icon: Maximize,
+                  run: () => fit('board'),
                 },
-              },
-              {
-                id: 'clear-selection',
-                label: 'Clear selection',
-                icon: SquareDashed,
-                disabled: !selection.length,
-                run: () => {
-                  setSelection([]);
-                  setInspectedPadId('');
+                { id: 'fit-all', label: 'Fit all objects', icon: Maximize, run: () => fit('all') },
+                {
+                  id: 'actual-size',
+                  label: 'Actual size (100%)',
+                  icon: Maximize,
+                  run: () => zoom(size.width / (view.width * pixelsPerMM)),
                 },
-              },
-              {
-                id: 'rotate',
-                label: 'Rotate selection',
-                icon: RotateCw,
-                disabled:
-                  tool !== 'select' ||
-                  !selection.length ||
-                  Boolean(onAnalysisProbe) ||
-                  Boolean(drag || trackDrag),
-                run: () => rotate(90, selection),
-              },
-              {
-                id: 'delete',
-                label: 'Delete selection',
-                icon: Trash2,
-                destructive: true,
-                disabled:
-                  tool !== 'select' ||
-                  !selection.length ||
-                  Boolean(onAnalysisProbe) ||
-                  Boolean(drag || trackDrag),
-                run: () => remove(selection),
-              },
-            ]}
-          />
-          <div className="zoom-controls">
-            <button aria-label="Zoom out" title="Zoom out" onClick={() => zoom(1.2)}>
-              <Minus size={15} />
-            </button>
-            <button
-              className="zoom-value"
-              aria-label="Actual size (100%)"
-              onClick={() => zoom(size.width / (view.width * pixelsPerMM))}
-            >
-              <LayoutCameraScaleRender camera={camera}>
-                {(view) => `${Math.round((size.width / view.width / pixelsPerMM) * 100)}%`}
-              </LayoutCameraScaleRender>
-            </button>
-            <button aria-label="Zoom in" title="Zoom in" onClick={() => zoom(1 / 1.2)}>
-              <Plus size={15} />
-            </button>
-            <i />
-            <button aria-label="Fit board to canvas" title="Fit board" onClick={() => fit('board')}>
-              <Maximize size={15} />
-            </button>
+                { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(1 / 1.2) },
+                { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
+                {
+                  id: 'export',
+                  label: 'Export image',
+                  icon: ImageDown,
+                  disabled: exporting,
+                  run: exportImage,
+                },
+                {
+                  id: 'select-all',
+                  label: 'Select all',
+                  icon: Scan,
+                  separated: true,
+                  disabled: tool !== 'select' || Boolean(onAnalysisProbe),
+                  run: () => {
+                    cancelGesture();
+                    setSelection(allVisibleSelections());
+                    setInspectedPadId('');
+                  },
+                },
+                {
+                  id: 'clear-selection',
+                  label: 'Clear selection',
+                  icon: SquareDashed,
+                  disabled: !selection.length,
+                  run: () => {
+                    setSelection([]);
+                    setInspectedPadId('');
+                  },
+                },
+                {
+                  id: 'rotate',
+                  label: 'Rotate selection',
+                  icon: RotateCw,
+                  disabled:
+                    tool !== 'select' ||
+                    !selection.length ||
+                    Boolean(onAnalysisProbe) ||
+                    Boolean(drag || trackDrag),
+                  run: () => rotate(90, selection),
+                },
+                {
+                  id: 'delete',
+                  label: 'Delete selection',
+                  icon: Trash2,
+                  destructive: true,
+                  disabled:
+                    tool !== 'select' ||
+                    !selection.length ||
+                    Boolean(onAnalysisProbe) ||
+                    Boolean(drag || trackDrag),
+                  run: () => remove(selection),
+                },
+              ]}
+            />
           </div>
+          <EditorStatusBar
+            className="layout-status"
+            active={active && visible}
+            modeActions={{
+              onInteraction: () => toolbarActions.current.activate('select'),
+              onAnnotation: () => toolbarActions.current.activate('annotate'),
+              annotationDisabled,
+            }}
+            mode={
+              onAnalysisProbe
+                ? 'Analysis probe'
+                : trackDrag
+                  ? trackDrag.mode === 'corner'
+                    ? 'Dragging track corner'
+                    : 'Dragging connected tracks'
+                  : drag
+                    ? 'Moving selection'
+                    : marquee
+                      ? 'Selecting'
+                      : tool === 'route'
+                        ? route
+                          ? 'Routing'
+                          : 'Route tracks'
+                        : drawing
+                          ? outline
+                            ? outlineShape === 'rectangle'
+                              ? 'Choose opposite corner'
+                              : 'Choose next corner'
+                            : 'Choose first corner'
+                          : tool === 'place'
+                            ? 'Place footprint'
+                            : tool === 'via'
+                              ? 'Place through via'
+                              : tool === 'annotate'
+                                ? 'Annotation mode'
+                                : tool === 'measure'
+                                  ? 'Measure distance'
+                                  : tool === 'hand'
+                                    ? 'Pan'
+                                    : 'Interaction mode'
+            }
+            coordinates={
+              tool === 'measure' ? (
+                <MeasurementReadout measurement={measurement} />
+              ) : (
+                <CanvasCoordinates coordinates={coordinates} />
+              )
+            }
+            controls={gridControl}
+            status={
+              outlineResizePreview?.error ||
+              trackDragPreview?.error ||
+              fillPreview.error ||
+              backgroundFill.error ||
+              (trackDragPreview?.constraint ? 'Stopped at obstacle' : '') ||
+              imageStatus ||
+              routingIssue ||
+              (acceptedFillPreview.changed && backgroundFill.completed?.candidate !== placed
+                ? 'Updating copper'
+                : '') ||
+              draftStatus
+            }
+          />
         </div>
-        {analysisPanel}
+        <InspectorResize
+          target={analysisDock}
+          size={sidebarSize}
+          onResize={setSidebarSize}
+          label="layout sidebar"
+          axes={['width']}
+          gutter
+          hidden={!analysisPanelVisible}
+          minWidth={224}
+          bounds={() => ({
+            width: Math.min(
+              480,
+              Math.max(0, (analysisDock.current?.parentElement?.clientWidth ?? 480) - 172),
+            ),
+            height: analysisDock.current?.parentElement?.clientHeight ?? 0,
+          })}
+        />
+        <div ref={analysisDock} className="layout-analysis-dock" hidden={!analysisPanelVisible}>
+          {analysisPanel}
+        </div>
+        <InspectorResize
+          target={sidebarDock}
+          size={sidebarSize}
+          onResize={setSidebarSize}
+          label="layout sidebar"
+          axes={['width']}
+          gutter
+          hidden={!sidebarVisible}
+          minWidth={224}
+          bounds={() => ({
+            width: Math.min(
+              480,
+              Math.max(0, (sidebarDock.current?.parentElement?.clientWidth ?? 480) - 172),
+            ),
+            height: sidebarDock.current?.parentElement?.clientHeight ?? 0,
+          })}
+        />
         <aside
           ref={sidebarDock}
           className="layout-sidebar editor-sidebar-sections"
@@ -5052,76 +5170,9 @@ function LayoutEditor({
             )}
           </EditorDisplayDrawer>
           {appearancePanelContent}
-          <InspectorResize
-            target={sidebarDock}
-            size={sidebarSize}
-            onResize={setSidebarSize}
-            label="layout sidebar"
-            axes={['width']}
-            minWidth={224}
-            bounds={() => ({
-              width: Math.min(
-                480,
-                Math.max(0, (sidebarDock.current?.parentElement?.clientWidth ?? 480) - 160),
-              ),
-              height: sidebarDock.current?.parentElement?.clientHeight ?? 0,
-            })}
-          />
         </aside>
       </div>
-      <EditorStatusBar
-        className="layout-status"
-        active={active && visible}
-        mode={
-          onAnalysisProbe
-            ? 'Analysis probe'
-            : trackDrag
-              ? trackDrag.mode === 'corner'
-                ? 'Dragging track corner'
-                : 'Dragging connected tracks'
-              : drag
-                ? 'Moving selection'
-                : marquee
-                  ? 'Selecting'
-                  : tool === 'route'
-                    ? route
-                      ? 'Routing'
-                      : 'Route tracks'
-                    : drawing
-                      ? outline
-                        ? outlineShape === 'rectangle'
-                          ? 'Choose opposite corner'
-                          : 'Choose next corner'
-                        : 'Choose first corner'
-                      : tool === 'place'
-                        ? 'Place footprint'
-                        : tool === 'via'
-                          ? 'Place through via'
-                          : tool === 'annotate'
-                            ? 'Annotation mode'
-                            : tool === 'measure'
-                              ? 'Measure distance'
-                              : tool === 'hand'
-                                ? 'Pan'
-                                : 'Interaction mode'
-        }
-        coordinates={
-          tool === 'measure' ? (
-            <MeasurementReadout measurement={measurement} />
-          ) : (
-            <CanvasCoordinates coordinates={coordinates} />
-          )
-        }
-        controls={gridControl}
-        status={
-          outlineResizePreview?.error ||
-          trackDragPreview?.error ||
-          (trackDragPreview?.constraint ? 'Stopped at obstacle' : '') ||
-          imageStatus ||
-          routingIssue ||
-          draftStatus
-        }
-      />
+
       {choosing && active && (
         <LibraryChooser
           key={partId}

@@ -20,7 +20,7 @@ import {
 } from '../lib/appearance';
 
 test('appearance persists across service origins without creating or changing project recovery', async () => {
-  assert.equal(defaultAppearance.modelGridSpacing, 1);
+  assert.equal(defaultAppearance.modelGridSpacing, 5);
   const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-appearance-'));
   let server = await startServer({ dataDir: dir });
   const request = (body?: unknown, origin?: string) =>

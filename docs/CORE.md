@@ -76,7 +76,7 @@ geometry functions. Discoverable object queries supply retained native metadata.
 Generated PCB command schemas reuse canonical format definitions rather than a
 second document validator. [API](API.md) owns exact command parameters/results.
 
-`schematic.drag` shares canvas connection-preserving geometry, while `schematic.move` leaves unselected wires. Both use the same revision/Source gates and preserve no-op/rejection atomicity. Track locks, connected drag, collapse handling and copper invalidation follow [Layout](LAYOUT.md).
+`schematic.drag` shares canvas connection-preserving geometry, while `schematic.move` leaves unselected wires. Both use the same revision/Source gates and preserve no-op/rejection atomicity. Track locks, connected drag, collapse handling and automatic copper refresh follow [Layout](LAYOUT.md).
 
 `modelCad.add/update/remove/duplicate`, `modelCad.sketch.extrude` and `modelCad.boolean` are ordinary whole-project Core transactions. Box, cylinder, extrusion and Boolean bodies live in `org.openpe.model-cad`. Validation checks finite bounded geometry and global UUIDs; duplication allocates fresh body IDs. Model CAD permits up to 64 bodies; sketch extrusion accepts up to six ordered analytic contours and shares the prepared Boolean-solid path. Dedicated local-hole fields are rejected. Identical replacements are clean; read-only CAD queries remain available with pending Source. Rendering and analytical STEP share geometry; CAD adds no electrical/thermal simulation. [Format](FORMAT.md#document-ownership) owns native persistence and complete geometry limits.
 

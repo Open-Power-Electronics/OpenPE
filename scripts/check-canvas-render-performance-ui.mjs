@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -300,8 +301,8 @@ try {
     );
     const beforeCamera = await objects();
     for (let index = 0; index < 3; index++) {
-      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-      await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+      await runCanvasAction(page, 'Zoom in');
+      await runCanvasAction(page, 'Zoom out');
     }
     await page.mouse.move(600, 500);
     await page.mouse.down({ button: 'middle' });
@@ -475,7 +476,7 @@ try {
       assert.deepEqual((await work()).symbols, beforeNoteChange.symbols);
     }
 
-    await page.getByRole('button', { name: 'Fit to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit to canvas');
     assert.equal(
       (await objects()).fingerprints,
       0,
@@ -643,7 +644,7 @@ try {
       await page.evaluate(() => window.expectedPreview.wires.map(({ id }) => id)),
       'The commit keeps exactly the generated wire identities displayed in its final pose.',
     );
-    await page.getByRole('button', { name: 'Fit to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit to canvas');
     await nextFrame();
     await page.evaluate(() => window.setCanvasTool('annotate'));
     await nextFrame();

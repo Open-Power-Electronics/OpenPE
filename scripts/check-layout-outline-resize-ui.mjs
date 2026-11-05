@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -82,7 +83,7 @@ try {
       await page.addScriptTag({ content: bundle.outputFiles[0].text });
       const canvas = page.getByTestId('layout-canvas');
       await canvas.waitFor();
-      await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+      await runCanvasAction(page, 'Fit board to canvas');
       const screen = (position) =>
         canvas.evaluate((svg, p) => {
           const at = new DOMPoint(p.x, p.y).matrixTransform(svg.getScreenCTM());

@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import {
   closeDisplayDrawer,
   openDisplayDrawer,
@@ -220,7 +221,7 @@ try {
     assert.equal(await filter.isEnabled(), true);
   }
   await closeDisplayDrawer(page, 'Selection');
-  await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+  await runCanvasAction(page, 'Fit board to canvas');
   const point = (position) =>
     canvas.evaluate((svg, value) => {
       const screen = new DOMPoint(value.x, value.y).matrixTransform(svg.getScreenCTM());
@@ -554,7 +555,7 @@ try {
   const sources = JSON.parse(await readFile('lib/reference-examples.json', 'utf8'));
   const lm = parseProject(sources['reference-lm2596-to220-5-buck']).pcb;
   await page.evaluate((board) => window.replaceBoard(board), lm);
-  await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await setLayoutVisibility(page, 'B.Cu', true);
   await toggleLayoutVisualization(page, 'Visible layers');
   await panel.getByRole('button', { name: 'F.Cu', exact: true }).click();

@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { tsImport } from 'tsx/esm/api';
@@ -139,7 +140,7 @@ export async function exerciseNewProjectDesign(page, step) {
 
   await layout.press('Control+Home');
   // Zoom out around the actual geometry to make room for the complete outline.
-  for (let index = 0; index < 3; index++) await button('Zoom out').click();
+  for (let index = 0; index < 3; index++) await runCanvasAction(page, 'Zoom out');
   await selectLayoutLayer(page, 'Edge.Cuts');
   await button('Draw rectangle').click();
   await clickPoint(layout, { x: 10, y: 10 });

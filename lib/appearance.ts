@@ -105,7 +105,7 @@ export const defaultAppearance: Appearance = {
   schematicLayers: { ...defaultSchematicLayers },
   gridSpacing: 2,
   layoutGridSpacing: defaultLayoutGridSpacing,
-  modelGridSpacing: 1,
+  modelGridSpacing: 5,
   theme: 'light',
   textSize: 'standard',
   motion: 'system',

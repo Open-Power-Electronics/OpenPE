@@ -103,14 +103,14 @@ modelCad:modelCadFromProject(snapshot.project),source:snapshot.source,pcb:JSON.s
 setActive:value=>{enabled=value;setActive(value);},setSidebarVisible,setGrid,setGridSpacing,camera:()=>view.current,
 newObject:kind=>newModelCadObject(core.getSnapshot().project.pcb,kind)};window.THREE=THREE;
 return <div className="editor" style={{position:'relative',display:'flex',flexDirection:'column',height:'100vh'}}>
+<div className="editor-mode-bar"><div className="editor-mode-actions" role="group" aria-label="Project actions"><button className="tool-button" aria-label="List">☷</button><button className="tool-button" aria-label="Git">⑂</button><SidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div></div>
 <div style={{position:'relative',flex:1,minHeight:0}}><Preview board={snapshot.project.pcb} schematic={snapshot.project.schematic}
 grid={grid} gridSpacing={gridSpacing}
 modelCad={modelCadFromProject(snapshot.project)}
 onModeChange={mode=>window.modelMode=mode}
 revision={String(snapshot.revision)} undoDepth={snapshot.undoDepth} redoDepth={snapshot.redoDepth}
 sourcePending={snapshot.sourceDraft!==null} capabilityHost={host} active={active} viewState={view}
-listAction={<button className="tool-button" aria-label="Parts list">☷</button>}
-sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)} sidebarAction={<div className="editor-tool-group editor-view-controls"><SidebarToggle visible={sidebarVisible} onToggle={()=>setSidebarVisible(value=>!value)} className="editor-sidebar-toggle"/></div>}/></div></div>};
+sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)} onToggleSidebar={()=>setSidebarVisible(value=>!value)}/></div></div>};
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -368,22 +368,236 @@ try {
   });
   await sidebar.waitFor();
   await assertDocked();
+  if (process.argv.includes('--ground')) {
+    const ruler = page.getByRole('img', { name: /^3D scale:/ });
+    await ruler.waitFor();
+    const before = await state();
+    const floorFrame = () =>
+      page.evaluate(() => {
+        const surface = window.scene.getObjectByName('model-ground').children[0];
+        return [
+          ...surface.getWorldPosition(new window.THREE.Vector3()).toArray(),
+          ...surface.scale.toArray(),
+        ];
+      });
+    const originalFloor = await floorFrame();
+    const groundState = () =>
+      page.evaluate(() => {
+        const root = window.scene.getObjectByName('model-ground');
+        return { visible: root.visible, objects: root.children.length };
+      });
+    assert.deepEqual(await groundState(), { visible: true, objects: 5 });
+    assert.deepEqual(
+      await page.evaluate(() => {
+        const floor = window.scene.getObjectByName('model-ground');
+        return floor.children[3].getWorldPosition(new window.THREE.Vector3()).toArray().slice(0, 2);
+      }),
+      [50, -38],
+      'Ground axes intersect at the PCB outline center.',
+    );
+    const rulerBox = await ruler.boundingBox();
+    assert.ok(
+      rulerBox.width <= 112 && rulerBox.height <= 116,
+      'The corner ruler keeps a compact footprint.',
+    );
+    const captionAnchor = await ruler
+      .locator('.model-scale-value')
+      .evaluate((node) => [node.getAttribute('x'), node.getAttribute('y')]);
+    assert.equal(
+      await page.evaluate(() =>
+        ['x', 'y'].every(
+          (axis) => window.scene.getObjectByName(`model-ground-axis-${axis}`)?.isMesh === true,
+        ),
+      ),
+      true,
+      'The floor uses colored strips for both axes, without letter annotations.',
+    );
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.scene
+            .getObjectByName('model-ground')
+            .children[0].getWorldPosition(new window.THREE.Vector3()).z,
+      ),
+      -JSON.parse(before.pcb).thickness / 2 - 0.05,
+      'The ground sits directly below the PCB underside.',
+    );
+    assert.equal(
+      await ruler.locator('.model-scale-axis line').count(),
+      3,
+      'Each 3D axis has one uncluttered baseline.',
+    );
+    const isometricAxes = await ruler
+      .locator('.model-scale-axis line')
+      .evaluateAll((lines) => lines.map((line) => line.outerHTML));
+    assert.equal(
+      await ruler.locator('.model-scale-endpoint').count(),
+      3,
+      'Each axis has one labelled endpoint marker.',
+    );
+    const originBefore = await ruler.locator('.model-scale-origin').boundingBox();
+    const axisBeforeZoom = await ruler
+      .locator('.model-scale-axis line')
+      .first()
+      .evaluate((line) => line.outerHTML);
+    await runCanvasAction(page, 'Zoom in');
+    await page.waitForFunction(
+      (before) => document.querySelector('.model-scale-axis line').outerHTML !== before,
+      axisBeforeZoom,
+    );
+    const originAfter = await ruler.locator('.model-scale-origin').boundingBox();
+    assert.deepEqual(
+      await floorFrame(),
+      originalFloor,
+      'Zoom keeps exact symmetric floor extents centered on the PCB.',
+    );
+    assert.ok(
+      Math.abs(originAfter.x - originBefore.x) < 0.1 &&
+        Math.abs(originAfter.y - originBefore.y) < 0.1,
+      'The lower-left ruler scales around its fixed origin.',
+    );
+    await selectModelView(page, 'Top view');
+    await page.waitForFunction(
+      (previous) =>
+        JSON.stringify(
+          [...document.querySelectorAll('.model-scale-axis line')].map((line) => line.outerHTML),
+        ) !== JSON.stringify(previous),
+      isometricAxes,
+    );
+    await selectModelView(page, 'Isometric view');
+    assert.deepEqual(
+      await ruler
+        .locator('.model-scale-value')
+        .evaluate((node) => [node.getAttribute('x'), node.getAttribute('y')]),
+      captionAnchor,
+      'The scale number keeps its fixed position while the view rotates.',
+    );
+    const projection = page.getByRole('button', { name: 'Orthographic projection', exact: true });
+    await projection.click();
+    await page.waitForFunction(() => window.modelOrbit.object.isPerspectiveCamera);
+    await ruler.waitFor();
+    await projection.click();
+    await page.waitForFunction(() => window.modelOrbit.object.isOrthographicCamera);
+    await page.evaluate(() => window.cad.setGrid(false));
+    await page.waitForFunction(() => {
+      const floor = window.scene.getObjectByName('model-ground');
+      return floor.visible && floor.children.slice(1, 3).every((line) => !line.visible);
+    });
+    await page.evaluate(() => {
+      window.cad.setGridSpacing(2);
+      window.cad.setGrid(true);
+    });
+    await page.waitForFunction(() => window.scene.getObjectByName('model-ground').visible);
+    await selectModelVisualizationTab(page, 'Display');
+    const planeVisibility = page.getByRole('checkbox', {
+      name: 'Show reference plane',
+      exact: true,
+    });
+    assert.equal(
+      await page.getByRole('combobox', { name: 'Reference plane', exact: true }).count(),
+      0,
+    );
+    const beforePlaneCamera = await cameraState();
+    const beforePlaneRequests = requests;
+    await planeVisibility.focus();
+    for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
+      assert.equal(
+        await planeVisibility.evaluate(
+          (node, event) =>
+            node.dispatchEvent(
+              new KeyboardEvent('keydown', {
+                key: ' ',
+                bubbles: true,
+                cancelable: true,
+                ...event,
+              }),
+            ),
+          event,
+        ),
+        false,
+        'IME cannot toggle reference plane visibility.',
+      );
+      assert.equal(await planeVisibility.isChecked(), true);
+    }
+    await planeVisibility.press('Space');
+    await page.waitForFunction(() => !window.scene.getObjectByName('model-ground').visible);
+    await preview.screenshot({ path: 'test-results/model-reference-plane-off.png' });
+    await page.evaluate(() => window.cad.setActive(false));
+    await page.waitForFunction(() => !window.modelOrbit.enabled);
+    await page.evaluate(() => window.cad.setActive(true));
+    await page.waitForFunction(() => window.modelOrbit.enabled);
+    assert.equal(
+      await planeVisibility.isChecked(),
+      false,
+      'View switches retain plane visibility.',
+    );
+    await planeVisibility.check();
+    await page.waitForFunction(() => window.scene.getObjectByName('model-ground').visible);
+    assert.deepEqual(
+      await cameraState(),
+      beforePlaneCamera,
+      'Plane visibility preserves the camera.',
+    );
+    assert.equal(requests, beforePlaneRequests, 'Plane visibility retains model resources.');
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (theme) => document.documentElement.setAttribute('data-theme', theme),
+        theme,
+      );
+      await page.waitForFunction(
+        (theme) => document.querySelector('.pcb-model-preview').dataset.modelTheme === theme,
+        theme,
+      );
+      await preview.screenshot({ path: `test-results/model-ground-${theme}.png` });
+    }
+    await button('Create sketch').click();
+    const plane = page.getByRole('complementary', { name: 'Sketch plane settings', exact: true });
+    await page.waitForFunction(() => !window.scene.getObjectByName('model-ground').visible);
+    await plane.getByRole('button', { name: 'Start sketch', exact: true }).click();
+    await page.waitForFunction(() => {
+      let grid = false;
+      window.scene.traverseVisible((node) => {
+        if (node.userData.modelCadSketchGrid) grid = true;
+      });
+      return grid && !window.scene.getObjectByName('model-ground').visible;
+    });
+    await page
+      .getByRole('complementary', { name: 'Sketch settings', exact: true })
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+    await page.waitForFunction(() => window.scene.getObjectByName('model-ground').visible);
+    assert.equal(
+      await planeVisibility.isChecked(),
+      true,
+      'Sketch cancellation retains plane visibility.',
+    );
+    assert.deepEqual(
+      await state(),
+      before,
+      'Ground and ruler display actions preserve the document and undo.',
+    );
+    assert.deepEqual(errors, []);
+    console.log(
+      'PASS: Model ground, Off/density, theme, camera-following 3D ruler and unchanged Core/native state.',
+    );
+    throw sketchPlaneComplete;
+  }
   const rightToggle = button('Toggle right sidebar');
   assert.equal(await rightToggle.count(), 1);
   assert.equal(
     await rightToggle.evaluate(
       (element) =>
         element.classList.contains('editor-sidebar-toggle') &&
-        !!element.closest('.editor-toolbar .editor-view-controls'),
+        !!element.closest('.editor-mode-actions'),
     ),
     true,
-    'The Model toggle occupies the persistent toolbar view-control group.',
+    'The Model toggle occupies the shared upper project-action group.',
   );
   await assertToolbarSidebarPlacement(
     preview.getByRole('group', { name: 'Model tools', exact: true }),
   );
   const originalDockWidth = (await sidebar.boundingBox()).width;
-  const resize = sidebar.getByRole('button', {
+  const resize = sidebar.locator('..').getByRole('button', {
     name: 'Resize model properties width',
     exact: true,
   });

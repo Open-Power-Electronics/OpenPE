@@ -123,6 +123,18 @@ function fixture() {
   ];
   board.graphics = [
     { id: uid(), layer: 'Dwgs.User', start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, width: 0.1 },
+    {
+      id: uid(),
+      layer: 'Edge.Cuts',
+      kind: 'polygon',
+      start: { x: -5, y: -5 },
+      points: [
+        { x: 35, y: -5 },
+        { x: 35, y: 35 },
+      ],
+      end: { x: -5, y: 35 },
+      width: 0.05,
+    },
   ];
   project.pcb = board;
   return project;
@@ -329,7 +341,7 @@ test('GUI and Agent no-connect placement and wire simplification use identical t
   );
 });
 
-test('GUI and Agent pad edits normalize circle geometry, clear overrides and invalidate fills once', async () => {
+test('GUI and Agent pad edits normalize circle geometry, clear overrides and refresh fills once', async () => {
   await parity(
     'layout.pad.properties',
     (project) => ({
@@ -452,7 +464,9 @@ test('GUI and Agent board drawing creation and Properties retain UUIDs and nativ
       const board = project.pcb!;
       core.replaceBoard({
         ...board,
-        graphics: [{ ...graphic, layer: 'Dwgs.User', id: board.graphics[0].id }],
+        graphics: board.graphics.map((item, index) =>
+          index ? item : { ...graphic, layer: 'Dwgs.User', id: item.id },
+        ),
       });
     },
   );

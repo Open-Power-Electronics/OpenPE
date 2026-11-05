@@ -13,7 +13,7 @@
   --ui-font: 'Segoe UI', 'Helvetica Neue', Arial, 'Microsoft YaHei', sans-serif;
   --content-font: var(--ui-font);
   --code-font: 'Cascadia Code', Consolas, monospace;
-  --cursor-resize-horizontal: url('/cursors/resize-horizontal.svg') 16 16, col-resize;
+  --cursor-resize-horizontal: url('/cursors/resize-horizontal.svg') 12 12, col-resize;
   --cursor-annotation: url('/cursors/annotation.svg') 16 16, crosshair;
   --content-size: var(--font-body);
   --code-size: var(--font-control);
@@ -108,6 +108,7 @@
   --source-indent-3: #008b99;
   --source-selection: #d8e9fa;
   color-scheme: light;
+  --radius: 8px;
   --control-height: 30px;
   --dialog-width: 520px;
   --dialog-confirm-width: 360px;
@@ -251,7 +252,7 @@ input,
 textarea,
 select {
   outline: none;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 :focus,
 :focus-visible {
@@ -373,9 +374,12 @@ p {
   align-items: center;
   justify-content: space-between;
 }
-.icon-button {
+.icon-button,
+.send-button,
+.tool-button {
   display: grid;
   place-items: center;
+  padding: 0;
 }
 .agent-logo {
   display: grid;
@@ -407,21 +411,12 @@ p {
   justify-content: space-between;
   align-items: center;
 }
-.send-button {
-  display: grid;
-  place-items: center;
-}
 .editor {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
   overflow: hidden;
-}
-.document-bar {
-  flex: none;
-  display: flex;
-  align-items: center;
 }
 .file-tab {
   display: flex;
@@ -440,10 +435,6 @@ p {
   display: flex;
   align-items: center;
   flex: none;
-}
-.tool-button {
-  display: grid;
-  place-items: center;
 }
 .editor-body {
   flex: 1;
@@ -513,28 +504,6 @@ p {
 .canvas-wrap > svg:focus {
   outline: none;
 }
-.zoom-controls {
-  position: absolute;
-  display: flex;
-  align-items: center;
-}
-.zoom-controls button {
-  display: grid;
-  place-items: center;
-}
-.zoom-controls span {
-  font:
-    var(--font-caption) Consolas,
-    monospace;
-  min-width: 37px;
-  text-align: center;
-}
-.zoom-controls i {
-  width: 1px;
-  height: 12px;
-  background: var(--line);
-  margin: 0 4px;
-}
 .inspector {
   position: absolute;
   top: 18px;
@@ -590,7 +559,7 @@ p {
   gap: 20px;
 }
 .toast button {
-  border-radius: 3px;
+  border-radius: var(--radius);
   display: flex;
   padding: 3px;
 }
@@ -733,7 +702,6 @@ button:where(:hover:not(:disabled)) {
 .send-button {
   background: var(--accent);
   color: var(--text-strong);
-  border-radius: 2px;
   font-weight: 600;
 }
 .send-button:hover:not(:disabled) {
@@ -751,17 +719,8 @@ button:where(:hover:not(:disabled)) {
 .editor {
   border-left: 0;
 }
-.document-bar {
-  padding-left: 19px;
-}
 .file-tab {
   border-bottom-color: var(--accent);
-}
-.icon-button {
-  border-radius: 1px;
-}
-.zoom-controls {
-  border-color: var(--line);
 }
 .inspector {
   border-color: var(--line);
@@ -836,7 +795,7 @@ button:where(:hover:not(:disabled)) {
 
 /* Neutral actions and sparse green feedback match the Open Design palette. */
 .app-header,
-.document-bar,
+.editor-mode-bar,
 .editor-toolbar {
   background: var(--surface);
 }

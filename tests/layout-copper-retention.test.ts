@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { createElement, Fragment } from 'react';
 import { build } from 'esbuild';
+import type { PCBFillPreview } from '../components/pcbFillPreview';
 
 // Exercise the actual editor dependency arrays/drawing block and existing
 // retention hooks without a browser. Only commit publishes layout effects;
@@ -60,7 +61,7 @@ const compiled = await build({
       type BoardLayer=string;type ReactNode=unknown;
       const LayoutZoneFillDrawing='zone-fill',LayoutZoneOutlineDrawing='zone-outline',LayoutTrackDrawing='track';
       export default function draw(input){
-        const {copperLayers,layers,copperZones,copperPaths,zoneOwners,zoneOutlinePaths,selectionPaint,highlightNets,placed,netNames}=input;
+        const {copperLayers,layers,copperZones,copperPaths,fillPreview,fillPreviewZones,boardSurface,pattern,zoneOwners,zoneOutlinePaths,selectionPaint,highlightNets,placed,netNames}=input;
         const visibleLayer=(name)=>Boolean(layers[name]);
         ${section('  const copperFillInputs = [', '  const footprintPasses = useMemo(')}
         ${statement('  const retainTrack = useRetainedElements(')}
@@ -130,6 +131,10 @@ function fixture() {
     layers: { 'F.Cu': true, 'B.Cu': true, copper: true, zoneOutlines: true },
     copperZones: zones,
     copperPaths: new Map(zones.map((zone) => [zone.id, `fill-${zone.id}`])),
+    fillPreview: { changed: false, zones: [] } as PCBFillPreview,
+    fillPreviewZones: new Map<string, PCBFillPreview['zones'][number]>(),
+    boardSurface: 'board-outline',
+    pattern: 'test-layout',
     zoneOwners: new Map([['A', 'footprint-owner']]),
     zoneOutlinePaths: new Map(zones.map((zone) => [zone.id, `outline-${zone.id}`])),
     selectionPaint: {},
@@ -241,4 +246,50 @@ test('abandoned zone preparation cannot replace the committed retention maps', (
   const committed = render(proposed);
   assert.equal(committed.fills.get('F.Cu')![0].props.path, 'abandoned-fill');
   assert.equal(committed.outlines.get('F.Cu')![0].props.path, 'abandoned-outline');
+});
+
+test('worker fill frames and preview masks replace affected zones while retaining untouched drawings', () => {
+  const render = renderer(),
+    basis = fixture(),
+    first = render(basis);
+  const frame = {
+    ...basis,
+    copperPaths: new Map([...basis.copperPaths, ['A', 'worker-fill-A']]),
+  };
+  const filled = render(frame);
+  assert.equal(filled.fills.get('F.Cu')![0].props.path, 'worker-fill-A');
+  assert.notEqual(filled.fills.get('F.Cu')![0], first.fills.get('F.Cu')![0]);
+  assert.equal(filled.fills.get('F.Cu')![1], first.fills.get('F.Cu')![1]);
+  assert.equal(filled.fills.get('B.Cu')![0], first.fills.get('B.Cu')![0]);
+  assert.equal(filled.outlines, first.outlines);
+
+  const zones: PCBFillPreview['zones'] = basis.copperZones.map((zone) => ({
+    ...zone,
+    layer: zone.layer as 'F.Cu' | 'B.Cu',
+    outline: `preview-outline-${zone.id}`,
+    needsMask: zone.id === 'A',
+    blockers: zone.id === 'A' ? [{ path: 'M 3 4 L 8 4', strokeWidth: 1 }] : [],
+  }));
+  const maskedInput = {
+    ...frame,
+    fillPreview: { changed: true, zones },
+    fillPreviewZones: new Map(zones.map((zone) => [zone.id, zone])),
+  };
+  const masked = render(maskedInput);
+  assert.deepEqual(masked.fills.get('F.Cu')![0].props.preview, {
+    ...zones[0],
+    id: 'test-layout-fill-preview-A',
+    boardOutline: 'board-outline',
+  });
+  assert.equal(masked.fills.get('F.Cu')![1], filled.fills.get('F.Cu')![1]);
+  assert.equal(masked.fills.get('B.Cu')![0], filled.fills.get('B.Cu')![0]);
+  assert.equal(masked.outlines, first.outlines);
+  assert.equal(masked.copper.get('F.Cu')!.props.children[0], masked.fills.get('F.Cu'));
+
+  const settled = render(frame);
+  assert.equal(settled.fills.get('F.Cu')![0].props.preview, undefined);
+  assert.equal(settled.fills.get('F.Cu')![0].props.path, 'worker-fill-A');
+  assert.equal(settled.fills.get('F.Cu')![1], masked.fills.get('F.Cu')![1]);
+  assert.equal(settled.fills.get('B.Cu')![0], masked.fills.get('B.Cu')![0]);
+  assert.equal(settled.copper.get('F.Cu')!.props.children[0], settled.fills.get('F.Cu'));
 });

@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 // Real EMC geometry and Core commits in an isolated headless browser. All
 // project data stays in memory; no Electron, services, providers or solvers.
 // Usage: node scripts/benchmark-emc-interaction.mjs
@@ -167,7 +168,7 @@ try {
   await page.mouse.wheel(0, 600);
   await result('2 wheel zoom');
   assert.equal(await page.evaluate(() => window.state.undoDepth), 0);
-  await page.getByRole('button', { name: 'Fit to canvas', exact: true }).click();
+  await runCanvasAction(page, 'Fit to canvas');
   const part = project.schematic.parts.find((p) => p.ref === 'R1');
   await page.evaluate((id) => window.select([id]), part.id);
   const toScreen = (p) =>

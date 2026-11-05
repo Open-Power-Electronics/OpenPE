@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 // Opt-in desktop profiling. Uses an isolated profile and never submits Agent
 // requests, runs solvers or touches the user's open projects/recovery.
 // OPENPE_DEV_URL=http://127.0.0.1:3000 node scripts/benchmark-desktop-interaction.mjs [filter|all] [label]
@@ -90,8 +91,8 @@ try {
         });
     }
     for (let index = 0; index < 3; index++) {
-      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-      await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+      await runCanvasAction(page, 'Zoom in');
+      await runCanvasAction(page, 'Zoom out');
     }
     if (cpuSampling) {
       const { profile: cpu } = await cdp.send('Profiler.stop');

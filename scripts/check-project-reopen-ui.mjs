@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -303,7 +304,7 @@ try {
   assert.equal(await page.evaluate(() => window.exampleCalls[0].exampleKey), firstOriginal.key);
   assert.equal(await page.evaluate(() => window.exampleCalls[0].id), retained.id);
   // Keep a non-default canvas scale and compare every painted return frame.
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 150)));
   const canvasBefore = await page.getByTestId('schematic-canvas').getAttribute('viewBox');
   await button('Home').click();

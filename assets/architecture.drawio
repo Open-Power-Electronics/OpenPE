@@ -10,8 +10,8 @@
                 <mxCell id="human" parent="1" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=center;verticalAlign=middle;spacing=6;" value="Human" vertex="1">
                     <mxGeometry height="42" width="240" x="130" y="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;Shared PCB sketch canvas · Typed picking" vertex="1">
-                    <mxGeometry height="90" width="340" x="80" y="190" as="geometry"/>
+                <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;PCB sketch canvas · Typed picking&#xa;Copper preview Worker · Presentation only" vertex="1">
+                    <mxGeometry height="110" width="340" x="80" y="190" as="geometry"/>
                 </mxCell>
                 <mxCell id="context" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Context Management&#xa;Observations · Capture · Prompt projection" vertex="1">
                     <mxGeometry height="90" width="330" x="510" y="190" as="geometry"/>

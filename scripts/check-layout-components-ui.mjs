@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import { setLayoutVisibility } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -106,7 +107,7 @@ try {
       theme,
     );
     await page.locator(`[data-layout-editor][data-pcb-theme="${theme}"]`).waitFor();
-    await button('Fit board to canvas').click();
+    await runCanvasAction(page, 'Fit board to canvas');
     await page.screenshot({ path: `test-results/openpe-layout-components-${theme}.png` });
   }
   await setLayoutVisibility(page, 'Pad numbers', false);
@@ -127,7 +128,7 @@ try {
   assert.equal(await canvas.locator('[data-pad-id], [data-footprint-captions]').count(), 0);
   await setLayoutVisibility(page, 'Footprints', true);
   const beforeZoom = await canvas.locator('[data-pad-label]').allTextContents();
-  await button('Actual size (100%)').click();
+  await runCanvasAction(page, 'Actual size (100%)');
   await page.setViewportSize({ width: 1100, height: 760 });
   assert.deepEqual(await canvas.locator('[data-pad-label]').allTextContents(), beforeZoom);
   assert.equal(await page.evaluate(() => window.commits), 0);

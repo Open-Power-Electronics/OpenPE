@@ -1,3 +1,4 @@
+import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -12,6 +13,11 @@ import {
 
 // Isolated renderer with private IPC snapshots and native Source files in memory.
 const source = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
+// Source tree display order is presentation; compare exact filenames and bytes.
+const byName = (bundle) => ({
+  ...bundle,
+  files: [...bundle.files].sort((a, b) => a.name.localeCompare(b.name)),
+});
 const bundle = await build({
   stdin: {
     contents:
@@ -53,6 +59,7 @@ try {
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
       releaseFile: async () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       open: async () => ({
         source: await window.readSaved(),
         name: 'tabs.kicad_pro',
@@ -100,7 +107,7 @@ try {
     await page.getByRole('option', { name, exact: true }).click();
   };
   await button('Open project').click();
-  await button('New file').click();
+  await fileMenuAction(page, 'New file');
   const first = await tabs().getByRole('tab').first().innerText();
   const second = await tabs().getByRole('tab', { selected: true }).innerText();
   await page.locator('.project-navigation [data-project-id]').click({ button: 'right' });
@@ -109,14 +116,14 @@ try {
   const baseline = saved;
   assert.ok(JSON.parse(baseline).pcb, 'The fixture keeps its linked PCB.');
   await button('Source').click();
-  const baselineNative = await readNativeFiles(page);
+  const baselineNative = byName(await readNativeFiles(page));
   await button('Schematic').click();
   await closeTab(first);
   assert.equal(await tabs().getByRole('tab').count(), 1);
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
   await button('Source').click();
   assert.deepEqual(
-    await readNativeFiles(page),
+    byName(await readNativeFiles(page)),
     baselineNative,
     'Closing the primary tab preserves its schematic, PCB and all project bytes.',
   );
@@ -126,6 +133,14 @@ try {
   await button('Source').click();
   await selectSourceFile(page, baselineNative.entry);
   await fillSource(page, '{unfinished');
+  await button('Close project').click();
+  await page.getByRole('dialog', { name: 'Save changes?', exact: true }).waitFor();
+  await button('Cancel').click();
+  assert.equal(
+    await readSource(page),
+    '{unfinished',
+    'Header Close project retains Source on cancel.',
+  );
   await closeTab(first);
   assert.equal(
     await tabs().getByRole('tab').count(),
@@ -161,7 +176,7 @@ try {
   await tabs().getByRole('tab').waitFor();
   assert.equal(await tabs().getByRole('tab').count(), 1, 'Recovery retains closed views.');
   assert.deepEqual(
-    projectNativeFiles(parseProject(recovery.documents[0].source), 'tabs.kicad_pro'),
+    byName(projectNativeFiles(parseProject(recovery.documents[0].source), 'tabs.kicad_pro')),
     baselineNative,
   );
   await closeTab(first);
@@ -182,7 +197,7 @@ try {
   await closeTab(first);
   await button('Source').click();
   await fillSource(page, '{discard this draft');
-  await closeTab(second);
+  await button('Close project').click();
   await button("Don't save").click();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   assert.equal(saved, baseline, 'Discarding a project never deletes its saved file.');

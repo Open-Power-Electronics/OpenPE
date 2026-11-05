@@ -1,6 +1,7 @@
 'use client';
 import CanvasContextMenu from './CanvasContextMenu';
 import { createPortal } from 'react-dom';
+import type { EditorModeActions } from './EditorStatusBar';
 import ComponentProperties, { type ComponentPropertiesProps } from './ComponentProperties';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import PropertiesEmptyState from './PropertiesEmptyState';
@@ -9,6 +10,7 @@ import { NumberField } from './LayoutPropertyFields';
 import { modelReferenceKey } from '@/lib/example-model-paths';
 import {
   memo,
+  cloneElement,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -16,7 +18,7 @@ import {
   useRef,
   useState,
   type RefObject,
-  type ReactNode,
+  type ReactElement,
 } from 'react';
 import {
   Maximize,
@@ -68,6 +70,8 @@ import {
   pickModelCadEdge,
 } from './model-cad-edges';
 import { createModelCadSketchScene, modelCadSketchFrame } from './model-cad-sketch-scene';
+import { createModelGroundScene } from './model-ground-scene';
+import ModelSpatialScale, { modelScaleAxes } from './ModelSpatialScale';
 import type { ModelCadSketch, ModelCadSketchPlane } from './ModelCadSketchPanel';
 import { useModelCadTools, type CadHit } from './useModelCadTools';
 import { pcbSilkscreen } from '@/lib/pcb-silkscreen';
@@ -117,7 +121,6 @@ import EditorDisplayDrawer from './EditorDisplayDrawer';
 import ModelDisplayPanel, { type ModelView } from './ModelDisplayPanel';
 import { ModelMeasurementDrawing } from './CanvasMeasurement';
 import {
-  canvasScaleLength,
   createCanvasMeasurement,
   type CanvasMeasurement,
   type MeasurementPoint,
@@ -177,84 +180,21 @@ export type PCB3DViewState = {
   orthographic?: boolean;
   modelsVisible: boolean;
   boardDisplay: ModelBoardDisplay;
+  referencePlaneVisible?: boolean;
   cadVisible?: boolean;
 };
-
-function ModelZoomReadout({
-  update,
-  disabled,
-  onReset,
-}: {
-  update: RefObject<(percent: number) => void>;
-  disabled: boolean;
-  onReset: () => void;
-}) {
-  const [percent, setPercent] = useState(100);
-  useLayoutEffect(() => {
-    update.current = setPercent;
-    return () => {
-      update.current = () => {};
-    };
-  }, [update]);
-  return (
-    <button
-      className="zoom-value"
-      aria-label="Actual size (100%)"
-      disabled={disabled}
-      onClick={onReset}
-    >
-      {percent}%
-    </button>
-  );
-}
-
-function ModelScaleReadout({
-  update,
-  unitsPerPixel,
-}: {
-  update: RefObject<() => void>;
-  unitsPerPixel: RefObject<() => number>;
-}) {
-  const [scale, setScale] = useState({ length: 1, width: 1 });
-  useLayoutEffect(() => {
-    const refresh = () => {
-      const spacing = unitsPerPixel.current();
-      const length = canvasScaleLength(spacing);
-      const width = length / spacing;
-      setScale((previous) =>
-        previous.length === length && previous.width === width ? previous : { length, width },
-      );
-    };
-    update.current = refresh;
-    refresh();
-    return () => {
-      update.current = () => {};
-    };
-  }, [update, unitsPerPixel]);
-  return (
-    <div
-      className="layout-scale model-scale"
-      role="img"
-      aria-label={`Model scale: ${scale.length} mm at the camera target plane`}
-    >
-      <i style={{ width: scale.width }} />
-      {scale.length} mm
-    </div>
-  );
-}
 
 function PCBModelPreview({
   board: latestBoard,
   viewState,
   schematic: latestSchematic,
   active = true,
+  readOnly = false,
   grid = true,
-  gridSpacing = 1,
+  gridSpacing = 5,
   annotationProps,
-  toolbarRef,
   errorTarget,
-  listAction,
-  sidebarAction,
+  statusBar,
   fileId,
   projectSource,
   getRevision,
@@ -291,15 +231,15 @@ function PCBModelPreview({
   schematic?: Circuit;
   viewState?: RefObject<PCB3DViewState | null>;
   active?: boolean;
+  /** Render navigation and scene feedback without design-edit affordances. */
+  readOnly?: boolean;
   grid?: boolean;
   gridSpacing?: number;
   /** Visibility is independent of temporary modal/interaction suspension. */
   visible?: boolean;
   annotationProps?: ObjectAnnotationProps;
-  toolbarRef?: RefObject<HTMLDivElement | null>;
   errorTarget: HTMLElement | null;
-  listAction?: ReactNode;
-  sidebarAction?: ReactNode;
+  statusBar?: ReactElement<{ modeActions?: EditorModeActions }> | null;
   capabilityHost?: CapabilityHost;
   revision?: string;
   sourcePending?: boolean;
@@ -362,6 +302,15 @@ function PCBModelPreview({
   const resumeLoading = useRef(() => {});
   const host = useRef<HTMLDivElement>(null),
     fit = useRef(() => {});
+  function previewNavigationBlocked() {
+    const element = host.current;
+    return (
+      !element ||
+      Array.from(
+        element.ownerDocument.querySelectorAll('dialog[open], [role="listbox"], [role="menu"]'),
+      ).some((overlay) => !overlay.contains(element))
+    );
+  }
   const surface = useRef<HTMLElement>(null);
   const darkCanvas = useCanvasBrightness(surface);
   const [selection, setSelection] = useState<string[]>([]);
@@ -377,6 +326,7 @@ function PCBModelPreview({
   const pressedPointers = useRef(new Set<number>());
   const placementPointer = useRef<{ clientX: number; clientY: number } | null>(null);
   useEffect(() => {
+    if (readOnly) return;
     const release = (event: PointerEvent) => pressedPointers.current.delete(event.pointerId);
     const clear = () => pressedPointers.current.clear();
     // A disabled orbit control does not capture placement clicks. Releasing
@@ -389,7 +339,7 @@ function PCBModelPreview({
       window.removeEventListener('pointercancel', release, true);
       window.removeEventListener('blur', clear);
     };
-  }, []);
+  }, [readOnly]);
   const [status, setStatus] = useState('Loading 3D board…');
   const loadingProgress = useRef<ModelLoadingProgress>({ completed: 0, total: 0, reference: '' });
   const updateLoadingProgress = useRef<(value: ModelLoadingProgress) => void>(() => {});
@@ -405,12 +355,17 @@ function PCBModelPreview({
   const explodedRef = useRef(exploded);
   explodedRef.current = exploded;
   const applyExploded = useRef(() => {});
-  const modelsSelectable = selectionFilters.bodies;
+  const modelsSelectable = !readOnly && selectionFilters.bodies;
   const modelsSelectableRef = useRef(modelsSelectable);
   modelsSelectableRef.current = modelsSelectable;
   const [boardDisplay, setBoardDisplay] = useState<ModelBoardDisplay>(() =>
     viewState?.current ? { ...viewState.current.boardDisplay } : defaultModelBoardDisplay(),
   );
+  const [referencePlaneVisible, setReferencePlaneVisible] = useState(
+    viewState?.current?.referencePlaneVisible ?? true,
+  );
+  const referencePlaneVisibleRef = useRef(referencePlaneVisible);
+  referencePlaneVisibleRef.current = referencePlaneVisible;
   const cadColors = useMemo(
     () =>
       modelCad?.objects.length
@@ -420,7 +375,6 @@ function PCBModelPreview({
   );
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
-  const updateZoomPercent = useRef((_: number) => {});
   const zoom = useRef((_: number | null) => {});
   const [orthographic, setOrthographic] = useState(viewState?.current?.orthographic ?? true);
   const orthographicRef = useRef(orthographic);
@@ -462,7 +416,7 @@ function PCBModelPreview({
   const onLeaveSketchView = useCallback(() => leaveSketchView.current(), []);
   const [cadVisible, setCadVisible] = useState(viewState?.current?.cadVisible ?? true);
   const [ownMeasurement] = useState(createCanvasMeasurement);
-  const measurement = distanceMeasurement ?? ownMeasurement;
+  const measurement = readOnly ? ownMeasurement : (distanceMeasurement ?? ownMeasurement);
   const [measuring, setMeasuring] = useState(false);
   const measuringRef = useRef(measuring);
   measuringRef.current = measuring;
@@ -476,6 +430,14 @@ function PCBModelPreview({
   const redrawMeasurement = useRef(() => {});
   const measurementScale = useRef<() => number>(() => 1);
   const updateScale = useRef(() => {});
+  const readScale = useRef(() => ({
+    spacing: 1,
+    axes: [
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 },
+    ],
+  }));
   const closeMeasurement = useCallback(() => {
     measurement.clear();
     measurementPointer.current = null;
@@ -485,15 +447,24 @@ function PCBModelPreview({
   useEffect(() => {
     measurement.clear();
     if (!active) setMeasuring(false);
-  }, [active, board, modelCad, boardDisplay, modelsVisible, cadVisible, measurement]);
-  const cadSelectable = modelCadSelectionModeAvailable('auto', selectionFilters);
+  }, [
+    active,
+    board,
+    modelCad,
+    boardDisplay,
+    referencePlaneVisible,
+    modelsVisible,
+    cadVisible,
+    measurement,
+  ]);
+  const cadSelectable = !readOnly && modelCadSelectionModeAvailable('auto', selectionFilters);
   const cad = useModelCadTools({
     board: latestBoard,
     modelCad: latestModelCad,
     selectionFilters,
-    host: capabilityHost,
+    host: readOnly ? undefined : capabilityHost,
     revision,
-    active,
+    active: active && !readOnly,
     disabled: sourcePending || !ready || failed,
     annotating,
     undoDepth,
@@ -520,10 +491,10 @@ function PCBModelPreview({
     onLeaveSketchView,
     measuring,
     onMeasure: toggleMeasurement,
-    viewOnly: explosionActive,
+    viewOnly: readOnly || explosionActive,
   });
   function toggleMeasurement(): void {
-    if (!ready || failed || cad.selectionBlocked || cad.tool) return;
+    if (readOnly || !ready || failed || cad.selectionBlocked || cad.tool) return;
     if (measuring) closeMeasurement();
     else {
       cad.clear();
@@ -535,6 +506,17 @@ function PCBModelPreview({
   }
   const cadRef = useRef(cad);
   cadRef.current = cad;
+  useEffect(() => {
+    if (!readOnly) return;
+    setSelection([]);
+    setBoardSelected(false);
+    setAnnotating(false);
+    setAnnotationsOpened(false);
+    setMeasuring(false);
+    selectionPointer.current = null;
+    pressedPointers.current.clear();
+    placementPointer.current = null;
+  }, [readOnly]);
   useEffect(() => {
     if (cad.tool || cad.pan || annotating) setMeasuring(false);
     if (!measuring) measurement.clear();
@@ -570,16 +552,29 @@ function PCBModelPreview({
             }[cad.tool]
           : 'Interaction mode';
   useLayoutEffect(() => {
-    if (active) onModeChange?.(mode);
-  }, [active, mode, onModeChange]);
+    if (active && !readOnly) onModeChange?.(mode);
+  }, [active, readOnly, mode, onModeChange]);
   useLayoutEffect(() => {
+    if (readOnly) return;
     onSketchPointerChange?.(
       active && cad.sketchPhase === 'sketch' && cad.sketch
         ? { plane: cad.sketch.plane, cursor: cad.sketch.cursor }
         : null,
     );
-  }, [active, cad.sketchPhase, cad.sketch?.plane, cad.sketch?.cursor, onSketchPointerChange]);
-  useEffect(() => () => onSketchPointerChange?.(null), [onSketchPointerChange]);
+  }, [
+    active,
+    readOnly,
+    cad.sketchPhase,
+    cad.sketch?.plane,
+    cad.sketch?.cursor,
+    onSketchPointerChange,
+  ]);
+  useEffect(
+    () => () => {
+      if (!readOnly) onSketchPointerChange?.(null);
+    },
+    [readOnly, onSketchPointerChange],
+  );
   const cadState = useRef({
     modelCad,
     preview: cad.preview,
@@ -711,7 +706,7 @@ function PCBModelPreview({
   useEffect(() => {
     applyDisplay.current();
     if (!Object.values(boardDisplay).some(Boolean)) setBoardSelected(false);
-  }, [boardDisplay]);
+  }, [boardDisplay, referencePlaneVisible]);
   useEffect(() => {
     applyProjection.current();
   }, [orthographic]);
@@ -760,6 +755,8 @@ function PCBModelPreview({
     for (const transient of [previewGroup, sketchGroup, edgeGroup, faceGroup, operandGhostGroup])
       transient.userData.modelMeasurementExcluded = true;
     const operandGhosts = createModelCadOperandGhosts(operandGhostGroup);
+    const groundGroup = new THREE.Group();
+    const groundScene = createModelGroundScene(groundGroup);
     orderAssembly(cadGroup);
     orderAssembly(previewGroup);
     const bounds = pcbBounds(board);
@@ -915,6 +912,19 @@ function PCBModelPreview({
       )
         throw new Error('The board exceeds the 3D preview geometry limit.');
       const boundary = modelBoardPolygons(board);
+      const boardFrame = new THREE.Box2();
+      for (const polygon of boundary)
+        for (const point of polygon.outer)
+          boardFrame.expandByPoint(new THREE.Vector2(point.x, point.y));
+      const boardCenter = boardFrame.isEmpty()
+        ? new THREE.Vector2()
+        : boardFrame.getCenter(new THREE.Vector2());
+      const groundBounds = boardFrame.isEmpty()
+        ? new THREE.Box3()
+        : new THREE.Box3(
+            new THREE.Vector3(boardFrame.min.x, -boardFrame.max.y, 0),
+            new THREE.Vector3(boardFrame.max.x, -boardFrame.min.y, 0),
+          );
       const holes: Polygon[] = board.footprints.flatMap((f) =>
         f.pads
           .filter((p) => p.drill)
@@ -1203,6 +1213,7 @@ function PCBModelPreview({
       await yieldBuild();
       const scene = new THREE.Scene();
       scene.add(group);
+      scene.add(groundGroup);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
       const light = new THREE.DirectionalLight(0xffffff, 3);
       light.position.set(50, -70, 100);
@@ -1239,6 +1250,19 @@ function PCBModelPreview({
       let shadersReady = false;
       const clippingSphere = new THREE.Sphere();
       const clippingBounds = new THREE.Box3();
+      const updateReferencePlane = () =>
+        groundScene.update({
+          bounds: groundBounds,
+          boardThickness: board.thickness,
+          boardCenter,
+          spacing: gridOptions.current.spacing,
+          unitsPerPixel: visibleHeight() / (host.current?.clientHeight || 1),
+          dark: cadState.current.darkCanvas,
+          gridVisible: gridOptions.current.visible,
+          visible:
+            referencePlaneVisibleRef.current &&
+            !['plane', 'sketch'].includes(cadState.current.sketch?.phase ?? ''),
+        });
       const render = () => {
         if (
           !renderer ||
@@ -1274,9 +1298,19 @@ function PCBModelPreview({
             target: orbit!.target,
             bounds: clippingBounds.isEmpty() ? null : clippingSphere,
           });
+          updateReferencePlane();
           const planeClipping = sketchScene.clippingRange(camera);
-          camera.near = Math.min(clipping.near, planeClipping?.near ?? clipping.near);
-          camera.far = Math.max(clipping.far, planeClipping?.far ?? clipping.far);
+          const groundClipping = groundScene.clippingRange(camera, orbit!.target);
+          camera.near = Math.min(
+            clipping.near,
+            planeClipping?.near ?? clipping.near,
+            groundClipping?.near ?? clipping.near,
+          );
+          camera.far = Math.max(
+            clipping.far,
+            planeClipping?.far ?? clipping.far,
+            groundClipping?.far ?? clipping.far,
+          );
           camera.updateProjectionMatrix();
           if (
             measuringRef.current &&
@@ -1325,9 +1359,6 @@ function PCBModelPreview({
                   )
                 : [],
             );
-          updateZoomPercent.current(
-            Math.round(((host.current?.clientHeight || 1) / visibleHeight() / pixelsPerMM) * 100),
-          );
           if (annotatingRef.current) updateAnnotationView.current();
           if (host.current)
             host.current.dataset.renderCount = String(
@@ -1570,6 +1601,7 @@ function PCBModelPreview({
             orthographic: camera instanceof THREE.OrthographicCamera,
             modelsVisible: modelsVisibleRef.current,
             boardDisplay: { ...displayRef.current },
+            referencePlaneVisible: referencePlaneVisibleRef.current,
             cadVisible: cadState.current.cadVisible,
           };
       };
@@ -1647,6 +1679,10 @@ function PCBModelPreview({
         };
       };
       measurementScale.current = () => visibleHeight() / (host.current?.clientHeight || 1);
+      readScale.current = () => ({
+        spacing: measurementScale.current(),
+        axes: modelScaleAxes(camera),
+      });
       const pickAt = (point: { x: number; y: number }, options: ModelPickOptions) => {
         if (!options.cad && !options.components && !options.board)
           return modelPickResult([], options);
@@ -1783,6 +1819,8 @@ function PCBModelPreview({
           modelsVisible: components.visible,
           exploded: explodedRef.current,
           boardDisplay: displayRef.current,
+          referencePlaneVisible: referencePlaneVisibleRef.current,
+          grid: gridOptions.current,
           modelCad: cadState.current.modelCad,
           cadVisible: cadState.current.cadVisible,
           bodies: components.children
@@ -1837,6 +1875,7 @@ function PCBModelPreview({
       updateActivity.current();
       applyDisplay.current = () => {
         applyModelBoardDisplay(boardGroups, displayRef.current);
+        updateReferencePlane();
         clippingBoundsDirty.current = true;
         updateAnnotationView.current();
         saveView();
@@ -2053,6 +2092,7 @@ function PCBModelPreview({
       cadScene.dispose();
       previewScene.dispose();
       sketchScene.dispose();
+      groundScene.dispose();
       disposeModelCadEdgeHighlight(edgeGroup);
       disposeModelCadFaceHighlight(faceGroup);
       operandGhosts.dispose();
@@ -2081,6 +2121,14 @@ function PCBModelPreview({
       measurePoint.current = () => null;
       projectMeasurement.current = () => null;
       measurementScale.current = () => 1;
+      readScale.current = () => ({
+        spacing: 1,
+        axes: [
+          { x: 1, y: 0 },
+          { x: 0, y: 1 },
+          { x: 0, y: -1 },
+        ],
+      });
       cadPoint.current = () => null;
       applyDisplay.current = () => {};
       applyExploded.current = () => {};
@@ -2134,63 +2182,49 @@ function PCBModelPreview({
     }
   }
   const interacting = !measuring && !annotating && !cad.tool && !cad.pan;
+  const interactionDisabled = cad.selectionBlocked;
+  const annotationDisabled =
+    !ready || failed || !schematic || !annotationProps || annotationProps.disabled;
+  function activateInteraction() {
+    cad.clear();
+    setAnnotating(false);
+    closeMeasurement();
+  }
+  function activateAnnotation() {
+    setAnnotationsOpened(true);
+    setAnnotating(true);
+    closeMeasurement();
+  }
   const drawingSketch = cad.tool === 'sketch' && cad.sketchPhase === 'sketch';
   const pointerTool = Boolean(cad.tool && (cad.tool !== 'sketch' || drawingSketch));
+  const errorFeedback = (
+    <>
+      {failed && (
+        <span className="model-error-status" role="alert">
+          <span>{status}</span>
+          <button className="secondary" onClick={() => setRetry((n) => n + 1)}>
+            Retry 3D preview
+          </button>
+        </span>
+      )}
+      {(cadGeometryErrors.document || cadGeometryErrors.preview) && (
+        <span className="model-error-status" role="alert">
+          <span>{cadGeometryErrors.preview || cadGeometryErrors.document}</span>
+          <button type="button" className="secondary" onClick={() => retryCadGeometry.current()}>
+            Retry CAD geometry
+          </button>
+        </span>
+      )}
+    </>
+  );
   return (
     <section
       ref={surface}
       className="pcb-model-preview"
       aria-label="3D board preview"
       data-model-theme={darkCanvas ? 'dark' : 'light'}
+      data-read-only={readOnly || undefined}
     >
-      <div
-        className="editor-toolbar pcb-object-toolbar"
-        ref={toolbarRef}
-        role="group"
-        aria-label="Model tools"
-      >
-        <div className="editor-tool-group" role="group" aria-label="Canvas modes">
-          <button
-            className={`tool-button${interacting ? ' active' : ''}`}
-            aria-label="Interaction mode"
-            title="Interaction mode"
-            aria-pressed={interacting}
-            disabled={cad.selectionBlocked}
-            onClick={() => {
-              cad.clear();
-              setAnnotating(false);
-              closeMeasurement();
-            }}
-          >
-            <MousePointer2 size={17} />
-          </button>
-          <button
-            className={`tool-button${annotating ? ' active' : ''}`}
-            aria-label="Annotation mode"
-            title="Annotation mode"
-            aria-pressed={annotating}
-            disabled={
-              !ready || failed || !schematic || !annotationProps || annotationProps.disabled
-            }
-            onClick={() => {
-              setAnnotationsOpened(true);
-              setAnnotating(true);
-              closeMeasurement();
-            }}
-          >
-            <MessageSquareText size={17} />
-          </button>
-        </div>
-        {cad.toolbar}
-        <div
-          className="editor-tool-group editor-tool-group-end"
-          role="group"
-          aria-label="3D display"
-        >
-          {listAction}
-          {sidebarAction}
-        </div>
-      </div>
       <div
         className="model-editor-body"
         onFocusCapture={(event) => {
@@ -2198,601 +2232,643 @@ function PCBModelPreview({
             placementPointer.current = null;
         }}
       >
-        <div className="pcb-object-stage">
-          {cad.placementPanel}
-          {cad.error}
-          <div
-            className="pcb-model-canvas"
-            ref={host}
-            aria-label="Interactive 3D board"
-            tabIndex={0}
-            data-models-selectable={modelsSelectable}
-            data-cad-tool={cad.tool ?? 'select'}
-            data-cad-selected-edges={cad.edgeSelection?.ids.length ?? 0}
-            data-cad-selection-count={cad.selection.length}
-            data-sketch-plane={cad.sketch?.plane}
-            data-sketch-phase={cad.sketchPhase ?? undefined}
-            style={{
-              cursor: measuring || pointerTool ? 'crosshair' : cad.pan ? 'grab' : undefined,
-            }}
-            onPointerDownCapture={(e) => {
-              if (active && !annotating && !hasOpenOverlay())
-                pressedPointers.current.add(e.pointerId);
-              if (e.button !== 0 || !active || annotating || hasOpenOverlay()) return;
-              e.currentTarget.focus({ preventScroll: true });
-              selectionPointer.current = {
-                id: e.pointerId,
-                x: e.clientX,
-                y: e.clientY,
-                moved: false,
-              };
-              if (drawingSketch) {
-                const rect = e.currentTarget.getBoundingClientRect();
-                cad.sketchInput.current?.down(
-                  cadPoint.current({
+        <div className="model-drawing-region editor-drawing-region">
+          {!readOnly && (
+            <div
+              className="editor-toolbar pcb-object-toolbar"
+              role="group"
+              aria-label="Model tools"
+            >
+              <div className="editor-tool-group" role="group" aria-label="Canvas modes">
+                <button
+                  className={`tool-button${interacting ? ' active' : ''}`}
+                  aria-label="Interaction mode"
+                  title="Interaction mode"
+                  aria-pressed={interacting}
+                  disabled={interactionDisabled}
+                  onClick={activateInteraction}
+                >
+                  <MousePointer2 size={17} />
+                </button>
+                <button
+                  className={`tool-button${annotating ? ' active' : ''}`}
+                  aria-label="Annotation mode"
+                  title="Annotation mode"
+                  aria-pressed={annotating}
+                  disabled={annotationDisabled}
+                  onClick={activateAnnotation}
+                >
+                  <MessageSquareText size={17} />
+                </button>
+              </div>
+              {cad.toolbar}
+            </div>
+          )}
+          <div className="pcb-object-stage">
+            {!readOnly && cad.placementPanel}
+            {!readOnly && cad.error}
+            <div
+              className="pcb-model-canvas"
+              ref={host}
+              aria-label="Interactive 3D board"
+              tabIndex={0}
+              data-models-selectable={modelsSelectable}
+              data-cad-tool={cad.tool ?? 'select'}
+              data-cad-selected-edges={cad.edgeSelection?.ids.length ?? 0}
+              data-cad-selection-count={cad.selection.length}
+              data-sketch-plane={cad.sketch?.plane}
+              data-sketch-phase={cad.sketchPhase ?? undefined}
+              style={{
+                cursor: measuring || pointerTool ? 'crosshair' : cad.pan ? 'grab' : undefined,
+              }}
+              onPointerDownCapture={(e) => {
+                if (readOnly) {
+                  if (previewNavigationBlocked()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  } else e.currentTarget.focus({ preventScroll: true });
+                  return;
+                }
+                if (active && !annotating && !hasOpenOverlay())
+                  pressedPointers.current.add(e.pointerId);
+                if (e.button !== 0 || !active || annotating || hasOpenOverlay()) return;
+                e.currentTarget.focus({ preventScroll: true });
+                selectionPointer.current = {
+                  id: e.pointerId,
+                  x: e.clientX,
+                  y: e.clientY,
+                  moved: false,
+                };
+                if (drawingSketch) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  cad.sketchInput.current?.down(
+                    cadPoint.current({
+                      x: ((e.clientX - rect.left) / rect.width) * 1000,
+                      y: ((e.clientY - rect.top) / rect.width) * 1000,
+                    }),
+                    measurementScale.current() * 8,
+                  );
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  e.preventDefault();
+                }
+              }}
+              onPointerMoveCapture={(e) => {
+                if (readOnly) return;
+                if (measuring && active && !hasOpenOverlay()) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  measurementPointer.current = {
                     x: ((e.clientX - rect.left) / rect.width) * 1000,
                     y: ((e.clientY - rect.top) / rect.width) * 1000,
-                  }),
-                  measurementScale.current() * 8,
-                );
-                e.currentTarget.setPointerCapture(e.pointerId);
-                e.preventDefault();
-              }
-            }}
-            onPointerMoveCapture={(e) => {
-              if (measuring && active && !hasOpenOverlay()) {
-                const rect = e.currentTarget.getBoundingClientRect();
-                measurementPointer.current = {
-                  x: ((e.clientX - rect.left) / rect.width) * 1000,
-                  y: ((e.clientY - rect.top) / rect.width) * 1000,
-                  snap: !e.altKey,
-                };
-                if (e.buttons === 0) {
-                  measurement.move(measurePoint.current(measurementPointer.current, !e.altKey));
+                    snap: !e.altKey,
+                  };
+                  if (e.buttons === 0) {
+                    measurement.move(measurePoint.current(measurementPointer.current, !e.altKey));
+                  }
                 }
-              }
-              if (pointerTool && active && !annotating) {
-                const rect = e.currentTarget.getBoundingClientRect();
-                if (e.buttons === 0 || placementPointer.current)
-                  placementPointer.current = { clientX: e.clientX, clientY: e.clientY };
-                if (e.buttons === 0 || (drawingSketch && (e.buttons & 1) !== 0))
-                  cad.canvasMove(
+                if (pointerTool && active && !annotating) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  if (e.buttons === 0 || placementPointer.current)
+                    placementPointer.current = { clientX: e.clientX, clientY: e.clientY };
+                  if (e.buttons === 0 || (drawingSketch && (e.buttons & 1) !== 0))
+                    cad.canvasMove(
+                      cadPoint.current({
+                        x: ((e.clientX - rect.left) / rect.width) * 1000,
+                        y: ((e.clientY - rect.top) / rect.width) * 1000,
+                      }),
+                    );
+                }
+                const pointer = selectionPointer.current;
+                if (
+                  pointer?.id === e.pointerId &&
+                  Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 4
+                )
+                  pointer.moved = true;
+              }}
+              onPointerUpCapture={(e) => {
+                if (readOnly) return;
+                pressedPointers.current.delete(e.pointerId);
+                if (cad.tool) redraw.current();
+                const pointer = selectionPointer.current;
+                selectionPointer.current = null;
+                if (drawingSketch && e.button === 0 && pointer?.id === e.pointerId) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  cad.sketchInput.current?.up(
                     cadPoint.current({
                       x: ((e.clientX - rect.left) / rect.width) * 1000,
                       y: ((e.clientY - rect.top) / rect.width) * 1000,
                     }),
                   );
-              }
-              const pointer = selectionPointer.current;
-              if (
-                pointer?.id === e.pointerId &&
-                Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 4
-              )
-                pointer.moved = true;
-            }}
-            onPointerUpCapture={(e) => {
-              pressedPointers.current.delete(e.pointerId);
-              if (cad.tool) redraw.current();
-              const pointer = selectionPointer.current;
-              selectionPointer.current = null;
-              if (drawingSketch && e.button === 0 && pointer?.id === e.pointerId) {
-                const rect = e.currentTarget.getBoundingClientRect();
-                cad.sketchInput.current?.up(
-                  cadPoint.current({
-                    x: ((e.clientX - rect.left) / rect.width) * 1000,
-                    y: ((e.clientY - rect.top) / rect.width) * 1000,
-                  }),
-                );
-                if (e.currentTarget.hasPointerCapture(e.pointerId))
-                  e.currentTarget.releasePointerCapture(e.pointerId);
-                return;
-              }
-              if (
-                e.button !== 0 ||
-                !pointer ||
-                pointer.id !== e.pointerId ||
-                pointer.moved ||
-                Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 4 ||
-                !active ||
-                annotating ||
-                hasOpenOverlay()
-              )
-                return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const point = {
-                x: ((e.clientX - rect.left) / rect.width) * 1000,
-                y: ((e.clientY - rect.top) / rect.width) * 1000,
-              };
-              if (measuring) {
-                measurement.place(measurePoint.current(point, !e.altKey));
-                return;
-              }
-              if (!cad.tool && cad.pan) return;
-              if (cad.tool === 'sketch') return;
-              if (cad.tool === 'boolean') {
-                const hit = pickInteraction.current(point).cad;
-                if (hit)
-                  cad.selectGeometry(
-                    { kind: 'body', objectId: hit.id },
-                    e.shiftKey || e.ctrlKey || e.metaKey,
-                  );
-                return;
-              }
-              if (cad.tool) {
-                if (cad.edgeSelection) {
-                  cad.toggleEdge(pickCadEdge.current(point));
+                  if (e.currentTarget.hasPointerCapture(e.pointerId))
+                    e.currentTarget.releasePointerCapture(e.pointerId);
                   return;
                 }
-                void cad.canvasClick(cadPoint.current(point));
-                return;
-              }
-              if (cad.pan) return;
-              if (cad.edgeSelection) {
-                const edge = pickCadEdge.current(point);
-                if (edge) {
-                  cad.toggleEdge(edge, e.shiftKey || e.ctrlKey || e.metaKey);
+                if (
+                  e.button !== 0 ||
+                  !pointer ||
+                  pointer.id !== e.pointerId ||
+                  pointer.moved ||
+                  Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 4 ||
+                  !active ||
+                  annotating ||
+                  hasOpenOverlay()
+                )
+                  return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const point = {
+                  x: ((e.clientX - rect.left) / rect.width) * 1000,
+                  y: ((e.clientY - rect.top) / rect.width) * 1000,
+                };
+                if (measuring) {
+                  measurement.place(measurePoint.current(point, !e.altKey));
+                  return;
+                }
+                if (!cad.tool && cad.pan) return;
+                if (cad.tool === 'sketch') return;
+                if (cad.tool === 'boolean') {
+                  const hit = pickInteraction.current(point).cad;
+                  if (hit)
+                    cad.selectGeometry(
+                      { kind: 'body', objectId: hit.id },
+                      e.shiftKey || e.ctrlKey || e.metaKey,
+                    );
+                  return;
+                }
+                if (cad.tool) {
+                  if (cad.edgeSelection) {
+                    cad.toggleEdge(pickCadEdge.current(point));
+                    return;
+                  }
+                  void cad.canvasClick(cadPoint.current(point));
+                  return;
+                }
+                if (cad.pan) return;
+                if (cad.edgeSelection) {
+                  const edge = pickCadEdge.current(point);
+                  if (edge) {
+                    cad.toggleEdge(edge, e.shiftKey || e.ctrlKey || e.metaKey);
+                    showProperties();
+                    return;
+                  }
+                }
+                if (cad.selectionBlocked) return;
+                const picked = pickInteraction.current(point);
+                setBoardSelected(false);
+                const hit = picked.cad;
+                if (hit) {
+                  const edgeId = pickCadEdge.current(point, hit.id);
+                  let geometry: ModelCadSelection | null = null;
+                  if (edgeId)
+                    geometry = {
+                      kind: selectionFilters.edges ? 'edge' : 'line',
+                      objectId: hit.id,
+                      edgeId,
+                    };
+                  else if (selectionFilters.bodies) geometry = { kind: 'body', objectId: hit.id };
+                  else if (selectionFilters.faces) {
+                    const body = modelCad?.objects.find((body) => body.id === hit.id);
+                    const face = body && modelCadFaceAtPoint(body, hit.local, hit.normal);
+                    if (face) geometry = { kind: 'face', objectId: hit.id, faceId: face.id };
+                  }
+                  cad.selectGeometry(geometry, e.shiftKey || e.ctrlKey || e.metaKey);
+                  return;
+                }
+                if (!picked.footprint) {
+                  const edge = pickUnselectedCadEdge.current(point);
+                  if (edge) {
+                    cad.selectGeometry(
+                      {
+                        kind: selectionFilters.edges ? 'edge' : 'line',
+                        objectId: edge.id,
+                        edgeId: edge.edgeId,
+                      },
+                      e.shiftKey || e.ctrlKey || e.metaKey,
+                    );
+                    return;
+                  }
+                }
+                cad.select(null);
+                if (!modelsSelectable) return;
+                if (picked.board && !picked.footprint) {
+                  setSelection([]);
+                  setBoardSelected(true);
                   showProperties();
                   return;
                 }
-              }
-              if (cad.selectionBlocked) return;
-              const picked = pickInteraction.current(point);
-              setBoardSelected(false);
-              const hit = picked.cad;
-              if (hit) {
-                const edgeId = pickCadEdge.current(point, hit.id);
-                let geometry: ModelCadSelection | null = null;
-                if (edgeId)
-                  geometry = {
-                    kind: selectionFilters.edges ? 'edge' : 'line',
-                    objectId: hit.id,
-                    edgeId,
-                  };
-                else if (selectionFilters.bodies) geometry = { kind: 'body', objectId: hit.id };
-                else if (selectionFilters.faces) {
-                  const body = modelCad?.objects.find((body) => body.id === hit.id);
-                  const face = body && modelCadFaceAtPoint(body, hit.local, hit.normal);
-                  if (face) geometry = { kind: 'face', objectId: hit.id, faceId: face.id };
-                }
-                cad.selectGeometry(geometry, e.shiftKey || e.ctrlKey || e.metaKey);
-                return;
-              }
-              if (!picked.footprint) {
-                const edge = pickUnselectedCadEdge.current(point);
-                if (edge) {
-                  cad.selectGeometry(
-                    {
-                      kind: selectionFilters.edges ? 'edge' : 'line',
-                      objectId: edge.id,
-                      edgeId: edge.edgeId,
-                    },
-                    e.shiftKey || e.ctrlKey || e.metaKey,
-                  );
+                const id = picked.footprint;
+                setSelection((previous) =>
+                  applySelection(previous, id ? [id] : [], selectionMode(e)),
+                );
+                if (id) showProperties();
+              }}
+              onPointerCancel={(e) => {
+                if (readOnly) return;
+                if (drawingSketch) cad.sketchInput.current?.cancelPointer();
+                pressedPointers.current.delete(e.pointerId);
+                selectionPointer.current = null;
+              }}
+              onLostPointerCapture={(e) => {
+                if (readOnly) return;
+                if (drawingSketch) cad.sketchInput.current?.cancelPointer();
+                pressedPointers.current.delete(e.pointerId);
+                selectionPointer.current = null;
+              }}
+              onDoubleClick={(e) => {
+                if (readOnly) return;
+                if (!drawingSketch || !active || annotating || hasOpenOverlay()) return;
+                e.preventDefault();
+                cad.sketchInput.current?.closeProfile();
+              }}
+              onPointerLeave={() => {
+                if (readOnly) return;
+                placementPointer.current = null;
+                measurementPointer.current = null;
+                if (measuring) measurement.move(null);
+              }}
+              onWheelCapture={(e) => {
+                if (readOnly) {
+                  if (previewNavigationBlocked()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
                   return;
                 }
-              }
-              cad.select(null);
-              if (!modelsSelectable) return;
-              if (picked.board && !picked.footprint) {
-                setSelection([]);
-                setBoardSelected(true);
-                showProperties();
-                return;
-              }
-              const id = picked.footprint;
-              setSelection((previous) =>
-                applySelection(previous, id ? [id] : [], selectionMode(e)),
-              );
-              if (id) showProperties();
-            }}
-            onPointerCancel={(e) => {
-              if (drawingSketch) cad.sketchInput.current?.cancelPointer();
-              pressedPointers.current.delete(e.pointerId);
-              selectionPointer.current = null;
-            }}
-            onLostPointerCapture={(e) => {
-              if (drawingSketch) cad.sketchInput.current?.cancelPointer();
-              pressedPointers.current.delete(e.pointerId);
-              selectionPointer.current = null;
-            }}
-            onDoubleClick={(e) => {
-              if (!drawingSketch || !active || annotating || hasOpenOverlay()) return;
-              e.preventDefault();
-              cad.sketchInput.current?.closeProfile();
-            }}
-            onPointerLeave={() => {
-              placementPointer.current = null;
-              measurementPointer.current = null;
-              if (measuring) measurement.move(null);
-            }}
-            onWheelCapture={(e) => {
-              if (
-                !pointerTool ||
-                !active ||
-                annotating ||
-                hasOpenOverlay() ||
-                !placementPointer.current
-              )
-                return;
-              placementPointer.current = { clientX: e.clientX, clientY: e.clientY };
-            }}
-            onKeyDown={(e) => {
-              if (
-                e.defaultPrevented ||
-                e.nativeEvent.isComposing ||
-                e.nativeEvent.keyCode === 229 ||
-                (e.target instanceof HTMLElement &&
-                  (e.target.isContentEditable || e.target.closest('input, textarea, select'))) ||
-                (e.key !== 'Escape' && pressedPointers.current.size > 0)
-              )
-                return;
-              if (measuring && e.key !== ' ' && e.code !== 'Space') {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (measurement.getSnapshot().start) measurement.clear();
-                  else closeMeasurement();
-                } else if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  measurement.confirm();
-                }
-                return;
-              }
-              if (
-                active &&
-                ready &&
-                !failed &&
-                !hasOpenOverlay() &&
-                (e.code === 'Space' || e.key === ' ') &&
-                !e.altKey &&
-                !e.ctrlKey &&
-                !e.metaKey &&
-                !e.shiftKey
-              ) {
-                e.preventDefault();
-                if (!e.repeat) fit.current();
-                return;
-              }
-              if (active && !hasOpenOverlay() && cad.keyDown(e)) {
-                if (e.key === 'Escape') {
-                  setSelection([]);
-                  setBoardSelected(false);
-                }
-                e.preventDefault();
-                return;
-              }
-              if (e.key === 'Escape' && active && !hasOpenOverlay()) {
-                e.preventDefault();
-                setSelection([]);
-                setBoardSelected(false);
-              }
-            }}
-          />
-          {measuring && (
-            <>
-              <ModelMeasurementDrawing
-                measurement={measurement}
-                project={projectMeasurement}
-                redraw={redrawMeasurement}
-                unitsPerPixel={measurementScale}
-              />
-            </>
-          )}
-          {annotationsOpened && schematic && annotationProps && (
-            <PCB3DAnnotations
-              board={board}
-              schematic={schematic}
-              active={active && annotating && ready && !failed && !annotationProps.disabled}
-              view={annotationView}
-              {...annotationProps}
-              pick={(point) => pickAnnotation.current(point)}
-              captureImage={(...args) => captureAnnotation.current(...args)}
-              onExit={() => setAnnotating(false)}
-              onSelection={setSelection}
-            />
-          )}
-          <CanvasContextMenu
-            target={host}
-            active={active}
-            identity={revision || board}
-            onError={setExportStatus}
-            actions={[
-              {
-                id: 'fit',
-                label: 'Fit 3D board',
-                icon: Maximize,
-                disabled: !ready || failed,
-                run: () => fit.current(),
-              },
-              {
-                id: 'actual-size',
-                label: 'Actual size (100%)',
-                icon: Maximize,
-                disabled: !ready || failed,
-                run: () => zoom.current(null),
-              },
-              {
-                id: 'zoom-in',
-                label: 'Zoom in',
-                icon: Plus,
-                disabled: !ready || failed,
-                run: () => zoom.current(1.2),
-              },
-              {
-                id: 'zoom-out',
-                label: 'Zoom out',
-                icon: Minus,
-                disabled: !ready || failed,
-                run: () => zoom.current(1 / 1.2),
-              },
-              {
-                id: 'export',
-                label: 'Export image',
-                icon: ImageDown,
-                disabled: !ready || exporting || failed,
-                run: async () => {
-                  setExporting(true);
-                  setExportStatus('');
-                  try {
-                    await exportPNG.current();
-                  } catch (error) {
-                    setExportStatus((error as Error).message);
-                  } finally {
-                    setExporting(false);
-                  }
-                },
-              },
-              {
-                id: 'isometric',
-                label: 'Isometric view',
-                icon: Box,
-                separated: true,
-                disabled: !ready || failed,
-                run: () => orient.current('isometric'),
-              },
-              {
-                id: 'top',
-                label: 'Top view',
-                icon: Box,
-                disabled: !ready || failed,
-                run: () => orient.current('top'),
-              },
-              {
-                id: 'clear-selection',
-                label: 'Clear selection',
-                icon: SquareDashed,
-                separated: true,
-                disabled: (!selection.length && !boardSelected) || Boolean(cad.tool),
-                run: () => {
-                  setSelection([]);
-                  setBoardSelected(false);
-                },
-              },
-            ]}
-          />
-          {ready && !failed && (
-            <ModelScaleReadout update={updateScale} unitsPerPixel={measurementScale} />
-          )}
-          <div className="model-canvas-controls">
-            {!!warnings.length && (
-              <details className="pcb-model-notices">
-                <summary>{warnings.length} model notices</summary>
-                <ul>
-                  {warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-            <div className="zoom-controls" role="group" aria-label="3D zoom controls">
-              <button
-                aria-label="Zoom out"
-                title="Zoom out"
-                disabled={!ready || failed}
-                onClick={() => zoom.current(1 / 1.2)}
-              >
-                <Minus size={15} />
-              </button>
-              <ModelZoomReadout
-                update={updateZoomPercent}
-                disabled={!ready || failed}
-                onReset={() => zoom.current(null)}
-              />
-              <button
-                aria-label="Zoom in"
-                title="Zoom in"
-                disabled={!ready || failed}
-                onClick={() => zoom.current(1.2)}
-              >
-                <Plus size={15} />
-              </button>
-              <i />
-              <button
-                aria-label="Fit 3D board to canvas"
-                title="Fit board"
-                disabled={!ready || failed}
-                onClick={() => fit.current()}
-              >
-                <Maximize size={15} />
-              </button>
-            </div>
-          </div>
-          {exportStatus && (
-            <p className="pcb-model-status" role="status">
-              {exportStatus}
-            </p>
-          )}
-          {status &&
-            !failed &&
-            (status === componentLoadingStatus ? (
-              <ModelLoadingStatus progress={loadingProgress} update={updateLoadingProgress} />
-            ) : (
-              <p role="status" className="pcb-model-status">
-                {status}
-              </p>
-            ))}
-          {errorTarget &&
-            createPortal(
-              <>
-                {failed && (
-                  <span className="model-error-status" role="alert">
-                    <span>{status}</span>
-                    <button className="secondary" onClick={() => setRetry((n) => n + 1)}>
-                      Retry 3D preview
-                    </button>
-                  </span>
-                )}
-                {(cadGeometryErrors.document || cadGeometryErrors.preview) && (
-                  <span className="model-error-status" role="alert">
-                    <span>{cadGeometryErrors.preview || cadGeometryErrors.document}</span>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => retryCadGeometry.current()}
-                    >
-                      Retry CAD geometry
-                    </button>
-                  </span>
-                )}
-              </>,
-              errorTarget,
-            )}
-        </div>
-        <aside
-          ref={propertiesDock}
-          className="model-properties-dock editor-sidebar-sections"
-          aria-label="Model sidebar"
-          hidden={!sidebarVisible}
-          style={{ width: inspectorSize.width }}
-        >
-          <EditorDisplayDrawer
-            label="Properties"
-            className="editor-properties-drawer"
-            open={propertiesExpanded}
-            onOpenChange={setPropertiesExpanded}
-          >
-            {cad.panel}
-            <section
-              className="model-properties-content"
-              aria-label="Board properties"
-              hidden={!boardSelected || cad.inspecting}
-            >
-              <div className="model-properties-body">
-                <NumberField
-                  label="Board thickness (mm)"
-                  value={board.thickness}
-                  min={0.1}
-                  max={20}
-                  active={
+                if (
+                  !pointerTool ||
+                  !active ||
+                  annotating ||
+                  hasOpenOverlay() ||
+                  !placementPointer.current
+                )
+                  return;
+                placementPointer.current = { clientX: e.clientX, clientY: e.clientY };
+              }}
+              onKeyDown={(e) => {
+                if (
+                  e.defaultPrevented ||
+                  e.nativeEvent.isComposing ||
+                  e.nativeEvent.keyCode === 229 ||
+                  (e.target instanceof HTMLElement &&
+                    (e.target.isContentEditable || e.target.closest('input, textarea, select'))) ||
+                  (e.key !== 'Escape' && pressedPointers.current.size > 0)
+                )
+                  return;
+                if (readOnly) {
+                  if (
                     active &&
-                    boardSelected &&
-                    sidebarVisible &&
-                    propertiesExpanded &&
-                    !sourcePending &&
-                    !annotating &&
-                    !cad.tool &&
                     ready &&
                     !failed &&
-                    !cad.selectionBlocked
+                    !previewNavigationBlocked() &&
+                    (e.code === 'Space' || e.key === ' ') &&
+                    !e.altKey &&
+                    !e.ctrlKey &&
+                    !e.metaKey &&
+                    !e.shiftKey
+                  ) {
+                    e.preventDefault();
+                    if (!e.repeat) fit.current();
                   }
-                  disabled={!onBoardThicknessChange}
-                  onCommit={(thickness) => onBoardThicknessChange?.(board, thickness) ?? false}
+                  return;
+                }
+                if (measuring && e.key !== ' ' && e.code !== 'Space') {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (measurement.getSnapshot().start) measurement.clear();
+                    else closeMeasurement();
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    measurement.confirm();
+                  }
+                  return;
+                }
+                if (
+                  active &&
+                  ready &&
+                  !failed &&
+                  !hasOpenOverlay() &&
+                  (e.code === 'Space' || e.key === ' ') &&
+                  !e.altKey &&
+                  !e.ctrlKey &&
+                  !e.metaKey &&
+                  !e.shiftKey
+                ) {
+                  e.preventDefault();
+                  if (!e.repeat) fit.current();
+                  return;
+                }
+                if (active && !hasOpenOverlay() && cad.keyDown(e)) {
+                  if (e.key === 'Escape') {
+                    setSelection([]);
+                    setBoardSelected(false);
+                  }
+                  e.preventDefault();
+                  return;
+                }
+                if (e.key === 'Escape' && active && !hasOpenOverlay()) {
+                  e.preventDefault();
+                  setSelection([]);
+                  setBoardSelected(false);
+                }
+              }}
+            />
+            {!readOnly && measuring && (
+              <>
+                <ModelMeasurementDrawing
+                  measurement={measurement}
+                  project={projectMeasurement}
+                  redraw={redrawMeasurement}
+                  unitsPerPixel={measurementScale}
                 />
-              </div>
-            </section>
-            {!cad.inspecting && !boardSelected && (
-              <section
-                className="model-properties-content"
-                aria-label={selectedFootprint ? 'Component properties' : 'Model properties'}
-                onCompositionStart={() => {
-                  componentComposition.current = true;
-                }}
-                onCompositionEnd={() => {
-                  componentComposition.current = false;
-                }}
-              >
-                <div className="model-properties-body">
-                  {selectedFootprint ? (
-                    schematic ? (
-                      <ComponentProperties
-                        footprint={selectedFootprint}
-                        schematic={schematic}
-                        active={active && !sourcePending && sidebarVisible && !explosionActive}
-                        resetKey={active}
-                        snap={(value) => value}
-                        onFootprint={(footprint) => onFootprintChange?.(board, footprint) ?? false}
-                        onSavePartProperties={onSavePartProperties}
-                        capabilityHost={capabilityHost}
-                        fileId={fileId}
-                        projectSource={projectSource}
-                        getRevision={getRevision}
-                        spiceAvailable={spiceAvailable}
-                        onRequestSave={onRequestSave}
-                      />
-                    ) : (
-                      <p>Component schematic is unavailable.</p>
-                    )
-                  ) : (
-                    <PropertiesEmptyState icon={Box}>
-                      Select an element to view its properties.
-                    </PropertiesEmptyState>
-                  )}
-                  {componentDeleteError && (
-                    <p className="dialog-error" role="alert">
-                      {componentDeleteError}
-                    </p>
-                  )}
-                </div>
-                {selectedFootprint && (
-                  <footer className="inspector-footer">
-                    <PropertyDeleteButton
-                      disabled={componentDeleteBlocked}
-                      onClick={() => void removeComponent()}
-                    />
-                  </footer>
-                )}
-              </section>
+              </>
             )}
-          </EditorDisplayDrawer>
-          <ModelDisplayPanel
-            exploded={exploded}
-            onExplodedChange={setExploded}
-            explodedDisabled={cad.selectionBlocked || Boolean(cad.tool)}
-            ready={ready && !failed}
-            orthographic={orthographic}
-            onOrthographicChange={setOrthographic}
-            cadVisible={cadVisible}
-            cadColors={cadColors}
-            onCadVisibleChange={(visible) => {
-              setCadVisible(visible);
-              if (!visible) cad.clear();
-            }}
-            modelsVisible={modelsVisible}
-            onModelsVisibleChange={setModelsVisible}
-            boardDisplay={boardDisplay}
-            onBoardDisplayChange={setBoardDisplay}
-            filters={selectionFilters}
-            selectionDisabled={cad.selectionBlocked}
-            onFiltersChange={changeModelFilters}
-            onView={(view) => orient.current(view)}
-          />
+            {!readOnly && annotationsOpened && schematic && annotationProps && (
+              <PCB3DAnnotations
+                board={board}
+                schematic={schematic}
+                active={active && annotating && ready && !failed && !annotationProps.disabled}
+                view={annotationView}
+                {...annotationProps}
+                pick={(point) => pickAnnotation.current(point)}
+                captureImage={(...args) => captureAnnotation.current(...args)}
+                onExit={() => setAnnotating(false)}
+                onSelection={setSelection}
+              />
+            )}
+            {!readOnly && (
+              <CanvasContextMenu
+                target={host}
+                active={active}
+                identity={revision || board}
+                onError={setExportStatus}
+                actions={[
+                  {
+                    id: 'fit',
+                    label: 'Fit 3D board',
+                    icon: Maximize,
+                    disabled: !ready || failed,
+                    run: () => fit.current(),
+                  },
+                  {
+                    id: 'actual-size',
+                    label: 'Actual size (100%)',
+                    icon: Maximize,
+                    disabled: !ready || failed,
+                    run: () => zoom.current(null),
+                  },
+                  {
+                    id: 'zoom-in',
+                    label: 'Zoom in',
+                    icon: Plus,
+                    disabled: !ready || failed,
+                    run: () => zoom.current(1.2),
+                  },
+                  {
+                    id: 'zoom-out',
+                    label: 'Zoom out',
+                    icon: Minus,
+                    disabled: !ready || failed,
+                    run: () => zoom.current(1 / 1.2),
+                  },
+                  {
+                    id: 'export',
+                    label: 'Export image',
+                    icon: ImageDown,
+                    disabled: !ready || exporting || failed,
+                    run: async () => {
+                      setExporting(true);
+                      setExportStatus('');
+                      try {
+                        await exportPNG.current();
+                      } catch (error) {
+                        setExportStatus((error as Error).message);
+                      } finally {
+                        setExporting(false);
+                      }
+                    },
+                  },
+                  {
+                    id: 'isometric',
+                    label: 'Isometric view',
+                    icon: Box,
+                    separated: true,
+                    disabled: !ready || failed,
+                    run: () => orient.current('isometric'),
+                  },
+                  {
+                    id: 'top',
+                    label: 'Top view',
+                    icon: Box,
+                    disabled: !ready || failed,
+                    run: () => orient.current('top'),
+                  },
+                  {
+                    id: 'clear-selection',
+                    label: 'Clear selection',
+                    icon: SquareDashed,
+                    separated: true,
+                    disabled: (!selection.length && !boardSelected) || Boolean(cad.tool),
+                    run: () => {
+                      setSelection([]);
+                      setBoardSelected(false);
+                    },
+                  },
+                ]}
+              />
+            )}
+            {ready && !failed && <ModelSpatialScale update={updateScale} read={readScale} />}
+            {!!warnings.length && (
+              <div className="model-canvas-controls">
+                <details className="pcb-model-notices">
+                  <summary>{warnings.length} model notices</summary>
+                  <ul>
+                    {warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                  {readOnly && (
+                    <button className="secondary" onClick={() => setRetry((n) => n + 1)}>
+                      Retry component models
+                    </button>
+                  )}
+                </details>
+              </div>
+            )}
+            {exportStatus && (
+              <p className="pcb-model-status" role="status">
+                {exportStatus}
+              </p>
+            )}
+            {status &&
+              !failed &&
+              (status === componentLoadingStatus ? (
+                <ModelLoadingStatus progress={loadingProgress} update={updateLoadingProgress} />
+              ) : (
+                <p role="status" className="pcb-model-status">
+                  {status}
+                </p>
+              ))}
+            {errorTarget ? (
+              createPortal(errorFeedback, errorTarget)
+            ) : failed || cadGeometryErrors.document || cadGeometryErrors.preview ? (
+              <div className="model-inline-errors">{errorFeedback}</div>
+            ) : null}
+          </div>
+          {!readOnly &&
+            statusBar &&
+            cloneElement(statusBar, {
+              modeActions: {
+                onInteraction: activateInteraction,
+                onAnnotation: activateAnnotation,
+                interactionDisabled,
+                annotationDisabled,
+              },
+            })}
+        </div>
+        {!readOnly && (
           <InspectorResize
             target={propertiesDock}
             size={inspectorSize}
             onResize={setInspectorSize}
             label="model properties"
             axes={['width']}
+            gutter
+            hidden={!sidebarVisible}
             minWidth={280}
             bounds={() => ({
               width: Math.min(
                 480,
-                Math.max(0, (propertiesDock.current?.parentElement?.clientWidth ?? 480) - 160),
+                Math.max(0, (propertiesDock.current?.parentElement?.clientWidth ?? 480) - 172),
               ),
               height: propertiesDock.current?.parentElement?.clientHeight ?? 0,
             })}
           />
-        </aside>
+        )}
+        {!readOnly && (
+          <aside
+            ref={propertiesDock}
+            className="model-properties-dock editor-sidebar-sections"
+            aria-label="Model sidebar"
+            hidden={!sidebarVisible}
+            style={{ width: inspectorSize.width }}
+          >
+            <EditorDisplayDrawer
+              label="Properties"
+              className="editor-properties-drawer"
+              open={propertiesExpanded}
+              onOpenChange={setPropertiesExpanded}
+            >
+              {cad.panel}
+              <section
+                className="model-properties-content"
+                aria-label="Board properties"
+                hidden={!boardSelected || cad.inspecting}
+              >
+                <div className="model-properties-body">
+                  <NumberField
+                    label="Board thickness (mm)"
+                    value={board.thickness}
+                    min={0.1}
+                    max={20}
+                    active={
+                      active &&
+                      boardSelected &&
+                      sidebarVisible &&
+                      propertiesExpanded &&
+                      !sourcePending &&
+                      !annotating &&
+                      !cad.tool &&
+                      ready &&
+                      !failed &&
+                      !cad.selectionBlocked
+                    }
+                    disabled={!onBoardThicknessChange}
+                    onCommit={(thickness) => onBoardThicknessChange?.(board, thickness) ?? false}
+                  />
+                </div>
+              </section>
+              {!cad.inspecting && !boardSelected && (
+                <section
+                  className="model-properties-content"
+                  aria-label={selectedFootprint ? 'Component properties' : 'Model properties'}
+                  onCompositionStart={() => {
+                    componentComposition.current = true;
+                  }}
+                  onCompositionEnd={() => {
+                    componentComposition.current = false;
+                  }}
+                >
+                  <div className="model-properties-body">
+                    {selectedFootprint ? (
+                      schematic ? (
+                        <ComponentProperties
+                          footprint={selectedFootprint}
+                          schematic={schematic}
+                          active={active && !sourcePending && sidebarVisible && !explosionActive}
+                          resetKey={active}
+                          snap={(value) => value}
+                          onFootprint={(footprint) =>
+                            onFootprintChange?.(board, footprint) ?? false
+                          }
+                          onSavePartProperties={onSavePartProperties}
+                          capabilityHost={capabilityHost}
+                          fileId={fileId}
+                          projectSource={projectSource}
+                          getRevision={getRevision}
+                          spiceAvailable={spiceAvailable}
+                          onRequestSave={onRequestSave}
+                        />
+                      ) : (
+                        <p>Component schematic is unavailable.</p>
+                      )
+                    ) : (
+                      <PropertiesEmptyState icon={Box}>
+                        Select an element to view its properties.
+                      </PropertiesEmptyState>
+                    )}
+                    {componentDeleteError && (
+                      <p className="dialog-error" role="alert">
+                        {componentDeleteError}
+                      </p>
+                    )}
+                  </div>
+                  {selectedFootprint && (
+                    <footer className="inspector-footer">
+                      <PropertyDeleteButton
+                        disabled={componentDeleteBlocked}
+                        onClick={() => void removeComponent()}
+                      />
+                    </footer>
+                  )}
+                </section>
+              )}
+            </EditorDisplayDrawer>
+            <ModelDisplayPanel
+              exploded={exploded}
+              onExplodedChange={setExploded}
+              explodedDisabled={cad.selectionBlocked || Boolean(cad.tool)}
+              ready={ready && !failed}
+              orthographic={orthographic}
+              onOrthographicChange={setOrthographic}
+              cadVisible={cadVisible}
+              cadColors={cadColors}
+              onCadVisibleChange={(visible) => {
+                setCadVisible(visible);
+                if (!visible) cad.clear();
+              }}
+              modelsVisible={modelsVisible}
+              onModelsVisibleChange={setModelsVisible}
+              boardDisplay={boardDisplay}
+              onBoardDisplayChange={setBoardDisplay}
+              referencePlaneVisible={referencePlaneVisible}
+              onReferencePlaneVisibleChange={setReferencePlaneVisible}
+              filters={selectionFilters}
+              selectionDisabled={cad.selectionBlocked}
+              onFiltersChange={changeModelFilters}
+              onView={(view) => orient.current(view)}
+            />
+          </aside>
+        )}
       </div>
     </section>
   );

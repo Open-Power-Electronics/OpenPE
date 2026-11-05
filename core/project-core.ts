@@ -16,6 +16,7 @@ import {
   serializeProject,
 } from '../lib/project';
 import { type PCB, invalidatePCBFill } from '../lib/pcb';
+import { refreshPCBFill } from '../lib/pcb-polygons';
 import { partFields, displayPartValue } from '../lib/library';
 import { preparePartGeometry, preparePartProperties, type FieldRow } from '../lib/part-properties';
 import { applyProposal, extractProposal } from '../lib/proposals';
@@ -619,6 +620,13 @@ export class ProjectCore {
     serializeProject(next);
     const prepared = this.options.prepare?.(next) ?? next;
     next = ownProject(prepared, next);
+    serializeProject(next);
+    // Geometry and its current copper are one edit for every editor/Agent path.
+    // Explicit native Source retains its own accepted contours without refilling.
+    if (!applyDraft && this.project?.pcb && next.pcb) {
+      const pcb = refreshPCBFill(this.project.pcb, next.pcb);
+      if (pcb !== next.pcb) next = ownProject({ ...next, pcb }, next);
+    }
     this.requirePreparedModelCadGeometry(next);
     const source = serializeProject(next);
     const changed = source !== this.source;
@@ -687,7 +695,7 @@ export class ProjectCore {
     // Copper-only previews cannot change assignments through the same array;
     // the complete candidate still passes the normal commit validation.
     if (latest.pcb && board.footprints === latest.pcb.footprints)
-      return this.commit({ ...latest, pcb: invalidatePCBFill(latest.pcb, board) });
+      return this.commit({ ...latest, pcb: board });
     const assignments = new Map<string, string>();
     for (const footprint of board.footprints) {
       const old = latest.pcb?.footprints.find((item) => item.id === footprint.id);
@@ -714,7 +722,7 @@ export class ProjectCore {
     return this.commit({
       ...latest,
       schematic,
-      pcb: latest.pcb ? invalidatePCBFill(latest.pcb, board) : board,
+      pcb: board,
     });
   }
 
@@ -846,6 +854,11 @@ export class ProjectCore {
     if (this.editingBlocked !== null) return false;
     if (this.project !== basis || this.sourceDraft !== null) return false;
     next = ownProject(next, basis);
+    serializeProject(next);
+    if (basis.pcb && next.pcb) {
+      const pcb = refreshPCBFill(basis.pcb, next.pcb);
+      if (pcb !== next.pcb) next = ownProject({ ...next, pcb }, next);
+    }
     this.requirePreparedModelCadGeometry(next);
     const source = serializeProject(next);
     if (source === this.source) return true;
@@ -1066,8 +1079,7 @@ export class ProjectCore {
     }
     if (id.startsWith('layout.')) {
       const result = executeLayout(project.pcb, id, args);
-      // Fill produces current contours and their effective rules together.
-      // Ordinary board replacement would invalidate those freshly made fills.
+      // Explicit Fill also enables its target and supplies the requested minimum.
       if (id === 'layout.fill') this.commitProject({ ...project, pcb: result.board });
       else this.replaceBoard(result.board);
       return { revision: String(this.revision), ...result.result };

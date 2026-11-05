@@ -18,7 +18,7 @@
   max-width: min(420px, calc(100% - 24px));
   padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   font-size: var(--font-small);

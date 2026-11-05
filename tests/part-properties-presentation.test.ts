@@ -177,7 +177,7 @@ for (const [kind, field, label, otherLabel, value, display, unit] of [
       tag.includes(`aria-label="${label}"`),
     )?.[0];
     assert.ok(input, `.MODEL ${kind} exposes ${label}.`);
-    assert.ok(input.includes(`value="${display}"`));
+    assert.equal(Number(input.match(/\bvalue="([^"]+)"/)?.[1]), Number(display));
     const unitControl = modelHtml
       .slice(modelHtml.indexOf(`aria-label="${label} unit"`))
       .split('</button>')[0];

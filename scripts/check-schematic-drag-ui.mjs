@@ -1,3 +1,4 @@
+import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -375,7 +376,7 @@ try {
   assert.deepEqual(await currentCircuit(), nudged);
 
   const tabs = page.getByRole('tablist', { name: 'Schematic files' });
-  await button('New file').click();
+  await fileMenuAction(page, 'New file');
   const firstSheet = await tabs.getByRole('tab').first().innerText();
   const secondSheet = await tabs.getByRole('tab', { selected: true }).innerText();
   await tabs

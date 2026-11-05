@@ -1,5 +1,6 @@
 'use client';
 import { useLayoutEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
+import { modelScaleLength } from './model-scale';
 import {
   measurementDistance,
   measurementAngles,
@@ -50,6 +51,7 @@ function rulerGeometry(
   project: (point: MeasurementPoint) => { x: number; y: number } | null,
   scale = 1,
   unitsPerPixel = scale,
+  interval?: number,
 ) {
   const a = project(start),
     b = project(end);
@@ -57,7 +59,11 @@ function rulerGeometry(
   const length = Math.hypot(b.x - a.x, b.y - a.y);
   if (length / scale < 1) return '';
   const distance = measurementDistance(start, end).distance;
-  const ticks = measurementTicks(distance, unitsPerPixel);
+  // Normalize to unit intervals so the shared bounded thinning also supports
+  // the compact Model scale beyond Layout's fixed length range.
+  const ticks = interval
+    ? measurementTicks(distance / interval, 0.01)
+    : measurementTicks(distance, unitsPerPixel);
   if (!ticks.length) return '';
   const nx = -(b.y - a.y) / length,
     ny = (b.x - a.x) / length;
@@ -161,7 +167,15 @@ export function ModelMeasurementDrawing({
       line.current.style.display = second.current.style.display = a && b ? '' : 'none';
       ticks.current.replaceChildren();
       if (!a || !b || !start || !end) return;
-      const ruler = rulerGeometry(start, end, project.current, 1, unitsPerPixel.current());
+      const spacing = unitsPerPixel.current();
+      const ruler = rulerGeometry(
+        start,
+        end,
+        project.current,
+        1,
+        spacing,
+        modelScaleLength(spacing),
+      );
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', ruler);
       ticks.current.append(path);

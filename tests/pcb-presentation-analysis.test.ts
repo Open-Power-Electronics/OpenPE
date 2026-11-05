@@ -12,7 +12,7 @@ import { isOwnedPCB, ownProjectData } from '../lib/immutable-project';
 import { invalidatePCBFill, type PCB } from '../lib/pcb';
 import { analyzePCBConnectivity } from '../lib/pcb-connectivity';
 import { createEmptyPCB } from '../lib/pcb-layout';
-import { filledCopperPolygons, polygonPath } from '../lib/pcb-polygons';
+import { filledCopperPolygons, polygonPath, refreshPCBFill } from '../lib/pcb-polygons';
 import { createPCBTrackDrag } from '../lib/pcb-track-drag';
 import { parseProject, projectNativeFiles } from '../lib/project';
 
@@ -456,7 +456,7 @@ test('Proxy reads retain actual stationary edits even when descriptors report th
   assert.equal(clean.board.footprints[0].value, coldBasis.footprints[0].value);
 });
 
-test('EMC preview survives Core adoption exactly and is analyzed once, including undo and native parity', async () => {
+test('EMC dynamic fill preview reuses copper, retries bounded connectivity and retains Core/native/undo parity', async () => {
   const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
   for (const y of [0.5, -0.5]) {
     const core = new ProjectCore(project);
@@ -481,15 +481,30 @@ test('EMC preview survives Core adoption exactly and is analyzed once, including
     assert.equal(prepared.board.footprints, earlierPrepared.board.footprints);
     assert.deepEqual(prepared.board, invalidatePCBFill(basis, raw.board));
     assert.equal(invalidatePCBFill(basis, prepared.board), prepared.board);
+    const projected = refreshPCBFill(basis, prepared.board);
+    assert.equal(isOwnedPCB(projected), true);
+    assert.notEqual(projected, prepared.board);
+    assert.ok(projected.zones.some((zone) => zone.filledPolygons !== undefined));
+    assert.equal(refreshPCBFill(basis, projected), projected);
     const { analysis, calls } = counted();
-    const displayed = analysis.connectivity(prepared.board);
-    analysis.copper(prepared.board);
-    assert.equal(core.replaceBoard(prepared.board), true);
+    assert.throws(
+      () => analysis.connectivity(projected),
+      /Airwire preview exceeds the geometry limit/,
+    );
+    analysis.copper(projected);
+    assert.equal(core.replaceBoard(projected), true);
     const committed = core.getSnapshot().project!;
-    assert.equal(committed.pcb, prepared.board);
-    assert.deepEqual(analysis.connectivity(committed.pcb!), displayed);
+    assert.equal(
+      committed.pcb === projected,
+      true,
+      'Core adopts the exact displayed dynamic fill.',
+    );
+    assert.throws(
+      () => analysis.connectivity(committed.pcb!),
+      /Airwire preview exceeds the geometry limit/,
+    );
     analysis.copper(committed.pcb!);
-    assert.deepEqual(calls, { connectivity: 1, copper: 1 });
+    assert.deepEqual(calls, { connectivity: 2, copper: 1 });
     assert.deepEqual(projectNativeFiles(committed), projectNativeFiles(structuredClone(committed)));
     core.undo();
     assert.equal(core.getSnapshot().project!.pcb, basis);
@@ -497,7 +512,7 @@ test('EMC preview survives Core adoption exactly and is analyzed once, including
     assert.deepEqual(analysis.connectivity(basis), { edges: [], padCount: 194, warnings: [] });
     assert.equal(
       calls.connectivity,
-      2,
+      3,
       'The original saved-fill analysis runs once after undo and retains its successful result.',
     );
   }

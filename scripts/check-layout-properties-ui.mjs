@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
@@ -225,7 +226,7 @@ async function run(name, check) {
       assert.deepEqual(errors, [], 'The real editor mounts without renderer errors.');
       throw error;
     }
-    await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit board to canvas');
     const filterDisclosure = page.getByRole('button', { name: 'Selection', exact: true });
     if ((await filterDisclosure.getAttribute('aria-expanded')) !== 'true')
       await filterDisclosure.click();
@@ -376,7 +377,7 @@ try {
       assert.equal(await marker.getAttribute('aria-label'), 'J1 locked');
       const markerSize = await marker.locator(':scope > rect').boundingBox();
       assert.ok(Math.abs(markerSize.width - 16) < 0.1);
-      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+      await runCanvasAction(page, 'Zoom in');
       await frames();
       const zoomed = await marker.locator(':scope > rect').boundingBox();
       assert.ok(

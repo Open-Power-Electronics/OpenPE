@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import {
   selectModelView,
   selectLayoutLayer,
@@ -171,7 +172,7 @@ try {
   const button = (name) => page.getByRole('button', { name, exact: true });
   const canvas = page.getByTestId('layout-canvas');
   await canvas.waitFor();
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   assert.equal(
     await canvas.locator('[data-copper-zone]').first().getAttribute('d'),
     '',

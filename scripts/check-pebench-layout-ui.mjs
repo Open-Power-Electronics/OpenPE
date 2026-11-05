@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import { toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -49,7 +50,7 @@ try {
     await canvas.waitFor({ timeout: 15000 }).catch((error) => {
       throw new Error(`${error.message}; page errors: ${errors.join('; ')}`);
     });
-    await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit board to canvas');
     assert.equal(
       await canvas.evaluate(
         (svg) =>

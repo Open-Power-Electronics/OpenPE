@@ -10,7 +10,7 @@
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-floating);
 }
 .header {
@@ -27,19 +27,19 @@
 .panel[data-docked] {
   position: static;
   inset: auto;
-  width: var(--layout-sidebar-width, var(--editor-sidebar-default-width, 300px));
-  min-width: var(--layout-sidebar-min-width, min(224px, calc(100% - 160px)));
-  max-width: var(--layout-sidebar-max-width, min(480px, calc(100% - 160px)));
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: 0;
   max-height: none;
-  flex-shrink: 0;
-  border: 0;
-  border-left: 1px solid var(--line);
-  border-radius: 0;
+  flex: 1;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
   box-shadow: none;
 }
 .header h2 {
   margin: 0;
-  font-size: var(--font-body);
+  font-size: var(--font-control);
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -56,7 +56,7 @@
   flex: 1;
   overflow: auto;
   min-height: 0;
-  padding: 12px;
+  padding: var(--properties-inset);
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
@@ -71,7 +71,7 @@
 }
 .fields {
   display: grid;
-  gap: 8px;
+  gap: var(--properties-row-gap);
 }
 .sourceRow {
   display: flex;
@@ -81,7 +81,7 @@
   margin-bottom: 8px;
   padding: 6px 8px;
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--panel);
   font-size: var(--font-small);
   line-height: 1.4;
@@ -95,7 +95,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--properties-label-gap);
   min-height: 30px;
   font-size: var(--font-small);
   color: var(--muted);
@@ -106,17 +106,19 @@
   overflow-wrap: anywhere;
 }
 .field > :global(.quantity-input) {
-  flex: 0 0 clamp(112px, 47%, 150px);
+  flex: 0 0 max(112px, var(--properties-value-width));
 }
 .footer {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  min-height: var(--editor-footer-height);
   gap: 8px;
-  padding: 12px;
+  padding: 2px 12px;
   border-top: 1px solid var(--line-soft);
   flex-shrink: 0;
-  background: var(--panel);
+  background: var(--surface);
 }
 .footer p {
   flex-basis: 100%;
@@ -162,7 +164,7 @@
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--panel);
   color: var(--muted);
   overflow-wrap: anywhere;
@@ -186,7 +188,7 @@
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-panel);
   font-size: var(--font-small);
   pointer-events: auto;
@@ -227,11 +229,11 @@
 }
 .selectedReadout {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-top: 8px;
-  margin-top: 8px;
+  min-height: 31px;
+  padding: 4px 2px;
   border-top: 1px solid var(--line-soft);
   color: var(--text-strong);
   font-variant-numeric: tabular-nums;
@@ -248,7 +250,6 @@
 }
 .heatPaths {
   margin-top: 10px;
-  padding-top: 8px;
   border-top: 1px solid var(--line-soft);
 }
 .heatPaths p {
@@ -274,7 +275,7 @@
   min-height: 30px;
   padding: 4px 2px;
   border: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text-strong);
   font: inherit;

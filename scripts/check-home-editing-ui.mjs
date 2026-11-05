@@ -335,8 +335,8 @@ try {
       };
       const editValue = async (reference, value) => {
         await button('Schematic').click();
-        await button('Parts list').click();
-        const panel = page.getByRole('dialog', { name: 'Parts list', exact: true });
+        await button('List').click();
+        const panel = page.getByRole('dialog', { name: 'List', exact: true });
         await panel.getByRole('textbox', { name: 'Search parts', exact: true }).fill(reference);
         await panel.getByRole('button', { name: 'Edit ' + reference, exact: true }).click();
         const field = page

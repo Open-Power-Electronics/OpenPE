@@ -3,7 +3,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
-  FileDiff,
+  CircuitBoard,
+  Code2,
   FileCode2,
   FileCheck2,
   Check,
@@ -14,13 +15,22 @@ import {
 } from 'lucide-react';
 import Select from './Select';
 import Dialog from './Dialog';
-import { GitIcon, SchematicIcon } from './EditorIcons';
+import { GitIcon, ModelIcon, SchematicIcon } from './EditorIcons';
 import ProjectFileComparison from './ProjectFileComparison';
 import { compareProjectFiles, type HistoryEntry, type HistoryPage } from '@/lib/project-history';
 import type { CapabilityHost } from '@/api/capabilities';
 import { parseProject, projectNativeFiles, serializeProject } from '@/lib/project';
 
 const SchematicComparison = lazy(() => import('./SchematicComparison'));
+const LayoutComparison = lazy(() => import('./LayoutComparison'));
+const ModelComparison = lazy(() => import('./ModelComparison'));
+const previewModes = [
+  { id: 'schematic', label: 'Schematic', icon: SchematicIcon },
+  { id: 'layout', label: 'Layout', icon: CircuitBoard },
+  { id: 'model', label: 'Model', icon: ModelIcon },
+  { id: 'source', label: 'Source', icon: Code2 },
+] as const;
+type Display = (typeof previewModes)[number]['id'];
 type Version = { id: string; source: string };
 const changeLabel = { added: 'Added', removed: 'Deleted', changed: 'Modified' };
 const changeStatus = { added: 'A', removed: 'D', changed: 'M' };
@@ -55,7 +65,12 @@ export default function ProjectHistoryView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  const [display, setDisplay] = useState<'schematic' | 'details'>('schematic');
+  const [display, setDisplay] = useState<Display>('schematic');
+  const [openedDisplays, setOpenedDisplays] = useState<Display[]>(['schematic']);
+  function showDisplay(next: Display) {
+    setDisplay(next);
+    setOpenedDisplays((opened) => (opened.includes(next) ? opened : [...opened, next]));
+  }
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const pending = useRef(false);
   const composing = useRef(false);
@@ -178,8 +193,8 @@ export default function ProjectHistoryView({
   return (
     <Dialog
       title="Git"
-      icon={<GitIcon size={18} />}
-      className="project-history-dialog"
+      icon={<GitIcon size={16} />}
+      className="independent-window project-history-dialog"
       open={visible}
       onClose={() => {
         if (!composing.current) onClose();
@@ -292,20 +307,20 @@ export default function ProjectHistoryView({
                         key={change.name}
                         data-change={change.kind}
                         className={
-                          display === 'details' && activeChange?.name === change.name
+                          display === 'source' && activeChange?.name === change.name
                             ? 'selected'
                             : ''
                         }
                         aria-label={changeLabel[change.kind] + ' · ' + change.name}
                         aria-current={
-                          display === 'details' && activeChange?.name === change.name
+                          display === 'source' && activeChange?.name === change.name
                             ? 'true'
                             : undefined
                         }
                         title={change.name}
                         onClick={() => {
                           setSelectedFile(change.name);
-                          setDisplay('details');
+                          showDisplay('source');
                         }}
                       >
                         <FileCode2 size={16} aria-hidden="true" />
@@ -405,26 +420,18 @@ export default function ProjectHistoryView({
                   }
                 />
                 <div className="history-display-actions" role="group" aria-label="Comparison view">
-                  <button
-                    className={'tool-button' + (display === 'schematic' ? ' active' : '')}
-                    aria-label="Schematic comparison"
-                    title="Schematic comparison"
-                    aria-pressed={display === 'schematic'}
-                    onClick={() => setDisplay('schematic')}
-                  >
-                    <SchematicIcon size={17} />
-                  </button>
-                  <button
-                    className={'tool-button' + (display === 'details' ? ' active' : '')}
-                    aria-label="File comparison"
-                    title="File comparison"
-                    aria-pressed={display === 'details'}
-                    onClick={() => {
-                      setDisplay('details');
-                    }}
-                  >
-                    <FileDiff size={17} />
-                  </button>
+                  {previewModes.map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      className={'tool-button' + (display === id ? ' active' : '')}
+                      aria-label={`${label} comparison`}
+                      title={`${label} comparison`}
+                      aria-pressed={display === id}
+                      onClick={() => showDisplay(id)}
+                    >
+                      <Icon size={17} />
+                    </button>
+                  ))}
                 </div>
                 <button
                   className="tool-button"
@@ -442,27 +449,44 @@ export default function ProjectHistoryView({
                   <RotateCcw size={17} />
                 </button>
               </div>
-              {display === 'schematic' ? (
-                <Suspense fallback={<p role="status">Loading schematic comparison…</p>}>
-                  <SchematicComparison
-                    active={visible}
-                    beforeSource={before}
-                    afterSource={after}
-                    beforeLabel={beforeLabel}
-                    afterLabel={afterLabel}
-                  />
-                </Suspense>
-              ) : activeChange ? (
-                <ProjectFileComparison
-                  change={activeChange}
-                  beforeLabel={beforeLabel}
-                  afterLabel={afterLabel}
-                />
-              ) : (
-                <div className="history-empty-state" role="status">
-                  <FileCheck2 size={32} aria-hidden="true" />
-                  <strong>No file changes</strong>
-                  <p>The selected versions have identical native files.</p>
+              {openedDisplays
+                .filter((mode) => mode !== 'source')
+                .map((mode) => {
+                  const Comparison = mode === 'schematic' ? SchematicComparison : LayoutComparison;
+                  const props = {
+                    active: visible && display === mode,
+                    beforeSource: before,
+                    afterSource: after,
+                    beforeLabel,
+                    afterLabel,
+                  };
+                  return (
+                    <div className="history-preview" key={mode} hidden={display !== mode}>
+                      <Suspense fallback={<p role="status">Loading {mode} comparison…</p>}>
+                        {mode === 'model' ? (
+                          <ModelComparison {...props} fileId={fileId} />
+                        ) : (
+                          <Comparison {...props} />
+                        )}
+                      </Suspense>
+                    </div>
+                  );
+                })}
+              {openedDisplays.includes('source') && (
+                <div className="history-preview" hidden={display !== 'source'}>
+                  {activeChange ? (
+                    <ProjectFileComparison
+                      change={activeChange}
+                      beforeLabel={beforeLabel}
+                      afterLabel={afterLabel}
+                    />
+                  ) : (
+                    <div className="history-empty-state" role="status">
+                      <FileCheck2 size={32} aria-hidden="true" />
+                      <strong>No file changes</strong>
+                      <p>The selected versions have identical native files.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </section>

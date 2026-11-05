@@ -117,6 +117,7 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
   netId,
   ownerId,
   path,
+  preview,
   selection,
   highlightNets,
 }: Paint & {
@@ -125,6 +126,12 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
   netId: string | null;
   ownerId: string;
   path: string;
+  preview?: {
+    id: string;
+    outline: string;
+    boardOutline: string;
+    blockers: { path: string; strokeWidth: number }[];
+  };
 }) {
   const selected = useLayoutSelection(selection, zoneId, ownerId);
   return (
@@ -134,6 +141,28 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
       opacity={copperFillOpacity * netOpacity(netId, highlightNets, selected)}
       data-export-opacity={copperFillOpacity * netOpacity(netId, highlightNets)}
     >
+      {preview && (
+        <defs>
+          <clipPath id={`${preview.id}-board`}>
+            <path d={preview.boardOutline} clipRule="evenodd" />
+          </clipPath>
+          <mask id={preview.id} maskContentUnits="userSpaceOnUse" style={{ maskType: 'luminance' }}>
+            <path d={preview.outline} fill="white" fillRule="evenodd" />
+            {preview.blockers.map((blocker, index) => (
+              <path
+                key={index}
+                d={blocker.path}
+                fill="black"
+                fillRule="evenodd"
+                stroke="black"
+                strokeWidth={blocker.strokeWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+          </mask>
+        </defs>
+      )}
       <PCBSelectionPaint color={pcbLayerColor(layer, true)} selected={selected}>
         {(color, selection) => (
           <path
@@ -141,6 +170,8 @@ export const LayoutZoneFillDrawing = memo(function LayoutZoneFillDrawing({
             d={path}
             fill={color}
             fillRule="evenodd"
+            mask={preview ? `url(#${preview.id})` : undefined}
+            clipPath={preview ? `url(#${preview.id}-board)` : undefined}
           />
         )}
       </PCBSelectionPaint>

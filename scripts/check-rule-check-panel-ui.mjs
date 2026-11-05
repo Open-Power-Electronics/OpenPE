@@ -47,6 +47,7 @@ const bundle = await build({
             <button onClick={()=>setOpen(true)}>Open checks</button>
           </div>
           {open&&<RuleCheckPanel {...state}
+            onKindChange={kind=>{window.kindChanges.push(kind);setState(current=>({...current,kind}))}}
             onDRCSettingsChange={config=>setState(current=>({...current,drcSettings:config,stale:!!current.report}))}
             onRun={config=>window.checkRuns.push(config??null)}
             onSelectIssue={issue=>window.locatedIssues.push(issue.id)}
@@ -82,6 +83,7 @@ try {
     window.checkRuns = [];
     window.locatedIssues = [];
     window.closedPanels = 0;
+    window.kindChanges = [];
   });
   for (const file of ['app/globals.css', 'app/workspace.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
@@ -97,29 +99,147 @@ try {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }, changes);
   const button = (name) => page.getByRole('button', { name, exact: true });
+  const assertRunIMEBlocked = async (action) => {
+    assert.equal(await action.isEnabled(), true);
+    const before = await page.evaluate(() => window.checkRuns.length);
+    assert.equal(
+      await action.evaluate((element) => {
+        for (const key of ['Enter', ' ']) {
+          for (const composition of [{ keyCode: 229 }, { isComposing: true }]) {
+            const event = new KeyboardEvent('keydown', {
+              key,
+              ...composition,
+              bubbles: true,
+              cancelable: true,
+            });
+            element.dispatchEvent(event);
+            if (!event.defaultPrevented) return false;
+          }
+        }
+        return true;
+      }),
+      true,
+      'IME Enter and Space prevent default activation of an enabled check action.',
+    );
+    assert.equal(
+      await page.evaluate(() => window.checkRuns.length),
+      before,
+      'IME activation starts no extra check.',
+    );
+  };
   await button('Open checks').click();
-  const erc = page.getByRole('dialog', { name: 'ERC checks', exact: true });
+  const erc = page.getByRole('dialog', { name: 'Rule', exact: true });
   await erc.waitFor();
   assert.equal(await erc.getAttribute('aria-modal'), 'true');
   assert.equal(await erc.evaluate((dialog) => dialog.matches(':modal')), true);
   const initialERC = await erc.boundingBox();
-  assert.equal(Math.round(initialERC.width), 600);
+  assert.equal(Math.round(initialERC.width), 720);
+  assert.equal(Math.round(initialERC.height), 560);
   assert.ok(Math.abs(initialERC.x + initialERC.width / 2 - 640) <= 1);
   assert.ok(Math.abs(initialERC.y + initialERC.height / 2 - 425) <= 1);
   assert.equal(await erc.getByText('Not checked', { exact: true }).isVisible(), true);
   assert.equal(await erc.getByText('No violations found in checked rules.').count(), 0);
+  assert.deepEqual(
+    await page.evaluate(() => window.checkRuns),
+    [null],
+    'Opening the panel automatically runs the selected ERC check once.',
+  );
+  const tabs = erc.getByRole('tablist', { name: 'Rule', exact: true });
+  const ercTab = tabs.getByRole('tab', { name: 'ERC', exact: true });
+  const drcTab = tabs.getByRole('tab', { name: 'DRC', exact: true });
+  assert.equal(await tabs.getByRole('tab').count(), 2);
+  assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await drcTab.getAttribute('aria-selected'), 'false');
+  assert.equal(
+    await erc.getByRole('tabpanel').getAttribute('aria-labelledby'),
+    await ercTab.getAttribute('id'),
+  );
+  await update({ drcAvailable: false });
+  assert.equal(await drcTab.isDisabled(), true, 'A project without a PCB cannot select DRC.');
+  await ercTab.focus();
+  await page.keyboard.press('End');
+  assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
+  assert.deepEqual(await page.evaluate(() => window.kindChanges), []);
+  await update({ drcAvailable: true });
+  await assertRunIMEBlocked(button('Run ERC'));
   await button('Run ERC').click();
-  assert.deepEqual(await page.evaluate(() => window.checkRuns), [null]);
+  assert.deepEqual(await page.evaluate(() => window.checkRuns), [null, null]);
 
   await update({ report });
+  await assertRunIMEBlocked(button('Recheck ERC'));
   assert.equal(await erc.getByText('1 error', { exact: true }).isVisible(), true);
   assert.equal(await erc.getByText('1 warning', { exact: true }).isVisible(), true);
+  const issueRow = button(`Locate issue: ${report.issues[0].message}`);
+  const issueList = erc.getByRole('list', { name: 'ERC issues', exact: true });
+  const firstItem = issueList.locator(':scope > li').first();
+  assert.equal(await issueRow.getAttribute('title'), null, 'Issue text has no redundant tooltip.');
+  assert.equal(await firstItem.getByRole('button').count(), 1, 'The whole issue is one action.');
   assert.equal(
-    await button(`Locate issue: ${report.issues[0].message}`).getAttribute('title'),
-    'Locate issue',
+    await issueRow.locator('button, input, a').count(),
+    0,
+    'Rows have no nested actions.',
   );
-  await button(`Locate issue: ${report.issues[0].message}`).click();
+  assert.equal(await issueList.locator('.lucide-locate-fixed').count(), 0);
+  const rowBox = await issueRow.boundingBox();
+  const itemBox = await firstItem.boundingBox();
+  assert.ok(
+    Math.abs(rowBox.x - itemBox.x) <= 1 && Math.abs(rowBox.width - itemBox.width) <= 1,
+    'The locate action spans the complete issue row.',
+  );
+  assert.ok(rowBox.height <= 56, 'A short issue retains a compact two-line row.');
+  assert.equal(
+    await issueRow.evaluate((element) => {
+      for (const key of ['Enter', ' ']) {
+        for (const composition of [{ keyCode: 229 }, { isComposing: true }]) {
+          const event = new KeyboardEvent('keydown', {
+            key,
+            ...composition,
+            bubbles: true,
+            cancelable: true,
+          });
+          element.dispatchEvent(event);
+          if (!event.defaultPrevented) return false;
+        }
+      }
+      return true;
+    }),
+    true,
+    'IME Enter and Space suppress native issue activation.',
+  );
+  await issueRow.dispatchEvent('compositionstart');
+  for (const key of ['Enter', ' ']) {
+    assert.equal(
+      await issueRow.evaluate((element, key) => {
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        element.dispatchEvent(event);
+        return event.defaultPrevented;
+      }, key),
+      true,
+      'Active composition also suppresses ordinary Enter/Space events.',
+    );
+  }
+  assert.deepEqual(await page.evaluate(() => window.locatedIssues), []);
+  await issueRow.dispatchEvent('compositionend');
+  await issueRow.click({ position: { x: rowBox.width / 2, y: rowBox.height / 2 } });
   assert.deepEqual(await page.evaluate(() => window.locatedIssues), ['first']);
+  await issueRow.focus();
+  await issueRow.press('Enter');
+  await issueRow.press('Space');
+  assert.deepEqual(
+    await page.evaluate(() => window.locatedIssues),
+    ['first', 'first', 'first'],
+    'Enter and Space locate through the same whole-row action.',
+  );
+  await update({ blockedReason: 'Project is closing.' });
+  assert.equal(await issueRow.isDisabled(), true, 'Closing projects disable whole-row locating.');
+  await issueRow.evaluate((element) => element.click());
+  assert.equal(await page.evaluate(() => window.locatedIssues.length), 3);
+  await update({
+    blockedReason: '',
+    report: { ...report, issues: [{ ...report.issues[0], objectIds: [], location: undefined }] },
+  });
+  assert.equal(await issueRow.isDisabled(), true, 'Issues without a target remain read-only.');
+  await update({ report });
   assert.equal(await erc.locator('details').count(), 0);
   assert.equal(await erc.getByText(report.notes[0], { exact: true }).count(), 0);
   await mkdir('test-results', { recursive: true });
@@ -129,16 +249,18 @@ try {
   assert.equal(await erc.getByText('Design or limits changed. Recheck ERC.').isVisible(), true);
   assert.equal(await button(`Locate issue: ${report.issues[0].message}`).isDisabled(), true);
   await button('Recheck ERC').click();
-  assert.equal(await page.evaluate(() => window.checkRuns.length), 2);
-  await update({ busy: true });
+  assert.equal(await page.evaluate(() => window.checkRuns.length), 3);
+  await update({ busy: true, stale: false });
   assert.equal(await button('Recheck ERC').isDisabled(), true);
+  assert.equal(await issueRow.isDisabled(), true, 'Running checks disable whole-row locating.');
   assert.equal(await button('Close dialog').isDisabled(), true);
   await page.keyboard.press('Escape');
   assert.equal(await erc.isVisible(), true, 'A running check retains its dialog.');
-  await update({ busy: false, sourcePending: true, error: 'Fixture check failed.' });
+  await update({ busy: false, sourcePending: true, stale: false, error: 'Fixture check failed.' });
   assert.equal(await erc.getByText('Apply Source edits before checking rules.').isVisible(), true);
   assert.equal(await erc.getByRole('alert').innerText(), 'Fixture check failed.');
   assert.equal(await button('Recheck ERC').isDisabled(), true);
+  assert.equal(await issueRow.isDisabled(), true, 'Pending Source disables whole-row locating.');
   await update({
     sourcePending: false,
     stale: false,
@@ -190,13 +312,75 @@ try {
 
   await update({ kind: 'drc', report: { ...clean, kind: 'drc' }, drcSettings: settings });
   await button('Open checks').click();
-  const drc = page.getByRole('dialog', { name: 'DRC checks', exact: true });
+  const drc = page.getByRole('dialog', { name: 'Rule', exact: true });
   const clearance = drc.getByRole('spinbutton', { name: 'Copper clearance (mm)', exact: true });
   await clearance.waitFor();
-  assert.equal(await clearance.inputValue(), String(settings.clearance));
+  assert.deepEqual(
+    await page.evaluate(() => window.checkRuns.at(-1)),
+    settings,
+    'Opening DRC automatically runs with its validated settings.',
+  );
+  assert.equal(await drcTab.getAttribute('aria-selected'), 'true');
+  await ercTab.click();
+  assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await clearance.count(), 0, 'ERC hides the board limits.');
+  assert.equal(
+    await ercTab.evaluate((element) => {
+      for (const key of ['ArrowRight', 'End', 'Enter', ' ']) {
+        element.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            keyCode: 229,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        element.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key,
+            isComposing: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }
+      return true;
+    }),
+    true,
+  );
+  assert.equal(await ercTab.getAttribute('aria-selected'), 'true', 'IME cannot switch rule tabs.');
+  assert.deepEqual(await page.evaluate(() => window.kindChanges), ['erc']);
+  await ercTab.press('ArrowRight');
+  assert.equal(await drcTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await drcTab.evaluate((element) => document.activeElement === element), true);
+  await drcTab.press('ArrowLeft');
+  assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
+  await ercTab.press('End');
+  assert.equal(await drcTab.getAttribute('aria-selected'), 'true');
+  await drcTab.press('Home');
+  assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
+  await drcTab.click();
+  assert.equal(await clearance.inputValue(), settings.clearance.toFixed(2));
   assert.equal(await drc.getByRole('spinbutton').count(), 6);
-  for (const invalid of ['', '-0.01', '1000.1']) {
+  assert.deepEqual(
+    await drc.getByRole('spinbutton').evaluateAll((inputs) => inputs.map((input) => input.value)),
+    Object.values(settings).map((value) => value.toFixed(2)),
+  );
+  await clearance.fill('0.154321');
+  await button('Recheck DRC').click();
+  await update({});
+  assert.equal(await clearance.inputValue(), '0.15');
+  assert.equal(
+    await page.evaluate(() => window.checkRuns.at(-1).clearance),
+    0.154321,
+    'Two-decimal display retains the complete checking threshold.',
+  );
+  for (const invalid of ['', '-0.001', '1000.1']) {
+    await clearance.focus();
+    await update({});
     await clearance.fill(invalid);
+    await drc.getByRole('spinbutton', { name: 'Minimum track width (mm)', exact: true }).focus();
+    assert.equal(await clearance.inputValue(), invalid, 'Blur retains invalid drafts literally.');
     assert.equal(await clearance.getAttribute('aria-invalid'), 'true');
     assert.equal(await button('Recheck DRC').isDisabled(), true);
     assert.equal(
@@ -206,6 +390,21 @@ try {
     );
     assert.equal(await drc.getByRole('alert').innerText(), 'Enter each limit from 0 to 1000 mm.');
   }
+  await ercTab.click();
+  const beforeInvalidDRC = await page.evaluate(() => window.checkRuns.length);
+  await drcTab.click();
+  assert.equal(
+    await page.evaluate(() => window.checkRuns.length),
+    beforeInvalidDRC,
+    'Reactivating DRC with retained invalid drafts does not run a check.',
+  );
+  assert.equal(
+    Number(await clearance.inputValue()),
+    1000.1,
+    'Switching tabs preserves the invalid DRC threshold through two-decimal display.',
+  );
+  assert.equal(await clearance.getAttribute('aria-invalid'), 'true');
+  assert.equal(await button('Recheck DRC').isDisabled(), true);
   await clearance.fill('0.35');
   await button('Recheck DRC').click();
   assert.deepEqual(
@@ -215,14 +414,14 @@ try {
   );
   await update({ drcSettings: { ...settings, clearance: 0.4 }, stale: false });
   await page.waitForFunction(
-    () => document.querySelector('input[aria-label="Copper clearance (mm)"]').value === '0.4',
+    () => document.querySelector('input[aria-label="Copper clearance (mm)"]').value === '0.40',
   );
   await update({ busy: true });
   assert.equal(await clearance.isDisabled(), true);
   await update({ busy: false });
   const before = await drc.boundingBox();
-  const resize = button('Resize design rules');
-  assert.equal(await drc.locator('.inspector-resize').count(), 1);
+  const resize = button('Resize rule bottom right');
+  assert.equal(await drc.locator('.dialog-resize-edge').count(), 8);
   const grip = await resize.boundingBox();
   assert.ok(Math.abs(grip.x + grip.width - before.x - before.width) <= 2);
   assert.ok(Math.abs(grip.y + grip.height - before.y - before.height) <= 2);
@@ -244,10 +443,18 @@ try {
   await page.setViewportSize({ width: 1120, height: 760 });
   await page.waitForFunction(() => {
     const bounds = document.querySelector('dialog[open]').getBoundingClientRect();
-    return bounds.x >= 0 && bounds.right <= window.innerWidth;
+    return (
+      bounds.x >= 24 &&
+      bounds.right <= window.innerWidth - 24 &&
+      bounds.y >= 24 &&
+      bounds.bottom <= window.innerHeight - 24
+    );
   });
   const bounds = await drc.boundingBox();
-  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 1120);
+  assert.equal(Math.round(bounds.width), 720);
+  assert.equal(Math.round(bounds.height), 560);
+  assert.ok(bounds.x >= 24 && bounds.x + bounds.width <= 1120 - 24);
+  assert.ok(bounds.y >= 24 && bounds.y + bounds.height <= 760 - 24);
   assert.equal(
     await drc.evaluate((element) => element.scrollWidth <= element.clientWidth),
     true,
@@ -259,7 +466,7 @@ try {
   assert.equal(await page.evaluate(() => window.closedPanels), 2);
   assert.deepEqual(errors, []);
   console.log(
-    'Rule panel: concise ERC/DRC reports, incomplete/stale/Source states, complete limit drafts, locating, focus and resizing passed.',
+    'Rule panel: compact whole-row ERC/DRC locating with pointer/keyboard/IME guards, incomplete/stale/Source states, complete limit drafts, focus and resizing passed.',
   );
 } finally {
   await browser.close();

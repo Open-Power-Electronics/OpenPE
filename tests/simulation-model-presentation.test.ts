@@ -94,7 +94,9 @@ test('EMC initial values and model names match the generated execution bench', (
     createElement(PartProperties, { part, circuit, spiceAvailable: true, onSave: () => true }),
   );
   assert.match(html, /placeholder="24"/);
-  assert.match(html, /aria-label="Initial voltage \(V\)"[^>]*value="24"/);
+  const initialValue = html.match(/aria-label="Initial voltage \(V\)"[^>]*value="([^"]+)"/);
+  assert.ok(initialValue);
+  assert.equal(Number(initialValue[1]), 24);
   assert.doesNotMatch(html, /Default model|placeholder="Default"/);
   assert.equal(
     simulationComponentPresentation(

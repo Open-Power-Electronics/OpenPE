@@ -1,3 +1,5 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
+import { fileMenuAction } from './file-menu-test-helpers.mjs';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -289,7 +291,7 @@ try {
   await canvas.press('Space');
   await page.waitForTimeout(120);
   const fittedCamera = await cameraTransform();
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
   const zoomedCamera = await cameraTransform();
   assert.ok(zoomedCamera.a > fittedCamera.a, 'The camera fixture starts with a custom zoom.');
   const panBounds = await canvas.boundingBox();
@@ -319,7 +321,7 @@ try {
   await assertCameraRetained(retainedCamera, 'Reopening Simulation preserves the current camera');
   await button('Close simulation settings').click();
   await propertiesSidebar.waitFor();
-  const sidebarResize = propertiesSidebar.getByRole('button', {
+  const sidebarResize = propertiesSidebar.locator('..').getByRole('button', {
     name: 'Resize properties width',
     exact: true,
   });
@@ -933,7 +935,7 @@ try {
   await button('Run').click();
   await dock.getByRole('group', { name: 'Waveform controls' }).waitFor();
   assert.equal(await settings.isVisible(), true, 'Settings stay usable after running.');
-  await button('New file').click();
+  await fileMenuAction(page, 'New file');
   assert.equal(
     await cursor.count(),
     0,

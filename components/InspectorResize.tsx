@@ -15,6 +15,8 @@ export default function InspectorResize({
   verticalAnchor = 'top',
   horizontalAnchor = 'right',
   axes = ['width', 'height', 'both'],
+  gutter = false,
+  hidden = false,
 }: {
   target: RefObject<HTMLElement | null>;
   size: InspectorSize;
@@ -25,6 +27,8 @@ export default function InspectorResize({
   verticalAnchor?: 'top' | 'bottom';
   horizontalAnchor?: 'left' | 'right';
   axes?: readonly Axis[];
+  gutter?: boolean;
+  hidden?: boolean;
 }) {
   const drag = useRef<{
     id: number;
@@ -90,7 +94,8 @@ export default function InspectorResize({
         <button
           key={axis}
           type="button"
-          className={`inspector-resize inspector-resize-${axis}`}
+          className={`inspector-resize inspector-resize-${axis}${gutter ? ' inspector-resize-gutter' : ''}`}
+          hidden={hidden}
           data-vertical-anchor={verticalAnchor}
           data-horizontal-anchor={horizontalAnchor}
           aria-label={axis === 'both' ? `Resize ${label}` : `Resize ${label} ${axis}`}

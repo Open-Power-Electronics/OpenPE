@@ -204,10 +204,10 @@ try {
     await button('Git').waitFor();
     assert.equal(
       await button('Git').evaluate((el) => el.previousElementSibling?.getAttribute('aria-label')),
-      'Parts list',
-      'Git immediately follows Parts list.',
+      'List',
+      'Git immediately follows List.',
     );
-    const parts = await button('Parts list').boundingBox();
+    const parts = await button('List').boundingBox();
     const git = await button('Git').boundingBox();
     assert.ok(git.x >= parts.x + parts.width && Math.abs(git.y - parts.y) < 1);
     assert.equal(await page.locator('.editor-view-switch-host > button').count(), 0);
@@ -344,7 +344,7 @@ try {
     (await fileComparison.getByRole('region', { name: 'After file' }).innerText()).includes('1k'),
   );
   await page.screenshot({ path: 'test-results/project-history-files-light.png' });
-  await button('File comparison').click();
+  await button('Source comparison').click();
   assert.equal(
     await fileComparison.locator('.history-file-heading strong').innerText(),
     'rc.kicad_sch',
@@ -408,7 +408,7 @@ try {
   await versionName.press('Control+Enter');
   await history.getByText('Version created.', { exact: true }).waitFor();
   await history.getByLabel('0 changed files', { exact: true }).waitFor();
-  await button('File comparison').click();
+  await button('Source comparison').click();
   await history.getByText('No file changes', { exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/project-history-empty-light.png' });
   await button('Schematic comparison').click();
@@ -419,7 +419,7 @@ try {
   await page.getByRole('radio', { name: 'Dark', exact: true }).check();
   await button('Done').click();
   await button('Git').click();
-  await button('File comparison').click();
+  await button('Source comparison').click();
   await history.getByText('No file changes', { exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/project-history-empty-dark.png' });
   await versions.getByRole('button').filter({ hasText: 'Tune resistor' }).click();

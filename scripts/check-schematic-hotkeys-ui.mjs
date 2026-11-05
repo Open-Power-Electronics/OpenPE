@@ -504,12 +504,12 @@ async function panInspectionTargetAway(t) {
 }
 
 async function locateInspectionTarget(t, expectPickupCancelled = false) {
-  const panel = await openSchematicPanel(t.page, 'Parts list');
+  const panel = await openSchematicPanel(t.page, 'List');
   if (expectPickupCancelled)
     assert.equal(
       await t.canvas.getAttribute('data-move-preview'),
       null,
-      'Opening Parts list transfers focus and cancels the pickup before Locate measures the committed symbol.',
+      'Opening List transfers focus and cancels the pickup before Locate measures the committed symbol.',
     );
   await panel.getByRole('button', { name: `Locate ${first.ref}`, exact: true }).click();
   await panel.waitFor({ state: 'detached' });
@@ -544,11 +544,7 @@ async function locateInspectionTarget(t, expectPickupCancelled = false) {
     true,
     'Locate returns to Interaction before the next pointer or keyboard action.',
   );
-  assert.equal(
-    located.focused,
-    true,
-    'Locate restores canvas focus after the Parts list dialog closes.',
-  );
+  assert.equal(located.focused, true, 'Locate restores canvas focus after the List dialog closes.');
   assert.equal(
     await t.selectedPart(first).evaluate((node) => node.classList.contains('is-selected')),
     true,
@@ -562,7 +558,7 @@ const partsSearchState = (t) =>
     return { source: snapshot.source, revision: snapshot.revision, undoDepth: snapshot.undoDepth };
   });
 async function openPartsSearch(t) {
-  const panel = await openSchematicPanel(t.page, 'Parts list');
+  const panel = await openSchematicPanel(t.page, 'List');
   const input = panel.getByLabel('Search parts', { exact: true });
   await input.waitFor();
   assert.equal(
@@ -802,7 +798,7 @@ try {
       await t.page.keyboard.press('Escape');
       await panel.waitFor({ state: 'detached' });
       assert.equal(
-        await t.button('Parts list').evaluate((node) => document.activeElement === node),
+        await t.button('List').evaluate((node) => document.activeElement === node),
         true,
       );
       await expectPartsSearchUnchanged(t, before);
@@ -878,7 +874,7 @@ try {
       await t.page.keyboard.press('Escape');
       await panel.waitFor({ state: 'detached' });
       assert.equal(
-        await t.button('Parts list').evaluate((node) => document.activeElement === node),
+        await t.button('List').evaluate((node) => document.activeElement === node),
         true,
       );
       assert.equal(
@@ -958,7 +954,7 @@ try {
         await t.page.keyboard.press('Escape');
         await panel.waitFor({ state: 'detached' });
         assert.equal(
-          await t.button('Parts list').evaluate((node) => document.activeElement === node),
+          await t.button('List').evaluate((node) => document.activeElement === node),
           true,
         );
         assert.equal(
@@ -1065,7 +1061,7 @@ try {
     },
   );
 
-  for (const entry of ['E', 'double-click', 'Parts list Edit'])
+  for (const entry of ['E', 'double-click', 'List Edit'])
     await run(
       `inspection continuity collapsed sidebar ${entry} reveals and focuses Properties without editing`,
       async (t) => {
@@ -1077,7 +1073,7 @@ try {
           await t.page.keyboard.press('e');
         } else if (entry === 'double-click') await t.doubleClick(first);
         else {
-          const panel = await openSchematicPanel(t.page, 'Parts list');
+          const panel = await openSchematicPanel(t.page, 'List');
           await panel.getByRole('button', { name: `Edit ${first.ref}`, exact: true }).click();
           await panel.waitFor({ state: 'detached' });
         }
@@ -1269,7 +1265,7 @@ try {
     );
 
   await run(
-    'inspection continuity Parts list Locate recenters an offscreen target and repeats for the same selection',
+    'inspection continuity List Locate recenters an offscreen target and repeats for the same selection',
     async (t) => {
       await t.click(first);
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -1288,7 +1284,7 @@ try {
 
   for (const key of ['m', 'g'])
     await run(
-      `inspection continuity Parts list Locate from pending ${key === 'g' ? 'Drag' : 'Move'} ignores uncommitted preview bounds`,
+      `inspection continuity List Locate from pending ${key === 'g' ? 'Drag' : 'Move'} ignores uncommitted preview bounds`,
       async (t) => {
         await t.click(first);
         await t.page.keyboard.press(key);
@@ -1318,7 +1314,7 @@ try {
 
   for (const view of ['Layout', 'Model'])
     await run(
-      `inspection continuity Parts list Locate from ${view} returns to the visible schematic target`,
+      `inspection continuity List Locate from ${view} returns to the visible schematic target`,
       async (t) => {
         await panInspectionTargetAway(t);
         await t.button('Wire').click();
@@ -1336,7 +1332,7 @@ try {
     async (t) => {
       await panInspectionTargetAway(t);
       const before = await inspectionView(t.canvas);
-      const panel = await openSchematicPanel(t.page, 'Parts list');
+      const panel = await openSchematicPanel(t.page, 'List');
       await panel
         .getByRole('button', { name: `Locate ${first.ref}`, exact: true })
         .evaluate(async (button) => {
@@ -1372,7 +1368,7 @@ try {
       await panInspectionTargetAway(t);
       const before = await inspectionView(t.canvas);
       const sourceButton = await t.button('Source').elementHandle();
-      const panel = await openSchematicPanel(t.page, 'Parts list');
+      const panel = await openSchematicPanel(t.page, 'List');
       await panel
         .getByRole('button', { name: `Locate ${first.ref}`, exact: true })
         .evaluate(async (button, sourceButton) => {
@@ -1417,7 +1413,7 @@ try {
         const snapshot = window.schematicHotkeysCore.getSnapshot();
         return { source: snapshot.source, undoDepth: snapshot.undoDepth };
       });
-      const panel = await openSchematicPanel(t.page, 'Parts list');
+      const panel = await openSchematicPanel(t.page, 'List');
       await panel
         .getByRole('button', { name: `Locate ${first.ref}`, exact: true })
         .evaluate(async (button, secondaryButton) => {
@@ -2647,9 +2643,9 @@ try {
       assert.equal(await t.selectedPart(first).count(), 1);
       assert.equal(await t.canvas.getByTestId(`annotation-ref-${first.ref}`).count(), 0);
       await t.expectClean();
-      await openSchematicPanel(t.page, 'Parts list');
+      await openSchematicPanel(t.page, 'List');
       await t.page
-        .getByRole('dialog', { name: 'Parts list', exact: true })
+        .getByRole('dialog', { name: 'List', exact: true })
         .getByRole('button', { name: `Edit ${first.ref}`, exact: true })
         .click();
       const input = t.inspector().getByLabel('Component reference', { exact: true });

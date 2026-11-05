@@ -1,3 +1,4 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -309,6 +310,12 @@ try {
     page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     );
+  const wheelZoom = async (direction) => {
+    const bounds = await canvas.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.wheel(0, direction === 'in' ? -120 : 120);
+    await nextFrame();
+  };
   const wheelBehavior = await canvas.evaluate(async (svg) => {
     const currentView = () =>
       svg.getAttribute('data-layout-camera-view') ?? svg.getAttribute('viewBox');
@@ -581,7 +588,7 @@ try {
     'Navigation and picking never commit PCB data.',
   );
   await canvas.press('Escape');
-  await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await nextFrame();
   const heldPanLifecycles = [];
   for (const finish of ['release', 'cancel', 'lostcapture', 'blur', 'deactivate', 'rebind']) {
@@ -688,7 +695,7 @@ try {
     await canvas.press('v');
     await nextFrame();
     assert.equal(await page.evaluate(() => window.layoutContext().tool), 'select');
-    await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+    await runCanvasAction(page, 'Fit board to canvas');
     await nextFrame();
   }
   assert.equal(
@@ -756,8 +763,8 @@ try {
   );
 
   for (let index = 0; index < 3; index++) {
-    await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
-    await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
+    await wheelZoom('in');
+    await wheelZoom('out');
   }
   await nextFrame();
   const zoomed = await work();
@@ -780,7 +787,7 @@ try {
     'Zoom does not rescan the drawing targets.',
   );
 
-  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await wheelZoom('in');
   await nextFrame();
   await canvas.evaluate((svg) => window.flushLayoutCamera(svg));
   const cameraGeometry = await canvas.evaluate((svg) => {
@@ -793,7 +800,6 @@ try {
     return {
       viewport: { x, y, width, height },
       observed: window.layoutContext().viewport,
-      percent: Math.round(100 / scale / (96 / 25.4)),
       track: Number(track.getAttribute('stroke-width')),
       trackExpected:
         track.dataset.layoutFixedTrack === 'true'
@@ -828,9 +834,9 @@ try {
     'Zoom retains exact footprint hit padding.',
   );
   assert.equal(
-    await page.locator('.zoom-value').innerText(),
-    cameraGeometry.percent + '%',
-    'Zoom readout follows the live camera.',
+    await page.locator('.zoom-controls').count(),
+    0,
+    'Layout camera navigation has no floating zoom controls.',
   );
   assert.equal(
     (await work()).renders,
@@ -1348,7 +1354,7 @@ try {
   });
   assert.ok(fittedFarTrack, 'The canvas Fit action uses the latest changed board.');
   await page.evaluate((basis) => window.replaceLayoutBoard(basis), fitBasis);
-  await page.getByRole('button', { name: 'Fit board to canvas', exact: true }).click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await nextFrame();
 
   const beforeEdit = await work();

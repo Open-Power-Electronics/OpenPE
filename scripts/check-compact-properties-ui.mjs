@@ -38,28 +38,30 @@ try {
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
-  const fields = page.locator('.property-additional-fields').first();
+  const fields = page.locator('.part-properties > .property-fields').first();
   try {
     await fields.waitFor();
   } catch (error) {
     assert.deepEqual(errors, [], 'The inspector fixture mounts without renderer errors.');
     throw error;
   }
-  assert.equal(await fields.getAttribute('open'), null);
-  const fieldsSummary = fields.locator('summary');
-  await fieldsSummary.focus();
-  await fieldsSummary.press('Enter');
+  assert.equal(
+    await page
+      .locator('.part-properties summary')
+      .filter({ hasText: /^Fields$/ })
+      .count(),
+    0,
+  );
   await fields.getByRole('button', { name: 'Add field', exact: true }).click();
   const name = fields.getByPlaceholder('Name', { exact: true }).last();
   await name.fill('Retained field');
   await name.press('Tab');
   const fieldValue = fields.getByPlaceholder('Value', { exact: true }).last();
   await fieldValue.fill('draft');
-  await fieldsSummary.click();
-  await fieldsSummary.press('Space');
+  await page.getByRole('button', { name: 'Toggle model', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle model', exact: true }).click();
   assert.equal(await name.inputValue(), 'Retained field');
   assert.equal(await fieldValue.inputValue(), 'draft');
-  await fieldsSummary.click();
 
   const componentX = page.getByLabel('Component X position', { exact: true });
   const savesBeforeGeometry = await page.evaluate(() => window.inspectorSaves);
@@ -249,9 +251,18 @@ try {
             return true;
           const columns = getComputedStyle(group).gridTemplateColumns.split(' ').length;
           const fields = [...group.children].map((field) => field.getBoundingClientRect());
-          return fields.every(
-            (field, index) =>
-              index % columns === 0 || Math.abs(field.top - fields[index - 1].top) < 1,
+          const tail = fields.at(-1);
+          const bounds = group.getBoundingClientRect();
+          const completeTail =
+            columns !== 2 || fields.length % 2 === 0 || Math.abs(tail.width - bounds.width) < 1;
+          const preferred = Number(group.dataset.columns);
+          return (
+            columns === preferred &&
+            completeTail &&
+            fields.every(
+              (field, index) =>
+                index % columns === 0 || Math.abs(field.top - fields[index - 1].top) < 1,
+            )
           );
         }),
     );
@@ -263,18 +274,33 @@ try {
         const columns = getComputedStyle(
           inputs[0].closest('label').parentElement,
         ).gridTemplateColumns.split(' ').length;
-        return inputs.every(
-          (input, index) =>
-            index % columns === 0 ||
-            Math.abs(
-              input.getBoundingClientRect().top - inputs[index - 1].getBoundingClientRect().top,
-            ) < 1,
+        return (
+          (inputs.length !== 3 || columns === 3) &&
+          inputs.every(
+            (input, index) =>
+              index % columns === 0 ||
+              Math.abs(
+                input.getBoundingClientRect().top - inputs[index - 1].getBoundingClientRect().top,
+              ) < 1,
+          )
         );
       });
     assert.equal(
       solidDimensions,
       true,
       `${context}: solid dimensions use three columns when available.`,
+    );
+    const transformGroups = await page
+      .locator('[aria-label="Solid position"] > div, [aria-label="Solid rotation"] > div')
+      .evaluateAll((groups) =>
+        groups
+          .filter((group) => group.getClientRects().length)
+          .every((group) => getComputedStyle(group).gridTemplateColumns.split(' ').length === 3),
+      );
+    assert.equal(
+      transformGroups,
+      true,
+      `${context}: XYZ position and rotation stay in three columns.`,
     );
     const coordinates = await page
       .locator('.geometry-fields.component-geometry')
@@ -284,6 +310,7 @@ try {
           const columns = getComputedStyle(group).gridTemplateColumns.split(' ').length;
           return (
             fields.length === 3 &&
+            columns === 3 &&
             fields.every(
               (field, index) =>
                 index % columns === 0 || Math.abs(field.top - fields[index - 1].top) < 1,

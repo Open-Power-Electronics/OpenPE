@@ -156,19 +156,10 @@ export type BoardZone = {
   };
 };
 
-/** A copper edit invalidates all affected pours in the same project transaction.
- * Captions, models, visibility and mere viewing never invalidate saved copper. */
-export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
-  // Nothing can be cleared when the candidate already contains no saved fills.
-  // Retain its exact identity, including owned renderer proposals/Core adoption.
-  if (
-    previous === next ||
-    (!next.zones.some((zone) => zone.filledPolygons !== undefined) &&
-      !next.footprints.some((footprint) =>
-        footprint.zones?.some((zone) => zone.filledPolygons !== undefined),
-      ))
-  )
-    return next;
+/** Compare electrical pour inputs independently of their saved contours.
+ * Captions, models, locks and mere viewing never change these inputs. */
+export function pcbFillInputsChanged(previous: PCB, next: PCB): boolean {
+  if (previous === next) return false;
   // A changed copper span already proves that saved fills are stale. Avoid
   // serializing unrelated pads/artwork for every interactive track pose.
   // Lock-only and other presentation edits still use the complete comparison.
@@ -216,7 +207,23 @@ export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
       ],
       (key, value) => (key === 'locked' ? undefined : value),
     );
-  if (!trackCopperChanged && inputs(previous) === inputs(next)) return next;
+  return trackCopperChanged || inputs(previous) !== inputs(next);
+}
+
+/** Remove stale saved contours from an uncommitted geometry candidate.
+ * Accepted edits refresh active saved pours in the same project transaction. */
+export function invalidatePCBFill(previous: PCB, next: PCB): PCB {
+  // Nothing can be cleared when the candidate already contains no saved fills.
+  // Retain its exact identity, including owned renderer proposals/Core adoption.
+  if (
+    previous === next ||
+    (!next.zones.some((zone) => zone.filledPolygons !== undefined) &&
+      !next.footprints.some((footprint) =>
+        footprint.zones?.some((zone) => zone.filledPolygons !== undefined),
+      )) ||
+    !pcbFillInputsChanged(previous, next)
+  )
+    return next;
   const clear = (z: BoardZone): BoardZone => {
     if (z.filledPolygons === undefined) return z;
     const { filledPolygons: _filled, ...rest } = z;

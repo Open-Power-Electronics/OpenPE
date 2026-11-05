@@ -1,8 +1,9 @@
 'use client';
 import { useLayoutEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
-import InspectorResize, { type InspectorSize } from './InspectorResize';
+import { Maximize2, Minimize2, X } from 'lucide-react';
+import type { InspectorSize } from './InspectorResize';
+import DialogResize, { type DialogWindowFrame } from './DialogResize';
 
 export type DialogSizeProps = {
   size?: InspectorSize;
@@ -28,11 +29,9 @@ export default function Dialog({
   open = true,
   anchorPlacement = 'below',
   anchorPoint,
-  resizable = false,
   size: preferredSize,
   onResize,
   minWidth = 224,
-  resizeCorner,
 }: {
   title: string;
   label?: string;
@@ -50,24 +49,56 @@ export default function Dialog({
   open?: boolean;
   anchorPlacement?: 'below' | 'inside' | 'above' | 'near';
   anchorPoint?: { x: number; y: number };
-  resizable?: boolean;
   minWidth?: number;
-  resizeCorner?: 'bottom-right';
 } & DialogSizeProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
   const backdropDown = useRef(false);
+  const composing = useRef(false);
+  const [maximized, setMaximized] = useState(false);
+  const [placementRevision, setPlacementRevision] = useState(0);
   const [localSize, setLocalSize] = useState<InspectorSize>({});
-  const resizeOrigin = useRef<{ left: number; top: number } | null>(null);
+  const windowOrigin = useRef<{ left: number; top: number } | null>(null);
+  const resizeSession = useRef<{
+    size: InspectorSize;
+    origin: { left: number; top: number } | null;
+    style: string;
+  } | null>(null);
+  const move = useRef<{
+    id: number;
+    header: HTMLElement;
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    moved: boolean;
+    origin: { left: number; top: number } | null;
+    style: string;
+  } | null>(null);
   const size = preferredSize ?? localSize;
-  function placeResizeOrigin(clamp = false) {
+  const margin = anchorRef ? 8 : 24;
+  function topMargin() {
+    const titlebar =
+      ref.current &&
+      parseFloat(getComputedStyle(ref.current).getPropertyValue('--desktop-titlebar-height'));
+    return Math.max(margin, titlebar || 0);
+  }
+  function placeWindowOrigin(clamp = false) {
     const dialog = ref.current;
-    const origin = resizeOrigin.current;
-    if (!dialog || !origin) return;
+    const origin = windowOrigin.current;
+    if (!dialog || !origin || !dialog.open || maximized) return;
     if (clamp) {
       const rect = dialog.getBoundingClientRect();
-      origin.left = Math.max(24, Math.min(origin.left, window.innerWidth - rect.width - 24));
-      origin.top = Math.max(24, Math.min(origin.top, window.innerHeight - rect.height - 24));
+      origin.left = Math.max(
+        margin,
+        Math.min(origin.left, window.innerWidth - rect.width - margin),
+      );
+      origin.top = Math.max(
+        topMargin(),
+        Math.min(origin.top, window.innerHeight - rect.height - margin),
+      );
     }
     Object.assign(dialog.style, {
       position: 'fixed',
@@ -75,60 +106,63 @@ export default function Dialog({
       margin: '0',
       left: `${origin.left}px`,
       top: `${origin.top}px`,
-      maxWidth: `${Math.max(0, window.innerWidth - origin.left - 24)}px`,
-      maxHeight: `${Math.max(0, window.innerHeight - origin.top - 24)}px`,
+      maxWidth: `${Math.max(0, window.innerWidth - origin.left - margin)}px`,
+      maxHeight: `${Math.max(0, window.innerHeight - origin.top - margin)}px`,
     });
   }
-  function resize(next: InspectorSize) {
+  function resetSize() {
+    if (maximized) return;
     const dialog = ref.current;
-    if (resizeCorner && dialog) {
-      if (next.width === undefined && next.height === undefined) {
-        resizeOrigin.current = null;
-        for (const property of [
-          'position',
-          'inset',
-          'margin',
-          'left',
-          'top',
-          'max-width',
-          'max-height',
-        ])
-          dialog.style.removeProperty(property);
-      } else {
-        const rect = dialog.getBoundingClientRect();
-        resizeOrigin.current ??= { left: rect.left, top: rect.top };
-        placeResizeOrigin();
-      }
+    if (dialog && windowOrigin.current) {
+      windowOrigin.current = null;
+      for (const property of [
+        'position',
+        'inset',
+        'margin',
+        'left',
+        'top',
+        'max-width',
+        'max-height',
+      ])
+        dialog.style.removeProperty(property);
+      setPlacementRevision((revision) => revision + 1);
     }
-    (onResize ?? setLocalSize)(next);
+    (onResize ?? setLocalSize)({});
   }
-  function resizeArea() {
-    if (resizeCorner) {
-      const rect = ref.current?.getBoundingClientRect();
-      const left = resizeOrigin.current?.left ?? rect?.left ?? 24;
-      const top = resizeOrigin.current?.top ?? rect?.top ?? 24;
-      return { left, right: window.innerWidth - 24, top, bottom: window.innerHeight - 24 };
+  function startResize() {
+    if (!ref.current || move.current || maximized) return;
+    resizeSession.current = {
+      size: { ...size },
+      origin: windowOrigin.current && { ...windowOrigin.current },
+      style: ref.current.style.cssText,
+    };
+  }
+  function changeResize(frame: DialogWindowFrame) {
+    if (!resizeSession.current || maximized) return;
+    windowOrigin.current = { left: frame.left, top: frame.top };
+    placeWindowOrigin();
+    (onResize ?? setLocalSize)({ width: frame.width, height: frame.height });
+  }
+  function finishResize(cancel: boolean) {
+    const session = resizeSession.current;
+    resizeSession.current = null;
+    if (!session || !cancel) return;
+    windowOrigin.current = session.origin;
+    if (ref.current) ref.current.style.cssText = session.style;
+    (onResize ?? setLocalSize)(session.size);
+  }
+  function finishMove(cancel: boolean) {
+    const current = move.current;
+    if (!current) return;
+    move.current = null;
+    if (cancel) {
+      windowOrigin.current = current.origin;
+      if (ref.current) ref.current.style.cssText = current.style;
+    } else if (current.moved) {
+      (onResize ?? setLocalSize)({ width: current.width, height: current.height });
     }
-    const anchor = anchorRef?.current?.getBoundingClientRect();
-    const editor = anchorRef?.current?.closest('.editor')?.getBoundingClientRect();
-    const left = Math.max(8, editor ? editor.left + 12 : 8);
-    const right = Math.max(
-      left,
-      Math.min(window.innerWidth - 8, anchor?.right ?? window.innerWidth - 8),
-    );
-    const bottom = Math.min(
-      window.innerHeight - 8,
-      anchorPlacement === 'above' && anchor
-        ? anchor.top - 6
-        : editor
-          ? editor.bottom - 12
-          : window.innerHeight - 8,
-    );
-    const top =
-      anchorPlacement === 'above'
-        ? Math.max(8, editor ? editor.top + 12 : 8)
-        : Math.max(8, Math.min((anchor?.bottom ?? 2) + 6, bottom - 112));
-    return { left, right, top, bottom };
+    if (current.header.hasPointerCapture(current.id))
+      current.header.releasePointerCapture(current.id);
   }
   useLayoutEffect(() => {
     if (!open) return;
@@ -136,9 +170,11 @@ export default function Dialog({
     const previous = document.activeElement as HTMLElement | null;
     if (modal) dialog.showModal();
     else dialog.show();
+    placeWindowOrigin(true);
     (
       dialog.querySelector<HTMLElement>('[data-autofocus]') ??
       dialog.querySelector<HTMLElement>('input') ??
+      dialog.querySelector<HTMLElement>('[aria-label="Close dialog"]') ??
       dialog.querySelector<HTMLElement>('button')
     )?.focus();
     return () => {
@@ -148,11 +184,35 @@ export default function Dialog({
     };
   }, [modal, open]);
   useLayoutEffect(() => {
-    if (!resizeCorner) return;
-    const place = () => placeResizeOrigin(true);
+    const place = () => placeWindowOrigin(true);
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [resizeCorner]);
+  }, [margin, maximized]);
+  useLayoutEffect(() => {
+    if (open && !maximized) placeWindowOrigin(true);
+  }, [open, maximized]);
+  useLayoutEffect(() => {
+    if (!open) return;
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key !== 'Escape' ||
+        !move.current ||
+        composing.current ||
+        event.isComposing ||
+        event.keyCode === 229
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      finishMove(true);
+    };
+    window.addEventListener('keydown', escape, true);
+    return () => {
+      window.removeEventListener('keydown', escape, true);
+      finishMove(true);
+      finishResize(true);
+    };
+  }, [open]);
   useLayoutEffect(() => {
     if (modal || !open) return;
     const dismiss = (event: PointerEvent) => {
@@ -162,36 +222,36 @@ export default function Dialog({
     return () => document.removeEventListener('pointerdown', dismiss);
   }, [modal, open, busy, onClose]);
   useLayoutEffect(() => {
-    if (!anchorRef) return;
+    if (!anchorRef || !open || maximized) return;
     const dialog = ref.current!;
     const place = () => {
+      if (windowOrigin.current) {
+        placeWindowOrigin(true);
+        return;
+      }
       const anchor = anchorRef.current?.getBoundingClientRect();
       if (!anchor) return;
       if (anchorPlacement === 'near') {
         dialog.style.maxWidth = `${window.innerWidth - 16}px`;
-        dialog.style.maxHeight = `${window.innerHeight - 16}px`;
+        dialog.style.maxHeight = `${window.innerHeight - topMargin() - 8}px`;
         const x = anchor.left + (anchorPoint?.x ?? anchor.width / 2);
         const y = anchor.top + (anchorPoint?.y ?? anchor.height / 2);
         const { width, height } = dialog.getBoundingClientRect();
         const top = y + 8 + height <= window.innerHeight - 8 ? y + 8 : y - height - 8;
         dialog.style.left = `${Math.max(8, Math.min(x + 8, window.innerWidth - width - 8))}px`;
-        dialog.style.top = `${Math.max(8, Math.min(top, window.innerHeight - height - 8))}px`;
-        return;
-      }
-      if (resizable) {
-        const { left, right, top, bottom } = resizeArea();
-        dialog.style.maxWidth = `${Math.max(0, right - left)}px`;
-        dialog.style.maxHeight = `${Math.max(0, bottom - top)}px`;
-        dialog.style.top = `${anchorPlacement === 'above' ? Math.max(top, bottom - dialog.getBoundingClientRect().height) : top}px`;
-        dialog.style.left = `${Math.max(left, right - dialog.getBoundingClientRect().width)}px`;
+        dialog.style.top = `${Math.max(topMargin(), Math.min(top, window.innerHeight - height - 8))}px`;
         return;
       }
       if (anchorPlacement === 'inside')
         dialog.style.maxWidth = `${Math.max(180, Math.min(anchor.width - 16, window.innerWidth - 16))}px`;
       const top = Math.max(
-        8,
+        topMargin(),
         Math.min(
-          anchorPlacement === 'inside' ? anchor.top + 26 : anchor.bottom + 6,
+          anchorPlacement === 'above'
+            ? anchor.top - dialog.offsetHeight - 6
+            : anchorPlacement === 'inside'
+              ? anchor.top + 26
+              : anchor.bottom + 6,
           window.innerHeight - (anchorPlacement === 'inside' ? dialog.offsetHeight + 8 : 120),
         ),
       );
@@ -203,8 +263,6 @@ export default function Dialog({
     const observer = new ResizeObserver(place);
     observer.observe(dialog);
     if (anchorRef.current) observer.observe(anchorRef.current);
-    const editor = anchorRef.current?.closest('.editor');
-    if (resizable && editor) observer.observe(editor);
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
     return () => {
@@ -212,23 +270,55 @@ export default function Dialog({
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [anchorRef, anchorPlacement, anchorPoint, resizable, size.width, size.height]);
+  }, [
+    anchorRef,
+    anchorPlacement,
+    anchorPoint,
+    size.width,
+    size.height,
+    open,
+    maximized,
+    placementRevision,
+  ]);
   return createPortal(
     <dialog
       ref={ref}
-      className={`surface-dialog ${compact ? 'surface-dialog-compact' : ''} ${wide ? 'surface-dialog-wide' : ''} ${anchorRef ? 'surface-dialog-anchored' : ''} ${!modal ? 'surface-dialog-nonmodal' : ''} ${resizable ? 'surface-dialog-resizable' : ''} ${className}`}
-      style={resizable ? { width: size.width, height: size.height } : undefined}
-      data-resized-height={resizable && size.height !== undefined ? true : undefined}
+      className={`surface-dialog surface-dialog-resizable ${compact ? 'surface-dialog-compact' : ''} ${wide ? 'surface-dialog-wide' : ''} ${anchorRef ? 'surface-dialog-anchored' : ''} ${!modal ? 'surface-dialog-nonmodal' : ''} ${className}`}
+      style={
+        maximized
+          ? {
+              position: 'fixed',
+              inset: 'var(--desktop-titlebar-height, 0px) 0 0',
+              margin: 0,
+              width: '100vw',
+              height: 'calc(100dvh - var(--desktop-titlebar-height, 0px))',
+              maxWidth: 'none',
+              maxHeight: 'none',
+            }
+          : { width: size.width, height: size.height }
+      }
+      data-maximized={maximized || undefined}
+      data-resized-height={maximized || size.height !== undefined ? true : undefined}
       aria-label={label}
       aria-describedby={id}
       aria-modal={modal}
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={() => {
+        composing.current = false;
+      }}
       onCancel={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!busy) onClose();
+        if (!busy && !composing.current) onClose();
       }}
       onKeyDown={(e) => {
         e.stopPropagation();
+        if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) {
+          if (e.key === 'Escape') e.preventDefault();
+          return;
+        }
         if (!modal && e.key === 'Escape' && !busy) {
           e.preventDefault();
           onClose();
@@ -242,7 +332,74 @@ export default function Dialog({
         backdropDown.current = false;
       }}
     >
-      <header className="dialog-header">
+      <header
+        className="dialog-header"
+        onPointerDown={(event) => {
+          if (
+            event.button !== 0 ||
+            maximized ||
+            move.current ||
+            resizeSession.current ||
+            (event.target instanceof Element &&
+              event.target.closest(
+                'button, input, textarea, select, a, [role="button"], [contenteditable]',
+              )) ||
+            document.querySelector('[role="listbox"], [role="menu"]')
+          )
+            return;
+          const topDialog = [...document.querySelectorAll('dialog[open]')].at(-1);
+          if (topDialog && topDialog !== ref.current) return;
+          const dialog = ref.current;
+          if (!dialog) return;
+          const rect = dialog.getBoundingClientRect();
+          event.preventDefault();
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          move.current = {
+            id: event.pointerId,
+            header: event.currentTarget,
+            x: event.clientX,
+            y: event.clientY,
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            moved: false,
+            origin: windowOrigin.current && { ...windowOrigin.current },
+            style: dialog.style.cssText,
+          };
+        }}
+        onPointerMove={(event) => {
+          const current = move.current;
+          if (!current || current.id !== event.pointerId) return;
+          if (!current.moved && event.clientX === current.x && event.clientY === current.y) return;
+          current.moved = true;
+          // Moving an auto-height popup must not relax its previous content
+          // cap and turn a position gesture into a size change.
+          ref.current!.style.width = `${current.width}px`;
+          ref.current!.style.height = `${current.height}px`;
+          windowOrigin.current = {
+            left: Math.max(
+              margin,
+              Math.min(
+                current.left + event.clientX - current.x,
+                window.innerWidth - current.width - margin,
+              ),
+            ),
+            top: Math.max(
+              topMargin(),
+              Math.min(
+                current.top + event.clientY - current.y,
+                window.innerHeight - current.height - margin,
+              ),
+            ),
+          };
+          placeWindowOrigin();
+        }}
+        onPointerUp={() => finishMove(false)}
+        onPointerCancel={() => finishMove(true)}
+        onLostPointerCapture={() => finishMove(true)}
+      >
         {icon && (
           <span className="dialog-icon" aria-hidden="true">
             {icon}
@@ -253,6 +410,20 @@ export default function Dialog({
           <h2>{title}</h2>
         </div>
         <button
+          type="button"
+          className="icon-button"
+          aria-label={maximized ? 'Restore dialog' : 'Maximize dialog'}
+          title={maximized ? 'Restore' : 'Maximize'}
+          onClick={() => {
+            finishMove(false);
+            finishResize(false);
+            setMaximized((value) => !value);
+          }}
+        >
+          {maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+        </button>
+        <button
+          type="button"
           className="icon-button"
           aria-label="Close dialog"
           title="Close"
@@ -266,20 +437,22 @@ export default function Dialog({
         {children}
       </div>
       {footer && <footer className="dialog-footer">{footer}</footer>}
-      {resizable && (
-        <InspectorResize
+      {open && !maximized && (
+        <DialogResize
           target={ref}
-          size={size}
-          onResize={resize}
           label={title.toLowerCase()}
-          axes={resizeCorner ? ['both'] : undefined}
-          horizontalAnchor={resizeCorner ? 'left' : 'right'}
-          verticalAnchor={anchorPlacement === 'above' ? 'bottom' : 'top'}
           minWidth={minWidth}
-          bounds={() => {
-            const { left, right, top, bottom } = resizeArea();
-            return { width: right - left, height: bottom - top };
-          }}
+          onStart={startResize}
+          onChange={changeResize}
+          onEnd={finishResize}
+          onReset={resetSize}
+          isComposing={() => composing.current}
+          bounds={() => ({
+            left: margin,
+            right: window.innerWidth - margin,
+            top: topMargin(),
+            bottom: window.innerHeight - margin,
+          })}
         />
       )}
     </dialog>,

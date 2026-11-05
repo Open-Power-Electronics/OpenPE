@@ -1,3 +1,5 @@
+import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
+import { fileMenuAction } from './file-menu-test-helpers.mjs';
 // Opt-in: real Electron/Next or packaged-renderer interaction measurements.
 // All native files, recovery and history live in an isolated temporary profile.
 // OPENPE_DEV_URL=http://127.0.0.1:3000 node scripts/benchmark-editor-experience.mjs [label]
@@ -1744,7 +1746,7 @@ try {
           const sidebarInitiallyVisible =
             (await button('Toggle right sidebar').getAttribute('aria-pressed')) === 'true';
           if (sidebarInitiallyVisible) await button('Toggle right sidebar').click();
-          await button('Fit board to canvas').click();
+          await runCanvasAction(page, 'Fit board to canvas');
           await settle();
           const viewport = await layout.boundingBox();
           const pivot = await screen(centre);
@@ -1936,7 +1938,7 @@ try {
             return { previewRemoved: true, dirty: false };
           });
           if (sidebarInitiallyVisible) await button('Toggle right sidebar').click();
-          await button('Fit board to canvas').click();
+          await runCanvasAction(page, 'Fit board to canvas');
           await settle();
         }
         if (trackEnabled || trackPacedEnabled) {
@@ -2076,7 +2078,7 @@ try {
               'Dragging extends original spans without extra reconnect doglegs.',
             );
           };
-          await button('Fit board to canvas').click();
+          await runCanvasAction(page, 'Fit board to canvas');
           const midpoint = { x: (track.start.x + track.end.x) / 2, y: track.start.y };
           const screen = (point) =>
             layout.evaluate((svg, point) => {
@@ -2179,7 +2181,7 @@ try {
             await layout.press('Control+z');
             await page.waitForFunction(() => !document.querySelector('.dirty-dot'));
             await settle();
-            await button('Fit board to canvas').click();
+            await runCanvasAction(page, 'Fit board to canvas');
             await layout.press('Escape');
             await button('B.Cu').click();
             const obstacleTrack = project.pcb.tracks.find(
@@ -2288,7 +2290,7 @@ try {
             await layout.press('Control+z');
             await page.waitForFunction(() => !document.querySelector('.dirty-dot'));
             await button('F.Cu').click();
-            await button('Fit board to canvas').click();
+            await runCanvasAction(page, 'Fit board to canvas');
             await settle();
           }
           if (trackEnabled) {
@@ -2348,7 +2350,7 @@ try {
             await assertTrackShape();
             await layout.press('Control+z');
             await page.waitForFunction(() => !document.querySelector('.dirty-dot'));
-            await button('Fit board to canvas').click();
+            await runCanvasAction(page, 'Fit board to canvas');
             await settle();
 
             // A real fixed-obstacle EMC drag replans a local detour at each cursor position.
@@ -3168,7 +3170,7 @@ try {
       // which also waits for preparation/history initialization of the full catalog.
       if (measuredOperations.has('project-reopen')) {
         await button('Schematic').click();
-        await page.locator('.project-file-tabs .file-tab-close').click();
+        await fileMenuAction(page, 'Close project');
         await page.getByRole('textbox', { name: 'Describe your circuit', exact: true }).waitFor();
         await measure('project-reopen', async () => {
           await button('Open EMC Flyback example').click();

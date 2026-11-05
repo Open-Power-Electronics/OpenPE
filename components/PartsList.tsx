@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ArrowUpRight, Search, X } from 'lucide-react';
+import { ArrowUpRight, List, Search, X } from 'lucide-react';
 import type { Part } from '@/lib/circuit';
 import { displayPartValue, partFields } from '@/lib/library';
 import Dialog, { type DialogSizeProps } from './Dialog';
@@ -35,11 +35,10 @@ export default function PartsList({
   );
   return (
     <Dialog
-      title="Parts list"
+      title="List"
+      icon={<List size={16} />}
       className="independent-window parts-panel"
       onClose={onClose}
-      resizable
-      resizeCorner="bottom-right"
       size={size}
       onResize={onResize}
       minWidth={340}

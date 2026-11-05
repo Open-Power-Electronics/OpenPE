@@ -37,6 +37,7 @@ import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalL
 import {
   AlertCircle,
   Blocks,
+  ClipboardCheck,
   Cpu,
   FolderPlus,
   FolderOpen,
@@ -44,12 +45,10 @@ import {
   Home as HomeIcon,
   List,
   MousePointer2,
-  Plus,
   Redo2,
   RotateCw,
   Settings,
   SlidersHorizontal,
-  ShieldCheck,
   Tag,
   Undo2,
   X,
@@ -123,6 +122,7 @@ import PartIdentity from './PartIdentity';
 import Logo from './Logo';
 import NavigationButton from './NavigationButton';
 import EditorViewSwitch, { type EditorView } from './EditorViewSwitch';
+import RevealButton from './RevealButton';
 import EditorStatusBar from './EditorStatusBar';
 const LayoutEditor = lazy(() => import('./LayoutEditor'));
 import type { PCB3DViewState } from './PCBModelPreview';
@@ -183,7 +183,6 @@ import ProjectNavigation, {
 } from './ProjectNavigation';
 import { emptyWorkspaceProjects } from './WorkspacePresentation';
 import SchematicFileTabs from './SchematicFileTabs';
-import ProjectTab from './ProjectTab';
 import type { AgentPreferences, DocumentState } from '@/lib/workspace-state';
 import { useProjectDirectory } from './useProjectDirectory';
 import type { DocumentController, DocumentUpdate } from './DesktopWorkspace';
@@ -532,9 +531,6 @@ export default function Workbench({
   useEffect(() => {
     setHasNativeTitlebar(window.openpe?.titleBarOverlay === true);
   }, []);
-  const schematicPanelsAnchor = useRef<HTMLDivElement>(null);
-  const layoutPanelsAnchor = useRef<HTMLDivElement>(null);
-  const objectPanelsAnchor = useRef<HTMLDivElement>(null);
   const schematicTabs = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (active && screen === 'workspace')
@@ -665,11 +661,18 @@ export default function Workbench({
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
-    setRuleFocus(null);
-    if (!active || screen !== 'workspace' || !['canvas', 'layout'].includes(view))
-      setRulesOpen(null);
+    if (!active || screen !== 'workspace') setRulesOpen(null);
     return () => ruleWork.current?.abort();
   }, [active, screen, view, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
+  useEffect(() => {
+    setRuleFocus(null);
+  }, [active, screen, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
+  useEffect(() => {
+    setRulesOpen(null);
+    setRuleFocus((focus) =>
+      focus && view === (focus.kind === 'erc' ? 'canvas' : 'layout') ? focus : null,
+    );
+  }, [view]);
   const currentRuleReport = rulesOpen ? ruleReports[rulesOpen] : null;
   const ruleReportStale = Boolean(
     currentRuleReport &&
@@ -685,11 +688,22 @@ export default function Workbench({
     setRuleFocus(null);
   }, []);
   const openRuleChecks = useEditorAction((kind: 'erc' | 'drc') => {
+    const snapshot = core.getSnapshot();
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked ||
+      (kind === 'drc' && !snapshot.project?.pcb)
+    )
+      return;
+    ruleWork.current?.abort();
+    ruleWork.current = null;
+    setRuleBusy(null);
     setModal(null);
     setPropertiesDismissed(true);
     setRulesOpen(kind);
     setRuleFocus(null);
-    void runRuleChecks(kind);
   });
   async function runRuleChecks(kind: 'erc' | 'drc', settings?: PCBDesignRuleConfig) {
     const snapshot = core.getSnapshot();
@@ -718,7 +732,7 @@ export default function Workbench({
         controller.signal.aborted ||
         !lifetime.active ||
         lifetime.screen !== 'workspace' ||
-        lifetime.view !== (kind === 'erc' ? 'canvas' : 'layout') ||
+        lifetime.view !== view ||
         lifetime.schematicId !== schematicId ||
         core.getSnapshot().revision !== snapshot.revision
       )
@@ -741,16 +755,29 @@ export default function Workbench({
       }
     }
   }
-  function locateRuleIssue(issue: RuleCheckIssue) {
+  async function locateRuleIssue(issue: RuleCheckIssue) {
     if (!rulesOpen || ruleReportStale || sourcePending || coreSnapshot.editingBlocked) return;
-    if (rulesOpen === 'erc') {
+    const kind = rulesOpen;
+    const revision = coreSnapshot.revision;
+    const schematicId = doc?.id;
+    if (!(await changeView(kind === 'erc' ? 'canvas' : 'layout'))) return;
+    if (
+      core.getSnapshot().revision !== revision ||
+      core.getSnapshot().sourceDraft !== null ||
+      core.getSnapshot().editingBlocked ||
+      activeSchematicRef.current !== schematicId ||
+      !ruleLifetime.current.active ||
+      ruleLifetime.current.screen !== 'workspace'
+    )
+      return;
+    if (kind === 'erc') {
       setTool('select');
       const selectable = selectableSchematicIds(doc!, layers, selectionFilters);
       setSelection(issue.objectIds.filter((id) => selectable.has(id)));
       setPropertiesDismissed(true);
     }
     setRuleFocus({
-      kind: rulesOpen,
+      kind,
       request: ++ruleFocusSequence.current,
       objectIds: issue.objectIds,
       ...(issue.location ? { location: issue.location } : {}),
@@ -2358,6 +2385,16 @@ export default function Workbench({
       label: 'File',
       items: [
         { label: 'New project', run: () => newFile() },
+        ...(doc && schematicFiles.length < MAX_SCHEMATIC_FILES
+          ? [
+              {
+                label: 'New file',
+                run: () => {
+                  void newSchematicFile();
+                },
+              },
+            ]
+          : []),
         {
           label: 'Open project',
           run: () => {
@@ -2598,17 +2635,11 @@ export default function Workbench({
   const closeThermal = useCallback(() => setThermalEnabled(false), []);
   const rightSidebarAction = useMemo(
     () => (
-      <div
-        className="editor-tool-group editor-view-controls"
-        role="group"
-        aria-label="View controls"
-      >
-        <SidebarToggle
-          visible={ordinarySidebarVisible}
-          onToggle={toggleCurrentRightSidebar}
-          className="editor-sidebar-toggle"
-        />
-      </div>
+      <SidebarToggle
+        visible={ordinarySidebarVisible}
+        onToggle={toggleCurrentRightSidebar}
+        className="editor-sidebar-toggle"
+      />
     ),
     [ordinarySidebarVisible, toggleCurrentRightSidebar],
   );
@@ -2741,19 +2772,19 @@ export default function Workbench({
       ) : null,
     [thermalAvailable, thermalEnabled, sourcePending, project?.pcb, openThermal],
   );
-  const ruleActions = useMemo(() => {
-    const action = (kind: 'erc' | 'drc') => (
+  const ruleAction = useMemo(
+    () => (
       <button
         type="button"
-        className={`tool-button${rulesOpen === kind ? ' active' : ''}`}
-        aria-label={kind === 'erc' ? 'Electrical rules (ERC)' : 'Design rules (DRC)'}
-        title={kind === 'erc' ? 'Electrical rules' : 'Design rules'}
+        className={`tool-button${rulesOpen ? ' active' : ''}`}
+        aria-label="Rule"
+        title="Rule"
         aria-haspopup="dialog"
-        aria-expanded={rulesOpen === kind}
-        disabled={
-          sourcePending || Boolean(coreSnapshot.editingBlocked) || (kind === 'drc' && !project?.pcb)
+        aria-expanded={rulesOpen !== null}
+        disabled={sourcePending || Boolean(coreSnapshot.editingBlocked)}
+        onClick={() =>
+          openRuleChecks((view === 'layout' || view === '3d') && project?.pcb ? 'drc' : 'erc')
         }
-        onClick={() => openRuleChecks(kind)}
         onKeyDown={(event) => {
           if (
             (event.key === 'Enter' || event.key === ' ') &&
@@ -2764,11 +2795,11 @@ export default function Workbench({
           }
         }}
       >
-        <ShieldCheck size={17} aria-hidden="true" />
+        <ClipboardCheck size={20} aria-hidden="true" />
       </button>
-    );
-    return { erc: action('erc'), drc: action('drc') };
-  }, [rulesOpen, sourcePending, coreSnapshot.editingBlocked, project?.pcb, openRuleChecks]);
+    ),
+    [view, rulesOpen, sourcePending, coreSnapshot.editingBlocked, project?.pcb, openRuleChecks],
+  );
   const undoAction = useMemo(
     () => (
       <>
@@ -2817,6 +2848,7 @@ export default function Workbench({
       <span className="grid-density">
         <Select
           label="Grid density"
+          showChevron={false}
           icon={<span aria-hidden="true">Grid</span>}
           value={grid ? String(activeGridSpacing) : 'off'}
           options={[
@@ -2882,8 +2914,8 @@ export default function Workbench({
         <button
           type="button"
           className={`tool-button${modal === 'parts' ? ' active' : ''}`}
-          aria-label="Parts list"
-          title="Parts list"
+          aria-label="List"
+          title="List"
           aria-haspopup="dialog"
           aria-expanded={modal === 'parts'}
           onClick={openPartsList}
@@ -2996,13 +3028,14 @@ export default function Workbench({
   const runHeaderFileAction = useEditorAction((value: string) =>
     runTitlebarMenuAction(titlebarMenus[0].items, value),
   );
+  const closeHeaderProject = useEditorAction(requestProjectClose);
   const hasDocument = Boolean(doc);
   const headerProjectTitle = project?.name ?? project?.schematic.title;
-  // File labels vary only with document presence; actions still resolve the
+  // File labels vary with document presence and the schematic-file limit; actions still resolve the
   // latest menu so retained chrome cannot bypass current Source/save guards.
   const headerFileOptions = useMemo(
     () => titlebarMenuOptions(titlebarMenus[0].items),
-    [hasDocument],
+    [hasDocument, schematicFiles.length],
   );
   const appHeader = useMemo(
     () => (
@@ -3036,6 +3069,15 @@ export default function Workbench({
               />
             </nav>
           )}
+          {screen === 'workspace' && hasDocument && (
+            <RevealButton
+              className="header-project-close"
+              icon={X}
+              iconSize={17}
+              label="Close project"
+              onClick={closeHeaderProject}
+            />
+          )}
         </div>
       </header>
     ),
@@ -3046,6 +3088,7 @@ export default function Workbench({
       hasNativeTitlebar,
       headerFileOptions,
       runHeaderFileAction,
+      closeHeaderProject,
     ],
   );
   const openWorkspaceHome = useCallback(() => {
@@ -3181,6 +3224,81 @@ export default function Workbench({
       return saveFields(ref, value, fields, partId, schematicBasis, footprintDetail);
     },
   );
+
+  const drawingStatusBar = useMemo(
+    () => (
+      <EditorStatusBar
+        className={view === '3d' ? 'model-editor-status' : undefined}
+        hidden={view !== 'canvas' && view !== '3d'}
+        active={active && screen === 'workspace'}
+        modeActions={
+          view === 'canvas'
+            ? {
+                onInteraction: () => activateSchematicTool('select'),
+                onAnnotation: () => activateSchematicTool('annotate'),
+                annotationDisabled: sourcePending,
+              }
+            : undefined
+        }
+        mode={
+          view === '3d'
+            ? project?.pcb
+              ? modelMode
+              : 'Interaction mode'
+            : schematicMoveMode
+              ? schematicMoveMode === 'drag'
+                ? 'Click to place · Keep connections'
+                : 'Click to place selection'
+              : {
+                  select: 'Interaction mode',
+                  hand: 'Pan',
+                  annotate: 'Annotation mode',
+                  wire: 'Click to route · Connect to finish',
+                  place: 'Click to place component',
+                  label: 'Click to place label',
+                  'global-label': 'Click to place global label',
+                  'no-connect': 'Click a pin to mark unconnected',
+                  drag: 'Drag with connections',
+                }[tool]
+        }
+        coordinates={
+          view === 'canvas' ? (
+            <CanvasCoordinates coordinates={coordinates} />
+          ) : view === '3d' && modelMode === 'Measure distance' ? (
+            <MeasurementReadout measurement={modelMeasurement} spatial />
+          ) : view === '3d' && modelMode === 'Draw sketch' ? (
+            <ModelSketchCoordinates coordinates={modelSketchCoordinates} />
+          ) : undefined
+        }
+        controls={view === 'canvas' ? gridDensityControl : undefined}
+        status={draftStatus || undefined}
+        actions={
+          view === '3d' ? (
+            <>
+              <span className="model-error-target" ref={setModelErrorTarget} />
+              {gridDensityControl}
+            </>
+          ) : undefined
+        }
+      />
+    ),
+    [
+      active,
+      screen,
+      view,
+      project?.pcb,
+      modelMode,
+      schematicMoveMode,
+      tool,
+      coordinates,
+      modelMeasurement,
+      modelSketchCoordinates,
+      gridDensityControl,
+      draftStatus,
+      activateSchematicTool,
+      sourcePending,
+    ],
+  );
   return (
     <>
       <DesktopTitlebar
@@ -3288,22 +3406,14 @@ export default function Workbench({
             ))}
             <WorkspaceDivider active={active && screen === 'workspace'} />
             <section className="editor" data-editor-view={view}>
-              <div className="document-bar">
-                <ProjectTab
-                  name={project!.name ?? project!.schematic.title}
-                  modified={unsaved}
-                  panelId={`schematic-panel-${documentId}`}
-                  onClose={requestProjectClose}
-                />
-                <ToolButton
-                  label="New file"
-                  onClick={newSchematicFile}
-                  disabled={projectSchematics(project!).length >= MAX_SCHEMATIC_FILES}
-                >
-                  <Plus size={17} />
-                </ToolButton>
-                <div className="editor-view-switch-host">
-                  <EditorViewSwitch view={view} onChange={selectEditorView} />
+              <div className="editor-mode-bar">
+                <EditorViewSwitch view={view} onChange={selectEditorView} />
+                <div className="editor-mode-actions" role="group" aria-label="Project actions">
+                  {ruleAction}
+                  {projectWindowActions}
+                  {(view === 'canvas' ||
+                    ((view === 'layout' || view === '3d') && Boolean(project?.pcb))) &&
+                    rightSidebarAction}
                 </div>
               </div>
               <div
@@ -3342,115 +3452,7 @@ export default function Workbench({
                   </span>
                 )}
               </div>
-              <RetainedSchematicToolbar
-                visible={active && screen === 'workspace' && view === 'canvas'}
-              >
-                {() => (
-                  <div
-                    className="editor-toolbar"
-                    role="group"
-                    aria-label="Schematic tools"
-                    hidden={view !== 'canvas'}
-                  >
-                    {schematicModeActions}
-                    {schematicPlaceActions}
-                    <div className="editor-tool-group" role="group" aria-label="Edit and history">
-                      <div
-                        className={
-                          view === 'canvas' && (tool === 'drag' || schematicMoveMode)
-                            ? 'tool-menu active'
-                            : 'tool-menu'
-                        }
-                      >
-                        <Select
-                          label="Edit schematic"
-                          value=""
-                          icon={<RotateCw size={16} />}
-                          compact
-                          iconOnly
-                          showChevron={false}
-                          options={[
-                            ...(selection.length
-                              ? [{ value: 'move', label: 'Move selection' }]
-                              : []),
-                            ...(selection.some((id) => !selectedField(id))
-                              ? [
-                                  { value: 'copy', label: 'Copy selection' },
-                                  { value: 'duplicate', label: 'Duplicate selection' },
-                                  { value: 'rotate', label: 'Rotate' },
-                                  { value: 'mirrorY', label: 'Mirror horizontally' },
-                                  { value: 'mirrorX', label: 'Mirror vertically' },
-                                  { value: 'delete', label: 'Delete selection' },
-                                ]
-                              : []),
-                            ...(clipboard.current?.doc.id === doc.id
-                              ? [{ value: 'paste', label: 'Paste' }]
-                              : []),
-                            { value: 'drag', label: 'Drag with connections' },
-                            { value: 'simplify', label: 'Simplify wires' },
-                          ]}
-                          onChange={async (value) => {
-                            if (!(await changeView('canvas'))) return;
-                            if (value === 'copy') copySelection();
-                            else if (value === 'paste') pasteSelection();
-                            else if (value === 'duplicate') duplicate();
-                            else if (value === 'rotate') rotate();
-                            else if (value === 'delete') remove();
-                            else if (value === 'move') requestSchematicMove(false);
-                            else if (value === 'drag') {
-                              if (selection.length) requestSchematicMove(true);
-                              else {
-                                setTool('drag');
-                                queueSchematicNavigation('drag');
-                              }
-                            } else if (value === 'simplify') commit(simplifyWires(doc));
-                            else
-                              commit(
-                                transformSelection(doc, selection, value as 'mirrorX' | 'mirrorY'),
-                              );
-                          }}
-                        />
-                      </div>
-                      <ToolButton label="Undo" disabled={!coreSnapshot.canUndo} onClick={undoStep}>
-                        <Undo2 size={16} />
-                      </ToolButton>
-                      <ToolButton label="Redo" disabled={!coreSnapshot.canRedo} onClick={redoStep}>
-                        <Redo2 size={16} />
-                      </ToolButton>
-                    </div>
-                    {spiceAvailable && (
-                      <div
-                        className="editor-tool-group editor-plugin-actions"
-                        role="group"
-                        aria-label="Plugins"
-                      >
-                        <ToolButton
-                          label="SPICE Simulation"
-                          active={simulationEnabled}
-                          disabled={sourcePending}
-                          onClick={() => {
-                            setModal(null);
-                            setSimulationOpened(true);
-                            setSimulationEnabled(true);
-                          }}
-                        >
-                          <PluginLogo id={SPICE_PLUGIN_ID} />
-                        </ToolButton>
-                      </div>
-                    )}
-                    <div
-                      ref={schematicPanelsAnchor}
-                      className="editor-tool-group editor-tool-group-end"
-                      role="group"
-                      aria-label="Analysis and display"
-                    >
-                      {ruleActions.erc}
-                      {projectWindowActions}
-                      {rightSidebarAction}
-                    </div>
-                  </div>
-                )}
-              </RetainedSchematicToolbar>
+
               <div
                 className="editor-body"
                 data-view={view}
@@ -3459,7 +3461,122 @@ export default function Workbench({
                 aria-label={project!.name ?? project!.schematic.title}
               >
                 <div className="file-editor-surface schematic-surface" hidden={view !== 'canvas'}>
-                  <div className="schematic-drawing">
+                  <div className="schematic-drawing editor-drawing-region">
+                    <RetainedSchematicToolbar
+                      visible={active && screen === 'workspace' && view === 'canvas'}
+                    >
+                      {() => (
+                        <div
+                          className="editor-toolbar"
+                          role="group"
+                          aria-label="Schematic tools"
+                          hidden={view !== 'canvas'}
+                        >
+                          {schematicModeActions}
+                          {schematicPlaceActions}
+                          <div
+                            className="editor-tool-group"
+                            role="group"
+                            aria-label="Edit and history"
+                          >
+                            <div
+                              className={
+                                view === 'canvas' && (tool === 'drag' || schematicMoveMode)
+                                  ? 'tool-menu active'
+                                  : 'tool-menu'
+                              }
+                            >
+                              <Select
+                                label="Edit schematic"
+                                value=""
+                                icon={<RotateCw size={16} />}
+                                compact
+                                iconOnly
+                                showChevron={false}
+                                options={[
+                                  ...(selection.length
+                                    ? [{ value: 'move', label: 'Move selection' }]
+                                    : []),
+                                  ...(selection.some((id) => !selectedField(id))
+                                    ? [
+                                        { value: 'copy', label: 'Copy selection' },
+                                        { value: 'duplicate', label: 'Duplicate selection' },
+                                        { value: 'rotate', label: 'Rotate' },
+                                        { value: 'mirrorY', label: 'Mirror horizontally' },
+                                        { value: 'mirrorX', label: 'Mirror vertically' },
+                                        { value: 'delete', label: 'Delete selection' },
+                                      ]
+                                    : []),
+                                  ...(clipboard.current?.doc.id === doc.id
+                                    ? [{ value: 'paste', label: 'Paste' }]
+                                    : []),
+                                  { value: 'drag', label: 'Drag with connections' },
+                                  { value: 'simplify', label: 'Simplify wires' },
+                                ]}
+                                onChange={async (value) => {
+                                  if (!(await changeView('canvas'))) return;
+                                  if (value === 'copy') copySelection();
+                                  else if (value === 'paste') pasteSelection();
+                                  else if (value === 'duplicate') duplicate();
+                                  else if (value === 'rotate') rotate();
+                                  else if (value === 'delete') remove();
+                                  else if (value === 'move') requestSchematicMove(false);
+                                  else if (value === 'drag') {
+                                    if (selection.length) requestSchematicMove(true);
+                                    else {
+                                      setTool('drag');
+                                      queueSchematicNavigation('drag');
+                                    }
+                                  } else if (value === 'simplify') commit(simplifyWires(doc));
+                                  else
+                                    commit(
+                                      transformSelection(
+                                        doc,
+                                        selection,
+                                        value as 'mirrorX' | 'mirrorY',
+                                      ),
+                                    );
+                                }}
+                              />
+                            </div>
+                            <ToolButton
+                              label="Undo"
+                              disabled={!coreSnapshot.canUndo}
+                              onClick={undoStep}
+                            >
+                              <Undo2 size={16} />
+                            </ToolButton>
+                            <ToolButton
+                              label="Redo"
+                              disabled={!coreSnapshot.canRedo}
+                              onClick={redoStep}
+                            >
+                              <Redo2 size={16} />
+                            </ToolButton>
+                          </div>
+                          {spiceAvailable && (
+                            <div
+                              className="editor-tool-group editor-plugin-actions"
+                              role="group"
+                              aria-label="Plugins"
+                            >
+                              <ToolButton
+                                label="SPICE Simulation"
+                                active={simulationEnabled}
+                                disabled={sourcePending}
+                                onClick={() => {
+                                  setModal(null);
+                                  setSimulationOpened(true);
+                                  setSimulationEnabled(true);
+                                }}
+                              >
+                                <PluginLogo id={SPICE_PLUGIN_ID} />
+                              </ToolButton>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </RetainedSchematicToolbar>
                     <div className="schematic-canvas-area">
                       <SchematicCanvas
                         ruleFocus={ruleFocus?.kind === 'erc' && !ruleReportStale ? ruleFocus : null}
@@ -3512,12 +3629,52 @@ export default function Workbench({
                         visible={simulationVisible && waveformRequested}
                       />
                     </div>
+                    {view === 'canvas' && drawingStatusBar}
                   </div>
+                  <InspectorResize
+                    target={simulationSettingsHost}
+                    size={inspectorSize}
+                    onResize={setInspectorSize}
+                    label="simulation settings"
+                    axes={['width']}
+                    gutter
+                    hidden={!simulationVisible}
+                    minWidth={280}
+                    bounds={() => ({
+                      width: Math.min(
+                        480,
+                        Math.max(
+                          0,
+                          (simulationSettingsHost.current?.parentElement?.clientWidth ?? 440) - 172,
+                        ),
+                      ),
+                      height: simulationSettingsHost.current?.parentElement?.clientHeight ?? 0,
+                    })}
+                  />
                   <div
                     ref={simulationSettingsHost}
                     className="simulation-settings-host"
                     hidden={!simulationVisible}
                     style={{ width: inspectorSize.width }}
+                  />
+                  <InspectorResize
+                    target={propertiesDock}
+                    size={inspectorSize}
+                    onResize={setInspectorSize}
+                    axes={['width']}
+                    gutter
+                    hidden={!rightSidebarVisible || simulationVisible}
+                    minWidth={280}
+                    bounds={() => ({
+                      width: Math.min(
+                        480,
+                        Math.max(
+                          0,
+                          (propertiesDock.current?.parentElement?.clientWidth ?? 440) - 172,
+                        ),
+                      ),
+                      height: propertiesDock.current?.parentElement?.clientHeight ?? 0,
+                    })}
                   />
                   <div
                     ref={propertiesDock}
@@ -3804,23 +3961,6 @@ export default function Workbench({
                         />
                       </EditorDisplayDrawer>
                     </div>
-                    <InspectorResize
-                      target={propertiesDock}
-                      size={inspectorSize}
-                      onResize={setInspectorSize}
-                      axes={['width']}
-                      minWidth={280}
-                      bounds={() => ({
-                        width: Math.min(
-                          480,
-                          Math.max(
-                            0,
-                            (propertiesDock.current?.parentElement?.clientWidth ?? 440) - 160,
-                          ),
-                        ),
-                        height: propertiesDock.current?.parentElement?.clientHeight ?? 0,
-                      })}
-                    />
                   </div>
                 </div>
                 {layoutOpened && project && (
@@ -3856,8 +3996,6 @@ export default function Workbench({
                         onSavePartProperties={saveLayoutPartProperties}
                         onRequestSave={requestPropertiesSave}
                         syncStatus={layoutSyncStatus}
-                        toolbarRef={layoutPanelsAnchor}
-                        listAction={projectWindowActions}
                         undoAction={undoAction}
                         analysisAction={thermalAction}
                         analysisDrawing={thermalDrawing}
@@ -3873,14 +4011,13 @@ export default function Workbench({
                         }
                         analysisReadout={thermalReadout}
                         analysisPanel={layoutAnalysisPanelMount}
+                        analysisPanelVisible={thermalVisible}
                         analysisLocateRef={thermalLocateRef}
                         onAnalysisProbe={
                           currentThermalPresentation?.probing
                             ? currentThermalPresentation.probeAt
                             : undefined
                         }
-                        sidebarAction={project.pcb ? rightSidebarAction : undefined}
-                        ruleAction={ruleActions.drc}
                         annotationSessionId={activeSessionId}
                         annotations={annotations}
                         onAnnotationsChange={onAnnotationsChange}
@@ -3925,10 +4062,8 @@ export default function Workbench({
                           grid={grid}
                           gridSpacing={modelGridSpacing}
                           viewState={pcb3DView}
-                          toolbarRef={objectPanelsAnchor}
+                          statusBar={view === '3d' ? drawingStatusBar : undefined}
                           errorTarget={modelErrorTarget}
-                          listAction={projectWindowActions}
-                          sidebarAction={rightSidebarAction}
                           annotationProps={modelAnnotationProps}
                           modelCad={modelCad}
                           undoDepth={coreSnapshot.undoDepth}
@@ -3940,26 +4075,13 @@ export default function Workbench({
                       </Suspense>
                     ) : (
                       <div className="pcb-model-preview">
-                        <div
-                          className="editor-toolbar"
-                          ref={objectPanelsAnchor}
-                          role="group"
-                          aria-label="Model tools"
-                        >
-                          <div
-                            className="editor-tool-group editor-tool-group-end"
-                            role="group"
-                            aria-label="3D display"
-                          >
-                            {projectWindowActions}
-                          </div>
-                        </div>
                         <div className="pcb-3d-empty">
                           <p>No PCB layout in this project.</p>
                           <button className="secondary" onClick={() => changeView('layout')}>
                             Open Layout
                           </button>
                         </div>
+                        {drawingStatusBar}
                       </div>
                     )}
                   </div>
@@ -3969,7 +4091,6 @@ export default function Workbench({
                     <Suspense fallback={<p role="status">Loading source editor…</p>}>
                       <RetainedSourceEditor
                         visible={sourceVisible}
-                        listAction={projectWindowActions}
                         active={
                           active &&
                           screen === 'workspace' &&
@@ -4021,52 +4142,6 @@ export default function Workbench({
                   </Suspense>
                 )}
               </div>
-              <EditorStatusBar
-                hidden={view !== 'canvas' && view !== '3d'}
-                active={active && screen === 'workspace'}
-                mode={
-                  view === '3d'
-                    ? project?.pcb
-                      ? modelMode
-                      : 'Interaction mode'
-                    : schematicMoveMode
-                      ? schematicMoveMode === 'drag'
-                        ? 'Click to place · Keep connections'
-                        : 'Click to place selection'
-                      : {
-                          select: 'Interaction mode',
-                          hand: 'Pan',
-                          annotate: 'Annotation mode',
-                          wire: 'Click to route · Connect to finish',
-                          place: 'Click to place component',
-                          label: 'Click to place label',
-                          'global-label': 'Click to place global label',
-                          'no-connect': 'Click a pin to mark unconnected',
-                          drag: 'Drag with connections',
-                        }[tool]
-                }
-                coordinates={
-                  view === 'canvas' ? (
-                    <CanvasCoordinates coordinates={coordinates} />
-                  ) : view === '3d' && modelMode === 'Measure distance' ? (
-                    <MeasurementReadout measurement={modelMeasurement} spatial />
-                  ) : view === '3d' && modelMode === 'Draw sketch' ? (
-                    <ModelSketchCoordinates coordinates={modelSketchCoordinates} />
-                  ) : undefined
-                }
-                controls={
-                  view === 'canvas' ||
-                  (view === '3d' && project?.pcb && modelMode === 'Draw sketch')
-                    ? gridDensityControl
-                    : undefined
-                }
-                status={draftStatus || undefined}
-                actions={
-                  view === '3d' ? (
-                    <span className="model-error-target" ref={setModelErrorTarget} />
-                  ) : undefined
-                }
-              />
             </section>
           </div>
         )}
@@ -4327,31 +4402,28 @@ export default function Workbench({
             <AboutDialog onClose={() => setModal(null)} />
           </DeferredDialog>
         )}
-        {rulesOpen &&
-          active &&
-          screen === 'workspace' &&
-          !modal &&
-          !confirmation &&
-          view === (rulesOpen === 'erc' ? 'canvas' : 'layout') && (
-            <Suspense fallback={null}>
-              <RuleCheckPanel
-                kind={rulesOpen}
-                report={currentRuleReport?.result ?? null}
-                busy={ruleBusy === rulesOpen}
-                error={ruleErrors[rulesOpen]}
-                stale={ruleReportStale}
-                sourcePending={sourcePending}
-                blockedReason={coreSnapshot.editingBlocked ?? ''}
-                drcSettings={drcSettings}
-                onDRCSettingsChange={setDRCSettings}
-                onRun={(settings) => void runRuleChecks(rulesOpen, settings)}
-                onSelectIssue={locateRuleIssue}
-                onClose={closeRuleChecks}
-                size={rulePanelSize}
-                onResize={setRulePanelSize}
-              />
-            </Suspense>
-          )}
+        {rulesOpen && active && screen === 'workspace' && !modal && !confirmation && (
+          <Suspense fallback={null}>
+            <RuleCheckPanel
+              kind={rulesOpen}
+              onKindChange={openRuleChecks}
+              drcAvailable={Boolean(project?.pcb)}
+              report={currentRuleReport?.result ?? null}
+              busy={ruleBusy === rulesOpen}
+              error={ruleErrors[rulesOpen]}
+              stale={ruleReportStale}
+              sourcePending={sourcePending}
+              blockedReason={coreSnapshot.editingBlocked ?? ''}
+              drcSettings={drcSettings}
+              onDRCSettingsChange={setDRCSettings}
+              onRun={(settings) => void runRuleChecks(rulesOpen, settings)}
+              onSelectIssue={locateRuleIssue}
+              onClose={closeRuleChecks}
+              size={rulePanelSize}
+              onResize={setRulePanelSize}
+            />
+          </Suspense>
+        )}
         {modal === 'settings' && (
           <DeferredDialog title="Settings" onClose={() => setModal(null)}>
             <SettingsDialog

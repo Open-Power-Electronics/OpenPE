@@ -228,7 +228,7 @@ try {
     assert.ok(Math.abs(scale.x - scale.y) < 1e-6, 'PCB uses equal X/Y millimetre scale.');
     return scale.x;
   };
-  await button('Actual size (100%)').click();
+  await runCanvasAction(page, 'Actual size (100%)');
   assert.ok(Math.abs((await assertScale()) - 96 / 25.4) < 1e-4);
   await page.setViewportSize({ width: 1280, height: 750 });
   await page.waitForTimeout(100);
@@ -236,7 +236,7 @@ try {
   await page.setViewportSize({ width: 1460, height: 900 });
   await page.waitForTimeout(100);
   await assertScale();
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   const fittedBoard = await canvas.getAttribute('viewBox');
   assert.equal(
     await canvas.locator('[data-airwire]').count(),
@@ -299,9 +299,9 @@ try {
     0,
     'Disabling pad inspection clears its inspector.',
   );
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await canvas.press('Space');
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   assert.equal(modelRequests, 0, 'Models remain deferred before opening 3D.');
   await button('Model').click();
   await page.waitForFunction(
@@ -564,7 +564,7 @@ try {
     'Pan carries annotation pins with the exact vector camera.',
   );
   assert.ok(Math.abs(pinAfterPan.y - pinBeforePan.y - 10) < 1);
-  await button('Zoom in').click();
+  await runCanvasAction(page, 'Zoom in');
   await page.waitForFunction(
     () => {
       const surface = document.querySelector('.file-editor-surface:not([hidden])');
@@ -579,7 +579,7 @@ try {
     undefined,
     { timeout: 15000 },
   );
-  await button('Zoom out').click();
+  await runCanvasAction(page, 'Zoom out');
 
   await canvas.press('Delete');
   await canvas.press('r');
@@ -640,9 +640,9 @@ try {
   };
   await button('Draw polygon').click();
   // The zone intentionally extends beyond the original board; make it visible.
-  await button('Zoom out').click();
-  await button('Zoom out').click();
-  await button('Zoom out').click();
+  await runCanvasAction(page, 'Zoom out');
+  await runCanvasAction(page, 'Zoom out');
+  await runCanvasAction(page, 'Zoom out');
   for (const [x, y] of [
     [2.54, 2.54],
     [17.78, 2.54],
@@ -708,8 +708,8 @@ try {
   await clickPoint(22.86, 25.4);
   await selectLayoutLayer(page, 'Edge.Cuts');
   await button('Draw rectangle').click();
-  await button('Zoom out').click();
-  await button('Zoom out').click();
+  await runCanvasAction(page, 'Zoom out');
+  await runCanvasAction(page, 'Zoom out');
   await clickPoint(10.16, 10.16);
   await clickPoint(45.72, 40.64);
   await button('Source').click();
@@ -731,7 +731,7 @@ try {
   assert.equal(await button('Git').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.getByRole('dialog').count(), 0);
   await button('Layout').click();
-  await button('Fit board to canvas').click();
+  await runCanvasAction(page, 'Fit board to canvas');
   await page.waitForFunction(
     () => document.querySelectorAll('.project-navigation .dirty-dot').length === 0,
   );

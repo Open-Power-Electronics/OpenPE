@@ -40,7 +40,7 @@ const bundle = await build({
         return <>
           <button onClick={() => core.undo()}>Undo</button>
           <button onClick={() => setCore(new ProjectCore(parseProject(snapshot.source)))}>Reopen</button>
-          <div className="panel"><PartProperties key={part.id + ':' + snapshot.project.id}
+          <div className="panel inspector"><PartProperties key={part.id + ':' + snapshot.project.id}
             part={part} spiceAvailable onSave={(reference, value, fields) => {
               update(reference, value, fields); setSaves(count => count + 1); return true;
             }}/></div>
@@ -76,7 +76,7 @@ try {
     await page.addStyleTag({ content: await readFile(path, 'utf8') });
   await page.addStyleTag({
     content:
-      '.panel{width:400px;padding:16px;margin:20px;border:1px solid #ddd;border-radius:16px}',
+      '.panel.inspector{position:static;inset:auto;width:400px;max-width:none;max-height:none;overflow:visible;padding:16px;margin:20px;border:1px solid var(--line);border-radius:var(--radius)}',
   });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const state = () => page.evaluate(() => window.propertiesState);
@@ -96,6 +96,33 @@ try {
     assert.equal(await field(label).isVisible(), false);
   }
   await disclosure.locator('summary').click();
+  const sharedFields = await disclosure.evaluate((section) => {
+    const root = section.closest('.part-properties');
+    const assignment = root.querySelector('.property-resource-field .property-field-value');
+    const file = section.querySelector('.property-model-choice');
+    const model = section.querySelector('.property-file-models .select-trigger');
+    const parameter = section.querySelector('.property-simulation-value .quantity-input');
+    const input = file.querySelector('input');
+    const bounds = (element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, width: box.width, height: box.height };
+    };
+    return {
+      assignment: bounds(assignment),
+      file: bounds(file),
+      model: bounds(model),
+      parameter: bounds(parameter),
+      inputBorder: getComputedStyle(input).borderTopWidth,
+      headingWeight: getComputedStyle(section.querySelector('summary')).fontWeight,
+    };
+  });
+  for (const field of [sharedFields.file, sharedFields.model, sharedFields.parameter]) {
+    assert.ok(Math.abs(field.left - sharedFields.assignment.left) <= 1);
+    assert.ok(Math.abs(field.width - sharedFields.assignment.width) <= 1);
+    assert.ok(Math.abs(field.height - sharedFields.assignment.height) <= 1);
+  }
+  assert.equal(sharedFields.inputBorder, '0px', 'SPICE library selection has one outer outline.');
+  assert.equal(sharedFields.headingWeight, '400');
   assert.equal(await field('Series resistance (Ω)').count(), 0);
   assert.equal(await field('Coupling (unitless)').count(), 0);
   assert.equal(
@@ -119,7 +146,7 @@ try {
   assert.equal(await field('Scratch').inputValue(), '2');
   assert.deepEqual(await state(), original, 'Inspecting parameters stays clean.');
 
-  await page.locator('.property-additional-fields > summary').click();
+  assert.equal(await field('Scratch').isVisible(), true);
   await field('Scratch').fill('3');
   await field('Scratch').press('Enter');
   const edited = await state();
@@ -229,14 +256,15 @@ try {
         const line = parseFloat(style.lineHeight);
         const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
         return (
-          element.clientHeight <= Math.ceil(line + padding) + 1 &&
+          element.clientHeight >= Math.floor(line + padding) &&
+          element.scrollHeight <= element.clientHeight + 1 &&
           element.scrollWidth <= element.clientWidth + 1
         );
       }),
     );
   assert.ok(
     labelsFit,
-    'Parameter names stay on one line at extra-large text size in compact Properties.',
+    'Parameter names wrap without clipping at extra-large text size in compact Properties.',
   );
   await page.screenshot({ path: 'test-results/simulation-properties-compact-extra-large.png' });
   await page.evaluate(() => {

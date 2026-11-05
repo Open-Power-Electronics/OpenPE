@@ -263,7 +263,7 @@ export default function LayoutProperties({
                 }))}
                 onChange={(shape) => padChange({ shape: shape as Pad['shape'] })}
               />
-              <PropertyGrid>
+              <PropertyGrid columns={3}>
                 <NumberField
                   {...field}
                   label="X (mm)"
@@ -288,7 +288,7 @@ export default function LayoutProperties({
                   onCommit={(rotation) => padChange({ rotation })}
                 />
               </PropertyGrid>
-              <PropertyGrid>
+              <PropertyGrid columns={pad.shape !== 'circle' && pad.type !== 'smd' ? 3 : 2}>
                 <NumberField
                   {...field}
                   label="Width (mm)"

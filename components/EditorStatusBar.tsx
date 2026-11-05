@@ -1,9 +1,18 @@
 'use client';
 import type { ReactNode } from 'react';
+import Select from './Select';
 import { useWorkspaceDraftStatus } from './WorkspacePresentation';
+
+export type EditorModeActions = {
+  onInteraction: () => void;
+  onAnnotation: () => void;
+  interactionDisabled?: boolean;
+  annotationDisabled?: boolean;
+};
 
 export default function EditorStatusBar({
   mode,
+  modeActions,
   coordinates,
   details,
   controls,
@@ -14,6 +23,7 @@ export default function EditorStatusBar({
   active = true,
 }: {
   mode: string;
+  modeActions?: EditorModeActions;
   coordinates?: ReactNode;
   details?: ReactNode;
   controls?: ReactNode;
@@ -28,8 +38,37 @@ export default function EditorStatusBar({
   return (
     <footer className={`status-bar ${className}`} hidden={hidden} aria-label="Editor status">
       <span className="tool-status" aria-description={mode}>
-        <span className="status-dot" aria-hidden="true" />
-        <span className="status-mode">{mode}</span>
+        {modeActions ? (
+          <Select
+            label="Editor mode"
+            value={mode}
+            placeholder={mode}
+            icon={<span className="status-dot" aria-hidden="true" />}
+            showChevron={false}
+            active={active && !hidden}
+            options={[
+              {
+                value: 'Interaction mode',
+                label: 'Interaction mode',
+                disabled: modeActions.interactionDisabled,
+              },
+              {
+                value: 'Annotation mode',
+                label: 'Annotation mode',
+                disabled: modeActions.annotationDisabled,
+              },
+            ]}
+            onChange={(value) => {
+              if (value === 'Interaction mode') modeActions.onInteraction();
+              else if (value === 'Annotation mode') modeActions.onAnnotation();
+            }}
+          />
+        ) : (
+          <>
+            <span className="status-dot" aria-hidden="true" />
+            <span className="status-mode">{mode}</span>
+          </>
+        )}
       </span>
       {coordinates && <span className="status-coordinate">{coordinates}</span>}
       {details && <span className="status-details">{details}</span>}

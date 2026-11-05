@@ -1,19 +1,15 @@
 .panel:global(.surface-dialog) {
-  width: 600px;
+  --rule-warning-ink: light-dark(#8f6100, #efbf64);
+  width: 720px;
+  height: 560px;
 }
 
 .panel:global(.surface-dialog) > :global(.dialog-content) {
   min-width: 0;
-  max-height: 540px;
+  max-height: none;
   overflow-y: auto;
   font-size: var(--font-control);
-  padding-bottom: 12px;
-}
-
-.panel:global(.surface-dialog) > :global(.dialog-footer) {
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px var(--dialog-inset);
+  padding: 0;
 }
 
 .runStatus {
@@ -23,15 +19,24 @@
   font-size: var(--font-caption);
 }
 
+.tabs {
+  align-items: flex-end;
+  min-height: 44px;
+  margin-bottom: var(--properties-group-gap);
+  padding: 4px var(--dialog-inset) 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+.body {
+  padding: 0 var(--dialog-inset) var(--dialog-inset);
+}
+
 .summary {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
-  margin: 12px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background: var(--panel);
+  margin: var(--properties-group-gap) 0;
+  padding: 4px 0;
   font-variant-numeric: tabular-nums;
 }
 
@@ -46,45 +51,64 @@
 }
 
 .summary > span:last-child > svg {
-  color: var(--muted);
+  color: var(--rule-warning-ink);
 }
 
 .issues {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.issues > li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-}
-
-.issueText {
-  flex: 1;
+.issue {
+  display: block;
+  width: 100%;
   min-width: 0;
-  line-height: 1.5;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-inline-start: 2px solid var(--issue-ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
-
-.severity {
-  display: block;
-  margin-bottom: 4px;
+.issue[data-severity='error'] {
+  --issue-ink: var(--error-ink);
+}
+.issue[data-severity='warning'] {
+  --issue-ink: var(--rule-warning-ink);
+}
+.issue:is(:hover, :focus-visible):not(:disabled) {
+  background: var(--surface-hover);
+}
+.issue:active:not(:disabled) {
+  background: var(--tint);
+}
+.issue:disabled {
+  cursor: default;
+  opacity: 1;
   color: var(--muted);
+}
+.message {
+  display: block;
+}
+
+.ruleName {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--issue-ink);
   font-size: var(--font-caption);
 }
 
 .notice,
 .error,
 .empty {
-  margin: 12px 0;
+  margin: var(--properties-group-gap) 0;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -98,56 +122,49 @@
 }
 
 .empty {
-  padding: 24px 12px;
+  padding: 16px 12px;
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius);
   background: var(--panel);
   color: var(--muted);
   text-align: center;
 }
 
 .limits {
+  min-width: 0;
   margin: 0;
-  padding: 4px 0 12px;
+  padding: 4px 0 var(--properties-group-gap);
   border: 0;
   border-bottom: 1px solid var(--line-soft);
 }
 
-.limits > legend {
-  padding: 0 0 6px;
-  color: var(--text-strong);
-  font-weight: 600;
-}
-
 .limitGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--properties-row-gap) var(--properties-column-gap);
 }
 
-.limitGrid label {
+.limitGrid > label {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  align-items: start;
+  gap: var(--properties-label-gap);
   min-width: 0;
   color: var(--muted);
   font-size: var(--font-small);
   line-height: 1.4;
 }
 
-.limitGrid input {
-  width: 100%;
+.limitGrid > label > span:first-child {
   min-width: 0;
-  min-height: 30px;
-  padding: 4px 8px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-control);
-  background: var(--field-surface);
-  color: var(--text-strong);
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--code-font);
+  overflow-wrap: anywhere;
 }
 
-.limitGrid input[aria-invalid='true'] {
+.limitGrid :global(.quantity-input) {
+  --quantity-unit-width: max(30px, calc(var(--font-small) * 2.2));
+}
+
+.limitGrid :global(.quantity-input):has(input[aria-invalid='true']) {
   border-color: var(--error-ink);
 }

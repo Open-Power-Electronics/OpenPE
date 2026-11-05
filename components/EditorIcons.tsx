@@ -21,6 +21,23 @@ export const SchematicIcon = createLucideIcon('Schematic', [
   ['path', { d: 'M14 20h8l-4 3Z', key: 'ground' }],
 ]);
 
+// Electrical nodes and a connected signal pulse distinguish ERC from PCB checks.
+export const ERCIcon = createLucideIcon('ERC', [
+  ['circle', { cx: '4', cy: '7', r: '2', key: 'input' }],
+  ['circle', { cx: '20', cy: '7', r: '2', key: 'output' }],
+  ['path', { d: 'M6 7h2l2-4 3 8 2-4h3', key: 'signal' }],
+  ['path', { d: 'M4 9v9h6', key: 'connection' }],
+  ['path', { d: 'm14 18 3 3 5-6', key: 'check' }],
+]);
+
+// Square PCB pads, routed corners and a clearance arrow distinguish DRC.
+export const DRCIcon = createLucideIcon('DRC', [
+  ['path', { d: 'M2 3h4v4H2zM2 17h4v4H2z', key: 'pads' }],
+  ['path', { d: 'M6 5h14v4M6 19h4v-3', key: 'tracks' }],
+  ['path', { d: 'M5 12h11m-3-3 3 3-3 3M8 9l-3 3 3 3', key: 'clearance' }],
+  ['path', { d: 'm14 18 3 3 5-6', key: 'check' }],
+]);
+
 export const ModelIcon = createLucideIcon('Model', [
   ['path', { d: 'M3 8h7v8h5v5H3Z', key: 'profile' }],
   ['path', { d: 'm3 8 6-5h7v8h5v5l-6 5', key: 'extrusion' }],
