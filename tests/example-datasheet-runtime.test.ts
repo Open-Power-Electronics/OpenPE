@@ -17,7 +17,7 @@ import {
   type WorkbenchCapabilityPorts,
 } from '../lib/workbench-capabilities';
 import { projectDatasheetContext } from '../lib/example-datasheets';
-import { validateAgentWorkspaceContext } from '../context/agent-workspace-context';
+import { agentSource, validateAgentWorkspaceContext } from '../context/agent-workspace-context';
 import { validateAgentWorkspaceContext as validateServiceContext } from '../server/agent-context-format.mjs';
 import { circuitFingerprint } from '../lib/circuit';
 import { makePrompt } from '../server/agents.mjs';
@@ -122,7 +122,7 @@ test('workspace observations reject forged specifications, cross-project binding
     version: 1,
     capturedAt: new Date().toISOString(),
     project: JSON.parse(serializeProject(project)),
-    source: { pending: false, draft: null, error: '' },
+    source: agentSource(null, ''),
     ui: { activeSchematicId: project.schematic.id },
     simulation: { status: 'disabled' },
     icDatasheet: projectDatasheetContext(project),

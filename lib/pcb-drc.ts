@@ -14,7 +14,9 @@ import {
   filledCopperPolygons,
   graphicVertices,
   intersectPolygons,
+  offsetPolygons,
   padPolygon,
+  polygonResolution,
   worldZones,
   type Polygon,
 } from './pcb-polygons';
@@ -677,6 +679,8 @@ export function runPCBDesignRules(
         );
       const polygon = { outer: zone.outline, holes: zone.holes ?? [] };
       const area = body(zone.id, 'zone', 'Keepout', null, [zone.layer], zone.outline, 0, polygon);
+      let pourInterior: Polygon[] | undefined;
+      let pourInteriorEdges = 0;
       for (const copper of bodies) {
         const blocked =
           copper.kind === 'track'
@@ -688,12 +692,21 @@ export function runPCBDesignRules(
                 : zone.keepout!.copperpour;
         if (!blocked || !copper.layers.includes(zone.layer) || !overlapsBounds(copper, area, 0))
           continue;
-        // Saved pours may end exactly on a keepout boundary. Only copper area
-        // inside it violates the pour flag; shared edges alone are legal.
+        // Rounding a shared sloped edge and its split vertices onto the clipping
+        // grid can create slivers. Allow one grid cell at the keepout boundary,
+        // while retaining even tiny copper areas farther inside it.
         let enters: boolean;
         if (copper.kind === 'zone' && copper.polygon) {
-          spend(copper.edges.length * area.edges.length);
-          enters = intersectPolygons([copper.polygon], [polygon]).length > 0;
+          if (!pourInterior) {
+            spend(area.edges.length);
+            pourInterior = offsetPolygons([polygon], -polygonResolution);
+            pourInteriorEdges = pourInterior.reduce(
+              (n, p) => n + p.outer.length + p.holes.reduce((m, h) => m + h.length, 0),
+              0,
+            );
+          }
+          spend(copper.edges.length * pourInteriorEdges);
+          enters = intersectPolygons([copper.polygon], pourInterior).length > 0;
         } else enters = distance(copper, area) <= epsilon;
         if (enters)
           issue(

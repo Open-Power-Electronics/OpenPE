@@ -15,6 +15,7 @@ import { schematicTexts } from './schematic-text';
 import { samePoint, onWire, wireRoute } from './wiring';
 import { removePartConnections } from './schematic-delete';
 import { documentPinKey, projectNetGroups } from './project-net-groups';
+import { fromProjectDocument, toProjectDocument } from './project-document';
 
 type ConnectionNetIdentities = {
   readonly wireNets: ReadonlyMap<string, number>;
@@ -716,6 +717,75 @@ export function duplicateSelection(
     }
   return { circuit: moveSelection(d, copies, delta), selection: copies };
 }
+
+/** Paste a retained same-sheet snapshot without replacing any current objects. */
+export function pasteSchematicSelection(
+  current: Circuit,
+  snapshot: Circuit,
+  ids: readonly string[],
+  delta: Point = { x: 10.16, y: 10.16 },
+): { circuit: Circuit; selection: string[] } {
+  if (snapshot.id !== current.id) throw new Error('Copy a selection from this document first.');
+  const selection = ids.filter((id) => !selectedField(id));
+  const picked = new Set(selection);
+  for (const part of snapshot.parts.filter((part) => picked.has(part.id)))
+    if (
+      current.libraries[part.libId] &&
+      JSON.stringify(current.libraries[part.libId]) !==
+        JSON.stringify(snapshot.libraries[part.libId])
+    )
+      throw new Error('The embedded symbol changed. Copy the selection again before pasting.');
+  const source = structuredClone(current);
+  // Agent snapshots cross the canonical document boundary. Normalize the copied
+  // snapshot through that same mapping so GUI copies have identical native
+  // metadata/default ordering; untouched live objects keep their original bytes.
+  const restored = fromProjectDocument(
+    toProjectDocument({
+      format: 'openpe',
+      version: 1,
+      units: 'mm',
+      id: snapshot.id,
+      schematic: snapshot,
+      pcb: null,
+      extensions: {},
+    }),
+  ).schematic;
+  for (const key of ['parts', 'wires', 'labels', 'junctions', 'noConnects'] as const)
+    Object.assign(source, {
+      [key]: [
+        ...(source[key] || []).filter((item) => !picked.has(item.id)),
+        ...(restored[key] || []).filter((item) => picked.has(item.id)),
+      ],
+    });
+  source.libraries = { ...restored.libraries, ...source.libraries };
+  source.original = restored.original;
+  const result = duplicateSelection(
+    source,
+    selection,
+    delta,
+    current.parts.map((part) => part.ref),
+  );
+  if (!result.selection.length) return { circuit: current, selection: [] };
+  const copies = new Set(result.selection),
+    next = structuredClone(current);
+  for (const key of ['parts', 'wires', 'labels', 'junctions', 'noConnects'] as const)
+    Object.assign(next, {
+      [key]: [
+        ...(next[key] || []),
+        ...(result.circuit[key] || []).filter((item) => copies.has(item.id)),
+      ],
+    });
+  next.libraries = source.libraries;
+  const texts = children(result.circuit.original || [], 'text').filter((node) =>
+    copies.has(val(child(node, 'uuid'))),
+  );
+  if (texts.length) {
+    next.original ||= parseSExpr(serializeCircuit(next));
+    next.original.push(...texts);
+  }
+  return { circuit: next, selection: result.selection };
+}
+
 export function transformSelection(
   source: Circuit,
   ids: string[],

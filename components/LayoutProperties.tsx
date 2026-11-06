@@ -7,11 +7,12 @@ import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
 import type { PCBBounds } from '@/lib/pcb-layout';
 import { pcbPadShapeLabel, pcbPadTypeLabel } from '@/lib/pcb-display';
 import {
+  preparePCBZoneProperties,
   setPCBPadProperties,
   setPCBTrackEndpoints,
   setPCBViaProperties,
 } from '@/lib/pcb-properties';
-import type { PCBRectangle } from '@/lib/pcb-outline-resize';
+import { setPCBRectangleWidth, type PCBRectangle } from '@/lib/pcb-outline-resize';
 import { pcbLockObject, type PCBLockTarget } from '@/lib/pcb-lock';
 import type { CapabilityHost } from '@/api/capabilities';
 import type { FootprintDetail } from './LibraryChooser';
@@ -573,12 +574,7 @@ export default function LayoutProperties({
                     min={0.0001}
                     max={1000}
                     onCommit={(width) =>
-                      onCommit({
-                        ...board,
-                        graphics: board.graphics.map((item) =>
-                          rectangle.ids.includes(item.id) ? { ...item, width } : item,
-                        ),
-                      })
+                      attempt(() => setPCBRectangleWidth(board, rectangle, width))
                     }
                   />
                 )}
@@ -674,16 +670,18 @@ export default function LayoutProperties({
                       { value: 'thru_hole_only', label: 'Thermal relief for through-hole' },
                     ]}
                     onChange={(value) => {
-                      const next = { ...zone };
-                      delete next.padConnection;
-                      onZone(
-                        value === 'thermal'
-                          ? next
-                          : {
-                              ...next,
-                              padConnection: value as NonNullable<typeof zone.padConnection>,
-                            },
-                      );
+                      try {
+                        onZone(
+                          preparePCBZoneProperties(zone, {
+                            padConnection:
+                              value === 'thermal'
+                                ? undefined
+                                : (value as NonNullable<typeof zone.padConnection>),
+                          }),
+                        );
+                      } catch (error) {
+                        onError((error as Error).message);
+                      }
                     }}
                   />
                   <Select

@@ -28,7 +28,14 @@ import {
   type WorkbenchCapabilityPorts,
 } from '@/lib/workbench-capabilities';
 import { registerProviderPluginCapabilities } from '@/lib/provider-plugin-capabilities';
-import { registerLibraryCapabilities } from '@/lib/library-capabilities';
+import {
+  registerLibraryCapabilities,
+  type LibraryCapabilityPorts,
+} from '@/lib/library-capabilities';
+import {
+  registerProjectFileCapabilities,
+  type ProjectFileCapabilityPorts,
+} from '@/lib/project-file-capabilities';
 import type { AgentThermalContext } from '@/context/agent-thermal-context';
 import ThermalField, { ThermalFieldMarkers } from './ThermalField';
 import ThermalComponentHighlight from './ThermalComponentHighlight';
@@ -37,7 +44,6 @@ import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalL
 import {
   AlertCircle,
   Blocks,
-  ClipboardCheck,
   Cpu,
   FolderPlus,
   FolderOpen,
@@ -53,14 +59,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import {
-  serializeCircuit,
-  circuitFingerprint,
-  labelShapes,
-  fmt,
-  type Circuit,
-  type Point,
-} from '@/lib/circuit';
+import { circuitFingerprint, labelShapes, fmt, type Circuit, type Point } from '@/lib/circuit';
 import { api } from '@/lib/bridge';
 import { downloadBytes, downloadText } from '@/lib/download';
 import { projectExportFormats, type ProjectExportFormat } from '@/lib/export-formats';
@@ -84,6 +83,7 @@ import {
   objectPosition,
   moveText,
   duplicateSelection,
+  pasteSchematicSelection,
   removeSelection,
   transformSelection,
   simplifyWires,
@@ -124,8 +124,11 @@ import NavigationButton from './NavigationButton';
 import EditorViewSwitch, { type EditorView } from './EditorViewSwitch';
 import RevealButton from './RevealButton';
 import EditorStatusBar from './EditorStatusBar';
+import RuleStatus from './RuleStatus';
 const LayoutEditor = lazy(() => import('./LayoutEditor'));
 import type { PCB3DViewState } from './PCBModelPreview';
+import type { ModelCheckIssue, ModelCheckFocus, ModelCheckReport } from './model-checks';
+import type { RuleCheckKind } from './RuleCheckPanel';
 const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
 import { type PCB, type Footprint } from '@/lib/pcb';
 import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
@@ -164,7 +167,8 @@ import type { ProbeTarget } from '@/lib/spice';
 import AnnotationDialog from './AnnotationDialog';
 import { validateAnnotations, type AgentAnnotation } from '@/lib/agent-annotations';
 import { captureAgentPresentation } from '@/context/agent-presentation';
-import type { AgentWorkspaceContext } from '@/context/agent-workspace-context';
+import { agentSource, type AgentWorkspaceContext } from '@/context/agent-workspace-context';
+import { agentProject, assertAgentSourceDraftSafe } from '@/lib/agent-project-access';
 import type { AgentSimulationContext } from '@/context/agent-simulation-context';
 import {
   SPICE_PLUGIN_ID,
@@ -175,7 +179,7 @@ import {
 import { schematicTexts } from '@/lib/schematic-text';
 import { displayPartValue, partFields } from '@/lib/library';
 import { preparePartGeometry, preparePartProperties } from '@/lib/part-properties';
-import { child, children, parseSExpr, val, type SExpr } from '@/lib/sexpr';
+import { val, type SExpr } from '@/lib/sexpr';
 import ProjectNavigation, {
   type ProjectNavigationItem,
   type ProjectFileAction,
@@ -220,6 +224,34 @@ type StoredRuleReport = {
   schematicId?: string;
   settings?: string;
 };
+function ruleReportIsStale(
+  report: StoredRuleReport | null,
+  kind: 'erc' | 'drc',
+  revision: number,
+  schematicId: string | undefined,
+  settings: PCBDesignRuleConfig,
+) {
+  return Boolean(
+    report &&
+    (report.revision !== revision ||
+      (kind === 'erc' && report.schematicId !== schematicId) ||
+      (kind === 'drc' && report.settings !== JSON.stringify(settings))),
+  );
+}
+function ruleCheckBasis(
+  kind: 'erc' | 'drc',
+  revision: number,
+  schematicId: string,
+  boardId: string | undefined,
+  settings: PCBDesignRuleConfig,
+) {
+  return JSON.stringify([
+    kind,
+    revision,
+    kind === 'erc' ? schematicId : boardId,
+    kind === 'drc' ? settings : null,
+  ]);
+}
 
 // Synchronous editor actions read the latest committed workbench state without
 // changing their prop identity on unrelated conversation/status updates. Async
@@ -370,6 +402,11 @@ export default function Workbench({
   const [capabilityHost] = useState(() =>
     createCapabilityHost({ revision: () => String(core.getSnapshot().revision) }),
   );
+  const resourcePorts = useRef<LibraryCapabilityPorts>({});
+  const projectFilePorts = useRef<ProjectFileCapabilityPorts>(null!);
+  const listedExampleIds = useRef(new Set(homeExampleCatalog.map((entry) => entry.id)));
+  const originRef = useRef({ active, fileId });
+  originRef.current = { active, fileId };
   const [activeSchematicId, setActiveSchematicId] = useState(
     initialState?.activeSchematicId ?? project?.schematic.id ?? '',
   );
@@ -639,13 +676,28 @@ export default function Workbench({
     : simulationVisible
       ? showSchematicSidebar
       : toggleRightSidebar;
-  const [rulesOpen, setRulesOpen] = useState<'erc' | 'drc' | null>(null);
+  const [rulesOpen, setRulesOpen] = useState<RuleCheckKind | null>(null);
+  const [modelCheckReport, setModelCheckReport] = useState<ModelCheckReport | null>(null);
+  const [modelCheckFocus, setModelCheckFocus] = useState<ModelCheckFocus | null>(null);
+  const onModelChecksChange = useEditorAction((report: ModelCheckReport) => {
+    const current = core.getSnapshot().project;
+    if (report.board === current?.pcb && report.schematic === current?.schematic)
+      setModelCheckReport(report);
+  });
+  const currentModelCheckReport =
+    modelCheckReport?.board === project?.pcb && modelCheckReport?.schematic === project?.schematic
+      ? modelCheckReport
+      : null;
   const [ruleReports, setRuleReports] = useState<Record<'erc' | 'drc', StoredRuleReport | null>>({
     erc: null,
     drc: null,
   });
   const [ruleBusy, setRuleBusy] = useState<'erc' | 'drc' | null>(null);
   const [ruleErrors, setRuleErrors] = useState({ erc: '', drc: '' });
+  const ruleFailureBasis = useRef<{ erc: string | null; drc: string | null }>({
+    erc: null,
+    drc: null,
+  });
   const [drcSettings, setDRCSettings] = useState<PCBDesignRuleConfig>(() => ({
     ...defaultPCBDesignRules,
   }));
@@ -666,20 +718,22 @@ export default function Workbench({
   }, [active, screen, view, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
   useEffect(() => {
     setRuleFocus(null);
+    setModelCheckFocus(null);
   }, [active, screen, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
   useEffect(() => {
     setRulesOpen(null);
+    if (view !== '3d') {
+      setModelCheckFocus(null);
+    }
     setRuleFocus((focus) =>
       focus && view === (focus.kind === 'erc' ? 'canvas' : 'layout') ? focus : null,
     );
   }, [view]);
-  const currentRuleReport = rulesOpen ? ruleReports[rulesOpen] : null;
-  const ruleReportStale = Boolean(
-    currentRuleReport &&
-    (currentRuleReport.revision !== coreSnapshot.revision ||
-      (rulesOpen === 'erc' && currentRuleReport.schematicId !== doc?.id) ||
-      (rulesOpen === 'drc' && currentRuleReport.settings !== JSON.stringify(drcSettings))),
-  );
+  const currentRuleReport = rulesOpen && rulesOpen !== 'model' ? ruleReports[rulesOpen] : null;
+  const ruleReportStale =
+    rulesOpen && rulesOpen !== 'model'
+      ? ruleReportIsStale(currentRuleReport, rulesOpen, coreSnapshot.revision, doc?.id, drcSettings)
+      : false;
   const closeRuleChecks = useCallback(() => {
     ruleWork.current?.abort();
     ruleWork.current = null;
@@ -687,14 +741,14 @@ export default function Workbench({
     setRulesOpen(null);
     setRuleFocus(null);
   }, []);
-  const openRuleChecks = useEditorAction((kind: 'erc' | 'drc') => {
+  const openRuleChecks = useEditorAction((kind: RuleCheckKind) => {
     const snapshot = core.getSnapshot();
     if (
       !active ||
       screen !== 'workspace' ||
       snapshot.sourceDraft !== null ||
       snapshot.editingBlocked ||
-      (kind === 'drc' && !snapshot.project?.pcb)
+      (kind !== 'erc' && !snapshot.project?.pcb)
     )
       return;
     ruleWork.current?.abort();
@@ -707,16 +761,31 @@ export default function Workbench({
   });
   async function runRuleChecks(kind: 'erc' | 'drc', settings?: PCBDesignRuleConfig) {
     const snapshot = core.getSnapshot();
+    if (!ruleLifetime.current.active || ruleLifetime.current.screen !== 'workspace') return;
     if (!snapshot.project || !doc || ruleWork.current) return;
     if (snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
     const config = settings ?? drcSettings;
+    const basis = ruleCheckBasis(kind, snapshot.revision, doc.id, snapshot.project.pcb?.id, config);
     if (kind === 'drc') setDRCSettings(config);
     const controller = new AbortController();
     ruleWork.current = controller;
     setRuleBusy(kind);
     setRuleErrors((current) => ({ ...current, [kind]: '' }));
+    ruleFailureBasis.current[kind] = null;
     setRuleFocus(null);
     const schematicId = doc.id;
+    const isCurrent = () => {
+      const lifetime = ruleLifetime.current;
+      return (
+        !controller.signal.aborted &&
+        ruleWork.current === controller &&
+        lifetime.active &&
+        lifetime.screen === 'workspace' &&
+        lifetime.view === view &&
+        lifetime.schematicId === schematicId &&
+        core.getSnapshot().revision === snapshot.revision
+      );
+    };
     try {
       if (kind === 'drc' && (layoutSyncStatus.pending || layoutSyncStatus.error))
         throw new Error(
@@ -727,16 +796,7 @@ export default function Workbench({
         kind === 'erc' ? { schematicId } : { boardId: snapshot.project.pcb?.id, settings: config },
         { signal: controller.signal },
       )) as RuleCheckResult;
-      const lifetime = ruleLifetime.current;
-      if (
-        controller.signal.aborted ||
-        !lifetime.active ||
-        lifetime.screen !== 'workspace' ||
-        lifetime.view !== view ||
-        lifetime.schematicId !== schematicId ||
-        core.getSnapshot().revision !== snapshot.revision
-      )
-        return;
+      if (!isCurrent()) return;
       setRuleReports((current) => ({
         ...current,
         [kind]: {
@@ -746,8 +806,10 @@ export default function Workbench({
         },
       }));
     } catch (error) {
-      if (!controller.signal.aborted)
+      if (isCurrent()) {
+        ruleFailureBasis.current[kind] = basis;
         setRuleErrors((current) => ({ ...current, [kind]: (error as Error).message }));
+      }
     } finally {
       if (ruleWork.current === controller) {
         ruleWork.current = null;
@@ -755,8 +817,16 @@ export default function Workbench({
       }
     }
   }
+  const requestRuleCheck = useEditorAction((kind: 'erc' | 'drc') => runRuleChecks(kind));
   async function locateRuleIssue(issue: RuleCheckIssue) {
-    if (!rulesOpen || ruleReportStale || sourcePending || coreSnapshot.editingBlocked) return;
+    if (
+      !rulesOpen ||
+      rulesOpen === 'model' ||
+      ruleReportStale ||
+      sourcePending ||
+      coreSnapshot.editingBlocked
+    )
+      return;
     const kind = rulesOpen;
     const revision = coreSnapshot.revision;
     const schematicId = doc?.id;
@@ -783,6 +853,47 @@ export default function Workbench({
       ...(issue.location ? { location: issue.location } : {}),
     });
     setRulesOpen(null);
+  }
+  async function openModelFromRules() {
+    if (!active || screen !== 'workspace' || sourcePending || core.getSnapshot().editingBlocked)
+      return;
+    if (await changeView('3d')) closeRuleChecks();
+  }
+  async function locateModelCheckIssue(notice: ModelCheckIssue) {
+    const report = currentModelCheckReport;
+    const snapshot = core.getSnapshot();
+    if (
+      rulesOpen !== 'model' ||
+      !active ||
+      screen !== 'workspace' ||
+      !report ||
+      report.state !== 'ready' ||
+      !report.canLocate ||
+      !notice.footprintId ||
+      !report.issues.includes(notice) ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked ||
+      report.board !== snapshot.project?.pcb ||
+      report.schematic !== snapshot.project?.schematic
+    )
+      return;
+    if (!(await changeView('3d'))) return;
+    const latest = core.getSnapshot();
+    if (
+      latest.revision !== snapshot.revision ||
+      latest.sourceDraft !== null ||
+      latest.editingBlocked ||
+      !ruleLifetime.current.active ||
+      ruleLifetime.current.screen !== 'workspace' ||
+      latest.project?.pcb !== report.board
+    )
+      return;
+    setModelCheckFocus({
+      request: ++ruleFocusSequence.current,
+      board: report.board,
+      footprintId: notice.footprintId,
+    });
+    closeRuleChecks();
   }
 
   const [navigation, setNavigation] = useState<{
@@ -1105,8 +1216,26 @@ export default function Workbench({
     });
     const disposePlugins = registerWorkbenchPluginCapabilities(capabilityHost);
     const disposeProviderPlugins = registerProviderPluginCapabilities(capabilityHost);
-    const disposeLibraries = registerLibraryCapabilities(capabilityHost, core);
+    const disposeLibraries = registerLibraryCapabilities(capabilityHost, core, {
+      available: () => resourcePorts.current.available?.() ?? false,
+      spiceAvailable: () => resourcePorts.current.spiceAvailable?.() ?? false,
+      getFileId: () => resourcePorts.current.getFileId?.(),
+      get chooseComponentModel() {
+        return resourcePorts.current.chooseComponentModel;
+      },
+      get chooseSpiceModel() {
+        return resourcePorts.current.chooseSpiceModel;
+      },
+      get inspectSpiceModel() {
+        return resourcePorts.current.inspectSpiceModel;
+      },
+    });
+    const disposeFiles = registerProjectFileCapabilities(
+      capabilityHost,
+      () => projectFilePorts.current,
+    );
     return () => {
+      disposeFiles();
       disposeLibraries();
       disposeProviderPlugins();
       disposePlugins();
@@ -1403,7 +1532,8 @@ export default function Workbench({
     setClosedSchematics((ids) => [...ids.filter((closed) => closed !== id), id]);
     return true;
   }
-  async function restoreProjectVersion(restored: string) {
+  async function restoreProjectVersion(restored: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     const basis = core.getSnapshot();
     if (basis.sourceDraft !== null)
       throw new Error('Apply the source edits before restoring a version.');
@@ -1411,6 +1541,8 @@ export default function Workbench({
     const candidate = parseProject(restored);
     const intent = cancelPendingNavigation(),
       control = new AbortController();
+    const abort = () => control.abort();
+    signal?.addEventListener('abort', abort, { once: true });
     sourcePreparation.current = control;
     try {
       const pending = core.pendingModelCadGeometry(candidate);
@@ -1431,6 +1563,7 @@ export default function Workbench({
       setTool('select');
       notify('Version restored. Save to write it to disk.');
     } finally {
+      signal?.removeEventListener('abort', abort);
       if (sourcePreparation.current === control) sourcePreparation.current = null;
     }
   }
@@ -1497,67 +1630,24 @@ export default function Workbench({
   function pasteSelection() {
     if (!doc || !clipboard.current) return;
     const clip = clipboard.current;
-    // Paste only within its source document so embedded symbol IDs cannot collide.
-    if (clip.doc.id !== doc.id) {
-      notify('Copy a selection from this document first.');
-      return;
+    try {
+      const result = pasteSchematicSelection(doc, clip.doc, clip.ids);
+      if (result.selection.length && commit(result.circuit)) setSelection(result.selection);
+    } catch (error) {
+      notify((error as Error).message);
     }
-    for (const p of clip.doc.parts.filter((p) => clip.ids.includes(p.id))) {
-      if (
-        doc.libraries[p.libId] &&
-        JSON.stringify(doc.libraries[p.libId]) !== JSON.stringify(clip.doc.libraries[p.libId])
-      ) {
-        notify('The embedded symbol changed. Copy the selection again before pasting.');
-        return;
-      }
-    }
-    const source = structuredClone(doc),
-      picked = new Set(clip.ids);
-    // Duplicate a snapshot, retaining unrelated live objects and allocating new references.
-    const restored = structuredClone(clip.doc);
-    for (const key of ['parts', 'wires', 'labels', 'junctions', 'noConnects'] as const) {
-      const currentItems = source[key] || [],
-        copiedItems = restored[key] || [];
-      Object.assign(source, {
-        [key]: [
-          ...currentItems.filter((p) => !picked.has(p.id)),
-          ...copiedItems.filter((p) => picked.has(p.id)),
-        ],
-      });
-    }
-    source.libraries = { ...restored.libraries, ...source.libraries };
-    source.original = restored.original;
-    const result = duplicateSelection(
-      source,
-      clip.ids,
-      { x: 10.16, y: 10.16 },
-      doc.parts.map((p) => p.ref),
-    );
-    const copies = new Set(result.selection),
-      next = structuredClone(doc);
-    for (const key of ['parts', 'wires', 'labels', 'junctions', 'noConnects'] as const)
-      Object.assign(next, {
-        [key]: [
-          ...(next[key] || []),
-          ...(result.circuit[key] || []).filter((p) => copies.has(p.id)),
-        ],
-      });
-    next.libraries = source.libraries;
-    const texts = children(result.circuit.original || [], 'text').filter((n) =>
-      copies.has(val(child(n, 'uuid'))),
-    );
-    if (texts.length) {
-      next.original ||= parseSExpr(serializeCircuit(next));
-      next.original.push(...texts);
-    }
-    if (result.selection.length && commit(next)) setSelection(result.selection);
   }
   async function save(
     saveAs = false,
     signal?: AbortSignal,
   ): Promise<'saved' | 'cancelled' | Error> {
     if (!doc) return 'cancelled';
-    if (saveBusy.current || closingDocument.current)
+    if (
+      saveBusy.current ||
+      exportBusy.current ||
+      nativeVersionBusy.current ||
+      closingDocument.current
+    )
       return new Error('A project file operation is already in progress.');
     saveBusy.current = true;
     try {
@@ -2132,6 +2222,7 @@ export default function Workbench({
     const reference = await readProjectDatasheet(signal);
     if (
       core.getSnapshot().revision !== state.revision ||
+      core.getSnapshot().sourceDraft !== state.sourceDraft ||
       activeSchematicRef.current !== schematic.id ||
       contextActive.current !== active
     )
@@ -2152,13 +2243,9 @@ export default function Workbench({
     return {
       version: 1,
       capturedAt: new Date().toISOString(),
-      project: core.query('project.get'),
+      project: agentProject(core.query('project.get')),
       icDatasheet: reference,
-      source: {
-        pending: state.sourceDraft !== null,
-        draft: state.sourceDraft,
-        error: state.sourceError,
-      },
+      source: agentSource(state.sourceDraft, state.sourceError),
       ui: {
         active,
         revision: String(core.getSnapshot().revision),
@@ -2185,7 +2272,7 @@ export default function Workbench({
         modelView: pcb3DView.current,
         layoutView: layoutAgentContext.current,
         modal,
-        toast,
+        toast: toast ? 'A notification is visible in the workspace.' : '',
         projects: getProjects?.() ?? projects,
         presentation: active
           ? captureAgentPresentation()
@@ -2200,8 +2287,54 @@ export default function Workbench({
     };
   }
   const capabilityPorts = useRef<WorkbenchCapabilityPorts>(null!);
+  const nativeActionAvailability = () => {
+    if (!active) return 'Activate the originating project before using project file operations.';
+    if (closingDocument.current || core.getSnapshot().editingBlocked)
+      return core.getSnapshot().editingBlocked || 'This project is closing.';
+    if (
+      saveBusy.current ||
+      exportBusy.current ||
+      nativeVersionBusy.current ||
+      fileActionBusy.current
+    )
+      return 'Wait for the current project file operation to finish.';
+    if (confirmationRef.current) return 'Finish the current project confirmation first.';
+    return true;
+  };
+  resourcePorts.current = {
+    available: nativeActionAvailability,
+    spiceAvailable: () =>
+      spiceAvailable || 'Install and enable SPICE Simulation in Plugins > Marketplace.',
+    getFileId: () => (window.openpe ? fileId : undefined),
+    chooseComponentModel:
+      typeof window !== 'undefined' && typeof window.openpe?.chooseComponentModel === 'function'
+        ? (id) => window.openpe!.chooseComponentModel(id)
+        : undefined,
+    chooseSpiceModel:
+      typeof window !== 'undefined' && typeof window.openpe?.chooseSpiceModel === 'function'
+        ? (id, library) => window.openpe!.chooseSpiceModel(id, library)
+        : undefined,
+    inspectSpiceModel:
+      typeof window !== 'undefined' && typeof window.openpe?.inspectSpiceModel === 'function'
+        ? (id, library) => window.openpe!.inspectSpiceModel(id, library)
+        : undefined,
+  };
+  projectFilePorts.current = {
+    revision: () => String(core.getSnapshot().revision),
+    available: (write) => {
+      const available = nativeActionAvailability();
+      if (available !== true) return available;
+      if (!window.openpe || !fileId)
+        return 'Open the desktop project to access its directory files.';
+      if (write && core.getSnapshot().sourceDraft !== null)
+        return 'Apply native Source edits before changing project directory files.';
+      return true;
+    },
+    files: directoryObservation.capabilities,
+  };
   capabilityPorts.current = {
     revision: () => String(core.getSnapshot().revision),
+    beforeAgentCommand: () => assertAgentSourceDraftSafe(core.getSnapshot()),
     state: (signal) => (doc ? readWorkspaceContext(signal) : core.query('project.snapshot')),
     datasheet: readProjectDatasheet,
     view: changeView,
@@ -2238,6 +2371,37 @@ export default function Workbench({
       const result = await exportFile(format, signal);
       if (result instanceof Error) throw result;
       return result;
+    },
+    projectActions: {
+      available: (action) => {
+        const available = nativeActionAvailability();
+        if (available !== true) return available;
+        if ((action === 'close' || action === 'reveal') && !projectRef.current)
+          return 'Open a project before using this file action.';
+        if (directoryEditorRef.current.saving) return 'Wait for the project file write to finish.';
+        return window.openpe ? true : 'Use the desktop app for project file operations.';
+      },
+      examples: async (signal) => {
+        signal.throwIfAborted();
+        const result = await window.openpe!.listExamples();
+        signal.throwIfAborted();
+        listedExampleIds.current = new Set(result.entries.map((entry) => entry.id));
+        return result;
+      },
+      request: (action, signal, exampleId) => {
+        signal.throwIfAborted();
+        if (action === 'new') newFile();
+        else if (action === 'open') open();
+        else if (action === 'close') requestProjectClose();
+        else if (action === 'reveal') onProjectAction(documentId, 'reveal');
+        else {
+          // Host resolves the current identity again before issuing any grant.
+          if (!exampleId || !listedExampleIds.current.has(exampleId))
+            throw new Error('Choose an example from the current project.examples list.');
+          newFile(exampleId);
+        }
+      },
+      failed: notify,
     },
     enclosureExportAvailable: () => {
       const state = core.getSnapshot();
@@ -2292,6 +2456,33 @@ export default function Workbench({
       nativeVersionBusy.current = true;
       try {
         return await window.openpe.historyCreate({ fileId, source: snapshot.source, message });
+      } finally {
+        nativeVersionBusy.current = false;
+      }
+    },
+    historyRestore: async (id, signal) => {
+      signal.throwIfAborted();
+      const available = nativeActionAvailability();
+      if (available !== true) throw new Error(String(available));
+      if (!window.openpe || !fileId)
+        throw new Error('Open the desktop project to access local version history.');
+      const basis = core.getSnapshot();
+      if (basis.sourceDraft !== null)
+        throw new Error('Apply Source edits before restoring a version.');
+      nativeVersionBusy.current = true;
+      try {
+        const restored = await window.openpe.historyRead({ fileId, id });
+        signal.throwIfAborted();
+        if (!originRef.current.active || originRef.current.fileId !== fileId)
+          throw new Error('The originating project changed while the version was read. Try again.');
+        const current = core.getSnapshot();
+        if (
+          current.revision !== basis.revision ||
+          current.sourceDraft !== null ||
+          current.editingBlocked
+        )
+          throw new Error('The project changed while the version was read. Try again.');
+        await restoreProjectVersion(restored, signal);
       } finally {
         nativeVersionBusy.current = false;
       }
@@ -2772,34 +2963,131 @@ export default function Workbench({
       ) : null,
     [thermalAvailable, thermalEnabled, sourcePending, project?.pcb, openThermal],
   );
-  const ruleAction = useMemo(
-    () => (
-      <button
-        type="button"
-        className={`tool-button${rulesOpen ? ' active' : ''}`}
-        aria-label="Rule"
-        title="Rule"
-        aria-haspopup="dialog"
-        aria-expanded={rulesOpen !== null}
-        disabled={sourcePending || Boolean(coreSnapshot.editingBlocked)}
-        onClick={() =>
-          openRuleChecks((view === 'layout' || view === '3d') && project?.pcb ? 'drc' : 'erc')
-        }
-        onKeyDown={(event) => {
-          if (
-            (event.key === 'Enter' || event.key === ' ') &&
-            (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
-          ) {
-            event.preventDefault();
-            event.stopPropagation();
+  const ruleStatus = useMemo(() => {
+    const disabled =
+      !active || screen !== 'workspace' || sourcePending || Boolean(coreSnapshot.editingBlocked);
+    if (view === '3d' && project?.pcb) {
+      const report = currentModelCheckReport;
+      const state =
+        report?.state === 'ready'
+          ? 'ready'
+          : report?.state === 'error'
+            ? 'failed'
+            : report
+              ? 'checking'
+              : 'unchecked';
+      return (
+        <RuleStatus
+          kind="model"
+          state={state}
+          report={
+            report && report.state !== 'loading'
+              ? { issues: report.issues, complete: report.state === 'ready' }
+              : null
           }
-        }}
-      >
-        <ClipboardCheck size={20} aria-hidden="true" />
-      </button>
-    ),
-    [view, rulesOpen, sourcePending, coreSnapshot.editingBlocked, project?.pcb, openRuleChecks],
-  );
+          expanded={rulesOpen !== null}
+          disabled={disabled}
+          onOpen={() => openRuleChecks('model')}
+        />
+      );
+    }
+    const kind = view === 'layout' && project?.pcb ? 'drc' : 'erc';
+    const stored = ruleReports[kind];
+    const stale =
+      ruleReportIsStale(stored, kind, coreSnapshot.revision, doc?.id, drcSettings) ||
+      (kind === 'drc' && layoutSyncStatus.pending);
+    const failed =
+      (doc &&
+        ruleFailureBasis.current[kind] ===
+          ruleCheckBasis(kind, coreSnapshot.revision, doc.id, project?.pcb?.id, drcSettings)) ||
+      (kind === 'drc' && layoutSyncStatus.error);
+    const state =
+      ruleBusy === kind
+        ? 'checking'
+        : failed
+          ? 'failed'
+          : stale
+            ? 'stale'
+            : stored
+              ? 'ready'
+              : 'unchecked';
+    return (
+      <RuleStatus
+        kind={kind}
+        report={state === 'ready' ? (stored?.result ?? null) : null}
+        state={state}
+        expanded={rulesOpen !== null}
+        disabled={disabled}
+        onOpen={() => openRuleChecks(kind)}
+      />
+    );
+  }, [
+    view,
+    project?.pcb,
+    ruleReports,
+    coreSnapshot.revision,
+    doc?.id,
+    drcSettings,
+    layoutSyncStatus.pending,
+    layoutSyncStatus.error,
+    ruleBusy,
+    ruleErrors,
+    currentModelCheckReport,
+    rulesOpen,
+    active,
+    screen,
+    sourcePending,
+    coreSnapshot.editingBlocked,
+    openRuleChecks,
+    requestRuleCheck,
+  ]);
+  useEffect(() => {
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      !project ||
+      !doc ||
+      sourcePending ||
+      coreSnapshot.editingBlocked ||
+      modal ||
+      confirmation ||
+      rulesOpen ||
+      ruleBusy ||
+      ruleWork.current ||
+      view === '3d'
+    )
+      return;
+    const kind = view === 'layout' && project.pcb ? 'drc' : 'erc';
+    if (kind === 'drc' && (layoutSyncStatus.pending || layoutSyncStatus.error)) return;
+    const stored = ruleReports[kind];
+    if (stored && !ruleReportIsStale(stored, kind, coreSnapshot.revision, doc.id, drcSettings))
+      return;
+    const basis = ruleCheckBasis(kind, coreSnapshot.revision, doc.id, project.pcb?.id, drcSettings);
+    if (ruleFailureBasis.current[kind] === basis) return;
+    const timer = setTimeout(() => {
+      void requestRuleCheck(kind);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [
+    active,
+    screen,
+    view,
+    project,
+    doc?.id,
+    sourcePending,
+    coreSnapshot.revision,
+    coreSnapshot.editingBlocked,
+    modal,
+    confirmation,
+    rulesOpen,
+    ruleBusy,
+    ruleReports,
+    ruleErrors,
+    drcSettings,
+    layoutSyncStatus.pending,
+    layoutSyncStatus.error,
+    requestRuleCheck,
+  ]);
   const undoAction = useMemo(
     () => (
       <>
@@ -3231,15 +3519,8 @@ export default function Workbench({
         className={view === '3d' ? 'model-editor-status' : undefined}
         hidden={view !== 'canvas' && view !== '3d'}
         active={active && screen === 'workspace'}
-        modeActions={
-          view === 'canvas'
-            ? {
-                onInteraction: () => activateSchematicTool('select'),
-                onAnnotation: () => activateSchematicTool('annotate'),
-                annotationDisabled: sourcePending,
-              }
-            : undefined
-        }
+        ruleStatus={ruleStatus}
+        centerCoordinates
         mode={
           view === '3d'
             ? project?.pcb
@@ -3295,8 +3576,7 @@ export default function Workbench({
       modelSketchCoordinates,
       gridDensityControl,
       draftStatus,
-      activateSchematicTool,
-      sourcePending,
+      ruleStatus,
     ],
   );
   return (
@@ -3409,7 +3689,6 @@ export default function Workbench({
               <div className="editor-mode-bar">
                 <EditorViewSwitch view={view} onChange={selectEditorView} />
                 <div className="editor-mode-actions" role="group" aria-label="Project actions">
-                  {ruleAction}
                   {projectWindowActions}
                   {(view === 'canvas' ||
                     ((view === 'layout' || view === '3d') && Boolean(project?.pcb))) &&
@@ -3980,6 +4259,7 @@ export default function Workbench({
                         gridSpacing={layoutGridSpacing}
                         leftButtonDrag={appearanceSettings.appearance.leftButtonDrag}
                         gridControl={gridDensityControl}
+                        ruleStatus={ruleStatus}
                         draftStatus={draftStatus || undefined}
                         active={
                           active &&
@@ -4071,6 +4351,8 @@ export default function Workbench({
                           capabilityHost={capabilityHost}
                           revision={String(coreSnapshot.revision)}
                           sourcePending={sourcePending || Boolean(coreSnapshot.editingBlocked)}
+                          onModelChecksChange={onModelChecksChange}
+                          modelCheckFocus={modelCheckFocus}
                         />
                       </Suspense>
                     ) : (
@@ -4090,6 +4372,7 @@ export default function Workbench({
                   {sourceOpened && (
                     <Suspense fallback={<p role="status">Loading source editor…</p>}>
                       <RetainedSourceEditor
+                        ruleStatus={ruleStatus}
                         visible={sourceVisible}
                         active={
                           active &&
@@ -4167,7 +4450,7 @@ export default function Workbench({
           />
         )}
         {toast && (
-          <div className="toast" role="status">
+          <div className="toast" role="status" data-agent-private>
             <span>{toast}</span>
             <button
               aria-label="Dismiss notification"
@@ -4410,14 +4693,19 @@ export default function Workbench({
               drcAvailable={Boolean(project?.pcb)}
               report={currentRuleReport?.result ?? null}
               busy={ruleBusy === rulesOpen}
-              error={ruleErrors[rulesOpen]}
+              error={rulesOpen === 'model' ? '' : ruleErrors[rulesOpen]}
               stale={ruleReportStale}
               sourcePending={sourcePending}
               blockedReason={coreSnapshot.editingBlocked ?? ''}
               drcSettings={drcSettings}
               onDRCSettingsChange={setDRCSettings}
-              onRun={(settings) => void runRuleChecks(rulesOpen, settings)}
+              onRun={(settings) => {
+                if (rulesOpen !== 'model') void runRuleChecks(rulesOpen, settings);
+              }}
               onSelectIssue={locateRuleIssue}
+              modelReport={currentModelCheckReport}
+              onSelectModelCheckIssue={locateModelCheckIssue}
+              onOpenModel={openModelFromRules}
               onClose={closeRuleChecks}
               size={rulePanelSize}
               onResize={setRulePanelSize}

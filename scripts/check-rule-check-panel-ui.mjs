@@ -147,7 +147,7 @@ try {
   const tabs = erc.getByRole('tablist', { name: 'Rule', exact: true });
   const ercTab = tabs.getByRole('tab', { name: 'ERC', exact: true });
   const drcTab = tabs.getByRole('tab', { name: 'DRC', exact: true });
-  assert.equal(await tabs.getByRole('tab').count(), 2);
+  assert.equal(await tabs.getByRole('tab').count(), 3);
   assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
   assert.equal(await drcTab.getAttribute('aria-selected'), 'false');
   assert.equal(
@@ -253,9 +253,11 @@ try {
   await update({ busy: true, stale: false });
   assert.equal(await button('Recheck ERC').isDisabled(), true);
   assert.equal(await issueRow.isDisabled(), true, 'Running checks disable whole-row locating.');
-  assert.equal(await button('Close dialog').isDisabled(), true);
-  await page.keyboard.press('Escape');
-  assert.equal(await erc.isVisible(), true, 'A running check retains its dialog.');
+  assert.equal(
+    await button('Close dialog').isDisabled(),
+    false,
+    'Read-only checks remain cancellable.',
+  );
   await update({ busy: false, sourcePending: true, stale: false, error: 'Fixture check failed.' });
   assert.equal(await erc.getByText('Apply Source edits before checking rules.').isVisible(), true);
   assert.equal(await erc.getByRole('alert').innerText(), 'Fixture check failed.');
@@ -293,9 +295,11 @@ try {
   );
   await update({ busy: false, error: 'Recheck failed.' });
   assert.equal(
-    await button('Recheck ERC').evaluate((element) => document.activeElement === element),
+    await erc.evaluate(
+      (element) => element.contains(document.activeElement) && !document.activeElement.disabled,
+    ),
     true,
-    'Finishing a check restores keyboard focus after its action was disabled.',
+    'Finishing a check retains keyboard focus on an enabled control inside the panel.',
   );
   assert.equal(
     await erc.getByText('No violations found in checked rules.').count(),
@@ -356,8 +360,44 @@ try {
   await drcTab.press('ArrowLeft');
   assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
   await ercTab.press('End');
-  assert.equal(await drcTab.getAttribute('aria-selected'), 'true');
-  await drcTab.press('Home');
+  const modelTab = tabs.getByRole('tab', { name: 'Model', exact: true });
+  assert.equal(await modelTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await button('Run MODEL').count(), 0);
+  await drc.getByText('Preview not loaded.', { exact: true }).waitFor();
+  const runsBeforeModel = await page.evaluate(() => window.checkRuns.length);
+  await update({
+    modelReport: {
+      board: {},
+      state: 'loading',
+      issues: [],
+      message: '',
+      canLocate: false,
+    },
+  });
+  await drc.getByText('Loading models…', { exact: true }).waitFor();
+  assert.equal(await drc.getByText('No model issues.', { exact: true }).count(), 0);
+  await update({
+    modelReport: {
+      board: {},
+      state: 'error',
+      issues: [{ message: 'Preview failed.', severity: 'error' }],
+      message: 'Preview failed.',
+      canLocate: false,
+    },
+  });
+  await drc.getByText('Preview failed.', { exact: true }).waitFor();
+  await update({
+    modelReport: {
+      board: {},
+      state: 'ready',
+      issues: [],
+      message: '',
+      canLocate: true,
+    },
+  });
+  await drc.getByText('No model issues.', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.checkRuns.length), runsBeforeModel);
+  await modelTab.press('Home');
   assert.equal(await ercTab.getAttribute('aria-selected'), 'true');
   await drcTab.click();
   assert.equal(await clearance.inputValue(), settings.clearance.toFixed(2));

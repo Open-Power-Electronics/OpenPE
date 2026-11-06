@@ -23,7 +23,12 @@ export type AgentCapabilities = {
   execute(
     name: string,
     input?: unknown,
-    options?: { expectedRevision?: string; signal?: AbortSignal },
+    options?: {
+      expectedRevision?: string;
+      signal?: AbortSignal;
+      resultDelivery?: Promise<boolean>;
+      onAfterResult?: (completion: Promise<void>) => void;
+    },
   ): unknown | Promise<unknown>;
   observe(after?: number): unknown | Promise<unknown>;
 };

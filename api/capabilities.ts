@@ -20,6 +20,10 @@ export type CapabilityOptions = {
   actor?: CapabilityActor;
   requestId?: string;
   expectedRevision?: string;
+  /** Remote adapters resolve true only after the result reaches its caller. */
+  resultDelivery?: Promise<boolean>;
+  /** Track only serialized deferred requests, so normal transport EOF can drain them. */
+  onAfterResult?: (completion: Promise<void>) => void;
 };
 export type CapabilityContext = {
   signal: AbortSignal;
@@ -27,6 +31,8 @@ export type CapabilityContext = {
   requestId: string;
   expectedRevision?: string;
   emit: (type: string, data: unknown) => void;
+  /** Defer one lifecycle action until result delivery, retaining cancellation. */
+  afterResult: (action: () => void) => void;
 };
 export type CapabilityDefinition<Input = unknown> = {
   id: string;
@@ -222,6 +228,18 @@ export function createCapabilityHost(
     const requestId = options.requestId ?? `capability-${++requestSequence}`;
     const actor = options.actor ?? 'human';
     const details = { id, requestId, actor };
+    const revision = hostOptions.revision?.();
+    let deferred: (() => void) | undefined;
+    let waitingForDelivery = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let finishDeferred: (() => void) | undefined;
+    const cleanup = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      entry.active.delete(control);
+      options.signal?.removeEventListener('abort', abort);
+      control.signal.removeEventListener('abort', cleanup);
+      finishDeferred?.();
+    };
     try {
       emit('capability.started', details);
       // Availability predicates and event observers may synchronously revoke
@@ -242,6 +260,11 @@ export function createCapabilityHost(
         actor,
         requestId,
         emit,
+        afterResult(action) {
+          if (kind !== 'command' || deferred || typeof action !== 'function')
+            throw new Error('Only commands may defer one lifecycle action.');
+          deferred = action;
+        },
         ...(options.expectedRevision !== undefined
           ? { expectedRevision: options.expectedRevision }
           : {}),
@@ -249,6 +272,57 @@ export function createCapabilityHost(
       if (control.signal.aborted) throw cancelled();
       const output = copyJson(result ?? null, maxDataBytes);
       emit('capability.completed', details);
+      if (deferred && !control.signal.aborted) {
+        const completion = new Promise<void>((resolve) => {
+          finishDeferred = resolve;
+        });
+        options.onAfterResult?.(completion);
+        if (control.signal.aborted) {
+          cleanup();
+          return output;
+        }
+        waitingForDelivery = true;
+        control.signal.addEventListener('abort', cleanup, { once: true });
+        // The result is already serialized. Keep its original authority alive
+        // until transport acknowledgement, then dispatch outside this call stack.
+        void (options.resultDelivery ?? Promise.resolve(true)).then(
+          (delivered) => {
+            if (!delivered || control.signal.aborted) {
+              control.abort();
+              cleanup();
+              return;
+            }
+            timer = setTimeout(() => {
+              try {
+                if (control.signal.aborted || disposed || entries.get(id) !== entry || suspended)
+                  throw cancelled();
+                const state = availability(entry);
+                if (!state.available) throw new Error(state.reason);
+                if (revision !== undefined && hostOptions.revision?.() !== revision)
+                  throw new Error('The project changed before the lifecycle action started.');
+                // Availability/revision adapters can synchronously revoke authority.
+                if (control.signal.aborted || disposed || entries.get(id) !== entry || suspended)
+                  throw cancelled();
+                deferred!();
+              } catch (error) {
+                emit(control.signal.aborted ? 'capability.cancelled' : 'capability.failed', {
+                  ...details,
+                  message:
+                    error instanceof Error
+                      ? error.message.slice(0, 2048)
+                      : 'The lifecycle action failed.',
+                });
+              } finally {
+                cleanup();
+              }
+            }, 0);
+          },
+          () => {
+            control.abort();
+            cleanup();
+          },
+        );
+      }
       return output;
     } catch (error) {
       emit(control.signal.aborted ? 'capability.cancelled' : 'capability.failed', {
@@ -258,8 +332,7 @@ export function createCapabilityHost(
       });
       throw error;
     } finally {
-      entry.active.delete(control);
-      options.signal?.removeEventListener('abort', abort);
+      if (!waitingForDelivery) cleanup();
     }
   }
   const host: CapabilityHost = {

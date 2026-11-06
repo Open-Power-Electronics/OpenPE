@@ -11,6 +11,7 @@ import {
 } from '../context/agent-simulation-context';
 import {
   validateAgentWorkspaceContext,
+  agentSource,
   type AgentWorkspaceContext,
 } from '../context/agent-workspace-context';
 import { validateAgentWorkspaceContext as validateNativeContext } from '../server/agent-context-format.mjs';
@@ -70,12 +71,53 @@ function fixture() {
     version: 1,
     capturedAt: new Date().toISOString(),
     project: JSON.parse(serializeProject(project)),
-    source: { pending: false, draft: null, error: '' },
+    source: agentSource(null, ''),
     ui: { activeSchematicId: circuit.id, view: 'canvas', mode: 'interaction' },
     simulation: agentSimulationContext(state),
   };
   return { circuit, basis, state, workspace };
 }
+
+test('workspace context retains Source metadata and rejects private native files, drafts and parser excerpts', () => {
+  const { workspace, circuit, basis } = fixture();
+  const privateText = '.subckt PRIVATE_MODEL A B\nprivate model implementation\n.ends';
+  const observed = agentSource(privateText, `Unexpected token: ${privateText}`);
+  assert.deepEqual(observed, {
+    pending: true,
+    draft: null,
+    error: 'Source edits are invalid. Review them in Source.',
+    draftCharacters: privateText.length,
+  });
+  assert.doesNotMatch(JSON.stringify(observed), /PRIVATE_MODEL|implementation|Unexpected token/);
+  for (const validate of [validateAgentWorkspaceContext, validateNativeContext]) {
+    const safe = { ...workspace, source: observed, simulation: { status: 'disabled' } };
+    assert.doesNotThrow(() => validate(safe, circuit.id, basis));
+    for (const source of [
+      { ...observed, draft: privateText },
+      { ...observed, error: privateText },
+      { ...observed, log: privateText },
+      { ...observed, draftCharacters: -1 },
+      { ...observed, draftCharacters: 8 * 1024 * 1024 + 1 },
+    ])
+      assert.throws(() => validate({ ...safe, source }, circuit.id, basis));
+    assert.throws(() =>
+      validate(
+        {
+          ...safe,
+          project: {
+            ...(safe.project as object),
+            nativeFiles: {
+              entry: 'project.kicad_pro',
+              files: [{ name: 'circuits/private.lib', source: privateText }],
+            },
+          },
+        },
+        circuit.id,
+        basis,
+      ),
+    );
+  }
+});
 
 test('authenticated chat forwards reviewed IC specifications to every supported provider and rejects modified records', async () => {
   const project = parseProject(
@@ -86,7 +128,7 @@ test('authenticated chat forwards reviewed IC specifications to every supported 
     version: 1,
     capturedAt: new Date().toISOString(),
     project: JSON.parse(serializeProject(project)),
-    source: { pending: false, draft: null, error: '' },
+    source: agentSource(null, ''),
     ui: { activeSchematicId: circuit.id },
     simulation: { status: 'disabled' },
     icDatasheet: projectDatasheetContext(project),
@@ -288,7 +330,7 @@ test('Renderer and generated service reject stale identities, malformed results,
       value.project.format = 'unsupported-format';
     });
     const draft = structuredClone(workspace);
-    draft.source = { pending: true, draft: '{invalid', error: 'Invalid JSON' };
+    draft.source = agentSource('{invalid', 'Invalid JSON');
     draft.simulation = { status: 'disabled' };
     assert.doesNotThrow(() => validate(draft, circuit.id, basis));
   }

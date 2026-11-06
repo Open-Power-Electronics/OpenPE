@@ -1,8 +1,17 @@
 'use client';
 import QuantityInput from './QuantityInput';
 
-import { useEffect, useId, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, ClipboardCheck, Play, RefreshCw } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Box,
+  ClipboardCheck,
+  Info,
+  Play,
+  RefreshCw,
+} from 'lucide-react';
+import type { ModelCheckIssue, ModelCheckReport } from './model-checks';
 import type { RuleCheckIssue, RuleCheckResult } from '@/lib/design-rule-checks';
 import type { PCBDesignRuleConfig } from '@/lib/pcb-drc';
 import Dialog, { type DialogSizeProps } from './Dialog';
@@ -44,9 +53,10 @@ function ruleLabel(id: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+export type RuleCheckKind = 'erc' | 'drc' | 'model';
 type RuleCheckPanelProps = {
-  kind: 'erc' | 'drc';
-  onKindChange: (kind: 'erc' | 'drc') => void;
+  kind: RuleCheckKind;
+  onKindChange: (kind: RuleCheckKind) => void;
   drcAvailable?: boolean;
   report: RuleCheckResult | null;
   busy?: boolean;
@@ -58,6 +68,9 @@ type RuleCheckPanelProps = {
   onDRCSettingsChange?: (settings: PCBDesignRuleConfig) => void;
   onRun: (settings?: PCBDesignRuleConfig) => void;
   onSelectIssue: (issue: RuleCheckIssue) => void;
+  modelReport?: ModelCheckReport | null;
+  onSelectModelCheckIssue?: (notice: ModelCheckIssue) => void;
+  onOpenModel?: () => void;
   onClose: () => void;
 } & DialogSizeProps;
 
@@ -75,6 +88,9 @@ export default function RuleCheckPanel({
   onDRCSettingsChange,
   onRun,
   onSelectIssue,
+  modelReport,
+  onSelectModelCheckIssue,
+  onOpenModel,
   onClose,
   size,
   onResize,
@@ -117,6 +133,11 @@ export default function RuleCheckPanel({
   const errors = currentReport?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
   const warnings =
     currentReport?.issues.filter((issue) => issue.severity === 'warning').length ?? 0;
+  const modelErrors = modelReport?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
+  const modelWarnings =
+    modelReport?.issues.filter((issue) => issue.severity === 'warning').length ?? 0;
+  const modelNotices =
+    modelReport?.issues.filter((issue) => issue.severity === 'notice').length ?? 0;
   const incomplete = currentReport && (!currentReport.complete || currentReport.truncated);
   const outdated = stale || !!limitsChanged;
   const canRun =
@@ -126,8 +147,14 @@ export default function RuleCheckPanel({
     (kind === 'erc' || (drcAvailable && !!drcSettings && !!limits));
   const canLocate = !busy && !sourcePending && !blockedReason && !outdated;
   const runLabel = `${currentReport ? 'Recheck' : 'Run'} ${code}`;
+  function blockComposingActivation(event: KeyboardEvent<HTMLElement>) {
+    if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
   function run() {
-    if (!canRun) return;
+    if (kind === 'model' || !canRun) return;
     if (kind === 'drc' && limits) {
       if (limitsChanged) onDRCSettingsChange?.(limits);
       onRun(limits);
@@ -144,40 +171,41 @@ export default function RuleCheckPanel({
       icon={<ClipboardCheck size={16} />}
       className={`independent-window ${styles.panel}`}
       onClose={onClose}
-      busy={busy}
       minWidth={400}
       size={size}
       onResize={onResize}
       footer={
-        <>
-          <span className={styles.runStatus} role="status">
-            {busy ? `Checking ${code}…` : currentReport ? '' : 'Not checked'}
-          </span>
-          <button
-            ref={runButton}
-            type="button"
-            className="tool-button"
-            aria-label={runLabel}
-            title={runLabel}
-            onClick={run}
-            disabled={!canRun}
-            onKeyDown={(event) => {
-              if (
-                (event.key === 'Enter' || event.key === ' ') &&
-                (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
-              ) {
-                event.preventDefault();
-                event.stopPropagation();
-              }
-            }}
-          >
-            {currentReport ? (
-              <RefreshCw size={15} aria-hidden="true" />
-            ) : (
-              <Play size={15} aria-hidden="true" />
-            )}
-          </button>
-        </>
+        kind === 'model' ? undefined : (
+          <>
+            <span className={styles.runStatus} role="status">
+              {busy ? `Checking ${code}…` : currentReport ? '' : 'Not checked'}
+            </span>
+            <button
+              ref={runButton}
+              type="button"
+              className="tool-button"
+              aria-label={runLabel}
+              title={runLabel}
+              onClick={run}
+              disabled={!canRun}
+              onKeyDown={(event) => {
+                if (
+                  (event.key === 'Enter' || event.key === ' ') &&
+                  (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+            >
+              {currentReport ? (
+                <RefreshCw size={15} aria-hidden="true" />
+              ) : (
+                <Play size={15} aria-hidden="true" />
+              )}
+            </button>
+          </>
+        )
       }
     >
       <div
@@ -196,44 +224,52 @@ export default function RuleCheckPanel({
           event.preventDefault();
           event.stopPropagation();
           if (sourcePending || blockedReason) return;
+          const tabs: RuleCheckKind[] = drcAvailable ? ['erc', 'drc', 'model'] : ['erc'];
+          const direction = event.key === 'ArrowLeft' ? -1 : 1;
           const next =
-            !drcAvailable || event.key === 'Home'
-              ? 'erc'
+            event.key === 'Home'
+              ? tabs[0]
               : event.key === 'End'
-                ? 'drc'
-                : kind === 'erc'
-                  ? 'drc'
-                  : 'erc';
+                ? tabs.at(-1)!
+                : tabs[(tabs.indexOf(kind) + direction + tabs.length) % tabs.length];
           if (next !== kind) onKindChange(next);
           event.currentTarget
             .querySelector<HTMLButtonElement>(`#${CSS.escape(id + '-' + next + '-tab')}`)
             ?.focus();
         }}
       >
-        {(['erc', 'drc'] as const).map((tab) => (
+        {(['erc', 'drc', 'model'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             className={`reveal-button${kind === tab ? ' active' : ''}`}
             role="tab"
-            aria-label={tab.toUpperCase()}
+            aria-label={tab === 'model' ? 'Model' : tab.toUpperCase()}
             id={`${id}-${tab}-tab`}
             aria-controls={`${id}-panel`}
             aria-selected={kind === tab}
-            aria-description={tab === 'erc' ? 'Electrical rules' : 'Design rules'}
+            aria-description={
+              tab === 'erc'
+                ? 'Electrical rules'
+                : tab === 'drc'
+                  ? 'Design rules'
+                  : '3D model checks'
+            }
             tabIndex={kind === tab ? 0 : -1}
-            disabled={sourcePending || Boolean(blockedReason) || (tab === 'drc' && !drcAvailable)}
+            disabled={sourcePending || Boolean(blockedReason) || (tab !== 'erc' && !drcAvailable)}
             onClick={() => {
               if (kind !== tab) onKindChange(tab);
             }}
           >
             {tab === 'erc' ? (
               <ERCIcon size={16} aria-hidden="true" />
-            ) : (
+            ) : tab === 'drc' ? (
               <DRCIcon size={16} aria-hidden="true" />
+            ) : (
+              <Box size={16} aria-hidden="true" />
             )}
             <span className="reveal-button-label" aria-hidden="true">
-              <span>{tab.toUpperCase()}</span>
+              <span>{tab === 'model' ? 'Model' : tab.toUpperCase()}</span>
             </span>
           </button>
         ))}
@@ -250,6 +286,87 @@ export default function RuleCheckPanel({
           composing.current = false;
         }}
       >
+        {kind === 'model' && (
+          <>
+            {!modelReport ? (
+              <div className={styles.empty}>
+                <p>Preview not loaded.</p>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={sourcePending || Boolean(blockedReason) || !onOpenModel}
+                  onClick={() => {
+                    if (!composing.current) onOpenModel?.();
+                  }}
+                  onKeyDown={blockComposingActivation}
+                  onKeyUp={blockComposingActivation}
+                >
+                  Open Model
+                </button>
+              </div>
+            ) : modelReport.state === 'loading' ? (
+              <p className={styles.notice} role="status">
+                Loading models…
+              </p>
+            ) : (
+              <>
+                <div className={styles.summary} aria-label="Model summary">
+                  <span>
+                    <AlertCircle size={15} aria-hidden="true" />
+                    {modelErrors} {modelErrors === 1 ? 'error' : 'errors'}
+                  </span>
+                  <span>
+                    <AlertTriangle size={15} aria-hidden="true" />
+                    {modelWarnings} {modelWarnings === 1 ? 'warning' : 'warnings'}
+                  </span>
+                  <span className={styles.noticeCount}>
+                    <Info size={15} aria-hidden="true" />
+                    {modelNotices} {modelNotices === 1 ? 'notice' : 'notices'}
+                  </span>
+                </div>
+                {!modelReport.issues.length ? (
+                  <p className={styles.empty}>No model issues.</p>
+                ) : (
+                  <ul className={styles.issues} aria-label="Model issues">
+                    {modelReport.issues.map((notice, index) => (
+                      <li key={index}>
+                        {notice.footprintId ? (
+                          <button
+                            type="button"
+                            className={styles.issue}
+                            data-severity={notice.severity}
+                            aria-label={`Locate ${notice.message}`}
+                            aria-description={
+                              notice.severity === 'error'
+                                ? 'Error'
+                                : notice.severity === 'warning'
+                                  ? 'Warning'
+                                  : 'Notice'
+                            }
+                            disabled={
+                              !canLocate || !modelReport.canLocate || !onSelectModelCheckIssue
+                            }
+                            onClick={() => {
+                              if (!composing.current) onSelectModelCheckIssue?.(notice);
+                            }}
+                            onKeyDown={blockComposingActivation}
+                            onKeyUp={blockComposingActivation}
+                          >
+                            {notice.message}
+                          </button>
+                        ) : (
+                          <div className={styles.issue} data-severity={notice.severity}>
+                            {notice.message}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </>
+        )}
         {kind === 'drc' && (
           <fieldset
             className={styles.limits}
@@ -323,6 +440,9 @@ export default function RuleCheckPanel({
               <span>
                 <AlertTriangle size={15} aria-hidden="true" />
                 {warnings} {warnings === 1 ? 'warning' : 'warnings'}
+              </span>
+              <span className={styles.noticeCount}>
+                <Info size={15} aria-hidden="true" />0 notices
               </span>
             </div>
             {incomplete && (

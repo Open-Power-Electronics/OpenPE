@@ -59,17 +59,20 @@ Panel styling belongs in
 
 ## Shared history capabilities
 
-| Capability                        | Contract                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------ |
-| `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination |
-| `versions.create`                 | Snapshot current validated Core Source through the native bridge                     |
-| `project.replace`                 | Replace complete canonical Source in one Core transaction                            |
-| `history.undo` / `history.redo`   | Shared in-memory history                                                             |
-| `project.save`                    | Native Save/Save as                                                                  |
+| Capability                        | Contract                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------- |
+| `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination        |
+| `versions.create`                 | Snapshot current validated Core Source through the native bridge                            |
+| `versions.restore`                | Read a reachable version and share GUI restoration, exact CAD preparation and one undo edit |
+| `project.replace`                 | Replace complete canonical Source in one Core transaction                                   |
+| `history.undo` / `history.redo`   | Shared in-memory history                                                                    |
+| `project.save`                    | Native Save/Save as                                                                         |
 
-The Git window uses shared reads/creation, then Core's internal validated restore
-adapter. Agents restore by reading and executing `project.replace`; no separate
-restore/comparison capability exists. Revision/review/Source/close gates follow
+The Git window uses shared reads/creation and the validated restoration adapter.
+Agent `versions.restore` reads a reachable version and uses that same adapter,
+including exact CAD preparation, cancellation and origin/revision rechecks.
+It retains the save destination and commits one whole-project undo edit.
+Revision/review/Source/close gates follow
 [Core](CORE.md); transient capability events are not Git versions. Tools cannot
 choose repository paths or another project's grant.
 
@@ -80,7 +83,7 @@ of the normalized native destination. `OPENPE_DATA_DIR` selects application data
 Reopening a destination reconnects history; Save as associates an independent
 repository. History does not travel in KiCad files.
 
-Home examples open their original `examples/<file>/<file>.kicad_pro` files.
+Home examples open their original native files under `examples/` or `recent/`.
 They use the same destination-keyed private history as other projects; no Git
 repository is added to the example directory. Show in File Explorer reveals
 the actual project folder. Closing never deletes its private history.
@@ -101,21 +104,24 @@ no persistent Git repository is removed.
 
 ## Original example opening
 
-`resources/example-catalog/home-manifest.json` defines ten fixed projects: nine
-curated projects under Example and EMC Flyback under Recent during Preview.
-Stable catalog IDs reconnect the original `examples/<stem>/<stem>.kicad_pro`
-files, or their packaged `examples-native/<stem>/` directory. Opening and clean
-recovery read the current native bytes. Save writes that destination; Save as
+`resources/example-catalog/home-manifest.json` defines nine curated projects
+under Example and EMC Flyback under Recent. Stable catalog IDs reconnect the
+original `examples/<stem>/<stem>.kicad_pro` files and
+`recent/emc-flyback/emc-flyback.kicad_pro`, packaged under `examples-native/` and
+`recent-native/` respectively. Both roots also admit host-discovered native
+projects through opaque keys; clean recovery re-resolves those keys through the
+host. Opening and clean recovery read the current native bytes. Save writes that destination; Save as
 creates a personal copy with independent history. Ordinary Source disk files,
-including SCAD and datasheet JSON/PDFs, remain outside native version snapshots.
+including SCAD and local PDFs, remain outside native version snapshots. Reviewed
+Agent datasheet records belong to the internal resource catalog, not project files.
 
 ### Opening barrier and concurrency
 
 Service/window creation and Home loading perform no runtime example preflight.
 One shared promise starts on the first example-opening IPC, including clean
 recovery. Home, new projects and ordinary recovery do not wait. The example-opening
-IPC awaits validation and private-history attempts for all ten original projects and rechecks its
-originating frame. Unrelated preparation failures do not block a usable selected
+IPC awaits validation and private-history attempts for the bundled and discovered
+projects and rechecks its originating frame. Unrelated preparation failures do not block a usable selected
 project; missing Git remains a warning on that project's open result.
 
 Preparation uses at most three concurrent operations.

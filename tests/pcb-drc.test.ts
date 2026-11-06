@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { uid, type Point } from '../lib/circuit';
 import { invalidatePCBFill, type BoardZone, type Footprint, type PCB } from '../lib/pcb';
 import { createEmptyPCB, padDrillPosition } from '../lib/pcb-layout';
 import { copperFillContour, fillCopperZones } from '../lib/pcb-polygons';
 import { defaultPCBDesignRules, runPCBDesignRules } from '../lib/pcb-drc';
+import { projectFromNativeFiles } from '../lib/kicad-project';
 
 const rect = (a: number, b: number, c: number, d: number): Point[] => [
   { x: a, y: b },
@@ -424,6 +426,8 @@ test('pour keepouts allow shared boundaries and holes but reject actual filled-a
     [{ outer: rect(2, 4, 4, 6), holes: [] }, 0],
     [{ outer: rect(2, 2, 4, 4), holes: [] }, 0],
     [{ outer: rect(2, 4, 4.01, 6), holes: [] }, 1],
+    [{ outer: rect(2, 4, 4.0002, 6), holes: [] }, 1],
+    [{ outer: rect(4.5, 4.5, 4.5001, 4.5001), holes: [] }, 1],
     [{ outer: rect(2, 4.5, 8, 5.5), holes: [] }, 1],
     [{ outer: rect(4.5, 4.5, 5.5, 5.5), holes: [] }, 1],
     [{ outer: rect(2, 2, 8, 8), holes: [] }, 1],
@@ -440,6 +444,54 @@ test('pour keepouts allow shared boundaries and holes but reject actual filled-a
   keepout.layer = 'F.Cu';
   keepout.keepout.copperpour = false;
   assert.equal(issues(board, 'pcb.keepout').length, 0);
+});
+
+test('pour keepouts tolerate coordinate rounding along a shared sloped boundary', () => {
+  const board = fixture();
+  const a = { x: 8.575314, y: 5.026666 };
+  const b = { x: 9.74, y: 5.18 };
+  const keepout = zone(board, [a, b, { x: b.x, y: 4 }]);
+  keepout.keepout = {
+    tracks: false,
+    vias: false,
+    pads: false,
+    copperpour: true,
+    footprints: false,
+  };
+  const pour = zone(board);
+  pour.filledPolygons = [
+    {
+      points: [a, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, b, { x: b.x, y: 6 }],
+    },
+  ];
+  board.zones = [keepout, pour];
+  const before = structuredClone(board);
+  assert.deepEqual(issues(board, 'pcb.keepout'), []);
+  assert.deepEqual(board, before);
+
+  // A narrow pour well inside the keepout must still fail, regardless of area.
+  pour.filledPolygons = [{ points: rect(9.5, 4.5, 9.5001, 4.5001) }];
+  assert.equal(issues(board, 'pcb.keepout').length, 1);
+
+  keepout.holes = [rect(9, 4.5, 9.6, 5)];
+  pour.filledPolygons = [{ points: keepout.holes[0] }];
+  assert.deepEqual(issues(board, 'pcb.keepout'), []);
+  pour.filledPolygons = [{ points: rect(8.9998, 4.5, 9.6, 5) }];
+  assert.equal(issues(board, 'pcb.keepout').length, 1);
+});
+
+test('the actual native EMC Flyback board passes DRC without changing saved copper or files', async () => {
+  const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
+  const filename = 'recent/emc-flyback/emc-flyback.kicad_pro';
+  const native = await readNativeProject(filename);
+  const board = projectFromNativeFiles(native).pcb!;
+  const before = structuredClone(board);
+  const report = runPCBDesignRules(board);
+  assert.equal(report.complete, true);
+  assert.equal(report.truncated, false);
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(board, before);
+  assert.deepEqual(await readNativeProject(filename), native);
 });
 
 test('checks are deterministic and never change board geometry or fills', () => {

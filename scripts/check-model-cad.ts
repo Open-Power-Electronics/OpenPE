@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { uid } from '../lib/circuit';
 import {
   modelCadFromProject,
@@ -9,11 +10,20 @@ import {
   type ModelCadObject,
   type ModelCadVector,
 } from '../lib/model-cad';
-import { parseProject } from '../lib/project';
+import { parseProject, projectFromNativeFiles } from '../lib/project';
 import { createEnclosureStep } from '../server/enclosure-step.mjs';
 
 // Explicit offline OpenCASCADE export/import verification. No Electron or solver.
-const example = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+const require = createRequire(import.meta.url);
+const { readNativeProject } = require('../electron/native-project.cjs');
+const nativePath = path.resolve('recent/emc-flyback/emc-flyback.kicad_pro');
+const nativeFiles = await readNativeProject(nativePath);
+const example = projectFromNativeFiles(nativeFiles);
+assert.deepEqual(
+  modelCadFromProject(example),
+  modelCadFromProject(parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'))),
+  'The actual native EMC settings must agree with the generated CAD fixture.',
+);
 const project = withModelCad(example, null);
 const objects: ModelCadObject[] = [
   {
@@ -40,20 +50,22 @@ const objects: ModelCadObject[] = [
 const target = withModelCad(project, { version: 1, objects }),
   before = JSON.stringify(project.pcb),
   bytes = await createEnclosureStep(target),
-  text = bytes.toString('ascii');
+  text = bytes.toString('ascii'),
+  brepSolids = (text.match(/MANIFOLD_SOLID_BREP\(/g) || []).length,
+  cylindricalSurfaces = (text.match(/CYLINDRICAL_SURFACE\(/g) || []).length;
 assert.equal(
-  (text.match(/MANIFOLD_SOLID_BREP\(/g) || []).length,
+  brepSolids,
   2,
   'Overlapping independently editable objects must remain two manifold solids.',
 );
 assert.equal(
-  (text.match(/CYLINDRICAL_SURFACE\(/g) || []).length,
-  3,
-  'The cylinder exterior and both requested local through cuts must remain analytical cylinders.',
+  cylindricalSurfaces,
+  1,
+  'The uncut cylindrical mount must retain one analytical cylindrical exterior.',
 );
 assert.equal(JSON.stringify(project.pcb), before);
 
-const occt = await createRequire(import.meta.url)('occt-import-js')();
+const occt = await require('occt-import-js')();
 const imported = occt.ReadStepFile(bytes, {
   linearUnit: 'millimeter',
   linearDeflectionType: 'absolute_value',
@@ -78,13 +90,40 @@ const bounds = (points: ModelCadVector[]) => ({
     z: Math.max(...points.map((p) => p.z)),
   },
 });
-const importedMeshBounds = (mesh: { attributes: { position: { array: number[] } } }) => {
+type ImportedMesh = {
+  attributes: { position: { array: number[] } };
+  index: { array: number[] };
+};
+const importedMeshPoints = (mesh: ImportedMesh) => {
   const vertices = mesh.attributes.position.array;
   const points: ModelCadVector[] = [];
   for (let i = 0; i < vertices.length; i += 3)
     points.push({ x: vertices[i], y: vertices[i + 1], z: vertices[i + 2] });
-  return bounds(points);
+  return points;
 };
+const importedMeshBounds = (mesh: ImportedMesh) => bounds(importedMeshPoints(mesh));
+// Signed tetrahedra independently measure the imported closed shell. Bounds alone
+// cannot distinguish drilled panels from solid rectangles with the same envelope.
+const importedMeshVolume = (mesh: ImportedMesh) => {
+  const points = importedMeshPoints(mesh),
+    indices = mesh.index.array;
+  let signed = 0;
+  for (let i = 0; i < indices.length; i += 3) {
+    const [a, b, c] = [points[indices[i]], points[indices[i + 1]], points[indices[i + 2]]];
+    signed +=
+      (a.x * (b.y * c.z - b.z * c.y) +
+        a.y * (b.z * c.x - b.x * c.z) +
+        a.z * (b.x * c.y - b.y * c.x)) /
+      6;
+  }
+  return Math.abs(signed);
+};
+const matchingBounds = (actual: ReturnType<typeof bounds>, wanted: ReturnType<typeof bounds>) =>
+  (['min', 'max'] as const).every((edge) =>
+    (['x', 'y', 'z'] as const).every(
+      (axis) => Math.abs(actual[edge][axis] - wanted[edge][axis]) < 0.011,
+    ),
+  );
 const meshBounds = imported.meshes.map(importedMeshBounds);
 // Independent closed-form Rx * Ry * Rz point transform checks compound rotation,
 // world translation, centre-based primitives, and the STEP's millimetre scale.
@@ -114,20 +153,12 @@ const expected = [
   },
 ];
 for (const wanted of expected) {
-  assert.ok(
-    meshBounds.some((actual: ReturnType<typeof bounds>) =>
-      (['min', 'max'] as const).every((edge) =>
-        (['x', 'y', 'z'] as const).every(
-          (axis) => Math.abs(actual[edge][axis] - wanted[edge][axis]) < 0.011,
-        ),
-      ),
-    ),
+  assert.equal(
+    meshBounds.filter((actual: ReturnType<typeof bounds>) => matchingBounds(actual, wanted)).length,
+    1,
     `Imported STEP geometry must match its independently transformed bounds: ${JSON.stringify(wanted)}`,
   );
 }
-const directory = 'test-results/model-cad';
-await mkdir(directory, { recursive: true });
-await writeFile(`${directory}/model-cad.step`, bytes);
 // Export the Home example itself, including every independent panel
 // and drilled feature, rather than replacing its CAD with the fixtures above.
 assert.equal(Object.hasOwn(example.extensions, 'org.openpe.enclosure'), false);
@@ -136,8 +167,24 @@ assert.equal(emcObjects.length, 4);
 const emcBefore = JSON.stringify(example.pcb);
 const emcBytes = await createEnclosureStep(example);
 const emcText = emcBytes.toString('ascii');
-assert.equal((emcText.match(/MANIFOLD_SOLID_BREP\(/g) || []).length, 4);
-assert.equal((emcText.match(/CYLINDRICAL_SURFACE\(/g) || []).length, 8);
+const emcBrepSolids = (emcText.match(/MANIFOLD_SOLID_BREP\(/g) || []).length,
+  emcCylindricalSurfaces = (emcText.match(/CYLINDRICAL_SURFACE\(/g) || []).length;
+assert.equal(emcBrepSolids, 4);
+// OCC exports extruded sketch circles as analytical ellipse extrusions with
+// equal radii, rather than the CYLINDRICAL_SURFACE used by cylinder primitives.
+const emcEntities = new Map(
+  [...emcText.matchAll(/#(\d+)\s*=\s*([^;]+);/g)].map((match) => [match[1], match[2].trim()]),
+);
+const emcCircularExtrusions = [
+  ...emcText.matchAll(/SURFACE_OF_LINEAR_EXTRUSION\('',#(\d+),#\d+\)/g),
+];
+assert.equal(emcCircularExtrusions.length, 8);
+for (const [, curve] of emcCircularExtrusions)
+  assert.match(
+    emcEntities.get(curve) ?? '',
+    /^ELLIPSE\('',#\d+,1\.6,1\.6\)$/,
+    'Every EMC cut wall must extrude an analytical circle of radius 1.6 mm.',
+  );
 assert.equal(JSON.stringify(example.pcb), emcBefore);
 const emcImported = occt.ReadStepFile(emcBytes, {
   linearUnit: 'millimeter',
@@ -145,49 +192,120 @@ const emcImported = occt.ReadStepFile(emcBytes, {
   linearDeflection: 0.01,
   angularDeflection: 0.1,
 });
-assert.equal(emcImported.success, true, 'The migrated EMC assembly must reimport as STEP.');
+assert.equal(emcImported.success, true, 'The current native EMC assembly must reimport as STEP.');
 assert.equal(emcImported.meshes.length, 4);
 const emcImportedBounds = emcImported.meshes.map(importedMeshBounds);
-const emcExpectedBounds = emcObjects.map((object) => {
-  assert.equal(object.kind, 'box');
-  assert.deepEqual(object.rotation, { x: 0, y: 0, z: 0 });
-  const min = { ...object.position },
-    max = { ...object.position };
-  for (const axis of ['x', 'y', 'z'] as const) {
-    min[axis] -= object.size[axis] / 2;
-    max[axis] += object.size[axis] / 2;
-  }
-  return { name: object.name, min, max };
-});
-for (const wanted of emcExpectedBounds)
-  assert.equal(
-    emcImportedBounds.filter((actual: ReturnType<typeof bounds>) =>
-      (['min', 'max'] as const).every((edge) =>
-        (['x', 'y', 'z'] as const).every(
-          (axis) => Math.abs(actual[edge][axis] - wanted[edge][axis]) < 0.011,
-        ),
-      ),
-    ).length,
-    1,
-    `${wanted.name}: one independently imported panel must match its saved world bounds.`,
+// Independent EMC dimensions: 112 x 94 x 3 mm panels, 30 mm walls,
+// 8 mm floor clearance below the 1.6 mm board. Do not treat Boolean `size`
+// (a conservative envelope) as the actual construction or use production bounds.
+const emcExpectedBounds = [
+  {
+    name: 'Aluminium base',
+    kind: 'boolean',
+    min: { x: 44, y: 41, z: -11.8 },
+    max: { x: 156, y: 135, z: -8.8 },
+    holes: [
+      { x: 53.8, y: 53.8 },
+      { x: 146.2, y: 122.2 },
+      { x: 146.2, y: 53.8 },
+      { x: 53.8, y: 122.2 },
+    ],
+  },
+  {
+    name: 'Aluminium front wall',
+    kind: 'box',
+    min: { x: 44, y: 41, z: -8.8 },
+    max: { x: 156, y: 44, z: 21.2 },
+    holes: [],
+  },
+  {
+    name: 'Aluminium back wall',
+    kind: 'box',
+    min: { x: 44, y: 132, z: -8.8 },
+    max: { x: 156, y: 135, z: 21.2 },
+    holes: [],
+  },
+  {
+    name: 'Transparent cover',
+    kind: 'boolean',
+    min: { x: 44, y: 41, z: 21.2 },
+    max: { x: 156, y: 135, z: 24.2 },
+    holes: [
+      { x: 52, y: 47 },
+      { x: 52, y: 129 },
+      { x: 148, y: 47 },
+      { x: 148, y: 129 },
+    ],
+  },
+];
+const emcMeasurements = emcExpectedBounds.map((wanted) => {
+  const saved = emcObjects.filter((object) => object.name === wanted.name);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].kind, wanted.kind);
+  assert.deepEqual(saved[0].rotation, { x: 0, y: 0, z: 0 });
+  const matches: ImportedMesh[] = emcImported.meshes.filter((mesh: ImportedMesh) =>
+    matchingBounds(importedMeshBounds(mesh), wanted),
   );
-await writeFile(`${directory}/emc-flyback-model-cad.step`, emcBytes);
+  assert.equal(
+    matches.length,
+    1,
+    `${wanted.name}: one imported solid must match the independent world bounds.`,
+  );
+  const points = importedMeshPoints(matches[0]);
+  for (const hole of wanted.holes)
+    for (const z of [wanted.min.z, wanted.max.z])
+      assert.ok(
+        points.filter(
+          (point) =>
+            Math.abs(point.z - z) < 0.0001 &&
+            Math.abs(Math.hypot(point.x - hole.x, point.y - hole.y) - 1.6) < 0.0001,
+        ).length >= 16,
+        `${wanted.name}: the 3.2 mm through cut at ${hole.x},${hole.y} must reach both faces.`,
+      );
+  const depth = wanted.max.z - wanted.min.z;
+  const expectedVolume =
+    (wanted.max.x - wanted.min.x) * (wanted.max.y - wanted.min.y) * depth -
+    wanted.holes.length * Math.PI * 1.6 ** 2 * depth;
+  const volume = importedMeshVolume(matches[0]);
+  // Circle tessellation can add at most perimeter * chord deflection * depth.
+  const tolerance = wanted.holes.length * 2 * Math.PI * 1.6 * 0.01 * depth + 0.001;
+  assert.ok(
+    Math.abs(volume - expectedVolume) < tolerance,
+    `${wanted.name}: imported volume ${volume} must match analytical volume ${expectedVolume}.`,
+  );
+  return { name: wanted.name, volume, expectedVolume, tolerance, throughCuts: wanted.holes.length };
+});
+assert.deepEqual(
+  await readNativeProject(nativePath),
+  nativeFiles,
+  'CAD verification preserves native files.',
+);
+// Publish only after every geometry check succeeds, in a fresh run directory.
+// A failed rerun or write cannot replace earlier STEP files or summaries.
+const evidenceRoot = 'test-results/model-cad';
+await mkdir(evidenceRoot, { recursive: true });
+const directory = await mkdtemp(path.join(evidenceRoot, 'run-'));
+await writeFile(path.join(directory, 'model-cad.step'), bytes);
+await writeFile(path.join(directory, 'emc-flyback-model-cad.step'), emcBytes);
 const summary = {
+  directory,
+  source: path.relative(process.cwd(), nativePath),
   objects,
   bytes: bytes.length,
   sha256: createHash('sha256').update(bytes).digest('hex'),
-  brepSolids: 2,
-  cylindricalSurfaces: 3,
+  brepSolids,
+  cylindricalSurfaces,
   expectedBounds: expected,
   importedBounds: meshBounds,
-  combinedBrepSolids: 4,
   emc: {
     bytes: emcBytes.length,
     sha256: createHash('sha256').update(emcBytes).digest('hex'),
-    brepSolids: 4,
-    cylindricalSurfaces: 8,
+    brepSolids: emcBrepSolids,
+    cylindricalSurfaces: emcCylindricalSurfaces,
+    circularExtrusionSurfaces: emcCircularExtrusions.length,
     expectedBounds: emcExpectedBounds,
     importedBounds: emcImportedBounds,
+    measurements: emcMeasurements,
   },
   engine: 'Pinned Gmsh OpenCASCADE export and independent occt-import-js reimport; no simulation',
 };

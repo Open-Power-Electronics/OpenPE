@@ -5,6 +5,7 @@ import { createPart, emptyCircuit, circuitFingerprint } from '../lib/circuit';
 import { createProject, projectFromNativeFiles, serializeProject } from '../lib/project';
 import { projectNetGroups } from '../lib/project-net-groups';
 import { agentPromptContext } from '../context/agent-prompt-context';
+import { agentSource } from '../context/agent-workspace-context';
 import { makePrompt, runAgent } from '../server/agents.mjs';
 
 const promptContext = (text: string) =>
@@ -36,7 +37,7 @@ test('the native EMC Flyback prompt fits provider input while preserving electri
       version: 1,
       capturedAt: new Date().toISOString(),
       project: document,
-      source: { pending: false, draft: null, error: '' },
+      source: agentSource(null, ''),
       ui: { activeSchematicId: circuit.id, view: 'canvas', revision: '12' },
       simulation: { status: 'not-opened' },
     },
@@ -122,11 +123,7 @@ test('prompt projection summarizes other sheets and pending Source while retaini
   const context = {
     workspace: {
       project: JSON.parse(serializeProject(project)),
-      source: {
-        pending: true,
-        draft: '(invalid native draft'.repeat(60_000),
-        error: 'Unclosed list',
-      },
+      source: agentSource('(invalid native draft'.repeat(60_000), 'Unclosed list'),
       simulation: { status: 'disabled' },
       thermal: { status: 'disabled' },
       icDatasheet: { status: 'not-example', record: null },
@@ -136,8 +133,8 @@ test('prompt projection summarizes other sheets and pending Source while retaini
   const sent = promptContext(makePrompt({ prompt: 'Review the draft', context }));
   assert.deepEqual(sent.workspace.source, {
     pending: true,
-    error: 'Unclosed list',
-    draftCharacters: context.workspace.source.draft.length,
+    error: 'Source edits are invalid. Review them in Source.',
+    draftCharacters: context.workspace.source.draftCharacters,
   });
   assert.equal(sent.workspace.source.draft, undefined);
   assert.deepEqual(sent.workspace.icDatasheet, context.workspace.icDatasheet);
@@ -166,7 +163,7 @@ test('large sheet summaries disclose omissions and retain the current selection'
   const context = {
     workspace: {
       project: JSON.parse(serializeProject(createProject(circuit))),
-      source: { pending: false, draft: null, error: '' },
+      source: agentSource(null, ''),
       ui: { activeSchematicId: circuit.id, selection: [selected.id] },
     },
   };

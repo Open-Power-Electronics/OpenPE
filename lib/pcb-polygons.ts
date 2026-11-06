@@ -7,7 +7,8 @@ import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pc
 import { isOwnedPCB, ownProjectData } from './immutable-project';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
-const scale = 10000;
+export const polygonResolution = 0.0001; // Millimetres per integer clipping coordinate.
+const scale = 1 / polygonResolution;
 const integer = (points: Point[]) =>
   points.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 const decimal = (points: Clipper.Path) => points.map((p) => ({ x: p.X / scale, y: p.Y / scale }));

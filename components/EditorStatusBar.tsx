@@ -1,20 +1,14 @@
 'use client';
 import type { ReactNode } from 'react';
-import Select from './Select';
 import { useWorkspaceDraftStatus } from './WorkspacePresentation';
-
-export type EditorModeActions = {
-  onInteraction: () => void;
-  onAnnotation: () => void;
-  interactionDisabled?: boolean;
-  annotationDisabled?: boolean;
-};
 
 export default function EditorStatusBar({
   mode,
-  modeActions,
+  ruleStatus,
   coordinates,
+  centerCoordinates = false,
   details,
+  center,
   controls,
   actions,
   status,
@@ -23,9 +17,11 @@ export default function EditorStatusBar({
   active = true,
 }: {
   mode: string;
-  modeActions?: EditorModeActions;
+  ruleStatus?: ReactNode;
   coordinates?: ReactNode;
+  centerCoordinates?: boolean;
   details?: ReactNode;
+  center?: ReactNode;
   controls?: ReactNode;
   actions?: ReactNode;
   status?: string;
@@ -35,44 +31,18 @@ export default function EditorStatusBar({
 }) {
   const draftStatus = useWorkspaceDraftStatus(active && !hidden && status === undefined);
   const displayedStatus = status ?? (draftStatus || 'Local draft');
-  return (
-    <footer className={`status-bar ${className}`} hidden={hidden} aria-label="Editor status">
-      <span className="tool-status" aria-description={mode}>
-        {modeActions ? (
-          <Select
-            label="Editor mode"
-            value={mode}
-            placeholder={mode}
-            icon={<span className="status-dot" aria-hidden="true" />}
-            showChevron={false}
-            active={active && !hidden}
-            options={[
-              {
-                value: 'Interaction mode',
-                label: 'Interaction mode',
-                disabled: modeActions.interactionDisabled,
-              },
-              {
-                value: 'Annotation mode',
-                label: 'Annotation mode',
-                disabled: modeActions.annotationDisabled,
-              },
-            ]}
-            onChange={(value) => {
-              if (value === 'Interaction mode') modeActions.onInteraction();
-              else if (value === 'Annotation mode') modeActions.onAnnotation();
-            }}
-          />
-        ) : (
-          <>
-            <span className="status-dot" aria-hidden="true" />
-            <span className="status-mode">{mode}</span>
-          </>
-        )}
-      </span>
-      {coordinates && <span className="status-coordinate">{coordinates}</span>}
+  const coordinateReadout = coordinates && <span className="status-coordinate">{coordinates}</span>;
+  const centered = center !== undefined || centerCoordinates;
+  const middle = center ?? (centerCoordinates ? coordinateReadout : null);
+  const leading = (
+    <>
+      {ruleStatus}
+      {!centerCoordinates && coordinateReadout}
       {details && <span className="status-details">{details}</span>}
-      <span className="editor-spacer" />
+    </>
+  );
+  const trailing = (
+    <>
       {controls}
       {displayedStatus && displayedStatus !== 'Draft saved' && (
         <span className="draft-status" aria-description={displayedStatus}>
@@ -80,6 +50,28 @@ export default function EditorStatusBar({
         </span>
       )}
       {actions}
+    </>
+  );
+  return (
+    <footer
+      className={`status-bar ${className}${centered ? ' status-bar-centered' : ''}`}
+      hidden={hidden}
+      aria-label="Editor status"
+      aria-description={mode}
+    >
+      {centered ? (
+        <>
+          <div className="status-leading">{leading}</div>
+          <span className="status-center">{middle}</span>
+          <div className="status-trailing">{trailing}</div>
+        </>
+      ) : (
+        <>
+          {leading}
+          <span className="editor-spacer" />
+          {trailing}
+        </>
+      )}
     </footer>
   );
 }

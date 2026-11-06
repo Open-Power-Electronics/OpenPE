@@ -320,6 +320,7 @@ export default function Chat({
     const observedRevision: { current: string | undefined } = { current: undefined };
     const handledRequests = new Set<string>();
     let reviewCount = 0;
+    const pendingLifecycleActions = new Set<Promise<void>>();
     const capabilityRequest = async (event: AgentCapabilityRequest) => {
       if (
         event.sessionId !== sessionId ||
@@ -354,6 +355,10 @@ export default function Chat({
         token: event.token,
       };
       let payload: typeof response & { result?: unknown; error?: string };
+      let acknowledge = (_delivered: boolean) => {};
+      const resultDelivery = new Promise<boolean>((resolve) => {
+        acknowledge = resolve;
+      });
       try {
         if (!runtime) throw new Error('The originating workbench capability host is unavailable.');
         const result = await resolveAgentCapability(
@@ -361,7 +366,15 @@ export default function Chat({
           {
             query: (...args) => runtime.query(...args),
             observe: (...args) => runtime.observe(...args),
-            execute: (name, input, options) => executeWithFiles(id, runtime, name, input, options),
+            execute: (name, input, options) =>
+              executeWithFiles(id, runtime, name, input, {
+                ...options,
+                resultDelivery,
+                onAfterResult: (completion) => {
+                  pendingLifecycleActions.add(completion);
+                  void completion.then(() => pendingLifecycleActions.delete(completion));
+                },
+              }),
           },
           approvalLatest.current,
           (command) => {
@@ -403,20 +416,26 @@ export default function Chat({
           result: activityStatus === 'review' ? undefined : toolPreview(result),
         });
       } catch (error) {
+        acknowledge(false);
         payload = { ...response, error: String((error as Error).message).slice(0, 4000) };
         updateTool({
           status: 'failed',
           error: payload.error,
         });
       }
-      if (control.signal.aborted) return;
+      if (control.signal.aborted) {
+        acknowledge(false);
+        return;
+      }
       try {
         await api('chat/tool-result', {
           method: 'POST',
           body: JSON.stringify(payload),
           signal: control.signal,
         });
+        acknowledge(!control.signal.aborted);
       } catch (error) {
+        acknowledge(false);
         updateTool({ deliveryError: `Result delivery failed: ${(error as Error).message}` });
       }
     };
@@ -517,6 +536,10 @@ export default function Chat({
       failure = outcome === 'cancelled' ? 'Generation stopped.' : (e as Error).message;
     } finally {
       clearTimeout(flushTimer);
+      // A provider may finish immediately after consuming a tool result. Drain
+      // only serialized lifecycle requests; unresolved commands still cancel.
+      if (outcome === 'completed' && !control.signal.aborted)
+        await Promise.allSettled([...pendingLifecycleActions]);
       if (control.signal.aborted) {
         outcome = 'cancelled';
         failure = 'Generation stopped.';

@@ -69,7 +69,8 @@ Uninstall retains native documents, model/footprint files, completed analysis
 records, verified caches and bundled runtimes. Component simulation attributes
 remain native design data editable through Source; the Schematic SPICE Simulation
 action, Properties parameter section and settings-dock participation switches require the plugin to be installed
-and enabled. Layout never shows these controls. All solver/detection/model/result routes independently check
+and enabled. Shared component Properties exposes parameters in Schematic, Layout
+and Model; the action and participation switches remain Schematic-only. All solver/detection/model/result routes independently check
 service-owned lifecycle state; stale responses cannot restore disabled UI.
 SPICE and Thermal cancellation remain independent. Their run/restore and panel
 retention rules belong in [Simulation](SIMULATION.md) and [Thermal](THERMAL.md).

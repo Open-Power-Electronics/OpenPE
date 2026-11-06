@@ -527,17 +527,18 @@ try {
   await schematic.waitFor();
   const assertSharedRuleAction = async (mode) => {
     const actions = page.locator('.editor-mode-actions:visible');
-    const rule = actions.getByRole('button', { name: 'Rule', exact: true });
+    const rule = page.getByRole('button', { name: 'Rule', exact: true });
     assert.equal(await page.getByRole('button', { name: 'Rule', exact: true }).count(), 1);
-    assert.equal(await rule.locator('.lucide-clipboard-check').count(), 1);
-    assert.equal((await rule.textContent()).trim(), '', 'Rule uses one icon-only trigger.');
+    assert.equal(await actions.getByRole('button', { name: 'Rule', exact: true }).count(), 0);
+    assert.equal(await rule.evaluate((element) => !!element.closest('.status-bar')), true);
+    assert.equal(await rule.locator('[data-rule-errors], [data-rule-warnings]').count(), 2);
     assert.equal(await rule.getAttribute('aria-haspopup'), 'dialog');
     assert.deepEqual(
       await actions
         .locator('button:visible')
         .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-      mode === 'Source' ? ['Rule', 'List', 'Git'] : ['Rule', 'List', 'Git', 'Toggle right sidebar'],
-      'Rule precedes List in the shared mode-row project actions.',
+      mode === 'Source' ? ['List', 'Git'] : ['List', 'Git', 'Toggle right sidebar'],
+      'List and Git precede dock visibility; Rule remains in the footer.',
     );
   };
   const assertWindowActions = async (toolbar, plugin) => {
@@ -579,7 +580,7 @@ try {
     );
     assert.equal(
       await page.locator('.status-bar').getByRole('button', { name: 'Rule', exact: true }).count(),
-      0,
+      1,
     );
   };
   await assertWindowActions(

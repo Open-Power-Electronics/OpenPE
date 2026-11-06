@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectDirectoryListing, ProjectFilePreview } from '@/lib/project-directory';
 import { acceptProjectFileSave, type ProjectFileDraft } from '@/lib/project-file-drafts';
+import {
+  createProjectFileAccess,
+  type ProjectFileAccessPorts,
+  type ProjectFileGuard,
+} from '@/lib/project-file-capabilities';
 
 const empty: ProjectDirectoryListing = { entries: [], truncated: false };
 const message = (reason: unknown, fallback: string) =>
@@ -36,11 +41,13 @@ export function useProjectDirectory(
   const listingSequence = useRef(0);
   const [drafts, setDrafts] = useState<ReadonlyMap<string, LocatedDraft>>(new Map());
   const draftsRef = useRef(drafts);
+  const draftRevision = useRef(0);
   const scope = JSON.stringify([fileId, destination]);
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
   const updateDrafts = useCallback((next: ReadonlyMap<string, LocatedDraft>) => {
     draftsRef.current = next;
+    draftRevision.current++;
     setDrafts(next);
   }, []);
   const current =
@@ -96,11 +103,11 @@ export function useProjectDirectory(
     };
   }, [current, selected, previews, fileId, loading, saving, visible]);
   const change = useCallback(
-    (name: string, source: string) => {
+    (name: string, source: string, suppliedPreview?: ProjectFilePreview) => {
       const key = JSON.stringify([scope, name]);
       const existing = draftsRef.current.get(key);
       const entry = current.entries.find((item) => item.kind === 'file' && item.name === name);
-      const preview = entry?.id ? previews.get(entry.id) : undefined;
+      const preview = suppliedPreview ?? (entry?.id ? previews.get(entry.id) : undefined);
       if (!existing && (!preview || preview.binary || preview.truncated || preview.readOnly))
         return;
       const draft: LocatedDraft = existing
@@ -122,7 +129,8 @@ export function useProjectDirectory(
     [scope, current, previews, updateDrafts],
   );
   const save = useCallback(
-    async (name?: string) => {
+    async (name?: string, guard?: ProjectFileGuard) => {
+      guard?.check();
       if (savingRef.current) throw new Error('A project file is already being saved.');
       const pending = [...draftsRef.current.entries()].filter(
         ([, draft]) => draft.source !== draft.expectedSource && (!name || draft.name === name),
@@ -137,6 +145,7 @@ export function useProjectDirectory(
       setError('');
       try {
         const value = await window.openpe.projectDirectory(fileId);
+        guard?.check();
         if (scopeRef.current !== scope)
           throw new Error('The project location changed while saving its files.');
         setListing({ fileId, destination, value });
@@ -149,6 +158,7 @@ export function useProjectDirectory(
             throw new Error(`The file ${draft.name} is unavailable. Refresh project files.`);
           if (scopeRef.current !== scope)
             throw new Error('The project location changed while saving its files.');
+          guard?.check();
           const saved = await window.openpe.projectFileWrite({
             fileId,
             id: entry.id,
@@ -183,10 +193,16 @@ export function useProjectDirectory(
     },
     [fileId, destination, scope, updateDrafts],
   );
-  const discard = useCallback(() => {
-    updateDrafts(new Map());
-    setError('');
-  }, [updateDrafts]);
+  const discard = useCallback(
+    (name?: string) => {
+      const next = new Map(draftsRef.current);
+      if (name === undefined) next.clear();
+      else next.delete(JSON.stringify([scopeRef.current, name]));
+      updateDrafts(next);
+      setError('');
+    },
+    [updateDrafts],
+  );
   const hasPending = useCallback(
     () => [...draftsRef.current.values()].some((draft) => draft.source !== draft.expectedSource),
     [],
@@ -233,7 +249,71 @@ export function useProjectDirectory(
   const pending = [...drafts.values()].some((draft) => draft.source !== draft.expectedSource);
   const selectedDraft = drafts.get(JSON.stringify([scope, selected]));
   const selectedPending = !!selectedDraft && selectedDraft.source !== selectedDraft.expectedSource;
+  const accessPorts = useRef<ProjectFileAccessPorts>(null!);
+  accessPorts.current = {
+    scope: () => scopeRef.current,
+    draftRevision: () => draftRevision.current,
+    draft: (name) => draftsRef.current.get(JSON.stringify([scopeRef.current, name])),
+    list: async (guard) => {
+      guard.check();
+      if (!fileId || !window.openpe)
+        throw new Error('Open a desktop project before reading its files.');
+      if (savingRef.current) throw new Error('A project file is already being saved.');
+      const sequence = ++listingSequence.current;
+      setLoading(true);
+      try {
+        const value = await window.openpe.projectDirectory(fileId);
+        guard.check();
+        if (sequence !== listingSequence.current)
+          throw new Error('The project file listing changed. Read it again.');
+        setListing({ fileId, destination, value });
+        setPreviews(new Map());
+        setError(
+          value.truncated
+            ? 'The project folder listing is limited. Some entries are not shown.'
+            : '',
+        );
+        return value;
+      } finally {
+        if (sequence === listingSequence.current) setLoading(false);
+      }
+    },
+    preview: async (id, guard) => {
+      guard.check();
+      if (!fileId || !window.openpe)
+        throw new Error('Open a desktop project before reading its files.');
+      const sequence = listingSequence.current;
+      const value = await window.openpe.projectFilePreview({ fileId, id });
+      guard.check();
+      if (sequence !== listingSequence.current)
+        throw new Error('The project file listing changed. Read it again.');
+      setPreviews((previous) => cachePreview(previous, id, value));
+      return value;
+    },
+    change: (name, source, preview) => {
+      if (savingRef.current) throw new Error('A project file is already being saved.');
+      change(name, source, preview);
+    },
+    save,
+    discard: (name) => {
+      if (savingRef.current) throw new Error('A project file is already being saved.');
+      discard(name);
+    },
+  };
+  const [capabilities] = useState(() =>
+    createProjectFileAccess({
+      scope: () => accessPorts.current.scope(),
+      draftRevision: () => accessPorts.current.draftRevision(),
+      draft: (name) => accessPorts.current.draft(name),
+      list: (guard) => accessPorts.current.list(guard),
+      preview: (id, guard) => accessPorts.current.preview(id, guard),
+      change: (name, source, preview) => accessPorts.current.change(name, source, preview),
+      save: (name, guard) => accessPorts.current.save(name, guard),
+      discard: (name) => accessPorts.current.discard(name),
+    }),
+  );
   return {
+    capabilities,
     files,
     directories,
     error,

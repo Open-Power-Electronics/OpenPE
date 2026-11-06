@@ -1,7 +1,6 @@
 'use client';
 import CanvasContextMenu from './CanvasContextMenu';
 import { createPortal } from 'react-dom';
-import type { EditorModeActions } from './EditorStatusBar';
 import ComponentProperties, { type ComponentPropertiesProps } from './ComponentProperties';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import PropertiesEmptyState from './PropertiesEmptyState';
@@ -19,6 +18,7 @@ import {
   useState,
   type RefObject,
   type ReactElement,
+  type ReactNode,
 } from 'react';
 import {
   Maximize,
@@ -127,6 +127,7 @@ import {
 } from '@/lib/canvas-measurement';
 import { modelMeasurementPoint } from '@/lib/model-measurement';
 import type { ModelSketchPointer } from './ModelSketchCoordinates';
+import type { ModelCheckIssue, ModelCheckReport, ModelCheckFocus } from './model-checks';
 
 function shape(p: Polygon) {
   const outline = new THREE.Shape(p.outer.map((v) => new THREE.Vector2(v.x, -v.y)));
@@ -155,10 +156,10 @@ function ModelLoadingStatus({
     };
   }, [update]);
   return (
-    <p role="status" className="pcb-model-status">
+    <span role="status" className="pcb-model-status">
       Loading components · {value.completed}/{value.total}
       {value.reference && ` · ${value.reference}`}
-    </p>
+    </span>
   );
 }
 /** Board lacquer/text must composite before transparent assembly surfaces.
@@ -215,6 +216,8 @@ function PCBModelPreview({
   sidebarVisible = true,
   onShowSidebar,
   onToggleSidebar,
+  onModelChecksChange,
+  modelCheckFocus,
 }: {
   board: PCB;
   fileId?: string;
@@ -239,7 +242,7 @@ function PCBModelPreview({
   visible?: boolean;
   annotationProps?: ObjectAnnotationProps;
   errorTarget: HTMLElement | null;
-  statusBar?: ReactElement<{ modeActions?: EditorModeActions }> | null;
+  statusBar?: ReactElement<{ center?: ReactNode }> | null;
   capabilityHost?: CapabilityHost;
   revision?: string;
   sourcePending?: boolean;
@@ -249,6 +252,8 @@ function PCBModelPreview({
   sidebarVisible?: boolean;
   onShowSidebar?: () => void;
   onToggleSidebar?: () => void;
+  onModelChecksChange?: (report: ModelCheckReport) => void;
+  modelCheckFocus?: ModelCheckFocus | null;
 }) {
   const gridOptions = useRef({ visible: grid, spacing: gridSpacing });
   gridOptions.current = { visible: grid, spacing: gridSpacing };
@@ -302,6 +307,8 @@ function PCBModelPreview({
   const resumeLoading = useRef(() => {});
   const host = useRef<HTMLDivElement>(null),
     fit = useRef(() => {});
+  const locateFootprint = useRef<(_: string) => void>(() => {});
+  const noticeComposition = useRef(false);
   function previewNavigationBlocked() {
     const element = host.current;
     return (
@@ -345,8 +352,19 @@ function PCBModelPreview({
   const updateLoadingProgress = useRef<(value: ModelLoadingProgress) => void>(() => {});
   const [cadGeometryErrors, setCadGeometryErrors] = useState({ document: '', preview: '' });
   const [failed, setFailed] = useState(false);
-  const [warnings, setWarnings] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<ModelCheckIssue[]>([]);
+  const completedNoticeBasis = useRef<{ board: PCB; schematic?: Circuit } | null>(null);
   const [retry, setRetry] = useState(0);
+  const modelCheckIssues = useMemo(() => {
+    const issues = [...warnings];
+    if (failed) issues.push({ message: status, severity: 'error' });
+    for (const message of [cadGeometryErrors.document, cadGeometryErrors.preview])
+      if (message) issues.push({ message, severity: 'error' });
+    return issues;
+  }, [warnings, failed, status, cadGeometryErrors.document, cadGeometryErrors.preview]);
+  const modelErrorCount = modelCheckIssues.filter((issue) => issue.severity === 'error').length;
+  const modelWarningCount = modelCheckIssues.filter((issue) => issue.severity === 'warning').length;
+  const modelNoticeCount = modelCheckIssues.filter((issue) => issue.severity === 'notice').length;
   const [modelsVisible, setModelsVisible] = useState(viewState?.current?.modelsVisible ?? true);
   const [exploded, setExploded] = useState<ModelExplodedView>(() => ({
     ...defaultModelExplodedView,
@@ -882,6 +900,7 @@ function PCBModelPreview({
     updateCadEdges.current();
     setStatus('Loading 3D board…');
     setWarnings([]);
+    completedNoticeBasis.current = null;
     setFailed(false);
     setReady(false);
     const waitForActive = async () => {
@@ -979,12 +998,12 @@ function PCBModelPreview({
         target.add(mesh);
         await yieldBuild();
       };
-      const notices: string[] = [];
+      const notices: ModelCheckIssue[] = [];
       let fills = new Map<string, Polygon[]>();
       try {
         fills = filledCopperPolygons(board);
       } catch (e) {
-        notices.push((e as Error).message);
+        notices.push({ message: (e as Error).message, severity: 'error' });
       }
       await yieldBuild();
       const silkGraphics = pcbSilkscreen(board, schematicRef.current);
@@ -1035,9 +1054,10 @@ function PCBModelPreview({
         if (!side) continue;
         const mask = solderMaskOpenings(board, side);
         if (mask.omittedText)
-          notices.push(
-            `${side === 'front' ? 'Front' : 'Back'} solder mask text and dimensions are not shown in 3D. Check the native export in KiCad.`,
-          );
+          notices.push({
+            message: `${side === 'front' ? 'Front' : 'Back'} solder mask text and dimensions are not shown in 3D. Check the native export in KiCad.`,
+            severity: 'notice',
+          });
         const maskShape = subtractPolygons(body, mask.openings);
         await yieldBuild();
         const coating = createModelSolderMaskSurface(new THREE.ShapeGeometry(maskShape.map(shape)));
@@ -1507,6 +1527,38 @@ function PCBModelPreview({
           camera instanceof THREE.PerspectiveCamera ? (2 * distance * tanHalfFov) / extent : 1;
         resize();
         applyView('isometric', center, distance);
+      };
+      locateFootprint.current = (id) => {
+        const footprint = board.footprints.find((item) => item.id === id);
+        if (!footprint || !activeRef.current) return;
+        const bounds = new THREE.Box3();
+        if (components.visible)
+          for (const child of components.children)
+            if (child.visible && child.userData.footprintId === id)
+              bounds.union(modelVisibleBounds(child));
+        // Mounting holes can have neither a STEP model nor a package estimate.
+        if (bounds.isEmpty()) {
+          const box = pcbBounds({ ...createEmptyPCB(), footprints: [footprint] });
+          const { z } = modelPlacement(footprint, board.thickness);
+          bounds.set(
+            new THREE.Vector3(box.minX, -box.maxY, z),
+            new THREE.Vector3(box.maxX, -box.minY, z),
+          );
+        }
+        const center = bounds.getCenter(new THREE.Vector3());
+        const size = bounds.getSize(new THREE.Vector3());
+        const aspect = (host.current?.clientWidth || 1) / (host.current?.clientHeight || 1);
+        const height = Math.max(20, Math.max(size.x / aspect, size.y, size.z) * 2.4);
+        const damping = orbit!.enableDamping;
+        orbit!.enableDamping = false;
+        orbit!.update();
+        camera.position.add(center.clone().sub(orbit!.target));
+        orbit!.target.copy(center);
+        zoom.current(visibleHeight() / height);
+        orbit!.enableDamping = damping;
+        clippingBoundsDirty.current = true;
+        saveView();
+        render();
       };
       orient.current = (direction) => {
         const target = orbit!.target.clone();
@@ -1999,7 +2051,14 @@ function PCBModelPreview({
             render();
           }
           if (!assigned.length) {
-            notices.push(`${name}: no 3D model is assigned.`);
+            const mechanicalHole =
+              f.libraryId.startsWith('MountingHole:') ||
+              (f.pads.length > 0 && f.pads.every((pad) => pad.type === 'np_thru_hole'));
+            notices.push({
+              message: `${name}: No 3D model`,
+              footprintId: f.id,
+              severity: mechanicalHole ? 'notice' : 'warning',
+            });
             continue;
           }
           for (const model of assigned) {
@@ -2008,7 +2067,11 @@ function PCBModelPreview({
             if (control.signal.aborted) return;
             const index = official.findIndex((m) => modelKey(m.path) === modelKey(model.path));
             if (index < 0 && !projectSource) {
-              notices.push(`${name}: model source is unavailable.`);
+              notices.push({
+                message: `${name}: 3D model unavailable`,
+                footprintId: f.id,
+                severity: 'warning',
+              });
               continue;
             }
             if (++instanceCount > 512)
@@ -2064,12 +2127,18 @@ function PCBModelPreview({
             render();
           }
         } catch (e) {
-          if (!control.signal.aborted) notices.push(`${name}: ${(e as Error).message}`);
+          if (!control.signal.aborted)
+            notices.push({
+              message: `${name}: ${(e as Error).message}`,
+              footprintId: f.id,
+              severity: 'error',
+            });
         } finally {
           reportProgress(completed + 1);
         }
       }
       if (!control.signal.aborted) {
+        completedNoticeBasis.current = { board, schematic };
         setWarnings(notices);
         setStatus('');
         render();
@@ -2102,6 +2171,7 @@ function PCBModelPreview({
       disposeRenderer();
       renderer?.domElement.remove();
       fit.current = () => {};
+      locateFootprint.current = () => {};
       zoom.current = () => {};
       orient.current = () => {};
       redraw.current = () => {};
@@ -2183,6 +2253,70 @@ function PCBModelPreview({
   }
   const interacting = !measuring && !annotating && !cad.tool && !cad.pan;
   const interactionDisabled = cad.selectionBlocked;
+  const noticeNavigationBlocked =
+    sourcePending ||
+    !ready ||
+    failed ||
+    cad.selectionBlocked ||
+    Boolean(cad.tool) ||
+    (!readOnly && !modelsSelectable);
+  function locateModelCheckIssue(id: string) {
+    if (!active || noticeComposition.current || noticeNavigationBlocked || hasOpenOverlay())
+      return false;
+    if (!board.footprints.some((footprint) => footprint.id === id)) return false;
+    if (!readOnly) {
+      cad.select(null);
+      setBoardSelected(false);
+      setAnnotating(false);
+      closeMeasurement();
+      setModelsVisible(true);
+      setSelection([id]);
+      showProperties();
+    }
+    locateFootprint.current(id);
+    return true;
+  }
+  useEffect(() => {
+    const complete =
+      completedNoticeBasis.current?.board === board &&
+      completedNoticeBasis.current?.schematic === schematic &&
+      !status;
+    onModelChecksChange?.({
+      board,
+      schematic,
+      issues: modelCheckIssues,
+      state: failed ? 'error' : complete ? 'ready' : 'loading',
+      message: status,
+      canLocate: !noticeNavigationBlocked && complete,
+    });
+  }, [
+    onModelChecksChange,
+    board,
+    schematic,
+    modelCheckIssues,
+    failed,
+    status,
+    noticeNavigationBlocked,
+    sourcePending,
+    cad.selectionBlocked,
+    cad.tool,
+  ]);
+  const lastCheckFocus = useRef<ModelCheckFocus | null>(null);
+  useEffect(() => {
+    if (!modelCheckFocus) {
+      lastCheckFocus.current = null;
+      return;
+    }
+    if (
+      modelCheckFocus === lastCheckFocus.current ||
+      modelCheckFocus.board !== board ||
+      !active ||
+      status
+    )
+      return;
+    if (locateModelCheckIssue(modelCheckFocus.footprintId))
+      lastCheckFocus.current = modelCheckFocus;
+  }, [modelCheckFocus, board, active, status, noticeNavigationBlocked]);
   const annotationDisabled =
     !ready || failed || !schematic || !annotationProps || annotationProps.disabled;
   function activateInteraction() {
@@ -2217,6 +2351,19 @@ function PCBModelPreview({
       )}
     </>
   );
+  const statusFeedback = exportStatus ? (
+    <span className="pcb-model-status" role="status">
+      {exportStatus}
+    </span>
+  ) : status && !failed ? (
+    status === componentLoadingStatus ? (
+      <ModelLoadingStatus progress={loadingProgress} update={updateLoadingProgress} />
+    ) : (
+      <span role="status" className="pcb-model-status">
+        {status}
+      </span>
+    )
+  ) : null;
   return (
     <section
       ref={surface}
@@ -2677,13 +2824,64 @@ function PCBModelPreview({
               />
             )}
             {ready && !failed && <ModelSpatialScale update={updateScale} read={readScale} />}
-            {!!warnings.length && (
+            {readOnly && !!modelCheckIssues.length && (
               <div className="model-canvas-controls">
-                <details className="pcb-model-notices">
-                  <summary>{warnings.length} model notices</summary>
+                <details
+                  className="pcb-model-notices"
+                  onCompositionStart={() => {
+                    noticeComposition.current = true;
+                  }}
+                  onCompositionEnd={() => {
+                    noticeComposition.current = false;
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      noticeComposition.current ||
+                      event.nativeEvent.isComposing ||
+                      event.nativeEvent.keyCode === 229
+                    ) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }
+                  }}
+                  onKeyUp={(event) => {
+                    if (
+                      noticeComposition.current ||
+                      event.nativeEvent.isComposing ||
+                      event.nativeEvent.keyCode === 229
+                    ) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }
+                  }}
+                >
+                  <summary>
+                    {modelErrorCount} {modelErrorCount === 1 ? 'error' : 'errors'} ·{' '}
+                    {modelWarningCount} {modelWarningCount === 1 ? 'warning' : 'warnings'}
+                    {' · '}
+                    {modelNoticeCount} {modelNoticeCount === 1 ? 'notice' : 'notices'}
+                  </summary>
                   <ul>
-                    {warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
+                    {modelCheckIssues.map((w, i) => (
+                      <li key={i}>
+                        {w.footprintId ? (
+                          <button
+                            type="button"
+                            className="model-notice-locate"
+                            aria-label={`Locate ${w.message}`}
+                            disabled={
+                              !active ||
+                              noticeNavigationBlocked ||
+                              !board.footprints.some((f) => f.id === w.footprintId)
+                            }
+                            onClick={() => locateModelCheckIssue(w.footprintId!)}
+                          >
+                            {w.message}
+                          </button>
+                        ) : (
+                          w.message
+                        )}
+                      </li>
                     ))}
                   </ul>
                   {readOnly && (
@@ -2694,36 +2892,14 @@ function PCBModelPreview({
                 </details>
               </div>
             )}
-            {exportStatus && (
-              <p className="pcb-model-status" role="status">
-                {exportStatus}
-              </p>
-            )}
-            {status &&
-              !failed &&
-              (status === componentLoadingStatus ? (
-                <ModelLoadingStatus progress={loadingProgress} update={updateLoadingProgress} />
-              ) : (
-                <p role="status" className="pcb-model-status">
-                  {status}
-                </p>
-              ))}
+            {(readOnly || !statusBar) && statusFeedback}
             {errorTarget ? (
               createPortal(errorFeedback, errorTarget)
             ) : failed || cadGeometryErrors.document || cadGeometryErrors.preview ? (
               <div className="model-inline-errors">{errorFeedback}</div>
             ) : null}
           </div>
-          {!readOnly &&
-            statusBar &&
-            cloneElement(statusBar, {
-              modeActions: {
-                onInteraction: activateInteraction,
-                onAnnotation: activateAnnotation,
-                interactionDisabled,
-                annotationDisabled,
-              },
-            })}
+          {!readOnly && statusBar && cloneElement(statusBar, { center: statusFeedback })}
         </div>
         {!readOnly && (
           <InspectorResize

@@ -94,7 +94,7 @@ try {
         import Preview from './components/PCBModelPreview';
                 import {modelCadFromProject} from './lib/model-cad';
         const root=createRoot(document.getElementById('root'));
-        window.preview=(project,key)=>{window.project=project;root.render(<Preview key={key} board={project.pcb} schematic={project.schematic} modelCad={modelCadFromProject(project)}/>)};`,
+        window.preview=(project,key)=>{window.project=project;window.modelCheckReport=null;root.render(<Preview key={key} board={project.pcb} schematic={project.schematic} modelCad={modelCadFromProject(project)} onModelChecksChange={report=>window.modelCheckReport=report}/>)};`,
         resolveDir: process.cwd(),
         loader: 'tsx',
       },
@@ -182,7 +182,7 @@ try {
           assert.ok(detail, `${footprint.libraryId}: missing checked footprint detail`);
           const assigned = footprint.models ?? detail.models;
           const name = footprint.reference || footprint.libraryId;
-          if (!assigned.length) expectedNotices.push(`${name}: no 3D model is assigned.`);
+          if (!assigned.length) expectedNotices.push(`${name}: No 3D model`);
           for (const model of assigned) {
             if (model.hidden) continue;
             const index = detail.models.findIndex(
@@ -205,12 +205,17 @@ try {
         await page.waitForFunction(
           () =>
             document.querySelector('.pcb-model-canvas canvas') &&
-            !document.querySelector('.pcb-model-status'),
+            !document.querySelector('.pcb-model-status') &&
+            window.modelCheckReport?.state === 'ready',
           undefined,
           { timeout: 30000 },
         );
         assert.deepEqual(
-          (await page.locator('.pcb-model-notices li').allTextContents()).sort(),
+          (
+            await page.evaluate(() =>
+              window.modelCheckReport.issues.map((notice) => notice.message),
+            )
+          ).sort(),
           expectedNotices.sort(),
           `${entry.title}: only known model omissions may remain.`,
         );

@@ -1,11 +1,13 @@
-import type { CapabilityHost, CapabilitySchema } from '../api/capabilities';
+import type { CapabilityContext, CapabilityHost, CapabilitySchema } from '../api/capabilities';
 import { emptyCapabilityInput } from '../api/capabilities';
 import { projectExportFormats, type ProjectExportFormat } from './export-formats';
+import { agentProjectSource } from './agent-project-access';
 
 /** Native and presentation ports stay outside the document engine. Both clients
  * use these same ports; the host never accepts native paths or commands. */
 export type WorkbenchCapabilityPorts = {
   revision: () => string;
+  beforeAgentCommand?: () => void;
   state: (signal?: AbortSignal) => unknown;
   datasheet?: (signal: AbortSignal) => unknown | Promise<unknown>;
   view: (
@@ -23,6 +25,17 @@ export type WorkbenchCapabilityPorts = {
   historyList: (offset: number) => Promise<unknown>;
   historyRead: (id: string) => Promise<string>;
   historyCreate: (message: string) => Promise<unknown>;
+  historyRestore?: (id: string, signal: AbortSignal) => Promise<void>;
+  projectActions?: {
+    available: (action?: 'new' | 'open' | 'close' | 'reveal' | 'example') => boolean | string;
+    examples: (signal: AbortSignal) => unknown | Promise<unknown>;
+    request: (
+      action: 'new' | 'open' | 'close' | 'reveal' | 'example',
+      signal: AbortSignal,
+      exampleId?: string,
+    ) => void;
+    failed: (message: string) => void;
+  };
   simulation: (visible: boolean, signal: AbortSignal) => Promise<unknown>;
   thermal?: (visible: boolean, signal: AbortSignal) => Promise<unknown>;
   enclosureExport?: (signal: AbortSignal) => Promise<{ name: string } | null>;
@@ -43,7 +56,11 @@ export function registerWorkbenchCapabilities(
     id: string,
     description: string,
     inputSchema: CapabilitySchema,
-    handler: (input: any, signal: AbortSignal) => unknown | Promise<unknown>,
+    handler: (
+      input: any,
+      signal: AbortSignal,
+      context: CapabilityContext,
+    ) => unknown | Promise<unknown>,
     external = false,
     document = false,
     available?: () => boolean | string,
@@ -60,6 +77,7 @@ export function registerWorkbenchCapabilities(
         ...(available ? { available } : {}),
         handler: (input, context) => {
           context.signal.throwIfAborted();
+          if (context.actor === 'agent') ports().beforeAgentCommand?.();
           if (
             context.expectedRevision !== undefined &&
             context.expectedRevision !== ports().revision()
@@ -67,7 +85,7 @@ export function registerWorkbenchCapabilities(
             throw new Error(
               'The project changed since this command was prepared. Query it again before continuing.',
             );
-          return handler(input, context.signal);
+          return handler(input, context.signal, context);
         },
       }),
     );
@@ -203,7 +221,10 @@ export function registerWorkbenchCapabilities(
       kind: 'query',
       description: 'Read a validated, reachable local version as canonical project Source.',
       inputSchema: object({ id: { type: 'string', pattern: '^[a-f0-9]{40,64}$' } }),
-      handler: async (input: any) => ({ source: await ports().historyRead(input.id) }),
+      handler: async (input: any, context) => {
+        const source = await ports().historyRead(input.id);
+        return { source: context.actor === 'agent' ? agentProjectSource(source) : source };
+      },
     }),
   );
   command(
@@ -213,6 +234,91 @@ export function registerWorkbenchCapabilities(
     ({ message }) => ports().historyCreate(message),
     true,
   );
+  if (ports().historyRestore)
+    command(
+      'versions.restore',
+      'Restore a validated local Git version as one whole-project undo edit. Does not write native files.',
+      object({ id: { type: 'string', pattern: '^[a-f0-9]{40,64}$' } }),
+      async ({ id }, signal) => {
+        await ports().historyRestore!(id, signal);
+        signal.throwIfAborted();
+        return { id, revision: ports().revision() };
+      },
+      false,
+      true,
+    );
+  if (ports().projectActions) {
+    const available = () => ports().projectActions!.available();
+    disposers.push(
+      host.register({
+        owner: 'host',
+        id: 'project.examples',
+        kind: 'query',
+        description:
+          'List bundled and host-discovered example identities without paths or file grants.',
+        inputSchema: emptyCapabilityInput,
+        available,
+        handler: (_, { signal }) => ports().projectActions!.examples(signal),
+      }),
+    );
+    for (const [id, action, description] of [
+      ['project.new', 'new', 'Request a new independent project through the workspace.'],
+      [
+        'project.open',
+        'open',
+        'Request the native project picker. Existing projects are activated.',
+      ],
+      [
+        'project.close',
+        'close',
+        'Request closing this project through the shared unsaved-work confirmation.',
+      ],
+      [
+        'project.reveal',
+        'reveal',
+        'Request showing this project in File Explorer, using Save first when required.',
+      ],
+      [
+        'project.openExample',
+        'example',
+        'Request opening a current bundled or host-discovered example by its listed identity.',
+      ],
+    ] as const) {
+      command(
+        id,
+        `${description} Returns requested before dialogs or navigation complete; this run remains bound to its originating project.`,
+        action === 'example'
+          ? object({ id: { type: 'string', minLength: 1, maxLength: 160 } })
+          : emptyCapabilityInput,
+        (input, signal, context) => {
+          const revision = ports().revision();
+          // Complete the request before closing/navigation revokes this run's
+          // authority. A request never transfers authority to another project.
+          context.afterResult(() => {
+            try {
+              signal.throwIfAborted();
+              const state = ports().projectActions!.available(action);
+              if (state !== true) throw new Error(String(state));
+              if (ports().revision() !== revision)
+                throw new Error(
+                  'The project changed before the workspace action started. Try again.',
+                );
+              ports().projectActions!.request(action, signal, input.id);
+            } catch (error) {
+              if (!signal.aborted)
+                ports().projectActions!.failed(
+                  error instanceof Error ? error.message : 'The workspace action failed.',
+                );
+            }
+          });
+          return { status: 'requested' };
+        },
+        action === 'reveal',
+        false,
+        () => ports().projectActions!.available(action),
+      );
+    }
+  }
   command(
     'simulation.show',
     'Open the supported SPICE plugin and wait until its capabilities are ready.',

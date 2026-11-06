@@ -420,9 +420,16 @@
   box-shadow: var(--shadow-panel);
 }
 .pcb-model-notices > summary {
-  padding: 4px 10px;
-  line-height: 28px;
+  display: block;
+  min-height: 30px;
+  padding: 4px 8px;
+  line-height: 20px;
   color: var(--muted);
+  list-style: none;
+  cursor: pointer;
+}
+.pcb-model-notices > summary::-webkit-details-marker {
+  display: none;
 }
 .pcb-model-notices > ul {
   position: absolute;
@@ -433,7 +440,32 @@
   overflow: auto;
   overflow-wrap: anywhere;
   margin: 0;
-  padding: 8px 12px 8px 30px;
+  padding: 6px;
+  list-style: none;
+}
+.pcb-model-notices > ul > li:not(:has(.model-notice-locate)) {
+  padding: 6px 8px;
+}
+.model-notice-locate {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.model-notice-locate:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--surface-hover);
+}
+.model-notice-locate:disabled {
+  color: var(--muted);
+  cursor: default;
 }
 .pcb-3d-surface {
   position: relative;

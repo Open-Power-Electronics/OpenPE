@@ -701,7 +701,7 @@ same depth and transparent-cover occlusion rules.
 Schematic, Layout and Model use two bordered regions separated by 12 px. The left
 region owns its editing toolbar, drawing and status row; the right region owns
 its retained Properties/Visualization/Selection panels. The shared mode row
-orders project actions as Rule, List, Git and Toggle right sidebar; Close project
+orders project actions as List, Git and Toggle right sidebar; Close project
 belongs to the application header. Hiding or resizing the right dock
 expands or shrinks the left drawing and footer together while retaining camera
 scale and drafts. Grid remains the final status control after recovery text and

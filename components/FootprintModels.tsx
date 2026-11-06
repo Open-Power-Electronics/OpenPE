@@ -4,19 +4,13 @@ import { Box, FolderOpen, FolderSearch, Library, Trash2 } from 'lucide-react';
 import type { Footprint, FootprintModel } from '@/lib/pcb';
 import { api } from '@/lib/bridge';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
-import { validateFootprintModelPath } from '@/lib/pcb-properties';
+import { prepareFootprintModelSelection } from '@/lib/model-resource-preparation';
 import type { CapabilityHost } from '@/api/capabilities';
 import { TextField, NumberField, PropertyGrid, PropertyToggle } from './LayoutPropertyFields';
 import Dialog from './Dialog';
 import DeferredDialog from './DeferredDialog';
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 const ModelPreview = lazy(() => import('./ModelPreview'));
-const fresh = (path: string): FootprintModel => ({
-  path,
-  offset: { x: 0, y: 0, z: 0 },
-  rotation: { x: 0, y: 0, z: 0 },
-  scale: { x: 1, y: 1, z: 1 },
-});
 export default function FootprintModels({
   footprint,
   active,
@@ -80,14 +74,13 @@ export default function FootprintModels({
   );
   function change(index: number, path: string) {
     if (!active) return false;
+    let next: FootprintModel[];
     try {
-      validateFootprintModelPath(path);
+      next = prepareFootprintModelSelection(footprint, index, path);
     } catch (error) {
       setError((error as Error).message);
       return false;
     }
-    const next = models.slice();
-    next[index] = models[index] ? { ...models[index], path } : fresh(path);
     const accepted = onChange(next);
     if (accepted) {
       setError('');

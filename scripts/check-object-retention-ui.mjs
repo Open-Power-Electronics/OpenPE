@@ -307,21 +307,21 @@ try {
     const labels = await toolbar
       .locator('button:visible')
       .evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label')));
-    const expected =
-      mode === 'Source' ? ['Rule', 'List', 'Git'] : ['Rule', 'List', 'Git', 'Toggle right sidebar'];
+    const expected = mode === 'Source' ? ['List', 'Git'] : ['List', 'Git', 'Toggle right sidebar'];
     assert.deepEqual(
       labels,
       expected,
-      `${mode} keeps Rule, List and Git before the rightmost dock visibility control.`,
+      `${mode} keeps List and Git before the rightmost dock visibility control.`,
     );
-    const rules = toolbar.getByRole('button', { name: 'Rule', exact: true });
+    const rules = page.getByRole('button', { name: 'Rule', exact: true });
     assert.equal(
       await page.getByRole('button', { name: 'Rule', exact: true }).count(),
       1,
-      `${mode} has one shared rule-check trigger.`,
+      `${mode} has one shared footer rule-count trigger.`,
     );
-    assert.equal(await rules.locator('.lucide-clipboard-check').count(), 1);
-    assert.equal((await rules.textContent()).trim(), '', 'Rule stays icon-only in every view.');
+    assert.equal(await toolbar.getByRole('button', { name: 'Rule', exact: true }).count(), 0);
+    assert.equal(await rules.evaluate((element) => !!element.closest('.status-bar')), true);
+    assert.equal(await rules.locator('[data-rule-errors], [data-rule-warnings]').count(), 2);
     assert.equal(await rules.getAttribute('aria-haspopup'), 'dialog');
     for (const name of ['Rule', 'Electrical rules (ERC)', 'Design rules (DRC)'])
       assert.equal(
@@ -416,15 +416,63 @@ try {
     await button('Source').click();
     const originalNative = await readNativeFiles(page);
     await button('Schematic').click();
-    const assertStatusModeControls = async (view) => {
-      const mode = page.getByRole('combobox', { name: 'Editor mode', exact: true });
+    const assertStatusRuleControls = async (view) => {
+      const rules = page.getByRole('button', { name: 'Rule', exact: true });
       const grid = page.getByRole('combobox', { name: 'Grid density', exact: true });
-      const [modeBox, gridBox] = await Promise.all([mode.boundingBox(), grid.boundingBox()]);
+      const [ruleBox, gridBox] = await Promise.all([rules.boundingBox(), grid.boundingBox()]);
       assert.ok(
-        Math.abs(modeBox.height - gridBox.height) < 1,
-        `${view} mode and Grid share control height.`,
+        Math.abs(ruleBox.height - gridBox.height) < 1,
+        `${view} Rule counts and Grid share control height.`,
       );
-      assert.equal(await mode.locator('svg').count(), 0);
+      assert.equal(
+        await page.getByRole('combobox', { name: 'Editor mode', exact: true }).count(),
+        0,
+      );
+      assert.equal(await rules.locator('[data-rule-errors], [data-rule-warnings]').count(), 2);
+      assert.equal(await rules.getAttribute('aria-haspopup'), 'dialog');
+      if (view !== 'Model') {
+        const coordinate = page.locator('.status-bar:visible .status-center .status-coordinate');
+        await coordinate.waitFor();
+        const footer = coordinate.locator('xpath=ancestor::footer');
+        const [readout, bounds] = await Promise.all([
+          coordinate.boundingBox(),
+          footer.boundingBox(),
+        ]);
+        assert.ok(
+          Math.abs(readout.x + readout.width / 2 - bounds.x - bounds.width / 2) <= 3,
+          `${view} live coordinates are centered on the drawing footer.`,
+        );
+        const drawing = page.getByTestId(
+          view === 'Schematic' ? 'schematic-canvas' : 'layout-canvas',
+        );
+        await drawing.hover({ position: { x: 40, y: 40 } });
+        const before = await coordinate.textContent();
+        await drawing.hover({ position: { x: 90, y: 80 } });
+        await page.waitForFunction(
+          (before) =>
+            document.querySelector('.status-center .status-coordinate')?.textContent !== before,
+          before,
+        );
+        assert.match(await coordinate.textContent(), /X .+ Y .+ mm/);
+        await page.screenshot({
+          path: `test-results/status-coordinates-${view.toLowerCase()}.png`,
+          animations: 'disabled',
+        });
+        const originalViewport = page.viewportSize();
+        await page.setViewportSize({ width: 1120, height: originalViewport.height });
+        const compact = await coordinate.boundingBox();
+        const compactFooter = await footer.boundingBox();
+        const compactGrid = await grid.boundingBox();
+        assert.ok(
+          Math.abs(compact.x + compact.width / 2 - compactFooter.x - compactFooter.width / 2) <= 3,
+        );
+        assert.ok(
+          Math.abs(compactGrid.x + compactGrid.width - compactFooter.x - compactFooter.width + 4) <=
+            1,
+          `${view} Grid stays at the right edge beside the centered coordinate row.`,
+        );
+        await page.setViewportSize(originalViewport);
+      }
       const spacing = await grid.evaluate((element) => {
         const label = element.querySelector(':scope > span[aria-hidden="true"]');
         const value = element.querySelector('.select-value');
@@ -436,41 +484,15 @@ try {
       assert.ok(Math.abs(spacing.gap - 4) < 1, `${view} Grid label and value use a compact gap.`);
       assert.equal(spacing.align, 'left');
       for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
-        await mode.dispatchEvent('keydown', { key: 'Enter', ...event });
-        assert.equal(await mode.getAttribute('aria-expanded'), 'false');
+        await rules.dispatchEvent('keydown', { key: 'Enter', ...event });
+        assert.equal(await rules.getAttribute('aria-expanded'), 'false');
+        assert.equal(await page.getByRole('dialog', { name: 'Rule', exact: true }).count(), 0);
       }
-      await mode.click();
-      const menu = page.getByRole('listbox', { name: 'Editor mode', exact: true });
-      assert.equal(await menu.getByRole('option').count(), 2);
-      for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
-        await mode.dispatchEvent('keydown', { key: 'Escape', ...event });
-        assert.equal(await mode.getAttribute('aria-expanded'), 'true');
-      }
-      await mode.press('Escape');
-      assert.equal(await mode.getAttribute('aria-expanded'), 'false');
-      assert.equal(await mode.evaluate((element) => element === document.activeElement), true);
-      await mode.press('Enter');
-      await mode.press('ArrowDown');
-      await mode.press('Enter');
-      await page.waitForFunction(
-        () =>
-          [...document.querySelectorAll('[aria-label="Editor mode"]')]
-            .find((element) => element.getClientRects().length)
-            ?.getAttribute('aria-description') === 'Annotation mode',
-      );
+      await button('Annotation mode').click();
       assert.equal(await button('Annotation mode').getAttribute('aria-pressed'), 'true');
-      await mode.click();
-      await menu.getByRole('option', { name: 'Interaction mode', exact: true }).click();
-      await page.waitForFunction(
-        () =>
-          [...document.querySelectorAll('[aria-label="Editor mode"]')]
-            .find((element) => element.getClientRects().length)
-            ?.getAttribute('aria-description') === 'Interaction mode',
-      );
+      await button('Interaction mode').focus();
+      await page.keyboard.press('Enter');
       assert.equal(await button('Interaction mode').getAttribute('aria-pressed'), 'true');
-      await mode.press('Space');
-      await menu.waitFor();
-      await mode.press('Escape');
     };
     const assertSidebarDragResize = async (view) => {
       const sidebar = page.locator('.editor-sidebar-sections:visible');
@@ -555,13 +577,11 @@ try {
       assert.ok(Math.abs(sidebar.y + sidebar.height - geometry.bottom) <= 1);
       assert.ok(geometry.gridRight <= geometry.statusRight && geometry.statusRight < sidebar.x);
       await assertToolbarSidebarPlacement(region.locator('.editor-toolbar'));
-      const rule = page
-        .locator('.editor-mode-actions:visible')
-        .getByRole('button', { name: 'Rule', exact: true });
+      const rule = region.getByRole('button', { name: 'Rule', exact: true });
       assert.equal(await rule.count(), 1);
-      assert.equal(await rule.locator('.lucide-clipboard-check').count(), 1);
+      assert.equal(await rule.evaluate((element) => !!element.closest('.status-bar')), true);
       assert.equal(await region.locator('.editor-tool-group-end').count(), 0);
-      for (const name of ['Rule', 'Electrical rules (ERC)', 'Design rules (DRC)'])
+      for (const name of ['Electrical rules (ERC)', 'Design rules (DRC)'])
         assert.equal(await region.locator(`button[aria-label="${name}"]`).count(), 0);
       assert.equal(await page.getByRole('button', { name: 'List', exact: true }).count(), 1);
       await page.screenshot({
@@ -573,7 +593,7 @@ try {
       await button(view).click();
       await page.getByTestId(view === 'Layout' ? 'layout-canvas' : 'schematic-canvas').waitFor();
       await assertDrawingRegions(view);
-      await assertStatusModeControls(view);
+      await assertStatusRuleControls(view);
       await assertSidebarDragResize(view);
       {
         const canvasId = view === 'Layout' ? 'layout-canvas' : 'schematic-canvas';
@@ -644,6 +664,40 @@ try {
     }
     await button('Model').click();
     await firstRequest;
+    const loadingFooter = page.locator('footer[aria-label="Editor status"]:visible');
+    const loadingStatus = loadingFooter.locator('.status-center .pcb-model-status');
+    await loadingStatus.waitFor();
+    assert.match(await loadingStatus.textContent(), /Loading components · \d+\/\d+.*J1/);
+    assert.equal(
+      await page.locator('.pcb-object-stage .pcb-model-status').count(),
+      0,
+      'Editable Model loading has no canvas-top status.',
+    );
+    const loadingGeometry = await loadingStatus.evaluate((element) => {
+      const text = element.getBoundingClientRect();
+      const footer = element.closest('footer').getBoundingClientRect();
+      const center = element.closest('.status-center');
+      const rule = element.closest('footer').querySelector('.rule-status').getBoundingClientRect();
+      const grid = element.closest('footer').querySelector('.grid-density').getBoundingClientRect();
+      return {
+        within: text.left >= rule.right && text.right <= grid.left,
+        centeredHorizontally: Math.abs(text.x + text.width / 2 - footer.x - footer.width / 2) <= 3,
+        centeredVertically: Math.abs(text.y + text.height / 2 - footer.y - footer.height / 2) <= 1,
+        alignment: getComputedStyle(center).textAlign,
+        position: getComputedStyle(element).position,
+      };
+    });
+    assert.deepEqual(loadingGeometry, {
+      within: true,
+      centeredHorizontally: true,
+      centeredVertically: true,
+      alignment: 'center',
+      position: 'static',
+    });
+    await page.screenshot({
+      path: 'test-results/model-status-loading-footer.png',
+      animations: 'disabled',
+    });
     releaseFirstModel();
     await ready();
     const dismiss = button('Dismiss notification');
@@ -687,7 +741,7 @@ try {
     };
     await footer.waitFor();
     await assertDrawingRegions('Model');
-    await assertStatusModeControls('Model');
+    await assertStatusRuleControls('Model');
     await assertSidebarDragResize('Model');
     await assertStatusLayout();
     const beforeFitRender = Number(await canvas.getAttribute('data-render-count'));
@@ -1714,8 +1768,10 @@ try {
   await button('Apply').click();
   await button('Model').click();
   await ready();
-  await page.locator('.pcb-model-notices summary').click();
+  await button('Rule').click();
+  await page.getByRole('tab', { name: 'Model', exact: true }).click();
   await page.getByText('J1: Fixture model unavailable. Retry.', { exact: true }).waitFor();
+  await button('Close dialog').click();
   const failedRequests = requests.models;
   await button('Source').click();
   failing.pcb.footprints[0].x += 1;

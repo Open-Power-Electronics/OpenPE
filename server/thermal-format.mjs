@@ -6142,7 +6142,8 @@ function padDrillPosition(footprint, pad) {
 
 // lib/pcb-polygons.ts
 var import_clipper_lib = __toESM(require_clipper(), 1);
-var scale = 1e4;
+var polygonResolution = 1e-4;
+var scale = 1 / polygonResolution;
 var integer = (points) => points.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 var decimal = (points) => points.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
 function oriented(points, positive3 = true) {

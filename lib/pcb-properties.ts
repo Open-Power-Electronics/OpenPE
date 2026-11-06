@@ -1,5 +1,22 @@
-import { invalidatePCBFill, type Pad, type PCB, type Footprint } from './pcb';
+import { invalidatePCBFill, type Pad, type PCB, type Footprint, type BoardZone } from './pcb';
 import { flipPCBFootprint } from './pcb-layout';
+
+export type PCBZoneProperties = Partial<Omit<BoardZone, 'id' | 'locked' | 'filledPolygons'>>;
+
+/** Undefined clears an optional override; omitted fields and native identity survive. */
+export function preparePCBZoneProperties(zone: BoardZone, changes: PCBZoneProperties): BoardZone {
+  if (
+    zone.locked &&
+    Object.entries(changes).some(
+      ([key, value]) => JSON.stringify(value) !== JSON.stringify(zone[key as keyof BoardZone]),
+    )
+  )
+    fail('Unlock the zone before editing.');
+  const next = { ...zone, ...changes };
+  for (const key of Object.keys(next) as (keyof BoardZone)[])
+    if (next[key] === undefined) delete next[key];
+  return next;
+}
 
 export type PCBFootprintProperties = Partial<
   Pick<

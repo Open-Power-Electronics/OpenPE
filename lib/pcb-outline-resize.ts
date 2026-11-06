@@ -92,7 +92,7 @@ export function findPCBRectangle(
   return bounds && selection.every((s) => ids.includes(s.id)) ? { ids, bounds } : null;
 }
 
-export function resizePCBRectangle(board: PCB, rectangle: PCBRectangle, bounds: PCBBounds): PCB {
+function checkPCBRectangle(board: PCB, rectangle: PCBRectangle): void {
   assertPCBSelectionUnlocked(
     board,
     rectangle.ids.map((id) => ({ kind: rectangle.zoneId ? 'zone' : 'graphic', id })),
@@ -110,7 +110,27 @@ export function resizePCBRectangle(board: PCB, rectangle: PCBRectangle, bounds: 
       (k) => current.bounds[k] !== rectangle.bounds[k],
     )
   )
-    throw new Error('The selected boundary changed. Select it again before resizing.');
+    throw new Error('The selected boundary changed. Select it again before editing.');
+}
+
+/** One Properties edit updates every native edge of the selected rectangle. */
+export function setPCBRectangleWidth(board: PCB, rectangle: PCBRectangle, width: number): PCB {
+  checkPCBRectangle(board, rectangle);
+  if (rectangle.zoneId)
+    throw new Error('Select a rectangular Edge.Cuts outline to edit line width.');
+  if (!Number.isFinite(width) || width < 0.0001 || width > 1000)
+    throw new Error('Line width must be between 0.0001 and 1000 mm.');
+  const ids = new Set(rectangle.ids);
+  return {
+    ...board,
+    graphics: board.graphics.map((graphic) =>
+      ids.has(graphic.id) ? { ...graphic, width } : graphic,
+    ),
+  };
+}
+
+export function resizePCBRectangle(board: PCB, rectangle: PCBRectangle, bounds: PCBBounds): PCB {
+  checkPCBRectangle(board, rectangle);
   if (
     Object.values(bounds).some((n) => !Number.isFinite(n) || Math.abs(n) > 100000) ||
     bounds.maxX - bounds.minX < 0.001 ||

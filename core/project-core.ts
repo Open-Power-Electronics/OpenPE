@@ -25,6 +25,7 @@ import {
   moveSelection,
   moveText,
   placeNoConnect,
+  pasteSchematicSelection,
   removeSelection,
   saveAnnotation,
   saveLabel,
@@ -32,6 +33,7 @@ import {
   transformSelection,
 } from '../lib/schematic-edit';
 import { commitWireRoute } from '../lib/wiring';
+import { previewSchematicMove } from '../lib/schematic-move';
 import { val } from '../lib/sexpr';
 import { schematicTexts } from '../lib/schematic-text';
 import { displayName, MAX_DISPLAY_NAME_LENGTH } from '../lib/display-name';
@@ -166,12 +168,24 @@ export const coreQueryDefinitions: CoreDefinition[] = [
   ),
   definition(
     'project.snapshot',
-    'Read the complete canonical project, pending Source draft and current revision.',
+    'Read canonical design, Source state and revision. Agent observations omit native backing and private draft text.',
   ),
-  definition('project.get', 'Read the complete canonical project document.'),
-  definition('project.source', 'Read the complete validated canonical project JSON.'),
-  definition('source.get', 'Read validated Source, pending Source text and validation error.'),
-  definition('source.files', 'Read every native KiCad project file, including pending file edits.'),
+  definition(
+    'project.get',
+    'Read canonical design. Agent observations omit private native backing.',
+  ),
+  definition(
+    'project.source',
+    'Read validated canonical JSON. Agent observations omit private native backing.',
+  ),
+  definition(
+    'source.get',
+    'Read validated Source and pending-edit status. Agent observations omit private backing, draft text and parser excerpts.',
+  ),
+  definition(
+    'source.files',
+    'Read native design text, including pending edits. Agent access excludes model and log resources.',
+  ),
   definition('history.get', 'Read the available document undo and redo counts.'),
   definition('schematic.list', 'List all independent schematics and their stable IDs.'),
   definition(
@@ -336,6 +350,25 @@ export const coreCommandDefinitions: CoreDefinition[] = [
     ),
   ),
   operationCommand(
+    'schematic.pose',
+    'Commit a complete canvas pickup pose in one undo transaction: apply ordered rotations/mirrors around anchor, then translate anchor to target. connected retains attached wire networks; false leaves unselected wires in place.',
+    object(
+      {
+        ...sheet,
+        ids,
+        anchor: point,
+        target: point,
+        operations: {
+          type: 'array',
+          maxItems: 128,
+          items: { enum: ['rotate', 'rotateReverse', 'mirrorX', 'mirrorY'] },
+        },
+        connected: { type: 'boolean' },
+      },
+      ['schematicId', 'ids', 'anchor', 'target', 'operations', 'connected'],
+    ),
+  ),
+  operationCommand(
     'schematic.delete',
     'Delete selected objects and complete attached component leads using the shared deletion rules.',
     object({ ...sheet, ids }, ['schematicId', 'ids']),
@@ -344,6 +377,19 @@ export const coreCommandDefinitions: CoreDefinition[] = [
     'schematic.duplicate',
     'Copy selected objects with fresh UUIDs/references and return their IDs.',
     object({ ...sheet, ids, delta: point }, ['schematicId', 'ids']),
+  ),
+  operationCommand(
+    'schematic.paste',
+    'Paste selected objects and native annotations from a retained canonical JSON source snapshot (source.get().source or JSON.stringify(project.get())) into the same schematic, preserving current objects and allocating fresh IDs/references in one undo transaction. Rejects changed embedded symbols.',
+    object(
+      {
+        ...sheet,
+        source: { type: 'string', maxLength: MAX_PROJECT_BYTES },
+        ids,
+        delta: point,
+      },
+      ['schematicId', 'source', 'ids', 'delta'],
+    ),
   ),
   operationCommand(
     'schematic.wire',
@@ -1112,11 +1158,29 @@ export class ProjectCore {
       case 'schematic.transform':
         next = transformSelection(schematic, args.ids, args.operation, args.pivot);
         break;
+      case 'schematic.pose':
+        next = previewSchematicMove(
+          schematic,
+          args.ids,
+          args.anchor,
+          args.target,
+          args.operations,
+          args.connected,
+        );
+        break;
       case 'schematic.delete':
         next = removeSelection(schematic, args.ids);
         break;
       case 'schematic.duplicate': {
         const result = duplicateSelection(schematic, args.ids, args.delta);
+        next = result.circuit;
+        selection = result.selection;
+        break;
+      }
+      case 'schematic.paste': {
+        const snapshot = findSchematic(parseProject(args.source), args.schematicId);
+        if (!snapshot) throw new Error('Copy a selection from this document first.');
+        const result = pasteSchematicSelection(schematic, snapshot, args.ids, args.delta);
         next = result.circuit;
         selection = result.selection;
         break;

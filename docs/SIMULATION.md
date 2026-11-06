@@ -111,9 +111,9 @@ directories and reference designators. Source model bytes remain unchanged and
 the executed derivative participates in the result identity. The opt-in native
 latch regression checks initialization, set/reset priority and held state.
 
-`scripts/home-simulation-verification.ts` requires completion and a final-2-ms
+`scripts/home-simulation-verification.ts` requires completion and a final-20%
 time-weighted output mean within the expected range, ripple ≤5% of absolute mean
-and drift ≤1% between adjacent 1 ms windows. Both Fly-Buck rails must pass.
+and drift ≤1% between the two equal halves of that interval. Both Fly-Buck rails must pass.
 `npm run simulation:check-examples` records exact source/deck/model/solver
 identities and rejects incomplete startup ramps.
 
@@ -289,8 +289,10 @@ Heat-summary version and dissipative vector/node metadata participate in complet
 
 ## Shared simulation capabilities
 
-Native discovery/file-set validation excludes generated `spice/` records; decks,
-model copies and results never enter editable Source, undo or recovery.
+Native discovery/file-set validation excludes generated `spice/` records. Source
+lists them as ordinary project files, with fully loaded text editable under the
+[ordinary-file rules](FORMAT.md#source-transactions). They remain outside native
+design, Core undo and recovery; changing an artifact's bytes invalidates its saved-result identity.
 
 SPICE registers its queries and commands in the project's capability host through `lib/simulation-capabilities.ts`. Human settings, Run/Stop, probes and waveform controls invoke the same handlers as Agent commands. The Agent uses `openpe_query`, `openpe_execute` and `openpe_observe`; query `capabilities.list` for current schemas and availability before using a capability. Opening Simulation lazily registers its resident runtime capabilities.
 

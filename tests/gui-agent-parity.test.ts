@@ -1,19 +1,24 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { createCapabilityHost } from '../api/capabilities';
 import { compileCapabilitySchema } from '../api/capability-schema';
 import { ProjectCore } from '../core/project-core';
 import { registerProjectCapabilities } from '../core/register-project';
 import { createPart, pinPositions, uid } from '../lib/circuit';
-import { createProject, type Project } from '../lib/project';
+import { createProject, parseProject, serializeProject, type Project } from '../lib/project';
 import {
   createEmptyPCB,
   createPCBFootprint,
   flipPCBFootprint,
+  flipPCBSelection,
+  movePCBSelection,
+  rotatePCBSelection,
   setPCBTrackProperties,
+  type PCBSelection,
 } from '../lib/pcb-layout';
 import {
   preparePCBFootprintProperties,
+  preparePCBZoneProperties,
   setPCBPadProperties,
   setPCBTrackEndpoints,
 } from '../lib/pcb-properties';
@@ -21,6 +26,7 @@ import {
   fieldId,
   moveText,
   placeNoConnect,
+  pasteSchematicSelection,
   saveAnnotation,
   saveLabel,
   simplifyWires,
@@ -29,10 +35,35 @@ import { projectFromNativeFiles } from '../lib/kicad-project';
 import { displayName } from '../lib/display-name';
 import { preparePartGeometry } from '../lib/part-properties';
 import type { PCB } from '../lib/pcb';
-import { findPCBRectangle, resizePCBRectangle } from '../lib/pcb-outline-resize';
+import {
+  findPCBRectangle,
+  resizePCBRectangle,
+  setPCBRectangleWidth,
+} from '../lib/pcb-outline-resize';
 import { setPCBLocked } from '../lib/pcb-lock';
 import { registerLibraryCapabilities } from '../lib/library-capabilities';
-import { parseSExpr } from '../lib/sexpr';
+import { child, children, parseSExpr, val } from '../lib/sexpr';
+import { previewSchematicMove, type SchematicMoveOperation } from '../lib/schematic-move';
+import { projectNetGroups } from '../lib/project-net-groups';
+import { schematicTexts } from '../lib/schematic-text';
+
+/** Equivalent gestures receive the same fresh UUID stream without changing production uid. */
+async function withStableIds<T>(operation: () => T | Promise<T>): Promise<T> {
+  let sequence = 0;
+  const replacement = mock.method(
+    crypto,
+    'randomUUID',
+    () =>
+      `00000000-0000-4000-8000-${(++sequence).toString(16).padStart(12, '0')}` as ReturnType<
+        typeof crypto.randomUUID
+      >,
+  );
+  try {
+    return await operation();
+  } finally {
+    replacement.mock.restore();
+  }
+}
 
 function fixture() {
   const project = createProject();
@@ -146,8 +177,9 @@ async function parity(
   input: (project: Project) => Record<string, unknown>,
   human: (core: ProjectCore, project: Project) => string | void,
   createdId?: (result: any) => string,
+  makeProject: () => Project = fixture,
 ) {
-  const project = fixture();
+  const project = makeProject();
   const gui = new ProjectCore(project),
     agent = new ProjectCore(project);
   const host = createCapabilityHost({ revision: () => String(agent.getSnapshot().revision) });
@@ -156,11 +188,14 @@ async function parity(
   const before = agent.getSnapshot();
   const args = input(before.project!);
   assert.equal(host.catalog().find((entry) => entry.id === id)?.available, true);
-  const humanId = human(gui, gui.getSnapshot().project!);
-  const result = await host.execute(id, args, {
-    actor: 'agent',
-    expectedRevision: String(before.revision),
-  });
+  const humanId = await withStableIds(() => human(gui, gui.getSnapshot().project!));
+  const result = await withStableIds(() =>
+    host.execute(id, args, {
+      actor: 'agent',
+      expectedRevision: String(before.revision),
+    }),
+  );
+  const accepted = agent.getSnapshot().project!;
   const normalize = (value: unknown) => {
     const json = JSON.stringify(value);
     return humanId && createdId ? json.replaceAll(createdId(result), humanId) : json;
@@ -184,6 +219,7 @@ async function parity(
   await assert.rejects(host.execute(id, args, { actor: 'agent' }), /closing/);
   dispose();
   host.dispose();
+  return accepted;
 }
 
 test('GUI and Agent object locks preserve the same native files and whole-project undo', async () => {
@@ -487,6 +523,573 @@ test('GUI and Agent boundary resizing retain zone identity and use the same boun
       core.replaceBoard(resizePCBRectangle(board, rectangle, bounds));
     },
   );
+});
+
+test('Agent connected pickup rotates, mirrors and moves the canvas pose with native-file and single-undo parity', async () => {
+  const topology = (project: Project) =>
+    projectNetGroups(project.schematic)
+      .map((group) => [...group.pins].sort())
+      .filter((pins) => pins.length)
+      .sort();
+  for (const operations of [
+    ['rotate'],
+    ['rotateReverse'],
+    ['mirrorX'],
+    ['rotate', 'mirrorY'],
+  ] as SchematicMoveOperation[][]) {
+    let original: Project;
+    const accepted = await parity(
+      'schematic.pose',
+      (project) => ({
+        schematicId: project.schematic.id,
+        ids: [project.schematic.parts[0].id],
+        anchor: { x: 25.4, y: 25.4 },
+        target: { x: 30.48, y: 27.94 },
+        operations,
+        connected: true,
+      }),
+      (core, project) => {
+        original = project;
+        core.replaceSchematic(
+          previewSchematicMove(
+            project.schematic,
+            [project.schematic.parts[0].id],
+            { x: 25.4, y: 25.4 },
+            { x: 30.48, y: 27.94 },
+            operations,
+            true,
+          ),
+        );
+      },
+      undefined,
+      () => {
+        const project = createProject(),
+          sheet = project.schematic;
+        sheet.parts.push(createPart(sheet, 'R', 25.4, 25.4), createPart(sheet, 'C', 76.2, 25.4));
+        for (const part of sheet.parts) part.rotation = 180;
+        const [a, b] = sheet.parts.map(
+          (part) => pinPositions(part, sheet.libraries[part.libId])[0],
+        );
+        sheet.wires = [
+          { id: uid(), a: { x: a.x, y: a.y }, b: { x: a.x, y: 40.64 } },
+          { id: uid(), a: { x: a.x, y: 40.64 }, b: { x: b.x, y: 40.64 } },
+          { id: uid(), a: { x: b.x, y: 40.64 }, b: { x: b.x, y: b.y } },
+          { id: uid(), a: { x: 63.5, y: 35.56 }, b: { x: 63.5, y: 55.88 } },
+        ];
+        sheet.labels = [{ id: uid(), text: 'SIGNAL', x: a.x, y: a.y }];
+        const otherPin = pinPositions(sheet.parts[0], sheet.libraries[sheet.parts[0].libId])[1];
+        sheet.noConnects = [{ id: uid(), x: otherPin.x, y: otherPin.y }];
+        return project;
+      },
+    );
+    assert.deepEqual(topology(accepted), topology(original!));
+    assert.deepEqual(accepted.schematic.parts[1], original!.schematic.parts[1]);
+    assert.deepEqual(
+      accepted.schematic.wires.find((wire) => wire.id === original!.schematic.wires[3].id),
+      original!.schematic.wires[3],
+    );
+    const moved = accepted.schematic.parts[0],
+      pins = pinPositions(moved, accepted.schematic.libraries[moved.libId]);
+    assert.equal(moved.x, 30.48);
+    assert.equal(moved.y, 27.94);
+    assert.deepEqual(
+      { x: accepted.schematic.labels[0].x, y: accepted.schematic.labels[0].y },
+      { x: pins[0].x, y: pins[0].y },
+    );
+    assert.deepEqual(
+      { x: accepted.schematic.noConnects![0].x, y: accepted.schematic.noConnects![0].y },
+      { x: pins[1].x, y: pins[1].y },
+    );
+  }
+});
+
+test('Agent floating Move applies a compound pose while leaving unselected wires untouched', async () => {
+  let wires: Project['schematic']['wires'];
+  const accepted = await parity(
+    'schematic.pose',
+    (project) => ({
+      schematicId: project.schematic.id,
+      ids: [project.schematic.parts[0].id],
+      anchor: { x: 10.16, y: 10.16 },
+      target: { x: 15.24, y: 12.7 },
+      operations: ['mirrorY', 'rotate'],
+      connected: false,
+    }),
+    (core, project) => {
+      wires = project.schematic.wires;
+      core.replaceSchematic(
+        previewSchematicMove(
+          project.schematic,
+          [project.schematic.parts[0].id],
+          { x: 10.16, y: 10.16 },
+          { x: 15.24, y: 12.7 },
+          ['mirrorY', 'rotate'],
+          false,
+        ),
+      );
+    },
+  );
+  assert.deepEqual(accepted.schematic.wires, wires!);
+});
+
+test('Agent Layout pickup matches canvas ordered group rotation, anchored flip and final move in one undo', async () => {
+  const anchor = { x: 20, y: 10 },
+    target = { x: 35, y: 27 };
+  const selected = (board: PCB): PCBSelection[] => [
+    { kind: 'footprint', id: board.footprints[0].id },
+    { kind: 'track', id: board.tracks[0].id },
+    { kind: 'via', id: board.vias[0].id },
+    { kind: 'graphic', id: board.graphics[0].id },
+  ];
+  const accepted = await parity(
+    'layout.pose',
+    (project) => ({
+      boardId: project.pcb!.id,
+      selection: selected(project.pcb!),
+      anchor,
+      target,
+      operations: ['rotate', 'flip', 'rotateReverse'],
+    }),
+    (core, project) => {
+      const board = project.pcb!,
+        selection = selected(board);
+      let preview = rotatePCBSelection(board, selection, 90, anchor);
+      preview = flipPCBSelection(preview, selection, anchor);
+      preview = rotatePCBSelection(preview, selection, -90, anchor);
+      core.replaceBoard(
+        movePCBSelection(preview, selection, { x: target.x - anchor.x, y: target.y - anchor.y }),
+      );
+    },
+  );
+  const board = accepted.pcb!,
+    footprint = board.footprints[0];
+  assert.deepEqual(
+    { x: footprint.x, y: footprint.y, side: footprint.side, rotation: footprint.rotation },
+    { x: 45, y: 27, side: 'back', rotation: 180 },
+  );
+  assert.deepEqual(board.tracks[0].start, { x: 35, y: 37 });
+  assert.deepEqual(board.tracks[0].end, { x: 40, y: 37 });
+  assert.deepEqual({ x: board.vias[0].x, y: board.vias[0].y }, { x: 40, y: 37 });
+});
+
+test('Agent zone override reset restores thermal relief, retains the net and refreshes saved copper like Properties', async () => {
+  const accepted = await parity(
+    'layout.zone',
+    (project) => ({
+      boardId: project.pcb!.id,
+      zoneId: project.pcb!.zones[0].id,
+      padConnection: null,
+    }),
+    (core, project) => {
+      const board = project.pcb!;
+      core.replaceBoard({
+        ...board,
+        zones: [preparePCBZoneProperties(board.zones[0], { padConnection: undefined })],
+      });
+    },
+    undefined,
+    () => {
+      const project = fixture(),
+        board = project.pcb!;
+      board.zones[0].padConnection = 'yes';
+      board.footprints[0].pads[0].netId = board.nets[0].id;
+      return project;
+    },
+  );
+  assert.equal(Object.hasOwn(accepted.pcb!.zones[0], 'padConnection'), false);
+  assert.equal(accepted.pcb!.zones[0].netId, accepted.pcb!.nets[0].id);
+  assert.ok(accepted.pcb!.zones[0].filledPolygons!.length > 0);
+});
+
+test('Agent rectangle line width changes all four native edges with Properties parity and one undo', async () => {
+  const accepted = await parity(
+    'layout.rectangle.properties',
+    (project) => ({
+      boardId: project.pcb!.id,
+      selection: project
+        .pcb!.graphics.filter((graphic) => graphic.layer === 'Edge.Cuts')
+        .map((graphic) => ({ kind: 'graphic', id: graphic.id })),
+      width: 0.2,
+    }),
+    (core, project) => {
+      const board = project.pcb!,
+        rectangle = findPCBRectangle(board, [{ kind: 'graphic', id: board.graphics[1].id }])!;
+      core.replaceBoard(setPCBRectangleWidth(board, rectangle, 0.2));
+    },
+    undefined,
+    () => {
+      const project = fixture(),
+        board = project.pcb!;
+      const points = [
+        { x: -5, y: -5 },
+        { x: 35, y: -5 },
+        { x: 35, y: 35 },
+        { x: -5, y: 35 },
+      ];
+      board.graphics = [
+        board.graphics[0],
+        ...points.map((start, index) => ({
+          id: uid(),
+          layer: 'Edge.Cuts' as const,
+          start,
+          end: points[(index + 1) % 4],
+          width: 0.05,
+        })),
+      ];
+      return project;
+    },
+  );
+  assert.deepEqual(
+    accepted.pcb!.graphics.map((graphic) => graphic.width),
+    [0.1, 0.2, 0.2, 0.2, 0.2],
+  );
+});
+
+test('pickup, rectangle and zone capabilities discover exact inputs and reject invalid or locked edits atomically', async () => {
+  const project = fixture(),
+    board = project.pcb!;
+  board.footprints[0].locked = true;
+  board.graphics[1].locked = true;
+  board.zones[0].locked = true;
+  const core = new ProjectCore(project),
+    host = createCapabilityHost();
+  const dispose = registerProjectCapabilities(host, core),
+    before = core.getSnapshot();
+  const pose = {
+    boardId: board.id,
+    selection: [{ kind: 'footprint', id: board.footprints[0].id }],
+    anchor: { x: 10, y: 10 },
+    target: { x: 15, y: 12 },
+    operations: ['rotate', 'flip'],
+  };
+  for (const [id, args, message] of [
+    ['layout.pose', pose, /Unlock/],
+    ['layout.pose', { ...pose, selection: [{ kind: 'via', id: uid() }] }, /no longer exists/],
+    ['layout.pose', { ...pose, operations: ['mirrorX'] }, /operations/],
+    [
+      'layout.rectangle.properties',
+      { boardId: board.id, selection: [{ kind: 'graphic', id: board.graphics[1].id }], width: 0.2 },
+      /Unlock/,
+    ],
+    [
+      'layout.rectangle.properties',
+      { boardId: board.id, selection: [{ kind: 'graphic', id: board.graphics[0].id }], width: 0.2 },
+      /rectangular/,
+    ],
+    [
+      'layout.rectangle.properties',
+      { boardId: board.id, selection: [{ kind: 'graphic', id: board.graphics[1].id }], width: 0 },
+      /width/,
+    ],
+    [
+      'layout.zone',
+      { boardId: board.id, zoneId: board.zones[0].id, padConnection: 'yes' },
+      /Unlock/,
+    ],
+    [
+      'layout.zone',
+      { boardId: board.id, zoneId: board.zones[0].id, thermalGap: null },
+      /thermalGap/,
+    ],
+    [
+      'schematic.pose',
+      {
+        schematicId: project.schematic.id,
+        ids: [project.schematic.parts[0].id],
+        anchor: { x: 0, y: 0 },
+        target: { x: 0, y: 0 },
+        operations: ['flip'],
+        connected: true,
+      },
+      /operations/,
+    ],
+  ] as [string, object, RegExp][]) {
+    await assert.rejects(host.execute(id, args, { actor: 'agent' }), message);
+    assert.equal(core.getSnapshot(), before);
+  }
+  const definition = host.catalog().find((entry) => entry.id === 'layout.zone')!;
+  const validate = compileCapabilitySchema(definition.inputSchema);
+  assert.equal(
+    validate({
+      boardId: board.id,
+      zoneId: board.zones[0].id,
+      netId: null,
+      padConnection: null,
+      holes: null,
+      keepout: null,
+    }).valid,
+    true,
+  );
+  assert.equal(
+    validate({ boardId: board.id, zoneId: board.zones[0].id, outline: null }).valid,
+    false,
+  );
+  dispose();
+  host.dispose();
+});
+
+test('zone optional resets keep explicit unassigned netId null in the accepted native document', async () => {
+  const accepted = await parity(
+    'layout.zone',
+    (project) => ({
+      boardId: project.pcb!.id,
+      zoneId: project.pcb!.zones[0].id,
+      netId: null,
+      padConnection: null,
+      priority: null,
+      islandRemovalMode: null,
+      holes: null,
+    }),
+    (core, project) => {
+      const board = project.pcb!;
+      core.replaceBoard({
+        ...board,
+        zones: [
+          preparePCBZoneProperties(board.zones[0], {
+            netId: null,
+            padConnection: undefined,
+            priority: undefined,
+            islandRemovalMode: undefined,
+            holes: undefined,
+          }),
+        ],
+      });
+    },
+    undefined,
+    () => {
+      const project = fixture(),
+        zone = project.pcb!.zones[0];
+      Object.assign(zone, {
+        padConnection: 'no',
+        priority: 2,
+        islandRemovalMode: 1,
+        holes: [
+          [
+            { x: 3, y: 3 },
+            { x: 4, y: 3 },
+            { x: 4, y: 4 },
+            { x: 3, y: 4 },
+          ],
+        ],
+      });
+      delete zone.filledPolygons;
+      return project;
+    },
+  );
+  assert.equal(accepted.pcb!.zones[0].netId, null);
+  for (const field of ['padConnection', 'priority', 'islandRemovalMode', 'holes'])
+    assert.equal(Object.hasOwn(accepted.pcb!.zones[0], field), false);
+});
+
+test('unchanged complete poses and cleared absent zone overrides create no native change or undo', async () => {
+  const core = new ProjectCore(fixture()),
+    host = createCapabilityHost();
+  const dispose = registerProjectCapabilities(host, core),
+    before = core.getSnapshot();
+  const project = before.project!,
+    board = project.pcb!,
+    position = { x: 10.16, y: 10.16 };
+  const native = core.getNativeFiles();
+  for (const [id, args] of [
+    [
+      'schematic.pose',
+      {
+        schematicId: project.schematic.id,
+        ids: [project.schematic.parts[0].id],
+        anchor: position,
+        target: position,
+        operations: [],
+        connected: true,
+      },
+    ],
+    [
+      'layout.pose',
+      {
+        boardId: board.id,
+        selection: [{ kind: 'footprint', id: board.footprints[0].id }],
+        anchor: position,
+        target: position,
+        operations: [],
+      },
+    ],
+    ['layout.zone', { boardId: board.id, zoneId: board.zones[0].id, padConnection: null }],
+  ] as [string, object][]) {
+    await host.execute(id, args, { actor: 'agent' });
+    assert.equal(core.getSnapshot(), before);
+    assert.deepEqual(core.getNativeFiles(), native);
+  }
+  dispose();
+  host.dispose();
+});
+
+test('Agent paste retains copied old values, deleted objects and native annotations without replacing current objects', async () => {
+  const copied = fixture(),
+    sheet = copied.schematic;
+  sheet.parts[0].value = '10k';
+  sheet.parts.push(createPart(sheet, 'C', 20.32, 10.16));
+  const annotation = saveAnnotation(sheet, 'Copied annotation', { x: 30.48, y: 30.48 });
+  copied.schematic = annotation.circuit;
+  const note = children(copied.schematic.original!, 'text').find(
+    (node) => val(child(node, 'uuid')) === annotation.id,
+  )!;
+  child(child(note, 'effects')!, 'font')!.push('bold', ['color', '0.1', '0.2', '0.3', '1']);
+  child(note, 'effects')!.push(['href', '"https://example.com/datasheet"']);
+  note.push(['exclude_from_sim', 'yes']);
+  const ids = [
+    ...copied.schematic.parts.map((part) => part.id),
+    sheet.wires[0].id,
+    sheet.labels[0].id,
+    annotation.id,
+  ];
+  const source = serializeProject(copied),
+    current = parseProject(source);
+  current.schematic.parts[0].value = '22k';
+  current.schematic.parts.pop();
+  current.schematic = saveAnnotation(
+    current.schematic,
+    'Live annotation',
+    { x: 30.48, y: 30.48 },
+    annotation.id,
+  ).circuit;
+  const gui = new ProjectCore(current),
+    agent = new ProjectCore(current);
+  const host = createCapabilityHost({ revision: () => String(agent.getSnapshot().revision) });
+  const dispose = registerProjectCapabilities(host, agent),
+    before = agent.getSnapshot();
+  const baseline = agent.getNativeFiles(),
+    delta = { x: 10.16, y: 10.16 };
+  const expected = await withStableIds(() => {
+    const expected = pasteSchematicSelection(
+      gui.getSnapshot().project!.schematic,
+      copied.schematic,
+      ids,
+      delta,
+    );
+    gui.replaceSchematic(expected.circuit);
+    return expected;
+  });
+  const input = { schematicId: current.schematic.id, source, ids, delta };
+  const result = (await withStableIds(() =>
+    host.execute('schematic.paste', input, {
+      actor: 'agent',
+      expectedRevision: String(before.revision),
+    }),
+  )) as { selection: string[] };
+  assert.equal(result.selection.length, ids.length);
+  assert.equal(new Set(result.selection).size, ids.length);
+  assert.ok(result.selection.every((id) => !ids.includes(id)));
+  const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const retained = new Set(JSON.stringify({ copied, current, baseline }).match(uuid));
+  // Parsing a transport snapshot may allocate temporary UUIDs before copying.
+  // Build one bijection for each result's selection, canonical data and native
+  // files together; retained UUIDs cannot be normalized or substituted.
+  const normalizedCopy = (selection: string[], core: ProjectCore) => {
+    const fresh = new Map<string, string>();
+    const source = JSON.stringify({
+      selection,
+      project: core.query('project.get'),
+      files: core.getNativeFiles(),
+    });
+    const normalized = source.replace(uuid, (id) => {
+      if (retained.has(id)) return id;
+      if (!fresh.has(id)) fresh.set(id, `new-uuid-${fresh.size}`);
+      return fresh.get(id)!;
+    });
+    return { normalized, count: fresh.size };
+  };
+  assert.deepEqual(
+    normalizedCopy(result.selection, agent),
+    normalizedCopy(expected.selection, gui),
+  );
+  const accepted = agent.getSnapshot().project!;
+  assert.equal(
+    accepted.schematic.parts.find((part) => part.id === sheet.parts[0].id)!.value,
+    '22k',
+  );
+  assert.deepEqual(
+    accepted.schematic.parts
+      .filter((part) => result.selection.includes(part.id))
+      .map((part) => [part.ref, part.value]),
+    [
+      ['R2', '10k'],
+      ['C2', sheet.parts[1].value],
+    ],
+  );
+  assert.deepEqual(
+    schematicTexts(accepted.schematic.original).map((text) => text.text),
+    ['Retained note', 'Live annotation', 'Copied annotation'],
+  );
+  assert.deepEqual(
+    schematicTexts(projectFromNativeFiles(agent.getNativeFiles()).schematic.original).map(
+      (text) => text.text,
+    ),
+    ['Retained note', 'Live annotation', 'Copied annotation'],
+  );
+  const copiedText = schematicTexts(accepted.schematic.original).find(
+    (text) => text.text === 'Copied annotation',
+  )!;
+  assert.equal(copiedText.bold, true);
+  assert.deepEqual(copiedText.color, [0.1, 0.2, 0.3, 1]);
+  assert.equal(copiedText.href, 'https://example.com/datasheet');
+  const acceptedNote = children(accepted.schematic.original!, 'text').find(
+    (node) => val(child(node, 'uuid')) === copiedText.id,
+  )!;
+  assert.equal(val(child(acceptedNote, 'exclude_from_sim')), 'yes');
+  assert.equal(agent.getSnapshot().undoDepth, 1);
+  assert.equal(gui.getSnapshot().undoDepth, 1);
+  agent.undo();
+  assert.deepEqual(agent.getNativeFiles(), baseline);
+  await assert.rejects(
+    host.execute('schematic.paste', input, { actor: 'agent', expectedRevision: '-1' }),
+    /changed/,
+  );
+  agent.updateSource(agent.getSnapshot().source + '\n');
+  await assert.rejects(host.execute('schematic.paste', input, { actor: 'agent' }), /Source/);
+  agent.discardSource();
+  agent.setEditingBlocked('This project is closing.');
+  await assert.rejects(host.execute('schematic.paste', input, { actor: 'agent' }), /closing/);
+  dispose();
+  host.dispose();
+});
+
+test('Agent and GUI paste reject foreign sheets or changed embedded symbols without an edit', async () => {
+  const project = fixture(),
+    snapshot = structuredClone(project),
+    core = new ProjectCore(project);
+  const host = createCapabilityHost(),
+    dispose = registerProjectCapabilities(host, core);
+  const before = core.getSnapshot(),
+    ids = [project.schematic.parts[0].id];
+  const input = { schematicId: project.schematic.id, ids, delta: { x: 10.16, y: 10.16 } };
+  const different = createProject();
+  assert.throws(
+    () => pasteSchematicSelection(project.schematic, different.schematic, ids),
+    /this document/,
+  );
+  await assert.rejects(
+    host.execute('schematic.paste', { ...input, source: serializeProject(different) }),
+    /this document/,
+  );
+  const library = snapshot.schematic.libraries[snapshot.schematic.parts[0].libId];
+  library.push([
+    'property',
+    '"Snapshot note"',
+    '"Changed"',
+    ['at', '0', '0', '0'],
+    ['effects', ['font', ['size', '1.27', '1.27']], ['hide', 'yes']],
+  ]);
+  assert.throws(
+    () => pasteSchematicSelection(project.schematic, snapshot.schematic, ids),
+    /embedded symbol changed/,
+  );
+  await assert.rejects(
+    host.execute('schematic.paste', { ...input, source: serializeProject(snapshot) }),
+    /embedded symbol changed/,
+  );
+  await assert.rejects(host.execute('schematic.paste', { ...input, source: '{}' }));
+  assert.equal(core.getSnapshot(), before);
+  dispose();
+  host.dispose();
 });
 
 test('Agent footprint placement uses the Layout chooser preparation, rejects duplicates and stale library responses', async () => {

@@ -27,7 +27,7 @@ npm start
 
 Setup and build may download required libraries and solver resources. If dependencies were installed with `--ignore-scripts`, run `npm run postinstall` before starting Electron.
 
-Home opens the original projects in `examples/`. Use **Save as** to create a personal copy with its supporting assets. Designs remain native `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` file sets.
+Home opens the original projects in `examples/` and `recent/`: nine curated Examples and EMC Flyback under Recent, plus discovered user-added native projects. Use **Save as** to create a personal copy with its supporting assets. Designs remain native `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` file sets.
 
 ## Development
 

@@ -6,6 +6,8 @@ import ts from 'typescript';
 import { ProjectCore } from '../core/project-core';
 import { createProject, findSchematic } from '../lib/project';
 import { circuitFingerprint } from '../lib/circuit';
+import { agentProject } from '../lib/agent-project-access';
+import { agentSource } from '../context/agent-workspace-context';
 
 // Exercise the production closure without mounting a browser or replacing its
 // asynchronous capture logic with a test implementation.
@@ -41,6 +43,8 @@ function fixture(active: boolean) {
     filename: 'Workbench.readWorkspaceContext.js',
   }).runInNewContext({
     core,
+    agentProject,
+    agentSource,
     active,
     contextActive,
     activeSchematicRef: { current: schematicId },
@@ -107,4 +111,28 @@ test('stable active and inactive observations retain their presentation boundary
     assert.equal(state.captures(), active ? 1 : 0);
     assert.equal(context.ui.presentation.text, active ? state.presentation.text : '');
   }
+});
+
+test('workspace observation rejects a Source draft change while references load', async () => {
+  const state = fixture(true);
+  const pending = state.read();
+  state.core.updateSource('private invalid draft');
+  state.ready();
+  await assert.rejects(pending, /project or active file changed/);
+  assert.equal(state.captures(), 0);
+});
+
+test('explicit workspace observation contains only Source metadata for an invalid draft', async () => {
+  const state = fixture(true);
+  state.core.updateSource('private invalid model text');
+  const pending = state.read();
+  state.ready();
+  const context = await pending;
+  assert.doesNotMatch(JSON.stringify(context), /private invalid model text|nativeFiles/);
+  assert.deepEqual(JSON.parse(JSON.stringify((context as any).source)), {
+    pending: true,
+    draft: null,
+    error: '',
+    draftCharacters: 'private invalid model text'.length,
+  });
 });

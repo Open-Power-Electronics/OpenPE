@@ -2,6 +2,7 @@ import type { CapabilityHost } from '../api/capabilities';
 import { ProjectCore, coreCommandDefinitions, coreQueryDefinitions } from './project-core';
 import { parseProject, type Project } from '../lib/project';
 import type { ModelCadObject } from '../lib/model-cad';
+import { agentCoreResult, prepareAgentCoreInput } from '../lib/agent-project-access';
 
 /** Register the same document engine for human and Agent transports. */
 export function registerProjectCapabilities(
@@ -30,7 +31,10 @@ export function registerProjectCapabilities(
             return 'This project has no PCB layout.';
           return true;
         },
-        handler: (input, context) => core.query(definition.id, input, { signal: context.signal }),
+        handler: async (input, context) => {
+          const result = await core.query(definition.id, input, { signal: context.signal });
+          return context.actor === 'agent' ? agentCoreResult(result) : result;
+        },
       }),
     ),
     ...coreCommandDefinitions.map((definition) =>
@@ -65,6 +69,9 @@ export function registerProjectCapabilities(
         },
         handler: (input, context) => {
           const basis = core.getSnapshot();
+          if (context.actor === 'agent') input = prepareAgentCoreInput(definition.id, input, basis);
+          const result = (value: unknown) =>
+            context.actor === 'agent' ? agentCoreResult(value) : value;
           if (
             context.expectedRevision !== undefined &&
             context.expectedRevision !== String(basis.revision)
@@ -84,17 +91,21 @@ export function registerProjectCapabilities(
             } catch {
               // Preserve the ordinary Core diagnostic/error event for invalid
               // native drafts before the host attempts geometry preparation.
-              return core.execute(definition.id, input, {
-                expectedRevision: context.expectedRevision,
-              });
+              return result(
+                core.execute(definition.id, input, {
+                  expectedRevision: context.expectedRevision,
+                }),
+              );
             }
           } else if (definition.id === 'project.replace')
             candidate = parseProject((input as { source: string }).source);
           const pending = candidate ? core.pendingModelCadGeometry(candidate) : [];
           if (!pending.length)
-            return core.execute(definition.id, replay, {
-              expectedRevision: context.expectedRevision,
-            });
+            return result(
+              core.execute(definition.id, replay, {
+                expectedRevision: context.expectedRevision,
+              }),
+            );
           if (!options.prepareModelCad)
             throw new Error('The Model CAD geometry kernel is unavailable.');
           return (async () => {
@@ -107,9 +118,11 @@ export function registerProjectCapabilities(
               current.editingBlocked
             )
               throw new Error('The project changed while CAD geometry was prepared. Try again.');
-            return core.execute(definition.id, replay, {
-              expectedRevision: String(basis.revision),
-            });
+            return result(
+              core.execute(definition.id, replay, {
+                expectedRevision: String(basis.revision),
+              }),
+            );
           })();
         },
       }),

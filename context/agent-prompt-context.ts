@@ -202,7 +202,7 @@ export function agentPromptContext(value: unknown): unknown {
       source: {
         pending: workspace.source.pending,
         error: workspace.source.error,
-        draftCharacters: workspace.source.draft?.length ?? 0,
+        draftCharacters: workspace.source.draftCharacters,
       },
       ui: workspace.ui,
       icDatasheet: workspace.icDatasheet,

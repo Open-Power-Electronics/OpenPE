@@ -134,6 +134,7 @@ import {
   assertPCBSelectionUnlocked,
   deletePCBSelection,
   flipPCBFootprint,
+  flipPCBSelection,
   footprintPoint,
   movePCBSelection,
   padPosition,
@@ -253,6 +254,7 @@ type Props = {
   gridSpacing?: number;
   leftButtonDrag?: LeftButtonDrag;
   gridControl?: ReactNode;
+  ruleStatus?: ReactNode;
   draftStatus?: string;
   agentContextRef?: RefObject<Record<string, unknown> | null>;
 };
@@ -315,6 +317,7 @@ function LayoutEditor({
   gridSpacing = defaultLayoutGridSpacing,
   leftButtonDrag = defaultLeftButtonDrag,
   gridControl,
+  ruleStatus,
   draftStatus,
   agentContextRef,
   capabilityHost,
@@ -2275,14 +2278,7 @@ function LayoutEditor({
       actionSelection((candidate) => flip([candidate.selection!]), ['footprint']);
     if (!ids?.length) return;
     const basis = drag?.preview ?? pcb;
-    const next = {
-      ...basis,
-      footprints: basis.footprints.map((f) => {
-        if (!ids.some((s) => s.kind === 'footprint' && s.id === f.id)) return f;
-        const flipped = flipPCBFootprint(f);
-        return drag ? { ...flipped, y: Number((2 * drag.start.y - f.y).toFixed(6)) } : flipped;
-      }),
-    };
+    const next = flipPCBSelection(basis, ids, drag?.start);
     if (drag) setDrag({ ...drag, preview: next });
     else if (commit(next)) setSelection(ids);
   }
@@ -4935,11 +4931,8 @@ function LayoutEditor({
           <EditorStatusBar
             className="layout-status"
             active={active && visible}
-            modeActions={{
-              onInteraction: () => toolbarActions.current.activate('select'),
-              onAnnotation: () => toolbarActions.current.activate('annotate'),
-              annotationDisabled,
-            }}
+            ruleStatus={ruleStatus}
+            centerCoordinates
             mode={
               onAnalysisProbe
                 ? 'Analysis probe'

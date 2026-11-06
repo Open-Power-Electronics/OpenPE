@@ -523,6 +523,43 @@ export function rotatePCBSelection(
     }),
   };
 }
+/** Pickup flips reflect package origins across the anchor's horizontal axis. */
+export function flipPCBSelection(board: PCB, selection: Selection, pivot?: Point): PCB {
+  const origin = pivot ? point(pivot) : undefined;
+  return {
+    ...board,
+    footprints: board.footprints.map((footprint) => {
+      if (!selected(selection, 'footprint', footprint.id)) return footprint;
+      const flipped = flipPCBFootprint(footprint);
+      return origin ? { ...flipped, y: coordinate(2 * origin.y - footprint.y) } : flipped;
+    }),
+  };
+}
+
+export type PCBMoveOperation = 'rotate' | 'rotateReverse' | 'flip';
+
+/** Apply the same ordered pickup edits as the canvas, then place its exact pose. */
+export function previewPCBMove(
+  board: PCB,
+  selection: readonly PCBSelection[],
+  anchor: Point,
+  target: Point,
+  operations: readonly PCBMoveOperation[] = [],
+): PCB {
+  const origin = point(anchor),
+    destination = point(target);
+  let posed = board;
+  for (const operation of operations)
+    posed =
+      operation === 'flip'
+        ? flipPCBSelection(posed, selection, origin)
+        : rotatePCBSelection(posed, selection, operation === 'rotate' ? 90 : -90, origin);
+  return movePCBSelection(posed, selection, {
+    x: destination.x - origin.x,
+    y: destination.y - origin.y,
+  });
+}
+
 export function deletePCBSelection(board: PCB, selection: Selection): PCB {
   assertPCBSelectionUnlocked(board, selection);
   return {

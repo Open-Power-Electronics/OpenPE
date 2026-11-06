@@ -5,7 +5,7 @@ import { flushLayoutCamera } from '../lib/layout-camera-presentation';
  * their own structured inputs. This never reads files or browser storage. */
 export function captureAgentPresentation(root: HTMLElement = document.body) {
   const excluded =
-    '.chat-panel, .cm-editor, script, style, [hidden], [aria-hidden="true"], [data-agent-private]';
+    '.chat-panel, .source-editor-code, .cm-editor, script, style, [hidden], [aria-hidden="true"], [data-agent-private]';
   const drawingElements = Array.from(
     root.querySelectorAll<SVGSVGElement>('.canvas-wrap > svg, .pcb-canvas svg'),
   );

@@ -7,6 +7,7 @@ import {
   validateThermalResult,
 } from './thermal-format.mjs';
 import { detectThermal, runThermalSimulation } from './thermal-runtime.mjs';
+import { publicThermalFailure } from './thermal-errors.mjs';
 
 /** The authenticated host supplies the sole executable resource root. Requests
  * carry validated project data and settings, never meshes, scripts or paths. */
@@ -165,7 +166,7 @@ export function registerThermal(
         res.status(control.signal.aborted ? 409 : 422).json({
           error: control.signal.aborted
             ? 'SPICE heat-source lookup cancelled.'
-            : String(error.message).slice(0, 4000),
+            : publicThermalFailure(error, 'spice').message,
         });
     } finally {
       lookups.delete(control);
@@ -186,14 +187,24 @@ export function registerThermal(
       const status = await detector(control.signal, resourceRoot);
       if (!res.destroyed) {
         if (control.signal.aborted) res.status(409).json({ error: 'Thermal detection cancelled.' });
-        else res.json({ ...status, ...(status.diagnostic ? { error: status.diagnostic } : {}) });
+        else if (status.available)
+          res.json({
+            available: true,
+            gmsh: status.gmsh,
+            elmer: status.elmer,
+            identity: status.identity,
+          });
+        else {
+          const { message } = publicThermalFailure(status, 'resources');
+          res.json({ available: false, diagnostic: message, error: message });
+        }
       }
     } catch (error) {
       if (!res.destroyed)
         res.status(control.signal.aborted ? 409 : 503).json({
           error: control.signal.aborted
             ? 'Thermal detection cancelled.'
-            : String(error.message).slice(0, 4000),
+            : publicThermalFailure(error, 'resources').message,
         });
     } finally {
       detections.delete(control);
@@ -260,7 +271,7 @@ export function registerThermal(
         res.status(control.signal.aborted ? 409 : 422).json({
           error: control.signal.aborted
             ? 'Thermal result lookup cancelled.'
-            : String(error.message).slice(0, 4000),
+            : publicThermalFailure(error, 'result').message,
         });
     } finally {
       lookups.delete(control);
@@ -335,7 +346,7 @@ export function registerThermal(
         res.status(control.signal.aborted ? 409 : 422).json({
           error: control.signal.aborted
             ? 'Thermal analysis cancelled.'
-            : String(error.message).slice(0, 4000),
+            : publicThermalFailure(error).message,
         });
     } finally {
       if (active === control) {

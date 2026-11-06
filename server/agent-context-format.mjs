@@ -5109,28 +5109,28 @@ var require_clipper = __commonJS({
         }
       };
       ClipperLib.JS = {};
-      ClipperLib.JS.AreaOfPolygon = function(poly, scale) {
-        if (!scale) scale = 1;
-        return ClipperLib.Clipper.Area(poly) / (scale * scale);
+      ClipperLib.JS.AreaOfPolygon = function(poly, scale2) {
+        if (!scale2) scale2 = 1;
+        return ClipperLib.Clipper.Area(poly) / (scale2 * scale2);
       };
-      ClipperLib.JS.AreaOfPolygons = function(poly, scale) {
-        if (!scale) scale = 1;
+      ClipperLib.JS.AreaOfPolygons = function(poly, scale2) {
+        if (!scale2) scale2 = 1;
         var area = 0;
         for (var i = 0; i < poly.length; i++) {
           area += ClipperLib.Clipper.Area(poly[i]);
         }
-        return area / (scale * scale);
+        return area / (scale2 * scale2);
       };
-      ClipperLib.JS.BoundsOfPath = function(path, scale) {
-        return ClipperLib.JS.BoundsOfPaths([path], scale);
+      ClipperLib.JS.BoundsOfPath = function(path, scale2) {
+        return ClipperLib.JS.BoundsOfPaths([path], scale2);
       };
-      ClipperLib.JS.BoundsOfPaths = function(paths, scale) {
-        if (!scale) scale = 1;
+      ClipperLib.JS.BoundsOfPaths = function(paths, scale2) {
+        if (!scale2) scale2 = 1;
         var bounds = ClipperLib.Clipper.GetBounds(paths);
-        bounds.left /= scale;
-        bounds.bottom /= scale;
-        bounds.right /= scale;
-        bounds.top /= scale;
+        bounds.left /= scale2;
+        bounds.bottom /= scale2;
+        bounds.right /= scale2;
+        bounds.top /= scale2;
         return bounds;
       };
       ClipperLib.JS.Clean = function(polygon, delta) {
@@ -5302,7 +5302,7 @@ var require_clipper = __commonJS({
         }
         return results;
       };
-      ClipperLib.JS.PerimeterOfPath = function(path, closed, scale) {
+      ClipperLib.JS.PerimeterOfPath = function(path, closed, scale2) {
         if (typeof path === "undefined") return 0;
         var sqrt = Math.sqrt;
         var perimeter = 0;
@@ -5323,59 +5323,59 @@ var require_clipper = __commonJS({
           perimeter += sqrt((p1x - p2x) * (p1x - p2x) + (p1y - p2y) * (p1y - p2y));
         }
         if (closed) path.pop();
-        return perimeter / scale;
+        return perimeter / scale2;
       };
-      ClipperLib.JS.PerimeterOfPaths = function(paths, closed, scale) {
-        if (!scale) scale = 1;
+      ClipperLib.JS.PerimeterOfPaths = function(paths, closed, scale2) {
+        if (!scale2) scale2 = 1;
         var perimeter = 0;
         for (var i = 0; i < paths.length; i++) {
-          perimeter += ClipperLib.JS.PerimeterOfPath(paths[i], closed, scale);
+          perimeter += ClipperLib.JS.PerimeterOfPath(paths[i], closed, scale2);
         }
         return perimeter;
       };
-      ClipperLib.JS.ScaleDownPath = function(path, scale) {
+      ClipperLib.JS.ScaleDownPath = function(path, scale2) {
         var i, p;
-        if (!scale) scale = 1;
+        if (!scale2) scale2 = 1;
         i = path.length;
         while (i--) {
           p = path[i];
-          p.X = p.X / scale;
-          p.Y = p.Y / scale;
+          p.X = p.X / scale2;
+          p.Y = p.Y / scale2;
         }
       };
-      ClipperLib.JS.ScaleDownPaths = function(paths, scale) {
+      ClipperLib.JS.ScaleDownPaths = function(paths, scale2) {
         var i, j, p;
-        if (!scale) scale = 1;
+        if (!scale2) scale2 = 1;
         i = paths.length;
         while (i--) {
           j = paths[i].length;
           while (j--) {
             p = paths[i][j];
-            p.X = p.X / scale;
-            p.Y = p.Y / scale;
+            p.X = p.X / scale2;
+            p.Y = p.Y / scale2;
           }
         }
       };
-      ClipperLib.JS.ScaleUpPath = function(path, scale) {
+      ClipperLib.JS.ScaleUpPath = function(path, scale2) {
         var i, p, round = Math.round;
-        if (!scale) scale = 1;
+        if (!scale2) scale2 = 1;
         i = path.length;
         while (i--) {
           p = path[i];
-          p.X = round(p.X * scale);
-          p.Y = round(p.Y * scale);
+          p.X = round(p.X * scale2);
+          p.Y = round(p.Y * scale2);
         }
       };
-      ClipperLib.JS.ScaleUpPaths = function(paths, scale) {
+      ClipperLib.JS.ScaleUpPaths = function(paths, scale2) {
         var i, j, p, round = Math.round;
-        if (!scale) scale = 1;
+        if (!scale2) scale2 = 1;
         i = paths.length;
         while (i--) {
           j = paths[i].length;
           while (j--) {
             p = paths[i][j];
-            p.X = round(p.X * scale);
-            p.Y = round(p.Y * scale);
+            p.X = round(p.X * scale2);
+            p.Y = round(p.Y * scale2);
           }
         }
       };
@@ -8802,6 +8802,8 @@ function compileCapabilitySchema(schema) {
 
 // lib/pcb-polygons.ts
 var import_clipper_lib = __toESM(require_clipper(), 1);
+var polygonResolution = 1e-4;
+var scale = 1 / polygonResolution;
 
 // lib/thermal.ts
 var THERMAL_LIMITS = {
@@ -9635,7 +9637,7 @@ function agentPromptContext(value) {
       source: {
         pending: workspace.source.pending,
         error: workspace.source.error,
-        draftCharacters: workspace.source.draft?.length ?? 0
+        draftCharacters: workspace.source.draftCharacters
       },
       ui: workspace.ui,
       icDatasheet: workspace.icDatasheet,
@@ -9646,6 +9648,15 @@ function agentPromptContext(value) {
 }
 
 // context/agent-workspace-context.ts
+var sourceError = "Source edits are invalid. Review them in Source.";
+function agentSource(draft, error) {
+  return {
+    pending: draft !== null,
+    draft: null,
+    error: error ? sourceError : "",
+    draftCharacters: draft?.length ?? 0
+  };
+}
 function validateAgentWorkspaceContext(value, circuitId, basis) {
   if (value === void 0) return;
   const context = value;
@@ -9662,7 +9673,11 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
     else if (item !== null && !["string", "number", "boolean"].includes(typeof item)) fail2();
   }
   finiteJSON(value);
-  if (!context || context.version !== 1 || typeof context.capturedAt !== "string" || !Number.isFinite(Date.parse(context.capturedAt)) || !context.source || typeof context.source.pending !== "boolean" || typeof context.source.error !== "string" || !(context.source.draft === null || typeof context.source.draft === "string") || (context.source.draft?.length ?? 0) > 8 * 1024 * 1024 || !context.ui || Array.isArray(context.ui) || !context.simulation)
+  if (!context || context.version !== 1 || typeof context.capturedAt !== "string" || !Number.isFinite(Date.parse(context.capturedAt)) || !context.source || typeof context.source.pending !== "boolean" || !["", sourceError].includes(context.source.error) || context.source.draft !== null || !Number.isSafeInteger(context.source.draftCharacters) || context.source.draftCharacters < 0 || context.source.draftCharacters > 8 * 1024 * 1024 || !context.source.pending && context.source.draftCharacters !== 0 || Object.keys(context.source).some(
+    (key) => !["pending", "draft", "error", "draftCharacters"].includes(key)
+  ) || !context.ui || Array.isArray(context.ui) || !context.simulation)
+    fail2();
+  if (context.project && typeof context.project === "object" && Object.hasOwn(context.project, "nativeFiles"))
     fail2();
   const project = parseProject2(JSON.stringify(context.project));
   const active = [project.schematic, ...project.additionalSchematics ?? []].find(
@@ -9728,5 +9743,6 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
 }
 export {
   agentPromptContext,
+  agentSource,
   validateAgentWorkspaceContext
 };

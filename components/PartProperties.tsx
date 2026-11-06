@@ -22,7 +22,6 @@ import {
 import { isSimulationField } from '@/lib/simulation-fields';
 import { storagePrimitive, initialConditionField } from '@/lib/simulation-initial-conditions';
 import {
-  simulationLibraryForPath,
   simulationLibraryPath,
   simulationLibraryDeclaration,
   simulationLibraryModelName,
@@ -38,11 +37,11 @@ import {
   basicSimulationAvailable,
   basicSimulationKind,
 } from '@/lib/simulation-model-source';
+import { externalModelBinding, validateExternalModelMapping } from '@/lib/simulation-model-binding';
 import {
-  externalModelBinding,
-  externalModelBindingFields,
-  validateExternalModelMapping,
-} from '@/lib/simulation-model-binding';
+  prepareSimulationLibrarySelection,
+  prepareSimulationModelSelection,
+} from '@/lib/model-resource-preparation';
 
 import { prepareSourceConversion } from '@/lib/simulation-source-conversion';
 import type { SimulationSourceType } from '@/lib/simulation-source-parameters';
@@ -65,6 +64,13 @@ function withModelFields(
     if (value !== undefined && !seen.has(name))
       next.push({ name, value, simulation: true, label: name.replace(/^Sim\./, '') });
   return next;
+}
+
+function withPreparedModelFields(rows: PropertyRow[], fields: Record<string, string>) {
+  const changes: Record<string, string | undefined> = { ...fields };
+  for (const row of rows)
+    if (!row.sourceKey && !Object.hasOwn(fields, row.name)) changes[row.name] = undefined;
+  return withModelFields(rows, changes);
 }
 
 const simulationParameterLabels = new Map([
@@ -198,7 +204,6 @@ function PartProperties({
   const [ref, setRef] = useState(part.ref),
     [value, setValue] = useState(() => displayPartValue(part));
   const [rows, setRows] = useState(() => propertyRows(part));
-  const libraryIndex = rows.findIndex((row) => row.name === 'Sim.Library');
   const rowFields = Object.fromEntries(
     rows.filter((row) => !row.sourceKey).map((row) => [row.name, row.value]),
   );
@@ -319,7 +324,7 @@ function PartProperties({
     }
   }
 
-  async function browseModel(i: number) {
+  async function browseModel() {
     if (!active || !spiceAvailable || modelBrowsing || composing.current) return;
     if (!fileId || !window.openpe) {
       setError('Use the desktop app to browse model files.');
@@ -345,31 +350,19 @@ function PartProperties({
         !Array.isArray(result.issues)
       )
         throw new Error('Restart OpenPE to load SPICE model inspection.');
-      const library = simulationLibraryForPath(result.path, rows[i]?.value ?? '');
       setCatalog({
-        path: simulationLibraryPath(library),
+        path: result.path,
         models: result.models,
         issues: result.issues,
       });
-      const sameFile = library === rowFields['Sim.Library'];
-      if (
-        sameFile &&
-        externalName &&
-        !simulationLibraryDeclaration(library, externalName, result.models)
-      ) {
-        setMapping(null);
-        throw new Error(
-          `This library does not contain model "${simulationLibraryModelName(library, externalName)}". Choose a matching model.`,
-        );
-      }
-      const next = withModelFields(rows, {
-        'Sim.Library': library,
-        'OpenPE.ModelSource':
-          rowFields['OpenPE.ModelSource'] ??
-          (sameFile ? undefined : externalModel || !basicAvailable ? 'external' : 'basic'),
-        'Sim.Name': sameFile ? rowFields['Sim.Name'] : undefined,
-      });
       setMapping(null);
+      const prepared = prepareSimulationLibrarySelection(
+        part,
+        rowFields,
+        result.path,
+        result.models,
+      );
+      const next = withPreparedModelFields(rows, prepared);
       setRows(next);
       save(next);
     } catch (reason) {
@@ -410,7 +403,10 @@ function PartProperties({
     if (selection === 'intrinsic') {
       if (!basicAvailable) return;
       setMapping(null);
-      const next = withModelFields(rows, { 'OpenPE.ModelSource': 'basic' });
+      const next = withPreparedModelFields(
+        rows,
+        prepareSimulationModelSelection(circuit, part, rowFields, { source: 'basic' }),
+      );
       setRows(next);
       save(next);
       return;
@@ -434,7 +430,14 @@ function PartProperties({
           if (!binding.compatible)
             throw new Error(binding.reason || 'This model is incompatible with the component.');
         }
-        const next = withModelFields(rows, { 'OpenPE.ModelSource': 'external' });
+        const next = withPreparedModelFields(
+          rows,
+          prepareSimulationModelSelection(circuit, part, rowFields, {
+            source: 'external',
+            name,
+            declarations: catalog?.path === libraryPath ? declarations : undefined,
+          }),
+        );
         setMapping(null);
         setRows(next);
         save(next);
@@ -462,10 +465,15 @@ function PartProperties({
         setError('');
         return;
       }
-      const next = withModelFields(rows, {
-        'OpenPE.ModelSource': 'external',
-        ...externalModelBindingFields(circuit, part, declaration, binding.mapping),
-      });
+      const next = withPreparedModelFields(
+        rows,
+        prepareSimulationModelSelection(circuit, part, rowFields, {
+          source: 'external',
+          name,
+          declarations,
+          mapping: binding.mapping,
+        }),
+      );
       setMapping(null);
       setRows(next);
       save(next);
@@ -482,10 +490,15 @@ function PartProperties({
     }
     try {
       validateExternalModelMapping(mapping.binding, mapping.choices);
-      const next = withModelFields(rows, {
-        'OpenPE.ModelSource': 'external',
-        ...externalModelBindingFields(circuit, part, mapping.declaration, mapping.choices),
-      });
+      const next = withPreparedModelFields(
+        rows,
+        prepareSimulationModelSelection(circuit, part, rowFields, {
+          source: 'external',
+          name: mapping.declaration.name,
+          declarations: [mapping.declaration],
+          mapping: mapping.choices,
+        }),
+      );
       setRows(next);
       if (save(next)) setMapping(null);
     } catch (error) {
@@ -584,7 +597,7 @@ function PartProperties({
               title="Choose model file"
               disabled={!active || !spiceAvailable || modelBrowsing}
               aria-busy={modelBrowsing}
-              onClick={() => void browseModel(libraryIndex)}
+              onClick={() => void browseModel()}
             >
               <FolderSearch size={17} />
             </button>

@@ -177,6 +177,7 @@ function SourceEditor({
   onCopy,
   status,
   trailingAction,
+  ruleStatus,
   active = true,
   visible = true,
   files,
@@ -195,6 +196,7 @@ function SourceEditor({
   onCopy: () => void;
   status?: string;
   trailingAction?: ReactNode;
+  ruleStatus?: ReactNode;
   active?: boolean;
   visible?: boolean;
   files?: readonly {
@@ -343,7 +345,7 @@ function SourceEditor({
     <section
       className="source-editor"
       aria-label="Project source"
-      data-agent-private={selectedFile?.readOnly || undefined}
+      data-agent-private={selectedFile?.readOnly || selectedFile?.observation || undefined}
     >
       <header className="source-editor-toolbar">
         <span className="source-editor-title" aria-description={fileLabel || 'Project files'}>
@@ -429,7 +431,7 @@ function SourceEditor({
         )}
       </div>
       {error && (
-        <p id={errorId} className="source-editor-error" role="alert">
+        <p id={errorId} className="source-editor-error" role="alert" data-agent-private>
           {error}
         </p>
       )}
@@ -439,6 +441,7 @@ function SourceEditor({
         </p>
       )}
       <EditorStatusBar
+        ruleStatus={ruleStatus}
         mode="Source"
         active={active && visible}
         coordinates={

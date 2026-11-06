@@ -4,6 +4,19 @@ OpenPE exposes a per-project Uniform API for Human and Agent adapters, three sco
 
 Registrations cover Core, host and bundled plugin capabilities. A mounted project's catalog depends on plugin and lazy-view lifecycle; runtime discovery is authoritative for its available queries and commands. This reference covers the implemented interfaces in [the architecture](ARCHITECTURE.md); task-level automatic layout, arbitrary FEM inputs, analytical-model execution, OpenSCAD import/execution and runtime Skill loading have no registered API.
 
+GUI/Agent parity covers design, simulation and project-file operations through shared preparation and transactions:
+
+| GUI work                                                                          | Agent route                                                                        | Shared boundary                                                                                 |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Schematic placement, Properties, wiring, connected pickup, copy/paste and removal | `schematic.*`, `part.*`, `library.*`                                               | Validated Core edit; original identities/connections retained, copies receive fresh identities  |
+| PCB placement, routing, pickup, Properties, zones and board drawings              | `layout.*`                                                                         | Same geometry preparation, collision checks, fills and single undo result                       |
+| Model CAD and component model selection                                           | `modelCad.*`, `enclosure.exportStep`, `layout.model.*`                             | Exact host-prepared geometry/resource identities, then Core validation                          |
+| SPICE and Thermal settings, probes, Run/Stop and supported result operations      | `simulation.*`, `thermal.*`, `part.spiceModel.*`, `part.sourceType`                | Same mounted plugin handlers, saved-destination gates and automatic verified result restoration |
+| Native Source, Save/Save as, export and local history                             | `source.*`, `project.save`, `project.export`, `versions.*`                         | Same Source/revision gates, native grants and history restoration                               |
+| New/open/example/close/Explorer and ordinary project text                         | `project.new/open/openExample/close/reveal`, `project.examples`, `project.files.*` | Origin-bound workspace actions and existing file drafts/native pickers                          |
+
+Model contents and logs remain unavailable to Agents, including explicit project-file reads/writes. Ordinary files are never added automatically to Agent context. Credentials, unrelated projects and arbitrary host paths remain outside these interfaces. Display settings and provider/plugin management are separate from this parity scope. Live scoped tools are available to Codex/Claude; restricted context/proposal providers and detection-only providers retain their documented transport limits.
+
 - [Uniform API contract](#uniform-api-contract)
 - [Project and Source capabilities](#project-and-source-capabilities)
 - [Schematic and component capabilities](#schematic-and-component-capabilities)
@@ -46,6 +59,8 @@ type CapabilityOptions = {
   actor?: 'human' | 'agent' | 'system'; // Defaults to human.
   requestId?: string;
   expectedRevision?: string;
+  resultDelivery?: Promise<boolean>; // Adapter acknowledgement for deferred lifecycle actions.
+  onAfterResult?: (completion: Promise<void>) => void; // Drain accepted lifecycle actions at normal EOF.
 };
 
 type CapabilityDescription = {
@@ -70,7 +85,7 @@ type CapabilityEvent = {
 };
 ```
 
-Registration additionally supplies `handler(input, context)`, optional `available() => true | false | string`, and required owner and optional mutation/review/level/plugin metadata. Handler context contains `signal`, `actor`, `requestId`, optional `expectedRevision`, and `emit`. Omitted mutation/review default to `false`/`none`; every registration must declare its owner explicitly. Plugin ownership requires a nonblank plugin ID, and other owners cannot declare one. Queries cannot declare a truthy mutation.
+Registration additionally supplies `handler(input, context)`, optional `available() => true | false | string`, and required owner and optional mutation/review/level/plugin metadata. Handler context contains `signal`, `actor`, `requestId`, optional `expectedRevision`, `emit` and `afterResult(action)`. A command may defer one workspace lifecycle action until its result is delivered; queries cannot defer actions. Omitted mutation/review default to `false`/`none`; every registration must declare its owner explicitly. Plugin ownership requires a nonblank plugin ID, and other owners cannot declare one. Queries cannot declare a truthy mutation.
 
 `owner` identifies the implementing layer; `level` identifies a domain abstraction. Neither grants permission. `mutation` describes possible effects rather than promising that every call changes a document. A no-op can leave the revision/undo unchanged. The tables below use `O` for object-level, `P` for operation-level and `—` for no level. There are no task-level registrations. Every current command has `review: 'optional'`; Agent Review/Auto behaviour is enforced by its adapter, not by `execute()` itself.
 
@@ -121,6 +136,20 @@ Canonical component simulation records include optional `modelSource: "basic" | 
 
 `CanonicalProject` means the validated private JSON query/snapshot representation defined by [Format](FORMAT.md) and [`lib/project-document.ts`](../lib/project-document.ts). A single-file query returns a canonical project containing that schematic. It is not a public on-disk design format. Native user projects remain KiCad file sets. `project.source` and `source.get().source` serialize this private representation; `source.files` supplies the actual native text files shown in Source.
 
+Agent observations omit optional native backing from canonical projects and
+historical Source; `source.files` excludes model/log bodies. Human GUI reads retain
+complete native data. Agent result envelopes report `sourcePending` and
+`draftCharacters` with `sourceDraft:null` and generic Source diagnostics, so invalid
+aggregate drafts cannot expose private parser excerpts. Explicit native design
+text remains available through `source.files`.
+
+Agent project/Source replacements reject explicitly supplied model/log bodies and
+retain protected native files internally from accepted Core state when omitted.
+This preserves exact bytes without returning them or introducing placeholder data.
+Protected GUI Source drafts require review in the editor before Agent commands
+can apply/discard them or implicitly apply them through Save/view/export. Known
+history restoration and native resource pickers remain bounded host operations.
+
 Core IDs are generally 1–200 characters; Core `Point` coordinates are bounded to ±100,000 mm. Specific operations can impose narrower bounds. Discover the full `inputSchema` for exact lengths, enums and nested limits.
 
 ## Project and Source capabilities
@@ -168,23 +197,25 @@ validation and undo gates.
 
 Owner is `core`; editing commands declare mutation `document`. `schematic.place` and `part.footprint` are host-backed object commands documented under [Library capabilities](#library-capabilities).
 
-| ID                     | Kind / level | Input                                                                                                            | Result and behaviour                                                                                                                                          |
-| ---------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schematic.list`       | query / —    | `{}`                                                                                                             | `{id,name,primary}[]` for all project schematics.                                                                                                             |
-| `schematic.get`        | query / —    | `{schematicId:string}`                                                                                           | Single-file `CanonicalProject`.                                                                                                                               |
-| `schematic.erc`        | query / —    | `{schematicId:string}`                                                                                           | `RuleCheckResult & {revision:string, schematicId:string}`; checks one independent schematic. See [Rule-check queries](#rule-check-queries).                   |
-| `schematic.add`        | command / O  | `{}`                                                                                                             | `{schematicId,revision}`; appends an independent schematic, up to 12 per project.                                                                             |
-| `schematic.remove`     | command / O  | `{schematicId:string}`                                                                                           | `ProjectSnapshot`; validates primary-board ownership and remaining sheets.                                                                                    |
-| `schematic.operations` | command / P  | `{schematicId, operations:Operation[]}`                                                                          | `EditResult`; 1–100 operations applied atomically.                                                                                                            |
-| `schematic.move`       | command / O  | `{schematicId, ids:string[], delta:Point}`                                                                       | `EditResult`; leaves unselected wires in place.                                                                                                               |
-| `schematic.drag`       | command / P  | `{schematicId, ids:string[], delta:Point}`                                                                       | `EditResult`; repositions components with attached wire rerouting and original pin connections in one undo transaction. Use for connected component movement. |
-| `schematic.transform`  | command / O  | `{schematicId, ids:string[], operation:'rotate'/'rotateReverse'/'mirrorX'/'mirrorY', pivot?:Point}`              | `EditResult`; one transform transaction.                                                                                                                      |
-| `schematic.delete`     | command / P  | `{schematicId, ids:string[]}`                                                                                    | `EditResult`; shared deletion rules remove complete attached leads and orphan annotations while preserving surviving shared networks.                         |
-| `schematic.duplicate`  | command / O  | `{schematicId, ids:string[], delta?:Point}`                                                                      | `EditResult` with newly created selection IDs; copies receive fresh UUIDs/references. Default delta is `{x:10.16,y:10.16}` mm.                                |
-| `schematic.wire`       | command / P  | `{schematicId, points:Point[]}`                                                                                  | `EditResult`; commits all route legs and deliberate segment splits once. 2–30,000 points.                                                                     |
-| `schematic.annotation` | command / O  | `{schematicId, text:string, position:Point, id?:string}`                                                         | `EditResult`; creates/updates a schematic annotation. This is design text, not an Agent screenshot attachment.                                                |
-| `part.properties`      | command / O  | `{schematicId, partId, reference?:string, value?:string, fields?:FieldRow[], position?:Point, rotation?:number}` | `EditResult`; resolves stable ID, shares reference/value/fields across units and applies value-linked simulation rules.                                       |
-| `part.participation`   | command / O  | `{schematicId, partId, included:boolean}`                                                                        | `EditResult`; updates Include in SPICE simulation independently of plugin installation and physical connectivity.                                             |
+| ID                     | Kind / level | Input                                                                                                            | Result and behaviour                                                                                                                                                                                                                   |
+| ---------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schematic.list`       | query / —    | `{}`                                                                                                             | `{id,name,primary}[]` for all project schematics.                                                                                                                                                                                      |
+| `schematic.get`        | query / —    | `{schematicId:string}`                                                                                           | Single-file `CanonicalProject`.                                                                                                                                                                                                        |
+| `schematic.erc`        | query / —    | `{schematicId:string}`                                                                                           | `RuleCheckResult & {revision:string, schematicId:string}`; checks one independent schematic. See [Rule-check queries](#rule-check-queries).                                                                                            |
+| `schematic.add`        | command / O  | `{}`                                                                                                             | `{schematicId,revision}`; appends an independent schematic, up to 12 per project.                                                                                                                                                      |
+| `schematic.remove`     | command / O  | `{schematicId:string}`                                                                                           | `ProjectSnapshot`; validates primary-board ownership and remaining sheets.                                                                                                                                                             |
+| `schematic.operations` | command / P  | `{schematicId, operations:Operation[]}`                                                                          | `EditResult`; 1–100 operations applied atomically.                                                                                                                                                                                     |
+| `schematic.move`       | command / O  | `{schematicId, ids:string[], delta:Point}`                                                                       | `EditResult`; leaves unselected wires in place.                                                                                                                                                                                        |
+| `schematic.drag`       | command / P  | `{schematicId, ids:string[], delta:Point}`                                                                       | `EditResult`; repositions components with attached wire rerouting and original pin connections in one undo transaction. Use for connected component movement.                                                                          |
+| `schematic.transform`  | command / O  | `{schematicId, ids:string[], operation:'rotate'/'rotateReverse'/'mirrorX'/'mirrorY', pivot?:Point}`              | `EditResult`; one transform transaction.                                                                                                                                                                                               |
+| `schematic.pose`       | command / P  | `{schematicId,ids:string[],anchor:Point,target:Point,operations:SchematicMoveOperation[],connected:boolean}`     | `EditResult`; applies a complete canvas pickup pose in one undo transaction, including ordered rotations/mirrors and final translation. Connected mode reroutes attached networks; disconnected mode leaves unselected wires in place. |
+| `schematic.delete`     | command / P  | `{schematicId, ids:string[]}`                                                                                    | `EditResult`; shared deletion rules remove complete attached leads and orphan annotations while preserving surviving shared networks.                                                                                                  |
+| `schematic.duplicate`  | command / O  | `{schematicId, ids:string[], delta?:Point}`                                                                      | `EditResult` with newly created selection IDs; copies receive fresh UUIDs/references. Default delta is `{x:10.16,y:10.16}` mm.                                                                                                         |
+| `schematic.paste`      | command / P  | `{schematicId,source:string,ids:string[],delta:Point}`                                                           | `EditResult` with fresh selection IDs; pastes retained objects/native annotations from a validated same-sheet snapshot without replacing current objects. Shares GUI clipboard preparation and reference allocation.                   |
+| `schematic.wire`       | command / P  | `{schematicId, points:Point[]}`                                                                                  | `EditResult`; commits all route legs and deliberate segment splits once. 2–30,000 points.                                                                                                                                              |
+| `schematic.annotation` | command / O  | `{schematicId, text:string, position:Point, id?:string}`                                                         | `EditResult`; creates/updates a schematic annotation. This is design text, not an Agent screenshot attachment.                                                                                                                         |
+| `part.properties`      | command / O  | `{schematicId, partId, reference?:string, value?:string, fields?:FieldRow[], position?:Point, rotation?:number}` | `EditResult`; resolves stable ID, shares reference/value/fields across units and applies value-linked simulation rules.                                                                                                                |
+| `part.participation`   | command / O  | `{schematicId, partId, included:boolean}`                                                                        | `EditResult`; updates Include in SPICE simulation independently of plugin installation and physical connectivity.                                                                                                                      |
 
 ```ts
 type Operation =
@@ -198,9 +229,19 @@ type Operation =
     }
   | { type: 'removePart'; ref: string };
 type FieldRow = { name: string; value: string; fresh?: boolean };
+type SchematicMoveOperation = 'rotate' | 'rotateReverse' | 'mirrorX' | 'mirrorY';
 ```
 
 Selection-ID arrays are unique and bounded to 30,000. `Operation` component coordinates are bounded to ±1,000 mm and operation values to 200 characters. Properties accepts up to 200 field rows, with field names/values and text values bounded to 4,096 characters. Part participation does not add solver support. Geometry validates connectivity and preserves shared branches; an edit can fail even when it passes the input schema.
+
+`schematic.pose` accepts up to 128 ordered operations around `anchor`, then translates
+that anchor to `target`, through `previewSchematicMove`. `schematic.paste.source` is
+the canonical JSON string from `source.get().source` or a JSON serialization of
+`project.get`/`schematic.get`, bounded to 8 MB of UTF-8 and validated before use. The snapshot must contain the current
+schematic ID; conflicting embedded definitions for copied symbols are rejected.
+Copied old values and deleted objects remain available, while existing objects,
+native annotations and unrelated live data are retained. Both commands use the
+ordinary revision, pending Source and close barriers.
 
 ## Layout capabilities
 
@@ -222,6 +263,7 @@ type RouteLeg = { layer: Layer; points: Point[]; via?: ViaSize };
 | `layout.drc`              | query / —    | `{settings?:Partial<PCBDesignRuleConfig>}`                                                                                                                                                                                 | `RuleCheckResult & {revision:string, boardId:string, settings:PCBDesignRuleConfig}`; see [Rule-check queries](#rule-check-queries).                                                                                                                                                                                                                                                     |
 | `layout.route.preview`    | query / —    | `{netId, layer:Layer, width, clearance, start:Point, end:Point, mode?:'straight'/'45', posture?:boolean}`                                                                                                                  | `{points:Point[],blocked:boolean,message:string}`; bounded Walk Around planning.                                                                                                                                                                                                                                                                                                        |
 | `layout.move`             | command / O  | `{selection:BoardObject[], delta:Point}`                                                                                                                                                                                   | `RevisionResult`.                                                                                                                                                                                                                                                                                                                                                                       |
+| `layout.pose`             | command / P  | `{selection:BoardObject[],anchor:Point,target:Point,operations:('rotate'/'rotateReverse'/'flip')[]}`                                                                                                                       | `RevisionResult`; one canvas pickup transaction with up to 128 ordered quarter-turn rotations/package flips, followed by anchor-to-target translation. Rotations use the shared group pivot; flips change only selected footprints and reflect their origins across the anchor's horizontal axis.                                                                                       |
 | `layout.drag`             | command / P  | `{selection:BoardObject[], delta:Point, clearance, pickup?:Point, mode?:'connected'/'corner', endpointTolerance?:number, posture?:boolean, obstacleMode?:'shove'/'walk-around', constrain?:boolean, previousDelta?:Point}` | `{revision,changedIds:string[],requestedDelta:Point,appliedDelta:Point,constrained:boolean,constraintReason?:string}`; uses the canvas geometry engine, defaults to connected Shove, retains original track UUIDs. Corner requires one track and pickup; tolerance defaults to 0.5 mm. Explicit constrain accepts a revalidated boundary; previousDelta is allowed only with constrain. |
 | `layout.rotate`           | command / O  | `{selection:BoardObject[], degrees?:number, pivot?:Point}`                                                                                                                                                                 | `RevisionResult`; `degrees` defaults to 90.                                                                                                                                                                                                                                                                                                                                             |
 | `layout.flip`             | command / O  | `{selection:BoardObject[]}`                                                                                                                                                                                                | `RevisionResult`; flips selected physical packages.                                                                                                                                                                                                                                                                                                                                     |
@@ -241,22 +283,22 @@ type ZoneChanges = {
   netId?: string | null;
   layer?: import('../lib/pcb').BoardLayer;
   outline?: Point[];
-  holes?: Point[][];
+  holes?: Point[][] | null;
   clearance?: number;
   minThickness?: number;
   thermalGap?: number;
   thermalBridge?: number;
-  priority?: number; // Integer, 0–10,000.
-  padConnection?: 'yes' | 'no' | 'thru_hole_only';
-  islandRemovalMode?: number; // Integer, 0–2.
-  fillEnabled?: boolean;
+  priority?: number | null; // Integer, 0–10,000.
+  padConnection?: 'yes' | 'no' | 'thru_hole_only' | null;
+  islandRemovalMode?: number | null; // Integer, 0–2.
+  fillEnabled?: boolean | null;
   keepout?: {
     tracks: boolean;
     vias: boolean;
     pads: boolean;
     copperpour: boolean;
     footprints: boolean;
-  };
+  } | null;
 };
 ```
 
@@ -287,6 +329,7 @@ boundary edits refresh already-filled enabled zones; captions/model-only edits r
 | `layout.footprint.properties` | `{footprintId,changes}`                                  | X/Y, rotation, side, board-only reference/value, complete model array and fabrication margins. Side changes share `flipPCBFootprint`, including local pads/artwork/models. Linked captions require `part.properties`; IDs, assignments, pad nets and geometry arrays cannot change here. |
 | `layout.graphic`              | `{graphicId?,graphic}`                                   | Create or replace a complete supported board drawing, polygon outline, text or dimension. `graphic` is the native record without `id`; omission of `graphicId` creates a fresh UUID, while updates retain it.                                                                            |
 | `layout.rectangle.resize`     | `{selection:BoardObject[],bounds:{minX,minY,maxX,maxY}}` | Shared canvas/Properties boundary resize for an Edge.Cuts rectangle or one zone, including its holes. Preserves object UUIDs and rejects nonrectangular outline selections or degenerate bounds.                                                                                         |
+| `layout.rectangle.properties` | `{selection:BoardObject[],width}`                        | Updates every native edge of a rectangular Edge.Cuts outline in one undo transaction through `setPCBRectangleWidth`; width is 0.0001–1,000 mm. One edge or the complete rectangle can identify the group; zones, nonrectangular selections and locked edges are rejected.                |
 
 Property `changes` omit keys to retain them; `null` clears optional pad/footprint
 overrides (including the explicit `models` member). Required
@@ -303,6 +346,13 @@ It shares `setPCBTrackEndpoints`; a locked track rejects endpoint edits unless
 the same transaction explicitly includes `locked:false`. Endpoints retain native
 precision independently of display grid. `layout.zone` accepts supported board
 layers, priorities up to 10,000 and zero thermal gap/bridge as native Properties do.
+Its input shape is generated from canonical zone definitions, excluding identity,
+lock and stored fills: outline rings have at most 10,000 points and at most 100
+holes. Omitted fields retain their values; `null` clears optional overrides,
+including `padConnection:null` to restore default thermal relief. `netId:null`
+explicitly means unassigned and remains present. Updates share
+`preparePCBZoneProperties`, retain absent defaults and refresh already-filled
+enabled zones once in the accepted transaction.
 
 ## Model CAD capabilities
 
@@ -445,29 +495,33 @@ Both reports cap issues at 1,000 and set `truncated:true` and `complete:false` w
 
 Owner is `host`, level is absent. All commands have optional review. Mutation is `session` unless the table specifies `document` or `external`.
 
-| ID                     | Kind / mutation    | Input                                                 | Result and behaviour                                                                                                                                                                                                                                              |
-| ---------------------- | ------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `workbench.state`      | query / false      | `{}`                                                  | Originating project's bounded `WorkspaceContext`; without a document returns `ProjectSnapshot`.                                                                                                                                                                   |
-| `project.datasheet`    | query / false      | `{}`                                                  | `ProjectDatasheetContext` for the current example controller, including reviewed parameter JSON and source locators. No paths, URLs or example selectors are accepted.                                                                                            |
-| `workbench.view`       | command / document | `{view:'canvas'/'source'/'layout'/'3d'}`              | `{view}`; validates/applies pending Source before switching. UI names are Schematic, Source, Layout and Model.                                                                                                                                                    |
-| `workbench.sheet`      | command / session  | `{id:string}`                                         | `{id}`; selects an existing schematic. Pending Source blocks it.                                                                                                                                                                                                  |
-| `workbench.selection`  | command / session  | `{ids:string[]}`                                      | `{ids}`; selects visible schematic objects allowed by current selection filters. Unique IDs, at most 30,000.                                                                                                                                                      |
-| `workbench.panel`      | command / session  | `{panel:'parts'/'layers'/'history'/'settings'/null}`  | `{panel}`; `history` opens the Git window through Source validation without switching editor mode; `layers` enters Schematic and expands its right-side Visualization drawer, applying valid pending Source if needed.                                            |
-| `project.save`         | command / external | `{saveAs?:boolean}`                                   | `{status:'saved'/'cancelled'}`; validates and uses the native dialog/live grant. Default `saveAs` is false.                                                                                                                                                       |
-| `project.export`       | command / external | `{format:'gerber'/'jlcpcb'/'bom'/'placement'/'scad'}` | `{status:'exported'/'cancelled'}`; compiles the requested manufacturing ZIP, assembly CSV or OpenSCAD model, then opens its native picker; output never changes the native save destination.                                                                      |
-| `enclosure.exportStep` | command / external | `{}`                                                  | `{status:'exported',name:string}` or `{status:'cancelled'}`; requires the originating active Model view, applied Source, CAD bodies, and the native bridge. Exports the current validated CAD solids through the STEP destination picker; saving is not required. |
-| `versions.list`        | query / false      | `{offset?:integer}`                                   | `HistoryPage`; offset defaults to 0, range 0–100,000.                                                                                                                                                                                                             |
-| `versions.read`        | query / false      | `{id:string}`                                         | `{source:string}` for a validated reachable Git version. ID is 40–64 lowercase hexadecimal characters.                                                                                                                                                            |
-| `versions.create`      | command / external | `{message:string}`                                    | `{id:string}`; message length 1–2,000; pending Source and overlapping file operations block creation.                                                                                                                                                             |
-| `simulation.show`      | command / document | `{}`                                                  | `{visible:true}` after enabled plugin settings/capabilities mount; requires the originating project to be active.                                                                                                                                                 |
-| `simulation.hide`      | command / session  | `{}`                                                  | `{visible:false}`; cancels active work and retains completed/stopped state.                                                                                                                                                                                       |
+| ID                                                                  | Kind / mutation                        | Input                                                 | Result and behaviour                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workbench.state`                                                   | query / false                          | `{}`                                                  | Originating project's bounded `WorkspaceContext`; without a document returns `ProjectSnapshot`.                                                                                                                                                                   |
+| `project.datasheet`                                                 | query / false                          | `{}`                                                  | `ProjectDatasheetContext` for the current example controller, including reviewed parameter JSON and source locators. No paths, URLs or example selectors are accepted.                                                                                            |
+| `workbench.view`                                                    | command / document                     | `{view:'canvas'/'source'/'layout'/'3d'}`              | `{view}`; validates/applies pending Source before switching. UI names are Schematic, Source, Layout and Model.                                                                                                                                                    |
+| `workbench.sheet`                                                   | command / session                      | `{id:string}`                                         | `{id}`; selects an existing schematic. Pending Source blocks it.                                                                                                                                                                                                  |
+| `workbench.selection`                                               | command / session                      | `{ids:string[]}`                                      | `{ids}`; selects visible schematic objects allowed by current selection filters. Unique IDs, at most 30,000.                                                                                                                                                      |
+| `workbench.panel`                                                   | command / session                      | `{panel:'parts'/'layers'/'history'/'settings'/null}`  | `{panel}`; `history` opens the Git window through Source validation without switching editor mode; `layers` enters Schematic and expands its right-side Visualization drawer, applying valid pending Source if needed.                                            |
+| `project.save`                                                      | command / external                     | `{saveAs?:boolean}`                                   | `{status:'saved'/'cancelled'}`; validates and uses the native dialog/live grant. Default `saveAs` is false.                                                                                                                                                       |
+| `project.export`                                                    | command / external                     | `{format:'gerber'/'jlcpcb'/'bom'/'placement'/'scad'}` | `{status:'exported'/'cancelled'}`; compiles the requested manufacturing ZIP, assembly CSV or OpenSCAD model, then opens its native picker; output never changes the native save destination.                                                                      |
+| `enclosure.exportStep`                                              | command / external                     | `{}`                                                  | `{status:'exported',name:string}` or `{status:'cancelled'}`; requires the originating active Model view, applied Source, CAD bodies, and the native bridge. Exports the current validated CAD solids through the STEP destination picker; saving is not required. |
+| `versions.list`                                                     | query / false                          | `{offset?:integer}`                                   | `HistoryPage`; offset defaults to 0, range 0–100,000.                                                                                                                                                                                                             |
+| `versions.read`                                                     | query / false                          | `{id:string}`                                         | `{source:string}` for a validated reachable Git version. ID is 40–64 lowercase hexadecimal characters.                                                                                                                                                            |
+| `versions.create`                                                   | command / external                     | `{message:string}`                                    | `{id:string}`; message length 1–2,000; pending Source and overlapping file operations block creation.                                                                                                                                                             |
+| `versions.restore`                                                  | command / document                     | `{id:string}`                                         | `{id,revision}`; reads a reachable version and uses the GUI restoration path for one undo edit, with Source/revision/cancellation guards. Does not save native files.                                                                                             |
+| `project.examples`                                                  | query / false                          | `{}`                                                  | Current `{entries:[{id,title,description,section}],warnings}` from the host, without paths/grants.                                                                                                                                                                |
+| `project.new` / `project.open` / `project.close` / `project.reveal` | command / session (`reveal`: external) | `{}`                                                  | `{status:'requested'}`; shared new-project flow, native picker, unsaved-work close confirmation or Explorer action.                                                                                                                                               |
+| `project.openExample`                                               | command / session                      | `{id:string}`                                         | `{status:'requested'}`; identity must come from `project.examples`; host re-resolves it before admission.                                                                                                                                                         |
+| `simulation.show`                                                   | command / document                     | `{}`                                                  | `{visible:true}` after enabled plugin settings/capabilities mount; requires the originating project to be active.                                                                                                                                                 |
+| `simulation.hide`                                                   | command / session                      | `{}`                                                  | `{visible:false}`; cancels active work and retains completed/stopped state.                                                                                                                                                                                       |
 
 ```ts
 type WorkspaceContext = {
   version: 1;
   capturedAt: string;
   project: CanonicalProject;
-  source: { pending: boolean; draft: string | null; error: string };
+  source: { pending: boolean; draft: null; error: string; draftCharacters: number };
   ui: Record<string, unknown>; // Includes revision, view, activeSchematicId and selection.
   icDatasheet?: ProjectDatasheetContext;
   simulation: SimulationContext | { status: 'disabled' | 'not-opened' };
@@ -504,7 +558,29 @@ During gestures, a renderer Worker calculates fill paths with the shared pure ge
 
 `ProjectDatasheetContext` is `{version:1, projectId:string|null, exampleId:string|null, basis:'validated-project', status:'available'|'not-example'|'controller-mismatch', bindings:[{schematicId,partId,reference}], record:ICDatasheetRecord|null}`. The full `record` follows the [IC datasheet JSON contract](DATASHEETS.md), which also owns record selection and controller binding. Read queries use validated state while Source is pending; they do not interpret drafts or imply board operating points or model equivalence. The host rechecks revision/cancellation after lazy loading; submission capture additionally rechecks the active sheet. The service rejects forged or cross-project reference observations. `source.files` remains native-only; Source shows actual local PDFs as ordinary project files; OpenPE does not generate a separate datasheet JSON. Internal reviewed records are bundled from `resources/example-catalog/ic-datasheets.json`.
 
-Git operations require the desktop bridge and a live destination grant. `versions.read` only reads; restoration uses validated `project.replace` for one undo edit. Save/export cancellation is a successful result with status `cancelled`, not proof of a write. Save/export/history do not accept paths through these capabilities.
+Git operations require the desktop bridge and a live destination grant. `versions.read` only reads; `versions.restore` shares GUI restoration, including exact Model CAD preparation and a whole-project undo edit. Save/export cancellation is a successful result with status `cancelled`, not proof of a write. Save/export/history do not accept paths through these capabilities.
+
+Workspace requests return before dialogs/navigation finish, so `{status:'requested'}` does not claim a completed close/open. The live Agent adapter acknowledges only after a successful tool-result POST; local callers acknowledge automatically. `afterResult` dispatches on the next task after acknowledgement and retains the original cancellation authority until then. Failed delivery, Stop, changed revisions, inactive origins and disposed/suspended registrations prevent dispatch. Once started, native picker cancellation and close decisions follow the GUI flow. Opening another project never transfers the originating run's authority to it; subsequent tools remain scoped to the original project. New/open/close/Explorer requests require the active desktop editor and no conflicting file operation or confirmation.
+
+`onAfterResult` receives only deferred actions whose results have been serialized.
+Normal successful Agent completion drains these delivery/dispatch promises before
+revoking the run; it never waits for arbitrary unresolved commands or solvers.
+Stop/failure abort immediately. Dispatch, cancellation and failed delivery all
+settle the deferred promise, preventing normal EOF from losing an accepted close.
+
+### Ordinary project files
+
+These host capabilities share `useProjectDirectory` drafts and existing native preview/write handlers. They use relative names from the granted directory listing, never arbitrary paths or native grant IDs.
+
+| ID                      | Kind / mutation    | Input                        | Result                                                                                      |
+| ----------------------- | ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `project.files.list`    | query / false      | `{}`                         | Bounded filename/kind/byte/pending/access metadata; model/log entries remain metadata-only. |
+| `project.files.read`    | query / false      | `{name}`                     | Current text/preview metadata, pending state and opaque `fileRevision`.                     |
+| `project.files.update`  | command / session  | `{name,source,fileRevision}` | Stages the same ordinary text draft as GUI Source.                                          |
+| `project.files.save`    | command / external | `{name,fileRevision}`        | `{name,status:'saved',pending}` through the existing per-file host writer.                  |
+| `project.files.discard` | command / session  | `{name,fileRevision}`        | `{name,status:'discarded'}` after discarding that ordinary-file draft.                      |
+
+Mutations require a fresh read token and fully loaded editable text. Native files use `source.*`; binary/truncated previews stay read-only. Model/log formats and model/circuit/solver/log directories reject content operations. Host credential/link/path restrictions still apply. The bounded observation cache rechecks origin, Core revision, destination, draft revision and cancellation; native Save additionally checks disk bytes before replacement. A newer GUI edit is retained if an earlier save completes. Pending native Source blocks ordinary-file mutations. Ordinary drafts participate in project Save/close while remaining outside Core, design undo, recovery and automatic Agent context.
 
 ## Library capabilities
 
@@ -528,6 +604,19 @@ optional back-side placement flips that prepared footprint. Coordinates are
 millimetres within ±100,000; rotation is within ±360°. Existing placements,
 unsupported library geometry, pending Source, stale asynchronous results and
 closing projects reject without committing.
+
+Component resource selection is also host-backed and shares the GUI preparation helpers in `lib/model-resource-preparation.ts`:
+
+| ID                        | Input                                                                                                                    | Result and shared behaviour                                                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `layout.model.import`     | `{boardId,footprintId,index?}`                                                                                           | Native STEP picker; prepares a verified resource and appends/replaces one footprint model through `layout.footprint.properties`. Picker cancellation returns `{status:'cancelled'}`. |
+| `layout.model.library`    | `{boardId,footprintId,index?,libraryId,modelIndex}`                                                                      | Same append/replace transaction using a fixed library identity and model index.                                                                                                      |
+| `part.spiceModel.choose`  | `{schematicId,partId}`                                                                                                   | Native library picker and the GUI library-selection transaction; returns declaration metadata and an opaque observation, or cancellation.                                            |
+| `part.spiceModel.inspect` | `{schematicId,partId}`                                                                                                   | Query the accepted project-relative library through its grant, returning declaration metadata and compatible mappings without model contents.                                        |
+| `part.spiceModel.bind`    | `{schematicId,partId,source:'basic'/'external'}` or `{schematicId,partId,source:'external',observationId,name,mapping?}` | Select the intrinsic/retained external model or bind an observed declaration. Ambiguous terminal roles require an explicit valid mapping.                                            |
+| `part.sourceType`         | `{schematicId,partId,type:'DC'/'PULSE'/'SIN'}`                                                                           | Shared intrinsic-source conversion preserving levels/timing and linked native fields.                                                                                                |
+
+These commands declare host ownership, object level and document mutation; inspection is a read-only host query. Successful STEP selection returns `{status:'applied',revision,boardId,footprintId,index,models}`. SPICE observations contain `{status:'available',observationId,revision,path,models,issues,bindings}` with declaration names/kinds/device/pins only. The cache holds at most eight observations and invalidates on Core changes; binding rechecks the exact component, revision, library and grant. Native selection, inspection and asynchronous library preparation recheck Source, close, active-origin and cancellation gates. SPICE resource controls require the enabled SPICE plugin. Retained inactive fields survive intrinsic/external switching. No capability accepts model bodies, executable paths or arbitrary library paths.
 
 ## Plugin lifecycle capabilities
 
@@ -756,7 +845,7 @@ Model spacing defaults to 5 mm and controls ground and sketch workplane lines,
 independently of CAD snapping.
 Workspace UI observations include `modelGridSpacing` alongside the other grid settings.
 
-Workspace recovery accepts only the current envelope, bundled Home identities and syntactically valid opaque local example identities. Required dirty state, Source draft, filename, Agent preferences, sessions and active conversation must be present and valid. Recovery does not infer an example identity, restore retired examples, convert message-only conversations or fill missing required fields. Unsupported recovery is preserved and fails validation.
+Workspace recovery accepts only the current envelope, bundled Home identities and syntactically valid opaque local example identities. It retains stable project IDs, complete project Source, required dirty state and native Source drafts, filenames, conversations, active project/conversation IDs and shared Agent preferences. Optional active-schematic and closed-tab IDs must refer to existing sheets; the active sheet cannot be closed. Each non-null Source draft is limited to 8,000,000 UTF-8 bytes, separately from the 96 MiB workspace envelope. Required fields must be present and valid. Recovery does not infer an example identity, restore retired examples, convert message-only conversations or fill missing required fields. Unsupported recovery is preserved and fails validation.
 
 JSON request limits are 8 MiB by default, with route-specific limits: state 96 MiB, simulation result/transient and thermal run/result/spice-sources 24 MiB, chat 32 MiB, chat/tool-result 40 MiB, agent-tools 32 MiB and model-cad/preview 512 KiB. These parser limits do not replace the narrower domain/tool bounds.
 

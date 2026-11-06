@@ -95,7 +95,7 @@ export async function assertToolbarSidebarPlacement(toolbar) {
     await actions
       .getByRole('button')
       .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label'))),
-    ['Rule', 'List', 'Git', 'Toggle right sidebar'],
+    ['List', 'Git', 'Toggle right sidebar'],
   );
   const geometry = await actions.evaluate((group) => {
     const row = group.closest('.editor-mode-bar').getBoundingClientRect();

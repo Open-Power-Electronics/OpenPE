@@ -50,8 +50,11 @@
   color: var(--error-ink);
 }
 
-.summary > span:last-child > svg {
+.summary > span:nth-child(2) > svg {
   color: var(--rule-warning-ink);
+}
+.noticeCount {
+  color: var(--muted);
 }
 
 .issues {
@@ -82,6 +85,9 @@
 }
 .issue[data-severity='warning'] {
   --issue-ink: var(--rule-warning-ink);
+}
+.issue[data-severity='notice'] {
+  --issue-ink: var(--muted);
 }
 .issue:is(:hover, :focus-visible):not(:disabled) {
   background: var(--surface-hover);

@@ -4,11 +4,23 @@ import type { AgentSimulationContext } from './agent-simulation-context';
 import { validateAgentThermalContext, type AgentThermalContext } from './agent-thermal-context';
 export { agentPromptContext } from './agent-prompt-context';
 
+const sourceError = 'Source edits are invalid. Review them in Source.';
+
+/** Source may contain native model files or invalid private text; observe metadata only. */
+export function agentSource(draft: string | null, error: string) {
+  return {
+    pending: draft !== null,
+    draft: null,
+    error: error ? sourceError : '',
+    draftCharacters: draft?.length ?? 0,
+  };
+}
+
 export type AgentWorkspaceContext = {
   version: 1;
   capturedAt: string;
   project: unknown;
-  source: { pending: boolean; draft: string | null; error: string };
+  source: ReturnType<typeof agentSource>;
   ui: Record<string, unknown>;
   icDatasheet?: ProjectDatasheetContext;
   simulation: AgentSimulationContext | { status: 'disabled' | 'not-opened' };
@@ -39,12 +51,24 @@ export function validateAgentWorkspaceContext(value: unknown, circuitId?: string
     !Number.isFinite(Date.parse(context.capturedAt)) ||
     !context.source ||
     typeof context.source.pending !== 'boolean' ||
-    typeof context.source.error !== 'string' ||
-    !(context.source.draft === null || typeof context.source.draft === 'string') ||
-    (context.source.draft?.length ?? 0) > 8 * 1024 * 1024 ||
+    !['', sourceError].includes(context.source.error) ||
+    context.source.draft !== null ||
+    !Number.isSafeInteger(context.source.draftCharacters) ||
+    context.source.draftCharacters < 0 ||
+    context.source.draftCharacters > 8 * 1024 * 1024 ||
+    (!context.source.pending && context.source.draftCharacters !== 0) ||
+    Object.keys(context.source).some(
+      (key) => !['pending', 'draft', 'error', 'draftCharacters'].includes(key),
+    ) ||
     !context.ui ||
     Array.isArray(context.ui) ||
     !context.simulation
+  )
+    fail();
+  if (
+    context.project &&
+    typeof context.project === 'object' &&
+    Object.hasOwn(context.project, 'nativeFiles')
   )
     fail();
   const project = parseProject(JSON.stringify(context.project));

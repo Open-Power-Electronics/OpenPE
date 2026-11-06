@@ -48,19 +48,21 @@ snapshot compatibility metadata.
 
 Supported notes include horizontal plain/bold/italic text with inert HTTP(S)
 links and finite unfilled Notes polylines. Polylines are read-only on canvas and
-editable in Source. Native track locks map to optional `locked: true`; unlocked
-tracks omit it. Private snapshots use their explicit canonical lock state;
-serialization synchronizes it with retained native text.
-Footprint and graphic locks also map to optional `locked: true` and block
-geometric edits until unlocked in Source. Pad pin-function/type metadata,
-non-rendered footprint properties and unit records survive edits. Footprint
+editable in Source. Native footprint, pad, track, via, graphic and zone locks map
+to optional `locked: true`; unlocked objects omit it. Serialization synchronizes
+the canonical lock state with retained native text. Properties and `layout.lock`
+share lock/unlock transactions; locked objects reject ordinary property/geometry
+edits and removal. Source remains explicit native editing. See
+[object locking](LAYOUT.md#object-locking) for ownership and selection rules.
+Pad pin-function/type metadata, non-rendered footprint properties and unit records
+survive edits. Footprint
 mask/paste margins are retained; pad mask overrides take precedence over the
 footprint default. Multi-layer zones have one editable instance per layer;
 the first retains the native UUID and later instances use deterministic UUIDs.
 Clean files retain their exact original bytes; a PCB edit writes equivalent
 single-layer zones with their original per-layer fills and rules. Disabled
 placement-rule metadata is preserved; enabled placement rules remain unsupported.
-Via locks and zone names remain metadata. The EMC generator uses the official
+Zone names remain metadata. The EMC generator uses the official
 KiCad upgrader and exact custom-pad/keepout decomposition; pinned inputs remain
 unchanged.
 
@@ -118,6 +120,14 @@ draft; project Save writes pending text files before saving native content.
 Changed disk bytes reject the write and retain the draft. Pending text participates
 in project close review. These file edits never enter Core, native drafts, undo,
 recovery, native save/export sets or automatic Agent context.
+
+Agent `project.files.*` capabilities explicitly access these same ordinary-file
+drafts through relative listed names and opaque read revisions. Native files use
+`source.*`. Model contents and logs remain unavailable to Agent reads/writes,
+including model/circuit/solver/log directories; listing exposes metadata only.
+Pending native Source blocks ordinary-file mutations. Destination/draft changes,
+stale disk bytes and cancellation reject pending work without discarding drafts.
+The [API contract](API.md#ordinary-project-files) defines schemas and results.
 
 Source edits every loaded native text file using bundled CodeMirror
 JSON/S-expression/plain-text modes. Copy returns the selected file. UTF-8
@@ -194,9 +204,9 @@ Simulation model filenames must match the current pinned component registry.
 Native STEP references retain their documented KiCad paths;
 Save does not reorganize unrelated user files; root `.scad` files are ordinary
 editable text outside the native design set.
-Home examples open the original `examples/<file>/<file>.kicad_pro` directly,
-retaining all disk filenames. History remains private outside the project;
-see [Version history](VERSION-HISTORY.md).
+Home opens original native projects under `examples/` and `recent/` directly,
+including host-discovered additions, retaining all disk filenames. History remains
+private outside the project; see [Version history](VERSION-HISTORY.md).
 
 ## Manufacturing export
 

@@ -351,7 +351,9 @@ test('thermal results publish through live grants and restore matching inputs wi
     saveFailure = true;
     const failedSave = await post('/api/thermal/run', { ...payload, fileId });
     assert.equal(failedSave.status, 422);
-    assert.match((await failedSave.json()).error, /Could not save.*Disk full/);
+    const saveError = (await failedSave.json()).error;
+    assert.match(saveError, /Could not save.*available disk space/);
+    assert.doesNotMatch(saveError, /Disk full/);
     assert.equal(writes, 1);
     assert.deepEqual(await (await lookup()).json(), { result, config: payload.config });
     const before = { reads, detections };
@@ -360,6 +362,94 @@ test('thermal results publish through live grants and restore matching inputs wi
     assert.equal((await post('/api/thermal/run', { ...payload, fileId })).status, 403);
     assert.deepEqual({ reads, detections }, before);
     assert.equal(runs, 2);
+  } finally {
+    server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('thermal service keeps native diagnostics private across run, detection and saved-result failures', async () => {
+  await mkdir('test-results', { recursive: true });
+  const directory = await mkdtemp(path.resolve('test-results/thermal-public-errors-'));
+  const sentinel = 'PRIVATE_THERMAL_SENTINEL .subckt PRIVATE_MODEL 1 2 C:/private/solver.log';
+  let failure = new Error(`Gmsh could not mesh this PCB. ${sentinel}`),
+    calls = 0,
+    detectionThrows = false;
+  const server = await startServer({
+    dataDir: directory,
+    thermalRunner: async () => {
+      calls++;
+      throw failure;
+    },
+    thermalDetector: async () => {
+      if (detectionThrows) throw new Error(sentinel);
+      return { available: false, diagnostic: sentinel, log: sentinel };
+    },
+    thermalResultFiles: {
+      forProject: () => ({
+        read: async () => {
+          throw new Error(sentinel);
+        },
+        write: async () => {
+          throw new Error(sentinel);
+        },
+      }),
+    },
+  });
+  const headers = { 'X-OpenPE-Token': server.token, 'Content-Type': 'application/json' };
+  const payload = { ...fixture(), fileId: uid() };
+  const post = (route: string, body: unknown) =>
+    fetch(server.base + route, { method: 'POST', headers, body: JSON.stringify(body) });
+  try {
+    for (const [prefix, expected] of [
+      ['Gmsh could not mesh this PCB. ', /Gmsh.*Mesh size/],
+      ['Elmer did not converge. ', /Elmer did not converge/],
+      [
+        'Elmer did not produce exactly one steady temperature result. ',
+        /invalid or incomplete temperature field/,
+      ],
+      ['Unknown runtime failure: ', /Thermal analysis could not complete/],
+    ] as [string, RegExp][]) {
+      failure = new Error(prefix + sentinel);
+      const response = await post('/api/thermal/run', payload),
+        body = await response.json();
+      assert.equal(response.status, 422);
+      assert.match(body.error, expected);
+      assert.doesNotMatch(JSON.stringify(body), /PRIVATE_|\.subckt|C:\/private|solver\.log/);
+      assert.equal(failure.message, prefix + sentinel);
+    }
+    const unavailable = await fetch(server.base + '/api/thermal/status', { headers });
+    const status = await unavailable.json();
+    assert.equal(status.available, false);
+    assert.match(status.error, /thermal:prepare/);
+    assert.equal(status.diagnostic, status.error);
+    assert.equal(Object.hasOwn(status, 'log'), false);
+    assert.doesNotMatch(JSON.stringify(status), /PRIVATE_/);
+    detectionThrows = true;
+    const failedDetection = await fetch(server.base + '/api/thermal/status', { headers });
+    assert.equal(failedDetection.status, 503);
+    assert.doesNotMatch(JSON.stringify(await failedDetection.json()), /PRIVATE_/);
+    const lookup = await post('/api/thermal/result', {
+      source: payload.source,
+      fileId: payload.fileId,
+    });
+    assert.equal(lookup.status, 422);
+    assert.match((await lookup.json()).error, /integrity/);
+    const invalid = await post('/api/thermal/run', {
+      ...payload,
+      config: { ...payload.config, ambientC: null },
+    });
+    assert.equal(invalid.status, 400);
+    assert.match((await invalid.json()).error, /Invalid thermal settings/);
+    const project = parseProject(payload.source);
+    project.pcb!.graphics = [];
+    const openBoard = await post('/api/thermal/run', {
+      ...payload,
+      source: serializeProject(project),
+    });
+    assert.equal(openBoard.status, 400);
+    assert.match((await openBoard.json()).error, /closed board outline/);
+    assert.equal(calls, 4, 'Input validation remains before solver execution.');
   } finally {
     server.close();
     await rm(directory, { recursive: true, force: true });

@@ -2,8 +2,9 @@ import { uid, type Point } from '../lib/circuit';
 import { type BoardZone, type CopperLayer, type PCB } from '../lib/pcb';
 import {
   deletePCBSelection,
-  flipPCBFootprint,
+  flipPCBSelection,
   movePCBSelection,
+  previewPCBMove,
   rotatePCBSelection,
   setPCBTrackProperties,
   type PCBSelection,
@@ -17,11 +18,16 @@ import type { CoreDefinition } from './project-core';
 import propertySchemas from './layout-property-schemas.json';
 import {
   preparePCBFootprintProperties,
+  preparePCBZoneProperties,
   setPCBPadProperties,
   setPCBTrackEndpoints,
   setPCBViaProperties,
 } from '../lib/pcb-properties';
-import { findPCBRectangle, resizePCBRectangle } from '../lib/pcb-outline-resize';
+import {
+  findPCBRectangle,
+  resizePCBRectangle,
+  setPCBRectangleWidth,
+} from '../lib/pcb-outline-resize';
 import { assertPCBLockedEdits, setPCBLocked } from '../lib/pcb-lock';
 
 // Property inputs derive from the same shapes as the full document validator.
@@ -35,9 +41,12 @@ const propertyShape = (schema: { properties: object; required: string[] }, exclu
         schema.required.includes(key) ? value : { anyOf: [value, { type: 'null' }] },
       ]),
   );
-const propertyChanges = (input: Record<string, any>) =>
+const propertyChanges = (input: Record<string, any>, nullableKeys: readonly string[] = []) =>
   Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [key, value === null ? undefined : value]),
+    Object.entries(input).map(([key, value]) => [
+      key,
+      value === null && !nullableKeys.includes(key) ? undefined : value,
+    ]),
   );
 
 const identity = { type: 'string', minLength: 1, maxLength: 200 };
@@ -146,6 +155,27 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
     ['selection', 'bounds'],
   ),
   objectCommand(
+    'layout.rectangle.properties',
+    'Set line width on every native edge of a rectangular Edge.Cuts outline in one undo transaction. Selection may identify one edge or the complete rectangle.',
+    { selection, width: { ...propertySchemas.graphic.properties.width, minimum: 0.0001 } },
+    ['selection', 'width'],
+  ),
+  operationCommand(
+    'layout.pose',
+    'Commit a complete canvas pickup pose in one undo transaction. Apply ordered quarter-turn rotations and package flips around anchor, then translate anchor to target. Flip changes only selected footprints and reflects their origins across the horizontal anchor axis.',
+    {
+      selection,
+      anchor: point,
+      target: point,
+      operations: {
+        type: 'array',
+        maxItems: 128,
+        items: { enum: ['rotate', 'rotateReverse', 'flip'] },
+      },
+    },
+    ['selection', 'anchor', 'target', 'operations'],
+  ),
+  objectCommand(
     'layout.move',
     'Move selected physical packages, copper, zones or artwork together.',
     { selection, delta: point },
@@ -219,35 +249,10 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'layout.zone',
-    'Create or update a typed board zone, preserving other metadata and invalidating affected saved fills.',
+    'Create or update a typed board zone with shared Properties preparation. Omitted fields are retained; null clears optional overrides (padConnection null restores thermal relief). netId null means unassigned. Refresh already-filled enabled zones in the same transaction.',
     {
       zoneId: identity,
-      netId: { type: ['string', 'null'], minLength: 1, maxLength: 200 },
-      layer: propertySchemas.zone.properties.layer,
-      outline: { type: 'array', items: point, minItems: 3, maxItems: 60000 },
-      holes: {
-        type: 'array',
-        maxItems: 30000,
-        items: { type: 'array', minItems: 3, maxItems: 60000, items: point },
-      },
-      clearance: { type: 'number', minimum: 0, maximum: 1000 },
-      minThickness: positive,
-      thermalGap: propertySchemas.zone.properties.thermalGap,
-      thermalBridge: propertySchemas.zone.properties.thermalBridge,
-      priority: propertySchemas.zone.properties.priority,
-      padConnection: { enum: ['yes', 'no', 'thru_hole_only'] },
-      islandRemovalMode: { type: 'integer', minimum: 0, maximum: 2 },
-      fillEnabled: { type: 'boolean' },
-      keepout: object(
-        {
-          tracks: { type: 'boolean' },
-          vias: { type: 'boolean' },
-          pads: { type: 'boolean' },
-          copperpour: { type: 'boolean' },
-          footprints: { type: 'boolean' },
-        },
-        ['tracks', 'vias', 'pads', 'copperpour', 'footprints'],
-      ),
+      ...propertyShape(propertySchemas.zone, ['id', 'locked', 'filledPolygons']),
     },
   ),
   operationCommand(
@@ -437,23 +442,15 @@ export function executeLayout(
     case 'layout.move':
       next = movePCBSelection(board, args.selection, args.delta);
       break;
+    case 'layout.pose':
+      next = previewPCBMove(board, args.selection, args.anchor, args.target, args.operations);
+      break;
     case 'layout.rotate':
       next = rotatePCBSelection(board, args.selection, args.degrees, args.pivot);
       break;
-    case 'layout.flip': {
-      const ids = new Set(
-        (args.selection as PCBSelection[])
-          .filter((item) => item.kind === 'footprint')
-          .map((item) => item.id),
-      );
-      next = {
-        ...board,
-        footprints: board.footprints.map((footprint) =>
-          ids.has(footprint.id) ? flipPCBFootprint(footprint) : footprint,
-        ),
-      };
+    case 'layout.flip':
+      next = flipPCBSelection(board, args.selection);
       break;
-    }
     case 'layout.delete':
       next = deletePCBSelection(board, args.selection);
       break;
@@ -619,16 +616,18 @@ export function executeLayout(
         throw new Error('This board zone no longer exists. Query the current board and try again.');
       if (!existing && (!changes.outline || !changes.layer || !Object.hasOwn(changes, 'netId')))
         throw new Error('A new zone needs an outline, layer and netId (or null for a keepout).');
-      const zone = {
-        id: uid(),
-        clearance: 0.25,
-        minThickness: 0.2,
-        thermalGap: 0.3,
-        thermalBridge: 0.3,
-        fillEnabled: true,
-        ...existing,
-        ...changes,
-      } as BoardZone;
+      const zone = preparePCBZoneProperties(
+        existing ??
+          ({
+            id: uid(),
+            clearance: 0.25,
+            minThickness: 0.2,
+            thermalGap: 0.3,
+            thermalBridge: 0.3,
+            fillEnabled: true,
+          } as BoardZone),
+        propertyChanges(changes, ['netId']),
+      );
       next = {
         ...board,
         zones: existing
@@ -669,11 +668,15 @@ export function executeLayout(
       if (start || end) next = setPCBTrackEndpoints(next, trackId, { start, end });
       break;
     }
-    case 'layout.rectangle.resize': {
+    case 'layout.rectangle.resize':
+    case 'layout.rectangle.properties': {
       checkSelection(board, args.selection);
       const rectangle = findPCBRectangle(board, args.selection);
       if (!rectangle) throw new Error('Select a rectangular outline or one board zone.');
-      next = resizePCBRectangle(board, rectangle, args.bounds);
+      next =
+        id === 'layout.rectangle.resize'
+          ? resizePCBRectangle(board, rectangle, args.bounds)
+          : setPCBRectangleWidth(board, rectangle, args.width);
       break;
     }
     case 'layout.pad.properties':
