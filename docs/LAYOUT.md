@@ -122,7 +122,10 @@ binding. Track identity, ordering, layer or width changes refresh only track
 targets; viewport, non-track geometry or copper-parent changes replace the binding.
 Within an unchanged, untransformed viewport, bounded transient pan/zoom uses a
 root CSS matrix with compensated visible non-scaling strokes. Transparent hit
-padding becomes exact before picking. Numerical camera state updates immediately;
+padding becomes exact before picking. Pure translation does not collect or
+recalculate visible stroke metrics; the first scaling pose captures them, and
+only scale changes update compensation until native rebasing or drawing replay.
+Numerical camera state updates immediately;
 navigation presents only its latest pose once per animation frame. Pointer
 mapping rebases the displayed transform to the latest numerical pose, preserving
 continuous wheel anchors and pan coordinates. Picking and captures first consume
@@ -190,6 +193,11 @@ does not starve fill updates.
 While a result is pending, lightweight conservative SVG masks adapt the latest
 solved fill to current geometry. Masks cut clearances around changed foreign
 tracks, pads, vias and keepouts and clip to current zone and board outlines.
+Mask preparation retains private transformed outlines, comparison keys, paths
+and bounds for exact internally owned zone and footprint arrays, with only the
+latest footprint variant per zone array. Track poses reuse these derivations;
+changed or caller-owned sources rebuild them. Every call returns independent
+mask containers and computes blockers from the current pose.
 Vacated gaps and expanded areas update with the next completed fill rather than
 remaining unchanged throughout the gesture. Worker output and masks are
 presentation only: airwires use fill-free candidate geometry on the renderer
@@ -483,6 +491,12 @@ checks, rejecting lost contacts or new joins to unrelated same-net islands.
 Retained leads must touch annular copper even when ending at drill centres.
 Gesture caches reuse only unchanged stationary geometry and retain exact checks
 for moved/added copper. Track drag opens no floating card or Selection settings.
+The retained stationary partition indexes X intervals for nets with more than
+64 bodies in their existing contact order; smaller nets retain the ordered scan.
+Queries skip disjoint ranges while preserving the same inclusive
+epsilon comparisons, exact contact candidates, visit order and geometry-work
+charges. A changed stationary body set rebuilds this private broad phase; it
+cannot certify connectivity or authorize an edit.
 
 GUI and Agent `layout.drag` share `createPCBInteractiveTrackDrag`: connected
 chain reshaping/local avoidance, picked corner/joint drag, posture and full-board
@@ -744,9 +758,18 @@ only a sustained wait reduces the batch. If fencing is unavailable, batches stay
 and size changes reset the batch, and disposing Render releases its fence.
 Larger batches skip redundant intermediate denoising passes while retaining the
 complete 64-sample image and final denoising for display and export.
+Accumulation-only continuation frames retain the composited raster image while
+shaders compile, and the current denoised image while the GPU is busy or only a
+partial sample advances. Camera, scene, size and selection changes invalidate
+that presentation. Explicit view updates and captures always repaint, including
+after canvas resize or reactivation; failed draws remain retryable. Sampling and
+the nonblocking GPU fence continue independently of duplicate presentation.
 These settings favour responsiveness over fine shadow, reflection and transmission
 detail. Camera motion uses a responsive preview and resets path
-accumulation; current geometry, display, projection, explosion and viewport changes
+accumulation once per continuous motion interval. Projection changes update the
+tracer camera without reuploading unchanged geometry, textures or lights; the
+camera-type shader define still changes through the pinned tracer. Current
+geometry, display, projection, explosion and viewport changes
 also restart the image. This temporary raster preview, also used during preparation
 and before the first sample, omits optical transmission on private materials;
 the path-traced scene retains its full transmission values. Hidden Model views
@@ -1140,6 +1163,11 @@ comparisons.
 | `node scripts/e2e-new-project.mjs`                                                                                                                                                                                         | Opt-in desktop: blank-project wiring, package placement, copper routing, board outline and Model edits; native Save/Save as and reopening in a fresh process                                                 |
 | `npm run examples:check-models -- --render`                                                                                                                                                                                | Verified offline STEP assets and all ten Home Model views                                                                                                                                                    |
 
+`tests/pcb-contact-intervals.test.ts` compares ordered broad-phase candidates with
+exhaustive interval filtering, including inclusive epsilon boundaries. The Shove
+suite compares both small and indexed stationary nets with exhaustive drilled,
+rotated and multilayer copper contacts.
+
 Model display groups, hidden-surface picking/Fit and material preservation are also
 covered by `tests/model-board-display.test.ts`. Plane-aware live readouts, independent
 project snapshots and unchanged-pointer notification suppression are covered by
@@ -1150,7 +1178,9 @@ bounded outer-copper normal maps and unchanged native geometry/UVs are covered b
 `tests/model-studio-renderer.test.ts`. The browser-only
 `node scripts/check-model-render-ui.mjs` exercises the GPU path tracer and PNG
 output, camera/material preservation, IME, retained display state and release
-across toggles; its fixed STEP fixture does not validate native model parsing,
+across toggles. Holding publication of the real linked shader verifies unchanged
+visible pixels and no repeated raster scene draws during preparation continuations.
+Its fixed STEP fixture does not validate native model parsing,
 desktop integration or equivalence to a Blender render.
 `node scripts/check-model-render-hmr-ui.mjs` exercises real Next/Turbopack hot
 updates in a private source copy, including retired callbacks, Render toggles,
@@ -1163,8 +1193,10 @@ surface/estimated-body picking, snap candidates and visible drawing anchors are
 covered by `tests/canvas-measurement.test.ts`, `tests/model-measurement.test.ts`
 and `tests/pcb-measurement.test.ts`.
 
-After explicit desktop-test authorization, measure the current built renderer
-with EMC Flyback using PowerShell:
+### Interaction latency measurements
+
+Desktop measurements require [explicit authorization](../AGENTS.md#verification-and-delivery)
+and isolated profiles. The current built renderer can be checked with EMC Flyback:
 
 ```powershell
 $env:OPENPE_EXPERIENCE_OPERATIONS = 'layout-navigation,track-paced'
@@ -1172,119 +1204,40 @@ $env:OPENPE_EXPERIENCE_TARGET_MS = '50'
 node scripts/benchmark-editor-experience.mjs layout-50ms
 ```
 
-The target defaults to 100 ms and accepts positive finite values. This selection
-requires 23 navigation and 31 track events, including the first D pickup from a
-clean board, seven separate preview heads, Enter commit and a separate pointer
-drag. The pinned DRV span also has separate pickup, seven preview heads across
-its fixed obstacles and commit; reachable heads must retain an unconstrained
-local detour following the cursor. The exact displayed path must match committed
-native PCB geometry. Before each cold pickup, untimed setup waits for the transient
-camera attribute to clear, then moves one CSS pixel past the pickup and back to
-its exact coordinate and awaits two frames. It makes no selection click or
-electrical edit. The `paced-single-api-inputs-v2` track protocol records 31
-independent API invocations for those 31 events. D and Enter each use separate
-`keyboard.down` and `keyboard.up` calls, so each key event has its own invocation
-clock. The key stays held during the 250 ms idle after down acknowledgement;
-CDP injection does not generate OS repeat, and repeated events fail pairing.
-Keyup invocation bounds cover the release call alone rather than the whole key
-press; event and two-frame endpoints are measured from the input event. Each event
-and calibrated API-invocation upper bound through its second animation frame
-must be strictly below the target. Inputs use one
-acknowledged send followed by 250 ms idle pacing; pacing is outside each input's
-latency interval. Track geometry, undo and final native-file equality remain
-required. `layoutInteractionTarget.goalWithinTarget` cannot pass missing,
-unpaired or incomplete evidence. This bounded protocol does not measure a GPU
-fence or sustained input load. Clock/pairing checks run without a browser using
-`node scripts/editor-experience-clock.mjs --test`.
+The target defaults to 100 ms and accepts positive finite values. Acceptance
+requires the complete navigation and paced-track event plan, cold pickups, both
+pinned track cases, exact preview/commit geometry, native-file equality and undo.
+Each paired event and its calibrated API-invocation upper bound through the second
+animation frame must be strictly below the target. Missing or unpaired evidence
+cannot pass `layoutInteractionTarget.goalWithinTarget`. D/Enter keydown and keyup
+use separate API clocks. Inputs use one acknowledged call at a time, with 250 ms
+idle pacing outside the latency interval. This protocol does
+not measure sustained input load, physical-device latency or a GPU/display fence.
 
-Built runs retain a private renderer copy and SHA-256 file manifest in their
-profile. Source manifests before/after copying must match the copy; a concurrent
-replacement gets one retry, then fails. Reads and copies use at most four workers;
-failed batches finish pending work before retrying. The benchmark adapter compiles the
-original Electron main under its original filename/module paths, changing only
-the loopback static directory. Reports retain original main/benchmark source
-hashes, Next version and final snapshot verification. `OPENPE_DEV_URL` runs use a
-mutable development renderer and make no fixed-artifact claim. Run snapshot,
-retry and module-path checks without Electron using
-`node scripts/editor-experience-artifact.mjs --test`.
+[benchmark-editor-experience.mjs](../scripts/benchmark-editor-experience.mjs) defines
+the executable event plan, cold-pickup setup, input pairing, budgets and report
+fields. The helper checks below verify these mechanisms without launching Electron.
 
-For a fixed-build A/B, set `OPENPE_EXPERIENCE_RENDERER_SNAPSHOT` to a retained
-snapshot before the same benchmark command, for example in PowerShell:
+| Mode | Setting | Evidence and limits |
+| --- | --- | --- |
+| Current built renderer | Default | Copies and hashes `out` into a private profile; unchanged source/copy manifests and original Electron main identity are required. Host resources remain current. |
+| Retained renderer A/B | `OPENPE_EXPERIENCE_RENDERER_SNAPSHOT` | Accepts only unlinked workspace `test-results/editor-experience-*/renderer/1` or `/2` snapshots with a matching prior artifact record and manifest. Reports retain source/record hashes. |
+| Development renderer | `OPENPE_DEV_URL` | Uses an already-running `npm run dev:web` server; cannot accompany a retained snapshot and makes no fixed-build claim. |
+| Node diagnostics | `OPENPE_PROFILE_NODE=1` | Bounded CPU/thread/event-loop observations of the benchmark process; excludes Electron CPU and changes no acceptance clock or threshold. Compare diagnostic runs separately. |
+| Input trace | `OPENPE_PROFILE_TRACE=input` with Node diagnostics | Probes a fixed category allowlist once and records explicit renderer/trace clock anchors. Missing critical categories, anchors or threads yield `inconclusive`; trace coverage cannot establish a latency pass. |
+| Native wheel diagnostic | `OPENPE_EXPERIENCE_OPERATIONS=layout-native-wheel` | Injects one guarded Windows pointer move and four alternating wheel ticks through an owned worker. Requires verified process/window/profile identity, foreground focus, unchanged viewport/DPI and released buttons/modifiers before every input. Interference aborts; no activation or cursor restoration is attempted. |
 
-```powershell
-$env:OPENPE_EXPERIENCE_RENDERER_SNAPSHOT = 'test-results/editor-experience-RETAINED-ID/renderer/1'
-```
+Formal accessibility runs additionally set `OPENPE_EXPERIENCE_NATIVE_AX=1`;
+otherwise the natural accessibility environment remains unchanged. Native wheel
+QPC timestamps and exact ordered DOM wheel events use the same second-RAF endpoint,
+but remain separate from CDP acceptance and goal status. Profiles retain bounded
+partial evidence on failure. Diagnostics preserve the existing failure/overload
+guards and input budgets. Unset diagnostic/snapshot variables before an ordinary run.
 
-Replace `RETAINED-ID` with an existing run profile. Only this workspace's
-`test-results/editor-experience-*/renderer/1` or `/2` accepted snapshot is allowed;
-every ancestor and content entry must be unlinked. Its prior artifact record and
-full manifest must match, then source-before/source-after/new-copy manifests
-must agree under the same bounds. Reports retain source path, record hash and
-renderer SHA. Electron main and host resources still use the current workspace.
-This option cannot accompany `OPENPE_DEV_URL`; unset it to use current `out`.
-
-`OPENPE_PROFILE_NODE=1` adds optional benchmark/Playwright Node diagnostics;
-unset/`0` disables sampling. Paired Layout navigation/track APIs retain their
-original invocation clocks. CPU/thread-CPU and event-loop-utilization counters
-are sampled afterward and at the original API return, after the unchanged
-acknowledgement clock. Missing features/read failures are explicit unavailable
-values. A 20 ms unref heartbeat keeps at most 2048 samples; API observations are
-capped at 1024, with drop counts. Final synchronous cleanup retains completed,
-failed and unfinished observations without waiting for an input or watchdog.
-`nodeInputDiagnostics` retains the helper source/hash and separate evidence;
-it changes no latency endpoint, acceptance threshold or overload guard. It
-observes this Node process, excluding Electron main/renderer CPU. Compare tagged
-diagnostic runs separately; counter collection has overhead. Browser-free bounds,
-lifecycle and feature checks use
-`node scripts/editor-experience-node-diagnostics.mjs --test`.
-
-`OPENPE_PROFILE_TRACE=input` requests one BrowserMain/IO diagnostic run with
-`OPENPE_PROFILE_NODE=1`. Before timing, one `Tracing.getCategories` probe selects
-only available members of a fixed allowlist: timeline/user timing, top-level
-tasks, input/latency, three scheduler categories and `accessibility`. Verbose
-disabled categories are excluded. AX configuration stays unchanged; formal AX
-runs retain `OPENPE_EXPERIENCE_NATIVE_AX=1`. The `light` and `1` trace modes use
-their own fixed category sets; `0`/unset disables tracing and unsupported
-modes fail explicitly. For the same reviewed snapshot, operations and target:
-
-```powershell
-$env:OPENPE_PROFILE_NODE = '1'
-$env:OPENPE_PROFILE_TRACE = 'input'
-$env:OPENPE_EXPERIENCE_NATIVE_AX = '1'
-node scripts/benchmark-editor-experience.mjs layout-input-diagnostic
-```
-
-Reports retain selected/missing categories and bounded process/thread metadata.
-Each phase creates one uniquely named `performance.mark` before input timing,
-retaining renderer before/after times and the matching trace timestamp, plus raw
-Performance Timestamp/NavigationStart values. This explicit anchor bounds trace
-alignment; arbitrary offsets cannot establish BrowserMain attribution. Missing
-critical categories, anchor or expected thread names yields `inconclusive`.
-Capture coverage never infers a cause or latency pass. Per-trace 64 MB, read-only
-failure cleanup and original run/input budgets remain unchanged. Mode, category,
-anchor and metadata checks use
-`node scripts/editor-experience-trace.mjs --test` without a browser.
-
-The optional `OPENPE_EXPERIENCE_OPERATIONS='layout-native-wheel'` diagnostic
-injects one Windows pointer move and four alternating native wheel ticks through
-a private worker. Before creating that worker, the actual Electron main must be
-the direct child of Playwright's Windows launch shell and agree with Browser
-metrics, the selected page's sole window, verified main/app/profile paths and a
-fresh private launch nonce. Reports retain both shell and actual main/parent PIDs.
-Before each input the worker verifies the owned foreground HWND/PID,
-unchanged client/DPI/canvas, destination ownership, pointer position and released
-buttons/modifiers. The initial cursor may be outside the window; its destination
-must be inside the reviewed canvas. A duplicate starting position moves one
-physical pixel right within that canvas. Focus loss or interference aborts; no
-window activation or cursor restoration is attempted by the worker.
-
-`nativeWheelDiagnostic` pairs five exact ordered events with QPC timestamps
-immediately before `SendInput` and the same second-RAF endpoint. DOM
-`wheelDeltaY` ticks must exactly match alternating ±120; DOM delta units are recorded and must
-stay consistently proportional across all four wheels. This diagnostic remains
-separate from CDP acceptance and goal status; it excludes physical-device latency
-and a GPU/display fence. `node scripts/editor-experience-native-input.mjs --test`
-checks the parser and compiled C# guards without Win32 observation/input calls.
-
-Documentation changes need static checks. Desktop/real-runtime verification is
-separate; follow [AGENTS.md](../AGENTS.md).
+| Browser-free check | Responsibility |
+| --- | --- |
+| `node scripts/editor-experience-clock.mjs --test` | Clock calibration, paired event/API intervals and acceptance completeness. |
+| `node scripts/editor-experience-artifact.mjs --test` | Bounded renderer copying, manifests, retry and native-module identity. |
+| `node scripts/editor-experience-node-diagnostics.mjs --test` | Bounded process diagnostics, lifecycle and unavailable counters. |
+| `node scripts/editor-experience-trace.mjs --test` | Trace modes, category selection, clock anchors and metadata. |
+| `node scripts/editor-experience-native-input.mjs --test` | Native-input parser and compiled C# guards; no Win32 observation or input calls. |

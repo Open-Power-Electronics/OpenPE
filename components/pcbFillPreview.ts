@@ -7,6 +7,7 @@ import {
   worldZones,
 } from '../lib/pcb-polygons';
 import type { Point } from '../lib/circuit';
+import { isOwnedProjectNode } from '../lib/immutable-project';
 
 export type PCBFillPreview = {
   changed: boolean;
@@ -57,8 +58,25 @@ const samePad = (a: Pad | undefined, b: Pad) =>
   a !== undefined && (a === b || JSON.stringify(padGeometry(a)) === JSON.stringify(padGeometry(b)));
 const circlePath = (point: Point, radius: number) =>
   `M ${point.x - radius} ${point.y} A ${radius} ${radius} 0 1 0 ${point.x + radius} ${point.y} A ${radius} ${radius} 0 1 0 ${point.x - radius} ${point.y} Z`;
-const outlinePath = (zone: BoardZone) =>
-  polygonPath([{ outer: zone.outline, holes: zone.holes ?? [] }]);
+// These keys are private stripped/transformed outlines, never caller zones.
+const outlinePaths = new WeakMap<BoardZone, string>();
+const outlineBounds = new WeakMap<BoardZone, Bounds>();
+function outlinePath(zone: BoardZone) {
+  let path = outlinePaths.get(zone);
+  if (path === undefined) {
+    path = polygonPath([{ outer: zone.outline, holes: zone.holes ?? [] }]);
+    outlinePaths.set(zone, path);
+  }
+  return path;
+}
+function zoneBounds(zone: BoardZone) {
+  let bounds = outlineBounds.get(zone);
+  if (!bounds) {
+    bounds = boundsOf(zone.outline);
+    outlineBounds.set(zone, bounds);
+  }
+  return bounds;
+}
 const localZones = (board: PCB) => [
   ...board.zones,
   ...board.footprints.flatMap((footprint) => footprint.zones ?? []),
@@ -108,15 +126,36 @@ function boundaryInputs(board: PCB) {
 
 // Transform only outlines. Saved contours can contain 60,000 vertices and never
 // participate in this conservative display-only mask preparation.
+type ZoneOutlines = {
+  zones: BoardZone[];
+  byId: Map<string, BoardZone>;
+  keys: Map<BoardZone, string>;
+};
+// One footprint variant per exact owned zone array; track poses retain these
+// sources. Mutable and caller-frozen containers always rebuild private outlines.
+const zoneOutlines = new WeakMap<
+  PCB['zones'],
+  { footprints: PCB['footprints']; value: ZoneOutlines }
+>();
 function outlineZones(board: PCB) {
+  const reusable = isOwnedProjectNode(board.zones) && isOwnedProjectNode(board.footprints);
+  const saved = reusable ? zoneOutlines.get(board.zones) : undefined;
+  if (saved?.footprints === board.footprints) return saved.value;
   const stripFill = ({ filledPolygons: _filled, ...zone }: BoardZone) => zone;
-  return worldZones({
+  const zones = worldZones({
     ...board,
     zones: board.zones.map(stripFill),
     footprints: board.footprints.map((footprint) =>
       footprint.zones ? { ...footprint, zones: footprint.zones.map(stripFill) } : footprint,
     ),
   });
+  const value: ZoneOutlines = {
+    zones,
+    byId: new Map(zones.map((zone) => [zone.id, zone])),
+    keys: new Map(zones.map((zone) => [zone, JSON.stringify(zone)])),
+  };
+  if (reusable) zoneOutlines.set(board.zones, { footprints: board.footprints, value });
+  return value;
 }
 
 /** Cheap conservative masks over saved fills during an unaccepted gesture.
@@ -149,12 +188,14 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
         packagesChanged = true;
       }
   }
-  const previousZones = outlineZones(basis);
-  const previousById = new Map(previousZones.map((zone) => [zone.id, zone]));
-  const zones = outlineZones(candidate);
+  const previous = outlineZones(basis);
+  const current = outlineZones(candidate);
+  const previousZones = previous.zones,
+    previousById = previous.byId,
+    zones = current.zones;
   const changedZones = zones.filter((zone) => {
     const old = previousById.get(zone.id);
-    return !old || JSON.stringify(old) !== JSON.stringify(zone);
+    return !old || previous.keys.get(old) !== current.keys.get(zone);
   });
   const keepouts = changedZones.filter((zone) => zone.keepout?.copperpour);
   const boundaryChanged =
@@ -192,14 +233,14 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
       )
       .map((zone) => {
         const clearance = zone.clearance > 0 ? zone.clearance : defaultCopperFillClearance;
-        const zoneBounds = boundsOf(zone.outline);
+        const bounds = zoneBounds(zone);
         const blockers: PCBFillPreview['zones'][number]['blockers'] = [];
         for (const track of tracks)
           if (
             track.layer === zone.layer &&
             track.netId !== zone.netId &&
             overlaps(
-              zoneBounds,
+              bounds,
               inflate(boundsOf([track.start, track.end]), track.width / 2 + clearance),
             )
           )
@@ -210,13 +251,13 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
         for (const via of vias) {
           if (
             via.netId !== zone.netId &&
-            overlaps(zoneBounds, circleBounds(via, via.diameter / 2 + clearance))
+            overlaps(bounds, circleBounds(via, via.diameter / 2 + clearance))
           )
             blockers.push({ path: circlePath(via, via.diameter / 2 + clearance), strokeWidth: 0 });
-          if (via.drill > 0 && overlaps(zoneBounds, circleBounds(via, via.drill / 2)))
+          if (via.drill > 0 && overlaps(bounds, circleBounds(via, via.drill / 2)))
             blockers.push({ path: circlePath(via, via.drill / 2), strokeWidth: 0 });
         }
-        for (const { footprint, pad, shape, bounds, drill } of padShapes) {
+        for (const { footprint, pad, shape, bounds: padBounds, drill } of padShapes) {
           const present =
             pad.type !== 'smd' ||
             (pad.layers
@@ -224,7 +265,7 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
               : zone.layer === (footprint.side === 'front' ? 'F.Cu' : 'B.Cu'));
           if (
             present &&
-            overlaps(zoneBounds, inflate(bounds, clearance)) &&
+            overlaps(bounds, inflate(padBounds, clearance)) &&
             (pad.type === 'np_thru_hole' ||
               !pad.netId ||
               pad.netId !== zone.netId ||
@@ -239,7 +280,7 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
             drill &&
             pad.drill &&
             pad.drill > 0 &&
-            overlaps(zoneBounds, circleBounds(drill, pad.drill / 2))
+            overlaps(bounds, circleBounds(drill, pad.drill / 2))
           )
             blockers.push({
               path: circlePath(drill, pad.drill / 2),
@@ -249,7 +290,7 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
         for (const keepout of keepouts)
           if (
             keepout.layer === zone.layer &&
-            overlaps(zoneBounds, inflate(boundsOf(keepout.outline), clearance))
+            overlaps(bounds, inflate(zoneBounds(keepout), clearance))
           )
             blockers.push({ path: outlinePath(keepout), strokeWidth: 2 * clearance });
         return {

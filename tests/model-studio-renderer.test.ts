@@ -585,7 +585,6 @@ function fixture() {
     original,
     content,
     [],
-    [],
     dependencies,
   );
   const camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.1, 1000);
@@ -763,17 +762,115 @@ test('GPU backpressure retains cached presentation and finalizes its fence after
   f.target.dispose();
 });
 
+test('accumulation continuations retain the raster image during compilation but explicit updates repaint', () => {
+  const f = fixture();
+  f.setCompiling(true);
+  const continuation = { ...f.options, continuation: true };
+  for (let index = 0; index < 30; index++) f.studio.render(f.camera, continuation);
+  assert.equal(
+    f.state.previews.length,
+    1,
+    'Waiting for the shader never redraws the same physical scene.',
+  );
+  f.studio.render(f.camera, f.options);
+  assert.equal(
+    f.state.previews.length,
+    2,
+    'An explicit view update repaints even without a new sample.',
+  );
+  f.camera.position.x += 1;
+  f.studio.render(f.camera, continuation);
+  f.state.drawing.set(1200, 900);
+  f.studio.render(f.camera, continuation);
+  f.setChanged();
+  f.studio.invalidate();
+  f.studio.render(f.camera, continuation);
+  assert.equal(
+    f.state.previews.length,
+    5,
+    'Camera, resize and physical-scene changes invalidate retained presentation.',
+  );
+  assert.equal(f.studio.samples, 0);
+  f.studio.dispose();
+  f.target.dispose();
+});
+
+test('backpressure and partial-sample continuations avoid duplicate copies while selection and capture repaint', () => {
+  const f = fixture();
+  const continuation = { ...f.options, continuation: true };
+  f.studio.render(f.camera, continuation);
+  f.studio.render(f.camera, continuation);
+  const presents = f.calls.presents;
+  f.backend.beginFrame = () => 1;
+  let submitted = -1;
+  f.backend.endFrame = (count) => {
+    submitted = count;
+  };
+  f.studio.render(f.camera, continuation);
+  assert.equal(submitted, 1);
+  assert.equal(f.calls.presents, presents, 'Another partial tile keeps the same denoised image.');
+  f.studio.render(f.camera, continuation);
+  assert.equal(f.calls.presents, presents + 1, 'A completed sample presents once.');
+  f.backend.beginFrame = () => 0;
+  for (let index = 0; index < 30; index++) f.studio.render(f.camera, continuation);
+  assert.equal(
+    f.calls.presents,
+    presents + 1,
+    'A busy GPU receives no duplicate presentation commands.',
+  );
+  const selected = [new THREE.Object3D()];
+  f.studio.render(f.camera, { ...continuation, selected });
+  selected[0] = new THREE.Object3D();
+  f.studio.render(f.camera, { ...continuation, selected });
+  assert.equal(
+    f.calls.presents,
+    presents + 3,
+    'Selection snapshots remain independent of caller arrays.',
+  );
+  f.studio.render(f.camera, { ...f.options, selected });
+  assert.equal(
+    f.calls.presents,
+    presents + 4,
+    'Explicit drawing/capture redraws the current canvas.',
+  );
+  const present = f.backend.present;
+  f.backend.present = () => {
+    throw Error('Presentation failed');
+  };
+  assert.throws(() => f.studio.render(f.camera, f.options), /Presentation failed/);
+  f.backend.present = present;
+  f.studio.render(f.camera, continuation);
+  assert.equal(
+    f.calls.presents,
+    presents + 5,
+    'A failed draw cannot leave a reusable presentation.',
+  );
+  f.studio.dispose();
+  f.target.dispose();
+});
+
 test('movement and physical scene changes reset samples without needless geometry uploads', () => {
   const f = fixture();
   f.studio.render(f.camera, f.options);
   f.studio.invalidate();
   f.studio.render(f.camera, f.options);
   assert.equal(f.calls.scenes, 1, 'Invalidation checks for real physical changes.');
+  const previewsBeforeMotion = f.state.previews.length;
   f.camera.position.x += 1;
   f.studio.render(f.camera, { ...f.options, moving: true });
   assert.equal(f.studio.samples, 0);
   assert.equal(f.state.previews.at(-1), f.physical);
   assert.equal(f.calls.scenes, 1);
+  for (let index = 0; index < 24; index++) {
+    f.camera.position.x += 1;
+    f.studio.render(f.camera, { ...f.options, moving: true });
+  }
+  assert.equal(f.calls.resets, 1, 'Continuous motion clears accumulation targets only once.');
+  assert.equal(
+    f.state.previews.length - previewsBeforeMotion,
+    25,
+    'Every moving pose still redraws the current preview.',
+  );
   f.studio.render(f.camera, f.options);
   assert.equal(f.calls.updates, 1);
   assert.equal(f.studio.samples, 0.75);
@@ -838,7 +935,7 @@ test('failed GPU samples restore renderer state and leave source camera/scene re
   f.target.dispose();
 });
 
-test('subnanometre camera drift preserves samples while a projection change uploads its camera', () => {
+test('subnanometre drift preserves samples and projection changes update only the render camera', () => {
   const f = fixture();
   f.studio.render(f.camera, f.options);
   f.camera.position.x += 1e-13;
@@ -849,9 +946,24 @@ test('subnanometre camera drift preserves samples while a projection change uplo
   orthographic.position.copy(f.camera.position);
   orthographic.quaternion.copy(f.camera.quaternion);
   f.studio.render(orthographic, f.options);
-  assert.equal(f.calls.scenes, 2);
+  assert.equal(
+    f.calls.scenes,
+    1,
+    'Projection changes retain uploaded geometry, textures and lights.',
+  );
+  assert.equal(f.calls.updates, 1);
   assert.ok(f.calls.cameras.at(-1) instanceof THREE.OrthographicCamera);
   assert.notEqual(f.calls.cameras.at(-1), orthographic);
+  f.studio.render(f.camera, { ...f.options, moving: true });
+  f.studio.render(orthographic, { ...f.options, moving: true });
+  f.studio.render(orthographic, f.options);
+  assert.equal(
+    f.calls.scenes,
+    1,
+    'A projection change during motion also retains the physical scene.',
+  );
+  assert.equal(f.calls.updates, 2);
+  assert.equal(f.studio.samples, 0.75, 'The new camera starts a fresh accumulation.');
   f.studio.dispose();
   f.target.dispose();
 });

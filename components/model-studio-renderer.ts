@@ -70,6 +70,8 @@ export type ModelStudioRenderOptions = {
   bounds: THREE.Box3;
   moving?: boolean;
   selected?: THREE.Object3D[];
+  /** An accumulation-only tick; explicit view updates and captures omit this. */
+  continuation?: boolean;
 };
 export type ModelRenderProgress = { samples: number; complete: boolean };
 
@@ -905,7 +907,6 @@ export function createModelStudioRenderer(
   originalScene: THREE.Scene,
   content: THREE.Group,
   helpers: THREE.Object3D[],
-  _ordinaryLights: THREE.Light[],
   dependencies: ModelStudioRendererDependencies = defaults,
 ) {
   // Three owns these immutable LUTs. Its module survives a Model hot update;
@@ -921,8 +922,9 @@ export function createModelStudioRenderer(
   const physical = dependencies.createScene(content);
   let backend: ModelPathTracingBackend | undefined, camera: THREE.Camera | undefined;
   let retainedCameraBasis = '',
-    retainedProjection = '',
     retainedSceneBasis = '';
+  let presentedSamples = -1;
+  let presentedSelection: THREE.Object3D[] = [];
   let needsSync = true,
     needsSceneUpload = true,
     moved = false,
@@ -950,26 +952,29 @@ export function createModelStudioRenderer(
           needsSync = false;
         }
         const nextCameraBasis = cameraBasis(sourceCamera),
-          changedCamera = nextCameraBasis !== retainedCameraBasis,
-          changedProjection = retainedProjection !== sourceCamera.type;
+          changedCamera = nextCameraBasis !== retainedCameraBasis;
         if (changedCamera || !camera) {
           camera = copyRenderCamera(sourceCamera, camera);
           retainedCameraBasis = nextCameraBasis;
-          retainedProjection = sourceCamera.type;
         }
         if (options.moving) {
-          backend?.reset();
+          // The retained tracer cannot sample during motion. Clear its three
+          // accumulation targets once, then only redraw the responsive preview.
+          if (!moved) backend?.reset();
           moved = true;
+          presentedSamples = -1;
           renderModelRasterPreview(renderer, physical.scene, camera!);
           return { samples: 0, complete: false };
         }
         backend ??= dependencies.createBackend(renderer, originalScene, helpers);
-        if (needsSceneUpload || changedProjection) {
+        if (needsSceneUpload) {
           backend.setScene(physical.scene, camera!);
+          presentedSamples = -1;
           needsSceneUpload = false;
           moved = false;
         } else if (changedCamera || moved) {
           backend.updateCamera(camera!);
+          presentedSamples = -1;
           moved = false;
         }
         const drawing = renderer.getDrawingBufferSize(new THREE.Vector2()),
@@ -985,16 +990,29 @@ export function createModelStudioRenderer(
           nextHeight = Math.max(1, Math.floor(drawing.y * scale));
         if (nextWidth !== width || nextHeight !== height) {
           backend.resize(nextWidth, nextHeight);
+          presentedSamples = -1;
           width = nextWidth;
           height = nextHeight;
         }
         let successfulFrame = false;
         try {
           advanceModelRenderFrame(backend);
-          if (backend.samples >= 1) backend.present(camera!, options.selected ?? []);
-          else renderModelRasterPreview(renderer, physical.scene, camera!);
+          const completed = Math.floor(backend.samples);
+          const selected = options.selected ?? [];
+          if (
+            !options.continuation ||
+            completed !== presentedSamples ||
+            selected.length !== presentedSelection.length ||
+            selected.some((object, index) => object !== presentedSelection[index])
+          ) {
+            if (backend.samples >= 1) backend.present(camera!, selected);
+            else renderModelRasterPreview(renderer, physical.scene, camera!);
+            presentedSamples = completed;
+            presentedSelection = [...selected];
+          }
           successfulFrame = true;
         } finally {
+          if (!successfulFrame) presentedSamples = -1;
           // Fence after denoising, outlines and copy: the next batch must not
           // queue behind unfinished presentation of the previous image.
           backend.finishFrame?.(successfulFrame);

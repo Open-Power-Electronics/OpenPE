@@ -628,6 +628,8 @@ function createCompositorViewport(
     node: SVGElement;
     values: { name: string; original: string; numbers: number[]; owned: string }[];
   }[] = [];
+  let strokesCaptured = false;
+  let strokeScale = 1;
   const ownStyle = (node: HTMLElement | SVGSVGElement, name: string, value: string) => {
     let values = ownedStyles.get(node);
     if (!values) {
@@ -651,6 +653,8 @@ function createCompositorViewport(
       for (const { name, original, owned } of values)
         if (node.getAttribute(name) === owned) node.setAttribute(name, original);
     strokes = [];
+    strokesCaptured = false;
+    strokeScale = 1;
     for (const [node, values] of ownedStyles)
       for (const [name, value] of values)
         if (
@@ -930,18 +934,9 @@ function createCompositorViewport(
         base = value;
         return false;
       }
-      if (!transform) {
-        const bounds = svg.getBoundingClientRect();
-        if (
-          Math.abs(bounds.width - size.width) >= 0.000001 ||
-          Math.abs(bounds.height - size.height) >= 0.000001
-        ) {
-          reserveViewportValid = false;
-          attribute(svg, 'viewBox', value);
-          base = value;
-          return false;
-        }
-        reserveViewportValid = true;
+      // Translation leaves every non-scaling stroke exact. Defer this board
+      // traversal until the promotion actually scales, including pan-to-zoom.
+      if (scale !== 1 && !strokesCaptured) {
         strokes = Array.from(
           svg.querySelectorAll<SVGElement>('[vector-effect="non-scaling-stroke"][stroke-width]'),
         )
@@ -971,10 +966,26 @@ function createCompositorViewport(
           )
         ) {
           strokes = [];
+          settleNative();
           attribute(svg, 'viewBox', value);
           base = value;
           return false;
         }
+        strokesCaptured = true;
+      }
+      if (!transform) {
+        const bounds = svg.getBoundingClientRect();
+        if (
+          Math.abs(bounds.width - size.width) >= 0.000001 ||
+          Math.abs(bounds.height - size.height) >= 0.000001
+        ) {
+          reserveViewportValid = false;
+          restore();
+          attribute(svg, 'viewBox', value);
+          base = value;
+          return false;
+        }
+        reserveViewportValid = true;
         ownStyle(svg, 'transform-origin', '0px 0px');
         ownStyle(svg, 'overflow-x', 'visible');
         ownStyle(svg, 'overflow-y', 'visible');
@@ -984,11 +995,14 @@ function createCompositorViewport(
       // CSS scales the rasterized non-scaling strokes too. Compensate them so
       // visible airwires and handles remain exact. Transparent hit geometry is
       // restored by the native rebase before every actual pick.
-      for (const stroke of strokes) {
-        for (const metric of stroke.values) {
-          metric.owned = metric.numbers.map((number) => number / scale).join(' ');
-          attribute(stroke.node, metric.name, metric.owned);
+      if (scale !== strokeScale) {
+        for (const stroke of strokes) {
+          for (const metric of stroke.values) {
+            metric.owned = metric.numbers.map((number) => number / scale).join(' ');
+            attribute(stroke.node, metric.name, metric.owned);
+          }
         }
+        strokeScale = scale;
       }
       transform = ownStyle(svg, 'transform', `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`);
       // Computed Typed OM values avoid the synchronous layout needed to obtain

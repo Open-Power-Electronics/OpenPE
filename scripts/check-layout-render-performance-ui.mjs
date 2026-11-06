@@ -845,6 +845,17 @@ try {
   );
   const beforeCameraReplay = await work();
   const currentCameraBox = await currentView();
+  const cameraFrames = () =>
+    canvas.evaluate((svg) =>
+      [
+        ...svg.querySelectorAll(
+          '[data-layout-background], [data-layout-grid], [data-layout-interaction-surface]',
+        ),
+      ].map((node) =>
+        ['x', 'y', 'width', 'height'].map((name) => node.getAttribute(name)).join(' '),
+      ),
+    );
+  const currentCameraFrames = await cameraFrames();
   await page.evaluate((oldBox) => {
     window.replayCameraCommit = () => {
       delete window.replayCameraCommit;
@@ -865,16 +876,10 @@ try {
     currentCameraBox,
     'An unrelated commit restores the latest camera after stale viewport props.',
   );
-  const replayFrames = await canvas.evaluate((svg) =>
-    [
-      ...svg.querySelectorAll(
-        '[data-layout-background], [data-layout-grid], [data-layout-interaction-surface]',
-      ),
-    ].map((node) => ['x', 'y', 'width', 'height'].map((name) => node.getAttribute(name)).join(' ')),
-  );
-  assert.ok(
-    replayFrames.every((frame) => frame === currentCameraBox),
-    'The same commit restores current background/grid/interaction bounds.',
+  assert.deepEqual(
+    await cameraFrames(),
+    currentCameraFrames,
+    'The same commit restores the retained clipped background/grid/interaction reserve.',
   );
   assert.equal(
     (await work()).cameraBindings,
@@ -884,8 +889,8 @@ try {
 
   const savedFillPaths = () =>
     canvas
-      .locator('[data-copper-fill] path')
-      .evaluateAll((paths) => paths.map((path) => path.getAttribute('d')));
+      .locator('[data-copper-fill] > path')
+      .evaluateAll((paths) => paths.map((path) => path.getAttribute('d')).filter(Boolean));
   const originalFills = await savedFillPaths();
   assert.ok(
     originalFills.some((path) => path?.length > 100),
@@ -903,7 +908,11 @@ try {
       },
       { x: dragOrigin.x, y: dragOrigin.y + delta },
     );
+    // The native pickup is off-grid. Bypass snapping for these exact poses so
+    // returning to delta zero is a real no-op rather than a nearby grid point.
+    await page.keyboard.down('Control');
     await page.mouse.move(point.x, point.y, { steps: 4 });
+    await page.keyboard.up('Control');
     await nextFrame();
   };
   await moveTrackCursor(0);
@@ -986,22 +995,34 @@ try {
   const movedFillWork = await work();
   for (const delta of [0, -0.5, 0, 0.5, 0]) {
     await moveTrackCursor(delta);
-    assert.ok(
-      (await savedFillPaths()).every((path) => !path),
-      'Passing through the origin keeps fills hidden for the current drag.',
+    assert.deepEqual(
+      await savedFillPaths(),
+      originalFills,
+      'Origin crossings retain saved fill paths while conservative masks follow the current drag.',
     );
+    if (delta !== 0)
+      assert.ok(
+        (await canvas.locator('[data-copper-fill] mask path[fill="black"]').count()) > 0,
+        'A moved pose masks its current changed-copper clearance.',
+      );
   }
   assert.equal(
     (await work()).paths,
     movedFillWork.paths,
     'Origin crossings never regenerate saved copper paths.',
   );
+  // CDP round-tripping through screen coordinates can leave a subpixel delta
+  // from the exact native pickup. Exercise the no-op without another move.
+  await canvas.press('Escape');
+  await moveTrackCursor(0);
+  await canvas.press('d');
+  await nextFrame();
   await canvas.press('Enter');
   await nextFrame();
   assert.deepEqual(
     await savedFillPaths(),
     originalFills,
-    'Placing at the origin restores exact saved pours.',
+    'Placing an unmoved pickup retains exact saved pours.',
   );
   assert.equal(
     (await work()).paths,
@@ -1011,7 +1032,7 @@ try {
   assert.equal(
     await page.evaluate(() => window.commits),
     0,
-    'Origin placement creates no design transaction.',
+    'An unmoved pickup creates no design transaction.',
   );
   assert.equal(
     (await work()).appearanceBodies,
@@ -1028,6 +1049,7 @@ try {
   assert.deepEqual(await savedFillPaths(), originalFills, 'Cancelling restores exact saved pours.');
   assert.deepEqual(await page.evaluate(() => window.layoutBoard), project.pcb);
 
+  const beforeLayerToggle = await work();
   await toggleLayoutVisualization(page, 'Visible layers');
   await page.evaluate(() => {
     window.beforeLayerSelection = window.layoutContext().selection;
@@ -1046,7 +1068,11 @@ try {
     hiddenLayer.footprints > zoomed.footprints,
     'Layer visibility invalidates footprint artwork.',
   );
-  assert.equal(hiddenLayer.paths, zoomed.paths, 'Silkscreen visibility preserves copper paths.');
+  assert.equal(
+    hiddenLayer.paths,
+    beforeLayerToggle.paths,
+    'Silkscreen visibility preserves copper paths.',
+  );
 
   const coordinatesBeforeTool = (await page.locator('.status-coordinate').innerText()).split(
     ' · ',
@@ -1408,9 +1434,9 @@ try {
         .getAttribute('transform'),
       expected:
         'translate(' + footprint.x + ' ' + footprint.y + ') rotate(' + -footprint.rotation + ')',
-      reference: svg.querySelector(
-        '[data-selection-id="' + window.captionFootprint.id + '"] [data-pad-id] title',
-      ).textContent,
+      reference: svg
+        .querySelector('[data-selection-id="' + window.captionFootprint.id + '"] [data-pad-id]')
+        .getAttribute('aria-label'),
       context: window.layoutContext(),
     };
   });
@@ -1513,8 +1539,8 @@ try {
   );
   assert.deepEqual(
     [...new Set(cleared.footprintOwners.slice(picked.footprintOwners.length))],
-    [pickAt.owner],
-    'Clearing selection retains every unrelated footprint.',
+    [],
+    'Clearing selection updates paint subscribers without rerendering footprint geometry.',
   );
   assert.equal(
     cleared.appearance,

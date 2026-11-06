@@ -1316,7 +1316,12 @@ function PCBModelPreview({
       let shadersReady = false;
       const clippingSphere = new THREE.Sphere();
       const clippingBounds = new THREE.Box3();
-      const drawScene = (selected: THREE.Object3D[] = [], moving = false, capture = false) => {
+      const drawScene = (
+        selected: THREE.Object3D[] = [],
+        moving = false,
+        capture = false,
+        continuation = false,
+      ) => {
         if (capture && renderEnabledRef.current && !studio)
           throw new Error(
             'Render is still preparing. Try exporting the image again when it is ready.',
@@ -1329,6 +1334,7 @@ function PCBModelPreview({
                 bounds: clippingBounds,
                 moving,
                 selected,
+                continuation: continuation && !capture,
               }),
             ),
           );
@@ -1382,13 +1388,7 @@ function PCBModelPreview({
         setRenderLoading(true);
         setRenderError('');
         try {
-          studio = createModelStudioRenderer(
-            renderer,
-            scene,
-            group,
-            [groundGroup],
-            [hemisphere, light],
-          );
+          studio = createModelStudioRenderer(renderer, scene, group, [groundGroup]);
           setRenderProgress({ samples: 0, target: MODEL_RENDER_SAMPLES });
           redraw.current();
           updateAnnotationView.current();
@@ -1508,6 +1508,8 @@ function PCBModelPreview({
                   )
                 : [],
               Boolean(changing || pressedPointers.current.size),
+              false,
+              !updateView,
             );
           } catch (error) {
             if (!studio) throw error;

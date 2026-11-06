@@ -199,7 +199,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
           assert.ok(source.includes(marker));
           source = source.replace(
             marker,
-            `  window.renderPhaseTimings ??= {compilations:[],sceneUploads:[]};
+            `  window.renderPhaseTimings ??= {compilations:[],sceneUploads:[],cameraTypes:[]};
             const backendStarted=performance.now();
             ${marker}
             window.renderPhaseTimings.backendMs=performance.now()-backendStarted;
@@ -216,6 +216,12 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
           source = source.replace(
             '      denoisedSample = -1;\n    },\n    updateCamera(camera)',
             '      window.renderPhaseTimings.sceneUploads.push(performance.now()-uploadStarted);\n      denoisedSample = -1;\n    },\n    updateCamera(camera)',
+          );
+          const cameraMarker = '      tracer.setCamera(camera);';
+          assert.equal(source.split(cameraMarker).length - 1, 2);
+          source = source.replaceAll(
+            cameraMarker,
+            `${cameraMarker} window.renderPhaseTimings.cameraTypes.push(material.defines.CAMERA_TYPE);`,
           );
           source = source.replace(
             '      tracer.update();',
@@ -240,6 +246,25 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
             '        quad.render(renderer);',
             '        window.renderDenoisePasses=(window.renderDenoisePasses??0)+1; quad.render(renderer);',
           );
+          for (const [marker, replacement] of [
+            [
+              '  const transmission = new Map<THREE.MeshPhysicalMaterial, number>();',
+              '  window.renderRasterFrames=(window.renderRasterFrames??0)+1; const transmission = new Map<THREE.MeshPhysicalMaterial, number>();',
+            ],
+            [
+              '    present(camera, selected) {',
+              '    present(camera, selected) { window.renderPresentations=(window.renderPresentations??0)+1;',
+            ],
+            [
+              'return renderer.compileAsync(primary._fsQuad._mesh, compileCamera).then(() => {',
+              `return renderer.compileAsync(primary._fsQuad._mesh, compileCamera).then(async () => {
+                if(window.holdRenderShader){window.holdRenderShader=false;
+                  await new Promise(resolve=>window.releaseRenderShader=resolve);}`,
+            ],
+          ]) {
+            assert.ok(source.includes(marker), `Instrument current rendering at ${marker}`);
+            source = source.replace(marker, replacement);
+          }
           return { contents: source, loader: 'ts', resolveDir: path.dirname(filename) };
         });
         plugin.onLoad({ filter: /[\\/]PCBModelPreview\.tsx$/ }, async ({ path: filename }) => {
@@ -298,6 +323,7 @@ try {
   await page.addInitScript((value) => {
     window.initialFixture = value;
     window.holdRenderBuild = true;
+    window.holdRenderShader = true;
     window.renderCommits = 0;
     window.renderExports = [];
     window.openpe = {
@@ -434,6 +460,36 @@ try {
     }),
   );
   await button.click();
+  await page.waitForFunction(() => typeof window.releaseRenderShader === 'function', undefined, {
+    timeout: 130000,
+  });
+  // Hold only publication of the real linked program. The GPU shader is real;
+  // idle accumulation ticks must retain its already-painted raster preview.
+  const preparingRasterFrames = await page.evaluate(() => window.renderRasterFrames);
+  const preparingImage = await canvasHost.screenshot();
+  await page.evaluate(async () => {
+    for (let index = 0; index < 10; index++) await new Promise(requestAnimationFrame);
+  });
+  assert.equal(
+    await page.evaluate(() => window.renderRasterFrames),
+    preparingRasterFrames,
+    'Shader-wait continuations do not traverse or redraw the same raster scene.',
+  );
+  const retainedPreparingImage = await canvasHost.screenshot();
+  assert.deepEqual(
+    await sharp(retainedPreparingImage).raw().toBuffer(),
+    await sharp(preparingImage).raw().toBuffer(),
+    'The non-preserved WebGL drawing buffer retains its composited image while waiting.',
+  );
+  assert.ok(
+    (await sharp(retainedPreparingImage).stats()).channels.some((channel) => channel.stdev > 10),
+    'The retained preparation image contains visible physical content.',
+  );
+  await writeFile(`${outputDirectory}/preparing.png`, retainedPreparingImage);
+  await page.evaluate(() => {
+    window.releaseRenderShader();
+    window.releaseRenderShader = null;
+  });
   await page.waitForFunction(
     () => document.querySelector('.pcb-model-canvas')?.dataset.renderMode === 'studio',
     undefined,
@@ -507,6 +563,8 @@ try {
     tiles: window.renderTraceTiles,
     frames: window.renderSamplingFrames,
     denoisePasses: window.renderDenoisePasses,
+    rasterFrames: window.renderRasterFrames,
+    presentations: window.renderPresentations,
   }));
   assert.equal(
     samplingWork.tiles,
@@ -608,8 +666,17 @@ try {
     'Visualization tabs retain Render.',
   );
   const projection = page.getByRole('button', { name: 'Orthographic projection', exact: true });
+  const sceneUploadsBeforeProjection = await page.evaluate(
+    () => window.renderPhaseTimings.sceneUploads.length,
+  );
   await projection.click();
   await page.waitForFunction(() => window.inspectRender().camera.isPerspectiveCamera);
+  await page.waitForFunction(() => window.renderPhaseTimings.cameraTypes.at(-1) === 0);
+  assert.equal(
+    await page.evaluate(() => window.renderPhaseTimings.sceneUploads.length),
+    sceneUploadsBeforeProjection,
+    'Perspective updates the real tracer camera define without uploading the physical scene.',
+  );
   assert.equal(
     await button.getAttribute('aria-pressed'),
     'true',
@@ -641,6 +708,12 @@ try {
   assert.equal(await button.getAttribute('aria-pressed'), 'true', 'View switching retains Render.');
   await projection.click();
   await page.waitForFunction(() => window.inspectRender().camera.isOrthographicCamera);
+  await page.waitForFunction(() => window.renderPhaseTimings.cameraTypes.at(-1) === 1);
+  assert.equal(
+    await page.evaluate(() => window.renderPhaseTimings.sceneUploads.length),
+    sceneUploadsBeforeProjection,
+    'Returning to orthographic reuses the same BVH, textures and lights.',
+  );
   await button.click();
   await page.waitForFunction(
     () => document.querySelector('.pcb-model-canvas')?.dataset.renderMode === 'standard',

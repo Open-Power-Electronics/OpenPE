@@ -5,6 +5,7 @@ import { uid, type Point } from '../lib/circuit';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import type { BoardZone, Footprint } from '../lib/pcb';
 import { padPolygon, polygonPath } from '../lib/pcb-polygons';
+import { ownProjectData } from '../lib/immutable-project';
 
 const rectangle = (x: number, y: number, width: number, height: number): Point[] => [
   { x, y },
@@ -45,6 +46,102 @@ function fixture() {
   ];
   return board;
 }
+
+test('owned track poses retain private zone preparation and return independent current masks', () => {
+  const basis = ownProjectData(fixture());
+  for (const y of [11, 14, 10, 5]) {
+    const candidate = ownProjectData(
+      {
+        ...basis,
+        tracks: basis.tracks.map((track) => ({
+          ...track,
+          start: { ...track.start, y },
+          end: { ...track.end, y },
+        })),
+      },
+      basis,
+    );
+    if (candidate === basis) {
+      assert.deepEqual(preparePCBFillPreview(basis, candidate), { changed: false, zones: [] });
+      continue;
+    }
+    const expected = preparePCBFillPreview(structuredClone(basis), structuredClone(candidate));
+    const actual = preparePCBFillPreview(basis, candidate);
+    assert.deepEqual(actual, expected);
+    actual.zones[0].outline = 'mutated public path';
+    actual.zones[0].blockers.push({ path: 'mutated public blocker', strokeWidth: 999 });
+    assert.deepEqual(preparePCBFillPreview(basis, candidate), expected);
+  }
+  // An owned replacement must invalidate geometry and fill-rule interpretation.
+  for (const edit of [
+    { outline: rectangle(3, 2, 15, 10) },
+    { holes: [rectangle(8, 5, 2, 2)] },
+    { netId: basis.nets[1].id, clearance: 0.8 },
+    { fillEnabled: false },
+    { layer: 'B.Cu' as const },
+  ]) {
+    const candidate = ownProjectData({ ...basis, zones: [{ ...basis.zones[0], ...edit }] }, basis);
+    assert.deepEqual(
+      preparePCBFillPreview(basis, candidate),
+      preparePCBFillPreview(structuredClone(basis), structuredClone(candidate)),
+    );
+  }
+});
+
+test('mutable and caller-frozen zone sources are recomputed after in-place outline and rule changes', () => {
+  for (const freeze of [false, true]) {
+    const basis = ownProjectData(fixture());
+    const raw = structuredClone(basis);
+    const candidate = freeze ? Object.freeze(raw) : raw;
+    preparePCBFillPreview(basis, candidate);
+    candidate.zones[0].outline[0].x = 3;
+    candidate.zones[0].clearance = 0.8;
+    candidate.tracks[0].start.y += 2;
+    const actual = preparePCBFillPreview(basis, candidate);
+    assert.deepEqual(
+      actual,
+      preparePCBFillPreview(structuredClone(basis), structuredClone(candidate)),
+    );
+    assert.equal(actual.zones[0].outline.startsWith('M 3 0'), true);
+    assert.equal(actual.zones[0].blockers[0].strokeWidth, 2);
+  }
+});
+
+test('owned footprint outline variants invalidate retained transforms and rule keys', () => {
+  const raw = fixture();
+  const local = raw.zones[0];
+  raw.zones = [];
+  raw.footprints = [
+    {
+      id: uid(),
+      symbolId: null,
+      libraryId: 'Test:Zone',
+      x: 10,
+      y: 10,
+      rotation: 0,
+      side: 'front',
+      graphics: [],
+      pads: [],
+      zones: [local],
+    },
+  ];
+  const basis = ownProjectData(raw);
+  for (const pose of [{ x: 20 }, { rotation: 90 }, { side: 'back' as const }, { x: 10 }]) {
+    const candidate = ownProjectData(
+      {
+        ...basis,
+        footprints: [{ ...basis.footprints[0], ...pose }],
+        tracks: basis.tracks.map((track) => ({ ...track, end: { ...track.end, y: 12 } })),
+      },
+      basis,
+    );
+    assert.equal(candidate.zones, basis.zones, 'All poses share the same owned board-zone key.');
+    assert.deepEqual(
+      preparePCBFillPreview(basis, candidate),
+      preparePCBFillPreview(structuredClone(basis), structuredClone(candidate)),
+    );
+  }
+});
 
 test('fill masks use only changed foreign copper with exact retained and inherited clearances', () => {
   for (const [clearance, expectedWidth] of [

@@ -223,6 +223,12 @@ test('shove connectivity agrees with exhaustive copper contacts across drilled a
       { ...track(out, 0, -2, 0, 2), layer: 'B.Cu' },
       track(out, 2, 2, 2, 2),
     ];
+    if (sample % 2)
+      board.tracks.push(
+        ...Array.from({ length: 80 }, (_, index) =>
+          track(out, -1000 - index * 4, 0, -999 - index * 4, 0),
+        ),
+      );
     board.footprints = Array.from({ length: 3 }, (_, index) => {
       const f = footprint(out, index - 1, (sample % 5) / 4);
       f.rotation = ((sample + index) % 8) * 45;

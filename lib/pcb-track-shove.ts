@@ -8,6 +8,7 @@ import { createPCBRouter } from './pcb-routing';
 import { preparePCBArtworkObstacles } from './pcb-routing-artwork';
 import type { PCBTrackDragPreview } from './pcb-track-drag';
 import { isOwnedPCB } from './immutable-project';
+import { createPCBContactIntervals } from './pcb-contact-intervals';
 
 type Track = PCB['tracks'][number];
 type PreviewEngine = { preview: (delta: Point, posture?: boolean) => PCBTrackDragPreview };
@@ -455,7 +456,13 @@ function preparePCBTrackShove(
       body(anchor.id, anchor.netId, anchor.polygon.outer, 0, anchor.layers, anchor.polygon),
     );
     let stationaryPartition:
-      { bodies: Body[]; nets: Map<string, Body[]>; groups: number[] } | undefined;
+      | {
+          bodies: Body[];
+          nets: Map<string, Body[]>;
+          contacts?: Map<string, ReturnType<typeof createPCBContactIntervals<Body>>>;
+          groups: number[];
+        }
+      | undefined;
     const partition = (tracks: Track[], movingIds?: Set<string>) => {
       const fixed: Body[] = [],
         moving: Body[] = [];
@@ -554,9 +561,14 @@ function preparePCBTrackShove(
         const fixedIndexes = new Map<number, number>();
         for (let index = 0; index < fixed.length; index++)
           fixedIndexes.set(indexes.get(fixed[index])!, index);
+        let contacts: Map<string, ReturnType<typeof createPCBContactIntervals<Body>>> | undefined;
+        for (const [netId, sorted] of nets)
+          if (sorted.length > 64)
+            (contacts ??= new Map()).set(netId, createPCBContactIntervals(sorted));
         stationaryPartition = {
           bodies: fixed,
           nets,
+          contacts,
           groups: fixed.map((item) => fixedIndexes.get(find(indexes.get(item)!))!),
         };
       }
@@ -568,10 +580,13 @@ function preparePCBTrackShove(
         const item = sortedMoving[index];
         // Preserve the X broad phase before charging exact-check work. Sparse
         // multilayer boards must not exhaust the budget on disjoint bodies.
-        for (const other of stationaryPartition!.nets.get(item.netId) ?? []) {
-          if (other.minX > item.maxX + epsilon) break;
-          if (other.maxX + epsilon >= item.minX) connect(item, other);
-        }
+        const indexed = stationaryPartition!.contacts?.get(item.netId);
+        if (indexed) indexed(item.minX, item.maxX, epsilon, (other) => connect(item, other));
+        else
+          for (const other of stationaryPartition!.nets.get(item.netId) ?? []) {
+            if (other.minX > item.maxX + epsilon) break;
+            if (other.maxX + epsilon >= item.minX) connect(item, other);
+          }
         for (
           let other = index + 1;
           other < sortedMoving.length && sortedMoving[other].minX <= item.maxX + epsilon;

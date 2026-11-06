@@ -216,6 +216,89 @@ function environment(
   }
 }
 
+test('translation defers stroke traversal and unchanged zoom scale retains compensation until native replay', () =>
+  environment(() => {
+    const current = scene();
+    const stroke = new Node(current.log);
+    stroke.attributes.set('vector-effect', 'non-scaling-stroke');
+    stroke.attributes.set('stroke-width', '1.5');
+    stroke.attributes.set('stroke-dasharray', '3, 4');
+    stroke.attributes.set('stroke-dashoffset', '0.5');
+    const query = current.root.querySelectorAll.bind(current.root);
+    let scans = 0,
+      reads = 0;
+    current.root.querySelectorAll = (selector = '') => {
+      if (selector.includes('vector-effect')) {
+        scans++;
+        return [stroke];
+      }
+      return query(selector);
+    };
+    const read = stroke.getAttribute.bind(stroke);
+    stroke.getAttribute = (name) => {
+      reads++;
+      return read(name);
+    };
+    const apply = createLayoutCameraApplicator(current.svg, {
+      fixedTargets: true,
+      compositor: true,
+      frameReserve: true,
+    });
+    apply(initial, size);
+    const pan = apply.beginPan();
+    for (let x = 1; x < 20; x++) pan.update(() => apply({ ...initial, x }, size, false));
+    assert.equal(scans, 0, 'A pure pan never queries the board for visible strokes.');
+    assert.equal(reads, 0);
+    apply({ x: 19, y: 0, width: 64 }, size, false);
+    assert.equal(scans, 1, 'Zoom after pan captures the current stroke tree once.');
+    assert.equal(read('stroke-width'), '1.2');
+    assert.equal(read('stroke-dasharray'), '2.4 3.2');
+    assert.equal(read('stroke-dashoffset'), '0.4');
+    const afterZoom = reads;
+    for (let x = 20; x < 30; x++) apply({ x, y: 0, width: 64 }, size, false);
+    assert.equal(scans, 1);
+    assert.equal(reads, afterZoom, 'Translation at a zoomed scale does no per-stroke work.');
+    apply({ x: 29, y: 0, width: 80 }, size, false);
+    assert.equal(read('stroke-width'), '1.5');
+    pan.release();
+    assert.equal(
+      read('stroke-dasharray'),
+      '3, 4',
+      'Native rebase restores exact authored attributes.',
+    );
+    stroke.attributes.set('stroke-width', '2.5');
+    apply({ x: 29, y: 0, width: 64 }, size, false);
+    assert.equal(scans, 2, 'The next promotion captures any committed drawing changes.');
+    assert.equal(read('stroke-width'), '2');
+    apply.dispose();
+    assert.equal(read('stroke-width'), '2.5');
+  }));
+
+test('unsupported stroke metrics discovered after a pan restore native clipping and remain retryable', () =>
+  environment(() => {
+    const current = scene();
+    const stroke = new Node(current.log);
+    stroke.attributes.set('stroke-width', 'calc(1px + 1px)');
+    const query = current.root.querySelectorAll.bind(current.root);
+    current.root.querySelectorAll = (selector = '') =>
+      selector.includes('vector-effect') ? [stroke] : query(selector);
+    const apply = createLayoutCameraApplicator(current.svg, { compositor: true });
+    apply(initial, size);
+    apply({ ...initial, x: 2 }, size, false);
+    assert.ok(current.root.style.getPropertyValue('transform'));
+    apply({ x: 2, y: 0, width: 64 }, size, false);
+    assert.equal(current.root.getAttribute('viewBox'), '2 0 64 40');
+    assert.equal(current.root.style.getPropertyValue('transform'), '');
+    assert.equal(current.root.style.getPropertyValue('overflow-x'), '');
+    assert.equal(current.host.style.getPropertyValue('overflow-x'), '');
+    assert.equal(stroke.getAttribute('stroke-width'), 'calc(1px + 1px)');
+    stroke.attributes.set('stroke-width', '2');
+    apply({ x: 2, y: 0, width: 51.2 }, size, false);
+    assert.equal(stroke.getAttribute('stroke-width'), '1.6');
+    apply.dispose();
+    assert.equal(stroke.getAttribute('stroke-width'), '2');
+  }));
+
 test('pan reserve is opt-in and keeps finite frames, grid, artwork and seven-pixel hits unchanged during contained translation', () =>
   environment((clock) => {
     for (const enabled of [false, true]) {
