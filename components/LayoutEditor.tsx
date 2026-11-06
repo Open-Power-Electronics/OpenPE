@@ -21,24 +21,30 @@ import {
   CircuitBoard,
   Cpu,
   ImageDown,
+  FlipHorizontal2,
   LockKeyhole,
   Maximize,
   MessageSquareText,
   Minus,
   MousePointer2,
+  Move,
   PaintBucket,
   Plus,
   RotateCw,
   Route,
   Ruler,
+  Radius,
+  SlidersHorizontal,
   Square,
   Trash2,
   Pentagon,
   Scan,
-  SquareDashed,
   X,
 } from 'lucide-react';
-import CanvasContextMenu from './CanvasContextMenu';
+import CanvasContextMenu, { type CanvasMenuAction } from './CanvasContextMenu';
+import { FootprintIcon } from './EditorIcons';
+import LayoutRegionFilletDialog from './LayoutRegionFilletDialog';
+import type { PCBRegionTarget } from '@/lib/pcb-region-fillet';
 import { MeasurementDrawing, MeasurementReadout } from './CanvasMeasurement';
 import { canvasScaleLength, createCanvasMeasurement } from '@/lib/canvas-measurement';
 import { pcbLockObject, setPCBLocked } from '@/lib/pcb-lock';
@@ -202,7 +208,7 @@ const RetainedLayoutProperties = memo(
 );
 
 type Selection = { kind: 'footprint' | 'track' | 'via' | 'graphic' | 'zone'; id: string };
-type SelectionCandidate = { id: string; directFootprintCaption?: boolean } & (
+type SelectionCandidate = { id: string; directFootprintCaptionLayers?: readonly BoardLayer[] } & (
   { selection: Selection; padId?: never } | { padId: string; selection?: never }
 );
 type Tool =
@@ -445,6 +451,10 @@ function LayoutEditor({
   const outlineBasis = useRef<PCB | null>(null);
   const outlineLayerBasis = useRef<BoardLayer | null>(null);
   const [fillBusy, setFillBusy] = useState(false);
+  const [filletTarget, setFilletTarget] = useState<PCBRegionTarget | null>(null);
+  useEffect(() => {
+    if (!active || !visible) setFilletTarget(null);
+  }, [active, visible]);
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 });
   const cursorPosition = useRef(cursor);
   const [coordinates] = useState(createCanvasCoordinates);
@@ -1968,7 +1978,7 @@ function LayoutEditor({
       );
     const objects: Selection[] = [];
     const padIds = new Set<string>();
-    const captionIds = new Set<string>();
+    const captionLayers = new Map<string, Set<BoardLayer>>();
     for (const element of document.elementsFromPoint(e.clientX, e.clientY)) {
       if (!svg.current?.contains(element)) continue;
       if (!includeFills && element.closest('[data-copper-fill]')) continue;
@@ -1981,8 +1991,16 @@ function LayoutEditor({
         (object.kind !== 'footprint' || layers.footprints)
       ) {
         objects.push(object);
-        if (object.kind === 'footprint' && element.closest('[data-footprint-captions]'))
-          captionIds.add(object.id);
+        if (object.kind === 'footprint' && element.closest('[data-footprint-captions]')) {
+          const captionLayer = element
+            .closest('[data-pcb-layer]')
+            ?.getAttribute('data-pcb-layer') as BoardLayer | null;
+          if (captionLayer) {
+            const hitLayers = captionLayers.get(object.id) ?? new Set<BoardLayer>();
+            hitLayers.add(captionLayer);
+            captionLayers.set(object.id, hitLayers);
+          }
+        }
       }
       if (filters.pad && target.pad) padIds.add(target.pad.id);
     }
@@ -1991,6 +2009,7 @@ function LayoutEditor({
       padId: id,
     }));
     const uniqueObjects = selectPCBPoint(pcb, layers, filters, raw, margin, {
+      priorityLayer: priorityLayer ?? undefined,
       preparedFills: placed === pcb ? copper.fills : undefined,
       includeFills,
       includeRegionInteriors: tool === 'select',
@@ -2001,7 +2020,9 @@ function LayoutEditor({
       candidates.push({
         id: `${object.kind}:${object.id}`,
         selection: object,
-        ...(captionIds.has(object.id) ? { directFootprintCaption: true } : {}),
+        ...(captionLayers.has(object.id)
+          ? { directFootprintCaptionLayers: [...captionLayers.get(object.id)!] }
+          : {}),
       });
     }
     return candidates;
@@ -2286,6 +2307,7 @@ function LayoutEditor({
     if (tool !== 'select' || drag || trackDrag || marquee) return;
     if (padId) {
       onShowSidebar?.();
+      setPropertiesExpanded(true);
       setInspectedPadId(padId);
       setSelection([]);
       setInspector(true);
@@ -2301,6 +2323,7 @@ function LayoutEditor({
       );
     if (ids?.length) {
       onShowSidebar?.();
+      setPropertiesExpanded(true);
       setSelection(ids);
       setInspectedPadId('');
       setInspector(true);
@@ -3966,6 +3989,142 @@ function LayoutEditor({
       connectivity.error,
     ],
   );
+  const contextIdle = tool === 'select' && !drag && !trackDrag && !marquee && !outlineResize;
+  const contextEditingBlocked = Boolean(
+    onAnalysisProbe || fillBusy || syncStatus?.pending || syncStatus?.error,
+  );
+  const contextLocked = selection.some((item) => pcbLockObject(pcb, item)?.locked);
+  const contextLockTargets = inspectedPad
+    ? [{ kind: 'pad' as const, id: inspectedPad.id }]
+    : selection;
+  const contextAllLocked =
+    contextLockTargets.length > 0 &&
+    contextLockTargets.every((item) => pcbLockObject(pcb, item)?.locked);
+  const regionTarget: PCBRegionTarget | null = selectedZone
+    ? { kind: 'zone', id: selectedZone.id }
+    : selectedGraphic?.kind === 'polygon'
+      ? { kind: 'graphic', id: selectedGraphic.id }
+      : null;
+  const contextIdentity = useMemo(
+    () => ({ pcb, selection, inspectedPadId, tool, revision: getRevision?.() }),
+    [pcb, selection, inspectedPadId, tool, getRevision?.()],
+  );
+  const contextObjectActions: CanvasMenuAction[] = [];
+  if (contextIdle && (selection.length || inspectedPad)) {
+    contextObjectActions.push({
+      id: 'properties',
+      label: 'Properties',
+      icon: SlidersHorizontal,
+      run: () => inspect(selection, inspectedPad?.id),
+    });
+    if (selection.length) {
+      contextObjectActions.push({
+        id: 'move',
+        label: 'Move selection',
+        icon: Move,
+        disabled: contextEditingBlocked || contextLocked,
+        run: () => beginMove(selection),
+      });
+      if (selection.every((item) => item.kind === 'track')) {
+        contextObjectActions.push(
+          {
+            id: 'track-drag',
+            label: 'Drag connected tracks',
+            icon: Move,
+            disabled: contextEditingBlocked || contextLocked,
+            run: () => beginTrackDrag('connected', selection),
+          },
+          {
+            id: 'corner-drag',
+            label: 'Drag track corner',
+            icon: Route,
+            disabled: contextEditingBlocked || contextLocked,
+            run: () => beginTrackDrag('corner', selection),
+          },
+        );
+      }
+      if (selection.some((item) => item.kind !== 'via') && selectedGraphic?.kind !== 'circle') {
+        contextObjectActions.push({
+          id: 'rotate',
+          label: 'Rotate selection',
+          icon: RotateCw,
+          disabled: contextEditingBlocked || contextLocked,
+          run: () => rotate(90, selection),
+        });
+      }
+      if (selection.every((item) => item.kind === 'footprint')) {
+        contextObjectActions.push({
+          id: 'flip',
+          label: 'Flip footprint',
+          icon: FlipHorizontal2,
+          disabled: contextEditingBlocked || contextLocked,
+          run: () => flip(selection),
+        });
+      }
+      if (regionTarget) {
+        contextObjectActions.push({
+          id: 'fillet',
+          label: 'Fillet corners',
+          icon: Radius,
+          disabled: contextEditingBlocked || contextLocked,
+          run: () => setFilletTarget(regionTarget),
+        });
+      }
+      if (selectedZone && !selectedZone.keepout) {
+        contextObjectActions.push({
+          id: 'fill',
+          label: selectedZone.filledPolygons === undefined ? 'Fill zone' : 'Refill zone',
+          icon: PaintBucket,
+          disabled: contextEditingBlocked || contextLocked,
+          run: () => fillZone(selectedZone.id),
+        });
+      }
+      if (selection.some((item) => item.kind === 'track' || item.kind === 'via')) {
+        contextObjectActions.push({
+          id: 'expand',
+          label: 'Expand track selection',
+          icon: Scan,
+          run: () => expandTracks(selection),
+        });
+      }
+    }
+    if (
+      inspectedPad?.netId ||
+      selection.some((item) => {
+        if (item.kind === 'track')
+          return pcb.tracks.some((track) => track.id === item.id && track.netId);
+        if (item.kind === 'via') return pcb.vias.some((via) => via.id === item.id && via.netId);
+        if (item.kind === 'zone')
+          return pcb.zones.some((zone) => zone.id === item.id && zone.netId && !zone.keepout);
+        return false;
+      })
+    ) {
+      contextObjectActions.push({
+        id: 'highlight',
+        label: 'Highlight selected nets',
+        icon: CircuitBoard,
+        run: () => highlightSelectionNet(selection, inspectedPad?.id),
+      });
+    }
+    contextObjectActions.push({
+      id: 'lock',
+      label: contextAllLocked ? 'Unlock selection' : 'Lock selection',
+      icon: LockKeyhole,
+      disabled: contextEditingBlocked || Boolean(inspectedFootprint?.locked),
+      run: () => {
+        commit(setPCBLocked(pcb, contextLockTargets, !contextAllLocked));
+      },
+    });
+    if (selection.length)
+      contextObjectActions.push({
+        id: 'delete',
+        label: 'Delete selection',
+        icon: Trash2,
+        destructive: true,
+        disabled: contextEditingBlocked || contextLocked,
+        run: () => remove(selection),
+      });
+  }
   const currentToolbarActions = {
     activate,
     openPlacement,
@@ -4016,7 +4175,7 @@ function LayoutEditor({
           aria-expanded={choosing}
           onClick={() => toolbarActions.current.openPlacement()}
         >
-          <CircuitBoard size={17} />
+          <FootprintIcon size={17} aria-hidden="true" />
         </button>
         {(
           [
@@ -4855,76 +5014,78 @@ function LayoutEditor({
             <CanvasContextMenu
               target={svg}
               active={active}
-              identity={pcb}
+              identity={contextIdentity}
               onError={setError}
+              onOpen={(_target, position) => {
+                if (!contextIdle || contextEditingBlocked || !position) return;
+                const candidate = pointCandidate({ clientX: position.x, clientY: position.y });
+                if (!candidate) return;
+                if (
+                  candidate.selection
+                    ? !selection.some(
+                        (item) =>
+                          item.kind === candidate.selection!.kind &&
+                          item.id === candidate.selection!.id,
+                      )
+                    : candidate.padId !== inspectedPadId
+                )
+                  selectCandidate(candidate, 'replace');
+              }}
               actions={[
-                {
-                  id: 'fit-board',
-                  label: 'Fit board to canvas',
-                  icon: Maximize,
-                  run: () => fit('board'),
-                },
-                { id: 'fit-all', label: 'Fit all objects', icon: Maximize, run: () => fit('all') },
-                {
-                  id: 'actual-size',
-                  label: 'Actual size (100%)',
-                  icon: Maximize,
-                  run: () => zoom(size.width / (view.width * pixelsPerMM)),
-                },
-                { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(1 / 1.2) },
-                { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
-                {
-                  id: 'export',
-                  label: 'Export image',
-                  icon: ImageDown,
-                  disabled: exporting,
-                  run: exportImage,
-                },
-                {
-                  id: 'select-all',
-                  label: 'Select all',
-                  icon: Scan,
-                  separated: true,
-                  disabled: tool !== 'select' || Boolean(onAnalysisProbe),
-                  run: () => {
-                    cancelGesture();
-                    setSelection(allVisibleSelections());
-                    setInspectedPadId('');
-                  },
-                },
-                {
-                  id: 'clear-selection',
-                  label: 'Clear selection',
-                  icon: SquareDashed,
-                  disabled: !selection.length,
-                  run: () => {
-                    setSelection([]);
-                    setInspectedPadId('');
-                  },
-                },
-                {
-                  id: 'rotate',
-                  label: 'Rotate selection',
-                  icon: RotateCw,
-                  disabled:
-                    tool !== 'select' ||
-                    !selection.length ||
-                    Boolean(onAnalysisProbe) ||
-                    Boolean(drag || trackDrag),
-                  run: () => rotate(90, selection),
-                },
-                {
-                  id: 'delete',
-                  label: 'Delete selection',
-                  icon: Trash2,
-                  destructive: true,
-                  disabled:
-                    tool !== 'select' ||
-                    !selection.length ||
-                    Boolean(onAnalysisProbe) ||
-                    Boolean(drag || trackDrag),
-                  run: () => remove(selection),
-                },
+                ...contextObjectActions,
+                ...(contextIdle && !selection.length && !inspectedPad
+                  ? [
+                      {
+                        id: 'fit-board',
+                        label: 'Fit board to canvas',
+                        icon: Maximize,
+                        run: () => fit('board'),
+                      },
+                      {
+                        id: 'fit-all',
+                        label: 'Fit all objects',
+                        icon: Maximize,
+                        run: () => fit('all'),
+                      },
+                      {
+                        id: 'actual-size',
+                        label: 'Actual size (100%)',
+                        icon: Maximize,
+                        run: () => zoom(size.width / (view.width * pixelsPerMM)),
+                      },
+                      { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(1 / 1.2) },
+                      { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
+                      {
+                        id: 'export',
+                        label: 'Export image',
+                        icon: ImageDown,
+                        disabled: exporting,
+                        run: exportImage,
+                      },
+                      {
+                        id: 'select-all',
+                        label: 'Select all',
+                        icon: Scan,
+                        separated: true,
+                        disabled: tool !== 'select' || Boolean(onAnalysisProbe),
+                        run: () => {
+                          cancelGesture();
+                          setSelection(allVisibleSelections());
+                          setInspectedPadId('');
+                        },
+                      },
+                    ]
+                  : []),
+                ...(!contextIdle
+                  ? [
+                      {
+                        id: 'cancel',
+                        label: 'Cancel tool',
+                        icon: X,
+                        run: () => activate('select'),
+                      },
+                    ]
+                  : []),
               ]}
             />
           </div>
@@ -5166,6 +5327,18 @@ function LayoutEditor({
         </aside>
       </div>
 
+      {filletTarget && active && visible && (
+        <LayoutRegionFilletDialog
+          board={pcb}
+          target={filletTarget}
+          getRevision={getRevision}
+          onCommit={commit}
+          onClose={() => {
+            setFilletTarget(null);
+            focusCanvas();
+          }}
+        />
+      )}
       {choosing && active && (
         <LibraryChooser
           key={partId}

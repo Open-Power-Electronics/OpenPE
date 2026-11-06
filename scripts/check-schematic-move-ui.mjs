@@ -84,12 +84,18 @@ const bundle = await build({
     contents: `import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
       import Canvas from './components/Canvas';
       import {serializeProject,parseProject} from './lib/project';
+      import {removeSelection} from './lib/schematic-edit';
       function Fixture(){const [project,setProject]=useState(window.fixture.project);
         const [history,setHistory]=useState([]);const [selection,setSelection]=useState([]);
         const [tool,setTool]=useState('select');const [active,setActive]=useState(true);
         const [layers,setLayers]=useState(window.fixture.layers);const [probing,setProbing]=useState(false);
         const [blocked,setBlocked]=useState(false);const [moveRequest,setMoveRequest]=useState(null);
         const source=serializeProject(project);
+        const commit=next=>{window.commitAttempts++;try{
+          const candidate={...project,schematic:next};const text=serializeProject(candidate);
+          const validated=parseProject(text);if(text===source)return true;
+          window.commits++;setHistory(h=>[...h,project]);setProject(validated);return true;
+        }catch(error){window.commitErrors.push(error.message);return false;}};
         window.moveState={project,doc:project.schematic,source,selection,tool,active,
           history:history.length,dirty:source!==window.fixture.source};
         window.undoFixture=()=>{if(history.length){setProject(history.at(-1));setHistory(h=>h.slice(0,-1));}};
@@ -107,11 +113,7 @@ const bundle = await build({
           probing={probing}
           onProbe={target=>window.probes.push(target)}
           onNotify={message=>window.moveNotices.push(message)}
-          onCommit={next=>{window.commitAttempts++;try{
-            const candidate={...project,schematic:next};const text=serializeProject(candidate);
-            const validated=parseProject(text);if(text===source)return true;
-            window.commits++;setHistory(h=>[...h,project]);setProject(validated);return true;
-          }catch(error){window.commitErrors.push(error.message);return false;}}}
+          onCommit={commit} onDelete={ids=>commit(removeSelection(project.schematic,ids))}
           fitKey={0} onPosition={()=>{}} grid={false} gridSpacing={1.27} layers={layers}/>}
       createRoot(document.getElementById('root')).render(window.fixture.strict?<React.StrictMode><Fixture/></React.StrictMode>:<Fixture/>);`,
     resolveDir: process.cwd(),
@@ -271,6 +273,143 @@ async function run(name, check, fixtureOptions = {}) {
 }
 
 try {
+  await run('context menu keeps common commands only for idle empty selection', async (t) => {
+    const menu = t.page.getByRole('menu', { name: 'Canvas actions', exact: true });
+    await t.canvas.press('ContextMenu');
+    await menu.waitFor();
+    for (const name of ['Fit to canvas', 'Zoom in', 'Zoom out', 'Export image', 'Select all'])
+      assert.equal(await menu.getByRole('menuitem', { name, exact: true }).isEnabled(), true);
+    assert.equal(
+      await menu
+        .getByRole('menuitem', { name: /^(Move$|Drag with connections$|Clear selection$)/ })
+        .count(),
+      0,
+    );
+    await menu.getByRole('menuitem', { name: 'Select all', exact: true }).click();
+    await t.canvas.press('ContextMenu');
+    await menu.waitFor();
+    assert.equal(
+      await menu.getByRole('menuitem', { name: /^(Fit |Zoom |Export image$|Select all$)/ }).count(),
+      0,
+    );
+    assert.equal(
+      await menu.getByRole('menuitem', { name: 'Clear selection', exact: true }).count(),
+      0,
+    );
+    assert.equal(
+      (await menu.getByRole('menuitem').last().textContent()).trim(),
+      'Delete selection',
+    );
+    await t.page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'hidden' });
+    assert.ok((await t.state()).selection.length > 0, 'Menu Escape retains the selected objects.');
+    await t.click({ x: 100, y: 70 });
+    assert.deepEqual(
+      (await t.state()).selection,
+      [],
+      'A blank-canvas click clears the standalone Canvas selection.',
+    );
+    await t.canvas.press('ContextMenu');
+    await menu.waitFor();
+    assert.equal(
+      await menu.getByRole('menuitem', { name: 'Fit to canvas', exact: true }).isEnabled(),
+      true,
+    );
+    await t.page.keyboard.press('Escape');
+    await t.expectNoEdit();
+  });
+
+  for (const key of ['m', 'g']) {
+    for (const opening of ['pointer', 'keyboard']) {
+      await run(
+        `context menu preserves ${key.toUpperCase()} preview and focus after ${opening} opening`,
+        async (t) => {
+          await t.click(first);
+          const menu = t.page.getByRole('menu', { name: 'Canvas actions', exact: true });
+          await t.canvas.press('ContextMenu');
+          await menu.waitFor();
+          assert.equal(
+            await menu
+              .getByRole('menuitem', { name: /^(Fit |Zoom |Export image$|Select all$)/ })
+              .count(),
+            0,
+            'Selected objects omit common canvas commands.',
+          );
+          assert.equal(
+            await menu.getByRole('menuitem', { name: 'Clear selection', exact: true }).count(),
+            0,
+          );
+          assert.equal(
+            (await menu.getByRole('menuitem').last().textContent()).trim(),
+            'Delete selection',
+            'Delete stays last in the selected-object menu.',
+          );
+          assert.equal(await menu.getByRole('menuitem', { name: 'Move', exact: true }).count(), 1);
+          assert.equal(
+            await menu
+              .getByRole('menuitem', { name: 'Drag with connections', exact: true })
+              .count(),
+            1,
+          );
+          await t.page.keyboard.press('Escape');
+          await menu.waitFor({ state: 'hidden' });
+          await t.canvas.press(key);
+          const target = { x: 35.56, y: 30.48 };
+          await t.move(target);
+          await t.expectPreview(key === 'm' ? 'move' : 'drag');
+          const shownBody = await t.bodyPosition(first.ref);
+          const shownWire = await t.wireGeometry(doc.wires[0].id);
+          if (opening === 'pointer') {
+            const at = await t.screen(target);
+            await t.page.mouse.click(at.x, at.y, { button: 'right' });
+          } else await t.canvas.press('Shift+F10');
+          await menu.waitFor();
+          assert.equal(
+            await menu
+              .getByRole('menuitem', {
+                name: /^(Fit |Zoom |Export image$|Select all$|Clear selection$|Move$|Drag with connections$|Rotate selection$)/,
+              })
+              .count(),
+            0,
+            'Active tools show no common canvas or unrelated object commands.',
+          );
+          assert.equal(
+            await menu.getByRole('menuitem', { name: 'Cancel tool', exact: true }).count(),
+            1,
+          );
+          await t.expectPreview(key === 'm' ? 'move' : 'drag');
+          closeTo(await t.bodyPosition(first.ref), shownBody, 'Menu retains the exact body pose');
+          assert.deepEqual(
+            await t.wireGeometry(doc.wires[0].id),
+            shownWire,
+            'Menu retains exact connection preview.',
+          );
+          await t.expectNoEdit();
+          await menu.dispatchEvent('keydown', { key: 'Escape', keyCode: 229, isComposing: true });
+          assert.equal(
+            await menu.count(),
+            1,
+            'Composition cannot dismiss the menu or cancel pickup.',
+          );
+          await t.page.keyboard.press('Escape');
+          await menu.waitFor({ state: 'hidden' });
+          await t.expectPreview(key === 'm' ? 'move' : 'drag');
+          assert.equal(
+            await t.canvas.evaluate((svg) => document.activeElement === svg),
+            true,
+            'Menu Escape restores canvas focus.',
+          );
+          closeTo(await t.bodyPosition(first.ref), shownBody, 'Menu dismissal retains body pose');
+          assert.deepEqual(await t.wireGeometry(doc.wires[0].id), shownWire);
+          await t.canvas.press('Enter');
+          const next = await t.expectOneEdit();
+          closeTo(next.parts[0], shownBody, 'Placement accepts the retained exact preview');
+          await t.undo();
+        },
+      );
+    }
+  }
+
   await run('direct component drag keeps wires and markers connected with one undo', async (t) => {
     const target = { x: 30.48, y: 27.94 };
     await t.move(first);

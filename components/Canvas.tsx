@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import { isOwnedCircuit } from '@/lib/immutable-project';
 import type { RuleCheckFocus } from '@/lib/design-rule-checks';
 import RuleCheckMarker from './RuleCheckMarker';
-import CanvasContextMenu from './CanvasContextMenu';
+import CanvasContextMenu, { type CanvasMenuAction } from './CanvasContextMenu';
 import {
   ImageDown,
   Maximize,
@@ -13,7 +13,6 @@ import {
   Move,
   RotateCw,
   Scan,
-  SquareDashed,
   SlidersHorizontal,
   Trash2,
   X,
@@ -1315,6 +1314,99 @@ export default function Canvas({
       return { width, x: p.x - (p.x - v.x) * f, y: p.y - (p.y - v.y) * f };
     });
   }
+  const menuSelection = selection.filter((id) => selectableIds.has(id));
+  const menuIdle = tool === 'select' && !pickup && !drag && !wireDraft;
+  const electricalSelection = menuSelection.some((id) =>
+    [...doc.parts, ...doc.wires, ...doc.labels, ...doc.junctions].some((item) => item.id === id),
+  );
+  const propertiesTarget = menuSelection.length === 1 ? menuSelection[0] : undefined;
+  const canInspectSelection =
+    propertiesTarget &&
+    (selectedField(propertiesTarget) ||
+      [...doc.parts, ...doc.wires, ...doc.labels, ...schematicTexts(doc.original)].some(
+        (item) => item.id === propertiesTarget,
+      ));
+  const menuActions: CanvasMenuAction[] = [];
+  if (menuIdle && editable && menuSelection.length) {
+    if (canInspectSelection && onProperties)
+      menuActions.push({
+        id: 'properties',
+        label: 'Properties',
+        icon: SlidersHorizontal,
+        disabled: editingBlocked,
+        run: () => onProperties(propertiesTarget!),
+      });
+    menuActions.push({
+      id: 'move',
+      label: 'Move',
+      icon: Move,
+      disabled: editingBlocked,
+      run: () => beginPickup(false, false),
+    });
+    if (electricalSelection)
+      menuActions.push({
+        id: 'drag',
+        label: 'Drag with connections',
+        icon: Move,
+        disabled: editingBlocked,
+        run: () => beginPickup(true, false),
+      });
+    if (
+      menuSelection.length > 1 ||
+      [...doc.parts, ...doc.wires, ...doc.labels].some((item) => menuSelection.includes(item.id))
+    )
+      menuActions.push({
+        id: 'rotate',
+        label: 'Rotate selection',
+        icon: RotateCw,
+        disabled: editingBlocked,
+        run: () => {
+          onCommit(transformSelection(doc, menuSelection, 'rotate'));
+        },
+      });
+    if (onDelete)
+      menuActions.push({
+        id: 'delete',
+        label: 'Delete selection',
+        icon: Trash2,
+        destructive: true,
+        disabled: editingBlocked,
+        run: () => onDelete(menuSelection),
+      });
+  }
+  if (tool !== 'select' || pickup || drag || wireDraft)
+    menuActions.push({
+      id: 'cancel',
+      label: 'Cancel tool',
+      icon: X,
+      run: () => {
+        cancelGesture();
+        updateWireDraft(null);
+        pendingWire.current = null;
+        setTool('select');
+      },
+    });
+  if (menuIdle && !menuSelection.length)
+    menuActions.push(
+      { id: 'fit', label: 'Fit to canvas', icon: Maximize, run: fit },
+      { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(0.8) },
+      { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
+      {
+        id: 'export',
+        label: 'Export image',
+        icon: ImageDown,
+        disabled: exporting,
+        run: exportImage,
+      },
+      {
+        id: 'select-all',
+        label: 'Select all',
+        icon: Scan,
+        separated: true,
+        disabled: !editable || editingBlocked || !selectableIds.size,
+        run: () => onSelection([...selectableIds]),
+      },
+    );
   return (
     <div
       ref={surface}
@@ -1675,9 +1767,15 @@ export default function Canvas({
         onLostPointerCapture={(e) => {
           if (pointerId.current === e.pointerId) cancelGesture();
         }}
-        onBlur={() => {
+        onBlur={(event) => {
           setPointerFocused(false);
-          cancelGesture();
+          // The canvas menu temporarily owns focus during a pickup. Its
+          // cancellation action, rather than opening the menu, ends the tool.
+          if (!(
+            event.relatedTarget instanceof Element &&
+            event.relatedTarget.closest('.canvas-context-menu')
+          ))
+            cancelGesture();
         }}
         onWheel={(e) => zoom(e.deltaY > 0 ? 1.1 : 0.9, point(e, false))}
         onContextMenu={(e) => e.preventDefault()}
@@ -1866,88 +1964,7 @@ export default function Canvas({
               : undefined;
           if (id && selectableIds.has(id) && !selection.includes(id)) onSelection([id]);
         }}
-        actions={[
-          { id: 'fit', label: 'Fit to canvas', icon: Maximize, run: fit },
-          { id: 'zoom-in', label: 'Zoom in', icon: Plus, run: () => zoom(0.8) },
-          { id: 'zoom-out', label: 'Zoom out', icon: Minus, run: () => zoom(1.2) },
-          {
-            id: 'export',
-            label: 'Export image',
-            icon: ImageDown,
-            disabled: exporting,
-            run: exportImage,
-          },
-          {
-            id: 'select-all',
-            label: 'Select all',
-            icon: Scan,
-            separated: true,
-            disabled: !editable || editingBlocked,
-            run: () => onSelection([...selectableIds]),
-          },
-          {
-            id: 'clear-selection',
-            label: 'Clear selection',
-            icon: SquareDashed,
-            disabled: !selection.length,
-            run: () => onSelection([]),
-          },
-          {
-            id: 'properties',
-            label: 'Properties',
-            icon: SlidersHorizontal,
-            separated: true,
-            disabled: !editable || editingBlocked || !selection.length || !onProperties,
-            run: () => {
-              const id = selection.filter((id) => selectableIds.has(id)).at(-1);
-              if (id) onProperties?.(id);
-            },
-          },
-          {
-            id: 'move',
-            label: 'Move',
-            icon: Move,
-            disabled: !editable || editingBlocked || !selection.length,
-            run: () => beginPickup(false, false),
-          },
-          {
-            id: 'drag',
-            label: 'Drag with connections',
-            icon: Move,
-            disabled: !editable || editingBlocked || !selection.length,
-            run: () => beginPickup(true, false),
-          },
-          {
-            id: 'rotate',
-            label: 'Rotate selection',
-            icon: RotateCw,
-            disabled: !editable || editingBlocked || !selection.length,
-            run: () => {
-              const ids = selection.filter((id) => selectableIds.has(id));
-              if (ids.length) onCommit(transformSelection(doc, ids, 'rotate'));
-            },
-          },
-          {
-            id: 'delete',
-            label: 'Delete selection',
-            icon: Trash2,
-            destructive: true,
-            disabled: !editable || editingBlocked || !selection.length || !onDelete,
-            run: () => onDelete?.(selection.filter((id) => selectableIds.has(id))),
-          },
-          {
-            id: 'cancel',
-            label: 'Cancel tool',
-            icon: X,
-            disabled: tool === 'select',
-            run: () => {
-              cancelGesture();
-              updateWireDraft(null);
-              pendingWire.current = null;
-              setTool('select');
-            },
-          },
-        ]}
+        actions={menuActions}
       />
     </div>
   );

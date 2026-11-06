@@ -29,6 +29,7 @@ import {
   setPCBRectangleWidth,
 } from '../lib/pcb-outline-resize';
 import { assertPCBLockedEdits, setPCBLocked } from '../lib/pcb-lock';
+import { preparePCBRegionFillet } from '../lib/pcb-region-fillet';
 
 // Property inputs derive from the same shapes as the full document validator.
 // null explicitly clears an optional override; omission retains it.
@@ -124,6 +125,12 @@ export const layoutQueryDefinitions: CoreDefinition[] = [
   ),
 ];
 export const layoutCommandDefinitions: CoreDefinition[] = [
+  objectCommand(
+    'layout.region.fillet',
+    'Round every convex corner of one board zone or polygon graphic using native polygon vertices within 0.01 mm of circular fillets. Preserves cutouts and commits one undo edit.',
+    { kind: { enum: ['zone', 'graphic'] }, id: identity, radius: positive },
+    ['kind', 'id', 'radius'],
+  ),
   objectCommand(
     'layout.lock',
     'Lock or unlock existing board objects or individual footprint pads in one undo transaction. Lock changes preserve saved fills.',
@@ -436,6 +443,9 @@ export function executeLayout(
   let next = board;
   let result: Record<string, unknown> | undefined;
   switch (id) {
+    case 'layout.region.fillet':
+      next = preparePCBRegionFillet(board, { kind: args.kind, id: args.id }, args.radius);
+      break;
     case 'layout.lock':
       next = setPCBLocked(board, args.targets, args.locked);
       break;

@@ -897,7 +897,7 @@ try {
     'Switching during loading retains the canvas and in-flight conversion.',
   );
   assert.deepEqual(requests, { models: 2, details: 2 });
-  assert.equal(await page.locator('.pcb-model-notices').count(), 0);
+  assert.equal(await page.locator('.pcb-model-issues').count(), 0);
   await page.evaluate(() => {
     window.originalCanvas = document.querySelector('.pcb-model-canvas canvas');
     window.originalScene = Object.values(window.scenes)[0];
@@ -1780,7 +1780,7 @@ try {
   await button('Model').click();
   await ready();
   assert.equal(requests.models, failedRequests + 1);
-  assert.equal(await page.locator('.pcb-model-notices').count(), 0);
+  assert.equal(await page.locator('.pcb-model-issues').count(), 0);
 
   // Closing a clean project releases its retained renderer.
   await selectProject(1);

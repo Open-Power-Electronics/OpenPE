@@ -84,6 +84,8 @@
     "sharp": "^0.35.5",
     "tar": "^7.5.22",
     "three": "^0.186.1",
+    "three-gpu-pathtracer": "0.0.24",
+    "three-mesh-bvh": "0.9.5",
     "tsx": "^4.20.0",
     "typescript": "^5.9.3",
     "unified": "^11.0.5",

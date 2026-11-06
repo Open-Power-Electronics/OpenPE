@@ -14,6 +14,13 @@ Voltage-source and EMC IPULSE current-source waveform selection stores optional 
 
 ## Document ownership
 
+Custom single-unit symbols are native embedded `.kicad_sch` definitions. Editing
+one instance forks its embedded name while preserving its original `lib_id`
+through native `lib_name` aliasing where needed. Custom footprints are native
+embedded `.kicad_pcb` pads/artwork. These drawing tools do not synthesize reusable
+`.kicad_sym`/`.pretty` libraries or modify bundled resources. Existing supporting
+library files retain their ordinary native preservation contract.
+
 `ProjectCore` owns validated models, Source drafts, revisions and whole-project
 undo. `lib/kicad-project.ts` maps bounded native file sets to those models and
 back. Save, recovery and history consume the current validated native texts,

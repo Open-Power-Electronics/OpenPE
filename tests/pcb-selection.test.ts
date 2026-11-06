@@ -120,6 +120,160 @@ test('closed region interiors are optional fallback picks, respect holes/layers 
   ]);
 });
 
+test('selected-layer graphic interiors survive off-layer precise hits and keep same-layer ink first', () => {
+  const board: PCB = {
+    ...createEmptyPCB(),
+    graphics: [
+      {
+        id: 'silk-region',
+        kind: 'polygon',
+        layer: 'F.SilkS',
+        width: 0.1,
+        start: { x: 0, y: 0 },
+        points: [
+          { x: 10, y: 0 },
+          { x: 10, y: 10 },
+        ],
+        end: { x: 0, y: 10 },
+      },
+    ],
+    tracks: [
+      {
+        id: 'back-track',
+        layer: 'B.Cu',
+        netId: '',
+        width: 0.4,
+        start: { x: 2, y: 5 },
+        end: { x: 8, y: 5 },
+      },
+    ],
+  };
+  const layers = defaultPCBDisplay();
+  const at = { x: 5, y: 5 };
+  const options = {
+    priorityLayer: 'F.SilkS' as const,
+    includeRegionInteriors: true,
+    hasPrecisePad: true,
+    preciseCandidates: [{ kind: 'track' as const, id: 'back-track' }],
+  };
+  const pick = (display = layers, eligible = filters) => {
+    const selections = selectPCBPoint(board, display, eligible, at, 0.1, options);
+    return {
+      selections,
+      chosen: choosePCBPointCandidate(
+        board,
+        display,
+        selections.map((selection) => ({ selection })),
+        at,
+        { ...options, tolerance: 0.1, filters: eligible },
+      )?.selection.id,
+    };
+  };
+  const before = structuredClone(board);
+  assert.ok(pick().selections.some((item) => item.id === 'silk-region'));
+  assert.equal(pick().chosen, 'silk-region');
+  assert.equal(pick({ ...layers, 'F.SilkS': false }).chosen, 'back-track');
+  assert.equal(pick(layers, { ...filters, graphic: false }).chosen, 'back-track');
+  board.graphics.push({
+    id: 'silk-ink',
+    layer: 'F.SilkS',
+    width: 0.2,
+    start: { x: 2, y: 5 },
+    end: { x: 8, y: 5 },
+  });
+  assert.equal(
+    pick().chosen,
+    'silk-ink',
+    'Precise ink wins over a region interior on the same layer.',
+  );
+  board.graphics.pop();
+  assert.deepEqual(board, before);
+});
+
+test('selected-layer zones and saved fills survive off-layer copper while holes and filters fall back', () => {
+  const outline = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ];
+  const holes = [
+    [
+      { x: 4, y: 4 },
+      { x: 6, y: 4 },
+      { x: 6, y: 6 },
+      { x: 4, y: 6 },
+    ],
+  ];
+  const board: PCB = {
+    ...createEmptyPCB(),
+    zones: [
+      {
+        id: 'front-zone',
+        layer: 'F.Cu',
+        netId: null,
+        outline,
+        holes,
+        clearance: 0.25,
+        minThickness: 0.2,
+        thermalGap: 0.3,
+        thermalBridge: 0.3,
+        filledPolygons: [],
+      },
+    ],
+    tracks: [
+      {
+        id: 'back-track',
+        layer: 'B.Cu',
+        netId: '',
+        width: 0.4,
+        start: { x: 1, y: 1 },
+        end: { x: 9, y: 9 },
+      },
+    ],
+  };
+  const layers = defaultPCBDisplay();
+  const options = {
+    priorityLayer: 'F.Cu' as const,
+    includeRegionInteriors: true,
+    preparedFills: new Map([['front-zone', [{ outer: outline, holes }]]]),
+  };
+  const before = structuredClone(board);
+  const pick = (at: { x: number; y: number }, eligible = filters, basis = board) => {
+    const selections = selectPCBPoint(basis, layers, eligible, at, 0.1, options);
+    return {
+      selections,
+      chosen: choosePCBPointCandidate(
+        basis,
+        layers,
+        selections.map((selection) => ({ selection })),
+        at,
+        { ...options, tolerance: 0.1, filters: eligible },
+      )?.selection.id,
+    };
+  };
+  for (const outlines of [true, false]) {
+    layers.zoneOutlines = outlines;
+    assert.ok(pick({ x: 2, y: 2 }).selections.some((item) => item.id === 'front-zone'));
+    assert.equal(pick({ x: 2, y: 2 }).chosen, 'front-zone');
+    assert.equal(pick({ x: 5, y: 5 }).chosen, 'back-track', 'A zone hole admits off-layer copper.');
+    assert.equal(pick({ x: 2, y: 2 }, { ...filters, zone: false }).chosen, 'back-track');
+    layers['F.Cu'] = false;
+    assert.equal(pick({ x: 2, y: 2 }).chosen, 'back-track');
+    layers['F.Cu'] = true;
+    const sameLayer: PCB = {
+      ...board,
+      tracks: [...board.tracks, { ...board.tracks[0], id: 'front-track', layer: 'F.Cu' }],
+    };
+    assert.equal(
+      pick({ x: 2, y: 2 }, filters, sameLayer).chosen,
+      'front-track',
+      'A same-layer track remains more precise than the surrounding zone.',
+    );
+  }
+  assert.deepEqual(board, before);
+});
+
 test('physical paint order resolves exact copper ties independently of record and candidate order', () => {
   const board = createEmptyPCB();
   board.layers = ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'];
@@ -230,14 +384,13 @@ test('physical tie ranking excludes hidden copper while retaining the nearest vi
     tolerance: 0.5,
     tieTolerance: 0.01,
     layerOrder: ['B.Cu', 'F.Cu'],
-    priorityLayer: 'F.Cu',
   };
   const pick = () =>
     choosePCBPointCandidate(board, layers, candidates, { x: 0, y: 0 }, options)?.selection.id;
   assert.equal(
     pick(),
     'back',
-    'A nearer centreline wins before either display priority or paint order.',
+    'Without a selected layer, a nearer centreline wins before paint order.',
   );
   board.tracks[1] = { ...board.tracks[1], start: { x: -2, y: 0.4 }, end: { x: 2, y: 0.4 } };
   assert.equal(pick(), 'back', 'A nearer surface wins before paint order.');

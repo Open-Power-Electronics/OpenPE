@@ -321,7 +321,7 @@ export async function captureReopenedDesign(page, dir, expected) {
           timeout: 60_000,
         });
       assert.equal(await page.locator('.pcb-model-status[role="alert"]').count(), 0);
-      assert.deepEqual(await page.locator('.pcb-model-notices li').allTextContents(), []);
+      assert.deepEqual(await page.locator('.pcb-model-issues li').allTextContents(), []);
     }
     await page.locator(selector).press(view === 'Model' ? 'Space' : 'Control+Home');
     await page.screenshot({ path: path.join(dir, filename) });

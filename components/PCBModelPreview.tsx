@@ -1,5 +1,5 @@
 'use client';
-import CanvasContextMenu from './CanvasContextMenu';
+import CanvasContextMenu, { type CanvasMenuAction } from './CanvasContextMenu';
 import { createPortal } from 'react-dom';
 import ComponentProperties, { type ComponentPropertiesProps } from './ComponentProperties';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
@@ -23,12 +23,14 @@ import {
 import {
   Maximize,
   ImageDown,
-  SquareDashed,
   MousePointer2,
   MessageSquareText,
   Box,
   Minus,
   Plus,
+  SlidersHorizontal,
+  Trash2,
+  X,
 } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -117,6 +119,7 @@ import PCB3DAnnotations, {
   type ObjectAnnotationView,
 } from './PCB3DAnnotations';
 import { createModelAnnotationOutline } from './model-annotation-outline';
+import { createModelStudioRenderer, MODEL_RENDER_SAMPLES } from './model-studio-renderer';
 import EditorDisplayDrawer from './EditorDisplayDrawer';
 import ModelDisplayPanel, { type ModelView } from './ModelDisplayPanel';
 import { ModelMeasurementDrawing } from './CanvasMeasurement';
@@ -185,6 +188,20 @@ export type PCB3DViewState = {
   cadVisible?: boolean;
 };
 
+// Memoized views can retain effects across a hot update. Rebind native callbacks
+// to this implementation without adding hooks or retaining closed view refs.
+const modelViewImplementations = new WeakMap<RefObject<PCB3DViewState | null>, object>();
+const defaultModelViewImplementation = {};
+function modelViewImplementation(viewState?: RefObject<PCB3DViewState | null>) {
+  if (!viewState) return defaultModelViewImplementation;
+  let implementation = modelViewImplementations.get(viewState);
+  if (!implementation) {
+    implementation = {};
+    modelViewImplementations.set(viewState, implementation);
+  }
+  return implementation;
+}
+
 function PCBModelPreview({
   board: latestBoard,
   viewState,
@@ -206,6 +223,7 @@ function PCBModelPreview({
   onBoardThicknessChange,
   onModeChange,
   onSketchPointerChange,
+  onEditingDraftChange,
   distanceMeasurement,
   capabilityHost,
   revision = '',
@@ -230,6 +248,7 @@ function PCBModelPreview({
   onBoardThicknessChange?: (board: PCB, thickness: number) => boolean;
   onModeChange?: (mode: string) => void;
   onSketchPointerChange?: (pointer: ModelSketchPointer | null) => void;
+  onEditingDraftChange?: (blocked: boolean) => void;
   distanceMeasurement?: CanvasMeasurement;
   schematic?: Circuit;
   viewState?: RefObject<PCB3DViewState | null>;
@@ -255,6 +274,7 @@ function PCBModelPreview({
   onModelChecksChange?: (report: ModelCheckReport) => void;
   modelCheckFocus?: ModelCheckFocus | null;
 }) {
+  const sceneImplementation = modelViewImplementation(viewState);
   const gridOptions = useRef({ visible: grid, spacing: gridSpacing });
   gridOptions.current = { visible: grid, spacing: gridSpacing };
   // Layout may emit many edits while Model is hidden. Build only the latest
@@ -308,7 +328,7 @@ function PCBModelPreview({
   const host = useRef<HTMLDivElement>(null),
     fit = useRef(() => {});
   const locateFootprint = useRef<(_: string) => void>(() => {});
-  const noticeComposition = useRef(false);
+  const issueComposition = useRef(false);
   function previewNavigationBlocked() {
     const element = host.current;
     return (
@@ -353,7 +373,7 @@ function PCBModelPreview({
   const [cadGeometryErrors, setCadGeometryErrors] = useState({ document: '', preview: '' });
   const [failed, setFailed] = useState(false);
   const [warnings, setWarnings] = useState<ModelCheckIssue[]>([]);
-  const completedNoticeBasis = useRef<{ board: PCB; schematic?: Circuit } | null>(null);
+  const completedCheckBasis = useRef<{ board: PCB; schematic?: Circuit } | null>(null);
   const [retry, setRetry] = useState(0);
   const modelCheckIssues = useMemo(() => {
     const issues = [...warnings];
@@ -364,7 +384,6 @@ function PCBModelPreview({
   }, [warnings, failed, status, cadGeometryErrors.document, cadGeometryErrors.preview]);
   const modelErrorCount = modelCheckIssues.filter((issue) => issue.severity === 'error').length;
   const modelWarningCount = modelCheckIssues.filter((issue) => issue.severity === 'warning').length;
-  const modelNoticeCount = modelCheckIssues.filter((issue) => issue.severity === 'notice').length;
   const [modelsVisible, setModelsVisible] = useState(viewState?.current?.modelsVisible ?? true);
   const [exploded, setExploded] = useState<ModelExplodedView>(() => ({
     ...defaultModelExplodedView,
@@ -398,6 +417,13 @@ function PCBModelPreview({
   const orthographicRef = useRef(orthographic);
   orthographicRef.current = orthographic;
   const applyProjection = useRef(() => {});
+  const [renderEnabled, setRenderEnabled] = useState(false);
+  const [renderLoading, setRenderLoading] = useState(false);
+  const [renderError, setRenderError] = useState('');
+  const [renderProgress, setRenderProgress] = useState({ samples: 0, target: 0 });
+  const renderEnabledRef = useRef(renderEnabled);
+  renderEnabledRef.current = renderEnabled;
+  const applyRenderMode = useRef(() => {});
   const [annotating, setAnnotating] = useState(false);
   const [annotationsOpened, setAnnotationsOpened] = useState(false);
   const annotatingRef = useRef(false);
@@ -511,6 +537,11 @@ function PCBModelPreview({
     onMeasure: toggleMeasurement,
     viewOnly: readOnly || explosionActive,
   });
+  const editingDraftBlocked = Boolean(cad.tool) || cad.selectionBlocked;
+  useLayoutEffect(() => {
+    onEditingDraftChange?.(editingDraftBlocked);
+  }, [editingDraftBlocked, onEditingDraftChange]);
+  useLayoutEffect(() => () => onEditingDraftChange?.(false), [onEditingDraftChange]);
   function toggleMeasurement(): void {
     if (readOnly || !ready || failed || cad.selectionBlocked || cad.tool) return;
     if (measuring) closeMeasurement();
@@ -524,6 +555,9 @@ function PCBModelPreview({
   }
   const cadRef = useRef(cad);
   cadRef.current = cad;
+  useEffect(() => {
+    if (cad.tool || cad.preview || cad.selectionBlocked) setRenderEnabled(false);
+  }, [cad.tool, cad.preview, cad.selectionBlocked]);
   useEffect(() => {
     if (!readOnly) return;
     setSelection([]);
@@ -729,6 +763,9 @@ function PCBModelPreview({
     applyProjection.current();
   }, [orthographic]);
   useEffect(() => {
+    applyRenderMode.current();
+  }, [renderEnabled, active]);
+  useEffect(() => {
     updateActivity.current();
     if (annotating) updateAnnotationView.current();
   }, [annotating]);
@@ -743,9 +780,15 @@ function PCBModelPreview({
       observer: ResizeObserver | undefined;
     let rendererDisposed = false;
     const annotationOutline = createModelAnnotationOutline();
+    let studio: ReturnType<typeof createModelStudioRenderer> | undefined;
+    let studioPreparing = false;
+    let studioComplete = false;
+    let renderEpoch = 0;
     const disposeRenderer = () => {
       if (!renderer || rendererDisposed) return;
       rendererDisposed = true;
+      studio?.dispose();
+      studio = undefined;
       annotationOutline.dispose();
       renderer.dispose();
     };
@@ -900,9 +943,11 @@ function PCBModelPreview({
     updateCadEdges.current();
     setStatus('Loading 3D board…');
     setWarnings([]);
-    completedNoticeBasis.current = null;
+    completedCheckBasis.current = null;
     setFailed(false);
     setReady(false);
+    setRenderProgress((previous) => ({ ...previous, samples: 0 }));
+    setRenderLoading(renderEnabledRef.current);
     const waitForActive = async () => {
       if (activeRef.current || control.signal.aborted) return;
       await new Promise<void>((resolve) => {
@@ -998,12 +1043,12 @@ function PCBModelPreview({
         target.add(mesh);
         await yieldBuild();
       };
-      const notices: ModelCheckIssue[] = [];
+      const issues: ModelCheckIssue[] = [];
       let fills = new Map<string, Polygon[]>();
       try {
         fills = filledCopperPolygons(board);
       } catch (e) {
-        notices.push({ message: (e as Error).message, severity: 'error' });
+        issues.push({ message: (e as Error).message, severity: 'error' });
       }
       await yieldBuild();
       const silkGraphics = pcbSilkscreen(board, schematicRef.current);
@@ -1054,9 +1099,9 @@ function PCBModelPreview({
         if (!side) continue;
         const mask = solderMaskOpenings(board, side);
         if (mask.omittedText)
-          notices.push({
+          issues.push({
             message: `${side === 'front' ? 'Front' : 'Back'} solder mask text and dimensions are not shown in 3D. Check the native export in KiCad.`,
-            severity: 'notice',
+            severity: 'warning',
           });
         const maskShape = subtractPolygons(body, mask.openings);
         await yieldBuild();
@@ -1234,7 +1279,8 @@ function PCBModelPreview({
       const scene = new THREE.Scene();
       scene.add(group);
       scene.add(groundGroup);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
+      const hemisphere = new THREE.HemisphereLight(0xffffff, 0x444444, 3);
+      scene.add(hemisphere);
       const light = new THREE.DirectionalLight(0xffffff, 3);
       light.position.set(50, -70, 100);
       scene.add(light);
@@ -1270,6 +1316,87 @@ function PCBModelPreview({
       let shadersReady = false;
       const clippingSphere = new THREE.Sphere();
       const clippingBounds = new THREE.Box3();
+      const drawScene = (selected: THREE.Object3D[] = [], moving = false, capture = false) => {
+        if (capture && renderEnabledRef.current && !studio)
+          throw new Error(
+            'Render is still preparing. Try exporting the image again when it is ready.',
+          );
+        if (studio && renderEnabledRef.current) {
+          const progress = selectionPaint.withoutSelection(() =>
+            cadPaint.withoutSelection(() =>
+              studio!.render(camera, {
+                dark: cadState.current.darkCanvas,
+                bounds: clippingBounds,
+                moving,
+                selected,
+              }),
+            ),
+          );
+          studioComplete = progress.complete;
+          const samples = Math.floor(progress.samples);
+          setRenderProgress((previous) =>
+            samples !== previous.samples &&
+            (samples === 0 || progress.complete || samples >= previous.samples + 4)
+              ? { ...previous, samples }
+              : previous,
+          );
+          if (studioPreparing && progress.samples > 0) {
+            studioPreparing = false;
+            setRenderLoading(false);
+          }
+          if (host.current) {
+            host.current.dataset.renderMode = 'studio';
+            host.current.dataset.renderSamples = String(progress.samples);
+          }
+        } else {
+          annotationOutline.render(renderer!, scene, camera, selected);
+          if (host.current) host.current.dataset.renderMode = 'standard';
+        }
+      };
+      const renderFailure = (error: unknown) => {
+        studio?.dispose();
+        studio = undefined;
+        studioPreparing = false;
+        studioComplete = false;
+        renderEnabledRef.current = false;
+        setRenderEnabled(false);
+        setRenderLoading(false);
+        setRenderError(
+          `Render failed: ${error instanceof Error ? error.message : String(error)}. Turn Render on to retry.`,
+        );
+      };
+      applyRenderMode.current = () => {
+        if (control.signal.aborted || rendererDisposed || !renderer) return;
+        if (!renderEnabledRef.current) {
+          studio?.dispose();
+          studio = undefined;
+          studioPreparing = false;
+          studioComplete = false;
+          setRenderLoading(false);
+          redraw.current();
+          updateAnnotationView.current();
+          return;
+        }
+        if (!activeRef.current || studio) return;
+        studioPreparing = true;
+        setRenderLoading(true);
+        setRenderError('');
+        try {
+          studio = createModelStudioRenderer(
+            renderer,
+            scene,
+            group,
+            [groundGroup],
+            [hemisphere, light],
+          );
+          setRenderProgress({ samples: 0, target: MODEL_RENDER_SAMPLES });
+          redraw.current();
+          updateAnnotationView.current();
+        } catch (error: unknown) {
+          renderFailure(error);
+          redraw.current();
+        }
+      };
       const updateReferencePlane = () =>
         groundScene.update({
           bounds: groundBounds,
@@ -1283,7 +1410,8 @@ function PCBModelPreview({
             referencePlaneVisibleRef.current &&
             !['plane', 'sketch'].includes(cadState.current.sketch?.phase ?? ''),
         });
-      const render = () => {
+      let viewDirty = true;
+      const scheduleRender = () => {
         if (
           !renderer ||
           !shadersReady ||
@@ -1296,81 +1424,82 @@ function PCBModelPreview({
         frame = requestAnimationFrame(() => {
           frame = 0;
           if (control.signal.aborted || !activeRef.current) return;
-          const changing = !annotatingRef.current && orbit?.update();
-          if (clippingBoundsDirty.current) {
-            // Cache physical extents until geometry/visibility changes. The
-            // transient sketch grid must not widen the depth range of the PCB.
-            clippingBounds.makeEmpty();
-            for (const child of group.children)
-              if (
-                child !== sketchGroup &&
-                child !== edgeGroup &&
-                child !== faceGroup &&
-                child !== operandGhostGroup &&
-                child.visible
-              )
-                clippingBounds.union(modelVisibleBounds(child));
-            clippingBounds.getBoundingSphere(clippingSphere);
-            clippingBoundsDirty.current = false;
-          }
-          const clipping = modelCameraClipping({
-            position: camera.position,
-            target: orbit!.target,
-            bounds: clippingBounds.isEmpty() ? null : clippingSphere,
-          });
-          updateReferencePlane();
-          const planeClipping = sketchScene.clippingRange(camera);
-          const groundClipping = groundScene.clippingRange(camera, orbit!.target);
-          camera.near = Math.min(
-            clipping.near,
-            planeClipping?.near ?? clipping.near,
-            groundClipping?.near ?? clipping.near,
-          );
-          camera.far = Math.max(
-            clipping.far,
-            planeClipping?.far ?? clipping.far,
-            groundClipping?.far ?? clipping.far,
-          );
-          camera.updateProjectionMatrix();
-          if (
-            measuringRef.current &&
-            measurementPointer.current &&
-            pressedPointers.current.size === 0 &&
-            !hasOpenOverlay()
-          )
-            measurement.move(
-              measurePoint.current(measurementPointer.current, measurementPointer.current.snap),
+          const updateView = viewDirty;
+          viewDirty = false;
+          const changing = updateView && !annotatingRef.current && orbit?.update();
+          if (updateView) {
+            if (clippingBoundsDirty.current) {
+              // Cache physical extents until geometry/visibility changes. The
+              // transient sketch grid must not widen the depth range of the PCB.
+              clippingBounds.makeEmpty();
+              for (const child of group.children)
+                if (
+                  child !== sketchGroup &&
+                  child !== edgeGroup &&
+                  child !== faceGroup &&
+                  child !== operandGhostGroup &&
+                  child.visible
+                )
+                  clippingBounds.union(modelVisibleBounds(child));
+              clippingBounds.getBoundingSphere(clippingSphere);
+              clippingBoundsDirty.current = false;
+            }
+            const clipping = modelCameraClipping({
+              position: camera.position,
+              target: orbit!.target,
+              bounds: clippingBounds.isEmpty() ? null : clippingSphere,
+            });
+            updateReferencePlane();
+            const planeClipping = sketchScene.clippingRange(camera);
+            const groundClipping = groundScene.clippingRange(camera, orbit!.target);
+            camera.near = Math.min(
+              clipping.near,
+              planeClipping?.near ?? clipping.near,
+              groundClipping?.near ?? clipping.near,
             );
-          redrawMeasurement.current();
-          updateScale.current();
-          // Wheel zoom and camera gestures can change the placement plane below
-          // a stationary pointer. Keep its snapped preview current before the
-          // next click/Enter, without moving it during a held camera gesture.
-          if (
-            cadRef.current.tool &&
-            (cadRef.current.tool !== 'sketch' || cadRef.current.sketchPhase === 'sketch') &&
-            placementPointer.current &&
-            !hasOpenOverlay() &&
-            pressedPointers.current.size === 0
-          ) {
-            const rect = host.current!.getBoundingClientRect();
-            cadRef.current.canvasMove(
-              cadPoint.current({
-                x: ((placementPointer.current.clientX - rect.left) / rect.width) * 1000,
-                y: ((placementPointer.current.clientY - rect.top) / rect.width) * 1000,
-              }),
+            camera.far = Math.max(
+              clipping.far,
+              planeClipping?.far ?? clipping.far,
+              groundClipping?.far ?? clipping.far,
             );
-          }
-          sketchScene.updateGrid({
-            camera,
-            width: host.current?.clientWidth || 1,
-            height: host.current?.clientHeight || 1,
-          });
-          if (renderer)
-            annotationOutline.render(
-              renderer,
-              scene,
+            camera.updateProjectionMatrix();
+            if (
+              measuringRef.current &&
+              measurementPointer.current &&
+              pressedPointers.current.size === 0 &&
+              !hasOpenOverlay()
+            )
+              measurement.move(
+                measurePoint.current(measurementPointer.current, measurementPointer.current.snap),
+              );
+            redrawMeasurement.current();
+            updateScale.current();
+            // Wheel zoom and camera gestures can change the placement plane below
+            // a stationary pointer. Keep its snapped preview current before the
+            // next click/Enter, without moving it during a held camera gesture.
+            if (
+              cadRef.current.tool &&
+              (cadRef.current.tool !== 'sketch' || cadRef.current.sketchPhase === 'sketch') &&
+              placementPointer.current &&
+              !hasOpenOverlay() &&
+              pressedPointers.current.size === 0
+            ) {
+              const rect = host.current!.getBoundingClientRect();
+              cadRef.current.canvasMove(
+                cadPoint.current({
+                  x: ((placementPointer.current.clientX - rect.left) / rect.width) * 1000,
+                  y: ((placementPointer.current.clientY - rect.top) / rect.width) * 1000,
+                }),
+              );
+            }
+            sketchScene.updateGrid({
               camera,
+              width: host.current?.clientWidth || 1,
+              height: host.current?.clientHeight || 1,
+            });
+          }
+          try {
+            drawScene(
               annotatingRef.current && components.visible
                 ? components.children.filter(
                     (object) =>
@@ -1378,7 +1507,13 @@ function PCBModelPreview({
                       selectionRef.current.ids.includes(object.userData.footprintId),
                   )
                 : [],
+              Boolean(changing || pressedPointers.current.size),
             );
+          } catch (error) {
+            if (!studio) throw error;
+            renderFailure(error);
+            drawScene();
+          }
           if (annotatingRef.current) updateAnnotationView.current();
           if (host.current)
             host.current.dataset.renderCount = String(
@@ -1392,7 +1527,53 @@ function PCBModelPreview({
             );
           }
           if (changing) render();
+          else if (
+            studio &&
+            renderEnabledRef.current &&
+            !studioComplete &&
+            !pressedPointers.current.size
+          )
+            scheduleRender();
         });
+      };
+      const render = () => {
+        viewDirty = true;
+        renderEpoch++;
+        if (renderEnabledRef.current) setExportStatus('');
+        studio?.invalidate();
+        studioComplete = false;
+        scheduleRender();
+      };
+      const requireCaptureView = () => {
+        if (control.signal.aborted || rendererDisposed || !activeRef.current)
+          throw new Error(
+            'The render changed or was stopped. Try exporting the current view again.',
+          );
+      };
+      const waitForRender = async () => {
+        requireCaptureView();
+        if (!renderEnabledRef.current) return;
+        if (!studio) {
+          throw new Error(
+            'The render changed or was stopped. Try exporting the current view again.',
+          );
+        }
+        const requested = studio;
+        const epoch = renderEpoch;
+        scheduleRender();
+        while (!studioComplete) {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          if (
+            control.signal.aborted ||
+            !activeRef.current ||
+            studio !== requested ||
+            !renderEnabledRef.current ||
+            epoch !== renderEpoch
+          )
+            throw new Error(
+              'The render changed or was stopped. Try exporting the current view again.',
+            );
+        }
       };
       applyExploded.current = () => {
         explodedScene.apply(explodedRef.current);
@@ -1402,6 +1583,7 @@ function PCBModelPreview({
         render();
       };
       redraw.current = render;
+      applyRenderMode.current();
       highlightModels.current = () => {
         const selected = selectionRef.current;
         selectionPaint.update(new Set(selected.ids), selected.dark);
@@ -1424,6 +1606,7 @@ function PCBModelPreview({
         render();
       };
       orbit.addEventListener('change', render);
+      orbit.addEventListener('end', render);
       const resize = () => {
         if (!host.current || !renderer || !activeRef.current) return;
         const { clientWidth: w, clientHeight: h } = host.current;
@@ -1872,6 +2055,8 @@ function PCBModelPreview({
           exploded: explodedRef.current,
           boardDisplay: displayRef.current,
           referencePlaneVisible: referencePlaneVisibleRef.current,
+          renderEnabled: renderEnabledRef.current,
+          darkCanvas: cadState.current.darkCanvas,
           grid: gridOptions.current,
           modelCad: cadState.current.modelCad,
           cadVisible: cadState.current.cadVisible,
@@ -1887,6 +2072,8 @@ function PCBModelPreview({
       };
       captureAnnotation.current = async (_svg, ids, bounds, markup) => {
         if (!renderer || !bounds) throw new Error('The 3D preview is not ready.');
+        await waitForRender();
+        requireCaptureView();
         const visible = previewGroup.visible;
         const sketchVisible = sketchGroup.visible;
         const edgeVisible = edgeGroup.visible;
@@ -1901,15 +2088,14 @@ function PCBModelPreview({
         try {
           return selectionPaint.withoutSelection(() =>
             cadPaint.withoutSelection(() => {
-              annotationOutline.render(
-                renderer!,
-                scene,
-                camera,
+              drawScene(
                 components.visible
                   ? components.children.filter(
                       (object) => object.visible && ids.includes(object.userData.footprintId),
                     )
                   : [],
+                false,
+                true,
               );
               return captureObjectAnnotationImage(renderer!.domElement, bounds, markup);
             }),
@@ -1936,7 +2122,9 @@ function PCBModelPreview({
       applyDisplay.current();
       exportPNG.current = async () => {
         if (!renderer) return;
-        if (!annotatingRef.current) orbit?.update();
+        if (!annotatingRef.current && !renderEnabledRef.current) orbit?.update();
+        await waitForRender();
+        requireCaptureView();
         const previewVisible = previewGroup.visible;
         const sketchVisible = sketchGroup.visible;
         const edgeVisible = edgeGroup.visible;
@@ -1952,7 +2140,7 @@ function PCBModelPreview({
         try {
           image = selectionPaint.withoutSelection(() =>
             cadPaint.withoutSelection(() => {
-              renderer!.render(scene, camera);
+              drawScene([], false, true);
               const canvas = renderer!.domElement;
               const max = Math.max(canvas.width, canvas.height);
               let output = canvas;
@@ -2051,13 +2239,10 @@ function PCBModelPreview({
             render();
           }
           if (!assigned.length) {
-            const mechanicalHole =
-              f.libraryId.startsWith('MountingHole:') ||
-              (f.pads.length > 0 && f.pads.every((pad) => pad.type === 'np_thru_hole'));
-            notices.push({
+            issues.push({
               message: `${name}: No 3D model`,
               footprintId: f.id,
-              severity: mechanicalHole ? 'notice' : 'warning',
+              severity: 'warning',
             });
             continue;
           }
@@ -2067,7 +2252,7 @@ function PCBModelPreview({
             if (control.signal.aborted) return;
             const index = official.findIndex((m) => modelKey(m.path) === modelKey(model.path));
             if (index < 0 && !projectSource) {
-              notices.push({
+              issues.push({
                 message: `${name}: 3D model unavailable`,
                 footprintId: f.id,
                 severity: 'warning',
@@ -2128,7 +2313,7 @@ function PCBModelPreview({
           }
         } catch (e) {
           if (!control.signal.aborted)
-            notices.push({
+            issues.push({
               message: `${name}: ${(e as Error).message}`,
               footprintId: f.id,
               severity: 'error',
@@ -2138,8 +2323,8 @@ function PCBModelPreview({
         }
       }
       if (!control.signal.aborted) {
-        completedNoticeBasis.current = { board, schematic };
-        setWarnings(notices);
+        completedCheckBasis.current = { board, schematic };
+        setWarnings(issues);
         setStatus('');
         render();
       }
@@ -2203,6 +2388,7 @@ function PCBModelPreview({
       applyDisplay.current = () => {};
       applyExploded.current = () => {};
       applyProjection.current = () => {};
+      applyRenderMode.current = () => {};
       updateActivity.current = () => {};
       exportPNG.current = async () => {};
       updateAnnotationView.current = () => {};
@@ -2211,7 +2397,7 @@ function PCBModelPreview({
         throw new Error('The 3D preview is not ready.');
       };
     };
-  }, [board, linkedCaptionBasis, retry, viewState]);
+  }, [board, linkedCaptionBasis, retry, sceneImplementation]);
   const selectedFootprint = board.footprints.find((footprint) => selection.includes(footprint.id));
   const componentDeleteBlocked =
     explosionActive ||
@@ -2253,7 +2439,7 @@ function PCBModelPreview({
   }
   const interacting = !measuring && !annotating && !cad.tool && !cad.pan;
   const interactionDisabled = cad.selectionBlocked;
-  const noticeNavigationBlocked =
+  const issueNavigationBlocked =
     sourcePending ||
     !ready ||
     failed ||
@@ -2261,7 +2447,7 @@ function PCBModelPreview({
     Boolean(cad.tool) ||
     (!readOnly && !modelsSelectable);
   function locateModelCheckIssue(id: string) {
-    if (!active || noticeComposition.current || noticeNavigationBlocked || hasOpenOverlay())
+    if (!active || issueComposition.current || issueNavigationBlocked || hasOpenOverlay())
       return false;
     if (!board.footprints.some((footprint) => footprint.id === id)) return false;
     if (!readOnly) {
@@ -2278,8 +2464,8 @@ function PCBModelPreview({
   }
   useEffect(() => {
     const complete =
-      completedNoticeBasis.current?.board === board &&
-      completedNoticeBasis.current?.schematic === schematic &&
+      completedCheckBasis.current?.board === board &&
+      completedCheckBasis.current?.schematic === schematic &&
       !status;
     onModelChecksChange?.({
       board,
@@ -2287,7 +2473,7 @@ function PCBModelPreview({
       issues: modelCheckIssues,
       state: failed ? 'error' : complete ? 'ready' : 'loading',
       message: status,
-      canLocate: !noticeNavigationBlocked && complete,
+      canLocate: !issueNavigationBlocked && complete,
     });
   }, [
     onModelChecksChange,
@@ -2296,7 +2482,7 @@ function PCBModelPreview({
     modelCheckIssues,
     failed,
     status,
-    noticeNavigationBlocked,
+    issueNavigationBlocked,
     sourcePending,
     cad.selectionBlocked,
     cad.tool,
@@ -2316,7 +2502,7 @@ function PCBModelPreview({
       return;
     if (locateModelCheckIssue(modelCheckFocus.footprintId))
       lastCheckFocus.current = modelCheckFocus;
-  }, [modelCheckFocus, board, active, status, noticeNavigationBlocked]);
+  }, [modelCheckFocus, board, active, status, issueNavigationBlocked]);
   const annotationDisabled =
     !ready || failed || !schematic || !annotationProps || annotationProps.disabled;
   function activateInteraction() {
@@ -2351,9 +2537,28 @@ function PCBModelPreview({
       )}
     </>
   );
-  const statusFeedback = exportStatus ? (
+  const renderWorking =
+    renderEnabled &&
+    (renderLoading ||
+      renderProgress.target === 0 ||
+      renderProgress.samples < renderProgress.target);
+  const statusFeedback = renderError ? (
+    <span className="pcb-model-status" data-model-render-status role="alert">
+      {renderError}
+    </span>
+  ) : exportStatus ? (
     <span className="pcb-model-status" role="status">
       {exportStatus}
+    </span>
+  ) : renderWorking ? (
+    <span className="pcb-model-status" data-model-render-status role="status">
+      {renderLoading || renderProgress.target === 0
+        ? 'Preparing render…'
+        : `${exporting ? 'Rendering image' : 'Rendering'} · ${renderProgress.samples} / ${renderProgress.target}`}
+    </span>
+  ) : exporting ? (
+    <span className="pcb-model-status" role="status">
+      Exporting image…
     </span>
   ) : status && !failed ? (
     status === componentLoadingStatus ? (
@@ -2364,6 +2569,36 @@ function PCBModelPreview({
       </span>
     )
   ) : null;
+  const contextHasSelection = Boolean(selection.length || boardSelected || cad.selection.length);
+  const contextToolActive = Boolean(cad.tool || cad.pan || measuring || annotating);
+  const contextActions: CanvasMenuAction[] = measuring || annotating ? [] : [...cad.contextActions];
+  if (interacting && (boardSelected || (selectedFootprint && selection.length === 1)))
+    contextActions.push({
+      id: 'properties',
+      label: 'Properties',
+      icon: SlidersHorizontal,
+      disabled: sourcePending || !ready || failed || cad.selectionBlocked,
+      run: showProperties,
+    });
+  if (interacting && selectedFootprint && selection.length === 1)
+    contextActions.push({
+      id: 'delete-component',
+      label: 'Delete component',
+      icon: Trash2,
+      destructive: true,
+      disabled: componentDeleteBlocked,
+      run: removeComponent,
+    });
+  if (measuring || annotating)
+    contextActions.push({
+      id: 'cancel',
+      label: 'Cancel tool',
+      icon: X,
+      run: () => {
+        setAnnotating(false);
+        closeMeasurement();
+      },
+    });
   return (
     <section
       ref={surface}
@@ -2749,77 +2984,71 @@ function PCBModelPreview({
                 identity={revision || board}
                 onError={setExportStatus}
                 actions={[
-                  {
-                    id: 'fit',
-                    label: 'Fit 3D board',
-                    icon: Maximize,
-                    disabled: !ready || failed,
-                    run: () => fit.current(),
-                  },
-                  {
-                    id: 'actual-size',
-                    label: 'Actual size (100%)',
-                    icon: Maximize,
-                    disabled: !ready || failed,
-                    run: () => zoom.current(null),
-                  },
-                  {
-                    id: 'zoom-in',
-                    label: 'Zoom in',
-                    icon: Plus,
-                    disabled: !ready || failed,
-                    run: () => zoom.current(1.2),
-                  },
-                  {
-                    id: 'zoom-out',
-                    label: 'Zoom out',
-                    icon: Minus,
-                    disabled: !ready || failed,
-                    run: () => zoom.current(1 / 1.2),
-                  },
-                  {
-                    id: 'export',
-                    label: 'Export image',
-                    icon: ImageDown,
-                    disabled: !ready || exporting || failed,
-                    run: async () => {
-                      setExporting(true);
-                      setExportStatus('');
-                      try {
-                        await exportPNG.current();
-                      } catch (error) {
-                        setExportStatus((error as Error).message);
-                      } finally {
-                        setExporting(false);
-                      }
-                    },
-                  },
-                  {
-                    id: 'isometric',
-                    label: 'Isometric view',
-                    icon: Box,
-                    separated: true,
-                    disabled: !ready || failed,
-                    run: () => orient.current('isometric'),
-                  },
-                  {
-                    id: 'top',
-                    label: 'Top view',
-                    icon: Box,
-                    disabled: !ready || failed,
-                    run: () => orient.current('top'),
-                  },
-                  {
-                    id: 'clear-selection',
-                    label: 'Clear selection',
-                    icon: SquareDashed,
-                    separated: true,
-                    disabled: (!selection.length && !boardSelected) || Boolean(cad.tool),
-                    run: () => {
-                      setSelection([]);
-                      setBoardSelected(false);
-                    },
-                  },
+                  ...contextActions,
+                  ...(!contextToolActive && !contextHasSelection
+                    ? [
+                        {
+                          id: 'fit',
+                          label: 'Fit 3D board',
+                          icon: Maximize,
+                          disabled: !ready || failed,
+                          run: () => fit.current(),
+                        },
+                        {
+                          id: 'actual-size',
+                          label: 'Actual size (100%)',
+                          icon: Maximize,
+                          disabled: !ready || failed,
+                          run: () => zoom.current(null),
+                        },
+                        {
+                          id: 'zoom-in',
+                          label: 'Zoom in',
+                          icon: Plus,
+                          disabled: !ready || failed,
+                          run: () => zoom.current(1.2),
+                        },
+                        {
+                          id: 'zoom-out',
+                          label: 'Zoom out',
+                          icon: Minus,
+                          disabled: !ready || failed,
+                          run: () => zoom.current(1 / 1.2),
+                        },
+                        {
+                          id: 'export',
+                          label: 'Export image',
+                          icon: ImageDown,
+                          disabled: !ready || exporting || failed,
+                          run: async () => {
+                            setExporting(true);
+                            setExportStatus('');
+                            try {
+                              await exportPNG.current();
+                            } catch (error) {
+                              setExportStatus((error as Error).message);
+                            } finally {
+                              setExporting(false);
+                            }
+                          },
+                        },
+                        {
+                          id: 'isometric',
+                          label: 'Isometric view',
+                          icon: Box,
+                          separated: true,
+                          disabled: !ready || failed,
+                          run: () => orient.current('isometric'),
+                        },
+                        {
+                          id: 'top',
+                          label: 'Top view',
+                          icon: Box,
+                          disabled: !ready || failed,
+                          run: () => orient.current('top'),
+                        },
+                      ]
+                    : []),
                 ]}
               />
             )}
@@ -2827,16 +3056,16 @@ function PCBModelPreview({
             {readOnly && !!modelCheckIssues.length && (
               <div className="model-canvas-controls">
                 <details
-                  className="pcb-model-notices"
+                  className="pcb-model-issues"
                   onCompositionStart={() => {
-                    noticeComposition.current = true;
+                    issueComposition.current = true;
                   }}
                   onCompositionEnd={() => {
-                    noticeComposition.current = false;
+                    issueComposition.current = false;
                   }}
                   onKeyDown={(event) => {
                     if (
-                      noticeComposition.current ||
+                      issueComposition.current ||
                       event.nativeEvent.isComposing ||
                       event.nativeEvent.keyCode === 229
                     ) {
@@ -2846,7 +3075,7 @@ function PCBModelPreview({
                   }}
                   onKeyUp={(event) => {
                     if (
-                      noticeComposition.current ||
+                      issueComposition.current ||
                       event.nativeEvent.isComposing ||
                       event.nativeEvent.keyCode === 229
                     ) {
@@ -2858,20 +3087,18 @@ function PCBModelPreview({
                   <summary>
                     {modelErrorCount} {modelErrorCount === 1 ? 'error' : 'errors'} ·{' '}
                     {modelWarningCount} {modelWarningCount === 1 ? 'warning' : 'warnings'}
-                    {' · '}
-                    {modelNoticeCount} {modelNoticeCount === 1 ? 'notice' : 'notices'}
                   </summary>
                   <ul>
                     {modelCheckIssues.map((w, i) => (
-                      <li key={i}>
+                      <li key={i} data-severity={w.severity}>
                         {w.footprintId ? (
                           <button
                             type="button"
-                            className="model-notice-locate"
+                            className="model-issue-locate"
                             aria-label={`Locate ${w.message}`}
                             disabled={
                               !active ||
-                              noticeNavigationBlocked ||
+                              issueNavigationBlocked ||
                               !board.footprints.some((f) => f.id === w.footprintId)
                             }
                             onClick={() => locateModelCheckIssue(w.footprintId!)}
@@ -3026,6 +3253,15 @@ function PCBModelPreview({
               ready={ready && !failed}
               orthographic={orthographic}
               onOrthographicChange={setOrthographic}
+              renderEnabled={renderEnabled}
+              renderLoading={renderLoading}
+              renderDisabled={Boolean(cad.tool || cad.preview || cad.selectionBlocked)}
+              onRenderChange={(enabled) => {
+                setRenderError('');
+                setExportStatus('');
+                setRenderLoading(enabled);
+                setRenderEnabled(enabled);
+              }}
               cadVisible={cadVisible}
               cadColors={cadColors}
               onCadVisibleChange={(visible) => {

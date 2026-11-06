@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, type KeyboardEvent } from 'react';
-import { CircleCheck, CircleX, AlertTriangle, Info } from 'lucide-react';
+import { CircleCheck, CircleX, AlertTriangle } from 'lucide-react';
 
 export default function RuleStatus({
   kind,
@@ -13,7 +13,7 @@ export default function RuleStatus({
 }: {
   kind: 'erc' | 'drc' | 'model';
   report: {
-    issues: readonly { severity: 'error' | 'warning' | 'notice' }[];
+    issues: readonly { severity: 'error' | 'warning' }[];
     complete: boolean;
     truncated?: boolean;
   } | null;
@@ -26,7 +26,6 @@ export default function RuleStatus({
   const current = state === 'ready' || state === 'failed' ? report : null;
   const errors = current?.issues.filter((issue) => issue.severity === 'error').length;
   const warnings = current?.issues.filter((issue) => issue.severity === 'warning').length;
-  const notices = current?.issues.filter((issue) => issue.severity === 'notice').length;
   const incomplete = current && (!current.complete || current.truncated);
   const clean = Boolean(current && !incomplete && errors === 0);
   const label = {
@@ -38,7 +37,7 @@ export default function RuleStatus({
   }[state];
   const description = [
     kind.toUpperCase(),
-    current ? `${errors} errors, ${warnings} warnings, ${notices} notices` : label,
+    current ? `${errors} errors, ${warnings} warnings` : label,
     incomplete ? 'Incomplete checks' : '',
   ]
     .filter(Boolean)
@@ -92,14 +91,6 @@ export default function RuleStatus({
         >
           <AlertTriangle size={14} />
           {warnings ?? '—'}
-        </span>
-        <span
-          className="rule-status-count"
-          data-rule-notices={notices ?? 'unknown'}
-          aria-hidden="true"
-        >
-          <Info size={14} />
-          {notices ?? '—'}
         </span>
         {label && (
           <span className="rule-status-state" aria-hidden="true">

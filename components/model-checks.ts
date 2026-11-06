@@ -5,7 +5,7 @@ import type { PCB } from '@/lib/pcb';
 export type ModelCheckIssue = {
   message: string;
   footprintId?: string;
-  severity: 'error' | 'warning' | 'notice';
+  severity: 'error' | 'warning';
 };
 export type ModelCheckReport = {
   board: PCB;

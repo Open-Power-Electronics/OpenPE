@@ -1857,7 +1857,8 @@ body[data-workspace-resizing='true'] * {
 
 .model-display-panel .model-projection-controls {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 4px;
   margin: 4px 8px 0;
   padding: 8px 0;
@@ -2417,7 +2418,7 @@ body[data-workspace-resizing='true'] * {
   margin-top: 8px;
 }
 
-.pcb-model-notices > summary {
+.pcb-model-issues > summary {
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
@@ -2621,13 +2622,9 @@ body[data-workspace-resizing='true'] * {
   color: var(--brand-ink);
 }
 .rule-status-warnings {
-  color: light-dark(#8f6100, #efbf64);
+  color: var(--muted);
 }
-.rule-status-count:is(
-  [data-rule-errors='unknown'],
-  [data-rule-warnings='unknown'],
-  [data-rule-notices='unknown']
-) {
+.rule-status-count:is([data-rule-errors='unknown'], [data-rule-warnings='unknown']) {
   color: var(--muted);
 }
 .rule-status-state {

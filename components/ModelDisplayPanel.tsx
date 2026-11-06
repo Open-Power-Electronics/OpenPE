@@ -2,6 +2,7 @@
 
 import {
   Box,
+  Aperture,
   Eye,
   EyeOff,
   Grid3X3,
@@ -45,6 +46,10 @@ export default function ModelDisplayPanel({
   ready,
   orthographic,
   onOrthographicChange,
+  renderEnabled,
+  renderLoading,
+  renderDisabled,
+  onRenderChange,
   cadVisible,
   cadColors,
   modelsVisible,
@@ -65,6 +70,10 @@ export default function ModelDisplayPanel({
   ready: boolean;
   orthographic: boolean;
   onOrthographicChange: (value: boolean) => void;
+  renderEnabled: boolean;
+  renderLoading: boolean;
+  renderDisabled: boolean;
+  onRenderChange: (enabled: boolean) => void;
   cadVisible: boolean;
   cadColors: readonly number[];
   modelsVisible: boolean;
@@ -196,7 +205,7 @@ export default function ModelDisplayPanel({
                     </button>
                   ))}
                 </div>
-                <div className="model-projection-controls" role="group" aria-label="Projection">
+                <div className="model-projection-controls" role="group" aria-label="View settings">
                   <button
                     type="button"
                     className="editor-visibility-name"
@@ -207,6 +216,24 @@ export default function ModelDisplayPanel({
                   >
                     <Box size={14} aria-hidden />
                     <span>Orthographic projection</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="editor-visibility-name"
+                    aria-pressed={renderEnabled}
+                    aria-busy={renderLoading}
+                    aria-description="Progressive path tracing with physical materials and studio lighting. Export image waits for the completed render."
+                    disabled={!ready || (!renderEnabled && renderDisabled)}
+                    onClick={() => onRenderChange(!renderEnabled)}
+                    onKeyDown={(event) => {
+                      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }
+                    }}
+                  >
+                    <Aperture size={14} aria-hidden />
+                    <span>Render</span>
                   </button>
                 </div>
               </>

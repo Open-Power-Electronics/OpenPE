@@ -2,15 +2,7 @@
 import QuantityInput from './QuantityInput';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Box,
-  ClipboardCheck,
-  Info,
-  Play,
-  RefreshCw,
-} from 'lucide-react';
+import { AlertCircle, AlertTriangle, Box, ClipboardCheck, Play, RefreshCw } from 'lucide-react';
 import type { ModelCheckIssue, ModelCheckReport } from './model-checks';
 import type { RuleCheckIssue, RuleCheckResult } from '@/lib/design-rule-checks';
 import type { PCBDesignRuleConfig } from '@/lib/pcb-drc';
@@ -69,7 +61,7 @@ type RuleCheckPanelProps = {
   onRun: (settings?: PCBDesignRuleConfig) => void;
   onSelectIssue: (issue: RuleCheckIssue) => void;
   modelReport?: ModelCheckReport | null;
-  onSelectModelCheckIssue?: (notice: ModelCheckIssue) => void;
+  onSelectModelCheckIssue?: (issue: ModelCheckIssue) => void;
   onOpenModel?: () => void;
   onClose: () => void;
 } & DialogSizeProps;
@@ -136,8 +128,6 @@ export default function RuleCheckPanel({
   const modelErrors = modelReport?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
   const modelWarnings =
     modelReport?.issues.filter((issue) => issue.severity === 'warning').length ?? 0;
-  const modelNotices =
-    modelReport?.issues.filter((issue) => issue.severity === 'notice').length ?? 0;
   const incomplete = currentReport && (!currentReport.complete || currentReport.truncated);
   const outdated = stale || !!limitsChanged;
   const canRun =
@@ -305,7 +295,7 @@ export default function RuleCheckPanel({
                 </button>
               </div>
             ) : modelReport.state === 'loading' ? (
-              <p className={styles.notice} role="status">
+              <p className={styles.statusMessage} role="status">
                 Loading models…
               </p>
             ) : (
@@ -319,44 +309,34 @@ export default function RuleCheckPanel({
                     <AlertTriangle size={15} aria-hidden="true" />
                     {modelWarnings} {modelWarnings === 1 ? 'warning' : 'warnings'}
                   </span>
-                  <span className={styles.noticeCount}>
-                    <Info size={15} aria-hidden="true" />
-                    {modelNotices} {modelNotices === 1 ? 'notice' : 'notices'}
-                  </span>
                 </div>
                 {!modelReport.issues.length ? (
                   <p className={styles.empty}>No model issues.</p>
                 ) : (
                   <ul className={styles.issues} aria-label="Model issues">
-                    {modelReport.issues.map((notice, index) => (
+                    {modelReport.issues.map((issue, index) => (
                       <li key={index}>
-                        {notice.footprintId ? (
+                        {issue.footprintId ? (
                           <button
                             type="button"
                             className={styles.issue}
-                            data-severity={notice.severity}
-                            aria-label={`Locate ${notice.message}`}
-                            aria-description={
-                              notice.severity === 'error'
-                                ? 'Error'
-                                : notice.severity === 'warning'
-                                  ? 'Warning'
-                                  : 'Notice'
-                            }
+                            data-severity={issue.severity}
+                            aria-label={`Locate ${issue.message}`}
+                            aria-description={issue.severity === 'error' ? 'Error' : 'Warning'}
                             disabled={
                               !canLocate || !modelReport.canLocate || !onSelectModelCheckIssue
                             }
                             onClick={() => {
-                              if (!composing.current) onSelectModelCheckIssue?.(notice);
+                              if (!composing.current) onSelectModelCheckIssue?.(issue);
                             }}
                             onKeyDown={blockComposingActivation}
                             onKeyUp={blockComposingActivation}
                           >
-                            {notice.message}
+                            {issue.message}
                           </button>
                         ) : (
-                          <div className={styles.issue} data-severity={notice.severity}>
-                            {notice.message}
+                          <div className={styles.issue} data-severity={issue.severity}>
+                            {issue.message}
                           </div>
                         )}
                       </li>
@@ -411,17 +391,17 @@ export default function RuleCheckPanel({
           </fieldset>
         )}
         {sourcePending && (
-          <p className={styles.notice} role="status">
+          <p className={styles.statusMessage} role="status">
             Apply Source edits before checking rules.
           </p>
         )}
         {!sourcePending && outdated && currentReport && (
-          <p className={styles.notice} role="status">
+          <p className={styles.statusMessage} role="status">
             Design or limits changed. Recheck {code}.
           </p>
         )}
         {blockedReason && (
-          <p className={styles.notice} role="status">
+          <p className={styles.statusMessage} role="status">
             {blockedReason}
           </p>
         )}
@@ -441,12 +421,9 @@ export default function RuleCheckPanel({
                 <AlertTriangle size={15} aria-hidden="true" />
                 {warnings} {warnings === 1 ? 'warning' : 'warnings'}
               </span>
-              <span className={styles.noticeCount}>
-                <Info size={15} aria-hidden="true" />0 notices
-              </span>
             </div>
             {incomplete && (
-              <p className={styles.notice} role="status">
+              <p className={styles.statusMessage} role="status">
                 Incomplete checks{currentReport.truncated ? ': issue list truncated.' : '.'}
               </p>
             )}

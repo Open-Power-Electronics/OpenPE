@@ -23,7 +23,14 @@ const licensePaths = new Set([
     'occt-import-js',
     'opencascade',
     'three',
+    'three-gpu-pathtracer',
+    'glsl-smart-denoise',
+    'three-mesh-bvh',
+    'xatlas-web',
+    'vscode-codicons',
+    'kicad-icons',
     'clipper',
+    'newstroke',
   ].map((name) => `/licenses/${name}.txt`),
   '/agents/README.txt',
   '/agents/LICENSE-deepseek',
@@ -371,11 +378,18 @@ async function checkAbout(page, errors) {
   await summary.focus();
   await page.keyboard.press('Enter');
   await dialog.locator('details[data-license]').first().waitFor({ state: 'attached' });
-  await waitForAsync(page, () => {
-    const texts = [...document.querySelectorAll('dialog pre')];
-    return texts.length === 18 && texts.every((text) => text.getAttribute('aria-busy') === 'false');
-  });
-  assert.equal(licenseRequests.length, 18);
+  await waitForAsync(
+    page,
+    (expectedCount) => {
+      const texts = [...document.querySelectorAll('dialog pre')];
+      return (
+        texts.length === expectedCount &&
+        texts.every((text) => text.getAttribute('aria-busy') === 'false')
+      );
+    },
+    licensePaths.size,
+  );
+  assert.equal(licenseRequests.length, licensePaths.size);
   assert.deepEqual(new Set(licenseRequests), licensePaths);
   const names = await dialog.locator('details[data-license] > summary').allTextContents();
   assert.deepEqual(names.slice(0, 3), [
@@ -401,7 +415,11 @@ async function checkAbout(page, errors) {
   await summary.click();
   await summary.click();
   await waitForAsync(page, () => document.querySelector('dialog details')?.open === true);
-  assert.equal(licenseRequests.length, 18, 'Reopening licenses reuses the retained text.');
+  assert.equal(
+    licenseRequests.length,
+    licensePaths.size,
+    'Reopening licenses reuses the retained text.',
+  );
   await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
   assert.equal(await opener.evaluate((element) => element === document.activeElement), true);

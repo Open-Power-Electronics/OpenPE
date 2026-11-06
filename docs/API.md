@@ -6,14 +6,14 @@ Registrations cover Core, host and bundled plugin capabilities. A mounted projec
 
 GUI/Agent parity covers design, simulation and project-file operations through shared preparation and transactions:
 
-| GUI work                                                                          | Agent route                                                                        | Shared boundary                                                                                 |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Schematic placement, Properties, wiring, connected pickup, copy/paste and removal | `schematic.*`, `part.*`, `library.*`                                               | Validated Core edit; original identities/connections retained, copies receive fresh identities  |
-| PCB placement, routing, pickup, Properties, zones and board drawings              | `layout.*`                                                                         | Same geometry preparation, collision checks, fills and single undo result                       |
-| Model CAD and component model selection                                           | `modelCad.*`, `enclosure.exportStep`, `layout.model.*`                             | Exact host-prepared geometry/resource identities, then Core validation                          |
-| SPICE and Thermal settings, probes, Run/Stop and supported result operations      | `simulation.*`, `thermal.*`, `part.spiceModel.*`, `part.sourceType`                | Same mounted plugin handlers, saved-destination gates and automatic verified result restoration |
-| Native Source, Save/Save as, export and local history                             | `source.*`, `project.save`, `project.export`, `versions.*`                         | Same Source/revision gates, native grants and history restoration                               |
-| New/open/example/close/Explorer and ordinary project text                         | `project.new/open/openExample/close/reveal`, `project.examples`, `project.files.*` | Origin-bound workspace actions and existing file drafts/native pickers                          |
+| GUI work                                                                                          | Agent route                                                                        | Shared boundary                                                                                 |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Schematic symbol drawing, placement, Properties, wiring, connected pickup, copy/paste and removal | `schematic.*`, `part.*`, `library.*`                                               | Validated Core edit; original identities/connections retained, copies receive fresh identities  |
+| PCB footprint drawing, placement, routing, pickup, Properties, zones and board drawings           | `layout.*`                                                                         | Same geometry preparation, collision checks, fills and single undo result                       |
+| Model CAD and component model selection                                                           | `modelCad.*`, `enclosure.exportStep`, `layout.model.*`                             | Exact host-prepared geometry/resource identities, then Core validation                          |
+| SPICE and Thermal settings, probes, Run/Stop and supported result operations                      | `simulation.*`, `thermal.*`, `part.spiceModel.*`, `part.sourceType`                | Same mounted plugin handlers, saved-destination gates and automatic verified result restoration |
+| Native Source, Save/Save as, export and local history                                             | `source.*`, `project.save`, `project.export`, `versions.*`                         | Same Source/revision gates, native grants and history restoration                               |
+| New/open/example/close/Explorer and ordinary project text                                         | `project.new/open/openExample/close/reveal`, `project.examples`, `project.files.*` | Origin-bound workspace actions and existing file drafts/native pickers                          |
 
 Model contents and logs remain unavailable to Agents, including explicit project-file reads/writes. Ordinary files are never added automatically to Agent context. Credentials, unrelated projects and arbitrary host paths remain outside these interfaces. Display settings and provider/plugin management are separate from this parity scope. Live scoped tools are available to Codex/Claude; restricted context/proposal providers and detection-only providers retain their documented transport limits.
 
@@ -243,6 +243,82 @@ Copied old values and deleted objects remain available, while existing objects,
 native annotations and unrelated live data are retained. Both commands use the
 ordinary revision, pending Source and close barriers.
 
+### Embedded symbol drawing
+
+`schematic.symbol.get` is a Core query accepting `{schematicId,partId}` and returning
+`{schematicId,partId,name,referencePrefix,value,position,drawing:SymbolDrawing}`.
+It returns an independent editable drawing for a supported single-unit symbol;
+it does not rewrite native data. Multi-unit/alternate bodies, unsupported
+primitives and rounded rectangles reject explicitly without discarding their
+native records.
+
+`schematic.symbol.draw` is a Core object command accepting
+`{schematicId,name,drawing:SymbolDrawing,partId?,referencePrefix?,value?,position?}`.
+Omit `partId` to create a component; supply its current identity to edit it.
+The result is `EditResult` with `selection:[partId]`. GUI and Agent use
+`prepareSymbolDrawing` and the same revision, Source, close and whole-project
+transaction gates. An identical drawing adds no undo edit.
+
+```ts
+type SymbolDrawingGraphic = (
+  | { type: 'rectangle'; start: Point; end: Point }
+  | { type: 'circle'; center: Point; radius: number }
+  | { type: 'polyline'; points: Point[] }
+) & { fill?: 'none' | 'background' | 'outline'; width?: number };
+type SymbolDrawingPin = Point & {
+  number: string;
+  name: string;
+  rotation: 0 | 90 | 180 | 270;
+  length: number;
+  type?:
+    | 'input'
+    | 'output'
+    | 'bidirectional'
+    | 'tri_state'
+    | 'passive'
+    | 'free'
+    | 'unspecified'
+    | 'power_in'
+    | 'power_out'
+    | 'open_collector'
+    | 'open_emitter'
+    | 'no_connect';
+  shape?:
+    | 'line'
+    | 'inverted'
+    | 'clock'
+    | 'inverted_clock'
+    | 'input_low'
+    | 'clock_low'
+    | 'output_low'
+    | 'edge_clock_high'
+    | 'non_logic';
+  hidden?: boolean;
+};
+type SymbolDrawing = { graphics: SymbolDrawingGraphic[]; pins: SymbolDrawingPin[] };
+```
+
+Both arrays are complete replacements, each capped at 256 entries, with at least
+one graphic or pin overall. Local millimetres use +X right and +Y down; positions
+are within ±100,000 mm. Drawing coordinates, radii, strokes and pin lengths use
+0.0001 mm precision. Pin rotation follows KiCad: 0° points right and 90° up.
+Pin length is 0–100,000 mm. Pin numbers are unique printable nonblank strings of
+1–64 characters, names at most 128. Circles have positive radius ≤100,000 mm;
+rectangles need nonzero width/height; polylines have 2–128 points with distinct
+geometry. Stroke width is 0–100 mm. Name is 1–80 printable characters without a
+colon; `referencePrefix` matches `#?[A-Za-z][A-Za-z0-9_]{0,15}` and value is printable
+text of at most 4,096 characters. New position defaults to `{x:0,y:0}` and uses the
+schematic placement grid; omitted prefix/value default to `U`/name. New symbols
+start excluded from simulation and have no assigned footprint.
+
+Edits retain the component UUID, reference, fields, participation, assignment and
+supported hidden native metadata. They create an instance-specific embedded
+`OpenPE:<name>_<UUID>` symbol definition, leaving other instances and bundled
+libraries unchanged. Pins retain native metadata by number. Wired/labelled/marked
+terminal positions cannot move or disappear; disconnect them first. Existing pin
+numbers cannot be removed while `Sim.Pins`, `Sim.Device` or `Sim.Library` is
+nonblank. Normal project validation and primary-board synchronization still apply.
+
 ## Layout capabilities
 
 Owner is `core`; every command declares mutation `document`. Every Layout input includes a current **`boardId`**. The table shows its remaining fields. Queries do not alter the document or regenerate source fills.
@@ -310,7 +386,73 @@ Routes contain 1–65 legs and at most 15,000 points in total. Each non-final le
 
 Move, rotation, deletion and object-property replacements reject changes to locked objects before writes. Connected drag, corner drag and Shove keep locked neighbours fixed. Lock changes have whole-project undo and native persistence; changing only locks retains saved copper fills. Explicit unlocking may share one `layout.track.properties` transaction with a net, layer or width change. Native Source remains an explicit editing path.
 
+### Embedded footprint drawing
+
+`layout.footprint.draw` is a Core object command accepting
+`{boardId,name,drawing:FootprintDrawing,footprintId?,partId?,position?,reference?,value?}`.
+It returns `{revision,boardId,footprintId,selection:[footprintId]}`. Omit
+`footprintId` to create an embedded package, or supply its current identity to
+replace its local drawing. Optional `partId` links a new package to an unplaced
+primary-sheet component. Existing packages cannot be reassigned by this command.
+GUI and Agent share `prepareFootprintDrawing`, complete project validation and
+one undo transaction, including required refresh of already-filled enabled zones.
+
+```ts
+// Pad and BoardLine are the canonical records in lib/pcb.ts.
+type FootprintDrawing = {
+  pads: (Omit<Pad, 'id' | 'netId' | 'locked' | 'unconnected'> & { id?: string })[];
+  graphics: (Omit<BoardLine, 'id' | 'locked'> & { id?: string })[];
+};
+```
+
+Supply both complete arrays: at most 2,000 pads and 10,000 graphics. Their schemas
+derive from the generated canonical pad/graphic definitions, rather than a second
+property schema. `layout.object` supplies the existing footprint; omit pad
+`netId`, `locked`, `unconnected` and graphic `locked` from the drawing. Runtime
+discovery exposes all supported fabrication, text, layer and corner fields.
+
+Pad types are `smd`, `thru_hole` and `np_thru_hole`; shapes are `rect`, `circle`,
+`oval` and `roundrect`. Pad dimensions and through-hole drills are 0.0001–1,000 mm;
+circular pads require equal dimensions, plated drills must be smaller than the
+pad, and SMD pads cannot have drills. Rounded pads require a 0–0.5 corner ratio.
+Local coordinates use ±100,000 mm at 0.000001 mm precision; pad rotation is within
+±360°. Graphics support lines, arcs, circles, polygons and text, using the same
+canonical record fields as board graphics. Arcs require `mid`, polygons require
+intermediate `points`, text requires `text`, and fill applies only to circles and
+polygons. Footprint dimensions are rejected. Full project geometry and aggregate
+limits also apply.
+
+New names match `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}` and create an `OpenPE:<name>`
+embedded identity. Position defaults to `{x:0,y:0}`, rotation to zero and side to
+front. An unlinked package defaults to an unused `FP<number>` reference and value
+equal to its name; `reference`/`value` override these creation defaults. Linked
+captions come from the schematic. Existing name, position, reference and value
+remain unchanged by drawing replacement; their ordinary Properties commands
+remain available.
+
+Existing pad IDs preserve identity and nets; omit IDs for new pads/graphics.
+Without a pad ID, a unique existing pad number identifies the retained pad;
+repeated numbers require explicit existing IDs. IDs from another package reject.
+Edits preserve package pose, side, models, fabrication overrides, retained native
+metadata and unrelated route geometry. Connected pads cannot be removed,
+renumbered or converted to mechanical holes. Pads touching routed copper cannot
+move or change type/layer membership. Locks and bounded copper collision checks
+reject blocked changes; these checks do not establish complete KiCad DRC parity.
+An unchanged drawing adds no undo edit.
+
 ### Layout object Properties
+
+`layout.region.fillet` is a Core object command taking
+`{boardId,kind:'zone'|'graphic',id,radius}` and returning `RevisionResult`.
+It rounds every corner of one unlocked board zone/rule area or polygon graphic
+through the same pure preparation as the GUI preview. Radius must be positive
+and at most 1,000 mm. Only simple convex outer rings without collinear vertices
+are supported; cutouts remain unchanged and must stay strictly inside the result.
+The accepted native polygon has at most 10,000 vertices, six-decimal coordinates
+and a maximum 0.01 mm deviation from circular fillets. Excessive radii, precision
+collapse and geometry work over two million operations reject unchanged. Source,
+revision, close and whole-project undo gates apply; previously filled enabled
+zones refresh in the same accepted transaction.
 
 `layout.object` is a read-only Core query taking `{boardId,kind,id}`, where `kind`
 is `footprint`, `pad`, `track`, `via`, `graphic` or `zone`. It returns an independent
@@ -1121,6 +1263,7 @@ await host.execute('simulation.configure', {
 | Rule-check results, thresholds and engines           | [`lib/design-rule-checks.ts`](../lib/design-rule-checks.ts), [`lib/schematic-erc.ts`](../lib/schematic-erc.ts), [`lib/pcb-drc.ts`](../lib/pcb-drc.ts)                                                                         |
 | Workspace/native/history ports                       | [`lib/workbench-capabilities.ts`](../lib/workbench-capabilities.ts), [`components/Workbench.tsx`](../components/Workbench.tsx)                                                                                                |
 | Official libraries                                   | [`lib/library-capabilities.ts`](../lib/library-capabilities.ts), [`lib/library.ts`](../lib/library.ts)                                                                                                                        |
+| Embedded symbol/footprint authoring                  | [`lib/symbol-drawing.ts`](../lib/symbol-drawing.ts), [`lib/footprint-drawing.ts`](../lib/footprint-drawing.ts)                                                                                                                |
 | Bundled/provider lifecycle                           | [`lib/workbench-plugins.ts`](../lib/workbench-plugins.ts), [`lib/provider-plugin-capabilities.ts`](../lib/provider-plugin-capabilities.ts)                                                                                    |
 | Resident simulation and waveform handlers            | [`lib/simulation-capabilities.ts`](../lib/simulation-capabilities.ts), [`components/SimulationDialog.tsx`](../components/SimulationDialog.tsx), [`components/SimulationWaveforms.tsx`](../components/SimulationWaveforms.tsx) |
 | Resident Thermal FEM handlers                        | [`lib/thermal-capabilities.ts`](../lib/thermal-capabilities.ts), [`components/ThermalSimulation.tsx`](../components/ThermalSimulation.tsx), [`lib/thermal.ts`](../lib/thermal.ts)                                             |

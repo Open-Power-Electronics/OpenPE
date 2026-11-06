@@ -39,18 +39,18 @@ import {
 import type { AgentThermalContext } from '@/context/agent-thermal-context';
 import ThermalField, { ThermalFieldMarkers } from './ThermalField';
 import ThermalComponentHighlight from './ThermalComponentHighlight';
-import { GitIcon, WireIcon } from './EditorIcons';
+import { GitIcon, SymbolIcon, WireIcon } from './EditorIcons';
 import ThermalLayoutResults, { type ThermalLayoutPresentation } from './ThermalLayoutResults';
 import {
   AlertCircle,
   Blocks,
-  Cpu,
   FolderPlus,
   FolderOpen,
   MessageSquareText,
   Home as HomeIcon,
   List,
   MousePointer2,
+  PencilRuler,
   Redo2,
   RotateCw,
   Settings,
@@ -203,6 +203,7 @@ const SimulationDialog = lazy(() => import('./SimulationDialog'));
 const ThermalSimulation = lazy(() => import('./ThermalSimulation'));
 const RuleCheckPanel = lazy(() => import('./RuleCheckPanel'));
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
+const ComponentDrawingEditor = lazy(() => import('./ComponentDrawingEditor'));
 const ProjectHistoryView = lazy(() => import('./ProjectHistoryView'));
 const PluginsPage = lazy(() => import('./PluginsPage'));
 const SettingsDialog = lazy(() => import('./SettingsDialog'));
@@ -272,7 +273,16 @@ const RetainedSchematicToolbar = memo(
   // not build toolbar JSX; revealing always receives current props/actions.
   (previous, next) => !previous.visible && !next.visible,
 );
-type Modal = 'power' | 'library' | 'settings' | 'about' | 'parts' | 'annotation' | 'history' | null;
+type Modal =
+  | 'power'
+  | 'library'
+  | 'settings'
+  | 'about'
+  | 'parts'
+  | 'annotation'
+  | 'history'
+  | 'drawing'
+  | null;
 type Confirmation = {
   kind: ConfirmationKind;
   action: (saveFirst?: boolean) => void | Promise<void>;
@@ -607,6 +617,7 @@ export default function Workbench({
     files.find((file) => file.name === selectedSourceFile) ?? files[0];
   const [layoutOpened, setLayoutOpened] = useState(false);
   const [objectOpened, setObjectOpened] = useState(false);
+  const [modelDrawingBlocked, setModelDrawingBlocked] = useState(false);
   const pcb3DView = useRef<PCB3DViewState | null>(null);
   const layoutAgentContext = useRef<Record<string, unknown> | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -859,7 +870,7 @@ export default function Workbench({
       return;
     if (await changeView('3d')) closeRuleChecks();
   }
-  async function locateModelCheckIssue(notice: ModelCheckIssue) {
+  async function locateModelCheckIssue(issue: ModelCheckIssue) {
     const report = currentModelCheckReport;
     const snapshot = core.getSnapshot();
     if (
@@ -869,8 +880,8 @@ export default function Workbench({
       !report ||
       report.state !== 'ready' ||
       !report.canLocate ||
-      !notice.footprintId ||
-      !report.issues.includes(notice) ||
+      !issue.footprintId ||
+      !report.issues.includes(issue) ||
       snapshot.sourceDraft !== null ||
       snapshot.editingBlocked ||
       report.board !== snapshot.project?.pcb ||
@@ -891,7 +902,7 @@ export default function Workbench({
     setModelCheckFocus({
       request: ++ruleFocusSequence.current,
       board: report.board,
-      footprintId: notice.footprintId,
+      footprintId: issue.footprintId,
     });
     closeRuleChecks();
   }
@@ -3273,7 +3284,7 @@ export default function Workbench({
     () => (
       <div className="editor-tool-group" role="group" aria-label="Place and connect">
         <ToolButton label="Add component" onClick={openSchematicLibrary}>
-          <Cpu size={17} />
+          <SymbolIcon size={17} aria-hidden="true" />
         </ToolButton>
         <ToolButton
           label="Wire"
@@ -3689,6 +3700,17 @@ export default function Workbench({
               <div className="editor-mode-bar">
                 <EditorViewSwitch view={view} onChange={selectEditorView} />
                 <div className="editor-mode-actions" role="group" aria-label="Project actions">
+                  <ToolButton
+                    label="Draw component"
+                    disabled={
+                      sourcePending || Boolean(coreSnapshot.editingBlocked) || modelDrawingBlocked
+                    }
+                    onClick={() => {
+                      if (!modelDrawingBlocked) setModal('drawing');
+                    }}
+                  >
+                    <PencilRuler size={17} />
+                  </ToolButton>
                   {projectWindowActions}
                   {(view === 'canvas' ||
                     ((view === 'layout' || view === '3d') && Boolean(project?.pcb))) &&
@@ -4200,7 +4222,7 @@ export default function Workbench({
                         </aside>
                       ) : (
                         <section className="schematic-properties-empty">
-                          <PropertiesEmptyState icon={Cpu}>
+                          <PropertiesEmptyState icon={SymbolIcon}>
                             {simulationEnabled
                               ? 'Close simulation to inspect component properties.'
                               : tool === 'annotate'
@@ -4337,6 +4359,7 @@ export default function Workbench({
                           onBoardThicknessChange={saveModelBoardThickness}
                           onModeChange={setModelMode}
                           onSketchPointerChange={modelSketchCoordinates.update}
+                          onEditingDraftChange={setModelDrawingBlocked}
                           distanceMeasurement={modelMeasurement}
                           schematic={project.schematic}
                           grid={grid}
@@ -4553,6 +4576,25 @@ export default function Workbench({
               />
             </Suspense>
           </div>
+        )}
+        {modal === 'drawing' && project && doc && (
+          <DeferredDialog title="Draw component" onClose={() => setModal(null)}>
+            <ComponentDrawingEditor
+              project={project}
+              schematic={doc}
+              capabilityHost={capabilityHost}
+              revision={String(coreSnapshot.revision)}
+              initialTab={view === 'layout' || view === '3d' ? 'footprint' : 'symbol'}
+              onClose={() => setModal(null)}
+              onApplied={(kind, id) => {
+                if (kind === 'symbol' && id) {
+                  setSelected(id);
+                  setTool('select');
+                  void changeView('canvas');
+                } else if (kind === 'footprint') void changeView('layout');
+              }}
+            />
+          </DeferredDialog>
         )}
         {(modal === 'library' || modal === 'power') && doc && (
           <DeferredDialog title="Choose symbol" onClose={() => setModal(null)}>

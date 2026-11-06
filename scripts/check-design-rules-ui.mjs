@@ -346,11 +346,20 @@ try {
     assert.equal(
       await action.evaluate((element) => !!element.closest('.status-bar')),
       true,
-      'Rule opens from the error/warning/notice counts in the editor footer.',
+      'Rule opens from the error/warning counts in the editor footer.',
     );
+    assert.equal(await action.locator('.rule-status-count').count(), 2);
     assert.equal(
-      await action.locator('[data-rule-errors], [data-rule-warnings], [data-rule-notices]').count(),
-      3,
+      await action.locator('[data-rule-warnings]').evaluate((element) => {
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--muted)';
+        element.append(probe);
+        const gray = getComputedStyle(probe).color;
+        probe.remove();
+        return getComputedStyle(element).color === gray;
+      }),
+      true,
+      'Footer warnings use muted gray.',
     );
     const order = await page
       .locator('.editor-mode-actions:visible')
@@ -381,7 +390,7 @@ try {
   const runCount = (id) =>
     page.evaluate((id) => window.ruleTestRuns.filter((value) => value === id).length, id);
   const assertUnknownCounts = async (state) => {
-    for (const severity of ['errors', 'warnings', 'notices']) {
+    for (const severity of ['errors', 'warnings']) {
       const count = ruleButton.locator(`[data-rule-${severity}]`);
       assert.equal(await count.getAttribute(`data-rule-${severity}`), 'unknown');
       assert.equal((await count.textContent()).trim(), '—');
@@ -395,7 +404,7 @@ try {
       );
       return (
         counts &&
-        ['errors', 'warnings', 'notices'].every((label) =>
+        ['errors', 'warnings'].every((label) =>
           /^\d+$/.test(
             counts.querySelector(`[data-rule-${label}]`)?.getAttribute(`data-rule-${label}`) ?? '',
           ),
@@ -407,7 +416,6 @@ try {
     for (const [severity, label] of [
       ['error', 'errors'],
       ['warning', 'warnings'],
-      ['notice', 'notices'],
     ]) {
       const expected = await panel(kind).locator(`button[data-severity="${severity}"]`).count();
       const count = ruleButton.locator(`[data-rule-${label}]`);
@@ -1055,12 +1063,6 @@ try {
     'First Model admission publishes its own missing-model warning before Rule opens.',
   );
   assert.equal(
-    await ruleButton.locator('[data-rule-notices]').getAttribute('data-rule-notices'),
-    '0',
-    'An ordinary unmodelled component is a warning, separate from informational notices.',
-  );
-  assert.equal(await ruleButton.locator('[data-model-notices]').count(), 0);
-  assert.equal(
     await runCount('layout.drc'),
     modelDRCRuns,
     'Model uses its own preview counts, not DRC.',
@@ -1074,13 +1076,13 @@ try {
     'Opening the Model report does not run DRC.',
   );
   assert.equal(
-    await page.locator('.pcb-model-notices').count(),
+    await page.locator('.pcb-model-issues').count(),
     0,
-    'Editable Model has no separate notice control.',
+    'Editable Model has no separate issue control.',
   );
-  const modelNotice = panel().getByRole('button', { name: 'Locate J1: No 3D model', exact: true });
-  await modelNotice.waitFor();
-  await modelNotice.click();
+  const modelIssue = panel().getByRole('button', { name: 'Locate J1: No 3D model', exact: true });
+  await modelIssue.waitFor();
+  await modelIssue.click();
   await panel().waitFor({ state: 'detached' });
   assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), '3d');
   assert.equal(
@@ -1093,23 +1095,23 @@ try {
   await unchanged(
     1,
     navigationBaseline,
-    'Model notice inspection and locating preserve native files, revision and undo.',
+    'Model issue inspection and locating preserve native files, revision and undo.',
   );
   await button('Layout').click();
   await ruleButton.click();
   await panel().getByRole('tab', { name: 'Model', exact: true }).click();
-  await modelNotice.click();
+  await modelIssue.click();
   await panel().waitFor({ state: 'detached' });
   assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), '3d');
   await unchanged(
     1,
     navigationBaseline,
-    'Model notice locating from Layout retains the exact project basis.',
+    'Model issue locating from Layout retains the exact project basis.',
   );
   await selectProject(0);
   await openERC(true, true);
   assert.equal(await panel().getByRole('tab', { name: 'Model', exact: true }).isDisabled(), true);
-  assert.equal(await modelNotice.count(), 0, 'Other projects never expose retained model notices.');
+  assert.equal(await modelIssue.count(), 0, 'Other projects never expose retained model issues.');
   const inactiveDRCRuns = await runCount('layout.drc');
   await page.evaluate((id) => {
     const core = window.ruleTestCores[id];

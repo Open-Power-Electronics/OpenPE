@@ -1,4 +1,5 @@
 import { createLucideIcon } from 'lucide-react';
+export { Cpu as FootprintIcon } from 'lucide-react';
 
 // Adapted from Microsoft VS Code Codicons source-control.svg.
 // Round nodes and balanced branch spacing use the shared 2-unit stroke.
@@ -19,6 +20,12 @@ export const SchematicIcon = createLucideIcon('Schematic', [
   ['path', { d: 'M5 3h8v6H5z', key: 'resistor' }],
   ['path', { d: 'M2 6h3m8 0h9m-4 0v6m-4 0h8m-8 4h8m-4 0v4', key: 'circuit' }],
   ['path', { d: 'M14 20h8l-4 3Z', key: 'ground' }],
+]);
+
+// An IEC resistor and leads identify an electrical symbol rather than a physical package.
+export const SymbolIcon = createLucideIcon('Symbol', [
+  ['rect', { x: '7', y: '8', width: '10', height: '8', key: 'resistor' }],
+  ['path', { d: 'M2 12h5m10 0h5', key: 'terminals' }],
 ]);
 
 // Electrical nodes and a connected signal pulse distinguish ERC from PCB checks.

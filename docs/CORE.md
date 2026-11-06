@@ -80,6 +80,18 @@ second document validator. [API](API.md) owns exact command parameters/results.
 
 `modelCad.add/update/remove/duplicate`, `modelCad.sketch.extrude` and `modelCad.boolean` are ordinary whole-project Core transactions. Box, cylinder, extrusion and Boolean bodies live in `org.openpe.model-cad`. Validation checks finite bounded geometry and global UUIDs; duplication allocates fresh body IDs. Model CAD permits up to 64 bodies; sketch extrusion accepts up to six ordered analytic contours and shares the prepared Boolean-solid path. Dedicated local-hole fields are rejected. Identical replacements are clean; read-only CAD queries remain available with pending Source. Rendering and analytical STEP share geometry; CAD adds no electrical/thermal simulation. [Format](FORMAT.md#document-ownership) owns native persistence and complete geometry limits.
 
+### Component drawing transactions
+
+Custom component drawings use pure `lib/symbol-drawing.ts` and
+`lib/footprint-drawing.ts` through `schematic.symbol.draw` and
+`layout.footprint.draw`. GUI and Agent submit the same complete local drawing.
+Symbols fork an embedded definition for the edited instance, preserving other
+instances, native fields and fixed numbered connected terminals. Footprints
+retain package/pad/graphic identities, nets, models and native metadata; new
+records receive fresh IDs. Routed contacts and bounded copper collisions reject
+the complete drawing. Assignment changes share the originating board edit and
+whole-project undo. Accepted fills still refresh through central commit.
+
 ## Read-only rule checks
 
 `schematic.erc` and `layout.drc` are Core queries with mutation `false`, review `none` and no level/plugin requirement. They lazily load pure engines, capture immutable identity/revision and recheck cancellation, pending Source and close/edit barriers after loading. Superseded content rejects; synchronous bounded geometry loops are not mid-loop cancellable. Query options do not impose command-style `expectedRevision`.

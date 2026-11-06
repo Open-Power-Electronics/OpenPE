@@ -29,7 +29,7 @@ export default function CanvasContextMenu({
   active: boolean;
   identity: unknown;
   actions: CanvasMenuAction[];
-  onOpen?: (target: EventTarget | null) => void;
+  onOpen?: (target: EventTarget | null, position?: { x: number; y: number }) => void;
   onError: (message: string) => void;
 }) {
   const [position, setPosition] = useState<{ x: number; y: number; identity: unknown } | null>(
@@ -40,7 +40,8 @@ export default function CanvasContextMenu({
   useLayoutEffect(() => {
     current.current = { active, identity, actions, onOpen, onError };
   });
-  const visible = active && position !== null && position.identity === identity;
+  const visible =
+    active && actions.length > 0 && position !== null && position.identity === identity;
   useLayoutEffect(() => {
     if (!visible) setPosition(null);
   }, [visible]);
@@ -57,9 +58,12 @@ export default function CanvasContextMenu({
       identity: current.current.identity,
       target: e.target,
     });
-    function open(x: number, y: number, node: EventTarget | null) {
+    function open(x: number, y: number, node: EventTarget | null, pointer = false) {
       if (!current.current.active || hasOpenOverlay()) return;
-      current.current.onOpen?.(node);
+      // Object picking must publish its selection/actions before menu identity
+      // and initial keyboard focus are captured.
+      flushSync(() => current.current.onOpen?.(node, pointer ? { x, y } : undefined));
+      if (!current.current.active || !current.current.actions.length) return;
       setPosition({ x, y, identity: current.current.identity });
     }
     const down = (event: Event) => gesture.start(pointer(event as PointerEvent));
@@ -69,7 +73,7 @@ export default function CanvasContextMenu({
     };
     const up = (event: Event) => {
       const click = gesture.finish(pointer(event as PointerEvent));
-      if (click) open(click.x, click.y, click.target);
+      if (click) open(click.x, click.y, click.target, true);
     };
     const cancel = () => gesture.cancel();
     const context = (event: Event) => {
@@ -124,17 +128,26 @@ export default function CanvasContextMenu({
     const outside = (event: PointerEvent) => {
       if (!popup.current?.contains(event.target as Node)) hide();
     };
+    const scroll = (event: Event) => {
+      const scroller = event.target;
+      if (
+        scroller === document ||
+        scroller === window ||
+        (scroller instanceof Element && scroller.contains(target.current))
+      )
+        hide();
+    };
     window.addEventListener('resize', hide);
     window.addEventListener('blur', hide);
-    window.addEventListener('scroll', hide, true);
+    window.addEventListener('scroll', scroll, true);
     document.addEventListener('pointerdown', outside, true);
     return () => {
       window.removeEventListener('resize', hide);
       window.removeEventListener('blur', hide);
-      window.removeEventListener('scroll', hide, true);
+      window.removeEventListener('scroll', scroll, true);
       document.removeEventListener('pointerdown', outside, true);
     };
-  }, [visible]);
+  }, [visible, target]);
 
   function dismiss() {
     flushSync(() => setPosition(null));

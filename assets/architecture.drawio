@@ -10,7 +10,7 @@
                 <mxCell id="human" parent="1" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=center;verticalAlign=middle;spacing=6;" value="Human" vertex="1">
                     <mxGeometry height="42" width="240" x="130" y="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;PCB sketch canvas · Typed picking&#xa;Copper preview Worker · Presentation only" vertex="1">
+                <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;PCB sketch · Picking · Model path tracing&#xa;Copper preview Worker · Presentation only" vertex="1">
                     <mxGeometry height="110" width="340" x="80" y="190" as="geometry"/>
                 </mxCell>
                 <mxCell id="context" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Context Management&#xa;Observations · Capture · Prompt projection" vertex="1">
@@ -19,7 +19,7 @@
                 <mxCell id="agent" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Agent adapters&#xa;Scoped tools · Reviewed proposals&#xa;Reply title metadata" vertex="1">
                     <mxGeometry height="90" width="340" x="930" y="190" as="geometry"/>
                 </mxCell>
-                <mxCell id="api" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#fafafa;fillColor=#202020;strokeColor=#202020;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Uniform API&#xa;Design · Simulation · Project file capabilities" vertex="1">
+                <mxCell id="api" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#fafafa;fillColor=#202020;strokeColor=#202020;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Uniform API&#xa;Design · Symbol / footprint drawings · Simulation · Project files" vertex="1">
                     <mxGeometry height="60" width="1190" x="80" y="330" as="geometry"/>
                 </mxCell>
                 <mxCell id="core" parent="1" style="swimlane;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=#f2fff2;strokeColor=#8fb58f;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=left;verticalAlign=middle;horizontal=1;startSize=40;collapsible=0;container=1;swimlaneFillColor=#f2fff2;spacingLeft=20;" value="Core" vertex="1">

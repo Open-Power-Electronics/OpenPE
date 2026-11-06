@@ -1,5 +1,4 @@
 .panel:global(.surface-dialog) {
-  --rule-warning-ink: light-dark(#8f6100, #efbf64);
   width: 720px;
   height: 560px;
 }
@@ -50,10 +49,7 @@
   color: var(--error-ink);
 }
 
-.summary > span:nth-child(2) > svg {
-  color: var(--rule-warning-ink);
-}
-.noticeCount {
+.summary > span:nth-child(2) {
   color: var(--muted);
 }
 
@@ -84,10 +80,8 @@
   --issue-ink: var(--error-ink);
 }
 .issue[data-severity='warning'] {
-  --issue-ink: var(--rule-warning-ink);
-}
-.issue[data-severity='notice'] {
   --issue-ink: var(--muted);
+  color: var(--muted);
 }
 .issue:is(:hover, :focus-visible):not(:disabled) {
   background: var(--surface-hover);
@@ -111,7 +105,7 @@
   font-size: var(--font-caption);
 }
 
-.notice,
+.statusMessage,
 .error,
 .empty {
   margin: var(--properties-group-gap) 0;
@@ -119,7 +113,7 @@
   overflow-wrap: anywhere;
 }
 
-.notice {
+.statusMessage {
   color: var(--muted);
 }
 

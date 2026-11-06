@@ -407,19 +407,19 @@
   max-width: calc(100% - 24px);
   pointer-events: none;
 }
-.pcb-model-notices {
+.pcb-model-issues {
   max-width: 100%;
   pointer-events: auto;
   font-size: var(--font-small);
   line-height: 1.6;
 }
-.pcb-model-notices > ul {
+.pcb-model-issues > ul {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
 }
-.pcb-model-notices > summary {
+.pcb-model-issues > summary {
   display: block;
   min-height: 30px;
   padding: 4px 8px;
@@ -428,10 +428,10 @@
   list-style: none;
   cursor: pointer;
 }
-.pcb-model-notices > summary::-webkit-details-marker {
+.pcb-model-issues > summary::-webkit-details-marker {
   display: none;
 }
-.pcb-model-notices > ul {
+.pcb-model-issues > ul {
   position: absolute;
   left: 0;
   bottom: calc(100% + 8px);
@@ -443,10 +443,13 @@
   padding: 6px;
   list-style: none;
 }
-.pcb-model-notices > ul > li:not(:has(.model-notice-locate)) {
+.pcb-model-issues > ul > li:not(:has(.model-issue-locate)) {
   padding: 6px 8px;
 }
-.model-notice-locate {
+.pcb-model-issues > ul > li[data-severity='warning'] {
+  color: var(--muted);
+}
+.model-issue-locate {
   display: block;
   width: 100%;
   min-height: 30px;
@@ -454,16 +457,16 @@
   border: 0;
   border-radius: var(--radius);
   background: transparent;
-  color: var(--text);
+  color: inherit;
   font: inherit;
   text-align: left;
   overflow-wrap: anywhere;
   cursor: pointer;
 }
-.model-notice-locate:not(:disabled):is(:hover, :focus-visible) {
+.model-issue-locate:not(:disabled):is(:hover, :focus-visible) {
   background: var(--surface-hover);
 }
-.model-notice-locate:disabled {
+.model-issue-locate:disabled {
   color: var(--muted);
   cursor: default;
 }
@@ -1210,4 +1213,35 @@
   gap: 12px;
   color: var(--muted);
   font-size: var(--font-small);
+}
+.layout-region-fillet-form {
+  display: grid;
+  gap: 12px;
+}
+
+.layout-region-fillet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.layout-region-fillet-radius {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.layout-region-fillet-preview {
+  width: 100%;
+  height: 180px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.layout-region-fillet-preview path {
+  fill: var(--selection-area);
+  stroke: var(--text);
+  stroke-width: 1.5px;
 }

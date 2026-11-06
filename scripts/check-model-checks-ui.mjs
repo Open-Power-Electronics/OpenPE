@@ -107,19 +107,22 @@ board.footprints.push({
 const bundle = await build({
   stdin: {
     contents: `import React,{useState,useRef}from'react';import{createRoot}from'react-dom/client';
-import Preview from'./components/PCBModelPreview';import RulePanel from'./components/RuleCheckPanel';
+import Preview from'./components/PCBModelPreview';import RulePanel from'./components/RuleCheckPanel';import RuleStatus from'./components/RuleStatus';
 function Harness(){const[active,setActive]=useState(true),[readOnly,setReadOnly]=useState(false);
 const[sidebarVisible,setSidebarVisible]=useState(false),view=useRef(null),sequence=useRef(0);
 const[report,setReport]=useState(null),[open,setOpen]=useState(false),[kind,setKind]=useState('model');
 const[focus,setFocus]=useState(null),[sourcePending,setSourcePending]=useState(false);
-window.noticeHarness={setActive,setReadOnly,view,setSourcePending};window.noticeReport=report;
-return <div style={{height:'100vh'}}><button style={{position:'absolute',zIndex:20,right:12,top:12}} onClick={()=>setOpen(true)}>Rule</button>
+window.modelCheckHarness={setActive,setReadOnly,view,setSourcePending};window.modelCheckReport=report;
+return <div style={{height:'100vh'}}><div style={{position:'absolute',zIndex:20,right:12,top:12}}><RuleStatus kind="model"
+report={report?{issues:report.issues,complete:report.state==='ready'}:null}
+state={!report?'unchecked':report.state==='loading'?'checking':report.state==='error'?'failed':'ready'}
+expanded={open} disabled={false} onOpen={()=>setOpen(true)}/></div>
 <Preview board={window.fixture} schematic={window.schematicFixture} active={active} readOnly={readOnly}
 onModelChecksChange={setReport} modelCheckFocus={focus}
 viewState={view} sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)}/>
 {open&&<RulePanel kind={kind} onKindChange={setKind} report={null} sourcePending={sourcePending}
-modelReport={report?{...report,canLocate:report.canLocate&&active}:null} onSelectModelCheckIssue={notice=>{setFocus({request:++sequence.current,board:window.fixture,footprintId:notice.footprintId});setOpen(false)}}
-onRun={()=>{throw Error('Model notices must not run ERC/DRC')}} onSelectIssue={()=>{}} onClose={()=>setOpen(false)}/>}
+modelReport={report?{...report,canLocate:report.canLocate&&active}:null} onSelectModelCheckIssue={issue=>{setFocus({request:++sequence.current,board:window.fixture,footprintId:issue.footprintId});setOpen(false)}}
+onRun={()=>{throw Error('Model checks must not run ERC/DRC')}} onSelectIssue={()=>{}} onClose={()=>setOpen(false)}/>}
 </div>}
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     loader: 'tsx',
@@ -127,13 +130,13 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
   },
   bundle: true,
   write: false,
-  outdir: 'test-results/model-notices-ui',
+  outdir: 'test-results/model-checks-ui',
   platform: 'browser',
   jsx: 'automatic',
   define: { 'process.env.NODE_ENV': '"production"' },
   plugins: [
     {
-      name: 'inspect-notice-navigation',
+      name: 'inspect-model-check-navigation',
       setup(plugin) {
         plugin.onLoad({ filter: /[\\/]PCBModelPreview\.tsx$/ }, async ({ path: filename }) => {
           const source = await readFile(filename, 'utf8');
@@ -145,7 +148,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
             contents: source.replace(
               marker,
               marker +
-                '\n      window.inspectNotices=()=>({camera,orbit,board,selection:selectionRef.current.ids,components,cad:cadRef.current});',
+                '\n      window.inspectModelChecks=()=>({camera,orbit,board,selection:selectionRef.current.ids,components,cad:cadRef.current});',
             ),
           };
         });
@@ -153,7 +156,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
     },
   ],
 });
-await mkdir('test-results/model-notices-ui', { recursive: true });
+await mkdir('test-results/model-checks-ui', { recursive: true });
 const browser = await chromium.launch({
   headless: true,
   channel:
@@ -194,13 +197,20 @@ try {
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
   await page
-    .waitForFunction(() => window.inspectNotices && !document.querySelector('.pcb-model-status'))
+    .waitForFunction(
+      () => window.inspectModelChecks && !document.querySelector('.pcb-model-status'),
+    )
     .catch(async (error) => {
       console.error(await page.locator('body').innerText(), errors);
       throw error;
     });
-  await page.waitForFunction(() => window.noticeReport?.state === 'ready');
-  assert.equal(await page.locator('.pcb-model-notices').count(), 0);
+  await page.waitForFunction(() => window.modelCheckReport?.state === 'ready');
+  const ruleStatus = page.getByRole('button', { name: 'Rule', exact: true });
+  assert.equal(await ruleStatus.locator('.rule-status-count').count(), 2);
+  assert.equal(await ruleStatus.locator('[data-rule-errors]').textContent(), '1');
+  assert.equal(await ruleStatus.locator('[data-rule-warnings]').textContent(), '2');
+  assert.equal(await ruleStatus.getAttribute('aria-description'), 'MODEL. 1 errors, 2 warnings');
+  assert.equal(await page.locator('.pcb-model-issues').count(), 0);
   const panel = page.getByRole('dialog', { name: 'Rule', exact: true });
   const buttons = panel
     .getByRole('list', { name: 'Model issues', exact: true })
@@ -215,21 +225,44 @@ try {
   };
   const inspect = () =>
     page.evaluate(() => {
-      const { camera, orbit, selection } = window.inspectNotices();
+      const { camera, orbit, selection } = window.inspectModelChecks();
       return { target: orbit.target.toArray(), quaternion: camera.quaternion.toArray(), selection };
     });
+  const assertWarningStyle = async () => {
+    // Theme colors transition; wait until count, text and border all reach gray.
+    await page.waitForFunction(() => {
+      const element = document.querySelector('dialog');
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--muted)';
+      element.append(probe);
+      const gray = getComputedStyle(probe).color;
+      probe.remove();
+      const warning = element.querySelector('[data-severity="warning"]');
+      const summary = element.querySelector('[aria-label="Model summary"]');
+      const footerWarning = document.querySelector('[data-rule-warnings]');
+      return (
+        summary.children.length === 2 &&
+        getComputedStyle(summary.lastElementChild).color === gray &&
+        getComputedStyle(warning).color === gray &&
+        getComputedStyle(warning).borderInlineStartColor === gray &&
+        getComputedStyle(footerWarning).color === gray
+      );
+    });
+  };
   await open();
-  assert.equal(await panel.getByLabel('Model summary').textContent(), '1 error1 warning1 notice');
+  assert.equal(await panel.getByLabel('Model summary').textContent(), '1 error2 warnings');
+  await assertWarningStyle();
   assert.deepEqual(await buttons.allTextContents(), [
     'MH1: No 3D model',
     'J1: 3D model unavailable',
     'U1: Model parse failed.',
   ]);
-  assert.equal(await buttons.nth(0).getAttribute('data-severity'), 'notice');
+  assert.equal(await buttons.nth(0).getAttribute('data-severity'), 'warning');
+  assert.equal(await buttons.nth(0).getAttribute('aria-description'), 'Warning');
   assert.equal(await buttons.nth(2).getAttribute('data-severity'), 'error');
   await buttons.first().click();
   await panel.waitFor({ state: 'detached' });
-  await page.waitForFunction(() => window.inspectNotices().selection[0] === 'hole');
+  await page.waitForFunction(() => window.inspectModelChecks().selection[0] === 'hole');
   const hole = await inspect();
   assert.deepEqual(hole.target, [12, -15, board.thickness / 2]);
   assert.equal(
@@ -239,7 +272,7 @@ try {
   await open();
   await buttons.nth(1).focus();
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => window.inspectNotices().selection[0] === 'component');
+  await page.waitForFunction(() => window.inspectModelChecks().selection[0] === 'component');
   const connector = await inspect();
   assert.ok(Math.abs(connector.target[0] - 82) < 1e-8);
   assert.ok(Math.abs(connector.target[1] + 65) < 1e-8);
@@ -249,7 +282,7 @@ try {
   await open();
   await buttons.first().focus();
   await page.keyboard.press('Space');
-  await page.waitForFunction(() => window.inspectNotices().selection[0] === 'hole');
+  await page.waitForFunction(() => window.inspectModelChecks().selection[0] === 'hole');
   await open();
   for (const key of ['Enter', ' '])
     for (const options of [{ isComposing: true }, { keyCode: 229 }])
@@ -274,30 +307,26 @@ try {
   await buttons.nth(1).click();
   assert.deepEqual((await inspect()).selection, ['hole']);
   await buttons.nth(1).dispatchEvent('compositionend');
-  await page.evaluate(() => window.noticeHarness.setSourcePending(true));
+  await page.evaluate(() => window.modelCheckHarness.setSourcePending(true));
   await page.waitForFunction(() => document.querySelector('[data-severity="warning"]').disabled);
-  await page.evaluate(() => window.noticeHarness.setSourcePending(false));
+  await page.evaluate(() => window.modelCheckHarness.setSourcePending(false));
   await page.waitForFunction(() => !document.querySelector('[data-severity="warning"]').disabled);
-  await page.evaluate(() => window.noticeHarness.setActive(false));
+  await page.evaluate(() => window.modelCheckHarness.setActive(false));
   await page.waitForFunction(() => document.querySelector('[data-severity="warning"]').disabled);
-  await page.evaluate(() => window.noticeHarness.setActive(true));
+  await page.evaluate(() => window.modelCheckHarness.setActive(true));
   await page.waitForFunction(() => !document.querySelector('[data-severity="warning"]').disabled);
   await page.setViewportSize({ width: 680, height: 600 });
   const layout = await panel.boundingBox();
   assert.ok(layout.x >= 24 && layout.x + layout.width <= 680 - 24);
-  await page.screenshot({ path: 'test-results/model-notices-ui/notices.png' });
+  await page.screenshot({ path: 'test-results/model-checks-ui/checks.png' });
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
-  await page.waitForFunction(
-    () =>
-      getComputedStyle(document.querySelector('[data-severity="warning"]')).color ===
-      'rgb(214, 214, 214)',
-  );
-  await page.screenshot({ path: 'test-results/model-notices-ui/notices-dark.png' });
+  await assertWarningStyle();
+  await page.screenshot({ path: 'test-results/model-checks-ui/checks-dark.png' });
   await panel.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole('button', { name: 'Orthographic projection', exact: true }).click();
-  await page.waitForFunction(() => window.inspectNotices().camera.isPerspectiveCamera);
+  await page.waitForFunction(() => window.inspectModelChecks().camera.isPerspectiveCamera);
   await open();
   await buttons.nth(1).click();
   assert.ok(Math.abs((await inspect()).target[0] - 82) < 1e-8);
@@ -305,16 +334,16 @@ try {
   await buttons.first().click();
   assert.ok(Math.abs((await inspect()).target[0] - 12) < 1e-8);
   // Read-only history previews permit camera navigation without an editable selection.
-  await page.evaluate(() => window.noticeHarness.setReadOnly(true));
-  await page.waitForFunction(() => window.inspectNotices().selection.length === 0);
-  await page.locator('.pcb-model-notices summary').click();
-  await page.locator('.model-notice-locate').nth(1).click();
+  await page.evaluate(() => window.modelCheckHarness.setReadOnly(true));
+  await page.waitForFunction(() => window.inspectModelChecks().selection.length === 0);
+  await page.locator('.pcb-model-issues summary').click();
+  await page.locator('.model-issue-locate').nth(1).click();
   assert.ok(Math.abs((await inspect()).target[0] - 82) < 1e-8);
   assert.deepEqual((await inspect()).selection, []);
-  assert.deepEqual(await page.evaluate(() => window.inspectNotices().board), board);
+  assert.deepEqual(await page.evaluate(() => window.inspectModelChecks().board), board);
   assert.deepEqual(errors, []);
   console.log(
-    'Model checks: shared error/warning/notice categories, pointer/keyboard locating, mounting holes, IME/Source/activity guards, both projections/themes, read-only and unchanged board passed.',
+    'Model checks: shared error/warning categories, pointer/keyboard locating, mounting holes, IME/Source/activity guards, both projections/themes, read-only and unchanged board passed.',
   );
 } finally {
   await browser.close();

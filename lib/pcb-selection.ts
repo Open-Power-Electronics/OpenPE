@@ -88,6 +88,8 @@ export type PCBSelectionMode = 'replace' | 'add' | 'toggle' | 'subtract';
 export type PCBPointSelectionOptions = {
   preparedFills?: ReadonlyMap<string, Polygon[]>;
   includeFills?: boolean;
+  /** Prefer eligible hits on this visible layer before other visible geometry. */
+  priorityLayer?: BoardLayer;
   /** Closed board regions can be picked through their interior behind precise objects. */
   includeRegionInteriors?: boolean;
   /** Eligible DOM body, caption and outline hits, excluding saved-fill targets. */
@@ -366,8 +368,8 @@ function selectionFills(
 export type PCBPointCandidate = {
   selection?: PCBSelection;
   padId?: string;
-  /** A renderer-confirmed glyph hit, without enlarging ordinary body targets. */
-  directFootprintCaption?: boolean;
+  /** Layers of renderer-confirmed glyph hits, without enlarging ordinary body targets. */
+  directFootprintCaptionLayers?: readonly BoardLayer[];
 };
 type PointScore = {
   distance: number;
@@ -387,17 +389,15 @@ const contourArea = (points: Point[]) =>
 const closerScore = (a: PointScore, b: PointScore) => {
   return (
     Number(!!b.inspection) - Number(!!a.inspection) ||
-    Number(b.priority) - Number(a.priority) ||
     (b.layerRank ?? -1) - (a.layerRank ?? -1) ||
     a.area - b.area
   );
 };
 
-/** Pick the visible geometry nearest the pointer, independently of SVG order or prior selection.
- * Surface and local centre/centreline distance precede explicit priority, optional
- * physical paint order, area and identity ties. Precise pad inspection stays preferred.
- * Empty footprint bodies and pour interiors are fallback targets; fills are never
- * inspected when a precise pad, stroke, graphic or zone boundary already matches.
+/** Pick eligible geometry on the selected visible layer first, then other layers.
+ * Within a layer group, precise geometry precedes region/body/fill fallback;
+ * surface and centre/centreline distance precede physical paint order and area ties.
+ * Without an explicit layer, keep the nearest visible geometry and lazy fill lookup.
  */
 export function choosePCBPointCandidate<T extends PCBPointCandidate>(
   board: PCB,
@@ -435,7 +435,9 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
   let objects: ReturnType<typeof pointObjects> | undefined;
   const allObjects = () => (objects ??= pointObjects(board));
   const priority = (list: string[]) =>
-    !!options.priorityLayer && list.includes(options.priorityLayer);
+    !!options.priorityLayer &&
+    !!layers[options.priorityLayer as keyof PCBDisplay] &&
+    list.includes(options.priorityLayer);
   const layerRanks = options.layerOrder
     ? new Map(options.layerOrder.map((name, index) => [name, index]))
     : undefined;
@@ -518,11 +520,13 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
   };
   const choose = () => {
     if (!scores.length) return;
-    const surface = scores.reduce(
+    const preferred = scores.filter((item) => item.score.priority),
+      pool = preferred.length ? preferred : scores;
+    const surface = pool.reduce(
         (distance, item) => Math.min(distance, item.score.distance),
         Infinity,
       ),
-      nearest = scores.filter((item) => item.score.distance <= surface + tieTolerance),
+      nearest = pool.filter((item) => item.score.distance <= surface + tieTolerance),
       local = nearest.reduce((distance, item) => Math.min(distance, item.score.local), Infinity);
     let winner: (typeof scores)[number] | undefined;
     for (const item of nearest) {
@@ -557,7 +561,9 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       const score = shapeScore({ paths: [], polygons: [padPolygon(owner, pad)], radius: 0 }),
         center = padPosition(owner, pad);
       score.local = Math.hypot(at.x - center.x, at.y - center.y);
-      score.priority = priority(padCopperLayers(board, owner, pad));
+      score.priority = priority(
+        pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
+      );
       score.layerRank = layerRank(
         pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
       );
@@ -687,7 +693,9 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
           ...score,
           local: Math.hypot(at.x - center.x, at.y - center.y),
           area,
-          priority: priority(padCopperLayers(board, owner, pad)),
+          priority: priority(
+            pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
+          ),
           layerRank: layerRank(
             pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
           ),
@@ -707,7 +715,7 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
             layerRank: layerRank([graphic.layer]),
           });
         else if (
-          candidate.directFootprintCaption &&
+          candidate.directFootprintCaptionLayers?.includes(graphic.layer) &&
           layers[graphic.layer] &&
           !graphic.text?.hidden &&
           pcbGraphicSelectionEligible(graphic, filters) &&
@@ -739,13 +747,23 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
             priority: priority([zone.layer]),
             layerRank: layerRank([zone.layer]),
           });
+      const preferredBounds =
+        options.priorityLayer && layers[options.priorityLayer as keyof PCBDisplay]
+          ? pcbFootprintBodyBounds(
+              board,
+              owner,
+              pcbDisplayForLayer(layers, options.priorityLayer as BoardLayer),
+            )
+          : undefined;
       const body =
         bounds && inContour(at, corners(bounds).map(transform))
           ? {
               distance: 0,
               local: 0,
               area,
-              priority: priority([owner.side === 'front' ? 'F.Cu' : 'B.Cu']),
+              priority: Boolean(
+                preferredBounds && inContour(at, corners(preferredBounds).map(transform)),
+              ),
               layerRank: layerRank([owner.side === 'front' ? 'F.Cu' : 'B.Cu']),
             }
           : undefined;
@@ -753,17 +771,23 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     }
   }
   const precise = choose();
-  if (precise) return precise;
+  if (precise && (!options.priorityLayer || scores.some((item) => item.score.priority)))
+    return precise;
   const needsFills =
     layers.copper &&
-    fallback.some((item) => item.zones.some((zone) => zone.filledPolygons !== undefined));
+    fallback.some((item) =>
+      item.zones.some(
+        (zone) => (!precise || priority([zone.layer])) && zone.filledPolygons !== undefined,
+      ),
+    );
   const fills = needsFills
     ? selectionFills(board, layers, filters, options.preparedFills)
     : noCopperFills;
   for (const item of fallback) {
-    if (item.body) accept(item.candidate, item.body);
+    if (item.body && (!precise || item.body.priority)) accept(item.candidate, item.body);
     if (layers.copper)
       for (const zone of item.zones) {
+        if (precise && !priority([zone.layer])) continue;
         const polygons = fills.get(zone.id);
         if (polygons?.length)
           accept(item.candidate, {
@@ -1119,8 +1143,9 @@ export function selectPCBTrackPoint(
   return selected;
 }
 
-/** Point candidates first inspect precise geometry, then saved fills only when nothing else hits.
- * Fill-inclusive queries include all fills. No fill contour is read on a precise ordinary hit.
+/** Keep selected-layer region candidates even behind precise hits on other layers.
+ * Saved-fill candidates are identities only until the picker needs their contours.
+ * Ordinary queries retain precise-first, lazy fill lookup.
  */
 export function selectPCBPoint(
   board: PCB,
@@ -1131,6 +1156,44 @@ export function selectPCBPoint(
   options: PCBPointSelectionOptions = {},
 ): PCBSelection[] {
   if (![at.x, at.y, tolerance].every(Number.isFinite) || tolerance < 0) return [];
+  const preferred: PCBSelection[] = [];
+  const priorityLayer = options.priorityLayer;
+  if (priorityLayer && layers[priorityLayer]) {
+    const zoneCandidate = (zone: BoardZone, point: Point) =>
+      zone.layer === priorityLayer &&
+      pcbZoneSelectionEligible(zone, filters) &&
+      ((options.includeRegionInteriors &&
+        layers.zoneOutlines &&
+        inContour(point, zone.outline) &&
+        !(zone.holes ?? []).some((hole) => inContour(point, hole))) ||
+        (layers.copper && zone.filledPolygons !== undefined));
+    if (options.includeRegionInteriors)
+      for (const graphic of board.graphics)
+        if (
+          graphic.layer === priorityLayer &&
+          graphic.kind === 'polygon' &&
+          (graphic.layer === 'Edge.Cuts' || layers.footprints) &&
+          pcbGraphicSelectionEligible(graphic, filters) &&
+          inContour(at, [graphic.start, ...(graphic.points ?? []), graphic.end])
+        )
+          preferred.push({ kind: 'graphic', id: graphic.id });
+    for (const zone of board.zones)
+      if (zoneCandidate(zone, at)) preferred.push({ kind: 'zone', id: zone.id });
+    if (filters.footprint && layers.footprints && layers.copper)
+      for (const footprint of board.footprints)
+        if (
+          (!footprint.locked || filters.locked !== false) &&
+          footprint.zones?.some(
+            (zone) =>
+              zone.layer === priorityLayer &&
+              pcbZoneSelectionEligible(zone, filters) &&
+              zone.filledPolygons !== undefined,
+          )
+        )
+          preferred.push({ kind: 'footprint', id: footprint.id });
+  }
+  const finish = (candidates: PCBSelection[]) =>
+    preferred.length ? mergePCBSelection(candidates, preferred, 'add') : candidates;
   const rectangle = {
       minX: at.x - tolerance,
       minY: at.y - tolerance,
@@ -1175,10 +1238,10 @@ export function selectPCBPoint(
           !(zone.holes ?? []).some((hole) => inContour(at, hole))
         )
           regions.push({ kind: 'zone', id: zone.id });
-    if (regions.length) return regions;
+    if (regions.length) return finish(regions);
   }
   if (options.includeFills || precise.length || options.hasPrecisePad || !layers.copper)
-    return precise;
+    return finish(precise);
   const fills = selectionFills(board, layers, filters, options.preparedFills),
     selected: PCBSelection[] = [];
   const hits = (zone: BoardZone) =>
@@ -1190,7 +1253,7 @@ export function selectPCBPoint(
       if ((!footprint.locked || filters.locked !== false) && footprint.zones?.some(hits))
         selected.push({ kind: 'footprint', id: footprint.id });
   for (const zone of board.zones) if (hits(zone)) selected.push({ kind: 'zone', id: zone.id });
-  return selected;
+  return finish(selected);
 }
 
 /** Preserve stable selection order and remove duplicate gesture candidates. */

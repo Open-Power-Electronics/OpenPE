@@ -35,6 +35,18 @@ import {
 import { commitWireRoute } from '../lib/wiring';
 import { previewSchematicMove } from '../lib/schematic-move';
 import { val } from '../lib/sexpr';
+import {
+  prepareSymbolDrawing,
+  readSymbolDrawing,
+  symbolDrawingSchema,
+  type SymbolDrawingInput,
+} from '../lib/symbol-drawing';
+import {
+  prepareFootprintDrawing,
+  footprintDrawingSchema,
+  type FootprintDrawingInput,
+} from '../lib/footprint-drawing';
+import layoutPropertySchemas from './layout-property-schemas.json';
 import { schematicTexts } from '../lib/schematic-text';
 import { displayName, MAX_DISPLAY_NAME_LENGTH } from '../lib/display-name';
 import { ownProject } from '../lib/immutable-project';
@@ -152,6 +164,11 @@ const operationCommand = (...args: Parameters<typeof definition>): CoreDefinitio
 export const coreQueryDefinitions: CoreDefinition[] = [
   ...layoutQueryDefinitions,
   definition(
+    'schematic.symbol.get',
+    'Read a supported single-unit component symbol as editable local drawing primitives and electrical pins. Unsupported geometry is preserved and rejected explicitly.',
+    object({ ...sheet, partId: identity }, ['schematicId', 'partId']),
+  ),
+  definition(
     'modelCad.get',
     'Read the bounded box, cylinder, extrusion and Boolean CAD objects for the PCB.',
     object({ boardId: identity }, ['boardId']),
@@ -197,6 +214,39 @@ export const coreQueryDefinitions: CoreDefinition[] = [
 ];
 export const coreCommandDefinitions: CoreDefinition[] = [
   ...layoutCommandDefinitions,
+  objectCommand(
+    'schematic.symbol.draw',
+    'Create or edit one embedded single-unit symbol with rectangles, circles, polylines and electrical pins. Uses local millimetres, preserves other instances and rejects disconnected wired pins. One project undo edit.',
+    object(
+      {
+        ...sheet,
+        partId: identity,
+        name: { type: 'string', minLength: 1, maxLength: 80 },
+        referencePrefix: { type: 'string', pattern: '^#?[A-Za-z][A-Za-z0-9_]{0,15}$' },
+        value: { type: 'string', maxLength: 4096 },
+        position: point,
+        drawing: symbolDrawingSchema,
+      },
+      ['schematicId', 'name', 'drawing'],
+    ),
+  ),
+  objectCommand(
+    'layout.footprint.draw',
+    'Create or edit an embedded footprint with local pads and graphics. Optionally link a new package to a primary schematic part. Retains IDs, net assignments, models and route geometry; rejects locked or colliding copper. One project undo edit.',
+    object(
+      {
+        boardId: identity,
+        footprintId: identity,
+        partId: identity,
+        name: { type: 'string', minLength: 1, maxLength: 80 },
+        position: point,
+        reference: text,
+        value: { type: 'string', maxLength: 4096 },
+        drawing: footprintDrawingSchema(layoutPropertySchemas),
+      },
+      ['boardId', 'name', 'drawing'],
+    ),
+  ),
   operationCommand(
     'modelCad.sketch.extrude',
     'Extrude up to six ordered analytic sketch contours with selected-corner fillet/chamfer and planar Union, Difference or Intersection as one prepared undo edit.',
@@ -1068,6 +1118,12 @@ export class ProjectCore {
       }));
     const schematic = findSchematic(project, args.schematicId);
     if (!schematic) throw new Error('This schematic file is no longer in the project.');
+    if (id === 'schematic.symbol.get')
+      return {
+        schematicId: schematic.id,
+        partId: args.partId,
+        ...readSymbolDrawing(schematic, args.partId),
+      };
     return JSON.parse(serializeProject(schematicSnapshot(project, schematic.id)));
   }
 
@@ -1123,6 +1179,20 @@ export class ProjectCore {
         ...(preview.objects ? { objects: structuredClone(preview.objects) } : {}),
       };
     }
+    if (id === 'layout.footprint.draw') {
+      if (!project.pcb || project.pcb.id !== args.boardId)
+        throw new Error('This PCB layout is no longer in the project.');
+      if (args.partId && !project.schematic.parts.some((part) => part.id === args.partId))
+        throw new Error('Choose a component from the primary schematic.');
+      const result = prepareFootprintDrawing(project.pcb, args as FootprintDrawingInput);
+      this.replaceBoard(result.board);
+      return {
+        revision: String(this.revision),
+        boardId: project.pcb.id,
+        footprintId: result.footprintId,
+        selection: [result.footprintId],
+      };
+    }
     if (id.startsWith('layout.')) {
       const result = executeLayout(project.pcb, id, args);
       // Explicit Fill also enables its target and supplies the requested minimum.
@@ -1144,6 +1214,12 @@ export class ProjectCore {
     let next: Circuit;
     let selection: string[] | undefined;
     switch (id) {
+      case 'schematic.symbol.draw': {
+        const result = prepareSymbolDrawing(schematic, args as SymbolDrawingInput);
+        next = result.circuit;
+        selection = [result.partId];
+        break;
+      }
       case 'schematic.operations': {
         const operations = extractProposal(
           '```openpe\n' + JSON.stringify(args.operations) + '\n```',

@@ -182,6 +182,20 @@ About OpenPE displays packaged `public/licenses/` notices. Three.js uses MIT;
 `occt-import-js` uses LGPL-2.1, and Open Cascade has its LGPL-2.1 exception.
 OpenPE permits modification and reverse engineering needed to debug changes.
 
+Model Render bundles `three-gpu-pathtracer` 0.0.24 and `three-mesh-bvh` 0.9.5
+under MIT. Their unmodified license texts are delivered as
+`public/licenses/three-gpu-pathtracer.txt` and `public/licenses/three-mesh-bvh.txt`
+and appear in About OpenPE. The installed `xatlas-web` 0.1.0 peer retains its
+MIT notice in `public/licenses/xatlas-web.txt`; Render does not use its UV
+unwrapping utility or load its WASM. The path tracer and BVH operate locally on
+render-only scene data without downloading studio images or native Blender.
+The path tracer notice also preserves the MIT attribution to HOVER's
+`ray-tracing-renderer`, identified as the bundled stratified samplers' source.
+The path tracer's denoising shader incorporates Michele Morrone's
+glslSmartDeNoise under BSD-2-Clause. Its embedded 2018–2019 copyright and full
+upstream license, identified by blob `6ce8dacef27906c1c0f9b726af1b28f5065c86c2`,
+are delivered in `public/licenses/glsl-smart-denoise.txt` and About OpenPE.
+
 The Git glyph adapts Microsoft's VS Code Codicons `source-control.svg` at revision
 `ceaa8663a7e63e2bac7f1ecac128ce31404b7487`. The redrawn geometry retains its
 three-node branch structure with round nodes, balanced spacing and the shared

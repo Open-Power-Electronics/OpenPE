@@ -55,6 +55,16 @@ Queries/infrastructure/view controls need no Core level. Metadata grants no perm
 
 ### Supported artifacts
 
+`components/ComponentDrawingEditor.tsx` owns local symbol/footprint drawing
+drafts and invokes the same Core commands as Agents. Pure
+`lib/symbol-drawing.ts` and `lib/footprint-drawing.ts` prepare native embedded
+definitions; Core owns assignment changes and the one accepted undo transaction.
+They add no private design format or resource-library writer. The component STEP
+host's CAD route accepts only current source and explicit body/footprint IDs,
+uses the existing analytical kernel and content-addressed model store, then the
+shared library capability assigns the prepared resource through Core. Source CAD
+remains independent. No new renderer file or process authority is introduced.
+
 Sketch corner fillet/chamfer and Boolean extrusion use pure `lib/model-cad-sketch.ts` through `modelCad.sketch.extrude`, compiling original corner indices to analytical vertical-edge treatment before the shared prepared-shape gate; analytic operands persist as bounded solid recipes. Dedicated local-hole fields are unsupported. The host reads/writes bounded native KiCad projects, exports manufacturing Gerber/drill ZIP and assembly CSV, and exports Model CAD as analytical STEP or OpenSCAD text. Source edits supporting text and displays local PDFs through grant-bound host adapters. Recovery, Git history and SPICE/thermal records remain private stores; snapshots are internal adapters, never public design formats. PE Layout Skill supplies bundled guidance. Transient SPICE and steady PCB thermal execution remain distinct from whole-assembly 3D simulation.
 
 ## Repository management
@@ -115,6 +125,24 @@ During Next.js development, `next.config.ts` starts one process-local geometry-p
 Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable; meshes and preparation receipts never enter native design or recovery. This host geometry service is independent of simulation plugins and runs no solve. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve; ambiguous or missing edges fail. No arbitrary programs, executables, paths, imported/Boolean topology editing or new simulation authority are exposed. File Export's OpenSCAD type runs pure `lib/model-cad-scad.ts` in the Electron export adapter over the host-parsed snapshot: boxes, cylinders, extrusions and Boolean cutout recipes keep their XYZ poses, edge treatments are rejected and circles are faceted. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it.
 
 ERC/DRC are pure, lazy Core queries. Reports, thresholds and locate markers are presentation, independent of simulation lifecycle. [Design rules](DESIGN-RULES.md) defines supported coverage and partial-report semantics.
+
+Model's optional Render mode remains entirely within the GUI.
+`components/model-studio-renderer.ts` owns a progressive WebGL path
+tracer backed by the pinned `three-gpu-pathtracer` scene generator/renderer and
+`three-mesh-bvh`, without the unused timed/low-resolution wrapper.
+Workbench lazy-loads the Model component, which statically owns its Render
+implementation. Retained scene callbacks do not dynamically import modules from
+an implementation that Fast Refresh may have retired.
+`components/model-render-scene.ts` creates disposable render-only geometry,
+material and texture-state copies, a procedural studio
+environment, softboxes and floor; image bytes are shared read-only and the retained
+editable scene remains independent.
+`components/model-render-environment.ts` prepares the owned studio map and its
+importance distributions using current Three texture APIs.
+Viewport and completed PNG output share the same accumulated image. No native
+Blender process, downloaded environment, host capability or document state is
+added. [Layout](LAYOUT.md) owns convergence, cancellation and appearance limits;
+[Libraries](LIBRARIES.md#licenses-and-replaceable-parser) owns dependency notices.
 
 Thermal settings/fields stay in the feature session. Workbench publishes generic analysis-panel/drawing/readout slots to Layout; Layout displays the selected-surface raster and real-node probes in its existing camera without storing fields as PCB data or introducing another execution path.
 
@@ -256,6 +284,14 @@ Recovery validates the full current envelope; exact-source import metadata uses 
 Cleanup removes only confirmed unused code/copies or reproducible output without active consumers. `tmp/` holds local experiments and evidence, excluded from Git, formatting and typecheck; maintained tools belong in `scripts/`. Curated project `spice/` and `thermal/` results also stay outside Git. Removing generated files from tracking preserves local copies. Resolve exact workspace-contained paths and reject links before recursive deletion. Preserve projects, recovery, Git history, offline models/tools, corresponding sources/notices and current evidence/builds. Ignored `.openpe/` or `test-results/` content is not automatically disposable.
 
 ## Verification
+
+`tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts` and
+`tests/footprint-drawing.test.ts` cover embedded component authoring, native
+reopening, shared human/Agent commands and atomic rejection.
+`node scripts/check-component-drawing-ui.mjs` exercises the actual drawing dialog
+in an isolated browser against Core, including invalid/stale/IME drafts.
+It starts no Electron app,
+provider or native CAD kernel. Desktop/native kernel evidence remains opt-in.
 
 GUI/Agent design parity is exercised by `tests/gui-agent-parity.test.ts`: shared
 preparations produce matching native KiCad files and undo results behind the

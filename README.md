@@ -7,6 +7,7 @@
 ## What you can do
 
 - Edit native KiCad schematics and Source, manually place and route PCBs, and run ERC/DRC.
+- Draw custom single-unit component symbols and embedded footprints through shared GUI/Agent commands.
 - Inspect boards in 3D and create Model CAD solids with sketch contour Booleans, extrusion, fillets, chamfers and solid Boolean operations.
 - Run supported SPICE transients and steady PCB thermal analysis.
 - Keep independent projects and conversations, recover drafts and compare local Git history.

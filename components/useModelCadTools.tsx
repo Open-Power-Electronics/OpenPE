@@ -18,8 +18,10 @@ import {
   Redo2,
   Ruler,
   RotateCw,
+  SlidersHorizontal,
   Trash2,
   Undo2,
+  X,
 } from 'lucide-react';
 import type { CapabilityHost } from '@/api/capabilities';
 import {
@@ -42,6 +44,7 @@ import {
   type ModelCadSelectionFilters,
 } from '@/lib/model-cad-selection';
 import { modelCadSelectableFaces } from './model-cad-faces';
+import type { CanvasMenuAction } from './CanvasContextMenu';
 import Select from './Select';
 import { ExtrudeIcon } from './EditorIcons';
 import ModelCadPanel from './ModelCadPanel';
@@ -622,6 +625,72 @@ export function useModelCadTools({
     },
   ];
   const drawingSketch = tool === 'sketch' && sketchPhase === 'sketch';
+  const contextActions: CanvasMenuAction[] = [];
+  if (object && selection.length && !tool && !pan && !baseBlocked)
+    contextActions.push({
+      id: 'cad-properties',
+      label: 'Properties',
+      icon: SlidersHorizontal,
+      run: () => {
+        setOpened(true);
+        onShowSidebar?.();
+      },
+    });
+  if (canTreat && !pan)
+    contextActions.push(
+      {
+        id: 'cad-fillet',
+        label: 'Fillet edges',
+        icon: Radius,
+        run: () => startFeature('fillet'),
+      },
+      {
+        id: 'cad-chamfer',
+        label: 'Chamfer edges',
+        icon: CornerDownRight,
+        run: () => startFeature('chamfer'),
+      },
+    );
+  if (canCombine && !pan && solidOperandsOnly && selectedBodyIds.length >= 2)
+    contextActions.push({
+      id: 'cad-boolean',
+      label: 'Boolean solids',
+      icon: Combine,
+      run: () => startFeature('boolean'),
+    });
+  if (canEdit && !pan)
+    contextActions.push(
+      { id: 'cad-move', label: 'Move solid', icon: Move3d, run: move },
+      { id: 'cad-rotate', label: 'Rotate solid 90°', icon: RotateCw, run: () => rotate() },
+      { id: 'cad-duplicate', label: 'Duplicate solid', icon: Copy, run: duplicate },
+      { id: 'cad-delete', label: 'Delete solid', icon: Trash2, destructive: true, run: remove },
+    );
+  if (drawingSketch && !blocked && sketchReady)
+    contextActions.push(
+      {
+        id: 'sketch-fillet',
+        label: 'Fillet sketch corners',
+        icon: Radius,
+        run: () => sketchInput.current?.modify('fillet'),
+      },
+      {
+        id: 'sketch-chamfer',
+        label: 'Chamfer sketch corners',
+        icon: CornerDownRight,
+        run: () => sketchInput.current?.modify('chamfer'),
+      },
+    );
+  if (tool || pan)
+    contextActions.push({
+      id: 'cad-cancel',
+      label: 'Cancel tool',
+      icon: X,
+      disabled: busy,
+      run: () => {
+        setPan(false);
+        dismissTool();
+      },
+    });
   const toolbar = (
     <>
       <div className="editor-tool-group">
@@ -957,6 +1026,7 @@ export function useModelCadTools({
     ) : null;
   return {
     toolbar,
+    contextActions,
     panel,
     placementPanel,
     inspecting: opened && !tool && Boolean(object),

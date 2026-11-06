@@ -21,6 +21,25 @@ bounded parser and one assignment/board undo transaction. [API](API.md#layout-ob
 documents the direct commands and generated property schemas; these do not add
 collision checks to numerical Properties beyond their documented Core validation.
 
+## Custom component drawings
+
+Draw component creates or edits a native embedded symbol or footprint through
+shared Core commands. Symbol drawing supports one unit with rectangles, circles,
+polylines and typed/numbered pins, up to 256 graphics and 256 pins. Unsupported
+primitives or multiple units fail before editing; Source retains the original.
+Existing connected numbered terminals cannot move or disappear, and assigned
+simulation pin numbers remain. Other instances retain their own definitions.
+
+Footprint drawing uses package-local pads and artwork, up to 2,000 pads and
+10,000 graphics. Canonical pad/graphic schemas remain authoritative. New packages
+can be board-only or linked to an unassigned primary-sheet component. Editing
+retains package pose/side/library identity, IDs, net assignments, models, zones
+and hidden native properties. Connected pad numbers/removal and routed pad
+copper geometry changes are blocked. Changed copper is checked against the
+existing bounded DRC engine and default thresholds, including hidden/fixed
+geometry; unrelated pre-existing violations do not prevent artwork-only edits.
+This does not establish full DRC coverage or manufacturing readiness.
+
 ## Project integrity and schematic synchronization
 
 Every edit and accepted synchronization is a complete-project Core transaction.
@@ -339,7 +358,15 @@ Containment and crossing marquees cover all visible layers in the default view;
 explicit priority restricts them to that layer, retaining category filters and
 selection modifiers. Through pads/vias participate on each physical copper
 layer; restricted footprint bounds use only that layer's body geometry. Point
-ties follow explicit priority or the default physical stack.
+picks prefer eligible hits on the explicitly selected visible layer before
+other layers, even when off-layer geometry is nearer. Within that layer, precise
+pad/stroke hits precede region/body/fill interiors. A missing, hidden or filtered
+current-layer hit falls back to other eligible visible geometry. With no explicit
+layer, nearest geometry and physical-stack ties retain their ordinary order.
+Selected-layer region and saved-fill candidates remain available behind off-layer
+precise hits; fill contours stay lazy until needed by the exact picker. Footprint
+priority follows the geometry under the pointer rather than distant child artwork;
+shared through copper belongs to each copper layer and non-plated holes to Edge.Cuts.
 Select all and explicit report navigation still cover all eligible visible
 layers. Copper row selection also chooses the routing layer; a noncopper row
 retains the copper tool layer and exits active copper drawing
@@ -507,6 +534,18 @@ preview and exact commit checks. `/` posture belongs only to D.
 
 ### Saved zone fills
 
+Round corners accepts one unlocked board zone, rule area or polygon graphic.
+The outer ring must be simple and convex, with no collinear corners; cutouts
+remain unchanged and must stay strictly inside the rounded ring. One positive
+radius up to 1,000 mm applies to every corner. Overlapping fillets, precision
+collapse, more than 10,000 resulting vertices or two million geometry operations
+reject the edit without changing accepted geometry. Preview and
+`layout.region.fillet` share `lib/pcb-region-fillet.ts`: native straight polygon
+vertices approximate circular fillets within 0.01 mm, including six-decimal
+coordinate rounding. This is polygonal rounding, not native analytical arcs.
+Object IDs, layers, rules and unrelated records survive. Core refreshes previously
+filled enabled zones in the same undo edit; fill failure rejects the complete edit.
+
 Zone completion by Enter/double-click/closed polygon commits once and
 restores canvas focus; rejection retains the draft/focus for retry. Properties
 edits net/layer, clearance, minimum width, thermals, priority and bounds.
@@ -649,13 +688,107 @@ original paint.
 
 Visualization uses Layout-styled Views, Display and Explosion tabs, initially Views.
 Views offers Top, Bottom, Front, Back, Left, Right and Isometric presets in a
-compact two-column grid, with Isometric spanning the final row. An Orthographic
-projection toggle follows a soft divider. Controls retain visible labels and
+compact two-column grid, with Isometric spanning the final row. Orthographic
+projection and Render toggles follow a soft divider. Controls retain visible labels and
 aligned icon/text columns. All view icons are 14 px; the first column shares the
 12 px leading inset and 34 px text alignment of disclosure headers, visibility
 rows and Selection. The toggle retains its pressed state and accessible name. View presets
 retain the orbit target, zoom and projection mode and explicitly redraw the
 current scene, including after view or project restoration.
+
+Render enables progressive, multi-bounce GPU path tracing. A separate presentation
+scene copies the current visible physical meshes into render-only PBR materials,
+with studio softboxes, a procedural HDR environment and a matte floor below the
+assembly. Reflections, indirect illumination and soft shadows are sampled from
+that scene; no native Blender process or downloaded environment is used. Material
+interpretation is a display approximation, not measured optical data or a promise
+of matching Blender/Cycles output. Component colours, maps and authored opacity
+remain represented without inventing a measured glass or metal classification.
+Render owns independent geometry, material and texture-state copies; only image
+bytes are shared read-only with the ordinary preview. Authored face groups are
+partitioned into single-material render meshes before tracing, preserving STEP
+face colours and material indices through the tracer's geometry merge. Explicit PMMA CAD material
+uses a display-only acrylic interpretation with transmission 0.92 and refractive
+index 1.49. Generic translucent STEP surfaces retain alpha without inferring an
+optical medium.
+Board copper, laminate, silkscreen and multiply-painted solder mask receive
+render-only physical shading. The current visible native tracks, pads, vias and pours
+remain in the render scene as opaque copper. The mask is a thin pigmented
+dielectric with transmission 0.26, refractive index 1.55, zero modelled thickness
+and clearcoat, so covered copper remains visible through the coating. Existing
+native mask apertures expose bare pads; opaque FR4 blocks internal and underside
+layers. These bounded optical approximations do not change authored material records.
+
+`components/model-copper-relief.ts` derives owned mask normal and clearcoat-normal
+maps from the union of actual visible outer-copper triangles. Pairing requires
+explicit `F.Mask`/`F.Cu` or `B.Mask`/`B.Cu` tags. The 35 µm shading height is a
+display assumption, not native copper thickness or a measured stackup. It changes
+normals only; vertex positions, UVs, native content and STEP geometry stay unchanged.
+Each mask's optional refinement is bounded to 1,024 px longest side, 250,000
+triangles, one million scanlines and 96 million filled pixels. Unsupported UVs or
+layer tags and excessive work omit that normal-map refinement while preserving
+the full physical geometry for path tracing.
+
+Still views accumulate 64 samples with a three-bounce path budget, three
+transmission traversals and edge-preserving denoising.
+Multiple importance sampling retains direct studio-light sampling to limit noise.
+The working image uses 75%
+of each dimension after applying a 2× pixel-ratio and 2,560 px longest-side cap;
+the viewport and PNG retain their original dimensions. Sampling begins with three
+tiles per animation frame and adapts up to 27 tiles as the preceding GPU batch
+finishes. A nonblocking fence after presentation keeps one tracing batch in
+flight; busy GPUs reduce the batch toward one tile. Tile submission checks an
+eight-millisecond CPU deadline between tiles. This is not a GPU execution-time
+guarantee. A 50 ms grace period accommodates asynchronous fence visibility;
+only a sustained wait reduces the batch. If fencing is unavailable, batches stay at three tiles. Camera, scene
+and size changes reset the batch, and disposing Render releases its fence.
+Larger batches skip redundant intermediate denoising passes while retaining the
+complete 64-sample image and final denoising for display and export.
+These settings favour responsiveness over fine shadow, reflection and transmission
+detail. Camera motion uses a responsive preview and resets path
+accumulation; current geometry, display, projection, explosion and viewport changes
+also restart the image. This temporary raster preview, also used during preparation
+and before the first sample, omits optical transmission on private materials;
+the path-traced scene retains its full transmission values. Hidden Model views
+pause work. The engineering reference plane and editing
+overlays are omitted from the path-traced image, while their ordinary-view settings
+and the editable scene remain retained. Render is available only without an active
+CAD tool or unapplied CAD geometry draft. Starting a tool or creating such a draft
+switches Render off so the editing preview remains visible. Camera, visibility,
+projection and explosion remain interactive. Render defaults off and belongs only to
+the mounted project's presentation through navigation. It changes no native
+geometry, material records, revision, undo or recovery data. Preparation, sampling,
+export and retryable errors share the center of the drawing's bottom
+status row, independent of the selected Visualization tab. Completion clears the
+render status text while retaining the rendered image and active mode. The Render button
+retains its busy and pressed states. Read-only previews without that footer keep
+inline feedback. Disabling Render or disposing the view releases its GPU resources.
+
+Render shader preparation has a 120-second deadline and can be cancelled by
+disabling Render. Before compiling the pinned shader, the renderer removes
+unused sheen, iridescence, fog and nonrectangular-light calculations; its scene
+and material adapters never enable those features. Metal, clearcoat, transmission and direct-light sampling
+remain active. Studio softboxes and the HDR environment share one shadow and
+material-evaluation path. The BVH traversal stack is sized from the deepest generated tree
+plus two entries, rounded up to four-entry buckets; no geometry or tree depth is
+truncated. Shader specialization rejects a mismatched pinned source explicitly.
+Graphics-driver compilation latency varies. The deadline bounds preparation,
+not total rendering time; compilation failure remains visible and retryable.
+
+The renderer directly owns one pinned path-tracing renderer and scene generator.
+It creates no unused low-resolution renderer, timed fade or empty-scene upload.
+The Model component and Render implementation load together when Model is first
+opened. Render still creates its scene and GPU resources only when enabled;
+retained callbacks never start a dynamic import across a development hot update.
+The retained scene also tracks its component implementation and view-ref identity,
+so a hot update disposes old native callbacks and rebuilds presentation without
+resetting the mounted component's drafts or external camera state.
+`components/model-render-environment.ts` prepares the generated studio map with
+current Three texture sources. Its half-float radiance and inverse importance
+distributions retain the pinned sampler's values; it does not recolour or
+downsample the environment. These preparation optimizations retain the sampling,
+working resolution, lighting, optical materials and denoising settings above.
+
 Tabs support arrow keys and Home/End and retain
 their selection across drawer, view and project switches. Only the active panel
 is exposed. Display ends with a Reference plane eye control and a 14 px grid icon,
@@ -719,10 +852,10 @@ reads current board/captions/CAD/Source/revision guards. Unrelated schematic
 poses retain geometry. Solid pose/name changes retain meshes; changed shape,
 holes or appearance replace only affected resources. Commit/preview groups own
 separate resources. Replacement/close aborts obsolete work and disposes WebGL
-resources. Missing models show notices without blocking the board or offering a
-retry action. The notice summary sits in the lower-right drawing corner, 12 px
-inside the right edge and 14 px above the status row. Notices expand above it within
-a height-bounded scrollable list that stays inside narrow drawing bounds. The lower-left 3D ruler shows native
+resources. Missing models show warnings without blocking the board or offering a
+retry action. Editable preview diagnostics appear in Rule and the footer
+Error/Warning summary. Read-only history retains a lower-right expandable
+Error/Warning summary with a height-bounded scrollable list inside the drawing bounds. The lower-left 3D ruler shows native
 X/Y/Z axes with rounded strokes and one circular labelled endpoint per axis,
 following camera orientation and scaling around a fixed overlay origin.
 The overlay sits 4 px above the drawing bottom. Its 112 × 116 px area uses
@@ -951,7 +1084,11 @@ selection paint, annotations and gestures. Longest side is capped at 4096 px:
 
 - Schematic: complete visible content/text plus 4 mm, with theme/layers/grid.
 - Layout: closed board bounds, up to 20 px/mm, with layers/grid/airwires.
-- Model: current camera at canvas resolution with transparency.
+- Model: current camera at canvas resolution with transparency in the standard
+  view; Render waits asynchronously for all 64 samples of the current image before
+  capturing the same studio appearance and background. Hiding the view, disabling
+  Render or changing its captured scene/camera cancels a pending render export.
+  Export omits editing previews and retains the live camera and design destination.
 
 Electron validates PNG/decoded dimensions before the picker and writes atomically;
 renderer paths are rejected. Cancellation is silent; errors remain actionable.
@@ -1007,6 +1144,19 @@ Model display groups, hidden-surface picking/Fit and material preservation are a
 covered by `tests/model-board-display.test.ts`. Plane-aware live readouts, independent
 project snapshots and unchanged-pointer notification suppression are covered by
 `tests/model-sketch-coordinates.test.ts`.
+Render scene/material isolation is covered by `tests/model-render-scene.test.ts`;
+bounded outer-copper normal maps and unchanged native geometry/UVs are covered by
+`tests/model-copper-relief.test.ts`. Renderer lifecycle handling is covered by
+`tests/model-studio-renderer.test.ts`. The browser-only
+`node scripts/check-model-render-ui.mjs` exercises the GPU path tracer and PNG
+output, camera/material preservation, IME, retained display state and release
+across toggles; its fixed STEP fixture does not validate native model parsing,
+desktop integration or equivalence to a Blender render.
+`node scripts/check-model-render-hmr-ui.mjs` exercises real Next/Turbopack hot
+updates in a private source copy, including retired callbacks, Render toggles,
+preparation, hidden views and retained drafts/camera/native data. It never edits
+or reloads the running development app. Its two-sample fixture checks lifecycle,
+not image quality.
 Two-point measurement state, finite/invalid picks, visible signed deltas/angles,
 unnumbered scale-bar-aligned graduations, visible component centers and
 surface/estimated-body picking, snap candidates and visible drawing anchors are

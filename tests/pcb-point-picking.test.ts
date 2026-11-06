@@ -296,7 +296,7 @@ test('precise hits never read saved fills, while fallback respects visible pours
   );
 });
 
-test('hidden layers and disabled filters are excluded and priority or IDs only resolve genuine ties', () => {
+test('hidden layers and disabled filters are excluded before selected-layer priority and identity ties', () => {
   const board = createEmptyPCB(),
     layers = defaultPCBDisplay();
   board.tracks = [
@@ -376,7 +376,7 @@ test('hidden layers and disabled filters are excluded and priority or IDs only r
   );
 });
 
-test('equal geometric distances use the active copper layer before comparing track lengths', () => {
+test('the selected copper layer wins within hit tolerance before comparing distances or track lengths', () => {
   const board = createEmptyPCB();
   board.tracks = [
     { ...track('back', { x: -3, y: 0 }, { x: 3, y: 0 }), layer: 'B.Cu' },
@@ -401,8 +401,19 @@ test('equal geometric distances use the active copper layer before comparing tra
       { x: 0.15, y: 0 },
       { tolerance: 0.2, priorityLayer: 'F.Cu' },
     )?.selection.id,
+    'front',
+    'The selected layer wins even when the other layer has a closer centreline.',
+  );
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      defaultPCBDisplay(),
+      candidates,
+      { x: 0.15, y: 0 },
+      { tolerance: 0.2 },
+    )?.selection.id,
     'back',
-    'A genuinely closer centreline still precedes the active layer.',
+    'Physical stack mode still uses the nearest geometry.',
   );
 });
 
@@ -413,7 +424,7 @@ test('viewport numeric ties absorb subpixel pointer noise without hiding a visib
     track('front', { x: 0, y: -6 }, { x: 0, y: 6 }),
   ];
   const candidates = board.tracks.map((item) => candidate('track', item.id)),
-    options = { tolerance: 0.2, tieTolerance: 0.00001, priorityLayer: 'F.Cu' };
+    options = { tolerance: 0.2, tieTolerance: 0.00001, layerOrder: ['B.Cu', 'F.Cu'] };
   assert.equal(
     choosePCBPointCandidate(
       board,
@@ -453,10 +464,183 @@ test('subpixel tie groups are anchored to the closest geometry and cannot depend
         defaultPCBDisplay(),
         items,
         { x: 0, y: 0.03 },
-        { tolerance: 0.1, tieTolerance: 0.015, priorityLayer: 'F.Cu' },
+        { tolerance: 0.1, tieTolerance: 0.015 },
       )?.selection.id,
       'b',
     );
+});
+
+test('selected-layer tracks beat closer off-layer pad inspection and fall back when hidden or filtered', () => {
+  const part = owner();
+  part.side = 'back';
+  part.pads[0].layers = ['B.Cu'];
+  const board = {
+    ...createEmptyPCB(),
+    footprints: [part],
+    tracks: [
+      { ...track('front', { x: -4, y: 0.35 }, { x: 4, y: 0.35 }), width: 0.2 },
+      { ...track('back', { x: -4, y: 0 }, { x: 4, y: 0 }), layer: 'B.Cu' as const },
+    ],
+  };
+  const layers = defaultPCBDisplay();
+  const pad = { padId: 'pad' };
+  const front = candidate('track', 'front');
+  const candidates = [pad, candidate('track', 'back'), front];
+  const options = { tolerance: 0.3, priorityLayer: 'F.Cu', filters };
+  const before = structuredClone(board);
+  for (const list of [candidates, candidates.toReversed()]) {
+    assert.equal(choosePCBPointCandidate(board, layers, list, { x: 0, y: 0 }, options), front);
+    assert.equal(
+      choosePCBPointCandidate(board, layers, list, { x: 0, y: 0 }, { tolerance: 0.3, filters }),
+      pad,
+    );
+    assert.equal(
+      choosePCBPointCandidate(
+        board,
+        layers,
+        list,
+        { x: 0, y: 0 },
+        {
+          ...options,
+          filters: { ...filters, track: false },
+        },
+      ),
+      pad,
+      'A disabled selected-layer category falls back to eligible geometry.',
+    );
+  }
+  layers['F.Cu'] = false;
+  assert.equal(choosePCBPointCandidate(board, layers, candidates, { x: 0, y: 0 }, options), pad);
+  layers['F.Cu'] = true;
+  assert.equal(
+    choosePCBPointCandidate(board, layers, candidates, { x: 0, y: -1 }, options),
+    undefined,
+    'Layer priority never expands the geometric hit tolerance.',
+  );
+  assert.deepEqual(board, before);
+});
+
+test('footprint priority comes from intersected artwork rather than a distant child on the selected layer', () => {
+  const part = owner();
+  part.graphics.push({
+    id: 'distant-back-ink',
+    layer: 'B.SilkS',
+    width: 0.1,
+    start: { x: 20, y: -1 },
+    end: { x: 20, y: 1 },
+  });
+  const board: PCB = {
+    ...createEmptyPCB(),
+    footprints: [part],
+    graphics: [
+      {
+        id: 'back-ink',
+        layer: 'B.SilkS',
+        width: 0.1,
+        start: { x: -1, y: 0.3 },
+        end: { x: 1, y: 0.3 },
+      },
+    ],
+  };
+  const body = candidate('footprint', part.id),
+    ink = candidate('graphic', 'back-ink');
+  const options = { tolerance: 0.3, priorityLayer: 'B.SilkS', filters };
+  for (const candidates of [
+    [body, ink],
+    [ink, body],
+  ])
+    assert.equal(
+      choosePCBPointCandidate(board, defaultPCBDisplay(), candidates, { x: 0, y: 0 }, options),
+      ink,
+    );
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      defaultPCBDisplay(),
+      [body],
+      { x: 3, y: 0 },
+      {
+        ...options,
+        priorityLayer: 'F.SilkS',
+      },
+    ),
+    body,
+    'Actual footprint artwork remains eligible on its own selected layer.',
+  );
+});
+
+test('selected inner copper admits shared through pads and Edge.Cuts admits non-plated holes', () => {
+  const through = owner();
+  through.id = 'through';
+  through.pads[0] = {
+    ...through.pads[0],
+    id: 'through-pad',
+    x: 0.2,
+    type: 'thru_hole',
+    layers: ['*.Cu'],
+    drill: 0.3,
+  };
+  const hole = owner();
+  hole.id = 'hole';
+  hole.pads[0] = {
+    ...hole.pads[0],
+    id: 'hole-pad',
+    x: 0.2,
+    type: 'np_thru_hole',
+    drill: 0.5,
+  };
+  const back = owner();
+  back.id = 'back';
+  back.side = 'back';
+  back.pads[0] = { ...back.pads[0], id: 'back-pad', layers: ['B.Cu'] };
+  const board: PCB = {
+    ...createEmptyPCB(),
+    layers: ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'],
+    footprints: [through, hole, back],
+  };
+  const candidates = [{ padId: 'back-pad' }, { padId: 'through-pad' }, { padId: 'hole-pad' }];
+  const options = { tolerance: 0, filters };
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      defaultPCBDisplay(),
+      candidates,
+      { x: 0, y: 0 },
+      {
+        ...options,
+        priorityLayer: 'In1.Cu',
+      },
+    )?.padId,
+    'through-pad',
+  );
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      defaultPCBDisplay(),
+      candidates,
+      { x: 0, y: 0 },
+      {
+        ...options,
+        priorityLayer: 'Edge.Cuts',
+      },
+    )?.padId,
+    'hole-pad',
+  );
+  const layers = { ...defaultPCBDisplay(), 'Edge.Cuts': false };
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      layers,
+      candidates,
+      { x: 0, y: 0 },
+      {
+        ...options,
+        priorityLayer: 'Edge.Cuts',
+      },
+    )?.padId,
+    'back-pad',
+    'A hidden selected layer cannot reveal its mechanical holes.',
+  );
 });
 
 test('caption DOM hits remain selectable without enlarging ordinary footprint targets or bypassing text filters', () => {
@@ -472,7 +656,7 @@ test('caption DOM hits remain selectable without enlarging ordinary footprint ta
   });
   const board = { ...createEmptyPCB(), footprints: [part] },
     plain = candidate('footprint', part.id),
-    caption = { ...plain, directFootprintCaption: true };
+    caption = { ...plain, directFootprintCaptionLayers: ['F.SilkS' as const] };
   assert.equal(
     choosePCBPointCandidate(
       board,
@@ -502,6 +686,68 @@ test('caption DOM hits remain selectable without enlarging ordinary footprint ta
       { tolerance: 0.2, filters: { ...filters, text: false } },
     ),
     undefined,
+  );
+});
+
+test('caption priority follows the glyph layer under the pointer rather than another caption on its owner', () => {
+  const part = owner();
+  part.graphics = [
+    {
+      id: 'front-caption',
+      kind: 'text',
+      layer: 'F.SilkS',
+      width: 0,
+      start: { x: 20, y: 20 },
+      end: { x: 20, y: 20 },
+      text: { value: 'Reference', rotation: 0, size: { x: 1, y: 1 }, thickness: 0.1 },
+    },
+    {
+      id: 'distant-back-caption',
+      kind: 'text',
+      layer: 'B.SilkS',
+      width: 0,
+      start: { x: 100, y: 100 },
+      end: { x: 100, y: 100 },
+      text: { value: 'Value', rotation: 0, size: { x: 1, y: 1 }, thickness: 0.1 },
+    },
+  ];
+  const board: PCB = {
+    ...createEmptyPCB(),
+    footprints: [part],
+    graphics: [
+      {
+        id: 'back-stroke',
+        layer: 'B.SilkS',
+        width: 0.02,
+        start: { x: 19, y: 20.1 },
+        end: { x: 21, y: 20.1 },
+      },
+    ],
+  };
+  const caption = {
+    ...candidate('footprint', part.id),
+    directFootprintCaptionLayers: ['F.SilkS' as const],
+  };
+  const candidates = [caption, candidate('graphic', 'back-stroke')];
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      defaultPCBDisplay(),
+      candidates,
+      { x: 20, y: 20 },
+      { tolerance: 0.2, priorityLayer: 'B.SilkS', filters },
+    )?.selection.id,
+    'back-stroke',
+  );
+  assert.equal(
+    choosePCBPointCandidate(
+      board,
+      { ...defaultPCBDisplay(), 'B.SilkS': false },
+      candidates,
+      { x: 20, y: 20 },
+      { tolerance: 0.2, priorityLayer: 'B.SilkS', filters },
+    )?.selection.id,
+    part.id,
   );
 });
 

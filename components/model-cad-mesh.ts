@@ -55,6 +55,7 @@ export function modelCadMesh(object: ModelCadObject, preview = false) {
   mesh.name = object.name;
   setModelCadPose(mesh, object);
   mesh.userData.modelCadId = object.id;
+  mesh.userData.modelCadMaterial = object.material;
   mesh.userData.modelCadPreview = preview;
   return mesh;
 }
@@ -94,11 +95,13 @@ export function modelCadKernelMesh(
         }),
       );
       mesh.userData.modelCadId = object.id;
+      mesh.userData.modelCadMaterial = object.material;
       mesh.userData.modelCadPreview = preview;
       group.add(mesh);
     }
     group.name = object.name;
     group.userData.modelCadId = object.id;
+    group.userData.modelCadMaterial = object.material;
     group.userData.modelCadPreview = preview;
     setModelCadPose(group, object);
     return group;

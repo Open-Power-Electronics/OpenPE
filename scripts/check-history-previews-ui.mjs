@@ -263,13 +263,13 @@ try {
   await waitForAsync(page, () => {
     const region = document.querySelector('section.model-comparison');
     return (
-      region.querySelectorAll('.pcb-model-notices').length === 2 &&
+      region.querySelectorAll('.pcb-model-issues').length === 2 &&
       region.querySelectorAll('.pcb-model-status').length === 0
     );
   });
   const requestsBeforeRetry = footprintRequests;
   failFootprints = false;
-  await model.locator('.pcb-model-notices summary').first().click();
+  await model.locator('.pcb-model-issues summary').first().click();
   const retryRequest = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === '/api/libraries/footprints' && response.status() === 200,
@@ -373,7 +373,7 @@ try {
     console.error(await page.locator('body').innerText(), errors, unexpectedRequests);
     console.error(
       { footprintRequests, failFootprints },
-      await page.locator('.pcb-model-notices').allTextContents(),
+      await page.locator('.pcb-model-issues').allTextContents(),
     );
     console.error(
       await page.evaluate(() => ({

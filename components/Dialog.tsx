@@ -316,12 +316,25 @@ export default function Dialog({
       onKeyDown={(e) => {
         e.stopPropagation();
         if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) {
-          if (e.key === 'Escape') e.preventDefault();
+          if (e.key === 'Escape' || (e.target instanceof Element && e.target.closest('button')))
+            e.preventDefault();
           return;
         }
         if (!modal && e.key === 'Escape' && !busy) {
           e.preventDefault();
           onClose();
+        }
+      }}
+      onKeyUp={(event) => {
+        if (
+          (composing.current ||
+            event.nativeEvent.isComposing ||
+            event.nativeEvent.keyCode === 229) &&
+          event.target instanceof Element &&
+          event.target.closest('button')
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
         }
       }}
       onPointerDown={(e) => {
