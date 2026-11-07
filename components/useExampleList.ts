@@ -52,7 +52,11 @@ export function useExampleList(active: boolean, screen: string) {
       {
         id: 'recent-heading',
         title: 'Recent',
-        examples: recent,
+        examples: recent.map((entry) =>
+          entry.id.startsWith('recent:')
+            ? { ...entry, title: entry.title.replace(/\.kicad_pro$/i, '') }
+            : entry,
+        ),
       },
       {
         id: 'example-heading',

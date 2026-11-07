@@ -17,6 +17,22 @@ input.on('line', (line) => {
       tools,
     );
     assert.equal(message.params.sandbox, 'read-only');
+    assert.match(
+      message.params.developerInstructions,
+      /Reuse the discovered index and full tool definitions for the rest of this turn/,
+    );
+    assert.match(
+      message.params.developerInstructions,
+      /Await its result and reuse that returned simulation state/,
+    );
+    assert.match(
+      message.params.dynamicTools[0].description,
+      /Do not repeat the same discovery query/,
+    );
+    assert.match(
+      message.params.dynamicTools[1].description,
+      /Never use capabilities.list as a simulation progress check/,
+    );
     send({ id: message.id, result: { thread: { id: 'thread' }, model: 'fixture' } });
   } else if (message.method === 'turn/start') {
     assert.match(message.params.input[0].text, /capabilities.list/);

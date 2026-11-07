@@ -33,6 +33,14 @@ createInterface({ input: process.stdin }).on('line', (line) => {
         message.result.tools.map((tool) => tool.name),
         tools,
       );
+      assert.match(
+        message.result.tools[0].description,
+        /Reuse the discovered index and full tool definitions for the rest of this turn/,
+      );
+      assert.match(
+        message.result.tools[1].description,
+        /Await its result and reuse that returned simulation state/,
+      );
       request(3, 'tools/call', { name: tools[0], arguments: { name: 'project.snapshot' } });
     }
     if (message.id === 3) {

@@ -14,6 +14,7 @@ const { createProject, importDocument, serializeProject } = await tsImport(
 );
 const { emptyCircuit, createPart } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const { projectFromNativeFiles, projectNativeFiles } = await tsImport(
   '../lib/kicad-project.ts',
   import.meta.url,
@@ -60,7 +61,7 @@ let recovery = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: { ...defaultAgentPreferences.models },
 };
 const bundle = await build({
   stdin: {
@@ -103,14 +104,14 @@ const bundle = await build({
                 'const { project, sourceDraft, sourceError } = coreSnapshot; window.nativeSourceCore = core;',
               )
               .replace(
-                '  const [layoutOpened, setLayoutOpened] = useState(false);',
+                '  const sourceReadOnly =',
                 `window.nativeSourcePresentation = {entry:nativeSource.entry,
                 files:nativeSource.files, name:activeSourceFile?.name, visible:sourceVisible};
               useLayoutEffect(()=>{
                 if(sourceVisible && document.querySelector('.cm-editor'))
                   window.nativeSourceBeforePaint.push(window.inspectSource().text);
               },[sourceVisible,nativeSource,activeSourceFile]);
-              const [layoutOpened, setLayoutOpened] = useState(false);`,
+              const sourceReadOnly =`,
               )
               .replace(
                 '  const capabilityPorts = useRef<WorkbenchCapabilityPorts>(null!);',
@@ -134,7 +135,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1480, height: 920 } });
   page.setDefaultTimeout(15000);
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+    console.error(error);
+  });
   await page.addInitScript(() => {
     window.nativeSaveRequests = [];
     window.openpe = {
@@ -149,6 +153,10 @@ try {
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
       releaseFile: async () => {},
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       setDirty: async () => {},
       onCloseRequested: () => () => {},
       save: async (options) => {
@@ -195,7 +203,12 @@ try {
         window.nativeSourceCore.getSnapshot();
       return { undoDepth, redoDepth, sourceDraft, sourceError };
     });
-  await page.getByTestId('schematic-canvas').waitFor();
+  const headerDirty = page.locator('.breadcrumb > .dirty-dot');
+  await page.getByTestId('schematic-canvas').waitFor().catch(async (error) => {
+    console.error(await page.locator('body').innerText());
+    throw error;
+  });
+  assert.equal(await headerDirty.count(), 0, 'Opening starts with a clean project title.');
   await button('Source').click();
   await files.waitFor();
   assert.deepEqual(
@@ -254,6 +267,20 @@ try {
     };
   });
   assert.notEqual(latest.source, savedBaseline);
+  await headerDirty.waitFor();
+  assert.equal(await headerDirty.getAttribute('aria-label'), 'Unsaved changes');
+  const titleBounds = await page.locator('.breadcrumb strong').boundingBox();
+  const dotBounds = await headerDirty.boundingBox();
+  assert.equal(dotBounds.width, 5);
+  assert.equal(dotBounds.height, 5);
+  assert.ok(dotBounds.x >= titleBounds.x + titleBounds.width);
+  assert.ok(
+    dotBounds.y >= titleBounds.y &&
+      dotBounds.y + dotBounds.height < titleBounds.y + titleBounds.height / 2,
+    'The dot sits at the upper right of the project name.',
+  );
+  await mkdir('test-results', { recursive: true });
+  await page.locator('.app-header').screenshot({ path: 'test-results/project-title-dirty.png' });
   const hiddenContext = await page.evaluate(() => window.readNativeSourceContext());
   assert.equal(hiddenContext.ui.sourceFile, 'circuit.kicad_sch');
   assert.equal(hiddenContext.ui.sourceReadOnly, false);
@@ -284,6 +311,7 @@ try {
     0,
     'Source presentation never changes the dirty baseline.',
   );
+  assert.equal(await headerDirty.count(), 0, 'Undo to saved bytes clears the title dot.');
 
   // Context resolves current names independently of the deferred presentation.
   await button('Source').click();
@@ -342,6 +370,7 @@ try {
   );
   const pendingContext = await page.evaluate(() => window.readNativeSourceContext());
   assert.equal(pendingContext.source.pending, true);
+  await headerDirty.waitFor();
   assert.equal(pendingContext.ui.sourceFile, 'circuit.kicad_sch');
   const blocked = await page.evaluate(() => {
     try {
@@ -362,6 +391,11 @@ try {
   const discardedContext = await page.evaluate(() => window.readNativeSourceContext());
   assert.equal(discardedContext.source.pending, false);
   assert.equal(discardedContext.ui.dirty, false);
+  assert.equal(
+    await headerDirty.count(),
+    0,
+    'Discarding the pending Source draft clears the title dot.',
+  );
   await page.evaluate(() =>
     window.nativeSourceCore.execute('source.updateFile', {
       name: 'circuit.kicad_sch',
@@ -538,6 +572,7 @@ try {
   );
   await editor.press('ControlOrMeta+s');
   await page.waitForFunction(() => window.nativeSaveRequests.length === 1);
+  await headerDirty.waitFor({ state: 'detached' });
   await editor.focus();
   await editor.press('Escape');
   await editor.press('Tab');

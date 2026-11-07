@@ -6,7 +6,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
-import { fillSource, selectSourceFile } from './source-editor-test-helpers.mjs';
+import { fillSource, readSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
 const { switchingStageFixture } = await tsImport(
   '../tests/fixtures/switching-stage.ts',
@@ -53,6 +53,7 @@ const bundle = await build({
   write: false,
   outdir: 'test-results/agent-tools-ui-bundle',
   platform: 'browser',
+  jsx: 'automatic',
   define: { 'process.env.NODE_ENV': '"development"' },
 });
 const browser = await chromium.launch({
@@ -60,7 +61,7 @@ const browser = await chromium.launch({
     process.env.OPENPE_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
   headless: true,
 });
-try {
+async function runChecks() {
   const page = await browser.newPage({ viewport: { width: 1480, height: 920 } });
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -78,6 +79,8 @@ try {
       connection: async () => ({ base: 'http://localhost', token: 'fixture' }),
       newFile: async () => crypto.randomUUID(),
       listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
@@ -98,6 +101,11 @@ try {
         window.toolReply = '';
         emit({ type: 'done', outcome: 'completed' });
         controller.close();
+        return;
+      }
+      if (step.type) {
+        emit(step);
+        queueMicrotask(next);
         return;
       }
       requestId = crypto.randomUUID();
@@ -185,6 +193,14 @@ try {
       );
     });
   const button = (name) => page.getByRole('button', { name, exact: true });
+  await page
+    .getByRole('textbox', { name: 'Message your agent' })
+    .waitFor()
+    .catch(async (error) => {
+      throw new Error(
+        `${error.message}\n${errors.join('\n')}\n${await page.locator('body').innerText()}`,
+      );
+    });
   async function send(plan) {
     const before = await page.evaluate(() => window.toolResponses.length);
     await page.evaluate((value) => {
@@ -196,7 +212,7 @@ try {
     await button('Send message').click();
     await page.waitForFunction(
       (count) => window.toolResponses.length >= count,
-      before + plan.length,
+      before + plan.filter((step) => step.tool).length,
     );
     await button('Send message').waitFor();
     return page.evaluate((index) => window.toolResponses.slice(index), before);
@@ -220,12 +236,10 @@ try {
     );
   await page.evaluate(() => {
     window.toolReply =
-      '```openpe_session\n{"title":"Switching-stage capability review"}\n```\nRuntime fixture completed.';
+      '```openpe_session\n{"title":"Capability review"}\n```\nRuntime fixture completed.';
   });
   let current = await snapshot();
-  await page
-    .getByRole('heading', { name: 'Switching-stage capability review', exact: true })
-    .waitFor();
+  await page.getByRole('heading', { name: 'Capability review', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.chatRequests[0].requestTitle), true);
   assert.ok(
     await page.evaluate(
@@ -235,6 +249,7 @@ try {
     ),
   );
   assert.equal(readPart(current).value, target.value);
+  await page.locator('.message.assistant').first().locator('.agent-process > summary').click();
   const firstTool = page.locator('.agent-tool-call').first();
   assert.equal(await firstTool.getAttribute('data-tool-status'), 'completed');
   assert.ok(
@@ -250,12 +265,75 @@ try {
       const body = reply.querySelector('.agent-markdown');
       return (
         Boolean(tool.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING) &&
-        reply.lastElementChild.matches('.agent-markdown')
+        reply.lastElementChild.matches('.agent-answer-part')
       );
     }),
     'Tool activity precedes the answer; an unchanged reply has no file footer.',
   );
   await firstTool.locator('summary').click();
+  await send([
+    { type: 'text', text: 'Before tools.' },
+    { type: 'process', id: 'phase-one', text: 'Reading project' },
+    ...Array.from({ length: 7 }, () => query('core.state')),
+    { type: 'process', id: 'phase-two', text: 'Checking results' },
+    query('project.snapshot'),
+    { type: 'process', id: 'phase-one', text: 'Project inspected' },
+    { type: 'text', text: 'Between batches.' },
+    query('core.state'),
+  ]);
+  const timelineReply = page.locator('.message.assistant').last();
+  assert.equal(await timelineReply.locator('.agent-process[open]').count(), 0);
+  for (const summary of await timelineReply.locator('.agent-process > summary').all()) {
+    await summary.click();
+    await summary.locator('..').locator('.agent-process-body').waitFor();
+  }
+  assert.deepEqual(
+    await timelineReply.evaluate((reply) =>
+      [...reply.querySelectorAll('.agent-answer-part, .agent-process-text, .agent-tool-list')].map(
+        (element) =>
+          element.matches('.agent-tool-list')
+            ? `tools:${element.querySelectorAll('.agent-tool-call').length}`
+            : element.textContent.trim(),
+      ),
+    ),
+    [
+      'Before tools.',
+      'Project inspected',
+      'tools:7',
+      'Checking results',
+      'tools:1',
+      'Between batches.',
+      'tools:1',
+      'Runtime fixture completed.',
+    ],
+  );
+  const carousel = timelineReply.locator('.agent-tool-list').first();
+  assert.equal(
+    await carousel.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const visible = [...element.querySelectorAll('.agent-tool-call')].filter((row) => {
+        const box = row.getBoundingClientRect();
+        return box.bottom > bounds.top + 1 && box.top < bounds.bottom - 1;
+      });
+      return (
+        visible.length === 5 && element.scrollTop > 0 && element.scrollHeight > element.clientHeight
+      );
+    }),
+    true,
+  );
+  await carousel.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  assert.equal(await carousel.evaluate((element) => element.scrollTop), 0);
+  await mkdir('test-results/agent-tools', { recursive: true });
+  await timelineReply.screenshot({ path: 'test-results/agent-tools/timeline.png' });
+  if (process.argv.includes('--timeline-only')) {
+    assert.deepEqual(errors, []);
+    console.log(
+      'Agent chronology passed: interleaved progress/reply text, stable snapshots, separate tool batches, five-row scrolling and completion collapse.',
+    );
+    return;
+  }
   await page.evaluate(() => {
     window.toolReply = 'Change R1.\n```openpe\n[{"type":"setValue","ref":"R1","value":"56k"}]\n```';
   });
@@ -295,6 +373,11 @@ try {
   });
   await apply.waitFor({ state: 'hidden' });
   current = await snapshot();
+  await reviewReply
+    .locator('.agent-process:not([open]):not([data-attention])')
+    .waitFor({ state: 'attached' });
+  await reviewReply.locator('.agent-process > summary').click();
+  await reviewReply.locator('[data-tool-status="applied"]').waitFor();
   assert.equal(await page.locator('[data-tool-status="applied"]').count(), 1);
   assert.match(
     await reviewReply.locator('.agent-file-changes').innerText(),
@@ -334,6 +417,12 @@ try {
     'Composing keyboard input cannot activate review controls.',
   );
   await reject.press('Enter');
+  const rejectedReply = page.locator('.message.assistant').last();
+  await rejectedReply
+    .locator('.agent-process:not([open]):not([data-attention])')
+    .waitFor({ state: 'attached' });
+  await rejectedReply.locator('.agent-process > summary').click();
+  await rejectedReply.locator('[data-tool-status="rejected"]').waitFor();
   assert.equal(await page.locator('[data-tool-status="rejected"]').count(), 1);
   assert.equal((await snapshot()).undoDepth, 0);
 
@@ -353,9 +442,13 @@ try {
   await page.evaluate(() => {
     window.duplicateNextTool = true;
   });
-  const beforeObserve = await page.locator('.agent-tool-call').count();
   await send([{ tool: 'openpe_observe', arguments: {} }]);
-  assert.equal(await page.locator('.agent-tool-call').count(), beforeObserve + 1);
+  await page.locator('.message.assistant').last().locator('.agent-process > summary').click();
+  await page.locator('.message.assistant').last().locator('.agent-tool-call').waitFor();
+  assert.equal(
+    await page.locator('.message.assistant').last().locator('.agent-tool-call').count(),
+    1,
+  );
   assert.match(
     await page.locator('.agent-tool-call').last().locator('summary').getAttribute('aria-label'),
     /openpe_observe/,
@@ -443,6 +536,7 @@ try {
   await page.getByRole('region', { name: 'Project source', exact: true }).waitFor();
   if (errors.length) throw new Error(errors.join('\n'));
   await fillSource(page, '{invalid source');
+  assert.equal(await readSource(page), '{invalid source');
   current = await snapshot();
   const draftFiles = JSON.parse(current.sourceDraft);
   assert.equal(
@@ -519,6 +613,9 @@ try {
   console.log(
     'Agent capability UI checks passed: live Core queries, Review, stale guards, undo/dirty, Auto move/wire and pending Source.',
   );
+}
+try {
+  await runChecks();
 } finally {
   await browser.close();
 }

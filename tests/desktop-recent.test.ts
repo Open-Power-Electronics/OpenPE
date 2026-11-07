@@ -28,6 +28,7 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
   let canceled = false;
   let saved: { name: string; path: string } | null = null;
   let selected = nativePath;
+  let pauseRecentWrite: (() => Promise<void>) | undefined;
   class TestWindow extends EventEmitter {
     webContents = Object.assign(new EventEmitter(), {
       mainFrame: {},
@@ -75,7 +76,12 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
   };
   const modules: Record<string, unknown> = {
     '../server/index.mjs': { startServer: async () => ({ base: 'http://127.0.0.1:12345' }) },
-    '../server/atomic-write.mjs': { atomicWrite },
+    '../server/atomic-write.mjs': {
+      atomicWrite: async (...args: Parameters<typeof atomicWrite>) => {
+        await pauseRecentWrite?.();
+        return atomicWrite(...args);
+      },
+    },
     '../server/project-format.mjs': projectFormat,
     '../server/example-models.mjs': { createSimulationModelStore() {} },
     '../server/project-history.mjs': { ProjectHistory: class {} },
@@ -130,7 +136,30 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
     handlers.get('openpe:list-recent')!({ ...event, senderFrame: {} }),
     /Unauthorized/,
   );
+  let writeStarted!: () => void;
+  let resumeWrite!: () => void;
+  const started = new Promise<void>((resolve) => (writeStarted = resolve));
+  const paused = new Promise<void>((resolve) => (resumeWrite = resolve));
+  pauseRecentWrite = async () => {
+    writeStarted();
+    await paused;
+  };
+  const reopening = call('open-recent', entry.id);
+  await started;
   await call('release-file', grant);
+  pauseRecentWrite = undefined;
+  resumeWrite();
+  const racedOpen = await reopening;
+  assert.ok(racedOpen, 'Closing during the Recent write must reopen native files.');
+  assert.equal(racedOpen.name, bundle.entry);
+  const racedGrant = await call('accept-open', racedOpen.openId);
+  assert.notEqual(racedGrant, grant);
+  assert.equal(
+    (await call('open-recent', entry.id)).fileId,
+    racedGrant,
+    'An existing editor activates without rereading or replacing its state.',
+  );
+  await call('release-file', racedGrant);
   const recentOpen = await call('open-recent', entry.id);
   assert.equal(recentOpen.name, bundle.entry);
   const reopened = await call('accept-open', recentOpen.openId);

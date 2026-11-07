@@ -170,7 +170,8 @@ app.whenReady().then(async () => {
     if (existing) {
       await rememberRecent(fileGrants.location(existing));
       trusted(event);
-      return { fileId: existing };
+      // Closing can release the editor while Recent is being written.
+      if (fileGrants.findOpen(file) === existing) return { fileId: existing };
     }
     const files = await readNativeProject(file);
     const source = serializeProject(projectFromNativeFiles(files));
@@ -180,7 +181,7 @@ app.whenReady().then(async () => {
     if (openProject) {
       await rememberRecent(fileGrants.location(openProject));
       trusted(event);
-      return { fileId: openProject };
+      if (fileGrants.findOpen(entryFile) === openProject) return { fileId: openProject };
     }
     pendingFile = {
       openId: ++nextOpenId,
@@ -198,8 +199,8 @@ app.whenReady().then(async () => {
       buttonLabel: 'Open',
       filters: [
         {
-          name: 'KiCad Project / Schematic / PCB',
-          extensions: ['kicad_pro', 'kicad_sch', 'kicad_pcb'],
+          name: 'KiCad Project',
+          extensions: ['kicad_pro'],
         },
       ],
       properties: ['openFile'],

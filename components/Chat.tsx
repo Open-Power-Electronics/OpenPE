@@ -15,10 +15,10 @@ import SidebarToggle from './SidebarToggle';
 import AgentLogo from './AgentLogo';
 import AgentComposer from './AgentComposer';
 import AgentToolCall from './AgentToolCall';
-import AgentToolList from './AgentToolList';
+import AgentTurn from './AgentTurn';
+import type { ActivityAnchor } from './agent-turn-timeline';
 import AgentFileChanges from './AgentFileChanges';
 import AgentQuestions from './AgentQuestions';
-import AgentProcess from './AgentProcess';
 import { updateAgentProcess, type AgentProcessEntry } from '@/lib/agent-process';
 import {
   changedAgentFiles,
@@ -147,6 +147,20 @@ export default function Chat({
   const [sendError, setSendError] = useState('');
   const [toolCalls, setToolCalls] = useState<AgentToolActivity[]>([]);
   const [processEntries, setProcessEntries] = useState<AgentProcessEntry[]>([]);
+  const [activityAnchors, setActivityAnchors] = useState<ActivityAnchor[]>([]);
+  useEffect(() => {
+    const retained = new Set([
+      ...toolCalls.map((item) => JSON.stringify([item.messageId, 'tool', item.id])),
+      ...processEntries.map((item) => JSON.stringify([item.messageId, 'process', item.id])),
+    ]);
+    // An older effect must not prune anchors added by a newer streamed event.
+    const expired = new Set(
+      activityAnchors.filter(
+        (item) => !retained.has(JSON.stringify([item.messageId, item.kind, item.id])),
+      ),
+    );
+    if (expired.size) setActivityAnchors((items) => items.filter((item) => !expired.has(item)));
+  }, [toolCalls, processEntries, activityAnchors]);
   const [questions, setQuestions] = useState<
     (Pick<AgentQuestionRequest, 'requestId' | 'questions'> & {
       messageId: string;
@@ -336,6 +350,15 @@ export default function Chat({
     const runtime = capabilities;
     const observedRevision: { current: string | undefined } = { current: undefined };
     const handledRequests = new Set<string>();
+    const anchorActivity = (kind: ActivityAnchor['kind'], activityId: string) => {
+      const offset = responseText(text).length;
+      setStreamedText(text);
+      setActivityAnchors((items) =>
+        items.some((item) => item.messageId === id && item.kind === kind && item.id === activityId)
+          ? items
+          : [...items, { messageId: id, kind, id: activityId, offset }],
+      );
+    };
     let reviewCount = 0;
     const pendingLifecycleActions = new Set<Promise<void>>();
     const capabilityRequest = async (event: AgentCapabilityRequest) => {
@@ -346,6 +369,7 @@ export default function Chat({
       )
         return;
       handledRequests.add(event.requestId);
+      anchorActivity('tool', event.requestId);
       setToolCalls((items) =>
         appendToolActivity(items, {
           id: event.requestId,
@@ -511,7 +535,10 @@ export default function Chat({
       await readChatEvents(
         res.body,
         (e) => {
-          if (e.type === 'process') setProcessEntries((items) => updateAgentProcess(items, id, e));
+          if (e.type === 'process') {
+            anchorActivity('process', e.id);
+            setProcessEntries((items) => updateAgentProcess(items, id, e));
+          }
           if (e.type === 'question-closed' && e.sessionId === sessionId) {
             questionRequests.current.delete(e.requestId);
             setQuestions((items) =>
@@ -812,66 +839,56 @@ export default function Chat({
                       {m.id !== activeId && m.timings && <ChatTiming timings={m.timings} />}
                     </div>
                   )}
-                  {(toolCalls.some((item) => item.messageId === m.id) ||
-                    processEntries.some((item) => item.messageId === m.id)) && (
-                    <AgentProcess
+                  {m.role === 'assistant' && (
+                    <AgentTurn
+                      text={
+                        (m.id === activeId ? streamedText : m.text) ||
+                        (!busy && !m.errorText ? 'No response content.' : '')
+                      }
+                      anchors={activityAnchors.filter((item) => item.messageId === m.id)}
+                      progress={processEntries.filter((item) => item.messageId === m.id)}
+                      tools={toolCalls.filter((item) => item.messageId === m.id)}
                       running={m.id === activeId}
-                      attention={toolCalls.some(
-                        (item) =>
-                          item.messageId === m.id &&
-                          ['review', 'applying', 'failed'].includes(item.status),
-                      )}
-                    >
-                      {processEntries
-                        .filter((item) => item.messageId === m.id)
-                        .map((item) => (
-                          <div className="agent-process-text" key={item.id}>
-                            <AssistantResponse text={item.text} />
-                          </div>
-                        ))}
-                      <AgentToolList>
-                        {toolCalls
-                          .filter((item) => item.messageId === m.id)
-                          .map((item) => {
-                            const review = commandReviews.find(
-                              (entry) => entry.messageId === m.id && entry.command.id === item.id,
-                            );
-                            return (
-                              <AgentToolCall
-                                key={item.id}
-                                activity={item}
-                                reviewCommand={review?.command}
-                                onApply={
-                                  review?.status === 'pending'
-                                    ? () => void applyCommandReview(item.id)
-                                    : undefined
-                                }
-                                onReject={
-                                  review?.status === 'pending'
-                                    ? () => {
-                                        reviewClaims.current.add(item.id);
-                                        setCommandReviews((items) =>
-                                          items.map((entry) =>
-                                            entry.command.id === item.id
-                                              ? { ...entry, status: 'rejected' }
-                                              : entry,
-                                          ),
-                                        );
-                                        setToolCalls((items) =>
-                                          items.map((entry) =>
-                                            entry.messageId === m.id && entry.id === item.id
-                                              ? { ...entry, status: 'rejected', result: undefined }
-                                              : entry,
-                                          ),
-                                        );
-                                      }
-                                    : undefined
-                                }
-                              />
-                            );
-                          })}
-                      </AgentToolList>
-                    </AgentProcess>
+                      renderText={(text) => <AssistantResponse text={text} />}
+                      renderTool={(item) => {
+                        const review = commandReviews.find(
+                          (entry) => entry.messageId === m.id && entry.command.id === item.id,
+                        );
+                        return (
+                          <AgentToolCall
+                            key={item.id}
+                            activity={item}
+                            reviewCommand={review?.command}
+                            onApply={
+                              review?.status === 'pending'
+                                ? () => void applyCommandReview(item.id)
+                                : undefined
+                            }
+                            onReject={
+                              review?.status === 'pending'
+                                ? () => {
+                                    reviewClaims.current.add(item.id);
+                                    setCommandReviews((items) =>
+                                      items.map((entry) =>
+                                        entry.command.id === item.id
+                                          ? { ...entry, status: 'rejected' }
+                                          : entry,
+                                      ),
+                                    );
+                                    setToolCalls((items) =>
+                                      items.map((entry) =>
+                                        entry.messageId === m.id && entry.id === item.id
+                                          ? { ...entry, status: 'rejected', result: undefined }
+                                          : entry,
+                                      ),
+                                    );
+                                  }
+                                : undefined
+                            }
+                          />
+                        );
+                      }}
+                    />
                   )}
                   {questions
                     .filter((question) => question.messageId === m.id)
@@ -909,16 +926,7 @@ export default function Chat({
                         }}
                       />
                     ))}
-                  {m.role === 'assistant' ? (
-                    <AssistantResponse
-                      text={
-                        (m.id === activeId ? streamedText : m.text) ||
-                        (!busy && !m.errorText ? 'No response content.' : '')
-                      }
-                    />
-                  ) : m.text ? (
-                    <div className="message-text">{m.text}</div>
-                  ) : null}
+                  {m.role === 'user' && m.text && <div className="message-text">{m.text}</div>}
                   {!!m.annotations?.length && <AnnotationAttachments annotations={m.annotations} />}
                   {m.errorText && (
                     <div className="message-error" role="status">

@@ -11,6 +11,7 @@ import {
   agentCapabilityTools,
   agentRevisionGuidance,
   agentDiscoveryGuidance,
+  agentSimulationGuidance,
 } from '../server/agent-capabilities.mjs';
 
 const promptContext = (text: string) =>
@@ -93,6 +94,38 @@ test('live prompts and command discovery share explicit accepted-edit revision r
   assert.ok(
     !makePrompt({ prompt: 'Explain the circuit.', context: {} }).includes(agentRevisionGuidance),
   );
+});
+
+test('live Agent instructions reuse discovery within a turn and inspect simulation state on demand', () => {
+  const prompt = makePrompt({ prompt: 'Run the transient.', context: {}, capabilities: true });
+  assert.ok(prompt.includes(agentDiscoveryGuidance));
+  assert.ok(prompt.includes(agentSimulationGuidance));
+  assert.match(
+    agentDiscoveryGuidance,
+    /Reuse the discovered index and full tool definitions for the rest of this turn/,
+  );
+  assert.match(agentDiscoveryGuidance, /batch those ids in one request/);
+  assert.match(agentDiscoveryGuidance, /Do not repeat the same discovery query/);
+  assert.match(agentDiscoveryGuidance, /Refresh discovery only for an unseen capability/);
+  assert.match(agentDiscoveryGuidance, /host rechecks it on every invocation/);
+  assert.match(
+    agentSimulationGuidance,
+    /Await its result and reuse that returned simulation state/,
+  );
+  assert.match(agentSimulationGuidance, /simulation.status only when current progress/);
+  assert.match(
+    agentSimulationGuidance,
+    /Never use capabilities.list as a simulation progress check/,
+  );
+  for (const name of ['openpe_query', 'openpe_execute'])
+    assert.ok(
+      agentCapabilityTools
+        .find((tool) => tool.name === name)!
+        .description.includes(agentSimulationGuidance),
+    );
+  const contextOnly = makePrompt({ prompt: 'Explain the circuit.', context: {} });
+  assert.equal(contextOnly.includes(agentDiscoveryGuidance), false);
+  assert.equal(contextOnly.includes(agentSimulationGuidance), false);
 });
 
 test('the native EMC Flyback prompt fits provider input while preserving electrical and observed state', async () => {

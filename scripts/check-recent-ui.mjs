@@ -100,19 +100,21 @@ try {
   });
   await waitForAsync(
     page,
-    () => document.querySelector('#recent-heading h3')?.textContent === 'Personal.kicad_pro',
+    () => document.querySelector('#recent-heading h3')?.textContent === 'Personal',
   );
   assert.equal(
     await page.locator('#recent-heading h3').count(),
     1,
     'Real history replaces the default.',
   );
+  assert.equal(await page.locator('#recent-heading small').textContent(), 'C:/Personal.kicad_pro');
+  assert.equal(await page.getByRole('button', { name: 'Open Personal', exact: true }).count(), 1);
   await page.evaluate(() => {
     window.fixture.exampleFail = true;
     window.fixture.refresh();
   });
   await waitForAsync(page, () => window.fixture.list.error === 'Examples unavailable');
-  assert.equal(await page.locator('#recent-heading h3').textContent(), 'Personal.kicad_pro');
+  assert.equal(await page.locator('#recent-heading h3').textContent(), 'Personal');
   await page.evaluate(() => {
     window.fixture.fail = true;
     window.fixture.refresh();
@@ -129,7 +131,7 @@ try {
     window.dispatchEvent(new Event('focus'));
   });
   await waitForAsync(page, () => window.fixture.list.error === '');
-  assert.equal(await page.locator('#recent-heading h3').textContent(), 'Personal.kicad_pro');
+  assert.equal(await page.locator('#recent-heading h3').textContent(), 'Personal');
   await page.evaluate(() => window.fixture.setActive(false));
   await waitForAsync(page, () => window.fixture.listeners.size === 0);
   await page.evaluate(() => {

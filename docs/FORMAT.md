@@ -6,6 +6,10 @@ snapshots are private IPC, recovery, fixture and history data; never publish the
 as a design format or give them a KiCad extension. See the
 [KiCad file documentation](https://dev-docs.kicad.org/en/file-formats/).
 
+Desktop **Open project** selects one `.kicad_pro` file. The host loads its bounded
+schematic, PCB and supporting native file set automatically; those files do not
+need to be selected separately.
+
 Component simulation data retains optional `initialVoltage` and `initialCurrent` strings in the canonical component record, represented natively by `OpenPE.InitialVoltage` and `OpenPE.InitialCurrent`. Unset values remain absent; inspection does not write defaults.
 
 Model selection retains optional canonical `simulation.modelSource` (`basic` or `external`) as native `OpenPE.ModelSource`, independently of the saved external Sim.Library/Sim.Name/Sim.Pins. An absent override follows the current native library binding. Selecting an intrinsic model preserves external settings, and undo/save/recovery retain both. Declaration catalogs and model bodies are not native fields.

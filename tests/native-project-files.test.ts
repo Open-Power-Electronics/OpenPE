@@ -33,7 +33,7 @@ const bundle = (value = 'original') => ({
   ],
 });
 
-test('native project reads bounded sibling sources and resolves a schematic to its project entry', async () => {
+test('selecting one project file reads bounded sibling sources; schematic entry resolves to the same project', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'openpe-native-files-'));
   try {
     const expected = bundle();
@@ -60,11 +60,15 @@ test('native project reads bounded sibling sources and resolves a schematic to i
     await writeFile(path.join(savedThermal, 'input.json'), '{"private":"thermal model"}');
     await writeFile(path.join(savedThermal, 'field.vtu'), '<VTKFile/>');
     expected.files.push({ name: 'models/amplifier.lib', source: '.subckt amplifier 1 2\n.ends\n' });
-    const loaded = await readNativeProject(path.join(directory, 'circuit.kicad_sch'));
+    const loaded = await readNativeProject(path.join(directory, expected.entry));
     assert.equal(loaded.entry, expected.entry);
     assert.deepEqual(
       loaded.files.sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)),
       expected.files.sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    assert.deepEqual(
+      await readNativeProject(path.join(directory, 'circuit.kicad_sch')),
+      await readNativeProject(path.join(directory, expected.entry)),
     );
     await assert.rejects(readNativeProject(path.join(directory, 'readme.md')), /Choose a KiCad/);
   } finally {

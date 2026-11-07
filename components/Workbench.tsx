@@ -1870,16 +1870,8 @@ export default function Workbench({
         }
         const loaded = importDocument(result.source);
         const grant = await window.openpe.acceptOpen(result.openId);
-        await enterDocument(
-          loaded,
-          result.name,
-          false,
-          '',
-          grant,
-          result.native ? 'Project opened' : 'KiCad file opened. Save to create a project.',
-        );
+        await enterDocument(loaded, result.name, false, '', grant);
         setScreen('workspace');
-        notify(result.native ? 'Project opened' : 'KiCad file opened. Save to create a project.');
       } catch (e) {
         notify((e as Error).message);
       }
@@ -3356,6 +3348,7 @@ export default function Workbench({
             <span className="header-separator" />
             <div className="breadcrumb">
               <strong>{headerProjectTitle}</strong>
+              {unsaved && <span className="dirty-dot" role="img" aria-label="Unsaved changes" />}
             </div>
           </>
         )}
@@ -3389,6 +3382,7 @@ export default function Workbench({
       screen,
       hasDocument,
       headerProjectTitle,
+      unsaved,
       hasNativeTitlebar,
       headerFileOptions,
       runHeaderFileAction,

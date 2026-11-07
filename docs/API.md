@@ -271,6 +271,15 @@ for the selected IDs before constructing arguments. Omitted input retains full
 discovery; catalog() remains the complete in-process method. Filtering changes
 neither commands nor execution authority.
 
+Live Agent instructions reuse the discovered index and complete tool definitions
+within the current turn, batching schema requests for required IDs not yet known.
+Accepted edits, revision changes and an active simulation do not invalidate
+argument schemas. Refresh only for an unseen capability, explicit registration
+or plugin-lifecycle changes, or a host error reporting a missing, changed or
+unavailable capability; scope the refresh to affected IDs or a domain. This is
+provider guidance, not a cached catalog or permission: every invocation retains
+the host's live availability, schema, revision and lifecycle checks.
+
 `schematic.pose` accepts up to 128 ordered operations around `anchor`, then translates
 that anchor to `target`, through `previewSchematicMove`. `schematic.paste.source` is
 the canonical JSON string from `source.get().source` or a JSON serialization of
@@ -857,6 +866,12 @@ The result is `{document,source,revision,license,attribution,documents:string[],
 | `simulation.cancel`       | command / session  | `{}`                                                          | `{cancelled:boolean}`; requests Stop and retains validated received samples as stopped partial results.                     |
 | `simulation.presentation` | command / session  | `SimulationPresentationChanges`                               | Current `WaveformPresentation`. Requires resident waveform controls and applicable traces/results.                          |
 
+Live Agents await `simulation.run` and reuse its returned state. They query the
+already-discovered `simulation.status` only when current progress, errors,
+probes or measurements are needed, including a human-started run. Instructions
+discourage tight polling, duplicate pending runs and using `capabilities.list`
+as a progress check, waiting loop or keepalive.
+
 ```ts
 type SimulationConfigChanges = {
   voltage?: number;
@@ -1225,7 +1240,9 @@ Native output is read every 200 ms. Display reduction retains actual trace extre
 `openRecent(id)` invokes `openpe:open-recent` with a `recent:<64 lowercase hex>`
 host-derived ID and returns the same validated source or existing `fileId` shape
 as `open()`. New opens use `acceptOpen(openId)` bound to their exact staged request; existing destinations activate their
-editor. The renderer cannot submit paths. Host resolution precedes the ordinary
+editor. The host rechecks the existing grant after recording Recent; if close
+released it during that write, opening continues with native reading and staged
+acceptance. The renderer cannot submit paths. Host resolution precedes the ordinary
 bounded native reader, including link and unsupported-content rejection; missing
 files stay listed and fail visibly on open. Trusted-main-frame checks surround
 asynchronous calls. `onRecentChanged(callback)` subscribes to the payload-free
