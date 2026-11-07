@@ -105,6 +105,9 @@ export async function resolveAgentCapability(
 }
 
 export type ChatEvent =
+  | { type: 'process'; id: string; text: string; append?: boolean }
+  | AgentQuestionRequest
+  | { type: 'question-closed'; requestId: string; sessionId: string }
   | { type: 'status'; stage?: string; text: string }
   | { type: 'text'; text: string }
   | { type: 'text-delta'; delta: string }
@@ -114,6 +117,23 @@ export type ChatEvent =
   | { type: 'agent-info'; model?: string; reasoningEffort?: string }
   | AgentCapabilityRequest
   | { type: 'done'; outcome?: ChatOutcome };
+
+export type AgentQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  detail?: string;
+  options: { label: string; description: string }[];
+  multiSelect: boolean;
+};
+export type AgentQuestionRequest = {
+  type: 'question-request';
+  runId: string;
+  sessionId: string;
+  requestId: string;
+  token: string;
+  questions: AgentQuestion[];
+};
 
 // Decode complete SSE frames, including UTF-8 split across reads and CRLF.
 export async function readChatEvents(

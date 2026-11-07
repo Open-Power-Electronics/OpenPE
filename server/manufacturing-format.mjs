@@ -7241,7 +7241,7 @@ function projectNetGroups(circuit) {
   }
   return groups;
 }
-function groupCircuit(circuit) {
+function groupCircuit(circuit, joinNames = true) {
   const points2 = [], parent = [];
   const add = (p) => {
     if (points2.length >= 3e4)
@@ -7341,11 +7341,13 @@ function groupCircuit(circuit) {
         join(i, wires[index]);
     }
   });
-  const named = /* @__PURE__ */ new Map();
-  for (const item of names) {
-    const previous = named.get(item.name);
-    if (previous !== void 0) join(item.index, previous);
-    named.set(item.name, item.index);
+  if (joinNames) {
+    const named = /* @__PURE__ */ new Map();
+    for (const item of names) {
+      const previous = named.get(item.name);
+      if (previous !== void 0) join(item.index, previous);
+      named.set(item.name, item.index);
+    }
   }
   const groups = /* @__PURE__ */ new Map();
   const group = (index) => {

@@ -96,7 +96,7 @@ Changes identify their layer, update the owning contract and regenerate formats 
 - Express binds loopback and validates hosts/origins/request bounds. Renderer APIs/SSE/tool results require process authentication. The separate Agent bridge uses a scoped turn token; one-time result tokens also bind request/run/session/origin.
 - `server/component-models.mjs` owns approved immutable local STEP bytes, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. Preview requests identify a validated project component/model index and share the bounded STEP worker pool. Shared component Properties commits native PCB model records through Core.
 - Provider CLIs and solvers use restricted child-process adapters. Library indexing and STEP conversion use bounded workers. These are implementation mechanisms, not independent plugin processes.
-- Codex/Claude expose live OpenPE tools only; DeepSeek/Pi use context-only protocols and Cursor is detection-only. UI Review/Auto cannot bypass provider restrictions or native grants.
+- Codex/Claude expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools and Cursor is detection-only. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the private DeepSeek user-question patch and the sole explicitly loaded Pi question extension. The latter two receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
 
 `server/agent-models.mjs` owns bounded provider model/effort discovery before
 inference, including Claude's initialization control exchange. Native effort
@@ -231,6 +231,15 @@ Electron establishes application data and its name, then loads the service modul
 
 Submission validates bounded observed context, then dispatches to the chosen restricted adapter. Codex dynamic tools or Claude's application-owned stdio MCP helper call the scoped bridge. Chat routes requests to the originating project's host; review/Auto uses the same checked handler. Cancel/disconnect/completion revokes tokens and rejects late work. Context-only adapters return text/reviewed proposals without live capability transport.
 
+`server/schematic-drafting.mjs` supplies fixed drafting methodology independently
+of optional plugins. Explicit `schematic.drafting` queries use pure
+`lib/schematic-drafting.ts` and shared physical grouping before named-net union;
+they add no automatic capture or mutation. `schematic.wires` applies only
+caller-supplied polylines through `lib/wiring.ts`, in order, with one Core commit.
+Uniform API discovery supports a compact index and selected schemas; this changes
+transport volume without changing the drawing algorithm or command authority.
+There is no automatic placement/router or separate Agent document owner.
+
 PE Layout Skill loads only fixed IDs from pinned resources, verifies hashes/lifecycle and injects trusted guidance before user context. Disable/uninstall cancels turns carrying it. The workflow adds no arbitrary file/process access or autorouting implementation.
 
 ### A transient run
@@ -311,6 +320,12 @@ Recovery validates the full current envelope; exact-source import metadata uses 
 Cleanup removes only confirmed unused code/copies or reproducible output without active consumers. `tmp/` holds local experiments and evidence, excluded from Git, formatting and typecheck; maintained tools belong in `scripts/`. Curated project `spice/` and `thermal/` results also stay outside Git. Removing generated files from tracking preserves local copies. Resolve exact workspace-contained paths and reject links before recursive deletion. Preserve projects, recovery, Git history, offline models/tools, corresponding sources/notices and current evidence/builds. Ignored `.openpe/` or `test-results/` content is not automatically disposable.
 
 ## Verification
+
+`tests/agent-questions.test.ts` exercises explicit answers and cancellation through
+synthetic Codex, Claude, DeepSeek and Pi protocols. Run
+`node scripts/check-agent-questions-ui.mjs` for isolated browser checks of choices,
+custom/multiple answers, IME, retry, cancellation and automatic process collapse.
+Neither check calls a real provider or starts Electron.
 
 `tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts` and
 `tests/footprint-drawing.test.ts` cover embedded component authoring, native

@@ -108,6 +108,10 @@ Every submission captures bounded workspace context. After validating the comple
 
 Codex uses dynamic app-server tools; Claude uses the application-owned stdio MCP helper. Provider shell/web/unrelated tools stay blocked. Plugin installation does not expand OpenPE permissions. Protocol fixtures establish adapter behaviour, not authentication or every CLI-version compatibility. Unnamed conversations can request a bounded topic title in that same reply. Successful, origin-bound suggestions update only the existing session name; manual names take precedence. Reserved title metadata is hidden in presentation and excluded from later provider context, while raw reply text is retained. This introduces no Core command or additional tool authority.
 
+`server/schematic-drafting.mjs` supplies fixed schematic drafting methodology to every Agent prompt, independently of the optional PCB guidance plugin. It applies to creation and requested redraws, preserving existing drawings for value/model-only tuning. Live Agents plan functional blocks, inspect the read-only `schematic.drafting` anchors/advisories, and use explicit local wire paths through the shared wire commands before reviewing the drawing and separate ERC evidence. Labels remain available for power notation, interfaces and justified distant connections. Selective discovery and accepted-edit revision reuse reduce unnecessary transport without changing design operations. Context-only integrations describe the plan and their proposal limits without inventing wire operations or successful checks. This guidance adds no file, tool or mutation authority; [API](API.md#schematic-and-component-capabilities) owns the query and wire-command contracts.
+
+The Agent transport also owns a separate question bridge (`server/agent-questions.mjs`) with single-use run/session/Origin-bound answers. Native Codex/Claude requests and the fixed DeepSeek/Pi question integrations share its bounded presentation protocol. Questions cannot execute capabilities or grant host permissions. Waiting for explicit user input pauses connection deadlines; cancellation/completion revoke pending answers. Progress and question UI remain outside Core, undo, recovery and later provider history. [API](API.md#chat-requests-and-sse) owns schemas and limits.
+
 Each bridge binds run/conversation/origin with per-turn and single-use response tokens. Renderer results require process authentication; the CLI helper gets only its scoped bridge token. Cancellation/disconnect/completion revoke the bridge. [Agent tools](API.md#agent-tools) define the envelope, per-turn call and delivery-deadline limits. Commands retain subsystem deadlines; solver execution has no runtime timeout.
 
 Live requests use the current permissions mode. Explicit expected revisions are preserved; omitted revisions use submission state or the latest `project.snapshot`, `core.state` or `workbench.state` observation. Review captures immutable arguments/revision after envelope validation. Apply performs full registered schema, availability, revision and domain checks; a pending card is not proof of validity. Auto invokes the same handler and never executes previously queued reviews.
@@ -132,6 +136,24 @@ checks establish the exercised design operations; provider transport availabilit
 and native file grants retain their separate contracts.
 
 Core/capability/lifecycle/transport tests cover ownership, structural sharing, mutation isolation, revision conflicts, Source/close barriers and cancellation. Owned-validation, native materialization/cache, admission and save tests protect private derivation boundaries. Rule-check capability/ERC/DRC tests cover read-only reports and incomplete coverage.
+
+`tests/schematic-drafting.test.ts` checks bounded physical-island evidence and
+transformed native geometry; `tests/schematic-drafting-capabilities.test.ts`
+checks ordered canvas/batch native-byte parity, one undo, field-position IDs
+and rejection gates. `node scripts/check-schematic-drafting-agent.mjs --run-agent`
+opts into a real Codex redraw of the recorded LM25017 demo fixture. It writes a
+new isolated native candidate, verifies input/supporting/PCB bytes and complete
+component semantics/pin partitions, and compares fixture-relative drafting
+metrics. It requires the existing demo fixture and configured provider; it starts
+no Electron or solver. Those metrics do not certify visual quality or establish
+a new simulation result. Inspect the rendered drawing separately.
+`node scripts/render-schematic-review.mjs --before=<native.kicad_pro> --after=<native.kicad_pro> --output=<review-directory>`
+captures both native drawings with the production schematic renderer, styles and
+PNG exporter in headless Chromium. It starts no provider, Electron or solver and
+never writes either input project; keep its output outside their directories.
+
+`tests/capability-discovery.test.ts` checks compact filters, isolation and live
+availability without adding document operations.
 
 `scripts/benchmark-project-runtime.ts` measures fresh geometry, Core property/participation commands and unchanged property requests together with native Source/dirty reads, checking revisions, undo and unchanged snapshot identity.
 

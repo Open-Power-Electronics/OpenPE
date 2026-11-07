@@ -16,6 +16,33 @@ export function wireRoute(start: Point, end: Point, vertical = false): Point[] {
   const corner = vertical ? { x: start.x, y: end.y } : { x: end.x, y: start.y };
   return [start, corner, end].filter((p, i, a) => !i || !samePoint(p, a[i - 1]));
 }
+
+/** Explicit independent polylines, using the same ordered preparation as canvas
+ * wire gestures. The caller publishes the complete candidate once. */
+export function commitWireRoutes(source: Circuit, routes: Point[][]): Circuit {
+  if (!Array.isArray(routes) || routes.length < 1 || routes.length > 100)
+    throw new Error('Provide between 1 and 100 explicit wire routes.');
+  let points = 0;
+  for (const route of routes) {
+    if (!Array.isArray(route) || route.length < 2)
+      throw new Error('Each wire route needs at least two points.');
+    points += route.length;
+    if (points > 30000) throw new Error('Wire routes exceed the 30,000-point limit.');
+    if (
+      route.some(
+        (point) =>
+          !point ||
+          !Number.isFinite(point.x) ||
+          !Number.isFinite(point.y) ||
+          Math.abs(point.x) > 100000 ||
+          Math.abs(point.y) > 100000,
+      )
+    )
+      throw new Error('Wire route coordinates must be finite and within ±100,000 mm.');
+  }
+  return routes.reduce((circuit, route) => commitWireRoute(circuit, route), source);
+}
+
 /** Split only at route endpoints and pins, never at incidental wire crossings. */
 export function commitWireRoute(source: Circuit, points: Point[]): Circuit {
   const d = structuredClone(source);

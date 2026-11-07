@@ -7,9 +7,93 @@ import { projectNetGroups } from '../lib/project-net-groups';
 import { agentPromptContext } from '../context/agent-prompt-context';
 import { agentSource } from '../context/agent-workspace-context';
 import { makePrompt, runAgent } from '../server/agents.mjs';
+import {
+  agentCapabilityTools,
+  agentRevisionGuidance,
+  agentDiscoveryGuidance,
+} from '../server/agent-capabilities.mjs';
 
 const promptContext = (text: string) =>
   JSON.parse(text.split('<circuit>\n')[1].split('\n</circuit>')[0]);
+const draftingGuidance = (text: string) =>
+  text.split('<schematic-drafting-guidance>\n')[1].split('\n</schematic-drafting-guidance>')[0];
+
+test('live schematic drafting guidance works without the optional PCB guide and preserves edit scope', () => {
+  const request = {
+    prompt: 'Redraw the feedback circuit with readable connections.',
+    context: { title: 'Feedback circuit' },
+    capabilities: true,
+  };
+  const text = makePrompt(request);
+  const guidance = draftingGuidance(text);
+  assert.doesNotMatch(text, /<bundled-pcb-design-guidance>/);
+  assert.match(guidance, /continuous, short orthogonal wires/);
+  assert.match(guidance, /Do not give every pin a short wire and a repeated net label/);
+  assert.match(
+    guidance,
+    /Reserve labels for power\/ground notation, external or off-sheet interfaces/,
+  );
+  assert.match(guidance, /schematic\.drafting/);
+  assert.match(guidance, /canonical annotation ID returned by schematic\.drafting/);
+  assert.match(guidance, /schematic\.wires/);
+  assert.doesNotMatch(guidance, /schematic\.(position|connections|arrange|batch)/);
+  assert.match(guidance, /omit repeated coordinate lists and raw tool argument dumps/);
+  assert.match(guidance, /does not search for paths or autoroute/);
+  assert.match(
+    guidance,
+    /retain exact imported pin or junction anchors even when they are off-grid/,
+  );
+  assert.match(guidance, /Preserve the existing drawing for value-only/);
+  assert.match(guidance, /Do not replace the whole project merely to avoid/);
+  assert.match(guidance, /schematic\.erc separately/);
+  assert.doesNotMatch(guidance, /This integration has no live schematic drafting tools/);
+  assert.equal(
+    draftingGuidance(makePrompt(request, 'Optional PCB engineering methodology')),
+    guidance,
+    'Optional PCB guidance must not gate or alter the fixed schematic workflow.',
+  );
+});
+
+test('context-only drafting guidance keeps unsupported wiring outside the proposal transport', () => {
+  const guidance = draftingGuidance(
+    makePrompt({ prompt: 'Redraw the feedback circuit.', context: { title: 'Feedback circuit' } }),
+  );
+  assert.match(guidance, /This integration has no live schematic drafting tools/);
+  assert.match(guidance, /emit only the documented supported proposal operations/);
+  assert.match(guidance, /Do not invent wire\/label proposal kinds/);
+  assert.match(guidance, /unwired part placements/);
+  assert.doesNotMatch(guidance, /schematic\.(drafting|wire|wires|erc)/);
+  assert.match(guidance, /readable trunks and branches/);
+});
+
+test('live prompts and command discovery share explicit accepted-edit revision reuse', () => {
+  const text = makePrompt({ prompt: 'Redraw the circuit.', context: {}, capabilities: true });
+  assert.ok(text.includes(agentRevisionGuidance));
+  assert.ok(text.includes(agentDiscoveryGuidance));
+  assert.ok(
+    agentCapabilityTools
+      .find((tool) => tool.name === 'openpe_query')!
+      .description.includes(agentDiscoveryGuidance),
+  );
+  assert.ok(draftingGuidance(text).includes(agentRevisionGuidance));
+  assert.ok(
+    agentCapabilityTools
+      .find((tool) => tool.name === 'openpe_execute')!
+      .description.includes(agentRevisionGuidance),
+  );
+  assert.match(
+    agentRevisionGuidance,
+    /explicitly pass the fresh revision returned by the preceding accepted edit/,
+  );
+  assert.match(
+    agentRevisionGuidance,
+    /Re-query core.state after a stale-revision rejection, any error/,
+  );
+  assert.match(agentRevisionGuidance, /Never guess or increment revisions/);
+  assert.ok(
+    !makePrompt({ prompt: 'Explain the circuit.', context: {} }).includes(agentRevisionGuidance),
+  );
+});
 
 test('the native EMC Flyback prompt fits provider input while preserving electrical and observed state', async () => {
   const names = ['emc-flyback.kicad_pro', 'emc-flyback.kicad_sch', 'emc-flyback.kicad_pcb'];

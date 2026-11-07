@@ -7,6 +7,7 @@ import {
   Pencil,
   Folder,
   FolderSearch,
+  MessageSquarePlus,
   Pin,
   PinOff,
   Save,
@@ -30,6 +31,7 @@ export type ProjectNavigationItem = {
 export type ProjectFileAction = 'rename' | 'save' | 'save-as' | 'reveal' | 'close';
 export type ProjectAction = ProjectFileAction | 'pin' | 'unpin';
 const actions = [
+  { id: 'new-session', label: 'New session', icon: MessageSquarePlus },
   { id: 'rename', label: 'Rename', icon: Pencil },
   { id: 'save', label: 'Save', icon: Save },
   { id: 'save-as', label: 'Save as', icon: SaveAll },
@@ -153,6 +155,10 @@ export default function ProjectNavigation({
                 );
               }}
               onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                  event.preventDefault();
+                  return;
+                }
                 if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
                   event.preventDefault();
                   event.stopPropagation();
@@ -233,6 +239,10 @@ export default function ProjectNavigation({
                           );
                         }}
                         onKeyDown={(event) => {
+                          if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                            event.preventDefault();
+                            return;
+                          }
                           if (
                             event.key === 'ContextMenu' ||
                             (event.shiftKey && event.key === 'F10')
@@ -264,6 +274,10 @@ export default function ProjectNavigation({
             onContextMenu={(event) => event.preventDefault()}
             onKeyDown={(event) => {
               event.stopPropagation();
+              if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                event.preventDefault();
+                return;
+              }
               const buttons = Array.from(
                 popup.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [],
               );
@@ -333,7 +347,8 @@ export default function ProjectNavigation({
                     onClick={() => {
                       if (!active || !projects.some((project) => project.id === menu.id)) return;
                       dismiss(true);
-                      onAction(menu.id, id);
+                      if (id === 'new-session') onSelect(menu.id);
+                      else onAction(menu.id, id);
                     }}
                   >
                     <Icon size={16} aria-hidden="true" />

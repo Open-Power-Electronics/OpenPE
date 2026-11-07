@@ -9,7 +9,7 @@ import { validModelId } from './model-id.mjs';
 
 // All paths/configuration here are service-owned, temporary and never renderer
 // inputs. The installed CLI retains responsibility for its own authentication.
-export async function prepareACPWorkspace(provider) {
+export async function prepareACPWorkspace(provider, questions = undefined) {
   if (provider !== 'deepseek') throw new Error('Unknown ACP agent.');
   const directory = await mkdtemp(path.join(tmpdir(), 'openpe-agent-'));
   try {
@@ -17,13 +17,22 @@ export async function prepareACPWorkspace(provider) {
       path.join(directory, 'boundary.mjs'),
       await readFile(new URL('./deepseek-tool-boundary.mjs', import.meta.url)),
     );
+    if (questions)
+      await writeFile(
+        path.join(directory, 'questions.mjs'),
+        await readFile(new URL('./deepseek-questions.mjs', import.meta.url)),
+      );
     const patch = [
-      { id: 'acp', inject: ['acpAppStartup', 'openpeToolBoundary'] },
+      {
+        id: 'acp',
+        inject: ['acpAppStartup', 'openpeToolBoundary', ...(questions ? ['openpeQuestions'] : [])],
+      },
       { id: 'agent-loop', config: { agents: [] } },
       { id: 'agent-instructions', disabled: true },
       { id: 'skill-filesystem', disabled: true },
       { id: 'session-log-deepseek', disabled: true },
       { insert: [{ id: 'openpe-tool-boundary', name: './boundary.mjs' }] },
+      ...(questions ? [{ insert: [{ id: 'openpe-questions', name: './questions.mjs' }] }] : []),
     ];
     const patchFile = path.join(directory, 'openpe.patch.yml');
     // JSON is a YAML subset, avoiding interpolation of paths or config text.
@@ -70,7 +79,7 @@ function modelCatalog(session) {
 
 async function withACPSession(provider, signal, options, task) {
   if (signal.aborted) throw new Error('Agent request cancelled.');
-  const workspace = await prepareACPWorkspace(provider);
+  const workspace = await prepareACPWorkspace(provider, options.questions);
   let proc;
   try {
     if (signal.aborted) throw new Error('Agent request cancelled.');
@@ -79,6 +88,12 @@ async function withACPSession(provider, signal, options, task) {
       env: {
         ...options.launch.env,
         DSH_TELEMETRY_DISABLED: '1',
+        ...(options.questions
+          ? {
+              OPENPE_QUESTIONS_URL: options.questions.url,
+              OPENPE_QUESTIONS_TOKEN: options.questions.token,
+            }
+          : {}),
       },
       shell: false,
       windowsHide: true,
@@ -285,6 +300,17 @@ export async function runACPAgent(provider, request, emit, signal, options) {
           if (message.method !== 'session/update' || message.params?.sessionId !== sessionId)
             return;
           const update = message.params.update;
+          if (
+            update?.sessionUpdate === 'agent_thought_chunk' &&
+            update.content?.type === 'text' &&
+            typeof update.content.text === 'string'
+          )
+            emit({
+              type: 'process',
+              id: 'deepseek-thought',
+              text: update.content.text,
+              append: true,
+            });
           if (
             update?.sessionUpdate === 'agent_message_chunk' &&
             update.content?.type === 'text' &&

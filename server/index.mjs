@@ -10,6 +10,7 @@ import { validateAgentWorkspaceContext } from './agent-context-format.mjs';
 import { detectAgents, runAgent } from './agents.mjs';
 import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
 import { createAgentCapabilityBridge } from './agent-capabilities.mjs';
+import { agentQuestions, createAgentQuestionBridge } from './agent-questions.mjs';
 import { listAgentModels } from './agent-models.mjs';
 import { createPluginService, registerPlugins } from './plugins.mjs';
 import {
@@ -64,6 +65,7 @@ export async function startServer({
   let base = '';
   const active = new Map();
   const agentBridges = new Map();
+  const questionBridges = new Map();
   const recovery = createWorkspaceRecoveryStore(dataDir);
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -98,6 +100,17 @@ export async function startServer({
     try {
       const result = await bridge.call(req.body?.tool, req.body?.arguments);
       if (!res.destroyed) res.json({ result });
+    } catch (error) {
+      if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
+    }
+  });
+  app.post('/api/agent-questions/:bridgeId', express.json({ limit: '256kb' }), async (req, res) => {
+    const bridge = questionBridges.get(req.params.bridgeId);
+    if (!bridge?.authorized(req.get('x-openpe-agent-token')))
+      return res.status(401).json({ error: 'Agent question connection expired.' });
+    try {
+      const answers = await bridge.ask(agentQuestions(bridge.provider, req.body?.questions));
+      if (!res.destroyed) res.json({ answers });
     } catch (error) {
       if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
     }
@@ -250,6 +263,16 @@ export async function startServer({
     await recovery.clear();
     res.json({ ok: true });
   });
+  app.post('/api/chat/answer', (req, res) => {
+    try {
+      const bridge = questionBridges.get(req.body?.runId);
+      if (!bridge) throw new Error('The originating Agent question is no longer active.');
+      bridge.respond(req.body, req.get('origin'));
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(409).json({ error: error.message });
+    }
+  });
   app.post('/api/chat/tool-result', (req, res) => {
     try {
       const bridge = agentBridges.get(req.body?.runId);
@@ -312,6 +335,14 @@ export async function startServer({
         })
       : null;
     if (bridge) agentBridges.set(bridge.id, bridge);
+    const questions = createAgentQuestionBridge({
+      sessionId,
+      emit,
+      signal: control.signal,
+      origin: req.get('origin'),
+    });
+    questions.provider = b.provider;
+    questionBridges.set(questions.id, questions);
     const heartbeat = setInterval(() => {
       if (!res.destroyed) res.write(': keepalive\n\n');
     }, 15000);
@@ -331,6 +362,7 @@ export async function startServer({
       if (!pcbDesignInstructions) pcbDesignTurns.delete(control);
       control.signal.throwIfAborted();
       const result = await agentRunner(b.provider, b, cwd, emit, control.signal, {
+        questions: { ...questions, url: `${base}/api/agent-questions/${questions.id}` },
         pcbDesignInstructions,
         ...(bridge
           ? {
@@ -350,6 +382,8 @@ export async function startServer({
       pcbDesignTurns.delete(control);
       clearInterval(heartbeat);
       bridge?.close();
+      questions.close();
+      questionBridges.delete(questions.id);
       if (bridge) agentBridges.delete(bridge.id);
       if (active.get(sessionId) === control) active.delete(sessionId);
       emit({ type: 'done', outcome });

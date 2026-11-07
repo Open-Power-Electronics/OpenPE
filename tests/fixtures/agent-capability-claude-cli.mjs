@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import assert from 'node:assert/strict';
 const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
 const tools = ['openpe_query', 'openpe_execute', 'openpe_observe'];
-assert.equal(process.argv[process.argv.indexOf('--tools') + 1], '');
+assert.equal(process.argv[process.argv.indexOf('--tools') + 1], 'AskUserQuestion');
 assert.ok(process.argv.includes('--strict-mcp-config'));
 for (const tool of tools) assert.ok(process.argv.includes(`mcp__openpe__${tool}`));
 const config = JSON.parse(process.argv[process.argv.indexOf('--mcp-config') + 1]);
@@ -13,8 +13,8 @@ assert.equal(server.env.ELECTRON_RUN_AS_NODE, '1');
 assert.equal(server.command, process.execPath);
 assert.equal(server.args.length, 1);
 assert.match(server.args[0], /agent-mcp\.mjs$/);
-process.stdin.resume();
-process.stdin.on('end', () => {
+createInterface({ input: process.stdin }).on('line', (line) => {
+  if (JSON.parse(line).type !== 'user') return;
   const child = spawn(server.command, server.args, {
     env: { ...process.env, ...server.env },
     stdio: ['pipe', 'pipe', 'pipe'],

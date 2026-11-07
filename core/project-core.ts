@@ -32,7 +32,8 @@ import {
   simplifyWires,
   transformSelection,
 } from '../lib/schematic-edit';
-import { commitWireRoute } from '../lib/wiring';
+import { commitWireRoute, commitWireRoutes } from '../lib/wiring';
+import { schematicDrafting } from '../lib/schematic-drafting';
 import { previewSchematicMove } from '../lib/schematic-move';
 import { val } from '../lib/sexpr';
 import {
@@ -176,6 +177,11 @@ export const coreQueryDefinitions: CoreDefinition[] = [
   definition(
     'schematic.erc',
     'Check the selected schematic for supported electrical rule violations without editing it.',
+    object(sheet, ['schematicId']),
+  ),
+  definition(
+    'schematic.drafting',
+    'Read exact transformed component pin anchors, body bounds, wires and advisory physical-island/label-join evidence for readable schematic drafting. This does not run ERC or change the design.',
     object(sheet, ['schematicId']),
   ),
   definition(
@@ -448,6 +454,22 @@ export const coreCommandDefinitions: CoreDefinition[] = [
       'schematicId',
       'points',
     ]),
+  ),
+  operationCommand(
+    'schematic.wires',
+    'Commit 1–100 explicitly drawn wire polylines in order as one undo edit, using the same route preparation as the canvas. Supply exact pin anchors and every bend; no placement or automatic routing is performed. At most 30,000 points total.',
+    object(
+      {
+        ...sheet,
+        routes: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 100,
+          items: { type: 'array', items: point, minItems: 2, maxItems: 30000 },
+        },
+      },
+      ['schematicId', 'routes'],
+    ),
   ),
   objectCommand(
     'schematic.annotation',
@@ -1118,6 +1140,13 @@ export class ProjectCore {
       }));
     const schematic = findSchematic(project, args.schematicId);
     if (!schematic) throw new Error('This schematic file is no longer in the project.');
+    if (id === 'schematic.drafting')
+      return {
+        ...schematicDrafting(schematic),
+        revision: String(this.revision),
+        sourcePending: this.sourceDraft !== null,
+        editingBlocked: this.editingBlocked,
+      };
     if (id === 'schematic.symbol.get')
       return {
         schematicId: schematic.id,
@@ -1263,6 +1292,9 @@ export class ProjectCore {
       }
       case 'schematic.wire':
         next = commitWireRoute(schematic, args.points);
+        break;
+      case 'schematic.wires':
+        next = commitWireRoutes(schematic, args.routes);
         break;
       case 'schematic.annotation':
         next = saveAnnotation(schematic, args.text, args.position as Point, args.id).circuit;

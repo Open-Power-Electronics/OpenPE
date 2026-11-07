@@ -451,9 +451,47 @@ export function createCapabilityHost(
     id: 'capabilities.list',
     kind: 'query',
     owner: 'api',
-    description: 'List current core, interface and plugin capabilities and their availability.',
-    inputSchema: emptyCapabilityInput,
-    handler: () => host.catalog(),
+    description:
+      'Discover current capabilities. Use includeSchema:false for a compact index, prefix/kind to narrow a domain, or ids to retrieve only the exact schemas needed. Availability remains live.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ids: {
+          type: 'array',
+          items: { type: 'string', minLength: 1, maxLength: 160 },
+          minItems: 1,
+          maxItems: 64,
+          uniqueItems: true,
+        },
+        prefix: { type: 'string', minLength: 1, maxLength: 160 },
+        kind: { enum: ['query', 'command'] },
+        includeSchema: { type: 'boolean' },
+      },
+      additionalProperties: false,
+    },
+    handler: (input) => {
+      const filter = input as {
+        ids?: string[];
+        prefix?: string;
+        kind?: string;
+        includeSchema?: boolean;
+      };
+      const selected = host
+        .catalog()
+        .filter(
+          (item) =>
+            (!filter.ids || filter.ids.includes(item.id)) &&
+            (!filter.prefix || item.id.startsWith(filter.prefix)) &&
+            (!filter.kind || item.kind === filter.kind),
+        );
+      if (filter.ids?.some((id) => !entries.has(id)))
+        throw new Error(
+          'An explicitly requested capability is not registered. Refresh the compact capability index.',
+        );
+      return filter.includeSchema === false
+        ? selected.map(({ inputSchema: _schema, ...item }) => item)
+        : selected;
+    },
   });
   return host;
 }

@@ -4,6 +4,7 @@ export function createEventNormalizer(provider) {
     throw new Error('Unknown agent event protocol.');
   const messages = new Map();
   const blocks = new Map();
+  const phases = new Map();
   let text = '',
     claudeId = 'assistant',
     piId = 'assistant',
@@ -20,13 +21,29 @@ export function createEventNormalizer(provider) {
     return [event];
   };
   const status = (stage, text) => [{ type: 'status', stage, text }];
+  const process = (id, text, append = false) =>
+    typeof text === 'string' && text ? [{ type: 'process', id, text, append }] : [];
   return (event) => {
     if (provider === 'codex') {
       const p = event.params || {};
+      if (
+        (event.method === 'item/started' || event.method === 'item/completed') &&
+        p.item?.type === 'agentMessage'
+      )
+        phases.set(p.item.id, p.item.phase);
+      if (event.method === 'item/reasoning/summaryTextDelta')
+        return [
+          ...status('thinking', 'Model is reasoning…'),
+          ...process(`reasoning-${p.itemId}-${p.summaryIndex}`, p.delta, true),
+        ];
       if (event.method === 'item/agentMessage/delta' && typeof p.delta === 'string')
-        return update(p.itemId, p.delta, true);
+        return phases.get(p.itemId) === 'commentary'
+          ? process(p.itemId, p.delta, true)
+          : update(p.itemId, p.delta, true);
       if (event.method === 'item/completed' && p.item?.type === 'agentMessage')
-        return update(p.item.id, p.item.text || '');
+        return p.item.phase === 'commentary'
+          ? process(p.item.id, p.item.text || '')
+          : update(p.item.id, p.item.text || '');
       if (event.method === 'turn/started') return status('waiting', 'Waiting for the model…');
       if (
         event.method?.startsWith('item/reasoning/') ||
@@ -62,7 +79,10 @@ export function createEventNormalizer(provider) {
       if (event.type === 'message_update') {
         const item = event.assistantMessageEvent || {};
         if (item.type === 'thinking_delta' || item.type === 'thinking_start')
-          return status('thinking', 'Model is reasoning…');
+          return [
+            ...status('thinking', 'Model is reasoning…'),
+            ...process(`${piId}-thinking-${item.contentIndex}`, item.delta, true),
+          ];
         if (item.type === 'error')
           return [
             {
@@ -125,7 +145,10 @@ export function createEventNormalizer(provider) {
           return status('waiting', 'Model response started…');
         }
         if (e.type === 'content_block_delta' && e.delta?.type === 'thinking_delta')
-          return status('thinking', 'Model is reasoning…');
+          return [
+            ...status('thinking', 'Model is reasoning…'),
+            ...process(`${claudeId}-thinking-${e.index}`, e.delta.thinking, true),
+          ];
         const initial = e.type === 'content_block_start' && e.content_block?.type === 'text';
         if (initial || (e.type === 'content_block_delta' && e.delta?.type === 'text_delta')) {
           const parts = blocks.get(claudeId) || new Map();

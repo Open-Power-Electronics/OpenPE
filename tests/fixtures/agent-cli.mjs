@@ -100,12 +100,9 @@ if (mode.startsWith('claude-catalog')) {
     mode.startsWith('claude-effort-') ? mode.slice('claude-effort-'.length) : 'high',
   );
   assert.equal(process.argv[process.argv.indexOf('--model') + 1], 'fixture-model');
-  process.stdin.resume();
-  let received = '';
-  process.stdin.on('data', (chunk) => {
-    received += chunk;
-  });
-  process.stdin.on('end', async () => {
+  const input = createInterface({ input: process.stdin });
+  input.on('line', async (received) => {
+    if (JSON.parse(received).type !== 'user') return;
     if (mode === 'claude-annotations') {
       assert.equal(process.argv[process.argv.indexOf('--input-format') + 1], 'stream-json');
       const input = JSON.parse(received);

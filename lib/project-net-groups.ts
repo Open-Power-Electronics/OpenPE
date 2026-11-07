@@ -3,7 +3,13 @@ import { unitGraphics } from './library';
 import { child, children, val } from './sexpr';
 import { isOwnedCircuit } from './immutable-project';
 
-type Group = { wires: number[]; junctions: number[]; labels: number[]; pins: string[] };
+export type ProjectNetGroup = {
+  wires: number[];
+  junctions: number[];
+  labels: number[];
+  pins: string[];
+};
+type Group = ProjectNetGroup;
 const ownedGroups = new WeakMap<Circuit, Group[]>();
 const copyGroups = (groups: Group[]): Group[] =>
   groups.map((group) => ({
@@ -31,7 +37,13 @@ export function projectNetGroups(circuit: Circuit): Group[] {
   return groups;
 }
 
-function groupCircuit(circuit: Circuit): Group[] {
+/** The same physical joins before labels and power names link remote islands.
+ * This is an observation of the drawing, not a different electrical netlist. */
+export function projectPhysicalNetGroups(circuit: Circuit): ProjectNetGroup[] {
+  return groupCircuit(circuit, false);
+}
+
+function groupCircuit(circuit: Circuit, joinNames = true): Group[] {
   const points: Point[] = [],
     parent: number[] = [];
   const add = (p: Point) => {
@@ -149,11 +161,13 @@ function groupCircuit(circuit: Circuit): Group[] {
         join(i, wires[index]);
     }
   });
-  const named = new Map<string, number>();
-  for (const item of names) {
-    const previous = named.get(item.name);
-    if (previous !== undefined) join(item.index, previous);
-    named.set(item.name, item.index);
+  if (joinNames) {
+    const named = new Map<string, number>();
+    for (const item of names) {
+      const previous = named.get(item.name);
+      if (previous !== undefined) join(item.index, previous);
+      named.set(item.name, item.index);
+    }
   }
   const groups = new Map<number, Group>();
   const group = (index: number) => {

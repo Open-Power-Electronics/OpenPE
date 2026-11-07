@@ -16,6 +16,9 @@ import AgentLogo from './AgentLogo';
 import AgentComposer from './AgentComposer';
 import AgentToolCall from './AgentToolCall';
 import AgentFileChanges from './AgentFileChanges';
+import AgentQuestions from './AgentQuestions';
+import AgentProcess from './AgentProcess';
+import { updateAgentProcess, type AgentProcessEntry } from '@/lib/agent-process';
 import {
   changedAgentFiles,
   mergeAgentFileChanges,
@@ -40,6 +43,7 @@ import {
   type AgentCapabilities,
   type AgentCapabilityRequest,
   type AgentCommandReview,
+  type AgentQuestionRequest,
   type ChatOutcome,
   type ChatTimings,
   type ReasoningEffort,
@@ -141,6 +145,15 @@ export default function Chat({
   const [startedAt, setStartedAt] = useState(0);
   const [sendError, setSendError] = useState('');
   const [toolCalls, setToolCalls] = useState<AgentToolActivity[]>([]);
+  const [processEntries, setProcessEntries] = useState<AgentProcessEntry[]>([]);
+  const [questions, setQuestions] = useState<
+    (Pick<AgentQuestionRequest, 'requestId' | 'questions'> & {
+      messageId: string;
+      closed?: boolean;
+    })[]
+  >([]);
+  const questionRequests = useRef(new Map<string, AgentQuestionRequest>());
+  const answering = useRef(new Set<string>());
   const [fileChanges, setFileChanges] = useState<Record<string, FileChanges>>({});
   const [showLatest, setShowLatest] = useState(false);
   const [commandReviews, setCommandReviews] = useState<
@@ -175,7 +188,7 @@ export default function Chat({
     // Follow within the conversation only; never scroll the editor's ancestors.
     if (active && follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [messages, streamedText, toolCalls, fileChanges, active]);
+  }, [messages, streamedText, toolCalls, fileChanges, processEntries, questions, active]);
   useEffect(
     () => () => {
       controller.current?.abort();
@@ -186,6 +199,8 @@ export default function Chat({
   useEffect(() => {
     const ids = new Set(messages.map((message) => message.id));
     setToolCalls((items) => items.filter((item) => ids.has(item.messageId)));
+    setProcessEntries((items) => items.filter((item) => ids.has(item.messageId)));
+    setQuestions((items) => items.filter((item) => ids.has(item.messageId)));
     setFileChanges((items) =>
       Object.fromEntries(Object.entries(items).filter(([id]) => ids.has(id))),
     );
@@ -302,6 +317,7 @@ export default function Chat({
     setStartedAt(started);
     setActiveId(id);
     setStreamedText('');
+    questionRequests.current.clear();
     setLiveModel('');
     follow.current = true;
     setShowLatest(false);
@@ -494,6 +510,29 @@ export default function Chat({
       await readChatEvents(
         res.body,
         (e) => {
+          if (e.type === 'process') setProcessEntries((items) => updateAgentProcess(items, id, e));
+          if (e.type === 'question-closed' && e.sessionId === sessionId) {
+            questionRequests.current.delete(e.requestId);
+            setQuestions((items) =>
+              items.map((item) =>
+                item.requestId === e.requestId ? { ...item, closed: true } : item,
+              ),
+            );
+          }
+          if (
+            e.type === 'question-request' &&
+            e.sessionId === sessionId &&
+            !control.signal.aborted &&
+            !questionRequests.current.has(e.requestId)
+          ) {
+            questionRequests.current.set(e.requestId, e);
+            setQuestions((items) =>
+              [...items, { requestId: e.requestId, questions: e.questions, messageId: id }].slice(
+                -64,
+              ),
+            );
+            setStatus('Waiting for your answer…');
+          }
           if (e.type === 'capability-request') void capabilityRequest(e);
           if (e.type === 'status') setStatus(e.text);
           if (e.type === 'agent-info') {
@@ -535,6 +574,7 @@ export default function Chat({
       outcome = control.signal.aborted ? 'cancelled' : 'failed';
       failure = outcome === 'cancelled' ? 'Generation stopped.' : (e as Error).message;
     } finally {
+      questionRequests.current.clear();
       clearTimeout(flushTimer);
       // A provider may finish immediately after consuming a tool result. Drain
       // only serialized lifecycle requests; unresolved commands still cancel.
@@ -771,50 +811,103 @@ export default function Chat({
                       {m.id !== activeId && m.timings && <ChatTiming timings={m.timings} />}
                     </div>
                   )}
-                  {toolCalls.some((item) => item.messageId === m.id) && (
-                    <div className="agent-tool-list" aria-label="OpenPE tool activity">
-                      {toolCalls
+                  {(toolCalls.some((item) => item.messageId === m.id) ||
+                    processEntries.some((item) => item.messageId === m.id)) && (
+                    <AgentProcess
+                      running={m.id === activeId}
+                      attention={toolCalls.some(
+                        (item) =>
+                          item.messageId === m.id &&
+                          ['review', 'applying', 'failed'].includes(item.status),
+                      )}
+                    >
+                      {processEntries
                         .filter((item) => item.messageId === m.id)
-                        .map((item) => {
-                          const review = commandReviews.find(
-                            (entry) => entry.messageId === m.id && entry.command.id === item.id,
-                          );
-                          return (
-                            <AgentToolCall
-                              key={item.id}
-                              activity={item}
-                              reviewCommand={review?.command}
-                              onApply={
-                                review?.status === 'pending'
-                                  ? () => void applyCommandReview(item.id)
-                                  : undefined
-                              }
-                              onReject={
-                                review?.status === 'pending'
-                                  ? () => {
-                                      reviewClaims.current.add(item.id);
-                                      setCommandReviews((items) =>
-                                        items.map((entry) =>
-                                          entry.command.id === item.id
-                                            ? { ...entry, status: 'rejected' }
-                                            : entry,
-                                        ),
-                                      );
-                                      setToolCalls((items) =>
-                                        items.map((entry) =>
-                                          entry.messageId === m.id && entry.id === item.id
-                                            ? { ...entry, status: 'rejected', result: undefined }
-                                            : entry,
-                                        ),
-                                      );
-                                    }
-                                  : undefined
-                              }
-                            />
-                          );
-                        })}
-                    </div>
+                        .map((item) => (
+                          <div className="agent-process-text" key={item.id}>
+                            <AssistantResponse text={item.text} />
+                          </div>
+                        ))}
+                      <div className="agent-tool-list" aria-label="OpenPE tool activity">
+                        {toolCalls
+                          .filter((item) => item.messageId === m.id)
+                          .map((item) => {
+                            const review = commandReviews.find(
+                              (entry) => entry.messageId === m.id && entry.command.id === item.id,
+                            );
+                            return (
+                              <AgentToolCall
+                                key={item.id}
+                                activity={item}
+                                reviewCommand={review?.command}
+                                onApply={
+                                  review?.status === 'pending'
+                                    ? () => void applyCommandReview(item.id)
+                                    : undefined
+                                }
+                                onReject={
+                                  review?.status === 'pending'
+                                    ? () => {
+                                        reviewClaims.current.add(item.id);
+                                        setCommandReviews((items) =>
+                                          items.map((entry) =>
+                                            entry.command.id === item.id
+                                              ? { ...entry, status: 'rejected' }
+                                              : entry,
+                                          ),
+                                        );
+                                        setToolCalls((items) =>
+                                          items.map((entry) =>
+                                            entry.messageId === m.id && entry.id === item.id
+                                              ? { ...entry, status: 'rejected', result: undefined }
+                                              : entry,
+                                          ),
+                                        );
+                                      }
+                                    : undefined
+                                }
+                              />
+                            );
+                          })}
+                      </div>
+                    </AgentProcess>
                   )}
+                  {questions
+                    .filter((question) => question.messageId === m.id)
+                    .map((question) => (
+                      <AgentQuestions
+                        key={question.requestId}
+                        questions={question.questions}
+                        disabled={m.id !== activeId || question.closed === true}
+                        onAnswer={async (answers) => {
+                          const request = questionRequests.current.get(question.requestId);
+                          if (
+                            !request ||
+                            controller.current?.signal.aborted ||
+                            answering.current.has(request.requestId)
+                          )
+                            throw new Error('This Agent question is no longer active.');
+                          answering.current.add(request.requestId);
+                          try {
+                            await api('/api/chat/answer', {
+                              method: 'POST',
+                              body: JSON.stringify({
+                                runId: request.runId,
+                                sessionId: request.sessionId,
+                                requestId: request.requestId,
+                                token: request.token,
+                                answers,
+                              }),
+                              signal: controller.current?.signal,
+                            });
+                            questionRequests.current.delete(request.requestId);
+                            setStatus('Waiting for the model…');
+                          } finally {
+                            answering.current.delete(request.requestId);
+                          }
+                        }}
+                      />
+                    ))}
                   {m.role === 'assistant' ? (
                     <AssistantResponse
                       text={

@@ -5,6 +5,9 @@ import { piIsolationFlags } from './agent-provider-runtime.mjs';
 import { createEventNormalizer } from './agent-events.mjs';
 import { validModelId } from './model-id.mjs';
 import { providerReasoningEfforts } from './agent-provider-format.mjs';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 // Pi publishes its per-model native thinking-level map through the RPC catalog.
 // Unmapped ordinary levels use the provider's default mapping; xhigh/max require
@@ -21,7 +24,25 @@ function piModelEfforts(model) {
 
 // The Pi client sends only state/catalog queries and one prompt. The RPC bash,
 // resource, session-file and extension control commands are never exposed.
-function piRPC(launch, cwd, signal, options, handlers) {
+async function piRPC(launch, cwd, signal, options, handlers) {
+  if (!options.questions) return piRPCSession(launch, cwd, signal, options, handlers);
+  signal.throwIfAborted();
+  // External Pi cannot read Electron's ASAR. Materialize only this fixed module,
+  // never a renderer-selected extension or a user's project file.
+  const directory = await mkdtemp(path.join(tmpdir(), 'openpe-pi-questions-'));
+  try {
+    const questionExtension = path.join(directory, 'pi-questions.mjs');
+    await writeFile(
+      questionExtension,
+      await readFile(new URL('./pi-questions.mjs', import.meta.url)),
+    );
+    return await piRPCSession(launch, cwd, signal, { ...options, questionExtension }, handlers);
+  } finally {
+    await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}
+
+function piRPCSession(launch, cwd, signal, options, handlers) {
   if (signal.aborted) return Promise.reject(new Error('Pi connection cancelled.'));
   return new Promise((resolve, reject) => {
     const proc = spawn(
@@ -31,10 +52,25 @@ function piRPC(launch, cwd, signal, options, handlers) {
         '--mode',
         'rpc',
         ...piIsolationFlags,
+        ...(options.questionExtension ? ['--extension', options.questionExtension] : []),
         ...(options.model ? ['--model', options.model] : []),
         ...(options.effort ? ['--thinking', options.effort] : []),
       ],
-      { cwd, env: launch.env, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'] },
+      {
+        cwd,
+        env: {
+          ...launch.env,
+          ...(options.questions
+            ? {
+                OPENPE_QUESTIONS_URL: options.questions.url,
+                OPENPE_QUESTIONS_TOKEN: options.questions.token,
+              }
+            : {}),
+        },
+        windowsHide: true,
+        shell: false,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
     );
     const decoder = new StringDecoder('utf8');
     let buffer = '',
@@ -72,16 +108,18 @@ function piRPC(launch, cwd, signal, options, handlers) {
       }
     };
     const abort = () => finish(new Error('Pi connection cancelled.'));
-    const timer = setTimeout(
-      () =>
-        finish(
-          new Error(
-            options.timeoutMessage ||
-              'Pi connection timed out. Check the CLI connection and retry.',
-          ),
+    const onTimeout = () => {
+      if (options.questions?.waiting()) {
+        timer = setTimeout(onTimeout, options.timeoutMs || 300000);
+        return;
+      }
+      finish(
+        new Error(
+          options.timeoutMessage || 'Pi connection timed out. Check the CLI connection and retry.',
         ),
-      options.timeoutMs || 300000,
-    );
+      );
+    };
+    let timer = setTimeout(onTimeout, options.timeoutMs || 300000);
     const send = (record) => {
       if (!settled && !proc.stdin.destroyed) proc.stdin.write(JSON.stringify(record) + '\n');
     };
@@ -94,7 +132,11 @@ function piRPC(launch, cwd, signal, options, handlers) {
           throw new Error(
             `Pi request failed: ${String(event.error || event.command || 'Unknown error').slice(0, 4000)}`,
           );
-        if (event.type === 'extension_ui_request' || event.type?.startsWith('tool_execution_'))
+        if (
+          event.type === 'extension_ui_request' ||
+          (event.type?.startsWith('tool_execution_') &&
+            (!options.questions || event.toolName !== 'openpe_ask_user'))
+        )
           throw new Error(
             'Pi attempted a tool or interactive action in an isolated OpenPE session.',
           );
