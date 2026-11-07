@@ -8,10 +8,73 @@ import { BoxGeometry } from 'three';
 import { tsImport } from 'tsx/esm/api';
 import sharp from 'sharp';
 
+function measureModelRenderSurfaces(image) {
+  const scale = image.info.width / 906;
+  const luminance = (x, y) => {
+    const offset = (y * image.info.width + x) * image.info.channels;
+    return (
+      0.2126 * image.data[offset] +
+      0.7152 * image.data[offset + 1] +
+      0.0722 * image.data[offset + 2]
+    );
+  };
+  // Regions are in the fixed fixture's 906 × 747 CSS image coordinates. Keep
+  // each stencil inside one surface and away from texture, silhouette or face
+  // edges. The metal region follows its sloping face rather than its screen box.
+  const regions = {
+    metalSide: {
+      bounds: [435, 405, 500, 510],
+      includes: (x, y) => {
+        const u = (x - 413) / 109;
+        const v = (y - 380 - 91 * u) / 65;
+        return u >= 0.25 && u <= 0.75 && v >= 0.3 && v <= 0.7;
+      },
+    },
+    transparentTop: { bounds: [250, 310, 280, 340] },
+    pcb: { bounds: [330, 430, 375, 470] },
+  };
+  return Object.fromEntries(
+    Object.entries(regions).map(([name, region]) => {
+      const [left, top, right, bottom] = region.bounds.map((value) => Math.round(value * scale));
+      const residuals = [1, 4, 8].map((radiusCssPx) => {
+        const radius = Math.max(1, Math.round(radiusCssPx * scale));
+        const values = [];
+        let sum = 0,
+          squares = 0;
+        for (let y = top; y < bottom; y++)
+          for (let x = left; x < right; x++) {
+            if (region.includes && !region.includes(x / scale, y / scale)) continue;
+            // Symmetric differences remove a linear lighting gradient. Larger
+            // radii expose mottling that a one-pixel grain score can overlook.
+            const neighbours =
+              (luminance(x - radius, y) +
+                luminance(x + radius, y) +
+                luminance(x, y - radius) +
+                luminance(x, y + radius)) /
+              4;
+            const residual = Math.abs(luminance(x, y) - neighbours);
+            values.push(residual);
+            sum += residual;
+            squares += residual * residual;
+          }
+        values.sort((a, b) => a - b);
+        return {
+          radiusCssPx,
+          meanAbsolute: sum / values.length,
+          rms: Math.sqrt(squares / values.length),
+          p95: values[Math.floor((values.length - 1) * 0.95)],
+        };
+      });
+      return [name, residuals];
+    }),
+  );
+}
+
 // Isolated real WebGL/React coverage. No Electron, native files, providers,
 // solvers or remote resources run; the STEP service returns fixed box geometry.
 const lifecycleOnly = process.argv.includes('--lifecycle-only');
 const preparationBaseline = process.argv.includes('--preparation-baseline');
+const highDpi = process.argv.includes('--high-dpi');
 const rendererSource = await readFile('components/model-studio-renderer.ts', 'utf8');
 const sampleTarget = rendererSource.match(/export const MODEL_RENDER_SAMPLES = (\d+);/);
 assert.ok(sampleTarget, 'Find the current renderer sample target.');
@@ -20,8 +83,11 @@ const outputDirectory = lifecycleOnly
   ? 'test-results/model-render-lifecycle'
   : preparationBaseline
     ? 'test-results/model-render-preparation-baseline'
-    : 'test-results/model-render-ui';
+    : highDpi
+      ? 'test-results/model-render-high-dpi'
+      : 'test-results/model-render-ui';
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
+const { modelCadGeometryKey } = await tsImport('../lib/model-cad.ts', import.meta.url);
 const board = createEmptyPCB();
 board.graphics = [
   {
@@ -172,10 +238,11 @@ const bundle = await build({
 import Preview from'./components/PCBModelPreview';
 function Footer({center}){return <footer className="status-bar"><div className="status-center">{center}</div></footer>;}
 function Harness(){const [active,setActive]=useState(true),[sidebar,setSidebar]=useState(true),[mounted,setMounted]=useState(true);
+ const[modelCad,setModelCad]=useState(window.initialFixture.modelCad);
  const view=useRef(window.initialFixture.view);
  const[host]=useState(()=>({catalog:()=>[],execute:async()=>{window.renderCommits++;throw Error('Rendering cannot edit this fixture.')}}));
- window.setRenderActive=setActive;window.setRenderSidebar=setSidebar;window.setRenderMounted=setMounted;
- return mounted?<div style={{height:'100vh'}}><Preview board={window.initialFixture.board} modelCad={window.initialFixture.modelCad}
+ window.setRenderActive=setActive;window.setRenderSidebar=setSidebar;window.setRenderMounted=setMounted;window.setRenderCad=setModelCad;
+ return mounted?<div style={{height:'100vh'}}><Preview board={window.initialFixture.board} modelCad={modelCad}
  viewState={view} active={active} visible={active} sidebarVisible={sidebar} capabilityHost={host} errorTarget={null} statusBar={<Footer/>}/></div>:null;}
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     resolveDir: process.cwd(),
@@ -191,6 +258,19 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
     {
       name: 'inspect-model-render',
       setup(plugin) {
+        plugin.onLoad({ filter: /[\\/]model-render-denoise\.ts$/ }, async ({ path: filename }) => {
+          const source = await readFile(filename, 'utf8');
+          const marker = '          quad.render(renderer);';
+          assert.ok(source.includes(marker), 'Instrument each guided denoise pass.');
+          return {
+            contents: source.replace(
+              marker,
+              '          window.renderDenoisePasses=(window.renderDenoisePasses??0)+1; quad.render(renderer);',
+            ),
+            loader: 'ts',
+            resolveDir: path.dirname(filename),
+          };
+        });
         plugin.onLoad({ filter: /[\\/]model-studio-renderer\.ts$/ }, async ({ path: filename }) => {
           let source = await readFile(filename, 'utf8');
           if (lifecycleOnly)
@@ -201,13 +281,17 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
             marker,
             `  window.renderPhaseTimings ??= {compilations:[],sceneUploads:[],cameraTypes:[]};
             const backendStarted=performance.now();
-            ${marker}
+            let traceSeed=0x4f50454e;
+            const withTraceRandom=(action)=>{const original=Math.random;
+              Math.random=()=>{traceSeed=(Math.imul(traceSeed,1664525)+1013904223)>>>0;return traceSeed/4294967296;};
+              try{return action();}finally{Math.random=original;}};
+            const tracer=withTraceRandom(()=>new PathTracingRenderer(renderer));
             window.renderPhaseTimings.backendMs=performance.now()-backendStarted;
-            window.inspectPathTracer=()=>({samples:tracer.samples,compiling:tracer.isCompiling,compilePending:!!tracer._compilePromise,geometry:generator.geometry.attributes.position?.count,programs:renderer.info.programs?.length,quality:{samples:MODEL_RENDER_SAMPLES,bounces:material.bounces,transmissiveBounces:material.transmissiveBounces,resolutionScale:MODEL_RENDER_RESOLUTION_SCALE,mis:material.defines.FEATURE_MIS,denoise:{sigma:denoise.sigma,kSigma:denoise.kSigma,threshold:denoise.threshold}},maskMaterials:(window.traceMaterials??[]).filter(material=>material.name==='OpenPE Render mask').map(material=>({normal:!!material.normalMap,clearcoatNormal:!!material.clearcoatNormalMap,transmission:material.transmission}))});`,
+            window.inspectPathTracer=()=>({samples:tracer.samples,compiling:tracer.isCompiling,compilePending:!!tracer._compilePromise,geometry:generator.geometry.attributes.position?.count,programs:renderer.info.programs?.length,quality:{samples:MODEL_RENDER_SAMPLES,bounces:material.bounces,transmissiveBounces:material.transmissiveBounces,resolutionScale:MODEL_RENDER_RESOLUTION_SCALE,mis:material.defines.FEATURE_MIS},maskMaterials:(window.traceMaterials??[]).filter(material=>material.name==='OpenPE Render mask').map(material=>({normal:!!material.normalMap,clearcoatNormal:!!material.clearcoatNormalMap,transmission:material.transmission}))});`,
           );
           source = source.replace(
             '      const results = generator.generate();',
-            '      const results = generator.generate(); window.traceMaterials=results.materials;',
+            '      const results = generator.generate(); window.traceMaterials=results.materials; results.lights.forEach((light,index)=>light.uuid="fixture-light-"+index);',
           );
           source = source.replace(
             '    setScene(scene, camera) {',
@@ -227,7 +311,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
             '      tracer.update();',
             `      window.renderSamplingStarted ??= performance.now();
             window.renderTraceTiles=(window.renderTraceTiles??0)+1;
-            tracer.update();
+            withTraceRandom(()=>tracer.update());
             const sample=Math.round(tracer.samples);
             if((sample===1||sample===MODEL_RENDER_SAMPLES)&&Math.abs(sample-tracer.samples)<1e-8&&!window.renderAccumulationStats?.some(item=>item.samples===sample)){
               const target=tracer.target,pixels=new Float32Array(32*32*4);
@@ -241,10 +325,6 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
           source = source.replace(
             '        advanceModelRenderFrame(backend);',
             '        if(!backend.compiling&&backend.samples<MODEL_RENDER_SAMPLES) window.renderSamplingFrames=(window.renderSamplingFrames??0)+1; advanceModelRenderFrame(backend);',
-          );
-          source = source.replace(
-            '        quad.render(renderer);',
-            '        window.renderDenoisePasses=(window.renderDenoisePasses??0)+1; quad.render(renderer);',
           );
           for (const [marker, replacement] of [
             [
@@ -270,6 +350,12 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
         plugin.onLoad({ filter: /[\\/]PCBModelPreview\.tsx$/ }, async ({ path: filename }) => {
           let source = await readFile(filename, 'utf8');
           const replacements = [
+            [
+              '          studio = createModelStudioRenderer(renderer, scene, group, [groundGroup]);',
+              `          if(pendingRenderImport())throw Error('Render started before model import completed.');
+              window.renderBackendStarts=(window.renderBackendStarts??0)+1;
+              studio = createModelStudioRenderer(renderer, scene, group, [groundGroup]);`,
+            ],
             [
               '    const yieldBuild = async () => {',
               `    const yieldBuild = async () => {
@@ -307,7 +393,10 @@ const browser = await chromium.launch({
     process.env.OPENPE_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
 });
 try {
-  const page = await browser.newPage({ viewport: { width: 1200, height: 820 } });
+  const page = await browser.newPage({
+    viewport: { width: 1200, height: 820 },
+    deviceScaleFactor: highDpi ? 2 : 1,
+  });
   const errors = [];
   const consoleErrors = [];
   const deprecationWarnings = [];
@@ -321,6 +410,13 @@ try {
     }
   });
   await page.addInitScript((value) => {
+    // Fix fixture-only light ordering, blue noise and stratification. Pixel
+    // regressions compare one repeatable scene, not a lucky Monte Carlo run.
+    let seed = 0x4f50454e;
+    Math.random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
     window.initialFixture = value;
     window.holdRenderBuild = true;
     window.holdRenderShader = true;
@@ -334,6 +430,12 @@ try {
       },
     };
   }, fixture);
+  let releaseComponentImport;
+  const componentImport = new Promise((resolve) => {
+    releaseComponentImport = resolve;
+  });
+  let cadImport = Promise.resolve();
+  let failCadImport = false;
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/libraries/footprints') {
@@ -346,10 +448,22 @@ try {
         },
       });
     }
-    if (url.pathname === '/api/library-model')
+    if (url.pathname === '/api/library-model') {
+      await componentImport;
       return route.fulfill({
         json: url.searchParams.get('id') === 'Fixture:Colors' ? parsedColoredModel : parsedModel,
       });
+    }
+    if (url.pathname === '/api/model-cad/preview') {
+      await cadImport;
+      const object = route.request().postDataJSON().object;
+      return route.fulfill({
+        json: {
+          shapeKey: failCadImport ? 'failed-fixture-geometry' : modelCadGeometryKey(object),
+          meshes: parsedModel.meshes,
+        },
+      });
+    }
     return route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
   });
   await page.goto('http://localhost');
@@ -368,6 +482,59 @@ try {
   await page.waitForFunction(() => typeof window.releaseRenderBuild === 'function');
   assert.equal(await button.isDisabled(), true, 'Render stays disabled until the scene is ready.');
   await page.evaluate(() => window.releaseRenderBuild());
+  await page.waitForFunction(() =>
+    document.querySelector('.pcb-model-status')?.textContent.includes('Loading components'),
+  );
+  await button.click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[data-model-render-status]')
+      ?.textContent.includes('Waiting for model import'),
+  );
+  assert.equal(await button.getAttribute('aria-pressed'), 'true', 'Import queues Render.');
+  assert.equal(await button.getAttribute('aria-busy'), 'true', 'Import reports pending work.');
+  assert.match(
+    await page.locator('[data-model-render-status]').textContent(),
+    /components · 0\/2 · J1/,
+    'Queued Render retains the live component import progress.',
+  );
+  assert.equal(
+    await page.evaluate(() => typeof window.inspectPathTracer),
+    'undefined',
+    'Queued Render allocates and compiles no path tracer before model import.',
+  );
+  const beginImportExport = () =>
+    page.evaluate(() => {
+      window.importRenderExport = window.exportRenderImage().then(
+        () => ({ completed: true }),
+        (error) => ({ error: error.message }),
+      );
+    });
+  const assertImportExportCancelled = async (message) => {
+    const result = await page.evaluate(() => window.importRenderExport);
+    assert.match(result.error ?? '', /changed or was stopped/, message);
+    assert.equal(await page.evaluate(() => window.renderExports.length), 0);
+  };
+  await beginImportExport();
+  await button.click();
+  await assertImportExportCancelled('Stopping queued Render cancels its pending export.');
+  await button.click();
+  await beginImportExport();
+  await page.evaluate(() => window.setRenderActive(false));
+  await assertImportExportCancelled('Hiding Model cancels an export waiting for imports.');
+  assert.equal(
+    await page.evaluate(() => typeof window.inspectPathTracer),
+    'undefined',
+    'A hidden queued Render still cannot prepare a partial scene.',
+  );
+  await page.evaluate(() => window.setRenderActive(true));
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[data-model-render-status]')
+      ?.textContent.includes('Waiting for model import'),
+  );
+  await button.click();
+  releaseComponentImport();
   await page.waitForFunction(() => {
     const state = window.inspectRender?.();
     return (
@@ -580,9 +747,8 @@ try {
       transmissiveBounces: 3,
       resolutionScale: 0.75,
       mis: 1,
-      denoise: { sigma: 1.6, kSigma: 1.5, threshold: 0.18 },
     },
-    'Preparation optimization preserves the established rendering quality.',
+    'Render retains full sampling and optical paths with guided reconstruction.',
   );
   const maskMaterials = await page.evaluate(() => window.inspectPathTracer().maskMaterials);
   assert.ok(
@@ -638,6 +804,34 @@ try {
   );
   assert.ok(redPixels > 200, 'Authored red STEP faces retain their colour in actual GPU output.');
   assert.ok(bluePixels > 200, 'Authored blue STEP faces retain their colour in actual GPU output.');
+  // Compare the same red/blue face boundary near and away from its antialiased
+  // edge. A clean floor alone cannot justify a filter that smears material edges.
+  const imageScale = studio.info.width / 906;
+  const chroma = (x, y) => {
+    const offset =
+      (Math.round(y * imageScale) * studio.info.width + Math.round(x * imageScale)) *
+      studio.info.channels;
+    return studio.data[offset] - studio.data[offset + 2];
+  };
+  let nearContrast = 0,
+    farContrast = 0,
+    edgeCount = 0;
+  for (let x = 310; x <= 380; x += 5) {
+    const expectedY = Math.round(223 + ((x - 278) * 107) / 129);
+    let edgeY = expectedY,
+      strongest = -Infinity;
+    for (let y = expectedY - 4; y <= expectedY + 4; y++) {
+      const contrast = chroma(x, y - 1) - chroma(x, y + 1);
+      if (contrast > strongest) {
+        strongest = contrast;
+        edgeY = y;
+      }
+    }
+    nearContrast += chroma(x, edgeY - 2) - chroma(x, edgeY + 2);
+    farContrast += chroma(x, edgeY - 8) - chroma(x, edgeY + 8);
+    edgeCount++;
+  }
+  const edgeContrast = nearContrast / farContrast;
   // This fixed floor region has no geometry edges or cast shadow. A local
   // high-pass residual measures visible grain without counting smooth lighting.
   let floorNoise = 0;
@@ -656,6 +850,7 @@ try {
       floorNoise += Math.abs(luminance(x, y) - neighbours);
     }
   floorNoise /= 20000;
+  const surfaceNoise = measureModelRenderSurfaces(studio);
   await canvasHost.screenshot({ path: `${outputDirectory}/studio-viewport.png` });
 
   await page.getByRole('tab', { name: 'Display', exact: true }).click();
@@ -787,6 +982,148 @@ try {
     for (const key of ['board', 'modelCad', 'geometry', 'materials', 'helpers', 'commits'])
       assert.deepEqual(current[key], before[key], `Render cycle ${cycle + 2} preserves ${key}.`);
   }
+  let releaseCadImport;
+  cadImport = new Promise((resolve) => {
+    releaseCadImport = resolve;
+  });
+  failCadImport = true;
+  await page.evaluate(() => {
+    const modelCad = structuredClone(window.initialFixture.modelCad);
+    modelCad.objects[0].edgeTreatment = {
+      kind: 'fillet',
+      distanceMm: 0.5,
+      edges: ['profile:top:0'],
+    };
+    window.setRenderCad(modelCad);
+  });
+  await page.waitForFunction(() =>
+    window.inspectRender().cadGroup.children.some((object) => object.userData.modelCadPending),
+  );
+  const backendStarts = await page.evaluate(() => window.renderBackendStarts);
+  await button.click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[data-model-render-status]')
+      ?.textContent.includes('Waiting for CAD model import'),
+  );
+  assert.equal(
+    await page.evaluate(() => window.renderBackendStarts),
+    backendStarts,
+    'CAD placeholders cannot start a path-tracing backend.',
+  );
+  const exportsBeforeProjection = await page.evaluate(() => window.renderExports.length);
+  await beginImportExport();
+  await projection.click();
+  const changedImportView = await page.evaluate(() => window.importRenderExport);
+  assert.match(
+    changedImportView.error ?? '',
+    /changed or was stopped/,
+    'Changing the queued view cancels its pending export.',
+  );
+  assert.equal(await page.evaluate(() => window.renderExports.length), exportsBeforeProjection);
+  await projection.click();
+  await beginImportExport();
+  releaseCadImport();
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[data-model-render-status][role="alert"]')
+      ?.textContent.includes('Render blocked by model import'),
+  );
+  const failedImportExport = await page.evaluate(() => window.importRenderExport);
+  assert.match(failedImportExport.error ?? '', /Model import failed/);
+  assert.equal(await button.getAttribute('aria-busy'), 'false', 'Failed imports stop the spinner.');
+  assert.equal(
+    await page.evaluate(() => window.renderBackendStarts),
+    backendStarts,
+    'Failed CAD import never renders an incomplete scene.',
+  );
+  cadImport = new Promise((resolve) => {
+    releaseCadImport = resolve;
+  });
+  failCadImport = false;
+  await page.getByRole('button', { name: 'Retry CAD geometry', exact: true }).click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[data-model-render-status]')
+      ?.textContent.includes('Waiting for CAD model import'),
+  );
+  await page.evaluate(() => window.setRenderActive(false));
+  releaseCadImport();
+  await page.evaluate(async () => {
+    for (let index = 0; index < 4; index++) await new Promise(requestAnimationFrame);
+  });
+  assert.equal(
+    await page.evaluate(() => window.renderBackendStarts),
+    backendStarts,
+    'CAD import finishing in a hidden view does not start Render.',
+  );
+  await page.evaluate(() => {
+    window.holdRenderShader = true;
+    window.setRenderActive(true);
+  });
+  await page.waitForFunction((starts) => window.renderBackendStarts === starts + 1, backendStarts);
+  assert.equal(
+    await button.getAttribute('aria-pressed'),
+    'true',
+    'Retry completion automatically resumes the requested Render when Model is visible.',
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      window.inspectRender().cadGroup.children.some((object) => object.userData.modelCadPending),
+    ),
+    false,
+    'All CAD meshes are present before automatic Render preparation.',
+  );
+  await page.waitForFunction(() => typeof window.releaseRenderShader === 'function', undefined, {
+    timeout: 60000,
+  });
+  await beginImportExport();
+  cadImport = new Promise((resolve) => {
+    releaseCadImport = resolve;
+  });
+  await page.evaluate(() => {
+    const modelCad = structuredClone(window.initialFixture.modelCad);
+    modelCad.objects[0].edgeTreatment = {
+      kind: 'fillet',
+      distanceMm: 0.75,
+      edges: ['profile:top:0'],
+    };
+    window.setRenderCad(modelCad);
+  });
+  const changedCadExport = await page.evaluate(() => window.importRenderExport);
+  assert.match(
+    changedCadExport.error ?? '',
+    /changed or was stopped/,
+    'A document CAD edit cancels capture of the earlier Render.',
+  );
+  await page.evaluate(() => {
+    window.releaseRenderShader();
+    window.releaseRenderShader = null;
+  });
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[data-model-render-status]')
+      ?.textContent.includes('Waiting for CAD model import'),
+  );
+  const exportsBeforeImport = await page.evaluate(() => window.renderExports.length);
+  await beginImportExport();
+  releaseCadImport();
+  await page.waitForFunction(
+    (previous) => window.renderExports.length === previous + 1,
+    exportsBeforeImport,
+    { timeout: 180000 },
+  );
+  assert.deepEqual(
+    await page.evaluate(() => window.importRenderExport),
+    { completed: true },
+    'An export queued during import waits through mesh publication and completed tracing.',
+  );
+  assert.equal(
+    await page.evaluate(() => window.renderBackendStarts),
+    backendStarts + 2,
+    'Each completed CAD scene starts exactly one Render backend.',
+  );
+  await button.click();
   await page.evaluate(() => window.setRenderMounted(false));
   await canvasHost.waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
@@ -813,6 +1150,8 @@ try {
         samplingWork,
         quality,
         floorNoise,
+        surfaceNoise,
+        edgeContrast,
         maskMaterials,
         pendingExportCancelled,
         exportedWidth: studio.info.width,
@@ -830,7 +1169,24 @@ try {
       accumulationStats[1].variance < accumulationStats[0].variance * 0.25,
       'Actual GPU accumulation must reduce floor variance, not only advance its sample counter.',
     );
-    assert.ok(floorNoise < 5, 'The denoised image must suppress visible floor speckle.');
+    assert.ok(floorNoise < 0.35, 'The denoised image must suppress visible floor speckle.');
+    for (const name of ['metalSide', 'transparentTop']) {
+      for (const [index, limit] of [0.35, 0.4, 0.5].entries())
+        assert.ok(
+          surfaceNoise[name][index].meanAbsolute < limit,
+          `${name} suppresses grain and mottling at ${surfaceNoise[name][index].radiusCssPx} CSS pixels.`,
+        );
+    }
+    for (const [index, limit] of [0.2, 0.35, 0.45].entries())
+      assert.ok(
+        surfaceNoise.pcb[index].meanAbsolute < limit,
+        'PCB shading retains a clean surface.',
+      );
+    assert.ok(
+      farContrast / edgeCount > 200,
+      'Both sides of the authored colour edge remain distinct.',
+    );
+    assert.ok(edgeContrast > 0.85, 'Denoising retains the sharp red/blue material boundary.');
   }
   console.log(
     'Model Render browser check passed: denoised GPU convergence, authored face colours, cleared completion status, retained view/native data and toggle-off/unmount.',

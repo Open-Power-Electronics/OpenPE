@@ -11,6 +11,10 @@ import { fileMenuAction } from './file-menu-test-helpers.mjs';
 // OPENPE_EXPERIENCE_OPERATIONS=schematic-paced measures low-frequency individual inputs.
 // OPENPE_EXPERIENCE_OPERATIONS=track-paced measures individual Layout drag inputs (v2).
 // OPENPE_EXPERIENCE_OPERATIONS=layout-native-wheel opts into five guarded OS inputs.
+// OPENPE_EXPERIENCE_OPERATIONS=layout-zoom-frames opts into 24 acknowledged wheel
+// inputs with 16 ms idle pacing and active-window renderer RAF cadence recording.
+// OPENPE_EXPERIENCE_OPERATIONS=layout-navigation-latency compares eight isolated
+// pan/zoom inputs each, with equal pacing and camera-DOM/second-RAF endpoints.
 // OPENPE_EXPERIENCE_TARGET_MS=50 selects a strict 50 ms acceptance target (default 100).
 // OPENPE_EXPERIENCE_NATIVE_AX=1 requests full native AX in this isolated test process.
 // Built runs copy and hash out into the isolated profile before launching Electron.
@@ -154,6 +158,7 @@ const navigationOperations = (name) => [
   `${name}-zoom-continuous`,
   `${name}-pan-zoomed-out`,
 ];
+const navigationLatencyOperations = ['layout-pan-latency', 'layout-zoom-latency'];
 const schematicPacedOperations = ['schematic-edit-paced', 'schematic-drag-paced'];
 const variants = [
   ...new Set(process.env.OPENPE_NAVIGATION_VARIANTS?.split(',').filter(Boolean) ?? []),
@@ -180,6 +185,7 @@ const groups = {
   'layout-navigation': navigationOperations('layout'),
   'schematic-navigation': navigationOperations('schematic'),
   'schematic-paced': schematicPacedOperations,
+  'layout-navigation-latency': navigationLatencyOperations,
 };
 const knownOperations = new Set([
   'schematic-edit',
@@ -190,6 +196,7 @@ const knownOperations = new Set([
   'layout-pick',
   'project-reopen',
   'layout-native-wheel',
+  'layout-zoom-frames',
   ...Object.values(groups).flat(),
   ...variants.flatMap((variant) => navigationOperations(`layout-${variant}`)),
 ]);
@@ -231,6 +238,7 @@ for (const [group, names] of [
   ['model-cad-edit', modelCadEditOperations],
   ['route', routeOperations],
   ['schematic-paced', schematicPacedOperations],
+  ['layout-navigation-latency', navigationLatencyOperations],
 ])
   assert.ok(
     !names.some((name) => measuredOperations.has(name)) ||
@@ -309,6 +317,7 @@ let application,
   editorInputTarget,
   layoutInteractionTarget,
   navigationActionTarget = null,
+  layoutNavigationLatencyComparison = null,
   schematicActionTarget = null,
   nativeAccessibilityBefore = null,
   nativeAccessibilityAfter = null,
@@ -660,6 +669,7 @@ try {
             window.experience.tasks.push(...list.getEntries().map((entry) => entry.duration));
         });
         window.experience.taskObserver.observe({ entryTypes: ['longtask'] });
+        const comparisonCameraEvents = new WeakMap();
         for (const type of [
           'keydown',
           'pointerdown',
@@ -673,6 +683,13 @@ try {
             (event) => {
               if (!window.experience.running) return;
               const metrics = window.experience;
+              const comparisonType =
+                metrics.sampleId === 'layout-pan-latency'
+                  ? 'pointermove'
+                  : metrics.sampleId === 'layout-zoom-latency'
+                    ? 'wheel'
+                    : null;
+              if (comparisonType && type !== comparisonType) return;
               const started = performance.now();
               const queuedMs = Math.max(0, started - event.timeStamp);
               const target = event.target instanceof Element ? event.target : null;
@@ -720,9 +737,56 @@ try {
                   : null,
               };
               // Keep every captured input, including one whose second frame
-              // has not completed. The legacy events array stays completed-only.
+              // has not completed. The events array contains completed samples only.
               metrics.observedEvents.push(observed);
-              requestAnimationFrame(() =>
+              if (comparisonType && canvas) {
+                comparisonCameraEvents.set(event, observed);
+                metrics.cameraObserver?.disconnect();
+                const readPose = () =>
+                  (canvas.getAttribute('data-layout-camera-view') ?? canvas.getAttribute('viewBox'))
+                    .split(' ')
+                    .map(Number);
+                const before = readPose();
+                const setup = window.layoutLatencySetup;
+                const factor = event.deltaY > 0 ? 1.12 : 1 / 1.12;
+                const width =
+                  comparisonType === 'wheel'
+                    ? Math.min(2000, Math.max(8, before[2] * factor))
+                    : setup.pose[2];
+                const expected =
+                  comparisonType === 'wheel'
+                    ? [
+                        before[0] +
+                          (before[2] - width) * ((event.clientX - setup.left) / setup.width),
+                        before[1] +
+                          (before[2] - width) * ((event.clientY - setup.top) / setup.width),
+                        width,
+                        (width * setup.height) / setup.width,
+                      ]
+                    : [
+                        setup.pose[0] - ((event.clientX - setup.x) * setup.pose[2]) / setup.width,
+                        setup.pose[1] - ((event.clientY - setup.y) * setup.pose[2]) / setup.width,
+                        setup.pose[2],
+                        setup.pose[3],
+                      ];
+                observed.cameraBefore = before;
+                observed.cameraExpected = expected;
+                const observer = new MutationObserver(() => {
+                  const pose = readPose();
+                  if (pose.every((value, index) => Math.abs(value - before[index]) < 1e-9)) return;
+                  if (!pose.every((value, index) => Math.abs(value - expected[index]) < 0.0001))
+                    return;
+                  observed.cameraDOMAtMs = performance.now();
+                  observed.cameraPresented = pose;
+                  observer.disconnect();
+                });
+                observer.observe(canvas, {
+                  attributes: true,
+                  attributeFilter: ['viewBox', 'data-layout-camera-view'],
+                });
+                metrics.cameraObserver = observer;
+              }
+              requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                   if (metrics.running && metrics.sampleId === observed.sampleId) {
                     const presentedAtMs = performance.now();
@@ -735,11 +799,25 @@ try {
                     });
                     metrics.events.push(observed);
                   }
-                }),
-              );
+                });
+              });
             },
             true,
           );
+        // React's root bubble handler queues the camera RAF before this window
+        // bubble listener. Pair the same native Event; a microtask from capture
+        // would run too early between listeners and cannot establish this order.
+        for (const type of ['pointermove', 'wheel'])
+          window.addEventListener(type, (event) => {
+            const observed = comparisonCameraEvents.get(event);
+            const metrics = window.experience;
+            if (!observed || !metrics.running || metrics.sampleId !== observed.sampleId) return;
+            comparisonCameraEvents.delete(event);
+            requestAnimationFrame(() => {
+              if (metrics.running && metrics.sampleId === observed.sampleId)
+                observed.cameraFirstFrameEndAtMs = performance.now();
+            });
+          });
       }, routeEnabled || trackPacedEnabled);
       const rawCdp = await page.context().newCDPSession(page);
       const cdp = {
@@ -839,6 +917,7 @@ try {
             const metrics = window.experience;
             metrics.running = false;
             cancelAnimationFrame(metrics.frame);
+            metrics.cameraObserver?.disconnect();
             metrics.observer?.disconnect();
             const pendingTasks = metrics.taskObserver?.takeRecords() ?? [];
             metrics.tasks.push(...pendingTasks.map((entry) => entry.duration));
@@ -846,6 +925,8 @@ try {
             return {
               sampleId: metrics.sampleId,
               frames: metrics.frames,
+              zoomFrameTimes: metrics.zoomFrameTimes,
+              zoomFrameLimitExceeded: metrics.zoomFrameLimitExceeded,
               events: metrics.events,
               observedEvents: metrics.observedEvents,
               tasks: metrics.tasks,
@@ -1012,8 +1093,11 @@ try {
               };
             }
             metrics.frames = [];
+            metrics.zoomFrameTimes = sampleId === 'layout-zoom-frames' ? [] : null;
+            metrics.zoomFrameLimitExceeded = false;
             metrics.events = [];
             metrics.observedEvents = [];
+            metrics.cameraObserver = null;
             metrics.tasks = [];
             metrics.sampleId = sampleId;
             metrics.eventSequence = 0;
@@ -1022,6 +1106,10 @@ try {
             const tick = (now) => {
               if (!metrics.running) return;
               metrics.frames.push(now - previous);
+              if (metrics.zoomFrameTimes) {
+                if (metrics.zoomFrameTimes.length < 4096) metrics.zoomFrameTimes.push(now);
+                else metrics.zoomFrameLimitExceeded = true;
+              }
               previous = now;
               metrics.frame = requestAnimationFrame(tick);
             };
@@ -1054,7 +1142,9 @@ try {
         );
         const armAfterMs = performance.now();
         const started = performance.now();
-        const navigationCapture = navigationPlan.has(name) ? { sampleId: name, inputs: [] } : null;
+        const navigationComparison = navigationLatencyOperations.includes(name);
+        const navigationCapture =
+          navigationPlan.has(name) || navigationComparison ? { sampleId: name, inputs: [] } : null;
         const schematicCapture = schematicActionPlan.has(name)
           ? { sampleId: name, actions: [], paced: name.endsWith('-paced'), gestures: [] }
           : null;
@@ -1181,9 +1271,12 @@ try {
           const metrics = window.experience;
           metrics.running = false;
           cancelAnimationFrame(metrics.frame);
+          metrics.cameraObserver?.disconnect();
           metrics.observer?.disconnect();
           return {
             frames: metrics.frames,
+            zoomFrameTimes: metrics.zoomFrameTimes,
+            zoomFrameLimitExceeded: metrics.zoomFrameLimitExceeded,
             events: metrics.events,
             observedEvents: metrics.observedEvents,
             tasks: metrics.tasks,
@@ -1280,18 +1373,128 @@ try {
             : {}),
           keyEvents: metrics.events.filter((event) => event.key),
           ...(details === undefined ? {} : { details }),
+          ...(navigationComparison
+            ? {
+                navigationLatency: (() => {
+                  const events = metrics.observedEvents;
+                  assert.equal(
+                    events.length,
+                    8,
+                    'Each comparison contains eight original navigation inputs.',
+                  );
+                  assert.ok(
+                    events.every(
+                      (event) =>
+                        event.isTrusted &&
+                        event.target?.canvasTestId === 'layout-canvas' &&
+                        Number.isFinite(event.cameraDOMAtMs) &&
+                        event.cameraDOMAtMs >= event.inputObservedAtMs &&
+                        Number.isFinite(event.presentedAtMs) &&
+                        event.cameraDOMAtMs <= event.presentedAtMs &&
+                        Number.isFinite(event.cameraFirstFrameEndAtMs) &&
+                        event.cameraDOMAtMs <= event.cameraFirstFrameEndAtMs,
+                    ),
+                    'Every comparison input reaches its expected camera pose and second RAF.',
+                  );
+                  return {
+                    metric: 'matched-layout-navigation-latency',
+                    inputCount: events.length,
+                    minimumIdleAfterAcknowledgementMs: inputPolicy.intervalMs,
+                    cameraDOMByFirstObservedFrame: true,
+                    inputQueueMs: summary(events.map((event) => event.queuedMs)),
+                    cameraDOMChangeMs: summary(
+                      events.map((event) => event.cameraDOMAtMs - event.inputObservedAtMs),
+                    ),
+                    eventTimestampToCameraDOMMs: summary(
+                      events.map((event) => event.cameraDOMAtMs - event.eventTimeStampMs),
+                    ),
+                    secondRAFMs: summary(
+                      events.map((event) => event.presentedAtMs - event.inputObservedAtMs),
+                    ),
+                    scope:
+                      'Only measured pointermove/wheel inputs; Home, positioning, button pickup/release and idle native rebase are excluded. Camera DOM means the expected effective camera attribute observed by MutationObserver. The first-frame end marker is queued at window bubble after React handles the same native Event. Neither marker is GPU/display presentation; second RAF is reported separately.',
+                  };
+                })(),
+              }
+            : {}),
+          ...(name === 'layout-zoom-frames'
+            ? {
+                zoomFrameCadence: (() => {
+                  const wheels = metrics.observedEvents.filter((event) => event.type === 'wheel');
+                  assert.equal(
+                    wheels.length,
+                    24,
+                    'The complete bounded zoom wheel plan was delivered.',
+                  );
+                  assert.ok(
+                    wheels.every(
+                      (event, index) =>
+                        event.isTrusted &&
+                        event.target?.canvasTestId === 'layout-canvas' &&
+                        event.deltaX === 0 &&
+                        event.deltaY === (index < 12 ? -50 : 50),
+                    ),
+                    'Every measured zoom input reaches the intended Layout canvas in order.',
+                  );
+                  assert.equal(metrics.zoomFrameLimitExceeded, false, 'RAF sample bound exceeded.');
+                  const activeStartMs = wheels[0].inputObservedAtMs;
+                  const activeEndMs = wheels.at(-1).inputObservedAtMs;
+                  const timestamps = metrics.zoomFrameTimes.filter(
+                    (time) => time >= activeStartMs && time <= activeEndMs,
+                  );
+                  assert.ok(timestamps.length > 1, 'The active zoom window needs two RAF anchors.');
+                  const intervals = timestamps
+                    .slice(1)
+                    .map((time, index) => time - timestamps[index]);
+                  assert.ok(
+                    intervals.every((value) => value > 0),
+                    'RAF timestamps must advance.',
+                  );
+                  const durationMs = timestamps.at(-1) - timestamps[0];
+                  const ordered = intervals.slice().sort((a, b) => a - b);
+                  return {
+                    metric: 'renderer-raf-cadence',
+                    scope:
+                      'Complete RAF intervals between first and last delivered wheel events; setup and idle tail are excluded. This observes renderer callback cadence, not GPU or display presentation FPS.',
+                    deliveredWheelCount: wheels.length,
+                    activeStartMs,
+                    activeEndMs,
+                    activeDurationMs: activeEndMs - activeStartMs,
+                    sampledStartMs: timestamps[0],
+                    sampledEndMs: timestamps.at(-1),
+                    sampledDurationMs: durationMs,
+                    frameTimesMs: timestamps,
+                    frameIntervalsMs: intervals,
+                    completeFrameIntervals: intervals.length,
+                    averageFramesPerSecond: (intervals.length * 1000) / durationMs,
+                    p95FrameMs: ordered[Math.ceil(ordered.length * 0.95) - 1],
+                    maximumFrameMs: ordered.at(-1),
+                    intervalsOver33_3Ms: intervals.filter((value) => value > 33.3).length,
+                    intervalsOver50Ms: intervals.filter((value) => value > 50).length,
+                  };
+                })(),
+              }
+            : {}),
           ...(metrics.dom ? { domChanges: metrics.dom } : {}),
           ...(navigationCapture
             ? {
-                navigationActionTarget: navigationActionSummary(
-                  name,
-                  navigationCapture.inputs,
-                  metrics.observedEvents,
-                  clockBracket(armBeforeMs, armAfterMs, armClock),
-                  clockBracket(resultBeforeMs, resultAfterMs, metrics.clock),
-                  navigationPlan.get(name),
-                  targetMs,
-                ),
+                navigationActionTarget: {
+                  ...navigationActionSummary(
+                    name,
+                    navigationCapture.inputs,
+                    metrics.observedEvents,
+                    clockBracket(armBeforeMs, armAfterMs, armClock),
+                    clockBracket(resultBeforeMs, resultAfterMs, metrics.clock),
+                    navigationComparison ? 8 : navigationPlan.get(name),
+                    targetMs,
+                  ),
+                  ...(navigationComparison
+                    ? {
+                        scope:
+                          'Eight isolated original pointermove or wheel inputs, paired in order; setup and release are outside measurement.',
+                      }
+                    : {}),
+                },
               }
             : {}),
           ...(schematicCapture
@@ -2410,6 +2613,156 @@ try {
         });
         if (navigationOperations('layout').some((name) => measuredOperations.has(name)))
           await navigation(layout, 'layout');
+        if (navigationLatencyOperations.every((name) => measuredOperations.has(name))) {
+          for (const name of navigationLatencyOperations) {
+            await layout.press('Home');
+            await page.waitForFunction(
+              () =>
+                !document
+                  .querySelector('[data-testid="layout-canvas"]')
+                  ?.hasAttribute('data-layout-camera-view'),
+            );
+            const box = await layout.boundingBox();
+            assert.ok(box);
+            const x = box.x + box.width / 2,
+              y = box.y + box.height / 2;
+            await mouse.move(x, y);
+            const pan = name === 'layout-pan-latency';
+            if (pan) await mouse.down({ button: 'middle' });
+            await settle();
+            await layout.evaluate(
+              (svg, setup) => {
+                window.layoutLatencySetup = {
+                  ...setup,
+                  pose: (svg.getAttribute('data-layout-camera-view') ?? svg.getAttribute('viewBox'))
+                    .split(' ')
+                    .map(Number),
+                };
+              },
+              { left: box.x, top: box.y, width: box.width, height: box.height, x, y },
+            );
+            try {
+              await measure(name, () =>
+                runPacedInputs(inputs, guard, 8, (index) => {
+                  const params = pan
+                    ? {
+                        type: 'mouseMoved',
+                        x: x + (index % 2 ? 24 : 0),
+                        y,
+                        button: 'middle',
+                        buttons: 4,
+                        pointerType: 'mouse',
+                        timestamp: Date.now() / 1000,
+                      }
+                    : {
+                        type: 'mouseWheel',
+                        x,
+                        y,
+                        deltaX: 0,
+                        deltaY: index % 2 ? -50 : 50,
+                        timestamp: Date.now() / 1000,
+                      };
+                  recordNavigationAction({
+                    transport: 'cdp.Input.dispatchMouseEvent',
+                    type: pan ? 'pointermove' : 'wheel',
+                    x: params.x,
+                    y: params.y,
+                    ...(pan ? { buttons: 4 } : { deltaX: params.deltaX, deltaY: params.deltaY }),
+                    cdpParams: { ...params },
+                  });
+                  return rawCdp.send('Input.dispatchMouseEvent', params);
+                }),
+              );
+            } finally {
+              if (pan && !guard.reason) await mouse.up({ button: 'middle' });
+            }
+          }
+          await layout.press('Home');
+          const [pan, zoom] = navigationLatencyOperations.map((name) =>
+            reports.find((report) => report.name === name),
+          );
+          assert.ok(
+            [pan, zoom].every((report) => report?.navigationActionTarget?.valid),
+            'Both latency comparisons retain strict original input/event pairing.',
+          );
+          layoutNavigationLatencyComparison = {
+            protocol: 'equal-count-paced-layout-navigation',
+            inputsPerKind: 8,
+            inputPolicy,
+            cameraDOMMedianDifferenceMs:
+              zoom.navigationLatency.cameraDOMChangeMs.median -
+              pan.navigationLatency.cameraDOMChangeMs.median,
+            cameraDOMP95DifferenceMs:
+              zoom.navigationLatency.cameraDOMChangeMs.p95 -
+              pan.navigationLatency.cameraDOMChangeMs.p95,
+            secondRAFMedianDifferenceMs:
+              zoom.navigationLatency.secondRAFMs.median - pan.navigationLatency.secondRAFMs.median,
+            secondRAFP95DifferenceMs:
+              zoom.navigationLatency.secondRAFMs.p95 - pan.navigationLatency.secondRAFMs.p95,
+            differenceDirection: 'zoom minus pan',
+            physicalPresentationObserved: false,
+            withinTarget: [pan, zoom].every((report) => report.navigationActionTarget.withinTarget),
+            scope:
+              'Equal input count, acknowledgement pacing and endpoints; two sequential samples. Differences are observations, not proof of identical latency or a GPU/display fence.',
+          };
+          console.log(
+            JSON.stringify({
+              name: 'layout-navigation-latency-comparison',
+              ...layoutNavigationLatencyComparison,
+            }),
+          );
+          if (!layoutNavigationLatencyComparison.withinTarget) process.exitCode = 1;
+        }
+        if (measuredOperations.has('layout-zoom-frames')) {
+          await layout.press('Home');
+          await measure('layout-zoom-frames', async () => {
+            const box = await layout.boundingBox();
+            assert.ok(box);
+            const x = box.x + box.width / 2,
+              y = box.y + box.height / 2;
+            await mouse.move(x, y);
+            const camera = () =>
+              layout.evaluate((svg) =>
+                (svg.getAttribute('data-layout-camera-view') ?? svg.getAttribute('viewBox'))
+                  .split(' ')
+                  .map(Number),
+              );
+            const before = await camera();
+            const details = await runPacedInputs(
+              inputs,
+              guard,
+              24,
+              (index) =>
+                rawCdp.send('Input.dispatchMouseEvent', {
+                  type: 'mouseWheel',
+                  x,
+                  y,
+                  deltaX: 0,
+                  deltaY: index <= 12 ? -50 : 50,
+                  timestamp: Date.now() / 1000,
+                }),
+              16,
+            );
+            await settle();
+            const after = await camera();
+            assert.ok(
+              after.every((value, index) => Math.abs(value - before[index]) < 0.0001),
+              'Opposite zoom ramps restore the original camera within subpixel precision.',
+            );
+            assert.equal(await page.locator('.dirty-dot').count(), 0);
+            return {
+              ...details,
+              viewportCSSPixels: { width: box.width, height: box.height },
+              devicePixelRatio: await page.evaluate(() => window.devicePixelRatio),
+              cameraBefore: before,
+              cameraAfter: after,
+              protocol: 'bounded-acknowledged-zoom-frames',
+              overloadMs: inputPolicy.overloadMs,
+              acknowledgementTimeoutMs: inputPolicy.timeoutMs,
+              physicalPresentationObserved: false,
+            };
+          });
+        }
         for (const variant of variants) {
           assert.ok(
             [
@@ -3411,6 +3764,8 @@ try {
             : measuredInputs.every((report) => report.eventToFrameMs.max < targetMs) &&
               (!modelCadEditEnabled || modelCadCommitTarget.withinTarget) &&
               (!navigationActionTarget || navigationActionTarget.withinTarget) &&
+              (!layoutNavigationLatencyComparison ||
+                layoutNavigationLatencyComparison.withinTarget) &&
               (!schematicActionTarget || schematicActionTarget.withinTarget) &&
               (!layoutInteractionTarget || layoutInteractionTarget.withinTarget !== false),
         overBudget: measuredInputs
@@ -3506,7 +3861,7 @@ try {
               plannedOperations: [...measuredOperations],
               inputTiming: 'Captured input event to the second requestAnimationFrame',
               navigationProtocol:
-                'short sequential acknowledged samples with idle pacing; not a 60 Hz sustained stress test',
+                'Existing navigation samples use 250 ms idle pacing; explicit layout-zoom-frames uses 24 acknowledged wheels with 16 ms idle pacing and reports active-window renderer RAF cadence separately. Neither is a GPU/display FPS measurement.',
               comparableWithLegacyQueuedNavigation: false,
               schematicInputProtocols: {
                 legacy: {
@@ -3556,6 +3911,7 @@ try {
               layoutInteractionTarget,
               modelCadCommitTarget,
               navigationActionTarget,
+              layoutNavigationLatencyComparison,
               schematicActionTarget,
               editorInputTarget,
               reports,

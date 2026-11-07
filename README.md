@@ -13,7 +13,7 @@
 - Keep independent projects and conversations, recover drafts and compare local Git history.
 - Work with Codex or Claude Code through scoped project tools, or review proposals from DeepSeek Harness and Pi. Cursor supports CLI detection only.
 
-Start with nine curated Example projects or EMC Flyback under Recent. The bundled [PE Layout Skill](docs/PLUGINS.md#pe-layout-skill) plugin provides design guidance and board review.
+Start with nine curated Example projects or the default EMC Flyback entry under Recent. Desktop Recent updates to your actual recently opened/saved projects and retains them across restarts. Right-click a Recent card to remove it from the list while keeping its project files. The bundled [PE Layout Skill](docs/PLUGINS.md#pe-layout-skill) plugin provides design guidance and board review.
 
 ## Get started
 
@@ -28,7 +28,7 @@ npm start
 
 Setup and build may download required libraries and solver resources. If dependencies were installed with `--ignore-scripts`, run `npm run postinstall` before starting Electron.
 
-Home opens the original projects in `examples/` and `recent/`: nine curated Examples and EMC Flyback under Recent, plus discovered user-added native projects. Use **Save as** to create a personal copy with its supporting assets. Designs remain native `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` file sets.
+Home opens the original projects in `examples/` and `project/`: nine curated Examples and the initial EMC Flyback Recent entry, plus discovered user-added native projects. The first real desktop history replaces the default Recent entry; opening EMC Flyback records it like any other project. Use **Save as** to create a personal copy with its supporting assets. Designs remain native `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` file sets.
 
 ## Development
 
@@ -62,7 +62,7 @@ See [verification](docs/ARCHITECTURE.md#verification) for focused tests and opt-
 
 ## Scope
 
-OpenPE is a preview supporting a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Save/Save as retain native KiCad projects. Export provides bounded Gerber/drill ZIP, JLCPCB manufacturing ZIP, BOM and placement CSV, plus OpenSCAD for supported CAD solids. Gerber requires a closed board outline and saved zone fills; review CAM and assembly output before manufacturing. See [manufacturing export coverage](docs/FORMAT.md#manufacturing-export).
+OpenPE supports a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Save/Save as retain native KiCad projects. Export provides bounded Gerber/drill ZIP, JLCPCB manufacturing ZIP, BOM and placement CSV, plus OpenSCAD for supported CAD solids. Gerber requires a closed board outline and saved zone fills; review CAM and assembly output before manufacturing. See [manufacturing export coverage](docs/FORMAT.md#manufacturing-export).
 
 Simulation support depends on the documented circuits and models. Thermal analysis estimates PCB temperature under stated material and cooling assumptions, not package junction temperature or EMC emissions. See the feature documents below for coverage and limits.
 

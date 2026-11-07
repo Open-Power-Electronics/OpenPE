@@ -2,7 +2,12 @@ import { importDocument, projectFilename, projectSchematics } from './project';
 import { restoreSessions, type ChatSession } from './chat-sessions';
 import type { ReasoningEffort } from './chat-stream';
 import { validExampleKey } from './workspace-example';
-import { agentProviderIds, isAgentProvider } from './agent-providers';
+import {
+  agentProviderIds,
+  defaultReasoningEffort,
+  isAgentProvider,
+  isReasoningEffort,
+} from './agent-providers';
 export { validExampleKey, retiredExampleFolderNames } from './workspace-example';
 
 export const maxOpenProjects = 12;
@@ -14,7 +19,7 @@ export type AgentPreferences = {
 };
 export const defaultAgentPreferences: AgentPreferences = {
   provider: 'codex',
-  effort: 'low',
+  effort: defaultReasoningEffort,
   approvalMode: 'review',
   models: Object.fromEntries(agentProviderIds.map((id) => [id, ''])),
 };
@@ -167,8 +172,7 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
   )
     throw new Error('The active project is missing from the workspace.');
   if (!isAgentProvider(state.provider)) throw new Error('Invalid saved Agent provider.');
-  if (!['low', 'medium', 'high'].includes(String(state.effort)))
-    throw new Error('Invalid saved Agent reasoning effort.');
+  if (!isReasoningEffort(state.effort)) throw new Error('Invalid saved Agent reasoning effort.');
   if (!['review', 'auto'].includes(String(state.approvalMode)))
     throw new Error('Invalid saved Agent approval mode.');
   const models = object(state.models);

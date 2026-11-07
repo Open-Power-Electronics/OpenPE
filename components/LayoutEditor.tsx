@@ -1221,7 +1221,6 @@ function LayoutEditor({
     const applyCamera = createLayoutCameraApplicator(target, {
       fixedTargets: true,
       compositor: true,
-      panFrameReserve: true,
       frameReserve: true,
       frameScheduled: true,
     });
@@ -3838,47 +3837,79 @@ function LayoutEditor({
     }
     return drawings;
   }, graphicInputs);
-  // Screen-space airwires follow routing/connectivity and the camera without
-  // rebuilding unchanged footprint, caption, via or graphic element arrays.
-  const airwireDrawing = useMemo(
-    () => (
-      <LayoutCameraScaleRender camera={camera}>
-        {(view) => (
-          <>
-            {airwires.map((wire) => {
-              const focused = route ? route.netId === wire.netId : highlightNets.has(wire.netId);
-              const path = same(wire.start, wire.end)
-                ? `M ${wire.start.x - (view.width / size.width) * 4} ${wire.start.y} a ${(view.width / size.width) * 4} ${(view.width / size.width) * 4} 0 1 0 ${(view.width / size.width) * 8} 0 a ${(view.width / size.width) * 4} ${(view.width / size.width) * 4} 0 1 0 ${(-view.width / size.width) * 8} 0`
-                : `M ${wire.start.x} ${wire.start.y} L ${wire.end.x} ${wire.end.y}`;
-              return (
-                <g
-                  key={wire.id}
-                  data-airwire={wire.netId}
-                  aria-label={`${netNames.get(wire.netId) ?? ''} · Unconnected copper`}
-                  fill="none"
-                  pointerEvents="none"
-                  opacity={(route || highlightNets.size > 0) && !focused ? 0.25 : 1}
-                >
-                  <path
-                    d={path}
-                    stroke="var(--pcb-airwire-halo)"
-                    strokeWidth={focused ? 4 : 3.2}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <path
-                    d={path}
-                    stroke={focused ? 'var(--pcb-selected)' : 'var(--pcb-airwire)'}
-                    strokeWidth={focused ? 1.8 : 1.25}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                </g>
-              );
-            })}
-          </>
-        )}
-      </LayoutCameraScaleRender>
-    ),
-    [camera, airwires, size.width, Boolean(route), route?.netId, highlightNets, netNames],
+  // Straight airwires retain their world geometry. Only coincident endpoints
+  // need a camera subscription for their fixed-size circular marker.
+  const airwireDrawing = useMemo(() => {
+    return airwires.map((wire) => {
+      const focused = route ? route.netId === wire.netId : highlightNets.has(wire.netId);
+      const paintAirwire = (path: string) => (
+        <>
+          <path
+            d={path}
+            stroke="var(--pcb-airwire-halo)"
+            strokeWidth={focused ? 4 : 3.2}
+            vectorEffect="non-scaling-stroke"
+          />
+          <path
+            d={path}
+            stroke={focused ? 'var(--pcb-selected)' : 'var(--pcb-airwire)'}
+            strokeWidth={focused ? 1.8 : 1.25}
+            vectorEffect="non-scaling-stroke"
+          />
+        </>
+      );
+      return (
+        <g
+          key={wire.id}
+          data-airwire={wire.netId}
+          aria-label={`${netNames.get(wire.netId) ?? ''} · Unconnected copper`}
+          fill="none"
+          pointerEvents="none"
+          opacity={(route || highlightNets.size > 0) && !focused ? 0.25 : 1}
+        >
+          {same(wire.start, wire.end) ? (
+            <LayoutCameraScaleRender camera={camera}>
+              {(view) => {
+                const scale = view.width / size.width;
+                const radius = scale * 4;
+                const diameter = scale * 8;
+                return paintAirwire(
+                  `M ${wire.start.x - radius} ${wire.start.y} a ${radius} ${radius} 0 1 0 ${diameter} 0 a ${radius} ${radius} 0 1 0 ${-diameter} 0`,
+                );
+              }}
+            </LayoutCameraScaleRender>
+          ) : (
+            paintAirwire(`M ${wire.start.x} ${wire.start.y} L ${wire.end.x} ${wire.end.y}`)
+          )}
+        </g>
+      );
+    });
+  }, [camera, airwires, size.width, Boolean(route), route?.netId, highlightNets, netNames]);
+  const lockMarkers = useMemo(
+    () =>
+      displayBoard.footprints.flatMap((footprint) => {
+        const bounds = footprint.locked && footprintBounds.get(footprint.id);
+        if (!bounds) return [];
+        const at = footprintPoint(footprint, { x: bounds.maxX, y: bounds.minY });
+        return [{ id: footprint.id, reference: footprint.reference, at }];
+      }),
+    [displayBoard.footprints, footprintBounds],
+  );
+  // Empty overlays retain their mounted state without a camera subscription.
+  const hasCameraOverlays = Boolean(
+    lockMarkers.length ||
+    analysisMarkers ||
+    tool === 'measure' ||
+    (analysisComponentDetail && selectedFootprint) ||
+    selectedRectangle ||
+    trackDrag ||
+    route ||
+    (tool === 'route' && !viaTarget && routeAnchor.target) ||
+    (outline && layers[outlineLayer]) ||
+    viaPreviewVisible ||
+    gesture ||
+    ruleFocus?.location ||
+    marquee,
   );
   // Artwork and captions share one pass per native layer, including fallback references.
   const captionDrawing = useMemo(() => {
@@ -4461,33 +4492,28 @@ function LayoutEditor({
                   )}
                 </g>
               )}
-              <LayoutCameraScaleRender camera={camera}>
+              <LayoutCameraScaleRender camera={camera} active={hasCameraOverlays}>
                 {(view) => (
                   <>
-                    {displayBoard.footprints.map((footprint) => {
-                      const bounds = footprint.locked && footprintBounds.get(footprint.id);
-                      if (!bounds) return null;
-                      const at = footprintPoint(footprint, { x: bounds.maxX, y: bounds.minY });
-                      return (
-                        <g
-                          key={footprint.id}
-                          data-annotation-overlay
-                          data-layout-lock={footprint.id}
-                          aria-label={`${footprint.reference || 'Component'} locked`}
-                          pointerEvents="none"
-                          transform={`translate(${at.x} ${at.y}) scale(${view.width / size.width})`}
-                        >
-                          <rect x={-8} y={-8} width={16} height={16} rx={4} fill="var(--panel)" />
-                          <LockKeyhole
-                            x={-6}
-                            y={-6}
-                            width={12}
-                            height={12}
-                            color="var(--text-strong)"
-                          />
-                        </g>
-                      );
-                    })}
+                    {lockMarkers.map(({ id, reference, at }) => (
+                      <g
+                        key={id}
+                        data-annotation-overlay
+                        data-layout-lock={id}
+                        aria-label={`${reference || 'Component'} locked`}
+                        pointerEvents="none"
+                        transform={`translate(${at.x} ${at.y}) scale(${view.width / size.width})`}
+                      >
+                        <rect x={-8} y={-8} width={16} height={16} rx={4} fill="var(--panel)" />
+                        <LockKeyhole
+                          x={-6}
+                          y={-6}
+                          width={12}
+                          height={12}
+                          color="var(--text-strong)"
+                        />
+                      </g>
+                    ))}
                     {analysisMarkers?.(view.width / size.width)}
                     {tool === 'measure' && (
                       <MeasurementDrawing

@@ -120,7 +120,7 @@ The check command is offline and read-only; it requires all 13 local PDFs.
 
 PDFs are named `<ic-family-in-lowercase>.pdf` under the matching circuit's
 `datasheets/` directory: `examples/<stem>/datasheets/` for the nine Example projects
-and `recent/emc-flyback/datasheets/` for EMC Flyback. Original PDF bytes are ignored by Git; the internal reviewed catalog, schema
+and `project/emc-flyback/datasheets/` for EMC Flyback. Original PDF bytes are ignored by Git; the internal reviewed catalog, schema
 and [rights notice](../public/licenses/example-datasheets.txt) are retained. A fresh checkout must run the
 download command for local PDFs. Normal builds and startup do not download
 PDFs. Builds validate and bundle the internal Agent reference catalog; packaging

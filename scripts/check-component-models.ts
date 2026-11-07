@@ -16,7 +16,7 @@ try {
   const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
   const footprint = project.pcb!.footprints.find((f) => f.symbolId && f.models?.length)!;
   const existing = footprint.models![0];
-  const modelFile = path.resolve('recent/emc-flyback', existing.path.slice('${KIPRJMOD}/'.length));
+  const modelFile = path.resolve('project/emc-flyback', existing.path.slice('${KIPRJMOD}/'.length));
   const source = await readFile(modelFile);
   const projectFile = path.join(root, 'source', 'board.kicad_pro');
   await mkdir(path.dirname(projectFile));
@@ -73,7 +73,7 @@ try {
   await server.componentModels.prepare(
     core.getSnapshot().project,
     copy,
-    path.resolve('recent/emc-flyback/emc-flyback.kicad_pro'),
+    path.resolve('project/emc-flyback/emc-flyback.kicad_pro'),
   );
   for (const f of projectNativeFiles(core.getSnapshot().project!, 'copy.kicad_pro').files) {
     await mkdir(path.dirname(path.join(path.dirname(copy), f.name)), { recursive: true });

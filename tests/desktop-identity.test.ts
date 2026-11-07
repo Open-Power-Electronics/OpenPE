@@ -68,7 +68,11 @@ test('desktop preload forwards every operation to a registered main channel and 
     ['connection', 'connection', []],
     ['chooseComponentModel', 'choose-component-model', ['opaque-project-id']],
     ['open', 'open', []],
-    ['acceptOpen', 'accept-open', []],
+    ['openRecent', 'open-recent', ['recent-id']],
+    ['listRecent', 'list-recent', []],
+    ['removeRecent', 'remove-recent', ['recent-id']],
+    ['previewRecent', 'preview-recent', ['recent-id']],
+    ['acceptOpen', 'accept-open', [1]],
     ['newFile', 'new', []],
     ['openDefaultExample', 'open-default-example', ['example-id']],
     ['listExamples', 'list-examples', []],
@@ -117,7 +121,18 @@ test('desktop preload forwards every operation to a registered main channel and 
   }
   assert.deepEqual(new Set(calls.map((call) => call.channel)), mainChannels);
 
-  assert.deepEqual(closeChannels, ['openpe:close-requested']);
+  assert.deepEqual([...new Set(closeChannels)], ['openpe:recent-changed', 'openpe:close-requested']);
+  let recentCalls = 0;
+  const unsubscribeRecent = (bridge.onRecentChanged as (callback: () => void) => () => void)(
+    (...args) => {
+      assert.equal(args.length, 0);
+      recentCalls++;
+    },
+  );
+  events.emit('openpe:recent-changed', { sender: 'privileged main process' });
+  assert.equal(recentCalls, 1);
+  unsubscribeRecent();
+  assert.equal(events.listenerCount('openpe:recent-changed'), 0);
   let firstCalls = 0;
   let secondCalls = 0;
   const subscribe = bridge.onCloseRequested as (
@@ -128,7 +143,7 @@ test('desktop preload forwards every operation to a registered main channel and 
     firstCalls++;
   });
   const unsubscribeSecond = subscribe(() => secondCalls++);
-  const closeChannel = closeChannels[0];
+  const closeChannel = 'openpe:close-requested';
   events.emit(closeChannel, { sender: 'privileged main process' });
   assert.equal(firstCalls, 1);
   assert.equal(secondCalls, 1);
@@ -177,6 +192,7 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
         if (specifier === './file-grants.cjs') return { FileGrants: class {} };
         assert.ok(
           [
+            './recent-projects.cjs',
             './native-save.cjs',
             './native-export.cjs',
             './image-export.cjs',

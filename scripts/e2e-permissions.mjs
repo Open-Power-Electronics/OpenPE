@@ -30,7 +30,13 @@ try {
       const pathname = new URL(String(url)).pathname;
       if (pathname === '/api/agents')
         return Response.json([{ id: 'codex', available: true, supportsEffort: true }]);
-      if (pathname === '/api/models') return Response.json({ models: [] });
+      if (pathname === '/api/models')
+        return Response.json({
+          models: [
+            { id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium', 'high'] },
+          ],
+          defaultModel: 'fixture-model',
+        });
       if (pathname !== '/api/chat') return original(url, options);
       const request = JSON.parse(options.body);
       const encoder = new TextEncoder();

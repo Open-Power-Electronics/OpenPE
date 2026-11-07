@@ -106,7 +106,14 @@ try {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/chat' || pathname === '/api/chat/tool-result') return route.continue();
     if (pathname === '/api/models')
-      return route.fulfill({ json: { models: [], defaultModel: '' } });
+      return route.fulfill({
+        json: {
+          models: [
+            { id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium', 'high'] },
+          ],
+          defaultModel: 'fixture-model',
+        },
+      });
     if (/^\/agents\/[\w.-]+\.svg$/.test(pathname))
       return route.fulfill({ body: await readFile('public' + pathname) });
     if (pathname.startsWith('/api/')) throw new Error(`Unexpected API call: ${pathname}`);

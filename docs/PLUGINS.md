@@ -150,7 +150,7 @@ Provider processes use argument arrays, closed stdin, 4 MB combined output and a
 provider; receipt transactions serialize across providers. These limits do not
 apply to ngspice runtime.
 
-Codex model discovery allows 300 ms for owned app-server EOF exit; completed
+Codex/Claude model discovery allows 300 ms for owned child EOF exit; completed
 Codex/Claude turns allow 500 ms. Their Windows cleanup starts at most one
 process-tree helper with a one-second deadline, then falls back to the captured
 child process if still open. An exited child cannot start a new PID-based helper.
@@ -169,7 +169,7 @@ render as images.
 | `tests/plugins.test.ts`                                                          | Installed lists, receipts, provider/scope/policy isolation, bounds and concurrency |
 | `tests/chat.test.ts`                                                             | Model discovery, cancellation and owned child cleanup, including Windows fallback  |
 | `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                 | Schemas, review/revisions, cancellation and synthetic scoped transports            |
-| `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`     | Isolated mocked lists, controls and Agent commands                                 |
+| `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands and model-specific effort selection |
 | `node scripts/e2e-plugins.mjs`                                                   | Opt-in desktop checks with fixtures; no real installs                              |
 
 Mock tests do not establish installed-provider compatibility or authentication.

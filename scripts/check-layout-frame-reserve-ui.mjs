@@ -363,6 +363,155 @@ try {
         };
       });
       report.captures = captures;
+      report.zoomRamp = await page.evaluate(async () => {
+        const f = window.fixture;
+        const initial = { x: 0, y: 0, width: 80 };
+        f.advance(initial, true);
+        const svg = f.candidate;
+        const descriptor = Object.getOwnPropertyDescriptor(svg, 'setAttribute');
+        const setAttribute = svg.setAttribute;
+        let nativeWrites = 0;
+        svg.setAttribute = function (name, value) {
+          if (name === 'viewBox' && this.getAttribute(name) !== String(value)) nativeWrites++;
+          return setAttribute.call(this, name, value);
+        };
+        try {
+          const steps = [
+            ...Array.from({ length: 12 }, (_, i) => i + 1),
+            ...Array.from({ length: 12 }, (_, i) => 11 - i),
+          ];
+          for (const step of steps) {
+            const width = initial.width / 1.12 ** step;
+            const view = {
+              x: (initial.width - width) * 0.37,
+              y: ((initial.width - width) / 1.6) * 0.61,
+              width,
+            };
+            f.advance(view);
+            const frame = f.frames()[0];
+            for (const pose of [initial, view])
+              f.check(
+                frame.every(Number.isFinite) &&
+                  frame[0] <= pose.x &&
+                  frame[1] <= pose.y &&
+                  frame[0] + frame[2] >= pose.x + pose.width &&
+                  frame[1] + frame[3] >= pose.y + pose.width / 1.6 &&
+                  frame[2] <= pose.width * 4 &&
+                  frame[3] <= (pose.width / 1.6) * 4,
+                'Zoom ramp exposed an unbounded or incomplete frame cover.',
+              );
+          }
+          f.check(nativeWrites === 0, `Zoom ramp rewrote native geometry ${nativeWrites} times.`);
+        } finally {
+          if (descriptor) Object.defineProperty(svg, 'setAttribute', descriptor);
+          else delete svg.setAttribute;
+        }
+        const bounds = { minX: -10, minY: -10, maxX: 90, maxY: 60 };
+        f.show('reference');
+        const expected = await window.captureLayoutPNG(f.reference, bounds);
+        f.show('candidate');
+        const actual = await window.captureLayoutPNG(svg, bounds);
+        f.check(actual.dataUrl === expected.dataUrl, 'Adaptive cover changed PNG capture.');
+        f.check(
+          svg.getAttribute('viewBox') === '0 0 80 50',
+          'Capture did not restore exact native camera.',
+        );
+        f.check(
+          !svg.hasAttribute('data-layout-camera-view'),
+          'Capture retained a transient transform.',
+        );
+        return { wheelSteps: 24, nativeWrites, boundedCovers: true, png: 'identical' };
+      });
+      report.rebaseMeasurements = await page.evaluate(() => {
+        const f = window.fixture;
+        const svg = f.candidate;
+        const initial = { x: 0, y: 0, width: 80 };
+        const collect = (run, roundedTransient = false) => {
+          const boundsDescriptor = Object.getOwnPropertyDescriptor(svg, 'getBoundingClientRect');
+          const attributeDescriptor = Object.getOwnPropertyDescriptor(svg, 'setAttribute');
+          const bounds = svg.getBoundingClientRect;
+          const setAttribute = svg.setAttribute;
+          const events = [];
+          svg.getBoundingClientRect = function () {
+            events.push(
+              this.hasAttribute('data-layout-camera-view') ? 'transient-bounds' : 'bounds',
+            );
+            const value = bounds.call(this);
+            // Transformed DOMRects can lose precision. Rebase preparation
+            // must measure the restored native box, before its viewBox changes.
+            if (roundedTransient && this.hasAttribute('data-layout-camera-view'))
+              return new DOMRect(value.x, value.y, value.width + 0.01, value.height);
+            return value;
+          };
+          svg.setAttribute = function (name, value) {
+            if (name === 'viewBox' && this.getAttribute(name) !== String(value))
+              events.push('native');
+            return setAttribute.call(this, name, value);
+          };
+          try {
+            run();
+            return events;
+          } finally {
+            if (boundsDescriptor)
+              Object.defineProperty(svg, 'getBoundingClientRect', boundsDescriptor);
+            else delete svg.getBoundingClientRect;
+            if (attributeDescriptor)
+              Object.defineProperty(svg, 'setAttribute', attributeDescriptor);
+            else delete svg.setAttribute;
+          }
+        };
+        const results = [];
+        const escape = (label, transient, next, roundedTransient = false) => {
+          if (transient) {
+            f.retained(transient, f.size);
+            f.check(svg.hasAttribute('data-layout-camera-view'), `${label}: no transient pose.`);
+          }
+          const events = collect(() => f.retained(next, f.size), roundedTransient);
+          const write = events.indexOf('native');
+          f.check(write >= 0, `${label}: reserve escape did not rebase native viewBox.`);
+          f.check(
+            !svg.hasAttribute('data-layout-camera-view'),
+            `${label}: camera stayed transient.`,
+          );
+          f.check(
+            f.frames().every((frame) => frame[2] === next.width * 2),
+            `${label}: no new reserve.`,
+          );
+          f.check(events.indexOf('bounds') < write, `${label}: viewport was not measured first.`);
+          f.check(
+            !events.includes('transient-bounds') && !events.slice(write + 1).includes('bounds'),
+            `${label}: viewport read used rounded or newly dirty geometry (${events.join(', ')}).`,
+          );
+          results.push({ label, events });
+        };
+        f.advance(initial, true);
+        escape('zoom-reserve-escape', { x: 15, y: 12, width: 60 }, { x: 32, y: 24, width: 16 });
+        escape('repeated-zoom-escape', { x: 28, y: 20, width: 24 }, initial);
+        const latest = initial;
+        const replay = collect(() => f.retained.applyNow(latest, f.size, false));
+        f.check(replay.includes('bounds'), 'Native replay reused a consumed viewport proof.');
+        results.push({ label: 'fresh-native-replay', events: replay });
+        svg.parentElement.style.width = '850px';
+        const resizedReplay = collect(() => f.retained.applyNow(latest, f.size, false));
+        f.check(resizedReplay.includes('bounds'), 'Replay missed a resize before ResizeObserver.');
+        f.check(
+          f.frames().every((frame) => frame[2] === latest.width),
+          'Resize retained old reserve.',
+        );
+        results.push({ label: 'resize-before-size-commit', events: resizedReplay });
+        svg.parentElement.style.removeProperty('width');
+        f.advance(initial, true);
+        escape('native-reserve-escape', null, { x: 32, y: 24, width: 16 });
+        f.advance(initial, true);
+        escape(
+          'rounded-transient-bounds',
+          { x: 15, y: 12, width: 60 },
+          { x: 32, y: 24, width: 16 },
+          true,
+        );
+        f.advance(initial, true);
+        return results;
+      });
       // A synchronous capture/pick can run after CSS resize but before the
       // editor's ResizeObserver supplies a new size to the camera binding.
       const resized = await page.evaluate(() => {

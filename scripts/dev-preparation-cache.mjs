@@ -26,7 +26,7 @@ const defaultPaths = [
   'server',
   'schemas',
   'examples',
-  'recent',
+  'project',
   'resources/example-catalog',
   'tests/fixtures/reference',
   'resources/example-models-lock.json',

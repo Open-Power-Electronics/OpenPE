@@ -1819,14 +1819,18 @@ try {
             target.searchParams.get('provider') === 'codex'
               ? [{ id: 'gpt-6-astra', label: 'GPT-6 Astra', efforts: ['low', 'medium', 'high'] }]
               : [
-                  { id: 'sonnet', label: 'Sonnet' },
-                  { id: 'opus', label: 'Opus' },
+                  { id: 'sonnet', label: 'Sonnet', efforts: ['low', 'medium', 'high'] },
+                  { id: 'opus', label: 'Opus', efforts: ['low', 'medium', 'high', 'max'] },
                 ],
         });
       return original(url, options);
     };
   });
   await page.reload();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[aria-label="Reasoning effort"]')?.textContent.trim() === 'Medium',
+  );
   await page.setViewportSize({ width: 1480, height: 920 });
   await (async () => {
     if (section === 'all' || section === 'appearance') {
@@ -2355,7 +2359,7 @@ try {
       'PASS: clear-chat cancellation/confirmation preserves the circuit; close IPC ignores unsolicited approval, supports cancellation, keeps the service alive after cancelled quit, and closes only after successful save.',
     );
     console.log(
-      'PASS: canvas navigation/editing, native save/open, incremental text before completion, timing, partial proposal isolation, apply/undo, cancellation, interrupted stream preservation, Low default and saved effort; screenshots and zero page errors.',
+      'PASS: canvas navigation/editing, native save/open, incremental text before completion, timing, partial proposal isolation, apply/undo, cancellation, interrupted stream preservation, Medium default and saved effort; screenshots and zero page errors.',
     );
   })();
 } catch (error) {

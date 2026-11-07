@@ -100,7 +100,7 @@
       "topology": "Flyback",
       "package": "SOIC-8",
       "directory": "emc-flyback",
-      "root": "recent"
+      "root": "project"
     }
   ]
 }

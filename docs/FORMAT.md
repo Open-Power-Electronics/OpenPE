@@ -211,7 +211,7 @@ Simulation model filenames must match the current pinned component registry.
 Native STEP references retain their documented KiCad paths;
 Save does not reorganize unrelated user files; root `.scad` files are ordinary
 editable text outside the native design set.
-Home opens original native projects under `examples/` and `recent/` directly,
+Home opens original native projects under `examples/` and `project/` directly,
 including host-discovered additions, retaining all disk filenames. History remains
 private outside the project; see [Version history](VERSION-HISTORY.md).
 

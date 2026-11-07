@@ -19,13 +19,13 @@ export class ExampleProjects {
     examplesRoot,
     grants,
     history,
-    recentRoot = path.resolve(examplesRoot, '..', 'recent'),
+    projectRoot = path.resolve(examplesRoot, '..', 'project'),
   ) {
     if (typeof examplesRoot !== 'string' || !path.isAbsolute(examplesRoot))
       throw new Error('The original example root must be an absolute host directory.');
-    if (typeof recentRoot !== 'string' || !path.isAbsolute(recentRoot))
-      throw new Error('The Recent root must be an absolute host directory.');
-    this.roots = { examples: path.resolve(examplesRoot), recent: path.resolve(recentRoot) };
+    if (typeof projectRoot !== 'string' || !path.isAbsolute(projectRoot))
+      throw new Error('The project root must be an absolute host directory.');
+    this.roots = { examples: path.resolve(examplesRoot), project: path.resolve(projectRoot) };
     this.grants = grants;
     this.history = history;
     this.busy = new Map();
@@ -59,13 +59,13 @@ export class ExampleProjects {
         const found = await discoverExamples(
           directory,
           nativeProject.nativeName,
-          root === 'recent' ? 'recent/' : '',
+          root === 'project' ? 'project/' : '',
         );
         projects.push(...found.projects.map((project) => ({ ...project, root })));
         warnings.push(...found.warnings);
       } catch (error) {
         if (root === 'examples') throw error;
-        warnings.push(`Could not inspect Recent: ${error.message}`);
+        warnings.push(`Could not inspect project resources: ${error.message}`);
       }
     }
     if (projects.length > 256) throw new Error('Example discovery exceeds 256 projects.');

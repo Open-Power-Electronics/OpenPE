@@ -322,10 +322,10 @@ export function registerSpice(
   plugins,
   resultFiles,
   resultLoader = findSimulationResult,
-  recentRoot,
+  projectRoot,
 ) {
   const modelStore = dataDir
-    ? createSimulationModelStore(dataDir, modelFetcher, recentRoot)
+    ? createSimulationModelStore(dataDir, modelFetcher, projectRoot)
     : undefined;
   const offlineModelStore = dataDir
     ? createSimulationModelStore(
@@ -337,7 +337,7 @@ export function registerSpice(
           error.code = 'OPENPE_MODEL_FILES_MISSING';
           throw error;
         },
-        recentRoot,
+        projectRoot,
       )
     : undefined;
   let active = null;

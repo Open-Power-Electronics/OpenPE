@@ -16,7 +16,7 @@ import { createEnclosureStep } from '../server/enclosure-step.mjs';
 // Explicit offline OpenCASCADE export/import verification. No Electron or solver.
 const require = createRequire(import.meta.url);
 const { readNativeProject } = require('../electron/native-project.cjs');
-const nativePath = path.resolve('recent/emc-flyback/emc-flyback.kicad_pro');
+const nativePath = path.resolve('project/emc-flyback/emc-flyback.kicad_pro');
 const nativeFiles = await readNativeProject(nativePath);
 const example = projectFromNativeFiles(nativeFiles);
 assert.deepEqual(

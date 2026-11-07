@@ -18,7 +18,7 @@ import {
 } from '../scripts/emc-flyback-testbench';
 
 const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-const filename = 'recent/emc-flyback/emc-flyback.kicad_pro';
+const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
 const refs = ['V1', 'R21', 'V2', 'R22', 'I1'];
 
 test('the actual native EMC testbench has explicit virtual supplies/loads and preserves ground isolation', async () => {

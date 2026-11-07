@@ -8,6 +8,8 @@ import {
   agentProviderIds,
   agentProviders,
   isAgentProvider,
+  providerReasoningEfforts,
+  reasoningEfforts,
 } from '../lib/agent-providers';
 import { defaultAgentPreferences, restoreWorkspace } from '../lib/workspace-state';
 import { readChatEvents, type ChatEvent } from '../lib/chat-stream';
@@ -49,6 +51,22 @@ test('workspace recovery retains each selected Agent and its independent model p
       assert.equal(restored.provider, provider);
       assert.deepEqual(restored.models, models);
     }
+  }
+});
+
+test('new Agent preferences default to medium and recovery preserves every native effort', () => {
+  assert.equal(defaultAgentPreferences.effort, 'medium');
+  const state = {
+    version: 2,
+    documents: [],
+    activeDocumentId: null,
+    ...defaultAgentPreferences,
+  };
+  for (const restore of [restoreWorkspace, restoreServiceWorkspace]) {
+    for (const effort of reasoningEfforts)
+      assert.equal(restore({ ...state, effort }).effort, effort);
+    for (const effort of [undefined, null, '', 'unknown', 'HIGH', ['high'], 1, {}])
+      assert.throws(() => restore({ ...state, effort }), /Invalid saved Agent reasoning effort/);
   }
 });
 
@@ -116,7 +134,6 @@ test('authenticated Agent routes dispatch only catalog IDs to the selected provi
     prompt: 'Explain this fixture',
     context: { title: 'Fixture' },
     history: [],
-    effort: 'low',
     model: 'fixture/model',
   };
   try {
@@ -194,6 +211,46 @@ test('authenticated Agent routes dispatch only catalog IDs to the selected provi
       agentProviderIds,
       'Rejected requests never reach the Agent runner.',
     );
+  } finally {
+    service.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('chat admission preserves every provider-native effort and rejects foreign or invalid values', async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'openpe-agent-efforts-'));
+  const calls: { provider: string; effort: unknown }[] = [];
+  const service = await startServer({
+    dataDir,
+    agentRunner: async (provider, request) => {
+      calls.push({ provider, effort: request.effort });
+      return { outcome: 'completed' };
+    },
+  });
+  const headers = { 'X-OpenPE-Token': service.token, 'Content-Type': 'application/json' };
+  try {
+    for (const provider of agentProviderIds) {
+      for (const effort of [...reasoningEfforts, '', 'unknown', null, ['high'], 42]) {
+        const accepted = providerReasoningEfforts[provider].some((value) => value === effort);
+        const before = calls.length;
+        const response = await fetch(`${service.base}/api/chat`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            provider,
+            effort,
+            prompt: 'Fixture',
+            context: {},
+            history: [],
+            sessionId: 'effort-admission',
+          }),
+        });
+        assert.equal(response.status, accepted ? 200 : 400, `${provider}: ${String(effort)}`);
+        await response.text();
+        assert.equal(calls.length, before + Number(accepted));
+        if (accepted) assert.deepEqual(calls.at(-1), { provider, effort });
+      }
+    }
   } finally {
     service.close();
     await rm(dataDir, { recursive: true, force: true });

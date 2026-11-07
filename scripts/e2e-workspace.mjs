@@ -109,7 +109,13 @@ try {
         await recoveryGate;
       if (pathname === '/api/agents')
         return Response.json([{ id: 'codex', available: true, supportsEffort: true }]);
-      if (pathname === '/api/models') return Response.json({ models: [] });
+      if (pathname === '/api/models')
+        return Response.json({
+          models: [
+            { id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium', 'high'] },
+          ],
+          defaultModel: 'fixture-model',
+        });
       if (pathname === '/api/chat') {
         const encoder = new TextEncoder();
         return new Response(

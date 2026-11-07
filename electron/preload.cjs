@@ -9,7 +9,16 @@ contextBridge.exposeInMainWorld('openpe', {
     return ipcRenderer.invoke('openpe:workspace-recovery-write', content);
   },
   open: () => ipcRenderer.invoke('openpe:open'),
-  acceptOpen: () => ipcRenderer.invoke('openpe:accept-open'),
+  openRecent: (id) => ipcRenderer.invoke('openpe:open-recent', id),
+  listRecent: () => ipcRenderer.invoke('openpe:list-recent'),
+  removeRecent: (id) => ipcRenderer.invoke('openpe:remove-recent', id),
+  previewRecent: (id) => ipcRenderer.invoke('openpe:preview-recent', id),
+  onRecentChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('openpe:recent-changed', listener);
+    return () => ipcRenderer.removeListener('openpe:recent-changed', listener);
+  },
+  acceptOpen: (openId) => ipcRenderer.invoke('openpe:accept-open', openId),
   newFile: () => ipcRenderer.invoke('openpe:new'),
   openDefaultExample: (key) => ipcRenderer.invoke('openpe:open-default-example', key),
   listExamples: () => ipcRenderer.invoke('openpe:list-examples'),

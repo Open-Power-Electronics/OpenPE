@@ -14,7 +14,12 @@ export async function readSource(page) {
       .getByRole('region', { name: 'Project source', exact: true })
       .getByRole('button', { name: 'Copy', exact: true })
       .click();
-    return await page.evaluate(() => window.sourceTestCopy.text);
+    const text = await page.evaluate(() => window.sourceTestCopy.text);
+    // Copy's notification can cover lower file rows in a compact desktop.
+    // Dismiss it through the public control before selecting the next file.
+    const dismiss = page.getByRole('button', { name: 'Dismiss notification', exact: true });
+    if (await dismiss.isVisible()) await dismiss.click();
+    return text;
   } finally {
     await page.evaluate(() => {
       navigator.clipboard.writeText = window.sourceTestCopy.original;

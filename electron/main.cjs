@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeImage, net } = r
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { FileGrants } = require('./file-grants.cjs');
+const { RecentProjects } = require('./recent-projects.cjs');
 const { createNativeSave } = require('./native-save.cjs');
 const { createNativeExport } = require('./native-export.cjs');
 const { createImageExport } = require('./image-export.cjs');
@@ -62,12 +63,13 @@ app.whenReady().then(async () => {
   const examplesRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'examples-native')
     : path.join(__dirname, '../examples');
-  const recentRoot = app.isPackaged
-    ? path.join(process.resourcesPath, 'recent-native')
-    : path.join(__dirname, '../recent');
-  const modelStore = createSimulationModelStore(app.getPath('userData'), modelFetcher, recentRoot);
+  const projectRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'project-native')
+    : path.join(__dirname, '../project');
+  const modelStore = createSimulationModelStore(app.getPath('userData'), modelFetcher, projectRoot);
   history = new ProjectHistory(app.getPath('userData'), fileGrants);
-  const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history, recentRoot);
+  const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history, projectRoot);
+  const recentProjects = new RecentProjects(app.getPath('userData'), atomicWrite);
   let examplePreparation;
   // Example opens join one bounded preparation before granting a file.
   // Home performs no example Git/model checks.
@@ -86,7 +88,7 @@ app.whenReady().then(async () => {
     thermalRoot: app.isPackaged ? process.resourcesPath : undefined,
     // Model downloads follow the desktop's system proxy instead of Node's direct HTTP stack.
     simulationModelFetcher: modelFetcher,
-    simulationRecentRoot: recentRoot,
+    simulationProjectRoot: projectRoot,
     componentModelFiles: { resolve: (id) => fileGrants.location(id) },
     simulationModelFiles: {
       read: (fileId, model) => readProjectModelFile(fileGrants.get(fileId), model),
@@ -157,6 +159,37 @@ app.whenReady().then(async () => {
   });
   // Save destinations come from native pickers or the fixed managed-example grant.
   let pendingFile = null;
+  let nextOpenId = 0;
+  const rememberRecent = async (file) => {
+    await recentProjects.remember(file);
+    if (!win.isDestroyed()) win.webContents.send('openpe:recent-changed');
+  };
+  const openNativeFile = async (event, file) => {
+    trusted(event);
+    const existing = fileGrants.findOpen(file);
+    if (existing) {
+      await rememberRecent(fileGrants.location(existing));
+      trusted(event);
+      return { fileId: existing };
+    }
+    const files = await readNativeProject(file);
+    const source = serializeProject(projectFromNativeFiles(files));
+    const entryFile = path.join(path.dirname(file), files.entry);
+    trusted(event);
+    const openProject = fileGrants.findOpen(entryFile);
+    if (openProject) {
+      await rememberRecent(fileGrants.location(openProject));
+      trusted(event);
+      return { fileId: openProject };
+    }
+    pendingFile = {
+      openId: ++nextOpenId,
+      path: /\.kicad_pro$/i.test(entryFile) ? entryFile : null,
+      source: entryFile,
+      files: files.files.map((item) => path.resolve(path.dirname(file), item.name)),
+    };
+    return { source, name: files.entry, native: true, openId: pendingFile.openId };
+  };
   ipcMain.handle('openpe:open', async (event) => {
     trusted(event);
     pendingFile = null;
@@ -173,25 +206,57 @@ app.whenReady().then(async () => {
     });
     trusted(event);
     if (result.canceled) return null;
-    const file = result.filePaths[0];
-    const existing = fileGrants.findOpen(file);
-    if (existing) return { fileId: existing };
-    const files = await readNativeProject(file);
-    const source = serializeProject(projectFromNativeFiles(files));
-    const entryFile = path.join(path.dirname(file), files.entry);
-    trusted(event);
-    const openProject = fileGrants.findOpen(entryFile);
-    if (openProject) return { fileId: openProject };
-    pendingFile = {
-      path: /\.kicad_pro$/i.test(entryFile) ? entryFile : null,
-      source: file,
-      files: files.files.map((item) => path.resolve(path.dirname(file), item.name)),
-    };
-    return { source, name: files.entry, native: true };
+    return openNativeFile(event, result.filePaths[0]);
   });
-  ipcMain.handle('openpe:accept-open', (event) => {
+  ipcMain.handle('openpe:open-recent', async (event, id) => {
+    trusted(event);
+    pendingFile = null;
+    const file = await recentProjects.resolve(id);
+    return openNativeFile(event, file);
+  });
+  ipcMain.handle('openpe:list-recent', async (event) => {
+    trusted(event);
+    const result = await recentProjects.list();
+    trusted(event);
+    return result;
+  });
+  ipcMain.handle('openpe:remove-recent', async (event, id) => {
+    trusted(event);
+    await recentProjects.remove(id);
+    trusted(event);
+    win.webContents.send('openpe:recent-changed');
+  });
+  let recentPreviewQueue = Promise.resolve();
+  const recentPreviews = new Map();
+  ipcMain.handle('openpe:preview-recent', (event, id) => {
+    trusted(event);
+    if (typeof id !== 'string' || !/^recent:[a-f0-9]{64}$/.test(id))
+      throw new Error('Unknown recent project.');
+    if (recentPreviews.has(id)) return recentPreviews.get(id);
+    if (recentPreviews.size >= 32) throw new Error('Recent previews are busy. Retry shortly.');
+    const preview = recentPreviewQueue.then(async () => {
+      trusted(event);
+      const file = await recentProjects.resolve(id);
+      trusted(event);
+      const bundle = await readNativeProject(file);
+      const project = projectFromNativeFiles(bundle);
+      const circuit = project.schematic;
+      if (Buffer.byteLength(JSON.stringify(circuit), 'utf8') > 8_000_000)
+        throw new Error('The project preview exceeds 8 MB.');
+      if ((await recentProjects.resolve(id)) !== file)
+        throw new Error('Recent changed. Refresh the preview.');
+      trusted(event);
+      return circuit;
+    });
+    recentPreviews.set(id, preview);
+    recentPreviewQueue = preview.catch(() => {}).finally(() => recentPreviews.delete(id));
+    return preview;
+  });
+  ipcMain.handle('openpe:accept-open', async (event, openId) => {
     trusted(event);
     if (!pendingFile) throw new Error('No validated file is waiting to open.');
+    if (openId !== pendingFile.openId)
+      throw new Error('The file opening request changed. Open the intended project again.');
     const fileId = pendingFile.path
       ? fileGrants.create(pendingFile.path)
       : fileGrants.createImport(pendingFile.source);
@@ -202,7 +267,10 @@ app.whenReady().then(async () => {
       pendingFile = null;
       throw error;
     }
+    const file = pendingFile.source;
     pendingFile = null;
+    await rememberRecent(file);
+    trusted(event);
     return fileId;
   });
   ipcMain.handle('openpe:new', (event) => {
@@ -214,6 +282,8 @@ app.whenReady().then(async () => {
     await prepareExamples();
     trusted(event);
     const opened = await exampleProjects.openDefault(key);
+    trusted(event);
+    await rememberRecent(fileGrants.location(opened.fileId));
     trusted(event);
     return opened;
   });
@@ -291,9 +361,13 @@ app.whenReady().then(async () => {
     },
     atomicWrite,
   });
-  ipcMain.handle('openpe:save', (event, options) => {
+  ipcMain.handle('openpe:save', async (event, options) => {
     trusted(event);
-    return nativeSave(options);
+    const saved = await nativeSave(options);
+    trusted(event);
+    if (saved) await rememberRecent(saved.path);
+    trusted(event);
+    return saved;
   });
   const nativeExport = createNativeExport({
     parseProject,

@@ -1857,17 +1857,19 @@ export default function Workbench({
   function open() {
     void openDocument();
   }
-  async function openDocument() {
+  async function openDocument(recentId?: string) {
     if (window.openpe) {
       try {
-        const result = await window.openpe.open();
+        const result = recentId
+          ? await window.openpe.openRecent(recentId)
+          : await window.openpe.open();
         if (!result) return;
         if ('fileId' in result) {
           onSelectFile(result.fileId);
           return;
         }
         const loaded = importDocument(result.source);
-        const grant = await window.openpe.acceptOpen();
+        const grant = await window.openpe.acceptOpen(result.openId);
         await enterDocument(
           loaded,
           result.name,
@@ -1884,6 +1886,10 @@ export default function Workbench({
     } else fileInput.current?.click();
   }
   function newFile(example?: ExampleId, brief = '') {
+    if (example?.startsWith('recent:')) {
+      void openDocument(example);
+      return;
+    }
     void (async () => {
       try {
         if (example && onSelectExample(`example:${example}`)) return;
@@ -3344,7 +3350,6 @@ export default function Workbench({
             <Logo size={32} />
           </div>
           <strong>OpenPE</strong>
-          <span className="version">Preview</span>
         </div>
         {screen === 'workspace' && hasDocument && (
           <>

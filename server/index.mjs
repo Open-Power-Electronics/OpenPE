@@ -8,7 +8,7 @@ import { createWorkspaceRecoveryStore } from './workspace-storage.mjs';
 import { validateAnnotations, validateLayoutAnnotationContext } from './annotation-format.mjs';
 import { validateAgentWorkspaceContext } from './agent-context-format.mjs';
 import { detectAgents, runAgent } from './agents.mjs';
-import { isAgentProvider } from './agent-provider-format.mjs';
+import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
 import { createAgentCapabilityBridge } from './agent-capabilities.mjs';
 import { listAgentModels } from './agent-models.mjs';
 import { createPluginService, registerPlugins } from './plugins.mjs';
@@ -45,7 +45,7 @@ export async function startServer({
   simulationModelFetcher = fetch,
   simulationModelFiles = undefined,
   componentModelFiles = undefined,
-  simulationRecentRoot = undefined,
+  simulationProjectRoot = undefined,
   simulationResultFiles = /** @type {{ forProject(fileId: string): ReturnType<typeof import('./project-spice-files.mjs').createProjectSpiceStore> | null } | undefined} */ (
     undefined
   ),
@@ -152,7 +152,7 @@ export async function startServer({
     simulationResultFiles,
     (deck, signal, store, resultFiles) =>
       simulationResultLoader(deck, signal, store, simulationRoot, resultFiles),
-    simulationRecentRoot,
+    simulationProjectRoot,
   );
   app.get('/api/libraries/:kind', async (req, res) => {
     if (!['symbols', 'footprints'].includes(req.params.kind))
@@ -270,7 +270,7 @@ export async function startServer({
       typeof b.prompt !== 'string' ||
       !b.prompt.trim() ||
       b.prompt.length > 16000 ||
-      (b.effort !== undefined && !['low', 'medium', 'high'].includes(b.effort)) ||
+      (b.effort !== undefined && !isProviderReasoningEffort(b.provider, b.effort)) ||
       (b.model !== undefined && !validModelId(b.model)) ||
       (b.capabilities !== undefined && typeof b.capabilities !== 'boolean') ||
       (b.requestTitle !== undefined && typeof b.requestTitle !== 'boolean') ||

@@ -223,7 +223,7 @@ export default function ModelDisplayPanel({
                     aria-pressed={renderEnabled}
                     aria-busy={renderLoading}
                     aria-description="Progressive path tracing with physical materials and studio lighting. Export image waits for the completed render."
-                    disabled={!ready || (!renderEnabled && renderDisabled)}
+                    disabled={!renderEnabled && (!ready || renderDisabled)}
                     onClick={() => onRenderChange(!renderEnabled)}
                     onKeyDown={(event) => {
                       if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {

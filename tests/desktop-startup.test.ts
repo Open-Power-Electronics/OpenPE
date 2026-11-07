@@ -11,6 +11,8 @@ test('desktop Home skips example preparation while explicit opens share its chec
   const opened: unknown[] = [];
   const modelPreparations: unknown[][] = [];
   const exampleRoots: string[] = [];
+  const recent: string[] = [];
+  const changed: string[] = [];
   let preparations = 0,
     grants = 0,
     bootstrap: Promise<void> | undefined,
@@ -23,6 +25,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     readonly webContents = Object.assign(new EventEmitter(), {
       mainFrame: {},
       setWindowOpenHandler: () => {},
+      send: (channel: string) => changed.push(channel),
     });
     constructor() {
       super();
@@ -30,6 +33,9 @@ test('desktop Home skips example preparation while explicit opens share its chec
     }
     async loadURL() {
       this.webContents.emit('did-finish-load');
+    }
+    isDestroyed() {
+      return false;
     }
   }
   const modules: Record<string, unknown> = {
@@ -90,6 +96,19 @@ test('desktop Home skips example preparation while explicit opens share its chec
         create() {
           return `grant-${++grants}`;
         }
+        location() {
+          return path.resolve('examples/selected.kicad_pro');
+        }
+      },
+    },
+    './recent-projects.cjs': {
+      RecentProjects: class {
+        async remember(file: string) {
+          recent.push(file);
+        }
+        async list() {
+          return { entries: [], warnings: [] };
+        }
       },
     },
     './native-save.cjs': { createNativeSave: () => {} },
@@ -123,6 +142,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
   assert.equal(modelPreparations.length, 0, 'Home does not read prepared model resources.');
   assert.deepEqual(exampleRoots, [path.resolve('examples')]);
   assert.equal(preparations, 0, 'Loading Home does not prepare or check example assets.');
+  assert.deepEqual(recent, [], 'Loading Home never records example preparation as recent use.');
   assert.equal(handlers.has('openpe:example-preparation'), false);
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
   assert.equal(await handlers.get('openpe:new')!(event), 'grant-1');
@@ -139,4 +159,6 @@ test('desktop Home skips example preparation while explicit opens share its chec
   assert.deepEqual(await open(event, 'third'), { key: 'third' });
   assert.equal(preparations, 1, 'Later opens reuse the completed shared preparation.');
   assert.equal(modelPreparations.length, 0, 'Opening original examples never rewrites sidecars.');
+  assert.equal(recent.length, 3, 'Only selected example opens enter Recent.');
+  assert.deepEqual(changed, Array(3).fill('openpe:recent-changed'));
 });

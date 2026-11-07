@@ -189,7 +189,7 @@ export async function loadSupplementalDatasheets(root = repositoryRoot) {
       throw new Error(
         'Supplemental EMC PDF metadata does not match the fitted IC or pinned source.',
       );
-    return { record, directory: path.join(root, 'recent/emc-flyback/datasheets') };
+    return { record, directory: path.join(root, 'project/emc-flyback/datasheets') };
   });
 }
 

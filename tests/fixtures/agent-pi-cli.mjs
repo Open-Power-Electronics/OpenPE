@@ -13,10 +13,14 @@ if (process.argv.includes('--help')) {
   assert.equal(process.argv[process.argv.indexOf('--mode') + 1], 'rpc');
   assert.ok(!process.argv.includes('--approve'));
   assert.ok(!process.argv.includes('--extension'));
+  const requestedEffort = process.argv.includes('--thinking')
+    ? process.argv[process.argv.indexOf('--thinking') + 1]
+    : undefined;
+  if (mode.startsWith('effort-')) assert.equal(requestedEffort, mode.slice('effort-'.length));
   const send = (record) => process.stdout.write(JSON.stringify(record) + '\n');
   const state = {
     model: { provider: 'fixture', id: 'fixture-model' },
-    thinkingLevel: 'high',
+    thinkingLevel: mode === 'clamped-effort' ? 'high' : requestedEffort || 'medium',
   };
   const input = createInterface({ input: process.stdin });
   input.on('line', (line) => {
@@ -37,8 +41,24 @@ if (process.argv.includes('--help')) {
                   ...state.model,
                   name: 'Fixture model',
                   reasoning: true,
+                  thinkingLevelMap: { xhigh: 'xhigh', max: 'max' },
                   input: ['text', 'image'],
                 },
+                { provider: 'fixture', id: 'ordinary-reasoner', reasoning: true, input: ['text'] },
+                {
+                  provider: 'fixture',
+                  id: 'restricted-reasoner',
+                  reasoning: true,
+                  thinkingLevelMap: {
+                    off: null,
+                    minimal: null,
+                    low: null,
+                    medium: null,
+                    xhigh: null,
+                    max: 'max',
+                  },
+                },
+                { provider: 'fixture', id: 'no-reasoning', reasoning: false, input: ['text'] },
                 { provider: 'fixture', id: '--bad' },
                 { provider: 'fixture', id: 'image-only', input: ['image'] },
               ],
@@ -47,6 +67,7 @@ if (process.argv.includes('--help')) {
         20,
       );
     } else if (event.type === 'prompt') {
+      assert.notEqual(mode, 'clamped-effort', 'A clamped effort must fail before prompting');
       assert.match(event.message, /Use only the supplied context and history/);
       assert.doesNotMatch(event.message, /Use the OpenPE capability tools/);
       assert.equal(event.message.includes('private-bridge-token'), false);

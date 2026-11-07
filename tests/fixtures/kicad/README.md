@@ -1,6 +1,6 @@
 # KiCad simulation fixtures
 
-Nine schematic-only demos from [KiCad 10.0.0](https://github.com/KiCad/kicad-source-mirror/tree/10.0.0/demos/simulation) are retained as internal format, connectivity and transient-simulation fixtures. These `.openpe.json` files are private regression snapshots. Open adjacent native `.kicad_sch` files with **Open project**. Home has nine curated Examples and fixed EMC Flyback Recent; see [Home projects](../../../docs/EXAMPLES.md). KiCad project settings and boards are not included.
+Nine schematic-only demos from [KiCad 10.0.0](https://github.com/KiCad/kicad-source-mirror/tree/10.0.0/demos/simulation) are retained as internal format, connectivity and transient-simulation fixtures. These `.openpe.json` files are private regression snapshots. Open adjacent native `.kicad_sch` files with **Open project**. Home has nine curated Examples and the initial EMC Flyback Recent entry; see [Home projects](../../../docs/EXAMPLES.md). KiCad project settings and boards are not included.
 
 [`manifest.json`](manifest.json) pins each original path and SHA-256 to commit `0feeca2a807f428ad2b3fa7c1e39625cb769f02c`. [`upstream/`](upstream/) contains unchanged native schematics. Generated `.openpe.json` documents use the current structured schema, embedded symbols and typed simulation attributes; adjacent `.kicad_sch` files are native KiCad 10 exports. Do not edit pinned originals or generated snapshots manually. Runtime symbol/model resolution uses bundled or explicitly prepared resources, not an installed KiCad library.
 

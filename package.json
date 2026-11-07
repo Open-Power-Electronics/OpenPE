@@ -140,8 +140,8 @@
         ]
       },
       {
-        "from": "recent",
-        "to": "recent-native",
+        "from": "project",
+        "to": "project-native",
         "filter": [
           "**/*",
           "!**/spice/**",

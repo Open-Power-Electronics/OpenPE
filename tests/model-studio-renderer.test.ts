@@ -11,6 +11,8 @@ import {
   MODEL_RENDER_MAX_DIMENSION,
   MODEL_RENDER_SAMPLES,
   modelRenderBvhStackDepth,
+  modelRenderTextureMask,
+  modelRenderWorkingSize,
   renderModelRasterPreview,
   specializeModelRenderShader,
   type ModelPathTracingBackend,
@@ -188,8 +190,8 @@ test('pinned Model shader omits unused spectral and velvet optics while retainin
     'transmissionDirection(',
     'clearcoatDirection(',
     'directLightContribution(',
-    'material.normalMapTransform',
-    'material.clearcoatNormalMapTransform',
+    'readTextureTransform( materials, material.textureTransformIndex + 10u )',
+    'readTextureTransform( materials, material.textureTransformIndex + 14u )',
     'vec4 albedo = vec4( material.color, material.opacity );',
     'mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness )',
   ])
@@ -203,6 +205,213 @@ test('pinned Model shader omits unused spectral and velvet optics while retainin
     'An incompatible pinned shader fails explicitly before compilation.',
   );
   material.dispose();
+});
+
+const packedMaterialTextureMaps = [
+  ['map', 0],
+  ['metalnessMap', 2],
+  ['roughnessMap', 4],
+  ['transmissionMap', 6],
+  ['emissiveMap', 8],
+  ['normalMap', 10],
+  ['clearcoatMap', 12],
+  ['clearcoatNormalMap', 14],
+  ['clearcoatRoughnessMap', 16],
+  ['sheenColorMap', 18],
+  ['sheenRoughnessMap', 20],
+  ['iridescenceMap', 22],
+  ['iridescenceThicknessMap', 24],
+  ['specularColorMap', 26],
+  ['specularIntensityMap', 28],
+  ['alphaMap', 30],
+] as const;
+
+const activeModelTextureMaps = packedMaterialTextureMaps
+  .map(([map]) => map)
+  .filter(
+    (map) =>
+      !map.startsWith('sheen') && !map.startsWith('iridescence') && !map.startsWith('specular'),
+  );
+
+test('Model texture mask follows the current union as maps are added and removed across materials', () => {
+  const surfaces = [new THREE.MeshPhysicalMaterial(), new THREE.MeshPhysicalMaterial()];
+  const texture = new THREE.Texture();
+  try {
+    assert.equal(modelRenderTextureMask([]), 0);
+    assert.equal(modelRenderTextureMask(surfaces), 0);
+    surfaces[0].transmission = 0.92;
+    surfaces[1].clearcoat = 0.8;
+    surfaces[0].specularColorMap = texture;
+    surfaces[1].sheenColorMap = texture;
+    assert.equal(
+      modelRenderTextureMask(surfaces),
+      0,
+      'Uniform optics and unused maps add no bits.',
+    );
+    let expected = 0;
+    for (const [index, map] of activeModelTextureMaps.entries()) {
+      surfaces[index % 2][map] = texture;
+      expected |= 1 << index;
+      assert.equal(modelRenderTextureMask(surfaces), expected, `${map} enables its own map bit.`);
+    }
+    assert.equal(expected, 1023, 'All ten supported map kinds occupy separate bits.');
+    assert.equal(modelRenderTextureMask([...surfaces].reverse()), 1023);
+    surfaces[1].map = texture;
+    surfaces[0].map = null;
+    assert.equal(
+      modelRenderTextureMask(surfaces),
+      1023,
+      'Another material retains the shared bit.',
+    );
+    surfaces[1].map = null;
+    expected &= ~1;
+    assert.equal(modelRenderTextureMask(surfaces), expected);
+    for (const [index, map] of activeModelTextureMaps.entries()) {
+      surfaces[0][map] = null;
+      surfaces[1][map] = null;
+      expected &= ~(1 << index);
+      assert.equal(modelRenderTextureMask(surfaces), expected, `${map} leaves no stale map bit.`);
+    }
+    assert.equal(modelRenderTextureMask(surfaces), 0);
+  } finally {
+    texture.dispose();
+    for (const surface of surfaces) surface.dispose();
+  }
+});
+
+test('Model texture mask guards retain the exact pinned map reader or disable only that map', () => {
+  const material = new PhysicalPathTracingMaterial();
+  const shader = specializeModelRenderShader(material.fragmentShader);
+  const guards = [
+    ...shader.matchAll(
+      /#if \( MODEL_TEXTURE_MAPS & (\d+) \) != 0\n([^#]+)\n#else\n([^#]+)\n#endif/g,
+    ),
+  ];
+  assert.equal(guards.length, 10);
+  for (const [index, map] of activeModelTextureMaps.entries()) {
+    const original = material.fragmentShader.match(
+      new RegExp(`\\t\\tm\\.${map} = int\\( round\\( s\\d+\\.[rgba] \\) \\);`, 'g'),
+    );
+    assert.equal(original?.length, 1);
+    const guard = guards.find((match) => Number(match[1]) === 1 << index);
+    assert.ok(guard, `${map} has the bit returned by the scene-wide texture mask.`);
+    assert.equal(guard[2], original![0], `${map} preserves the packed material lookup.`);
+    assert.equal(
+      guard[3],
+      `\t\tm.${map} = - 1;`,
+      `${map} alone is disabled when its bit is absent.`,
+    );
+  }
+  material.dispose();
+});
+
+test('Model reads packed texture transforms only inside the corresponding map sample branches', () => {
+  const material = new PhysicalPathTracingMaterial();
+  const shader = specializeModelRenderShader(material.fragmentShader);
+  const struct = shader.match(/struct Material \{([\s\S]*?)\n\t\};/)?.[1];
+  const reader = shader.match(/Material readMaterialInfo\([\s\S]*?return m;/)?.[0];
+  assert.ok(struct);
+  assert.ok(reader);
+  assert.match(struct, /uint textureTransformIndex;/);
+  assert.doesNotMatch(struct, /\bmat3\b/);
+  assert.ok(reader.includes('m.textureTransformIndex = i + 15u;'));
+  assert.doesNotMatch(reader, /readTextureTransform|firstTextureTransformIdx/);
+  for (const [map, offset] of packedMaterialTextureMaps) {
+    assert.equal(shader.includes(`${map}Transform`), false, `${map} has no eager matrix field.`);
+    const branches = [
+      ...shader.matchAll(
+        new RegExp(`if \\( material\\.${map} != - 1 \\) \\{[\\s\\S]*?vec3 uvPrime = ([^;]+);`, 'g'),
+      ),
+    ];
+    if (map.startsWith('sheen') || map.startsWith('iridescence')) {
+      assert.equal(branches.length, 0, `${map} is outside the owned surface optics.`);
+      continue;
+    }
+    const count = ['map', 'metalnessMap', 'transmissionMap', 'alphaMap'].includes(map) ? 2 : 1;
+    assert.equal(branches.length, count, `${map} retains its surface and shadow sample sites.`);
+    const index = `material.textureTransformIndex${offset ? ` + ${offset}u` : ''}`;
+    for (const branch of branches)
+      assert.equal(
+        branch[1],
+        `readTextureTransform( materials, ${index} ) * vec3( uv, 1 )`,
+        `${map} retains its original packed slot and UV equation.`,
+      );
+  }
+  assert.throws(
+    () =>
+      specializeModelRenderShader(
+        material.fragmentShader.replace(
+          'readTextureTransform( tex, firstTextureTransformIdx + 10u )',
+          'readTextureTransform( tex, firstTextureTransformIdx + 12u )',
+        ),
+      ),
+    /pinned path tracing shader/,
+    'Changed pinned transform offsets must fail explicitly.',
+  );
+  material.dispose();
+});
+
+test('lazy transform offsets match the real material texture ABI for every map and material index', () => {
+  const tracerMaterial = new PhysicalPathTracingMaterial();
+  const packed = tracerMaterial.uniforms.materials.value as THREE.DataTexture & {
+    updateFrom(materials: THREE.Material[], textures: THREE.Texture[]): boolean;
+  };
+  const surfaces = [new THREE.MeshPhysicalMaterial(), new THREE.MeshPhysicalMaterial()];
+  const textures: THREE.Texture[] = [];
+  try {
+    for (const [materialIndex, surface] of surfaces.entries()) {
+      for (const [mapIndex, [map]] of packedMaterialTextureMaps.entries()) {
+        const texture = new THREE.Texture();
+        const seed = 1 + materialIndex * packedMaterialTextureMaps.length + mapIndex;
+        texture.offset.set(seed * 0.13, seed * -0.07);
+        texture.repeat.set(-0.7 - seed * 0.03, 1.1 + seed * 0.04);
+        texture.center.set(seed * 0.01, 0.3 - seed * 0.02);
+        texture.rotation = seed * 0.17;
+        if (mapIndex % 2) {
+          texture.matrixAutoUpdate = false;
+          texture.matrix.set(1 + seed * 0.02, -0.3, seed * 0.11, 0.2, 0.8, seed * -0.09, 0, 0, 1);
+        }
+        surface[map] = texture;
+        textures.push(texture);
+      }
+    }
+    packed.updateFrom(surfaces, textures);
+    const data = packed.image.data as Float32Array;
+    for (const [materialIndex, surface] of surfaces.entries()) {
+      for (const [map, offset] of packedMaterialTextureMaps) {
+        const texture = surface[map]!;
+        const index = (materialIndex * 47 + 15 + offset) * 4;
+        const stored = new THREE.Matrix3().set(
+          data[index],
+          data[index + 1],
+          data[index + 2],
+          data[index + 4],
+          data[index + 5],
+          data[index + 6],
+          0,
+          0,
+          1,
+        );
+        for (const uv of [
+          [0, 0],
+          [0.25, 0.8],
+          [-1.7, 2.3],
+        ]) {
+          const expected = new THREE.Vector3(uv[0], uv[1], 1).applyMatrix3(texture.matrix);
+          const actual = new THREE.Vector3(uv[0], uv[1], 1).applyMatrix3(stored);
+          assert.ok(
+            actual.distanceTo(expected) < 0.000001,
+            `${map} on material ${materialIndex} preserves authored UV transforms at ${uv}.`,
+          );
+        }
+      }
+    }
+  } finally {
+    for (const texture of textures) texture.dispose();
+    for (const surface of surfaces) surface.dispose();
+    packed.dispose();
+    tracerMaterial.dispose();
+  }
 });
 
 test('owned surface invariants specialize unused branches while preserving authored specular uniforms', () => {
@@ -849,6 +1058,41 @@ test('backpressure and partial-sample continuations avoid duplicate copies while
   f.target.dispose();
 });
 
+test('filter cadence preserves early feedback, explicit repaint and the complete final image', () => {
+  const f = fixture();
+  const continuation = { ...f.options, continuation: true };
+  const presented: number[] = [];
+  f.backend.beginFrame = () => 4; // One full fixture sample per frame.
+  const present = f.backend.present;
+  f.backend.present = (...args) => {
+    presented.push(f.backend.samples);
+    present(...args);
+  };
+  for (let sample = 1; sample <= MODEL_RENDER_SAMPLES; sample++) {
+    const progress = f.studio.render(f.camera, continuation);
+    assert.equal(progress.samples, sample, 'Filtering never skips trace samples.');
+    assert.equal(progress.complete, sample === MODEL_RENDER_SAMPLES);
+    if (sample === 6) {
+      const count = presented.length;
+      f.backend.beginFrame = () => 0;
+      f.studio.render(f.camera, f.options);
+      assert.equal(
+        presented.length,
+        count + 1,
+        'Explicit capture repaints between filter updates.',
+      );
+      f.studio.render(f.camera, continuation);
+      assert.equal(presented.length, count + 1, 'The following continuation retains that image.');
+      presented.pop();
+      f.backend.beginFrame = () => 4;
+    }
+  }
+  assert.deepEqual(presented, [1, 2, 3, ...Array.from({ length: 16 }, (_, i) => (i + 1) * 4)]);
+  assert.equal(f.calls.samples, MODEL_RENDER_SAMPLES * 4);
+  f.studio.dispose();
+  f.target.dispose();
+});
+
 test('movement and physical scene changes reset samples without needless geometry uploads', () => {
   const f = fixture();
   f.studio.render(f.camera, f.options);
@@ -883,6 +1127,43 @@ test('movement and physical scene changes reset samples without needless geometr
   f.target.dispose();
 });
 
+test('path tracing keeps its normal-density resolution and caps high-density work at CSS pixels', () => {
+  for (const ratio of [1, 1.25, 2, 3]) {
+    const css = new THREE.Vector2(960, 640);
+    const drawing = css.clone().multiplyScalar(ratio);
+    const expectedScale = Math.min(0.75 * ratio, 1);
+    assert.deepEqual(modelRenderWorkingSize(drawing, css), {
+      width: 960 * expectedScale,
+      height: 640 * expectedScale,
+    });
+    assert.deepEqual(css.toArray(), [960, 640]);
+    assert.deepEqual(drawing.toArray(), [960 * ratio, 640 * ratio]);
+  }
+});
+
+test('path tracing retains aspect ratio and its working-size bound for large and small views', () => {
+  for (const [x, y] of [
+    [7680, 4320],
+    [4320, 7680],
+  ]) {
+    const size = modelRenderWorkingSize({ x, y }, { x: x / 2, y: y / 2 });
+    assert.equal(Math.max(size.width, size.height), MODEL_RENDER_MAX_DIMENSION * 0.75);
+    assert.equal(size.width / size.height, x / y);
+  }
+  assert.deepEqual(modelRenderWorkingSize({ x: 2, y: 2 }, { x: 1, y: 1 }), {
+    width: 1,
+    height: 1,
+  });
+  assert.deepEqual(modelRenderWorkingSize({ x: 0, y: 0 }, { x: 0, y: 0 }), {
+    width: 1,
+    height: 1,
+  });
+  assert.deepEqual(modelRenderWorkingSize({ x: 2002, y: 1002 }, { x: 1001, y: 501 }), {
+    width: 1001,
+    height: 501,
+  });
+});
+
 test('path tracing bounds working resolution and restarts accumulation after resize', () => {
   const f = fixture();
   f.state.drawing.set(7680, 4320);
@@ -895,6 +1176,11 @@ test('path tracing bounds working resolution and restarts accumulation after res
   assert.deepEqual(f.calls.sizes.at(-1), [750, 600]);
   assert.deepEqual(f.state.drawing.toArray(), [1000, 800], 'The output canvas keeps its size.');
   assert.equal(f.studio.samples, 0.75);
+  f.state.drawing.set(2000, 1600);
+  f.studio.render(f.camera, f.options);
+  assert.deepEqual(f.calls.sizes.at(-1), [1000, 800]);
+  assert.deepEqual(f.state.drawing.toArray(), [2000, 1600], 'High-density output keeps its size.');
+  assert.equal(f.studio.samples, 0.75, 'Changing working resolution starts a new image.');
   f.studio.dispose();
   f.target.dispose();
 });

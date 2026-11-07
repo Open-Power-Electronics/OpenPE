@@ -350,7 +350,7 @@ var home_manifest_default = {
       topology: "Flyback",
       package: "SOIC-8",
       directory: "emc-flyback",
-      root: "recent"
+      root: "project"
     }
   ]
 };
@@ -613,6 +613,21 @@ var agentProviders = [
   }
 ];
 var agentProviderIds = agentProviders.map(({ id }) => id);
+var reasoningEfforts = [
+  "none",
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra"
+];
+var defaultReasoningEffort = "medium";
+function isReasoningEffort(value) {
+  return typeof value === "string" && reasoningEfforts.some((effort) => effort === value);
+}
 function isAgentProvider(value) {
   return agentProviders.some(({ id }) => id === value);
 }
@@ -621,7 +636,7 @@ function isAgentProvider(value) {
 var maxOpenProjects = 12;
 var defaultAgentPreferences = {
   provider: "codex",
-  effort: "low",
+  effort: defaultReasoningEffort,
   approvalMode: "review",
   models: Object.fromEntries(agentProviderIds.map((id) => [id, ""]))
 };
@@ -710,8 +725,7 @@ function restoreWorkspace(value) {
   if (documents.length && !ids.has(String(state.activeDocumentId)) || !documents.length && state.activeDocumentId !== null)
     throw new Error("The active project is missing from the workspace.");
   if (!isAgentProvider(state.provider)) throw new Error("Invalid saved Agent provider.");
-  if (!["low", "medium", "high"].includes(String(state.effort)))
-    throw new Error("Invalid saved Agent reasoning effort.");
+  if (!isReasoningEffort(state.effort)) throw new Error("Invalid saved Agent reasoning effort.");
   if (!["review", "auto"].includes(String(state.approvalMode)))
     throw new Error("Invalid saved Agent approval mode.");
   const models = object(state.models);

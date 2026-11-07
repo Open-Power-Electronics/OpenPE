@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as pathTracing from 'three-gpu-pathtracer';
-import { DenoiseMaterial, PathTracingSceneGenerator } from 'three-gpu-pathtracer';
+import { PathTracingSceneGenerator } from 'three-gpu-pathtracer';
 import { getBVHExtremes, type MeshBVH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -10,6 +10,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { createModelRenderScene } from './model-render-scene';
 import { createModelRenderEnvironment } from './model-render-environment';
+import { createModelRenderDenoiser } from './model-render-denoise';
 import { prepareModelShaders } from '@/lib/model-shader-warmup';
 
 export const MODEL_RENDER_SAMPLES = 64;
@@ -20,6 +21,48 @@ const MODEL_RENDER_FRAME_BUDGET_MS = 8;
 const MODEL_RENDER_TILES_PER_FRAME = 3;
 const MODEL_RENDER_MAX_TILES_PER_FRAME = 27;
 const MODEL_RENDER_FENCE_GRACE_MS = 50;
+const modelRenderTextureMaps = [
+  'map',
+  'metalnessMap',
+  'roughnessMap',
+  'transmissionMap',
+  'emissiveMap',
+  'normalMap',
+  'clearcoatMap',
+  'clearcoatNormalMap',
+  'clearcoatRoughnessMap',
+  'alphaMap',
+] as const;
+
+/** Compile only map kinds present anywhere in the current generated scene. */
+export function modelRenderTextureMask(materials: readonly THREE.Material[]): number {
+  let mask = 0;
+  for (const material of materials) {
+    const surface = material as THREE.MeshPhysicalMaterial;
+    for (const [index, map] of modelRenderTextureMaps.entries())
+      if (surface[map]?.isTexture) mask |= 1 << index;
+  }
+  return mask;
+}
+
+/** Bound tracing work independently of the full-resolution viewport and PNG canvas. */
+export function modelRenderWorkingSize(
+  drawing: Readonly<{ x: number; y: number }>,
+  css: Readonly<{ x: number; y: number }>,
+) {
+  if (drawing.x <= 0 || drawing.y <= 0 || css.x <= 0 || css.y <= 0) return { width: 1, height: 1 };
+  const scale = Math.min(
+    MODEL_RENDER_RESOLUTION_SCALE,
+    css.x / drawing.x,
+    css.y / drawing.y,
+    (MODEL_RENDER_RESOLUTION_SCALE * MODEL_RENDER_MAX_DIMENSION) / Math.max(drawing.x, drawing.y),
+  );
+  return {
+    width: Math.max(1, Math.floor(drawing.x * scale)),
+    height: Math.max(1, Math.floor(drawing.y * scale)),
+  };
+}
+
 // The owned studio scene has rectangular area lights and an environment. Share
 // their visibility/BSDF evaluation so drivers compile one large traversal path.
 const modelDirectLightContribution = /* glsl */ `
@@ -74,6 +117,12 @@ export type ModelStudioRenderOptions = {
   continuation?: boolean;
 };
 export type ModelRenderProgress = { samples: number; complete: boolean };
+
+/** Show early progress, then amortize filtering across four complete samples. */
+function modelRenderPresentationSample(samples: number): number {
+  const complete = Math.floor(samples);
+  return complete < 4 ? complete : Math.floor(complete / 4) * 4;
+}
 
 /** Backend seam checks lifecycle without substituting mocked pixels for GPU evidence. */
 export type ModelPathTracingBackend = {
@@ -347,7 +396,63 @@ export function specializeModelRenderShader(source: string): string {
     /\n\t\tsurf\.(?:sheen|sheenColor|sheenRoughness|iridescence|iridescenceIor|iridescenceThickness) = [^;\n]*;/g;
   if ([...source.matchAll(assignments)].length !== 6)
     throw new Error('The pinned path tracing shader does not match its Model specialization.');
-  return source.replace(assignments, '');
+  source = source.replace(assignments, '');
+  // Carry only the packed texture base through surface and shadow traversal.
+  // Eagerly returning sixteen mat3 values makes the driver's inlined Material
+  // copies expensive to compile. Every sample already guards its map index,
+  // so fetch the identical transform there, retaining the original packed ABI.
+  const textureMaps = [
+    'map',
+    'metalnessMap',
+    'roughnessMap',
+    'transmissionMap',
+    'emissiveMap',
+    'normalMap',
+    'clearcoatMap',
+    'clearcoatNormalMap',
+    'clearcoatRoughnessMap',
+    'sheenColorMap',
+    'sheenRoughnessMap',
+    'iridescenceMap',
+    'iridescenceThicknessMap',
+    'specularColorMap',
+    'specularIntensityMap',
+    'alphaMap',
+  ];
+  replaceBlock(
+    textureMaps.map((map) => `\t\tmat3 ${map}Transform;\n`).join(''),
+    '\t\tuint textureTransformIndex;\n',
+  );
+  replaceBlock(
+    '\t\tuint firstTextureTransformIdx = i + 15u;',
+    '\t\tm.textureTransformIndex = i + 15u;',
+  );
+  replaceBlock('\t\t// mat3( 1.0 ) is an identity matrix\n');
+  for (const [index, map] of textureMaps.entries()) {
+    const offset = index ? ` + ${index * 2}u` : '';
+    replaceBlock(
+      `\t\tm.${map}Transform = m.${map} == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx${offset} );\n`,
+    );
+    source = source.replaceAll(
+      `material.${map}Transform`,
+      `readTextureTransform( materials, material.textureTransformIndex${offset} )`,
+    );
+  }
+  // STEP colours and untextured CAD do not need the general map sampling paths.
+  // The scene-wide union is refreshed on every upload; adding a map enables its
+  // exact original reader and sampler again before the next image can start.
+  for (const [index, map] of modelRenderTextureMaps.entries()) {
+    const assignment = source.match(
+      new RegExp(`\\t\\tm\\.${map} = int\\( round\\( s\\d+\\.[rgba] \\) \\);`, 'g'),
+    );
+    if (assignment?.length !== 1)
+      throw new Error('The pinned path tracing shader does not match its Model specialization.');
+    replaceBlock(
+      assignment[0],
+      `#if ( MODEL_TEXTURE_MAPS & ${1 << index} ) != 0\n${assignment[0]}\n#else\n\t\tm.${map} = - 1;\n#endif`,
+    );
+  }
+  return source;
 }
 
 /** Size the traversal stack from every generated tree, without shortening a tree. */
@@ -614,9 +719,12 @@ function createPathTracingBackend(
   material.backgroundMap = background;
   material.backgroundAlpha = 1;
   let environmentSource: THREE.DataTexture | undefined;
-  const denoise = new DenoiseMaterial({ sigma: 1.6, kSigma: 1.5, threshold: 0.18 });
-  const quad = new FullScreenQuad(denoise);
-  const image = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+  const denoiser = createModelRenderDenoiser(renderer);
+  let renderScene: THREE.Scene;
+  const image = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    depthBuffer: false,
+  });
   const copyMaterial = new THREE.MeshBasicMaterial({
     map: image.texture,
     depthWrite: false,
@@ -704,8 +812,7 @@ function createPathTracingBackend(
     frameBudget.dispose();
     events.removeEventListener('recompilation', requestCompile);
     releaseOutline();
-    denoise.dispose();
-    quad.dispose();
+    denoiser.dispose();
     image.dispose();
     copyMaterial.dispose();
     copyQuad.dispose();
@@ -740,6 +847,8 @@ function createPathTracingBackend(
     endFrame: frameBudget.endFrame,
     finishFrame: frameBudget.finishFrame,
     setScene(scene, camera) {
+      renderScene = scene;
+      denoiser.invalidate();
       frameBudget.reset();
       scene.updateMatrixWorld(true);
       camera.updateMatrixWorld();
@@ -781,6 +890,7 @@ function createPathTracingBackend(
         material.iesProfiles.setTextures(renderer, []);
       });
       material.materials.updateFrom(results.materials, textures);
+      material.setDefine('MODEL_TEXTURE_MAPS', modelRenderTextureMask(results.materials));
       material.lights.updateFrom(lights, []);
       if (environmentSource !== scene.environment) {
         const environment = createModelRenderEnvironment(scene.environment);
@@ -801,18 +911,21 @@ function createPathTracingBackend(
       denoisedSample = -1;
     },
     updateCamera(camera) {
+      denoiser.invalidate();
       frameBudget.reset();
       tracer.setCamera(camera);
       tracer.reset();
       denoisedSample = -1;
     },
     resize(width, height) {
+      denoiser.invalidate();
       frameBudget.reset();
       tracer.setSize(width, height);
       tracer.reset();
       denoisedSample = -1;
     },
     reset() {
+      denoiser.invalidate();
       frameBudget.reset();
       tracer.reset();
       denoisedSample = -1;
@@ -830,15 +943,11 @@ function createPathTracingBackend(
       tracer.update();
     },
     present(camera, selected) {
-      denoise.map = tracer.target.texture;
       const { width, height } = tracer.target;
-      const completed = Math.floor(tracer.samples);
+      const completed = modelRenderPresentationSample(tracer.samples);
       if (denoisedSample !== completed || image.width !== width || image.height !== height) {
         image.setSize(width, height);
-        renderer.setRenderTarget(image);
-        renderer.toneMapping = THREE.NoToneMapping;
-        quad.render(renderer);
-        renderer.toneMapping = THREE.AgXToneMapping;
+        denoiser.render(tracer.target.texture, image, renderScene, camera, tracer.samples);
         denoisedSample = completed;
       }
       renderer.setRenderTarget(null);
@@ -979,15 +1088,7 @@ export function createModelStudioRenderer(
         }
         const drawing = renderer.getDrawingBufferSize(new THREE.Vector2()),
           css = renderer.getSize(new THREE.Vector2());
-        const scale =
-          MODEL_RENDER_RESOLUTION_SCALE *
-          Math.min(
-            1,
-            (2 * Math.max(css.x, css.y)) / Math.max(drawing.x, drawing.y),
-            MODEL_RENDER_MAX_DIMENSION / Math.max(drawing.x, drawing.y),
-          );
-        const nextWidth = Math.max(1, Math.floor(drawing.x * scale)),
-          nextHeight = Math.max(1, Math.floor(drawing.y * scale));
+        const { width: nextWidth, height: nextHeight } = modelRenderWorkingSize(drawing, css);
         if (nextWidth !== width || nextHeight !== height) {
           backend.resize(nextWidth, nextHeight);
           presentedSamples = -1;
@@ -997,7 +1098,7 @@ export function createModelStudioRenderer(
         let successfulFrame = false;
         try {
           advanceModelRenderFrame(backend);
-          const completed = Math.floor(backend.samples);
+          const completed = modelRenderPresentationSample(backend.samples);
           const selected = options.selected ?? [];
           if (
             !options.continuation ||

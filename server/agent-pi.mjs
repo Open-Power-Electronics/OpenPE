@@ -4,6 +4,20 @@ import { performance } from 'node:perf_hooks';
 import { piIsolationFlags } from './agent-provider-runtime.mjs';
 import { createEventNormalizer } from './agent-events.mjs';
 import { validModelId } from './model-id.mjs';
+import { providerReasoningEfforts } from './agent-provider-format.mjs';
+
+// Pi publishes its per-model native thinking-level map through the RPC catalog.
+// Unmapped ordinary levels use the provider's default mapping; xhigh/max require
+// explicit support. A null mapping disables a level, including off.
+function piModelEfforts(model) {
+  if (!model.reasoning) return ['off'];
+  const mapping = model.thinkingLevelMap || {};
+  return providerReasoningEfforts.pi.filter(
+    (effort) =>
+      mapping[effort] !== null &&
+      (!['xhigh', 'max'].includes(effort) || mapping[effort] !== undefined),
+  );
+}
 
 // The Pi client sends only state/catalog queries and one prompt. The RPC bash,
 // resource, session-file and extension control commands are never exposed.
@@ -161,6 +175,10 @@ export async function runPiAgent(request, prompt, launch, cwd, emit, signal, opt
             submitted = true;
             mark('readyMs');
             const state = event.data || {};
+            if (request.effort !== undefined && state.thinkingLevel !== request.effort)
+              throw new Error(
+                `Pi did not apply the configured reasoning effort (${request.effort}). Choose a supported level and retry.`,
+              );
             emit({
               type: 'agent-info',
               model: state.model?.id,
@@ -251,7 +269,7 @@ export async function listPiModels(launch, cwd, signal, options = {}) {
               id,
               label: typeof item.name === 'string' ? item.name.slice(0, 100) : item.id,
               description: id,
-              ...(item.reasoning ? { efforts: ['low', 'medium', 'high'] } : {}),
+              efforts: piModelEfforts(item),
             });
           }
           models = [...unique.values()];

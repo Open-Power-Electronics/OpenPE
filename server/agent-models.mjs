@@ -2,12 +2,13 @@ import { spawn, execFile } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { resolveAgent } from './agents.mjs';
 import { validModelId } from './model-id.mjs';
-import { isAgentProvider } from './agent-provider-format.mjs';
+import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
 import { agentIntegrationError, verifyPiIsolation } from './agent-provider-runtime.mjs';
 import { listPiModels } from './agent-pi.mjs';
 
-// Model discovery starts no inference and never reads credential files. ACP
-// catalogs use an empty session that is closed without submitting a prompt.
+// Model discovery starts no inference and never reads credential files. Claude
+// initializes its bounded control protocol; ACP creates an empty session. Both
+// close without submitting a prompt, returning only public model metadata.
 export async function listAgentModels(provider, cwd, signal, options = {}) {
   if (!isAgentProvider(provider)) throw new Error('Unknown agent.');
   if (provider === 'deepseek' || provider === 'cursor') {
@@ -18,15 +19,6 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
     const { listACPModels } = await import('./agent-acp.mjs');
     return listACPModels(provider, signal, { launch, timeoutMs: options.timeoutMs });
   }
-  if (provider === 'claude') {
-    return {
-      models: ['sonnet', 'opus', 'haiku'].map((id) => ({
-        id,
-        label: id[0].toUpperCase() + id.slice(1),
-        description: 'Claude Code alias · resolved by your CLI',
-      })),
-    };
-  }
   const launch = await (options.resolve || resolveAgent)(provider);
   if (signal.aborted) throw new Error('Model loading cancelled.');
   if (provider === 'pi') {
@@ -34,7 +26,25 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
     return listPiModels(launch, cwd, signal, options);
   }
   return new Promise((resolve, reject) => {
-    const proc = spawn(launch.file, [...launch.args, 'app-server', '--listen', 'stdio://'], {
+    const args =
+      provider === 'claude'
+        ? [
+            '-p',
+            '--bare',
+            '--input-format',
+            'stream-json',
+            '--output-format',
+            'stream-json',
+            '--verbose',
+            '--no-session-persistence',
+            '--tools',
+            '',
+            '--strict-mcp-config',
+            '--mcp-config',
+            '{"mcpServers":{}}',
+          ]
+        : ['app-server', '--listen', 'stdio://'];
+    const proc = spawn(launch.file, [...launch.args, ...args], {
       cwd,
       env: launch.env,
       windowsHide: true,
@@ -109,6 +119,54 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       } catch {
         return;
       }
+      if (!e || typeof e !== 'object' || Array.isArray(e))
+        return finish(new Error('The CLI returned an invalid model response.'));
+      if (provider === 'claude') {
+        if (e.type === 'control_request')
+          return finish(
+            new Error(
+              'Model discovery requested an interactive action. Use your CLI to resolve it.',
+            ),
+          );
+        if (e.type !== 'control_response' || e.response?.request_id !== 'openpe-models') return;
+        if (e.response.subtype !== 'success')
+          return finish(new Error('Could not load Claude models. Update Claude Code and retry.'));
+        const catalog = e.response.response?.models;
+        if (!Array.isArray(catalog) || catalog.length > 500)
+          return finish(
+            new Error('Claude Code returned an invalid model list. Update Claude Code and retry.'),
+          );
+        for (const item of catalog) {
+          if (!item || !validModelId(item.value) || item.value === 'default') continue;
+          const alias = ['sonnet', 'opus', 'haiku', 'fable', 'best', 'opusplan'].includes(
+            item.value,
+          );
+          models.set(item.value, {
+            id: item.value,
+            label:
+              typeof item.displayName === 'string' ? item.displayName.slice(0, 100) : item.value,
+            description: alias
+              ? 'Claude Code alias · resolved by your CLI'
+              : typeof item.description === 'string'
+                ? item.description.slice(0, 300)
+                : item.value,
+            ...(item.supportsEffort === false
+              ? { efforts: [] }
+              : Array.isArray(item.supportedEffortLevels)
+                ? {
+                    efforts: [
+                      ...new Set(
+                        item.supportedEffortLevels.filter((effort) =>
+                          isProviderReasoningEffort('claude', effort),
+                        ),
+                      ),
+                    ],
+                  }
+                : {}),
+          });
+        }
+        return finish();
+      }
       if (e.id !== undefined && e.method) {
         send({
           id: e.id,
@@ -153,7 +211,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
             ? {
                 efforts: item.supportedReasoningEfforts
                   .map((e) => e?.reasoningEffort)
-                  .filter((e) => ['low', 'medium', 'high'].includes(e)),
+                  .filter((effort) => isProviderReasoningEffort('codex', effort)),
               }
             : {}),
         });
@@ -184,6 +242,14 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
     };
     proc.on('spawn', () => {
       if (signal.aborted) return abort();
+      if (provider === 'claude') {
+        send({
+          type: 'control_request',
+          request_id: 'openpe-models',
+          request: { subtype: 'initialize', hooks: null },
+        });
+        return;
+      }
       send({
         id: 1,
         method: 'initialize',
@@ -208,7 +274,14 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       clearTimeout(stopTimer);
       buffer += decoder.end();
       if (buffer.trim()) consume(buffer);
-      if (!settled) finish(new Error('The CLI closed before returning its model list.'));
+      if (!settled)
+        finish(
+          new Error(
+            provider === 'claude'
+              ? 'Claude Code closed before returning its model list. Update Claude Code for isolated model discovery and retry.'
+              : 'The CLI closed before returning its model list.',
+          ),
+        );
     });
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();

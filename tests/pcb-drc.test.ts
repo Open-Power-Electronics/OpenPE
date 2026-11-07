@@ -482,7 +482,7 @@ test('pour keepouts tolerate coordinate rounding along a shared sloped boundary'
 
 test('the actual native EMC Flyback board passes DRC without changing saved copper or files', async () => {
   const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-  const filename = 'recent/emc-flyback/emc-flyback.kicad_pro';
+  const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const native = await readNativeProject(filename);
   const board = projectFromNativeFiles(native).pcb!;
   const before = structuredClone(board);

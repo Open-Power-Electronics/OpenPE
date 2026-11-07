@@ -37,14 +37,14 @@ const noHistory = () => ({ ensureExampleInitial: async () => {} });
 
 test('same-named projects in sibling roots have distinct keys and packaged roots resolve independently', async (t) => {
   const { root, temporary, grants } = await fixture(t, []);
-  const recent = path.join(temporary, 'recent');
+  const projectRoot = path.join(temporary, 'project');
   const bundle = projectNativeFiles(createProject(switchingStageFixture()), 'Twin.kicad_pro');
-  for (const parent of [root, recent]) {
+  for (const parent of [root, projectRoot]) {
     await mkdir(path.join(parent, 'Twin'));
     for (const file of bundle.files)
       await writeFile(path.join(parent, 'Twin', file.name), file.source);
   }
-  const examples = new ExampleProjects(root, grants, noHistory(), recent);
+  const examples = new ExampleProjects(root, grants, noHistory(), projectRoot);
   const entries = (await examples.list()).entries;
   assert.equal(entries.length, 2);
   assert.equal(new Set(entries.map((entry: { id: string }) => entry.id)).size, 2);
@@ -58,8 +58,8 @@ test('same-named projects in sibling roots have distinct keys and packaged roots
   }
   const { rename } = await import('node:fs/promises');
   await rename(root, root + '-native');
-  await rename(recent, recent + '-native');
-  const packaged = new ExampleProjects(root + '-native', grants, noHistory(), recent + '-native');
+  await rename(projectRoot, projectRoot + '-native');
+  const packaged = new ExampleProjects(root + '-native', grants, noHistory(), projectRoot + '-native');
   assert.deepEqual((await packaged.list()).entries, entries);
   for (const entry of entries) {
     const opened = await packaged.openDefault(`example:${entry.id}`);
@@ -70,17 +70,17 @@ test('same-named projects in sibling roots have distinct keys and packaged roots
   }
 });
 
-test('Recent projects retain their catalog identity inside the dedicated recent directory', async (t) => {
+test('Default Recent projects retain their catalog identity inside the dedicated project directory', async (t) => {
   const { root, files, grants } = await fixture(t, defaultExamples().slice(0, 1));
   const examples = new ExampleProjects(root, grants, noHistory());
   const listed = await examples.list();
   assert.equal(listed.entries.length, 1);
   assert.equal(listed.entries[0].id, 'emc-flyback-demo');
-  assert.equal(listed.entries[0].section, 'recent');
+  assert.equal(listed.entries[0].section, 'project');
   const opened = await examples.openDefault('example:emc-flyback-demo');
   assert.equal(
     grants.get(opened.fileId),
-    path.join(path.dirname(root), 'recent', 'emc-flyback', 'emc-flyback.kicad_pro'),
+    path.join(path.dirname(root), 'project', 'emc-flyback', 'emc-flyback.kicad_pro'),
   );
   assert.equal(grants.get(opened.fileId), files.get('example:emc-flyback-demo'));
 });
@@ -159,7 +159,7 @@ async function fixture(t: TestContext, entries = defaultExamples().slice(0, 1)) 
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const root = path.join(temporary, 'examples');
   await mkdir(root);
-  await mkdir(path.join(temporary, 'recent'));
+  await mkdir(path.join(temporary, 'project'));
   const files = new Map<string, string>();
   for (const entry of entries) {
     const fixed = homeExampleCatalog.find((item) => `example:${item.id}` === entry.key)!;

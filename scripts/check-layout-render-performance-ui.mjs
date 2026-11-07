@@ -9,7 +9,118 @@ import { openVisualization, toggleLayoutVisualization } from './visualization-te
 import { waitForAsync } from './async-browser-test-helpers.mjs';
 
 const { parseProject } = await tsImport('../lib/project.ts', import.meta.url);
+const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
 const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+const overlayBoard = {
+  ...createEmptyPCB(),
+  nets: [
+    { id: 'line-net', name: 'Line' },
+    { id: 'ring-net', name: 'Ring' },
+  ],
+  footprints: [
+    { x: 15, y: 15, side: 'front', netId: 'line-net' },
+    { x: 40, y: 15, side: 'front', netId: 'line-net' },
+    { x: 25, y: 35, side: 'front', netId: 'ring-net' },
+    { x: 25, y: 35, side: 'back', netId: 'ring-net' },
+  ].map(({ netId, ...pose }, index) => ({
+    ...pose,
+    id: `overlay-footprint-${index}`,
+    reference: `J${index + 1}`,
+    symbolId: null,
+    libraryId: 'Test:Overlay',
+    rotation: 0,
+    ...(index === 0 ? { locked: true } : {}),
+    graphics: [],
+    pads: [
+      {
+        id: `overlay-pad-${index}`,
+        number: '1',
+        x: 0,
+        y: 0,
+        rotation: 0,
+        type: 'smd',
+        shape: 'circle',
+        size: { x: 2, y: 2 },
+        netId,
+      },
+    ],
+  })),
+  graphics: [
+    [
+      { x: 0, y: 0 },
+      { x: 60, y: 0 },
+    ],
+    [
+      { x: 60, y: 0 },
+      { x: 60, y: 50 },
+    ],
+    [
+      { x: 60, y: 50 },
+      { x: 0, y: 50 },
+    ],
+    [
+      { x: 0, y: 50 },
+      { x: 0, y: 0 },
+    ],
+  ].map(([start, end], index) => ({
+    id: `overlay-edge-${index}`,
+    start,
+    end,
+    width: 0.1,
+    layer: 'Edge.Cuts',
+  })),
+};
+
+async function startStrokeQueryAudit(canvas) {
+  await canvas.evaluate((svg) => {
+    const original = svg.querySelectorAll;
+    const descriptor = Object.getOwnPropertyDescriptor(svg, 'querySelectorAll');
+    const samples = [];
+    svg.querySelectorAll = function (selector) {
+      const result = original.call(this, selector);
+      if (selector.includes('non-scaling-stroke') && selector.includes('stroke-width')) {
+        const broad = Array.from(
+          original.call(this, '[vector-effect="non-scaling-stroke"][stroke-width]'),
+        );
+        // This is the previous camera predicate, applied independently to the
+        // exact current DOM. Observe the production query without prescribing it.
+        const expected = broad.filter(
+          (node) =>
+            !node.matches('[data-layout-track-target], [data-layout-body-bounds]') &&
+            !node.closest('[data-layout-graphic-target]') &&
+            node.getAttribute('stroke') !== 'transparent',
+        );
+        const returned = Array.from(result);
+        samples.push({
+          broadCount: broad.length,
+          returnedCount: returned.length,
+          expectedCount: expected.length,
+          sameOrderedNodes:
+            returned.length === expected.length &&
+            returned.every((node, index) => node === expected[index]),
+        });
+      }
+      return result;
+    };
+    window.finishLayoutStrokeQueryAudit = () => {
+      if (descriptor) Object.defineProperty(svg, 'querySelectorAll', descriptor);
+      else delete svg.querySelectorAll;
+      return samples;
+    };
+  });
+}
+
+async function finishStrokeQueryAudit(page, label) {
+  const samples = await page.evaluate(() => window.finishLayoutStrokeQueryAudit());
+  assert.ok(samples.length > 0, `${label} exercises the actual camera stroke query.`);
+  for (const sample of samples)
+    assert.equal(
+      sample.sameOrderedNodes,
+      true,
+      `${label} returns exactly the visible stroke nodes, excluding transparent hits before JS.`,
+    );
+  return samples;
+}
 
 // Real EMC geometry in an isolated renderer. No Electron, services, models,
 // providers, user files or design writes are involved.
@@ -156,7 +267,7 @@ const bundle = await build({
               'LayoutAppearancePanel.tsx': '  const id = useId();',
               'PCBSelectionPaint.tsx': '  return (',
               'LayoutBoardDrawing.tsx': '  return (',
-              'LayoutCamera.tsx': '  const scale = view.width / size.width;',
+              'LayoutCamera.tsx': '  if (!fixedTargets || !targets.tracksFixed)',
               'pcb-display.ts': '  if (!visible.footprints) return null;',
               'pcb-polygons.ts': '  polygons\n    .flatMap((p) => [p.outer, ...p.holes])',
             }[path.basename(file)];
@@ -184,6 +295,16 @@ const bundle = await build({
               );
             }
             if (path.basename(file) === 'LayoutCamera.tsx') {
+              const attributeValue = '  const text = String(value);';
+              assert.ok(contents.includes(attributeValue));
+              contents = contents.replace(
+                attributeValue,
+                `${attributeValue}
+                if(node.getAttribute(name)!==text &&
+                  node.ownerSVGElement?.hasAttribute('data-layout-camera-view') &&
+                  (node.matches('[data-layout-via-target]')||node.closest('[data-layout-graphic-target]')))
+                    window.layoutWork.transientHitWrites++;`,
+              );
               contents = contents.replace(
                 '  return children({ width });',
                 '  window.layoutWork.cameraScaleRenders++;\n  return children({ width });',
@@ -204,6 +325,19 @@ const bundle = await build({
               );
             }
             if (path.basename(file) === 'LayoutEditor.tsx') {
+              const airwirePaint = '      const paintAirwire = (path: string) => (';
+              assert.ok(contents.includes(airwirePaint));
+              contents = contents.replace(
+                airwirePaint,
+                `${airwirePaint}\n        window.layoutWork.airwirePaints++,`,
+              );
+              const lockPosition =
+                '        const at = footprintPoint(footprint, { x: bounds.maxX, y: bounds.minY });';
+              assert.equal(contents.split(lockPosition).length - 1, 1);
+              contents = contents.replace(
+                lockPosition,
+                `window.layoutWork.lockPositions++;\n${lockPosition}`,
+              );
               const cameraCommit = '    committedCameraApply.current?.();';
               assert.ok(
                 contents.includes(cameraCommit),
@@ -273,6 +407,7 @@ try {
       appearance: 0,
       appearanceBodies: 0,
       cameraHits: 0,
+      transientHitWrites: 0,
       cameraBindings: 0,
       trackRefreshes: 0,
       cameraScaleRenders: 0,
@@ -283,6 +418,8 @@ try {
       viaTrees: 0,
       graphicTrees: 0,
       airwireTrees: 0,
+      airwirePaints: 0,
+      lockPositions: 0,
       bodyTargets: 0,
       elements: 0,
       trackElements: 0,
@@ -316,6 +453,7 @@ try {
     await page.mouse.wheel(0, direction === 'in' ? -120 : 120);
     await nextFrame();
   };
+  await startStrokeQueryAudit(canvas);
   const wheelBehavior = await canvas.evaluate(async (svg) => {
     const currentView = () =>
       svg.getAttribute('data-layout-camera-view') ?? svg.getAttribute('viewBox');
@@ -377,6 +515,13 @@ try {
       unitsPerPixel: before[2] / bounds.width,
     };
   });
+  const emcStrokeQueries = await finishStrokeQueryAudit(page, 'EMC Flyback');
+  assert.ok(emcStrokeQueries[0].broadCount > emcStrokeQueries[0].returnedCount);
+  assert.equal(
+    emcStrokeQueries[0].returnedCount,
+    0,
+    'The connected EMC board needs no stroke compensation.',
+  );
   console.log(JSON.stringify({ wheelPresentation: wheelBehavior }));
   assert.ok(
     Math.abs(wheelBehavior.immediateViewport.width - wheelBehavior.before[2] / 1.12) < 1e-10,
@@ -768,6 +913,16 @@ try {
   }
   await nextFrame();
   const zoomed = await work();
+  assert.equal(
+    zoomed.cameraScaleRenders - panned.cameraScaleRenders,
+    6,
+    'Idle EMC zoom updates only its scale readout, without empty overlay subscriptions.',
+  );
+  assert.equal(
+    zoomed.transientHitWrites,
+    before.transientHitWrites,
+    'EMC zoom defers transparent via/graphic hit writes until native rebasing.',
+  );
   assert.equal(zoomed.renders, before.renders, 'Pan and zoom do not render the board editor.');
   assert.equal(zoomed.paths, before.paths, 'Zoom reuses saved copper SVG paths.');
   assert.equal(
@@ -1793,6 +1948,82 @@ try {
     'Revealing F.Cu leaves the visible B.Cu batch intact.',
   );
   assert.deepEqual(await replayOrder(), reordered);
+  // A straight airwire stays in world geometry. Only coincident-pad rings and
+  // visible lock glyphs need screen-scale updates; both must remain exact.
+  await page.evaluate((board) => window.replaceLayoutBoard(board), overlayBoard);
+  await canvas.press('Escape');
+  await canvas.press('v');
+  await runCanvasAction(page, 'Fit board to canvas');
+  await nextFrame();
+  assert.equal(await canvas.locator('[data-airwire]').count(), 2);
+  assert.equal(await canvas.locator('[data-layout-lock]').count(), 1);
+  const overlayBefore = await work();
+  await canvas.evaluate((svg) => {
+    window.straightAirwire = svg.querySelector('[data-airwire="line-net"]');
+    window.straightAirwirePath = window.straightAirwire.querySelector('path').getAttribute('d');
+    window.overlayBoardBeforeZoom = JSON.stringify(window.layoutBoard);
+  });
+  await startStrokeQueryAudit(canvas);
+  for (const direction of ['in', 'in', 'out', 'out']) {
+    await wheelZoom(direction);
+    const markers = await canvas.evaluate((svg) => {
+      window.flushLayoutCamera(svg);
+      const ring = svg.querySelector('[data-airwire="ring-net"] path');
+      const bounds = ring.getBBox();
+      const matrix = ring.getScreenCTM();
+      const lock = svg.querySelector('[data-layout-lock] rect').getBoundingClientRect();
+      const straight = svg.querySelector('[data-airwire="line-net"]');
+      return {
+        ringWidth: bounds.width * matrix.a,
+        ringHeight: bounds.height * matrix.d,
+        lockWidth: lock.width,
+        lockHeight: lock.height,
+        sameStraight:
+          straight === window.straightAirwire &&
+          straight.querySelector('path').getAttribute('d') === window.straightAirwirePath,
+        unchangedBoard: JSON.stringify(window.layoutBoard) === window.overlayBoardBeforeZoom,
+      };
+    });
+    for (const key of ['ringWidth', 'ringHeight'])
+      assert.ok(Math.abs(markers[key] - 8) < 0.0001, `${key} stays eight screen pixels.`);
+    for (const key of ['lockWidth', 'lockHeight'])
+      assert.ok(Math.abs(markers[key] - 16) < 0.0001, `${key} stays sixteen screen pixels.`);
+    assert.equal(markers.sameStraight, true, 'Zoom retains the same straight airwire geometry.');
+    assert.equal(markers.unchangedBoard, true, 'Overlay zoom leaves PCB data unchanged.');
+  }
+  const overlayStrokeQueries = await finishStrokeQueryAudit(page, 'Visible airwire overlays');
+  assert.ok(overlayStrokeQueries.every((sample) => sample.returnedCount > 0));
+  assert.ok(overlayStrokeQueries.every((sample) => sample.broadCount > sample.returnedCount));
+  const overlayAfter = await work();
+  assert.equal(overlayAfter.airwireTrees, overlayBefore.airwireTrees);
+  assert.equal(
+    overlayAfter.airwirePaints - overlayBefore.airwirePaints,
+    4,
+    'Each zoom repaints only the screen-size ring, retaining straight airwire JSX.',
+  );
+  assert.equal(
+    overlayAfter.lockPositions,
+    overlayBefore.lockPositions,
+    'Zoom reuses lock marker world positions.',
+  );
+  await page.evaluate(() =>
+    window.replaceLayoutBoard({
+      ...window.layoutBoard,
+      footprints: window.layoutBoard.footprints.map(({ locked, ...footprint }) => footprint),
+      vias: [{ id: 'ring-connection', x: 25, y: 35, diameter: 0.8, drill: 0.4, netId: 'ring-net' }],
+    }),
+  );
+  await nextFrame();
+  assert.equal(await canvas.locator('[data-layout-lock]').count(), 0);
+  assert.equal(await canvas.locator('[data-airwire="ring-net"]').count(), 0);
+  assert.equal(await canvas.locator('[data-airwire="line-net"]').count(), 1);
+  const straightOnlyBefore = await work();
+  await wheelZoom('in');
+  assert.equal(
+    (await work()).cameraScaleRenders - straightOnlyBefore.cameraScaleRenders,
+    1,
+    'Removing rings and locks releases their subscriptions while retaining the straight airwire.',
+  );
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
@@ -1806,6 +2037,13 @@ try {
       zoomFootprintRenders: 0,
       zoomBodyRebuilds: 0,
       zoomCopperPathRebuilds: 0,
+      zoomTransientHitWrites: zoomed.transientHitWrites - before.transientHitWrites,
+      zoomScaleRenders: zoomed.cameraScaleRenders - panned.cameraScaleRenders,
+      strokeQueries: {
+        emcFirstZoom: emcStrokeQueries[0],
+        overlayZooms: overlayStrokeQueries,
+      },
+      overlayZoom: 'straight airwire retention, fixed-size rings/locks and removal passed',
       trackEditElements: trackEdit.elements - beforeTrack.elements,
       trackEditBatches: trackEdit.trackBatches - beforeTrack.trackBatches,
       trackEditBoardRenders: trackEdit.renders - beforeTrack.renders,

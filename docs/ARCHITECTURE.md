@@ -77,7 +77,7 @@ Sketch corner fillet/chamfer and Boolean extrusion use pure `lib/model-cad-sketc
 | `app/`, `components/`, `public/`  | Renderer, shared controls and product assets              | [Design](../DESIGN.md)                                |
 | `lib/`                            | Domain/geometry/format and explicitly named host adapters | [Format](FORMAT.md), [Layout](LAYOUT.md)              |
 | `server/`, `electron/`            | Service/native/providers/plugins/solvers/persistence      | [API](API.md) and feature contracts                   |
-| `examples/`, `recent/`            | Nine Example projects and the EMC Flyback Recent project  | [Examples](EXAMPLES.md), [Format](FORMAT.md)          |
+| `examples/`, `project/`            | Nine Example projects and the EMC Flyback Recent project  | [Examples](EXAMPLES.md), [Format](FORMAT.md)          |
 | `resources/`                      | Shared catalog, pinned sources/assets and host resources  | [Examples](EXAMPLES.md), [Libraries](LIBRARIES.md)    |
 | `tests/`, `scripts/`              | Regressions, generators and opt-in integrations           | [Engineering](../AGENTS.md#verification-and-delivery) |
 | `assets/`, `docs/`, root Markdown | Architecture source, subsystem/design/setup contracts     | This map                                              |
@@ -97,6 +97,11 @@ Changes identify their layer, update the owning contract and regenerate formats 
 - `server/component-models.mjs` owns approved immutable local STEP bytes, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. Preview requests identify a validated project component/model index and share the bounded STEP worker pool. Shared component Properties commits native PCB model records through Core.
 - Provider CLIs and solvers use restricted child-process adapters. Library indexing and STEP conversion use bounded workers. These are implementation mechanisms, not independent plugin processes.
 - Codex/Claude expose live OpenPE tools only; DeepSeek/Pi use context-only protocols and Cursor is detection-only. UI Review/Auto cannot bypass provider restrictions or native grants.
+
+`server/agent-models.mjs` owns bounded provider model/effort discovery before
+inference, including Claude's initialization control exchange. Native effort
+values share the generated provider contract with renderer preferences and chat
+admission; [API](API.md#chat-requests-and-sse) owns their protocol limits.
 
 STEP conversion uses bounded reusable OCCT worker threads with fixed tessellation; [STEP access](LIBRARIES.md#step-access-and-previews) owns their reuse, timeout and memory limits. Mesh results are bounded and carry no document authority.
 
@@ -139,6 +144,11 @@ environment, softboxes and floor; image bytes are shared read-only and the retai
 editable scene remains independent.
 `components/model-render-environment.ts` prepares the owned studio map and its
 importance distributions using current Three texture APIs.
+`components/model-render-guides.ts` caches private first-surface normal/depth and
+albedo/optical render targets. `components/model-render-denoise.ts` uses those
+guides for three spatial reconstruction passes over accumulated radiance; all
+guide materials and targets share the Render owner's disposal lifecycle and
+never alter tracing samples or document geometry.
 Viewport and completed PNG output share the same accumulated image. No native
 Blender process, downloaded environment, host capability or document state is
 added. [Layout](LAYOUT.md) owns convergence, cancellation and appearance limits;
@@ -146,7 +156,7 @@ added. [Layout](LAYOUT.md) owns convergence, cancellation and appearance limits;
 
 Thermal settings/fields stay in the feature session. Workbench publishes generic analysis-panel/drawing/readout slots to Layout; Layout displays the selected-surface raster and real-node probes in its existing camera without storing fields as PCB data or introducing another execution path.
 
-EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `recent/emc-flyback/circuits/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged Recent root to the model store; neither renderer requests nor native text select a model resource root.
+EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `project/emc-flyback/circuits/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
 
 EMC Flyback’s external electrical testbench is native Core-owned schematic content: V1/R21 feed VBUS, V2 supplies VCC, and R22/I1 load VOUT. The pure compiler stamps those accepted values and source waveforms instead of injecting supplies or loads. Footprint-free bench components have no PCB packages and contribute no PCB heat.
 
@@ -241,9 +251,25 @@ Save validates the complete project, resolves a grant/native picker, prepares ve
 
 `scripts/prepare-default-examples.ts` reads and validates the original native sets and verifies pinned models, packages and notices. LM25017 and EMC custom package libraries and EMC symbols/rules are native project files, owned by Core with Source/undo/recovery/history. The native adapter renames project-bound libraries/rules and their library-table URIs together on Save as. Build asset preparation supplies pinned models without overwriting native library edits or generating project notices.
 
-`server/example-discovery.mjs` scans bounded native entries under the sibling `examples/` and `recent/` roots in development, packaged independently as `examples-native/` and `recent-native/`, using native filename validation supplied by the existing adapter. `server/example-projects.mjs` resolves bundled and opaque discovered keys to those original files. Home listings never prepare models, create history or grant file access. Opening reads the actual native files and grants their directory without renaming, copying or refreshing their content. Packaging includes supporting text and existing PDFs from those directories, excluding private/generated results and `.kicad_prl`. The first-open barrier attempts the bundled and discovered projects with at most three concurrent operations and rechecks its frame. Failures remain per-example warnings; another failed example or missing Git cannot block a usable selected project. Concurrent opens share work and later opens reread disk. Save writes that original destination; Save as uses a personal destination. Clean recovery reconnects the original files; dirty example recovery detaches destinations. [Examples](EXAMPLES.md) and [Version history](VERSION-HISTORY.md) own provenance/history details.
+`server/example-discovery.mjs` scans bounded native entries under the sibling `examples/` and `project/` roots in development, packaged independently as `examples-native/` and `project-native/`, using native filename validation supplied by the existing adapter. `server/example-projects.mjs` resolves bundled and opaque discovered keys to those original files. Home listings never prepare models, create history or grant file access. Opening reads the actual native files and grants their directory without renaming, copying or refreshing their content. Packaging includes supporting text and existing PDFs from those directories, excluding private/generated results and `.kicad_prl`. The first-open barrier attempts the bundled and discovered projects with at most three concurrent operations and rechecks its frame. Failures remain per-example warnings; another failed example or missing Git cannot block a usable selected project. Concurrent opens share work and later opens reread disk. Save writes that original destination; Save as uses a personal destination. Clean recovery reconnects the original files; dirty example recovery detaches destinations. [Examples](EXAMPLES.md) and [Version history](VERSION-HISTORY.md) own provenance/history details.
 
 ## Storage and build boundaries
+
+`electron/recent-projects.cjs` owns the private Recent index. The main process
+records accepted native opens and successful saves, serializes atomic index
+writes and returns opaque IDs plus display paths. Listing never reads project
+contents or creates grants. Recent opens resolve those IDs in the host and
+reuse the native reader/acceptance flow. [API](API.md) defines the protocol and
+bounds; [Design](../DESIGN.md#home-projects-and-recovery) owns presentation.
+Recent removal writes only this index. Thumbnail IPC uses the same bounded
+native reader without granting or staging a project. `HomeProjectCard` retains
+one schematic thumbnail per mounted card and reuses `CanvasContextMenu` for
+keyboard/IME-safe removal from the list.
+
+`tests/recent-projects.test.ts` and `tests/desktop-recent.test.ts` cover persistence,
+native acceptance, duplicate activation, cancellation and invalid locations.
+`node scripts/check-recent-ui.mjs` checks the initial EMC entry, real-history
+replacement, refresh and failure isolation in an isolated browser without Electron.
 
 | Data                                  | Location/lifecycle                                                                                                            |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -251,10 +277,11 @@ Save validates the complete project, resolves a grant/native picker, prepares ve
 | Verified portable simulation models   | Separate immutable `circuits/<component>.lib`; available through plugin removal                                               |
 | Completed desktop results             | Direct `spice/<native-stem>.*` / `thermal/<native-stem>.*`; project-bound v2 manifest and current success                     |
 | Workspace recovery                    | App data `openpe-workspace-v2.json`; no host destinations/grants/plugin results                                               |
+| Recent native locations               | App data `recent-projects.json`; bounded host-only path index, separate from recovery and live grants                         |
 | Appearance/layer preferences          | App data `appearance-v1.json`; independent settings                                                                           |
 | Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                          |
 | Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                       |
-| Original Home projects                | Sibling `examples/<stem>/` and `recent/<stem>/`; packaged as `examples-native/` and `recent-native/`, including existing PDFs |
+| Original Home projects                | Sibling `examples/<stem>/` and `project/<stem>/`; packaged as `examples-native/` and `project-native/`, including existing PDFs |
 | Destination-bound project history     | App data `project-history-v1/<normalized-destination-sha256>.git`; outside every project directory                            |
 | Solver/tools and corresponding source | Versioned `resources/ngspice/`, `resources/thermal/`, `resources/third-party-source/`                                         |
 | Official libraries/models and locks   | `resources/kicad/`, private verified caches and source-controlled locks/notices                                               |
@@ -277,7 +304,7 @@ Recovery retains optional `pinned: true` on each project and optional `pinned: t
 
 Recovery validates the full current envelope; exact-source import metadata uses a private 24-entry/eight-million-character LRU, without skipping envelope/session/draft/link checks or exposing cached objects. Malformed current recovery is preserved; retired `workspace.json` is deleted without migration. Replacement waits for grant release; quit pauses ordinary writes and removes discarded revisions only after all decisions succeed.
 
-`npm run examples` regenerates curated snapshots/native exports, using official KiCad 10 for EMC conversion. Host build infrastructure in `scripts/example-native-files.ts` publishes both converters through the Home catalog's explicit root, directory and filename: nine projects under `examples/<stem>/` and EMC Flyback under `recent/emc-flyback/`. Projects with custom libraries keep `.kicad_mod` packages in `footprints/<stem>.pretty/` and `.kicad_sym` libraries in `symbols/` with their project-local library tables; preparation adds flat STEP files in `models/` and SPICE `.lib` files named for their fixed component/variant in `circuits/`, without per-project notices. Generation removes only verified matching obsolete asset/library copies after native publication. Runtime opening performs no cleanup. Projects accept only pinned `circuits/<component>.lib` simulation references; shared resource hash filenames are not project aliases. Native STEP paths retain their documented KiCad meaning. Readable SPICE names do not change pinned IDs/hashes or shared source/cache filenames. Unknown/changed files and `spice/`/`thermal/` results remain. Shared pinned assets remain separate; stable IDs and upstream paths do not follow native filenames. EMC manufacturer sources, manifest and notices live under `resources/example-catalog/footprints/emc-flyback/`; build preparation supplies the required STEP files in the same native `models/` layout as other examples. `npm run fixtures:generate` produces internal fixtures. Pinned source/footprints/models/notices are evidence. Manufacturer supplements and reviewed datasheet JSON stay separate from unchanged upstream files; optional original PDFs stay outside Git and are included in the packaged example directory when present.
+`npm run examples` regenerates curated snapshots/native exports, using official KiCad 10 for EMC conversion. Host build infrastructure in `scripts/example-native-files.ts` publishes both converters through the Home catalog's explicit root, directory and filename: nine projects under `examples/<stem>/` and EMC Flyback under `project/emc-flyback/`. Projects with custom libraries keep `.kicad_mod` packages in `footprints/<stem>.pretty/` and `.kicad_sym` libraries in `symbols/` with their project-local library tables; preparation adds flat STEP files in `models/` and SPICE `.lib` files named for their fixed component/variant in `circuits/`, without per-project notices. Generation removes only verified matching obsolete asset/library copies after native publication. Runtime opening performs no cleanup. Projects accept only pinned `circuits/<component>.lib` simulation references; shared resource hash filenames are not project aliases. Native STEP paths retain their documented KiCad meaning. Readable SPICE names do not change pinned IDs/hashes or shared source/cache filenames. Unknown/changed files and `spice/`/`thermal/` results remain. Shared pinned assets remain separate; stable IDs and upstream paths do not follow native filenames. EMC manufacturer sources, manifest and notices live under `resources/example-catalog/footprints/emc-flyback/`; build preparation supplies the required STEP files in the same native `models/` layout as other examples. `npm run fixtures:generate` produces internal fixtures. Pinned source/footprints/models/notices are evidence. Manufacturer supplements and reviewed datasheet JSON stay separate from unchanged upstream files; optional original PDFs stay outside Git and are included in the packaged example directory when present.
 
 `scripts/dev.mjs` exports the format, Home and solver step lists that `scripts/build.mjs` reuses. `npm run examples:prepare` (`scripts/build.mjs --examples`) builds formats, prepares models and verifies original native files and pinned assets. `npm run build` runs the same format/Home steps, then the architecture check beside Home preparation once generated formats are current; bundled solver verification runs concurrently with buffered output. Any failure stops before `next build`. Packaging prepares libraries and delegates solver preparation to its build. `scripts/dev.mjs` runs preparation in order before its renderer/desktop children, with concise staged diagnostics and optional `--verbose` output. Its host-only `scripts/dev-preparation-cache.mjs` reuses the ordered format/model/Home sequence when content hashes of conservative source roots, dependency manifests, pinned model/footprint/EMC assets and generated outputs match `.openpe/dev-preparation-v1.json`. Generated flat `models/` STEP copies are outputs; native `.pretty` content remains input. Input/output hashes use at most four concurrent streams with 256 KiB chunks and file-identity checks; no full-file buffer is allocated. Fingerprints retain sorted traversal order regardless of completion order, and failures drain active reads before returning. Curated project `spice/` and `thermal/` result trees are excluded before traversal and cannot invalidate preparation. Pinned upstream model sources and native libraries remain inputs. Changed, missing or corrupt inputs/outputs rerun that sequence. Only successful preparation with unchanged inputs publishes an atomic cache record; failure and cancellation remain retryable. Solver runtime/source/version checks still run on every development start. Build and package preparation do not use this cache. Missing resources can require network access. None of these commands proves that an older running desktop instance loaded the rebuilt modules.
 

@@ -22,7 +22,7 @@ if (arguments_.length > 1) throw new Error('Only one mesh-size argument is suppo
 const meshSizeMm = arguments_.length ? Number(arguments_[0].split('=')[1]) : 2;
 assert.ok(meshSizeMm > 0 && meshSizeMm <= 1000, 'Mesh size must be within (0, 1000] mm.');
 const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-const nativePath = path.resolve('recent/emc-flyback/emc-flyback.kicad_pro');
+const nativePath = path.resolve('project/emc-flyback/emc-flyback.kicad_pro');
 const native = await readNativeProject(nativePath);
 const project = projectFromNativeFiles(native);
 const deck = buildSpiceDeck(project.schematic, defaultTransient(project.schematic));

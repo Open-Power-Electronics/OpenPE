@@ -28,7 +28,7 @@ async function setup() {
 test('unchanged example seeds verify in two Git processes while preserving private personal history', async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), 'openpe-history-seed-'));
   const grants = new FileGrants();
-  const id = grants.create(path.join(dir, 'recent', 'emc-flyback', 'emc-flyback.kicad_pro'));
+  const id = grants.create(path.join(dir, 'project', 'emc-flyback', 'emc-flyback.kicad_pro'));
   grants.markLocalExample(id);
   const history = new ProjectHistory(dir, grants);
   t.after(async () => {

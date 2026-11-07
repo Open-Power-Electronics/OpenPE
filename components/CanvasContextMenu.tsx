@@ -24,6 +24,7 @@ export default function CanvasContextMenu({
   actions,
   onOpen,
   onError,
+  label = 'Canvas actions',
 }: {
   target: RefObject<Element | null>;
   active: boolean;
@@ -31,6 +32,7 @@ export default function CanvasContextMenu({
   actions: CanvasMenuAction[];
   onOpen?: (target: EventTarget | null, position?: { x: number; y: number }) => void;
   onError: (message: string) => void;
+  label?: string;
 }) {
   const [position, setPosition] = useState<{ x: number; y: number; identity: unknown } | null>(
     null,
@@ -158,7 +160,7 @@ export default function CanvasContextMenu({
     <div
       ref={popup}
       role="menu"
-      aria-label="Canvas actions"
+      aria-label={label}
       className="select-popup canvas-context-menu"
       style={{ left: position.x, top: position.y }}
       onContextMenu={(e) => e.preventDefault()}

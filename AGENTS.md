@@ -80,7 +80,7 @@ Read [Format](docs/FORMAT.md) for preservation/Source/Save/export, [Datasheets](
 
 Follow [Examples](docs/EXAMPLES.md)'s catalog, provenance, native paths and generation contract and [Libraries](docs/LIBRARIES.md)'s resource/license delivery.
 
-- Open original `examples/` and `recent/` files; package roots independently. Runtime never copies/regenerates/cleans/downloads Home content. Fixed resource IDs are not grants; Recent is not opening history.
+- Open original `examples/` and `project/` files; package roots independently. Runtime never copies/regenerates/cleans/downloads Home content. Fixed resource IDs are not grants. Desktop Recent uses persisted native opening/save history, with EMC Flyback as the default only before real history exists.
 - Preserve neutral names, pinned bytes/transforms and provenance/licenses; keep manufacturer supplements separate. Create only populated asset directories, retain `.pretty`, exclude `.kicad_prl`, and never hand-edit snapshots/pinned source, substitute assets or use preview downloads.
 - Use `npm run examples` (EMC: KiCad 10 via `KICAD_CLI`), then `npm run build:format` after generated TypeScript changes. Run `npm run examples:prepare` before renderer build/dev. Preserve portable paths/bundled sources; no runtime KiCad CLI or user-library discovery.
 - Service/window/Home/new/ordinary recovery stay independent of example preflight. First example open shares the [bounded opening barrier](docs/VERSION-HISTORY.md#opening-barrier-and-concurrency), including clean recovery; unrelated failures/missing Git cannot block a usable project.

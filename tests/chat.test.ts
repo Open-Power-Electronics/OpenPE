@@ -265,6 +265,94 @@ test('real child transport streams before completion, sends effort and records o
   }
 });
 
+test('native reasoning levels reach Codex and Claude unchanged', async () => {
+  for (const [provider, efforts] of [
+    ['codex', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
+    ['claude', ['low', 'medium', 'high', 'xhigh', 'max']],
+  ] as const) {
+    for (const effort of efforts) {
+      const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-effort-'));
+      const events: any[] = [];
+      const result = await runAgent(
+        provider,
+        { ...request, effort, model: 'fixture-model' },
+        cwd,
+        (event) => events.push(event),
+        new AbortController().signal,
+        { resolve: resolver(`${provider}-effort-${effort}`) },
+      );
+      assert.equal(result.outcome, 'completed', JSON.stringify(events));
+      assert.equal(
+        events.find((event) => event.type === 'agent-info')?.reasoningEffort,
+        provider === 'codex' ? effort : undefined,
+      );
+      await assertStopped(cwd);
+    }
+  }
+});
+
+test('explicit Claude effort overrides only the child environment without claiming an effective level', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-env-effort-'));
+  const launch = await resolver('claude-effort-medium')();
+  launch.env = { ...launch.env, CLAUDE_CODE_EFFORT_LEVEL: 'high' };
+  const events: any[] = [];
+  const result = await runAgent(
+    'claude',
+    { ...request, effort: 'medium', model: 'fixture-model' },
+    cwd,
+    (event) => events.push(event),
+    new AbortController().signal,
+    { resolve: async () => launch },
+  );
+  assert.equal(result.outcome, 'completed', JSON.stringify(events));
+  assert.equal(launch.env.CLAUDE_CODE_EFFORT_LEVEL, 'high');
+  assert.deepEqual(
+    events.find((event) => event.type === 'agent-info'),
+    { type: 'agent-info', model: 'fixture' },
+  );
+  await assertStopped(cwd);
+});
+
+test('Codex defaults to medium and leaves an explicit model with no effort unmodified', async () => {
+  for (const [mode, model, expected] of [
+    ['default-effort', undefined, 'medium'],
+    ['codex-model-default', 'fixture-model', undefined],
+  ] as const) {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-default-effort-'));
+    const events: any[] = [];
+    const result = await runAgent(
+      'codex',
+      { ...request, ...(model ? { model } : {}) },
+      cwd,
+      (event) => events.push(event),
+      new AbortController().signal,
+      { resolve: resolver(mode) },
+    );
+    assert.equal(result.outcome, 'completed', JSON.stringify(events));
+    assert.equal(events.find((event) => event.type === 'agent-info')?.reasoningEffort, expected);
+    await assertStopped(cwd);
+  }
+});
+
+test('Codex rejects a changed reasoning effort before submitting its prompt', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-clamped-effort-'));
+  const events: any[] = [];
+  const result = await runAgent(
+    'codex',
+    { ...request, effort: 'xhigh', model: 'fixture-model' },
+    cwd,
+    (event) => events.push(event),
+    new AbortController().signal,
+    { resolve: resolver('codex-clamped') },
+  );
+  assert.equal(result.outcome, 'failed');
+  assert.match(
+    events.find((event) => event.type === 'error')?.text || '',
+    /did not apply the configured reasoning effort/,
+  );
+  await assertStopped(cwd);
+});
+
 test('cancellation, timeout, CLI failure, unexpected close and approval requests never report success', async (t) => {
   type ObservedChild = {
     child: ChildProcess;
@@ -560,7 +648,7 @@ test('model discovery paginates without creating a thread, filters capabilities 
       id: 'fixture-model',
       label: 'Fixture Model',
       description: 'fixture-model',
-      efforts: ['low', 'high'],
+      efforts: ['low', 'none', 'minimal', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     },
     { id: 'fixture-second', label: 'Second Model', description: 'fixture-second', efforts: [] },
   ]);
@@ -570,6 +658,69 @@ test('model discovery paginates without creating a thread, filters capabilities 
     'Effective config wins over the recommended catalog default, including IDs outside the catalog.',
   );
   await assertStopped(cwd);
+});
+
+test('Claude discovers per-model effort capabilities without prompting or exposing account metadata', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-models-'));
+  const result = await listAgentModels('claude', cwd, new AbortController().signal, {
+    resolve: resolver('claude-catalog'),
+  });
+  assert.deepEqual(result, {
+    defaultModel: null,
+    models: [
+      {
+        id: 'opus',
+        label: 'Opus',
+        description: 'Claude Code alias · resolved by your CLI',
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      },
+      {
+        id: 'sonnet',
+        label: 'Sonnet',
+        description: 'Claude Code alias · resolved by your CLI',
+        efforts: ['low', 'medium', 'high'],
+      },
+      {
+        id: 'haiku',
+        label: 'Haiku',
+        description: 'Claude Code alias · resolved by your CLI',
+        efforts: [],
+      },
+      { id: 'fixture-custom', label: 'Custom', description: 'Custom model' },
+      {
+        id: 'fixture-missing-levels',
+        label: 'Missing levels',
+        description: 'fixture-missing-levels',
+      },
+      {
+        id: 'fixture-invalid-levels',
+        label: 'Invalid levels',
+        description: 'fixture-invalid-levels',
+      },
+    ],
+  });
+  assert.equal(JSON.stringify(result).includes('private@example.invalid'), false);
+  await assertStopped(cwd);
+});
+
+test('Claude model discovery rejects interactive requests, failures and timeouts', async () => {
+  for (const [mode, expected] of [
+    ['claude-catalog-interactive', /interactive action/],
+    ['claude-catalog-error', /Could not load Claude models/],
+    ['claude-catalog-null', /invalid model response/],
+    ['claude-catalog-array', /invalid model response/],
+    ['claude-catalog-hang', /timed out/],
+  ] as const) {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-claude-model-failure-'));
+    await assert.rejects(
+      listAgentModels('claude', cwd, new AbortController().signal, {
+        resolve: resolver(mode),
+        timeoutMs: mode.endsWith('hang') ? 500 : 15000,
+      }),
+      expected,
+    );
+    await assertStopped(cwd);
+  }
 });
 
 test('model discovery preserves the catalog without guessing a configured model', async () => {

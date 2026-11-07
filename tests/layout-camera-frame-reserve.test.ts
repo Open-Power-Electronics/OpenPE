@@ -119,8 +119,8 @@ function scene() {
   svg.querySelector = () => pattern;
   svg.querySelectorAll = (selector = '') => {
     if (selector.includes('data-layout-background')) return frames;
+    if (selector.includes('vector-effect')) return [];
     if (selector.includes('data-layout-track-target')) return [track];
-    if (selector.includes('vector-effect')) return [track];
     return [];
   };
   const frameValues = () => frames.map((node) => Object.fromEntries(node.attributes));
@@ -299,128 +299,14 @@ test('unsupported stroke metrics discovered after a pan restore native clipping 
     assert.equal(stroke.getAttribute('stroke-width'), '2');
   }));
 
-test('pan reserve is opt-in and keeps finite frames, grid, artwork and seven-pixel hits unchanged during contained translation', () =>
-  environment((clock) => {
-    for (const enabled of [false, true]) {
-      const current = scene();
-      const apply = createLayoutCameraApplicator(current.svg, {
-        compositor: true,
-        fixedTargets: true,
-        panFrameReserve: enabled,
-      });
-      apply(initial, size);
-      const fixed = current.fixedValues();
-      const pan = apply.beginPan();
-      assertFrames(current, enabled ? reserve(initial) : exact(initial));
-      current.log.length = 0;
-      for (const view of [
-        { x: 6.125, y: -4.5, width: 80 },
-        { x: -39.5, y: 24.5, width: 80 },
-      ]) {
-        pan.update(() => apply(view, size, false));
-        assertFrames(current, enabled ? reserve(initial) : exact(view));
-        const m = new Matrix(current.root.style.getPropertyValue('transform'));
-        // Native world coordinates followed by the CSS matrix retain the exact camera.
-        assert.equal(m.a, 1);
-        assert.equal(m.e, -view.x * 10);
-        assert.equal(m.f, -view.y * 10);
-      }
-      if (enabled)
-        assert.equal(current.log.filter((entry) => current.frames.includes(entry.node)).length, 0);
-      assert.deepEqual(current.fixedValues(), fixed);
-      assert.equal(clock.timers.size, 0);
-      pan.release();
-      assertFrames(current, exact({ x: -39.5, y: 24.5, width: 80 }));
-      apply.dispose();
-    }
-  }));
-
-test('crossing any reserve edge rebases the exact pose before preparing a new two-viewport reserve', () =>
-  environment(() => {
-    for (const view of [
-      { x: -40.000001, y: 0, width: 80 },
-      { x: 40.000001, y: 0, width: 80 },
-      { x: 0, y: -25.000001, width: 80 },
-      { x: 0, y: 25.000001, width: 80 },
-      { x: 10000, y: -10000, width: 80 },
-    ]) {
-      const current = scene();
-      const apply = createLayoutCameraApplicator(current.svg, {
-        compositor: true,
-        panFrameReserve: true,
-      });
-      apply(initial, size);
-      const pan = apply.beginPan();
-      pan.update(() => apply({ x: 40, y: 25, width: 80 }, size, false));
-      assert.equal(current.root.getAttribute('viewBox'), '0 0 80 50');
-      assertFrames(current, reserve(initial));
-      current.log.length = 0;
-      pan.update(() => apply(view, size, false));
-      assert.equal(current.root.getAttribute('viewBox'), `${view.x} ${view.y} 80 50`);
-      assert.equal(current.root.hasAttribute('data-layout-camera-view'), false);
-      assertFrames(current, reserve(view));
-      const nativeWrite = current.log.findIndex(
-        (entry) => entry.node === current.root && entry.name === 'viewBox',
-      );
-      const frameWrite = current.log.findIndex((entry) => current.frames.includes(entry.node));
-      assert.ok(nativeWrite >= 0 && frameWrite > nativeWrite);
-      pan.release();
-      assertFrames(current, exact(view));
-      apply.dispose();
-    }
-  }));
-
-test('flush, release, refresh and disposal restore exact native frames even before a CSS matrix exists', () =>
-  environment(() => {
-    for (const finish of ['capture', 'release', 'refresh', 'dispose'] as const) {
-      const current = scene();
-      const apply = createLayoutCameraApplicator(current.svg, {
-        compositor: true,
-        panFrameReserve: true,
-      });
-      apply(initial, size);
-      const pan = apply.beginPan();
-      pan.update(() => apply(initial, size, false));
-      assertFrames(current, reserve(initial));
-      assert.equal(current.root.hasAttribute('data-layout-camera-view'), false);
-      if (finish === 'capture') flushLayoutCamera(current.svg);
-      else if (finish === 'release') pan.release();
-      else if (finish === 'refresh') apply.refreshTracks();
-      else apply.dispose();
-      assertFrames(current, exact(initial));
-      apply.dispose();
-    }
-  }));
-
-test('drawing replay repairs actual frame attributes and invalidates reserve before a later pan', () =>
-  environment(() => {
-    const current = scene();
-    const apply = createLayoutCameraApplicator(current.svg, {
-      compositor: true,
-      panFrameReserve: true,
-    });
-    apply(initial, size);
-    const pan = apply.beginPan();
-    current.frames[0].setAttribute('width', '0');
-    pan.update(() => apply(initial, size, false));
-    assertFrames(current, reserve(initial));
-    apply.applyNow(initial, size, false);
-    assertFrames(current, exact(initial));
-    const view = { x: 3.5, y: -4.25, width: 80 };
-    pan.update(() => apply(view, size, false));
-    assertFrames(current, exact(view));
-    pan.release();
-    apply.dispose();
-  }));
-
-test('queued latest ordinary navigation and scale-changing pan retain normal idle rebasing and exact frames', () =>
+test('queued latest ordinary navigation and scale-changing pan retain normal idle rebasing and current frame coverage', () =>
   environment((clock) => {
     for (const latestPan of [false, true]) {
       const current = scene();
       const apply = createLayoutCameraApplicator(current.svg, {
         compositor: true,
         frameScheduled: true,
-        panFrameReserve: true,
+        frameReserve: true,
       });
       apply(initial, size);
       const pan = apply.beginPan();
@@ -429,7 +315,7 @@ test('queued latest ordinary navigation and scale-changing pan retain normal idl
       if (latestPan) pan.update(() => apply(wheel, size));
       else apply(wheel, size);
       clock.next();
-      assertFrames(current, exact(wheel));
+      assertFrames(current, reserve(initial));
       assert.equal(clock.timers.size, 1);
       const idle = clock.timers.values().next().value!;
       clock.timers.clear();
@@ -447,7 +333,7 @@ test('explicit flush consumes the queued final pan and a resized viewport drops 
     const apply = createLayoutCameraApplicator(current.svg, {
       compositor: true,
       frameScheduled: true,
-      panFrameReserve: true,
+      frameReserve: true,
     });
     apply(initial, size);
     const pan = apply.beginPan();
@@ -455,7 +341,7 @@ test('explicit flush consumes the queued final pan and a resized viewport drops 
     pan.update(() => apply(last, size, false));
     flushLayoutCamera(current.svg);
     assert.equal(current.root.getAttribute('viewBox'), `${last.x} ${last.y} 80 50`);
-    assertFrames(current, exact(last));
+    assertFrames(current, reserve(initial));
     const stale = [...clock.callbacks.values()][0];
     const nextPan = apply.beginPan();
     current.root.bounds = { width: 900, height: 600 };
@@ -471,99 +357,6 @@ test('explicit flush consumes the queued final pan and a resized viewport drops 
     apply.dispose();
   }));
 
-test('foreign ancestor transforms preserve their priority and force exact native frames', () =>
-  environment(() => {
-    const current = scene();
-    const apply = createLayoutCameraApplicator(current.svg, {
-      compositor: true,
-      fixedTargets: true,
-      panFrameReserve: true,
-    });
-    apply(initial, size);
-    const pan = apply.beginPan();
-    pan.update(() => apply({ x: 2, y: 3, width: 80 }, size, false));
-    current.host.style.setProperty('transform', 'rotate(3deg)', 'important');
-    const view = { x: 7, y: 8, width: 80 };
-    pan.update(() => apply(view, size));
-    assertFrames(current, exact(view));
-    assert.equal(current.root.getAttribute('viewBox'), '7 8 80 50');
-    assert.equal(current.root.hasAttribute('data-layout-camera-view'), false);
-    assert.equal(current.host.style.getPropertyValue('transform'), 'rotate(3deg)');
-    assert.equal(current.host.style.getPropertyPriority('transform'), 'important');
-    assert.equal(current.root.style.getPropertyValue('transform'), '');
-    pan.release();
-    apply.dispose();
-  }));
-
-test('visible native overflow, missing compositor and changed live size cannot prepare a reserve', () =>
-  environment(() => {
-    for (const mode of [
-      'visible',
-      'one-axis-visible',
-      'no-compositor',
-      'changed-size',
-      'unrepresentable',
-    ] as const) {
-      const current = scene();
-      if (mode === 'visible') current.root.nativeOverflow = 'visible';
-      if (mode === 'one-axis-visible')
-        current.root.style.setProperty('overflow-x', 'visible', 'important');
-      const apply = createLayoutCameraApplicator(current.svg, {
-        compositor: mode !== 'no-compositor',
-        panFrameReserve: true,
-      });
-      const view = mode === 'unrepresentable' ? { x: 1e308, y: 1e308, width: 80 } : initial;
-      apply(view, size);
-      if (mode === 'changed-size') current.root.bounds = { width: 900, height: 500 };
-      const before = current.frameValues();
-      const pan = apply.beginPan();
-      assert.deepEqual(current.frameValues(), before);
-      assert.equal(current.host.style.getPropertyValue('overflow-x'), '');
-      assert.equal(current.host.style.getPropertyValue('overflow-y'), '');
-      if (mode === 'one-axis-visible')
-        assert.equal(current.root.style.getPropertyPriority('overflow-x'), 'important');
-      pan.release();
-      apply.dispose();
-    }
-  }));
-
-test('replacement retires the old reserve before new bounds reads and old queued callbacks cannot touch the next owner', () =>
-  environment((clock) => {
-    const current = scene();
-    const old = createLayoutCameraApplicator(current.svg, {
-      compositor: true,
-      frameScheduled: true,
-      panFrameReserve: true,
-    });
-    old(initial, size);
-    const pan = old.beginPan();
-    const displayed = { x: 3, y: 4, width: 80 };
-    pan.update(() => old(displayed, size, false));
-    clock.next();
-    pan.update(() => old({ x: 10, y: 11, width: 80 }, size, false));
-    const stale = [...clock.callbacks.values()];
-    current.root.getBoundingClientRect = () => {
-      assertFrames(current, exact(displayed));
-      return size;
-    };
-    const next = createLayoutCameraApplicator(current.svg, {
-      compositor: true,
-      panFrameReserve: true,
-    });
-    current.root.getBoundingClientRect = () => size;
-    const newest = { x: -9, y: -8, width: 100 };
-    next(newest, size);
-    const snapshot = current.frameValues();
-    old.dispose();
-    old.flush();
-    pan.release();
-    pan.update(() => old({ x: -999, y: -999, width: 8 }, size));
-    stale.forEach((callback) => callback(0));
-    assert.deepEqual(current.frameValues(), snapshot);
-    assert.equal(current.root.getAttribute('viewBox'), '-9 -8 100 62.5');
-    next.dispose();
-  }));
-
 test('retained frame reserve is prepared by the committed binding and survives native flush, idle and pan release', () =>
   environment((clock) => {
     const current = scene();
@@ -575,18 +368,29 @@ test('retained frame reserve is prepared by the committed binding and survives n
     const apply = createLayoutCameraApplicator(current.svg, {
       compositor: true,
       fixedTargets: true,
-      panFrameReserve: true,
       frameReserve: true,
     });
     apply(initial, size);
     assert.equal(measurements, 1, 'initial preparation reuses the committed viewport measurement');
     assertFrames(current, reserve(initial));
     const fixed = current.fixedValues();
+    const stationaryPan = apply.beginPan();
+    stationaryPan.release();
+    assertFrames(current, reserve(initial));
+    assert.equal(current.root.style.getPropertyValue('transform'), '');
+    assert.equal(clock.timers.size, 0);
+    apply.refreshTracks();
+    assertFrames(current, reserve(initial));
     const pan = apply.beginPan();
     current.log.length = 0;
     const translated = { x: 3, y: -4, width: 80 };
     pan.update(() => apply(translated, size, false));
     assertFrames(current, reserve(initial));
+    const matrix = new Matrix(current.root.style.getPropertyValue('transform'));
+    assert.equal(matrix.a, 1);
+    assert.equal(matrix.e, -translated.x * 10);
+    assert.equal(matrix.f, -translated.y * 10);
+    assert.equal(clock.timers.size, 0);
     assert.equal(current.log.filter((entry) => current.frames.includes(entry.node)).length, 0);
     pan.release();
     assert.equal(current.root.getAttribute('viewBox'), '3 -4 80 50');
@@ -655,7 +459,7 @@ test('retained covers stay finite and at most four native/current viewports befo
     assertFrames(current, exact(desired));
   }));
 
-test('coverage loss rebases before recentering the retained finite cover', () =>
+test('coverage loss resizes bounded frames and rebases only when both poses cannot fit', () =>
   environment(() => {
     const current = scene();
     const apply = createLayoutCameraApplicator(current.svg, {
@@ -668,15 +472,69 @@ test('coverage loss rebases before recentering the retained finite cover', () =>
     current.log.length = 0;
     const outside = { x: 40.000001, y: 25, width: 80 };
     apply(outside, size, false);
-    assert.equal(current.root.getAttribute('viewBox'), `${outside.x} 25 80 50`);
+    assert.equal(current.root.getAttribute('viewBox'), '0 0 80 50');
+    assert.equal(current.root.hasAttribute('data-layout-camera-view'), true);
+    const cover = ['x', 'y', 'width', 'height'].map((name) =>
+      Number(current.frames[0].getAttribute(name)),
+    );
+    for (const view of [initial, outside]) {
+      assert.ok(cover[0] < view.x && cover[1] < view.y);
+      assert.ok(cover[0] + cover[2] > view.x + view.width);
+      assert.ok(cover[1] + cover[3] > view.y + view.width / 1.6);
+      assert.ok(cover[2] <= view.width * 4 && cover[3] <= (view.width / 1.6) * 4);
+    }
+    assert.equal(current.log.filter((entry) => entry.name === 'viewBox').length, 0);
+    current.log.length = 0;
+    const distant = { x: 10000, y: -10000, width: 80 };
+    apply(distant, size, false);
+    assert.equal(current.root.getAttribute('viewBox'), '10000 -10000 80 50');
     assert.equal(current.root.style.getPropertyValue('transform'), '');
-    assertFrames(current, reserve(outside));
+    assertFrames(current, reserve(distant));
     const nativeWrite = current.log.findIndex(
       (entry) => entry.node === current.root && entry.name === 'viewBox',
     );
     const frameWrite = current.log.findIndex((entry) => current.frames.includes(entry.node));
     assert.ok(nativeWrite >= 0 && frameWrite > nativeWrite);
     apply.dispose();
+  }));
+
+test('a twelve-step zoom ramp and return retain the native board within bounded frame covers', () =>
+  environment(() => {
+    const current = scene();
+    const apply = createLayoutCameraApplicator(current.svg, {
+      compositor: true,
+      frameReserve: true,
+    });
+    apply(initial, size);
+    current.log.length = 0;
+    for (const step of [
+      ...Array.from({ length: 12 }, (_, i) => i + 1),
+      ...Array.from({ length: 12 }, (_, i) => 11 - i),
+    ]) {
+      const width = initial.width / 1.12 ** step;
+      const view = {
+        x: (initial.width - width) * 0.37,
+        y: ((initial.width - width) / 1.6) * 0.61,
+        width,
+      };
+      apply(view, size);
+      const cover = ['x', 'y', 'width', 'height'].map((name) =>
+        Number(current.frames[0].getAttribute(name)),
+      );
+      assert.ok(cover.every(Number.isFinite));
+      for (const pose of [initial, view]) {
+        assert.ok(cover[0] <= pose.x && cover[1] <= pose.y);
+        assert.ok(cover[0] + cover[2] >= pose.x + pose.width);
+        assert.ok(cover[1] + cover[3] >= pose.y + pose.width / 1.6);
+        assert.ok(cover[2] <= pose.width * 4 && cover[3] <= (pose.width / 1.6) * 4);
+      }
+    }
+    assert.equal(current.log.filter((entry) => entry.name === 'viewBox').length, 0);
+    flushLayoutCamera(current.svg);
+    assert.equal(current.root.getAttribute('viewBox'), '0 0 80 50');
+    assert.equal(current.root.hasAttribute('data-layout-camera-view'), false);
+    apply.dispose();
+    assertFrames(current, exact(initial));
   }));
 
 test('drawing replays and captures repair actual reserve attributes without changing the native camera or other bindings', () =>
@@ -778,8 +636,9 @@ test('retained reserve replacement restores exact presented frames before the su
       frameReserve: true,
     });
     old(initial, size);
+    const pan = old.beginPan();
     const shown = { x: 1, y: 2, width: 70 };
-    old(shown, size);
+    pan.update(() => old(shown, size));
     clock.next();
     const staleIdle = [...clock.timers.values()];
     old({ x: 10, y: 20, width: 60 }, size);
@@ -800,8 +659,16 @@ test('retained reserve replacement restores exact presented frames before the su
     next(newest, size);
     const snapshot = current.frameValues();
     old.dispose();
+    old.flush();
+    pan.release();
+    let obsoleteUpdate = false;
+    pan.update(() => {
+      obsoleteUpdate = true;
+      old({ x: -999, y: -999, width: 8 }, size);
+    });
     staleFrames.forEach((callback) => callback(0));
     staleIdle.forEach((callback) => callback());
+    assert.equal(obsoleteUpdate, false);
     assert.deepEqual(current.frameValues(), snapshot);
     assert.equal(current.root.getAttribute('viewBox'), '-8 -4 100 62.5');
     next.dispose();

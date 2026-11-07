@@ -1,11 +1,13 @@
 import type { HistoryPage } from './project-history';
 import type { ProjectExportFormat } from './export-formats';
+import type { Circuit } from './circuit';
 export type DiscoveredExample = {
   id: string;
   title: string;
   description: string;
-  section: 'recent' | 'examples';
+  section: 'project' | 'examples';
 };
+export type RecentProject = { id: string; title: string; description: string };
 export type SpiceModelDeclaration = {
   name: string;
   kind: 'model' | 'subcircuit';
@@ -25,9 +27,20 @@ declare global {
       connection(): Promise<{ base: string; token: string }>;
       writeWorkspaceRecovery(content: string | null): Promise<void>;
       open(): Promise<
-        { source: string; name: string; native: boolean } | { fileId: string } | null
+        | { source: string; name: string; native: boolean; openId: number }
+        | { fileId: string }
+        | null
       >;
-      acceptOpen(): Promise<string>;
+      openRecent(
+        id: string,
+      ): Promise<
+        { source: string; name: string; native: boolean; openId: number } | { fileId: string }
+      >;
+      listRecent(): Promise<{ initialized: boolean; entries: RecentProject[]; warnings: string[] }>;
+      removeRecent(id: string): Promise<void>;
+      previewRecent(id: string): Promise<Circuit>;
+      onRecentChanged(callback: () => void): () => void;
+      acceptOpen(openId: number): Promise<string>;
       newFile(): Promise<string>;
       listExamples(): Promise<{ entries: DiscoveredExample[]; warnings: string[] }>;
       openDefaultExample(key: string): Promise<{

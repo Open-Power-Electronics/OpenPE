@@ -9,9 +9,96 @@ const delta = (text) => ({
   method: 'item/agentMessage/delta',
   params: { itemId: 'a', delta: text },
 });
-if (mode === 'claude' || mode === 'claude-annotations') {
+if (mode.startsWith('claude-catalog')) {
+  assert.ok(
+    process.argv.includes('--bare'),
+    'Catalog initialization must not load hooks or plugins',
+  );
+  assert.ok(process.argv.includes('--no-session-persistence'));
+  assert.ok(process.argv.includes('--strict-mcp-config'));
+  assert.equal(process.argv[process.argv.indexOf('--tools') + 1], '');
+  assert.deepEqual(JSON.parse(process.argv[process.argv.indexOf('--mcp-config') + 1]), {
+    mcpServers: {},
+  });
+  const input = createInterface({ input: process.stdin });
+  input.on('line', (line) => {
+    const message = JSON.parse(line);
+    assert.equal(message.type, 'control_request');
+    assert.equal(message.request.subtype, 'initialize');
+    if (mode === 'claude-catalog-null') return send(null);
+    if (mode === 'claude-catalog-array') return send([]);
+    if (mode === 'claude-catalog-hang') return;
+    if (mode === 'claude-catalog-interactive')
+      return send({
+        type: 'control_request',
+        request_id: 'blocked',
+        request: { subtype: 'can_use_tool' },
+      });
+    if (mode === 'claude-catalog-error')
+      return send({
+        type: 'control_response',
+        response: {
+          subtype: 'error',
+          request_id: message.request_id,
+          error: 'Fixture catalog error',
+        },
+      });
+    send({
+      type: 'control_response',
+      response: {
+        subtype: 'success',
+        request_id: message.request_id,
+        response: {
+          account: { email: 'private@example.invalid' },
+          models: [
+            { value: 'default', displayName: 'Default' },
+            {
+              value: 'opus',
+              displayName: 'Opus',
+              supportsEffort: true,
+              supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+            },
+            {
+              value: 'sonnet',
+              displayName: 'Sonnet',
+              supportsEffort: true,
+              supportedEffortLevels: ['low', 'medium', 'high'],
+            },
+            {
+              value: 'haiku',
+              displayName: 'Haiku',
+              supportsEffort: false,
+              supportedEffortLevels: ['low', 'high'],
+            },
+            { value: 'fixture-custom', displayName: 'Custom', description: 'Custom model' },
+            {
+              value: 'fixture-missing-levels',
+              displayName: 'Missing levels',
+              supportsEffort: true,
+            },
+            {
+              value: 'fixture-invalid-levels',
+              displayName: 'Invalid levels',
+              supportsEffort: true,
+              supportedEffortLevels: 'medium',
+            },
+            { value: '--bad' },
+          ],
+        },
+      },
+    });
+  });
+  input.on('close', () => process.exit(0));
+} else if (mode.startsWith('claude')) {
   assert.ok(process.argv.includes('--include-partial-messages'));
-  assert.equal(process.argv[process.argv.indexOf('--effort') + 1], 'high');
+  assert.equal(
+    process.env.CLAUDE_CODE_EFFORT_LEVEL,
+    process.argv[process.argv.indexOf('--effort') + 1],
+  );
+  assert.equal(
+    process.argv[process.argv.indexOf('--effort') + 1],
+    mode.startsWith('claude-effort-') ? mode.slice('claude-effort-'.length) : 'high',
+  );
   assert.equal(process.argv[process.argv.indexOf('--model') + 1], 'fixture-model');
   process.stdin.resume();
   let received = '';
@@ -88,8 +175,13 @@ if (mode === 'claude' || mode === 'claude-annotations') {
                 displayName: 'Fixture Model',
                 supportedReasoningEfforts: [
                   { reasoningEffort: 'low' },
+                  { reasoningEffort: 'none' },
+                  { reasoningEffort: 'minimal' },
+                  { reasoningEffort: 'medium' },
                   { reasoningEffort: 'high' },
                   { reasoningEffort: 'xhigh' },
+                  { reasoningEffort: 'max' },
+                  { reasoningEffort: 'ultra' },
                 ],
               },
               null,
@@ -115,7 +207,15 @@ if (mode === 'claude' || mode === 'claude-annotations') {
       assert.equal(e.params.approvalPolicy, 'untrusted');
       assert.equal(
         e.params.config.model_reasoning_effort,
-        mode.startsWith('codex') ? 'high' : 'low',
+        mode === 'codex-model-default'
+          ? undefined
+          : mode === 'codex-clamped'
+            ? 'xhigh'
+            : mode.startsWith('codex-effort-')
+              ? mode.slice('codex-effort-'.length)
+              : mode.startsWith('codex')
+                ? 'high'
+                : 'medium',
       );
       assert.equal(e.params.model, mode.startsWith('codex') ? 'fixture-model' : undefined);
       send({
@@ -123,11 +223,13 @@ if (mode === 'claude' || mode === 'claude-annotations') {
         result: {
           thread: { id: 'thread' },
           model: 'fixture',
-          reasoningEffort: e.params.config.model_reasoning_effort,
+          reasoningEffort:
+            mode === 'codex-clamped' ? 'high' : e.params.config.model_reasoning_effort,
         },
       });
     }
     if (e.method === 'turn/start') {
+      assert.notEqual(mode, 'codex-clamped', 'A clamped effort must fail before prompting');
       assert.match(e.params.input[0].text, /Fixture/);
       if (mode === 'codex-annotations') {
         assert.equal(e.params.input[1].type, 'image');

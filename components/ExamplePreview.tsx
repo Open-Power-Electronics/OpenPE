@@ -31,6 +31,7 @@ export default memo(function ExamplePreview({ circuit: d }: { circuit: Circuit }
     ...schematicTexts(d.original),
     ...schematicPolylines(d.original).flatMap((line) => line.points),
   ];
+  if (!points.length) points.push({ x: 0, y: 0 });
   const left = Math.min(...points.map((p) => p.x)) - 10;
   const top = Math.min(...points.map((p) => p.y)) - 10;
   const width = Math.max(...points.map((p) => p.x)) - left + 10;

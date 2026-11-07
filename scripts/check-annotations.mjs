@@ -96,7 +96,14 @@ try {
     if (url.pathname === '/api/agents')
       return route.fulfill({ json: [{ id: 'codex', available: true, version: 'mock' }] });
     if (url.pathname === '/api/models')
-      return route.fulfill({ json: { models: [], defaultModel: '' } });
+      return route.fulfill({
+        json: {
+          models: [
+            { id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium', 'high'] },
+          ],
+          defaultModel: 'fixture-model',
+        },
+      });
     if (url.pathname === '/api/libraries/footprints')
       return route.fulfill({ json: { footprint: ['footprint', '"Test"'] } });
     if (/^\/(brand|agents)\/[\w.-]+\.(svg|png)$/.test(url.pathname))

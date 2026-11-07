@@ -20,7 +20,7 @@ import {
 } from './emc-flyback-testbench';
 
 export async function verifyEmcFlybackModels() {
-  const filename = 'recent/emc-flyback/emc-flyback.kicad_pro';
+  const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const signal = new AbortController().signal;
   for (const model of models.models) {
     signal.throwIfAborted();
@@ -32,7 +32,7 @@ export async function verifyEmcFlybackModels() {
 /** Publish model references without re-running the native KiCad geometry converter. */
 export async function prepareEmcFlybackModels() {
   await verifyEmcFlybackModels();
-  const filename = 'recent/emc-flyback/emc-flyback.kicad_pro';
+  const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const snapshot = 'lib/emc-flyback-example.json';
   const template = JSON.parse(await readFile(snapshot, 'utf8'));
   template.simulationModels = models.models.map((model) => ({ ...model }));

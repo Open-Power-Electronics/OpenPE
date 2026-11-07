@@ -83,7 +83,7 @@ of the normalized native destination. `OPENPE_DATA_DIR` selects application data
 Reopening a destination reconnects history; Save as associates an independent
 repository. History does not travel in KiCad files.
 
-Home examples open their original native files under `examples/` or `recent/`.
+Home examples open their original native files under `examples/` or `project/`.
 They use the same destination-keyed private history as other projects; no Git
 repository is added to the example directory. Show in File Explorer reveals
 the actual project folder. Closing never deletes its private history.
@@ -105,10 +105,10 @@ no persistent Git repository is removed.
 ## Original example opening
 
 `resources/example-catalog/home-manifest.json` defines nine curated projects
-under Example and EMC Flyback under Recent. Stable catalog IDs reconnect the
+under Example and EMC Flyback as the initial Recent entry. Stable catalog IDs reconnect the
 original `examples/<stem>/<stem>.kicad_pro` files and
-`recent/emc-flyback/emc-flyback.kicad_pro`, packaged under `examples-native/` and
-`recent-native/` respectively. Both roots also admit host-discovered native
+`project/emc-flyback/emc-flyback.kicad_pro`, packaged under `examples-native/` and
+`project-native/` respectively. Both roots also admit host-discovered native
 projects through opaque keys; clean recovery re-resolves those keys through the
 host. Opening and clean recovery read the current native bytes. Save writes that destination; Save as
 creates a personal copy with independent history. Ordinary Source disk files,

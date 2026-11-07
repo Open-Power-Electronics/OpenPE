@@ -1,15 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import {
-  ArrowRight,
-  Blocks,
-  FolderPlus,
-  FolderOpen,
-  Home as HomeIcon,
-  Settings,
-} from 'lucide-react';
+import { Blocks, FolderPlus, FolderOpen, Home as HomeIcon, Settings } from 'lucide-react';
 import { homeExampleCatalog, type HomeExampleId as ExampleId } from '@/lib/home-examples';
-import ExamplePreview from './ExamplePreview';
+import HomeProjectCard from './HomeProjectCard';
+import HomeProjectSection from './HomeProjectSection';
 import HomeHeroBackdrop from './HomeHeroBackdrop';
 import AgentComposer, { type AgentComposerProps } from './AgentComposer';
 import NavigationButton from './NavigationButton';
@@ -71,7 +65,8 @@ export default function Home({
 }) {
   const [previews, setPreviews] = useState(() => new Map(previewCache));
   const [previewError, setPreviewError] = useState('');
-  const { sections, error: discoveryError } = exampleList;
+  const [actionError, setActionError] = useState('');
+  const { sections, error: discoveryError, revision } = exampleList;
   useEffect(() => {
     if (!active || previewError) return;
     const next = homeExampleCatalog.find((entry) => !previews.has(entry.id));
@@ -144,8 +139,10 @@ export default function Home({
               </p>
             )}
             {discoveryError && <p role="alert">{discoveryError}</p>}
+            {actionError && <p role="alert">{actionError}</p>}
             <AgentComposer
               {...composer}
+              requiresAgent={false}
               className="home-composer"
               input={brief}
               setInput={setBrief}
@@ -156,34 +153,22 @@ export default function Home({
             />
           </div>
           {sections.map((section) => (
-            <section key={section.id} className="home-examples" aria-labelledby={section.id}>
-              <div className="home-section-heading">
-                <h2 id={section.id}>{section.title}</h2>
-              </div>
-              <div className="home-example-list">
-                {section.examples.map((example) => (
-                  <button
+            <HomeProjectSection key={section.id} title={section.title}>
+              {(expanded) =>
+                section.examples.map((example) => (
+                  <HomeProjectCard
                     key={example.id}
-                    className="home-example"
-                    onClick={() => onExample(example.id)}
-                    aria-label={`Open ${example.title} example`}
-                  >
-                    <div className="home-example-preview" aria-hidden="true">
-                      {previews.has(example.id) && (
-                        <ExamplePreview circuit={previews.get(example.id)!} />
-                      )}
-                    </div>
-                    <div className="home-example-description">
-                      <div className="home-example-heading">
-                        <h3>{example.title}</h3>
-                        <ArrowRight size={18} className="home-example-arrow" aria-hidden="true" />
-                      </div>
-                      <small>{example.description}</small>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
+                    entry={example}
+                    active={active && expanded}
+                    recent={section.id === 'recent-heading'}
+                    revision={revision}
+                    preview={previews.get(example.id)}
+                    onOpen={onExample}
+                    onError={setActionError}
+                  />
+                ))
+              }
+            </HomeProjectSection>
           ))}
         </div>
       </section>

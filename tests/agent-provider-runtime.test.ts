@@ -146,9 +146,81 @@ test('Pi model discovery accepts a state-first response and filters non-text or 
   assert.equal(result.defaultModel, 'fixture/fixture-model');
   assert.deepEqual(
     result.models.map((item: any) => item.id),
-    ['fixture/fixture-model'],
+    [
+      'fixture/fixture-model',
+      'fixture/ordinary-reasoner',
+      'fixture/restricted-reasoner',
+      'fixture/no-reasoning',
+    ],
   );
-  assert.deepEqual(result.models[0].efforts, ['low', 'medium', 'high']);
+  assert.deepEqual(result.models[0].efforts, [
+    'off',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ]);
+  assert.deepEqual(result.models[1].efforts, ['off', 'minimal', 'low', 'medium', 'high']);
+  assert.deepEqual(result.models[2].efforts, ['high', 'max']);
+  assert.deepEqual(result.models[3].efforts, ['off']);
+});
+
+test('Pi sends every native thinking level unchanged and rejects silent clamping before prompting', async () => {
+  for (const effort of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const) {
+    const events: any[] = [];
+    const result = await runAgent(
+      'pi',
+      { prompt: 'Explain ripple', context: {}, effort, model: 'fixture/fixture-model' },
+      cwd,
+      (event) => events.push(event),
+      new AbortController().signal,
+      { resolve: async () => launch(`effort-${effort}`) },
+    );
+    assert.equal(result.outcome, 'completed', JSON.stringify(events));
+    assert.equal(events.find((event) => event.type === 'agent-info')?.reasoningEffort, effort);
+  }
+  const events: any[] = [];
+  const result = await runAgent(
+    'pi',
+    { prompt: 'Explain ripple', context: {}, effort: 'max', model: 'fixture/fixture-model' },
+    cwd,
+    (event) => events.push(event),
+    new AbortController().signal,
+    { resolve: async () => launch('clamped-effort') },
+  );
+  assert.equal(result.outcome, 'failed');
+  assert.match(
+    events.find((event) => event.type === 'error')?.text || '',
+    /did not apply the configured reasoning effort/,
+  );
+});
+
+test('Agent runtimes reject reasoning values from another provider before resolving its CLI', async () => {
+  for (const [provider, effort] of [
+    ['codex', 'off'],
+    ['claude', 'ultra'],
+    ['pi', 'none'],
+    ['deepseek', 'medium'],
+    ['cursor', 'medium'],
+  ] as const) {
+    await assert.rejects(
+      runAgent(
+        provider,
+        { prompt: 'Test', context: {}, effort },
+        cwd,
+        () => {},
+        new AbortController().signal,
+        {
+          resolve: async () => {
+            throw new Error('Invalid reasoning effort must not resolve a CLI');
+          },
+        },
+      ),
+      /configured reasoning effort/,
+    );
+  }
 });
 
 test('Pi receives validated annotation images directly in its prompt without temporary files', async () => {

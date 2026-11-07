@@ -29,6 +29,31 @@ var agentProviders = [
   }
 ];
 var agentProviderIds = agentProviders.map(({ id }) => id);
+var reasoningEfforts = [
+  "none",
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra"
+];
+var defaultReasoningEffort = "medium";
+var providerReasoningEfforts = {
+  codex: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
+  claude: ["low", "medium", "high", "xhigh", "max"],
+  deepseek: [],
+  pi: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+  cursor: []
+};
+function isReasoningEffort(value) {
+  return typeof value === "string" && reasoningEfforts.some((effort) => effort === value);
+}
+function isProviderReasoningEffort(provider, value) {
+  return isAgentProvider(provider) && isReasoningEffort(value) && providerReasoningEfforts[provider].includes(value);
+}
 function isAgentProvider(value) {
   return agentProviders.some(({ id }) => id === value);
 }
@@ -39,5 +64,10 @@ export {
   agentName,
   agentProviderIds,
   agentProviders,
-  isAgentProvider
+  defaultReasoningEffort,
+  isAgentProvider,
+  isProviderReasoningEffort,
+  isReasoningEffort,
+  providerReasoningEfforts,
+  reasoningEfforts
 };

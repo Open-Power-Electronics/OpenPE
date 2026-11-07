@@ -1,15 +1,32 @@
 'use client';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { ArrowUp, Square, ShieldCheck, ShieldAlert } from 'lucide-react';
 import type { ReasoningEffort } from '@/lib/chat-stream';
 import { smartPunctuationEdit } from '@/lib/appearance';
 import Select from './Select';
 import ModelSelect from './ModelSelect';
-import { agentName } from '@/lib/agent-providers';
+import {
+  agentName,
+  defaultReasoningEffort,
+  isProviderReasoningEffort,
+} from '@/lib/agent-providers';
+
+const effortLabels: Record<ReasoningEffort, string> = {
+  none: 'None',
+  off: 'Off',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+  ultra: 'Ultra',
+};
 
 export type AgentComposerProps = {
   provider: string;
   available: boolean;
+  requiresAgent?: boolean;
   agentSupportsEffort?: boolean;
   effort: ReasoningEffort;
   setEffort: (value: ReasoningEffort) => void;
@@ -35,6 +52,7 @@ export type AgentComposerProps = {
 export default function AgentComposer({
   provider,
   available,
+  requiresAgent = true,
   agentSupportsEffort,
   effort,
   setEffort,
@@ -57,14 +75,40 @@ export default function AgentComposer({
   hasAttachments = false,
 }: AgentComposerProps) {
   const name = agentName(provider);
-  const [modelEfforts, setModelEfforts] = useState<ReasoningEffort[] | null>(null);
+  const [effortCatalog, setEffortCatalog] = useState<{
+    provider: string;
+    model: string;
+    observedModel: string;
+    efforts: ReasoningEffort[] | null;
+  } | null>(null);
+  const receiveEfforts = useCallback(
+    (efforts: ReasoningEffort[] | null) =>
+      setEffortCatalog({ provider, model, observedModel, efforts }),
+    [provider, model, observedModel],
+  );
+  const modelEfforts =
+    available &&
+    effortCatalog?.provider === provider &&
+    effortCatalog.model === model &&
+    effortCatalog.observedModel === observedModel
+      ? effortCatalog.efforts
+      : null;
   const supportsEffort =
-    (provider === 'codex' || agentSupportsEffort) &&
-    (modelEfforts === null || modelEfforts.length > 0);
-  const effectiveEffort =
-    modelEfforts?.length && !modelEfforts.includes(effort) ? modelEfforts[0] : effort;
+    modelEfforts === null ? provider === 'codex' || agentSupportsEffort : modelEfforts.length > 0;
+  const submissionBlocked =
+    requiresAgent &&
+    (!available || (['codex', 'claude', 'pi'].includes(provider) && modelEfforts === null));
+  const effectiveEffort = modelEfforts?.length
+    ? modelEfforts.includes(effort)
+      ? effort
+      : modelEfforts.includes(defaultReasoningEffort)
+        ? defaultReasoningEffort
+        : modelEfforts[0]
+    : isProviderReasoningEffort(provider, effort)
+      ? effort
+      : defaultReasoningEffort;
   function submit() {
-    if ((!input.trim() && !hasAttachments) || busy) return;
+    if ((!input.trim() && !hasAttachments) || busy || submissionBlocked) return;
     onSubmit(supportsEffort ? effectiveEffort : undefined);
   }
   return (
@@ -156,23 +200,20 @@ export default function AgentComposer({
               observedModel={observedModel}
               onChange={setModel}
               disabled={busy}
-              onEfforts={setModelEfforts}
+              onEfforts={receiveEfforts}
             />
             {supportsEffort ? (
               <Select
                 label="Reasoning effort"
                 value={effectiveEffort}
-                disabled={busy}
+                disabled={busy || !available || !modelEfforts?.length}
                 compact
+                placeholder={effortLabels[effectiveEffort]}
                 onChange={(value) => setEffort(value as ReasoningEffort)}
-                options={[
-                  { value: 'low', label: 'Low' },
-                  { value: 'medium', label: 'Medium' },
-                  { value: 'high', label: 'High' },
-                ].filter(
-                  (option) =>
-                    !modelEfforts || modelEfforts.includes(option.value as ReasoningEffort),
-                )}
+                options={(modelEfforts || []).map((value) => ({
+                  value,
+                  label: effortLabels[value],
+                }))}
               />
             ) : (
               <span
@@ -190,9 +231,15 @@ export default function AgentComposer({
           <button
             className={`send-button ${busy ? 'stop' : ''}`}
             aria-label={busy ? 'Stop generation' : submitLabel}
-            title={busy ? 'Stop generation' : submitLabel}
+            title={
+              busy
+                ? 'Stop generation'
+                : submissionBlocked
+                  ? 'Choose an available model before sending.'
+                  : submitLabel
+            }
             type="button"
-            disabled={!busy && !input.trim() && !hasAttachments}
+            disabled={!busy && (submissionBlocked || (!input.trim() && !hasAttachments))}
             onClick={() => (busy ? onStop?.() : submit())}
           >
             {busy ? <Square size={14} /> : <ArrowUp size={17} />}

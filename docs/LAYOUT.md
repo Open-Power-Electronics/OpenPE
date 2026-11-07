@@ -120,40 +120,45 @@ The camera updates root SVG/grid/hit bindings independently of drawing trees.
 Coordinate-only internally owned track previews retain their committed target
 binding. Track identity, ordering, layer or width changes refresh only track
 targets; viewport, non-track geometry or copper-parent changes replace the binding.
-Within an unchanged, untransformed viewport, bounded transient pan/zoom uses a
-root CSS matrix with compensated visible non-scaling strokes. Transparent hit
-padding becomes exact before picking. Pure translation does not collect or
-recalculate visible stroke metrics; the first scaling pose captures them, and
-only scale changes update compensation until native rebasing or drawing replay.
-Numerical camera state updates immediately;
-navigation presents only its latest pose once per animation frame. Pointer
-mapping rebases the displayed transform to the latest numerical pose, preserving
-continuous wheel anchors and pan coordinates. Picking and captures first consume
-any pending pose. Initial application and drawing replays stay synchronous;
-rebinding/disposal cancels the old frame. Ordinary navigation rebases the native
-viewBox after at most 120 ms idle. Only actual captured-pan updates can pause idle
-rebasing, and only for pure translation. Picking, commands, drawing commits,
-captures and binding disposal always consume and flush the latest native pose.
-Captured-pan release, cancellation, capture loss, blur and deactivation also
-flush it. Wheel, Fit, resize and drawing replays keep ordinary rebasing.
-Committed camera bindings reserve clipped background, grid and interaction bounds
-at twice the native viewport width and height. Navigation, idle rebasing and public
-camera flushes retain covered bounds. Coverage loss or a reserve exceeding four
-times either current or native viewport dimension first rebases the exact camera
-and recentres a finite reserve. Drawing replays repair those committed bounds;
-foreign transforms or clipping, viewport changes and binding disposal restore
+Pan and wheel update numerical camera state immediately and share one animation
+frame callback that presents the latest pose. Pointer mapping rebases the displayed
+transform to that numerical pose, preserving wheel anchors and pan coordinates.
+Initial application, resize and drawing replays stay synchronous. Straight airwires
+and lock-marker world positions remain retained; only coincident-endpoint rings
+and nonempty visible overlays subscribe to camera scale.
+
+Within an unchanged, untransformed viewport, bounded transient navigation uses a
+root CSS matrix. Pure translation does not collect visible stroke metrics; scaling
+queries only visible non-scaling strokes and updates compensation when scale
+changes. Transparent picking targets are excluded from that traversal and retain
+their native hit padding during transient motion. Native rebasing restores their
+exact current padding; native fallback updates it synchronously.
+
+Clipped background, grid and interaction bounds initially reserve twice the native
+viewport width and height. Navigation and flushes retain a cover that includes both
+native and requested viewports. If needed, it adjusts with at least one CSS pixel
+of margin, bounded to four times either viewport's dimensions. Poses that cannot
+share that cover rebase the native camera and recentre the reserve. Drawing replays
+repair the bounds. Foreign transforms or clipping, viewport changes and disposal restore
 exact viewport bounds. Export and annotation clones normalize their background
-and grid independently, without changing the live reserve.
-Native rebasing measures the physical viewport before camera writes when its
-owned positive scale is verified; uncertain scaled bounds retain the settled
-measurement and its original tolerance. Restored clipping remains authoritative.
-Initial application, resize, ancestor
-transforms and large camera jumps use native updates. Current world transforms
-and Agent observations remain authoritative; camera state never enters native design.
-One binding owns each SVG: replacement retires its predecessor before viewport
-and style capture, discards obsolete queued poses and preserves the new owner.
-Camera eligibility reads fresh Typed OM computed values where supported, with
-resolved-style fallback; foreign transforms and priorities retain native updates.
+and grid independently of the live reserve.
+
+Ordinary navigation schedules a native viewBox rebase after 120 ms idle. Only
+captured-pan updates with pure translation can pause that timer. Picking, commands,
+drawing commits, captures and disposal consume the pending pose and flush the
+native camera. Pan release, cancellation, capture loss, blur and deactivation also
+flush. One binding owns each SVG; replacement retires its predecessor before
+viewport/style capture and discards obsolete queued poses.
+
+Native rebasing checks the physical viewport before camera writes when ownership
+permits, using verified positive-scale bounds or restoring owned styles before
+measuring the old native viewport. Uncertain bounds retain the settled check and
+tolerance. A successful check is reusable only by its matching reserve update;
+ordinary native replays still detect resize before ResizeObserver delivery.
+Eligibility reads fresh Typed OM values with resolved-style
+fallback; foreign transforms/priorities and large jumps use native updates.
+Current world transforms and Agent observations remain authoritative.
+
 Selection updates affected records; unchanged geometry/captions/controls retain
 their presentation. Ordered zone fills and outlines retain their preparation
 through track-only previews; zone, layer, owner and selection changes refresh it.
@@ -725,6 +730,14 @@ face colours and material indices through the tracer's geometry merge. Explicit 
 uses a display-only acrylic interpretation with transmission 0.92 and refractive
 index 1.49. Generic translucent STEP surfaces retain alpha without inferring an
 optical medium.
+Enabling Render while component or advanced CAD models are importing retains
+the request and shows import progress. Scene copying, BVH generation, texture
+uploads and shader compilation begin only after those imports finish. Assigned
+models that fail to import block Render with the existing retry actions;
+intentionally unassigned component estimates remain supported. PNG export can
+wait through import publication, then through convergence. Disabling Render,
+hiding the view or changing the view/design basis cancels that export. Hidden
+views do not start a queued Render until reactivated.
 Board copper, laminate, silkscreen and multiply-painted solder mask receive
 render-only physical shading. The current visible native tracks, pads, vias and pours
 remain in the render scene as opaque copper. The mask is a thin pigmented
@@ -744,11 +757,25 @@ layer tags and excessive work omit that normal-map refinement while preserving
 the full physical geometry for path tracing.
 
 Still views accumulate 64 samples with a three-bounce path budget, three
-transmission traversals and edge-preserving denoising.
+transmission traversals and geometry-guided denoising. A private raster pass
+caches first-surface view normals, depth, albedo and optical strength at working
+resolution. Its materials retain native apertures, alpha tests, texture/vertex
+colours and mapped normals; the physical tracing materials are restored after
+the pass. Camera, scene and size changes invalidate these guides; accumulation
+and selection reuse them.
+Three 5×5 à-trous passes at strides 1, 2 and 4 reconstruct linear radiance using
+normal, tangent-plane distance, albedo and perceptual-colour weights. Their
+75 kernel taps span a 14-pixel radius, with weights rejecting incompatible
+surfaces. Four immediate-neighbour probes per pass retain the original traced
+pixels along guide boundaries, preserving their sampled subpixel coverage.
+Filtering never feeds back into the accumulated samples or clips HDR reflections.
+Raster guides describe only the nearest surface; transmission/alpha retain a
+tighter original-colour guard, but refracted detail and low-contrast shadows
+can still soften. This is bounded spatial denoising, not an optical reference.
 Multiple importance sampling retains direct studio-light sampling to limit noise.
-The working image uses 75%
-of each dimension after applying a 2× pixel-ratio and 2,560 px longest-side cap;
-the viewport and PNG retain their original dimensions. Sampling begins with three
+The working image uses 75% of drawing-buffer dimensions, capped at one pixel
+per CSS pixel and 1,920 px on its longest side; the viewport and PNG retain
+their original dimensions. Sampling begins with three
 tiles per animation frame and adapts up to 27 tiles as the preceding GPU batch
 finishes. A nonblocking fence after presentation keeps one tracing batch in
 flight; busy GPUs reduce the batch toward one tile. Tile submission checks an
@@ -756,11 +783,13 @@ eight-millisecond CPU deadline between tiles. This is not a GPU execution-time
 guarantee. A 50 ms grace period accommodates asynchronous fence visibility;
 only a sustained wait reduces the batch. If fencing is unavailable, batches stay at three tiles. Camera, scene
 and size changes reset the batch, and disposing Render releases its fence.
-Larger batches skip redundant intermediate denoising passes while retaining the
-complete 64-sample image and final denoising for display and export.
+The first four samples provide early filtered feedback; subsequent filtering
+and presentation advance in four-sample intervals. Larger batches can skip
+intermediate intervals. Every sample is still traced, and completion always
+filters the full 64-sample image for display and export.
 Accumulation-only continuation frames retain the composited raster image while
 shaders compile, and the current denoised image while the GPU is busy or only a
-partial sample advances. Camera, scene, size and selection changes invalidate
+partial presentation interval advances. Camera, scene, size and selection changes invalidate
 that presentation. Explicit view updates and captures always repaint, including
 after canvas resize or reactivation; failed draws remain retryable. Sampling and
 the nonblocking GPU fence continue independently of duplicate presentation.
@@ -792,7 +821,13 @@ disabling Render. Before compiling the pinned shader, the renderer removes
 unused sheen, iridescence, fog and nonrectangular-light calculations; its scene
 and material adapters never enable those features. Metal, clearcoat, transmission and direct-light sampling
 remain active. Studio softboxes and the HDR environment share one shadow and
-material-evaluation path. The BVH traversal stack is sized from the deepest generated tree
+material-evaluation path. Material records carry a packed texture-transform
+index instead of sixteen eagerly decoded matrices; each active texture sampler
+reads its original transform on demand. A scene-wide union of the ten supported
+map types specializes absent map indices to -1 before compilation. Every scene
+upload refreshes that union, so adding a previously absent map recompiles its
+original sampling path. Packed material offsets and authored UV transforms remain
+unchanged. The BVH traversal stack is sized from the deepest generated tree
 plus two entries, rounded up to four-entry buckets; no geometry or tree depth is
 truncated. Shader specialization rejects a mismatched pinned source explicitly.
 Graphics-driver compilation latency varies. The deadline bounds preparation,
@@ -801,8 +836,9 @@ not total rendering time; compilation failure remains visible and retryable.
 The renderer directly owns one pinned path-tracing renderer and scene generator.
 It creates no unused low-resolution renderer, timed fade or empty-scene upload.
 The Model component and Render implementation load together when Model is first
-opened. Render still creates its scene and GPU resources only when enabled;
-retained callbacks never start a dynamic import across a development hot update.
+opened. Render creates its scene and GPU resources only when enabled and model
+imports have completed; retained callbacks never start a dynamic import across
+a development hot update.
 The retained scene also tracks its component implementation and view-ref identity,
 so a hot update disposes old native callbacks and rebuilds presentation without
 resetting the mounted component's drafts or external camera state.
@@ -1146,7 +1182,7 @@ comparisons.
 | `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                         | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                            |
 | `node --import tsx scripts/check-pcb-fill-worker-bundle.mjs` after `npm run build`                                                                                                                                         | Emitted production Worker bootstrap and chunks calculate changed copper and SVG paths in an isolated Node worker; no Electron, host service or native solver                                                 |
 | `tests/pcb-track-drag.test.ts`, `tests/pcb-track-drag-copper-key.test.ts`, `tests/pcb-track-shove.test.ts`, `tests/pcb-track-joint-drag.test.ts`                                                                           | Connected/free-angle geometry, contacts, owned-key reuse and bounds                                                                                                                                          |
-| `tests/layout-camera-pan-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                                                         |
+| `tests/layout-camera-frame-reserve.test.ts`, `node scripts/check-layout-compositor-ui.mjs`, `node scripts/check-layout-frame-reserve-ui.mjs`                                                                                 | Camera scheduling, finite frame coverage, exact rebase, picking, captures and pixels                                                                                                                         |
 | `tests/model-camera-clipping.test.ts`, `node scripts/check-model-compositing-ui.mjs`                                                                                                                                       | Model depth precision, transparent assembly compositing and native opacity preservation                                                                                                                      |
 | `tests/model-cad.test.ts`, `tests/model-cad-emc.test.ts`, `tests/model-cad-step.test.ts`, `tests/model-cad-kernel.test.ts`, `tests/model-cad-host.test.ts`, `tests/model-cad-scene.test.ts`, `tests/model-picking.test.ts` | CAD schemas/proof gates/EMC construction/native round trips/STEP/kernel transport/retained meshes/picking                                                                                                    |
 | `$env:OPENPE_TEST_MODEL_CAD = '1'; npm test -- tests/model-cad-kernel-native.test.ts`                                                                                                                                      | Opt-in real bundled CAD kernel preview/STEP agreement and empty-result rejection                                                                                                                             |
@@ -1178,10 +1214,20 @@ bounded outer-copper normal maps and unchanged native geometry/UVs are covered b
 `tests/model-studio-renderer.test.ts`. The browser-only
 `node scripts/check-model-render-ui.mjs` exercises the GPU path tracer and PNG
 output, camera/material preservation, IME, retained display state and release
-across toggles. Holding publication of the real linked shader verifies unchanged
+across toggles. Its fixed-seed fixture checks floor grain, 1/4/8-pixel residuals
+on metal/translucent/PCB surfaces and authored colour-edge contrast;
+`--high-dpi` checks the same fixture at 2× device scale with the bounded working
+image and unchanged export dimensions. Holding publication of the real linked shader verifies unchanged
 visible pixels and no repeated raster scene draws during preparation continuations.
+Delayed component/CAD fixtures verify import progress, no premature Render
+allocation, failed-import retry, hidden completion, export cancellation on view
+or document changes and successful export after import and convergence.
 Its fixed STEP fixture does not validate native model parsing,
 desktop integration or equivalence to a Blender render.
+`node scripts/check-model-render-guides-ui.mjs` separately checks real GPU guide
+depth/albedo through alpha-test apertures, preserved narrow HDR marks under
+first-surface optical guidance, synthetic-noise reduction and GPU release. Its
+synthetic radiance is functional filter coverage, not path-tracing quality evidence.
 `node scripts/check-model-render-hmr-ui.mjs` exercises real Next/Turbopack hot
 updates in a private source copy, including retired callbacks, Render toggles,
 preparation, hidden views and retained drafts/camera/native data. It never edits
@@ -1196,7 +1242,12 @@ and `tests/pcb-measurement.test.ts`.
 ### Interaction latency measurements
 
 Desktop measurements require [explicit authorization](../AGENTS.md#verification-and-delivery)
-and isolated profiles. The current built renderer can be checked with EMC Flyback:
+and isolated profiles. [benchmark-editor-experience.mjs](../scripts/benchmark-editor-experience.mjs)
+owns the executable input plans, clock pairing, budgets and report fields. Measured
+inputs wait for acknowledgement one at a time, with a 200 ms overload threshold,
+750 ms acknowledgement timeout and owned-process shutdown on failure. Latency
+samples wait 250 ms after each acknowledgement, outside the measured interval.
+Full Layout acceptance uses the built renderer and EMC Flyback:
 
 ```powershell
 $env:OPENPE_EXPERIENCE_OPERATIONS = 'layout-navigation,track-paced'
@@ -1205,18 +1256,36 @@ node scripts/benchmark-editor-experience.mjs layout-50ms
 ```
 
 The target defaults to 100 ms and accepts positive finite values. Acceptance
-requires the complete navigation and paced-track event plan, cold pickups, both
-pinned track cases, exact preview/commit geometry, native-file equality and undo.
-Each paired event and its calibrated API-invocation upper bound through the second
-animation frame must be strictly below the target. Missing or unpaired evidence
-cannot pass `layoutInteractionTarget.goalWithinTarget`. D/Enter keydown and keyup
-use separate API clocks. Inputs use one acknowledged call at a time, with 250 ms
-idle pacing outside the latency interval. This protocol does
-not measure sustained input load, physical-device latency or a GPU/display fence.
+requires the complete navigation and paced-track plans, cold pickups, both pinned
+track cases, exact preview/commit geometry, native-file equality and undo. Each
+paired event and calibrated API-invocation upper bound through the second animation
+frame must be strictly below the target. Missing or unpaired evidence cannot pass
+`layoutInteractionTarget.goalWithinTarget`; D/Enter keydown and keyup use separate
+API clocks.
 
-[benchmark-editor-experience.mjs](../scripts/benchmark-editor-experience.mjs) defines
-the executable event plan, cold-pickup setup, input pairing, budgets and report
-fields. The helper checks below verify these mechanisms without launching Electron.
+`OPENPE_EXPERIENCE_OPERATIONS=layout-navigation-latency` compares eight captured-pan
+moves with eight wheel zooms at the same pacing. Fit, positioning and capture
+pickup/release stay outside the samples. Ordered original inputs and expected
+camera poses must match. The report retains raw events and calibrated API timings,
+separating input queue, observed-event-to-camera-DOM and second-animation-frame
+intervals. Each expected pose must appear by the first RAF checkpoint registered
+at window bubble after the application handles that same event. Ordinary wheel
+idle rebasing and captured-pan lifetimes remain active.
+
+`OPENPE_EXPERIENCE_OPERATIONS=layout-zoom-frames` instead sends 24 wheel inputs
+(12 in, 12 out) with 16 ms idle after each acknowledgement. `zoomFrameCadence`
+retains bounded RAF timestamps and complete intervals between the first and last
+delivered wheel events, excluding setup and the idle tail. It reports average
+callback frequency, P95/maximum frame interval and counts above 33.3/50 ms.
+Camera restoration, unchanged dirty state and native-file equality are checked.
+
+DOM markers, second RAF and callback cadence are separate renderer measurements,
+not physical-device latency or GPU/display presentation. The bundled Chromium's
+[CDP input route](https://github.com/chromium/chromium/blob/156.0.8078.48/content/browser/devtools/protocol/input_handler.cc)
+waits for compositor synchronization before forwarding each wheel event; pointer
+moves skip that barrier. Synthetic queue differences cannot establish physical
+mouse latency. Neither optional sample replaces the complete acceptance plan,
+and acknowledgement pacing does not measure a fixed-rate continuous input stream.
 
 | Mode | Setting | Evidence and limits |
 | --- | --- | --- |
@@ -1233,6 +1302,8 @@ QPC timestamps and exact ordered DOM wheel events use the same second-RAF endpoi
 but remain separate from CDP acceptance and goal status. Profiles retain bounded
 partial evidence on failure. Diagnostics preserve the existing failure/overload
 guards and input budgets. Unset diagnostic/snapshot variables before an ordinary run.
+
+These helper checks verify the measurement mechanisms without launching Electron:
 
 | Browser-free check | Responsibility |
 | --- | --- |

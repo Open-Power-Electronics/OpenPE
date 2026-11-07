@@ -4,6 +4,7 @@ import { api } from '@/lib/bridge';
 import Select from './Select';
 import { AlertCircle } from 'lucide-react';
 import type { ReasoningEffort } from '@/lib/chat-stream';
+import { isProviderReasoningEffort } from '@/lib/agent-providers';
 
 type ModelOption = {
   id: string;
@@ -37,17 +38,31 @@ export default function ModelSelect({
     models: [],
   });
   const [error, setError] = useState('');
-  const models = catalog.provider === provider ? catalog.models : [];
+  const models = available && catalog.provider === provider ? catalog.models : [];
   const currentModel =
     value || (catalog.provider === provider ? catalog.defaultModel : '') || observedModel;
   const selected = models.find((m) => m.id === currentModel);
   useEffect(() => {
     const control = new AbortController();
     setError('');
+    setCatalog({ provider: '', models: [] });
     if (!available) return;
     void api(`models?provider=${encodeURIComponent(provider)}`, { signal: control.signal })
       .then((r) => r.json())
       .then((result) => {
+        if (
+          !Array.isArray(result.models) ||
+          result.models.some(
+            (item: ModelOption) =>
+              !item ||
+              typeof item.id !== 'string' ||
+              typeof item.label !== 'string' ||
+              (item.efforts !== undefined &&
+                (!Array.isArray(item.efforts) ||
+                  item.efforts.some((effort) => !isProviderReasoningEffort(provider, effort)))),
+          )
+        )
+          throw new Error('The agent returned an invalid model catalog.');
         if (!control.signal.aborted)
           setCatalog({ provider, models: result.models, defaultModel: result.defaultModel });
       })
@@ -67,7 +82,7 @@ export default function ModelSelect({
         placeholder={
           available && catalog.provider !== provider && !error ? 'Loading model…' : 'Choose model'
         }
-        disabled={disabled || (!models.length && !currentModel)}
+        disabled={disabled || !available || (!models.length && !currentModel)}
         compact
         showChevron={false}
         options={[

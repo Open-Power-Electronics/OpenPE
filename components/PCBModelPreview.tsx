@@ -147,9 +147,11 @@ type ModelLoadingProgress = { completed: number; total: number; reference: strin
 function ModelLoadingStatus({
   progress,
   update,
+  waitingForRender = false,
 }: {
   progress: RefObject<ModelLoadingProgress>;
   update: RefObject<(value: ModelLoadingProgress) => void>;
+  waitingForRender?: boolean;
 }) {
   const [value, setValue] = useState(progress.current);
   useLayoutEffect(() => {
@@ -159,8 +161,13 @@ function ModelLoadingStatus({
     };
   }, [update]);
   return (
-    <span role="status" className="pcb-model-status">
-      Loading components · {value.completed}/{value.total}
+    <span
+      role="status"
+      className="pcb-model-status"
+      data-model-render-status={waitingForRender || undefined}
+    >
+      {waitingForRender ? 'Waiting for model import · components' : 'Loading components'} ·{' '}
+      {value.completed}/{value.total}
       {value.reference && ` · ${value.reference}`}
     </span>
   );
@@ -419,6 +426,9 @@ function PCBModelPreview({
   const applyProjection = useRef(() => {});
   const [renderEnabled, setRenderEnabled] = useState(false);
   const [renderLoading, setRenderLoading] = useState(false);
+  const [renderImportStatus, setRenderImportStatus] = useState<
+    '' | 'components' | 'cad' | 'component-error' | 'cad-error'
+  >('');
   const [renderError, setRenderError] = useState('');
   const [renderProgress, setRenderProgress] = useState({ samples: 0, target: 0 });
   const renderEnabledRef = useRef(renderEnabled);
@@ -784,6 +794,23 @@ function PCBModelPreview({
     let studioPreparing = false;
     let studioComplete = false;
     let renderEpoch = 0;
+    let componentsSettled = false;
+    let componentImportFailed = false;
+    let cadImportError = '';
+    let updatingCad = false;
+    let modelImportUpdate = false;
+    let syncRenderImports = () => {};
+    // Publishing the meshes an export is already waiting for is not a camera
+    // or document edit. Other redraws still cancel an in-flight export.
+    const publishModelImport = (update: () => void) => {
+      const previous = modelImportUpdate;
+      modelImportUpdate = true;
+      try {
+        update();
+      } finally {
+        modelImportUpdate = previous;
+      }
+    };
     const disposeRenderer = () => {
       if (!renderer || rendererDisposed) return;
       rendererDisposed = true;
@@ -888,18 +915,23 @@ function PCBModelPreview({
     setCadGeometryErrors({ document: '', preview: '' });
     const cadScene = createModelCadScene(cadGroup, () => cadPaint.dispose(), false, {
       active: () => activeRef.current,
-      onChange: () => {
-        measurement.clear();
-        explodedScene.apply(explodedRef.current);
-        orderAssembly(cadGroup);
-        updatePreviewVisibility();
-        paintCad.current();
-        if (host.current) host.current.dataset.cadObjects = String(cadGroup.children.length);
-        updateAnnotationView.current();
-        redraw.current();
+      onChange: () =>
+        publishModelImport(() => {
+          measurement.clear();
+          explodedScene.apply(explodedRef.current);
+          orderAssembly(cadGroup);
+          updatePreviewVisibility();
+          syncRenderImports();
+          paintCad.current();
+          if (host.current) host.current.dataset.cadObjects = String(cadGroup.children.length);
+          updateAnnotationView.current();
+          redraw.current();
+        }),
+      onError: (message) => {
+        cadImportError = message;
+        setCadGeometryErrors((previous) => ({ ...previous, document: message }));
+        syncRenderImports();
       },
-      onError: (message) =>
-        setCadGeometryErrors((previous) => ({ ...previous, document: message })),
     });
     const previewScene = createModelCadScene(previewGroup, () => {}, true, {
       active: () => activeRef.current,
@@ -914,13 +946,20 @@ function PCBModelPreview({
       setCadGeometryErrors({ document: '', preview: '' });
       cadScene.retry();
       previewScene.retry();
+      syncRenderImports();
     };
     paintCad.current = () => {
       cadPaint.update(new Set(cadState.current.selectedBodyIds), cadState.current.darkCanvas);
       redraw.current();
     };
     updateCad.current = () => {
-      cadScene.update(cadState.current.modelCad?.objects ?? []);
+      updatingCad = true;
+      try {
+        cadScene.update(cadState.current.modelCad?.objects ?? []);
+      } finally {
+        updatingCad = false;
+      }
+      syncRenderImports();
       explodedScene.apply(explodedRef.current);
       orderAssembly(cadGroup);
       cadGroup.visible = cadState.current.cadVisible;
@@ -946,8 +985,11 @@ function PCBModelPreview({
     completedCheckBasis.current = null;
     setFailed(false);
     setReady(false);
+    loadingProgress.current = { completed: 0, total: board.footprints.length, reference: '' };
+    updateLoadingProgress.current(loadingProgress.current);
     setRenderProgress((previous) => ({ ...previous, samples: 0 }));
     setRenderLoading(renderEnabledRef.current);
+    setRenderImportStatus(renderEnabledRef.current ? 'components' : '');
     const waitForActive = async () => {
       if (activeRef.current || control.signal.aborted) return;
       await new Promise<void>((resolve) => {
@@ -1367,9 +1409,18 @@ function PCBModelPreview({
         renderEnabledRef.current = false;
         setRenderEnabled(false);
         setRenderLoading(false);
+        setRenderImportStatus('');
         setRenderError(
           `Render failed: ${error instanceof Error ? error.message : String(error)}. Turn Render on to retry.`,
         );
+      };
+      const pendingRenderImport = () => {
+        if (!componentsSettled) return 'components';
+        if (componentImportFailed) return 'component-error';
+        if (cadImportError) return 'cad-error';
+        if (updatingCad || cadGroup.children.some((object) => object.userData.modelCadPending))
+          return 'cad';
+        return '';
       };
       applyRenderMode.current = () => {
         if (control.signal.aborted || rendererDisposed || !renderer) return;
@@ -1379,6 +1430,22 @@ function PCBModelPreview({
           studioPreparing = false;
           studioComplete = false;
           setRenderLoading(false);
+          setRenderImportStatus('');
+          redraw.current();
+          updateAnnotationView.current();
+          return;
+        }
+        const pending = pendingRenderImport();
+        setRenderImportStatus(pending);
+        if (pending) {
+          // Build the path-tracing scene only from a complete model. Imported
+          // meshes can arrive after board shaders or after a later CAD edit.
+          studio?.dispose();
+          studio = undefined;
+          studioPreparing = false;
+          studioComplete = false;
+          setRenderProgress({ samples: 0, target: MODEL_RENDER_SAMPLES });
+          setRenderLoading(pending === 'components' || pending === 'cad');
           redraw.current();
           updateAnnotationView.current();
           return;
@@ -1397,6 +1464,7 @@ function PCBModelPreview({
           redraw.current();
         }
       };
+      syncRenderImports = () => publishModelImport(() => applyRenderMode.current());
       const updateReferencePlane = () =>
         groundScene.update({
           bounds: groundBounds,
@@ -1540,7 +1608,7 @@ function PCBModelPreview({
       };
       const render = () => {
         viewDirty = true;
-        renderEpoch++;
+        if (!modelImportUpdate) renderEpoch++;
         if (renderEnabledRef.current) setExportStatus('');
         studio?.invalidate();
         studioComplete = false;
@@ -1555,6 +1623,20 @@ function PCBModelPreview({
       const waitForRender = async () => {
         requireCaptureView();
         if (!renderEnabledRef.current) return;
+        const importEpoch = renderEpoch;
+        while (pendingRenderImport()) {
+          const pending = pendingRenderImport();
+          if (pending === 'component-error' || pending === 'cad-error')
+            throw new Error(
+              'Model import failed. Retry the failed models before exporting Render.',
+            );
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          requireCaptureView();
+          if (!renderEnabledRef.current || importEpoch !== renderEpoch)
+            throw new Error(
+              'The render changed or was stopped. Try exporting the current view again.',
+            );
+        }
         if (!studio) {
           throw new Error(
             'The render changed or was stopped. Try exporting the current view again.',
@@ -2237,8 +2319,10 @@ function PCBModelPreview({
             clippingBoundsDirty.current = true;
             const estimate = estimates.get(f.id);
             if (estimate) estimate.visible = false;
-            highlightModels.current();
-            render();
+            publishModelImport(() => {
+              highlightModels.current();
+              render();
+            });
           }
           if (!assigned.length) {
             issues.push({
@@ -2254,6 +2338,7 @@ function PCBModelPreview({
             if (control.signal.aborted) return;
             const index = official.findIndex((m) => modelKey(m.path) === modelKey(model.path));
             if (index < 0 && !projectSource) {
+              componentImportFailed = true;
               issues.push({
                 message: `${name}: 3D model unavailable`,
                 footprintId: f.id,
@@ -2311,29 +2396,36 @@ function PCBModelPreview({
             if (estimate) {
               estimate.visible = false;
             }
-            render();
+            publishModelImport(render);
           }
         } catch (e) {
-          if (!control.signal.aborted)
+          if (!control.signal.aborted) {
+            componentImportFailed = true;
             issues.push({
               message: `${name}: ${(e as Error).message}`,
               footprintId: f.id,
               severity: 'error',
             });
+          }
         } finally {
           reportProgress(completed + 1);
         }
       }
       if (!control.signal.aborted) {
+        componentsSettled = true;
         completedCheckBasis.current = { board, schematic };
         setWarnings(issues);
         setStatus('');
-        render();
+        syncRenderImports();
+        publishModelImport(render);
       }
     })().catch((e) => {
       if (!control.signal.aborted) {
+        componentsSettled = true;
+        componentImportFailed = true;
         setStatus((e as Error).message);
         setFailed(true);
+        syncRenderImports();
       }
     });
     return () => {
@@ -2537,6 +2629,14 @@ function PCBModelPreview({
           </button>
         </span>
       )}
+      {renderEnabled && renderImportStatus === 'component-error' && !failed && (
+        <span className="model-error-status" role="alert">
+          <span>Component model import failed. Render will continue after the models load.</span>
+          <button className="secondary" onClick={() => setRetry((n) => n + 1)}>
+            Retry component models
+          </button>
+        </span>
+      )}
     </>
   );
   const renderWorking =
@@ -2551,6 +2651,22 @@ function PCBModelPreview({
   ) : exportStatus ? (
     <span className="pcb-model-status" role="status">
       {exportStatus}
+    </span>
+  ) : renderEnabled && renderImportStatus === 'components' ? (
+    <ModelLoadingStatus
+      progress={loadingProgress}
+      update={updateLoadingProgress}
+      waitingForRender
+    />
+  ) : renderEnabled && renderImportStatus ? (
+    <span
+      className="pcb-model-status"
+      data-model-render-status
+      role={renderImportStatus === 'cad' ? 'status' : 'alert'}
+    >
+      {renderImportStatus === 'cad'
+        ? 'Waiting for CAD model import…'
+        : 'Render blocked by model import. Retry the failed models to continue.'}
     </span>
   ) : renderWorking ? (
     <span className="pcb-model-status" data-model-render-status role="status">
@@ -3124,7 +3240,10 @@ function PCBModelPreview({
             {(readOnly || !statusBar) && statusFeedback}
             {errorTarget ? (
               createPortal(errorFeedback, errorTarget)
-            ) : failed || cadGeometryErrors.document || cadGeometryErrors.preview ? (
+            ) : failed ||
+              cadGeometryErrors.document ||
+              cadGeometryErrors.preview ||
+              (renderEnabled && renderImportStatus === 'component-error') ? (
               <div className="model-inline-errors">{errorFeedback}</div>
             ) : null}
           </div>

@@ -690,9 +690,6 @@ button:where(:hover:not(:disabled)) {
 .brand-mark img {
   display: block;
 }
-.version {
-  border-left: 1px solid var(--line);
-}
 .breadcrumb strong {
   color: var(--text-strong);
 }

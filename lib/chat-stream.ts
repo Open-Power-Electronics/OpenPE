@@ -13,7 +13,7 @@ export type ChatTimings = {
   completedMs?: number;
 };
 export type ChatOutcome = 'completed' | 'failed' | 'cancelled';
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type { ReasoningEffort } from './agent-providers';
 export type AgentCapabilities = {
   query(
     name: string,

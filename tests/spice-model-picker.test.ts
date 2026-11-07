@@ -66,7 +66,7 @@ test('every external model in the ten actual Home schematics is declared in its 
 
 test('EMC native component bindings open their actual project library and preserve the compiled pin mapping', async () => {
   const { readNativeProject } = require('../electron/native-project.cjs');
-  const filename = path.resolve('recent/emc-flyback/emc-flyback.kicad_pro');
+  const filename = path.resolve('project/emc-flyback/emc-flyback.kicad_pro');
   const project = projectFromNativeFiles(await readNativeProject(filename));
   const assignments = {
     Q1: ['EMC_IRF520N', 'EMC_IRF520N', '2=D 1=G 3=S'],
@@ -390,7 +390,7 @@ test('automatic inspection lists the current project library without a picker or
 
 test('automatic EMC library inspection returns all three top-level controller models', async () => {
   const grants = new FileGrants();
-  const fileId = grants.create(path.resolve('recent/emc-flyback/emc-flyback.kicad_pro'));
+  const fileId = grants.create(path.resolve('project/emc-flyback/emc-flyback.kicad_pro'));
   const handlers = new Map<string, (...args: any[]) => any>();
   registerSpiceModelPicker({
     ipcMain: { handle: (name: string, handler: any) => handlers.set(name, handler) },

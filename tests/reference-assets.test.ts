@@ -19,9 +19,10 @@ import {
 
 const root = 'resources/example-catalog/footprints';
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
-test('examples and sibling recent contain the ten self-contained projects and pinned assets', async () => {
-  assert.equal(existsSync('examples/recent'), false);
-  assert.deepEqual(readdirSync('recent'), ['emc-flyback']);
+test('examples and sibling project contain the ten self-contained projects and pinned assets', async () => {
+  assert.equal(existsSync('examples/project'), false);
+  assert.equal(existsSync('recent'), false);
+  assert.deepEqual(readdirSync('project'), ['emc-flyback']);
   const stems = manifest.examples.map((entry) => entry.file).sort();
   const rootEntries = readdirSync('examples', { withFileTypes: true });
   assert.deepEqual(

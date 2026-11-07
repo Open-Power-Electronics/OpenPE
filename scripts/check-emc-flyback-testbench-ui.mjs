@@ -8,7 +8,7 @@ import { projectFromNativeFiles, serializeProject } from '../server/project-form
 // Isolated browser with the actual native project and real Core; no Electron or solver.
 const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
 const source = serializeProject(
-  projectFromNativeFiles(await readNativeProject('recent/emc-flyback/emc-flyback.kicad_pro')),
+  projectFromNativeFiles(await readNativeProject('project/emc-flyback/emc-flyback.kicad_pro')),
 );
 const bundle = await build({
   stdin: {

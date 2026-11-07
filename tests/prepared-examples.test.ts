@@ -52,12 +52,12 @@ test('packaging retains the original examples tree including documents and optio
     examples,
     'Desktop packaging includes the same examples directory used in development.',
   );
-  const recent = configuration.build.extraResources.find(
+  const projectResources = configuration.build.extraResources.find(
     (entry: { from: string; to: string }) =>
-      entry.from === 'recent' && entry.to === 'recent-native',
+      entry.from === 'project' && entry.to === 'project-native',
   );
-  assert.ok(recent);
-  assert.deepEqual(recent.filter, examples.filter);
+  assert.ok(projectResources);
+  assert.deepEqual(projectResources.filter, examples.filter);
   const includes = (file: string) =>
     examples.filter
       .filter((pattern: string) => !pattern.startsWith('!'))

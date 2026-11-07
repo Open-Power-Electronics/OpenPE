@@ -120,8 +120,16 @@ try {
       return route.fulfill({
         json: {
           models: [
-            { id: `fixture/${provider}`, label: `fixture/${provider}` },
-            { id: `fixture/${provider}-other`, label: 'Codex alternate' },
+            {
+              id: `fixture/${provider}`,
+              label: `fixture/${provider}`,
+              efforts: ['low', 'medium', 'high'],
+            },
+            {
+              id: `fixture/${provider}-other`,
+              label: 'Codex alternate',
+              efforts: ['low', 'medium', 'high'],
+            },
           ],
           defaultModel: null,
         },
@@ -253,9 +261,8 @@ try {
   assert.deepEqual(state.models, expectedModels);
   await selectProvider(agentProviders.find((provider) => provider.id === 'cursor'));
   await composer.fill('Retain this draft while the CLI is missing');
-  await button('Send message').click();
-  await settings.waitFor();
-  await settings.getByRole('button', { name: 'Done', exact: true }).click();
+  assert.equal(await button('Send message').isDisabled(), true);
+  await composer.press('Enter');
   assert.equal(await composer.inputValue(), 'Retain this draft while the CLI is missing');
   assert.equal(chats, 0, 'Missing Agents never send provider requests.');
   assert.ok(modelRequests.every((provider) => provider === 'codex'));

@@ -9,7 +9,7 @@ const bundle = await build({
       import{flushLayoutCamera}from'./lib/layout-camera-presentation';
       import{captureLayoutPNG}from'./lib/drawing-export';
       import{annotationSelectionBounds,captureAnnotationImage}from'./lib/annotation-screenshot';
-      Object.assign(window,{bindCamera:(svg,options)=>createLayoutCameraApplicator(svg,{...options,panFrameReserve:options?.compositor===true}),flushCamera:flushLayoutCamera,
+      Object.assign(window,{bindCamera:createLayoutCameraApplicator,flushCamera:flushLayoutCamera,
         createLayoutCamera,zoomLayoutView,rebaseLayoutCameraPoint,
         captureLayoutPNG,annotationSelectionBounds,captureAnnotationImage});`,
     resolveDir: process.cwd(),
@@ -775,7 +775,12 @@ try {
     };
     try {
       for (const frameScheduled of [false, true]) {
-        apply = window.bindCamera(b, { fixedTargets: true, compositor: true, frameScheduled });
+        apply = window.bindCamera(b, {
+          fixedTargets: true,
+          compositor: true,
+          frameScheduled,
+          frameReserve: true,
+        });
         const camera = window.createLayoutCamera({ x: 0, y: 0, width: 80 });
         apply(camera.getSnapshot(), size);
         const stop = camera.subscribe(() => apply(camera.getSnapshot(), size));
@@ -851,7 +856,12 @@ try {
         heldPanCases++;
 
         const previous = apply;
-        apply = window.bindCamera(b, { fixedTargets: true, compositor: true, frameScheduled });
+        apply = window.bindCamera(b, {
+          fixedTargets: true,
+          compositor: true,
+          frameScheduled,
+          frameReserve: true,
+        });
         apply({ x: 20, y: 21, width: 80 }, size);
         const successorView = b.outerHTML;
         let obsoleteUpdate = false;
@@ -885,128 +895,149 @@ try {
       window.setTimeout = nativeTimeout;
       window.clearTimeout = nativeClearTimeout;
     }
-    // Exercise the production opt-in's actual SVG clipping, CTM and capture
-    // lifecycle, in addition to the shared compositor checks above.
-    // Earlier mutation cases intentionally changed only one fixture's strokes
-    // and hit nodes. Begin this independent pixel comparison with equal inputs.
     reference.dispose();
-    a.innerHTML = markup('reserve-native').match(/<svg[^>]*>([\s\S]*)<\/svg>/)[1];
-    b.innerHTML = markup('reserve-owned').match(/<svg[^>]*>([\s\S]*)<\/svg>/)[1];
-    apply = window.bindCamera(b, { fixedTargets: true, compositor: true });
+    // Camera-only zoom must leave transparent via/artwork geometry untouched
+    // until native picking settles, while visible screen-space paint stays exact.
+    a.innerHTML = markup('deferred-native').match(/<svg[^>]*>([\s\S]*)<\/svg>/)[1];
+    b.innerHTML = markup('deferred-camera').match(/<svg[^>]*>([\s\S]*)<\/svg>/)[1];
+    for (const svg of [a, b]) {
+      svg.querySelector('[data-layout-via-target]').setAttribute('data-hit', 'via');
+      svg
+        .querySelector('[data-layout-drawing]')
+        .insertAdjacentHTML(
+          'beforeend',
+          '<g data-layout-graphic-target=".25"><line data-hit="graphic" x1="48" y1="34" x2="60" y2="34" stroke="transparent" stroke-width=".25"/></g>',
+        );
+    }
     reference = window.bindCamera(a, { fixedTargets: true });
-    const initialReserveView = { x: 0, y: 0, width: 80 };
-    apply(initialReserveView, size);
-    reference(initialReserveView, size);
-    const frameNodes = [
-      ...b.querySelectorAll(
-        '[data-layout-background], [data-layout-grid], [data-layout-interaction-surface]',
-      ),
-    ];
-    check(frameNodes.length === 3, 'The pan reserve omitted a viewport frame.');
-    const frameValues = () =>
-      frameNodes.map((node) =>
-        ['x', 'y', 'width', 'height'].map((name) => Number(node.getAttribute(name))),
-      );
-    const exactFrames = (view) =>
-      frameValues().every((values) =>
-        values.every(
-          (value, index) =>
-            Math.abs(value - [view.x, view.y, view.width, view.width / 1.6][index]) < 1e-9,
-        ),
-      );
-    const reservePan = apply.beginPan();
-    const reservedFrames = frameValues();
-    check(
-      reservedFrames.every((values) =>
-        values.every((value, index) => value === [-40, -25, 160, 100][index]),
-      ),
-      'A held pan did not prepare the finite two-viewport reserve.',
-    );
-    const reservePattern = b.querySelector('[data-layout-grid-pattern]').outerHTML;
-    reservePan.update(() => apply({ x: 1, y: 2, width: 80 }, size, false));
-    await nextFrame();
-    reference({ x: 1, y: 2, width: 80 }, size);
-    check(
-      JSON.stringify(frameValues()) === JSON.stringify(reservedFrames),
-      'An interior pan rewrote its reserved viewport frames.',
-    );
-    check(matrixError() < 0.0002, 'Reserved frames changed the visible world mapping.');
-    check(
-      b.querySelector('[data-layout-grid-pattern]').outerHTML === reservePattern,
-      'A reserved pan changed world grid metrics.',
-    );
-    const trackPoint = new DOMPoint(30, 20).matrixTransform(b.getScreenCTM());
-    const trackHit = document.elementFromPoint(trackPoint.x, trackPoint.y);
-    check(
-      b.contains(trackHit) &&
-        trackHit.closest('[data-selection-id]')?.dataset.selectionId === 'track',
-      'Reserved frames displaced a real track hit.',
-    );
-    const hostBounds = host.getBoundingClientRect();
-    check(
-      !b.contains(document.elementFromPoint(hostBounds.left - 1, hostBounds.top + 100)),
-      'Reserved frame overflow intercepted input outside the clipped host.',
-    );
-    const crossed = { x: 50, y: -60, width: 80 };
-    reservePan.update(() => apply(crossed, size, false));
-    await nextFrame();
-    reference(crossed, size);
-    check(
-      b.getAttribute('viewBox') === '50 -60 80 50' && !b.style.transform,
-      'A pan crossed its reserve before performing an exact native rebase.',
-    );
-    check(
-      frameValues().every((values) =>
-        values.every((value, index) => value === [10, -85, 160, 100][index]),
-      ),
-      'Reserve crossing did not recenter bounded frames.',
-    );
-    check(matrixError() < 0.0002, 'Reserve crossing changed native world coordinates.');
-    const reservePNG = await window.captureLayoutPNG(b, { minX: 0, minY: 0, maxX: 80, maxY: 50 });
-    nativeHost.style.visibility = 'visible';
-    const nativeReservePNG = await window.captureLayoutPNG(a, {
-      minX: 0,
-      minY: 0,
-      maxX: 80,
-      maxY: 50,
+    apply = window.bindCamera(b, {
+      fixedTargets: true,
+      compositor: true,
+      frameScheduled: true,
+      frameReserve: true,
     });
-    check(exactFrames(crossed), 'PNG capture retained expanded viewport frames.');
+    const baseHitPose = { x: 0, y: 0, width: 80 };
+    reference(baseHitPose, size);
+    apply(baseHitPose, size);
+    const viaHit = b.querySelector('[data-layout-via-target]');
+    const graphicHit = b.querySelector('[data-layout-graphic-target] line');
+    const airwirePaint = b.querySelector('[data-hit="airwire"]');
+    const hitMutations = [];
+    const hitObserver = new MutationObserver((records) => hitMutations.push(...records));
+    hitObserver.observe(viaHit, { attributes: true, attributeFilter: ['r'] });
+    hitObserver.observe(graphicHit, { attributes: true, attributeFilter: ['stroke-width'] });
+    const takeHitMutations = () => [...hitMutations.splice(0), ...hitObserver.takeRecords()];
+    const exactHitMetrics = (view, width = size.width) =>
+      Math.abs(Number(viaHit.getAttribute('r')) - Math.max(0.3, (view.width / width) * 4)) <
+        1e-12 &&
+      Math.abs(
+        Number(graphicHit.getAttribute('stroke-width')) - Math.max(0.25, (view.width / width) * 6),
+      ) < 1e-12;
+    const deferredWidths = [72, 64, 60];
+    for (const width of deferredWidths) {
+      apply({ ...baseHitPose, width }, size);
+      await nextFrame();
+      check(
+        b.hasAttribute('data-layout-camera-view') && takeHitMutations().length === 0,
+        'Transient zoom rewrote transparent via or artwork hit geometry.',
+      );
+      check(
+        Math.abs(Number(airwirePaint.getAttribute('stroke-width')) * (80 / width) - 2) < 1e-12,
+        'Deferring hit targets changed visible non-scaling airwire compensation.',
+      );
+    }
+    const finalHitPose = { ...baseHitPose, width: deferredWidths.at(-1) };
+    reference(finalHitPose, size);
+    window.flushCamera(b);
+    const settledHitWrites = takeHitMutations().length;
     check(
-      reservePNG.dataUrl === nativeReservePNG.dataUrl,
-      'PNG capture changed exported pixels: ' +
-        JSON.stringify({
-          pixelsEqual: reservePNG.dataUrl === nativeReservePNG.dataUrl,
-          framesExact: exactFrames(crossed),
-          frames: frameValues(),
-          nativeStyle: a.getAttribute('style'),
-          actualStyle: b.getAttribute('style'),
-          nativeBox: a.getAttribute('viewBox'),
-          actualBox: b.getAttribute('viewBox'),
-        }),
+      settledHitWrites === 2 && exactHitMetrics(finalHitPose) && !b.style.transform,
+      'Explicit flush did not update each deferred hit target once to the latest pose.',
     );
-    const reserveAnnotation = await window.captureAnnotationImage(b, ['track'], annotationBounds);
-    const nativeReserveAnnotation = await window.captureAnnotationImage(
-      a,
-      ['track'],
-      annotationBounds,
-    );
-    check(exactFrames(crossed), 'Annotation capture retained expanded viewport frames.');
+    const hitEdgeSamples = [
+      ...[-4.05, -3.95, 3.95, 4.05].map((offset) => ({ x: 35, y: 28, offset })),
+      ...[-3.05, -2.95, 2.95, 3.05].map((offset) => ({ x: 52, y: 34, offset })),
+    ].map(({ x, y, offset }) => {
+      const screen = new DOMPoint(x, y).matrixTransform(a.getScreenCTM());
+      return { x: screen.x, y: screen.y + offset };
+    });
+    const pickHitEdges = () =>
+      hitEdgeSamples.map(({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('data-hit'));
+    host.style.visibility = 'hidden';
+    nativeHost.style.visibility = 'visible';
+    const expectedHitEdges = pickHitEdges();
+    nativeHost.style.visibility = 'hidden';
+    host.style.visibility = 'visible';
+    const actualHitEdges = pickHitEdges();
     check(
-      reserveAnnotation.dataUrl === nativeReserveAnnotation.dataUrl,
-      'Annotation capture changed pixels for identical native inputs.',
+      expectedHitEdges[1] === 'via' &&
+        expectedHitEdges[2] === 'via' &&
+        expectedHitEdges[0] !== 'via' &&
+        expectedHitEdges[3] !== 'via' &&
+        expectedHitEdges[5] === 'graphic' &&
+        expectedHitEdges[6] === 'graphic' &&
+        expectedHitEdges[4] !== 'graphic' &&
+        expectedHitEdges[7] !== 'graphic' &&
+        actualHitEdges.every((value, index) => value === expectedHitEdges[index]),
+      'Settled via and artwork screen-space hit boundaries differ from the native camera.',
     );
-    reservePan.release();
-    const jitterPan = apply.beginPan();
+    const idleHitPose = { ...baseHitPose, width: 70 };
+    apply(idleHitPose, size);
+    await nextFrame();
+    check(takeHitMutations().length === 0, 'The idle case changed hit targets before settling.');
+    await new Promise((resolve) => setTimeout(resolve, 150));
     check(
-      !exactFrames(crossed) && !b.style.transform,
-      'The no-motion reserve case did not remain on its native camera.',
+      !b.style.transform && exactHitMetrics(idleHitPose) && takeHitMutations().length === 2,
+      'Idle native rebasing left deferred via or artwork hit geometry stale.',
     );
-    jitterPan.release();
+    apply({ ...baseHitPose, width: 65 }, size);
+    await nextFrame();
+    apply.refreshTracks();
     check(
-      exactFrames(crossed) && !b.style.transform,
-      'Releasing a no-motion pan retained expanded viewport frames.',
+      exactHitMetrics({ ...baseHitPose, width: 65 }) && !b.style.transform,
+      'Track binding refresh did not settle unrelated deferred hit targets.',
+    );
+    host.style.transform = 'skewX(12deg)';
+    apply(baseHitPose, size);
+    await nextFrame();
+    check(
+      exactHitMetrics(baseHitPose) && !b.style.transform,
+      'Foreign-transform fallback left hit padding deferred.',
+    );
+    host.style.removeProperty('transform');
+    apply({ ...baseHitPose, width: 75 }, size);
+    await nextFrame();
+    host.style.width = '810px';
+    const resizedHitPose = { ...baseHitPose, width: 81 };
+    apply(resizedHitPose, { width: 810, height: 500 });
+    check(
+      exactHitMetrics(resizedHitPose, 810) && !b.style.transform,
+      'Resize fallback did not apply the latest native hit padding immediately.',
     );
     apply.dispose();
+    host.style.removeProperty('width');
+    apply = window.bindCamera(b, { fixedTargets: true, compositor: true, frameScheduled: true });
+    apply(baseHitPose, size);
+    apply({ ...baseHitPose, width: 70 }, size);
+    await nextFrame();
+    const hitSuccessor = window.bindCamera(b, {
+      fixedTargets: true,
+      compositor: true,
+      frameScheduled: true,
+    });
+    const successorHitPose = { ...baseHitPose, width: 90 };
+    hitSuccessor(successorHitPose, size);
+    apply.dispose();
+    check(exactHitMetrics(successorHitPose), 'Retired hit work overwrote its successor binding.');
+    const disposedHitPose = { ...baseHitPose, width: 72 };
+    hitSuccessor(disposedHitPose, size);
+    await nextFrame();
+    hitSuccessor.dispose();
+    check(
+      exactHitMetrics(disposedHitPose) && !b.style.transform,
+      'Disposal discarded the latest deferred hit padding.',
+    );
+    hitObserver.disconnect();
     reference.dispose();
     return {
       poses: poses.length,
@@ -1025,7 +1056,13 @@ try {
       refreshBoundsReads,
       bodyRefreshSamples,
       heldPanCases,
-      panReserve: 'coverage, CTM, hit clipping, grid, crossing, PNG, annotation and jitter passed',
+      deferredHitTargets: {
+        zoomFrames: deferredWidths.length,
+        transientWrites: 0,
+        settledWrites: settledHitWrites,
+        boundarySamples: hitEdgeSamples.length,
+        lifecycle: 'idle, refresh, foreign transform, resize, replacement and disposal passed',
+      },
     };
   });
   assert.deepEqual(errors, []);

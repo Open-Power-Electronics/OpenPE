@@ -1020,7 +1020,7 @@ type ChatRequest = {
   prompt: string; // Nonblank, at most 16,000 characters.
   context: unknown; // Required; optional layout/workspace observations are validated.
   history: unknown[]; // Required.
-  effort?: 'low' | 'medium' | 'high';
+  effort?: 'none' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   model?: string; // Validated provider model identifier, at most 200 characters.
   sessionId: string; // Required; [a-zA-Z0-9-]{1,80}.
   capabilities?: boolean;
@@ -1030,6 +1030,36 @@ type ChatRequest = {
 ```
 
 The client captures the current project, sheet fingerprint and optional `WorkspaceContext` at submission. `AgentAnnotation` is the bounded immutable screenshot/selection structure in [`lib/agent-annotations.ts`](../lib/agent-annotations.ts); up to four annotations are accepted per message. Codex/Claude capability support is advertised separately from the context-only DeepSeek/Pi transports. ACP images require the session's advertised image support; unsupported attachments fail visibly. DeepSeek model discovery reads ACP session metadata, with no effort selector. Cursor rejects execution/model discovery before a conversation starts. Provider credentials, arbitrary executable paths and shell commands are not request fields.
+
+Reasoning effort values are native provider settings, defined once in
+[`lib/agent-providers.ts`](../lib/agent-providers.ts) and generated for the service.
+Chat admission rejects values outside the selected provider's protocol: Codex
+accepts `none/minimal/low/medium/high/xhigh/max/ultra`, Claude accepts
+`low/medium/high/xhigh/max`, and Pi accepts `off/minimal/low/medium/high/xhigh/max`.
+DeepSeek and Cursor accept no effort field. `none` and `off` are distinct values,
+never translated aliases. These sets bound the protocols; each model can support
+fewer values. Model discovery returns `efforts?: ReasoningEffort[]` per model;
+an empty array means no effort control, while an omitted field means its support
+is unknown. New workspace preferences use `medium`; recovery retains any valid
+explicit preference without migration, including one not supported by the
+currently selected provider. The composer resolves it against the selected
+model as defined in [Design](../DESIGN.md#agent-conversation), and the submitted
+native value reaches the provider unchanged.
+
+Codex discovery preserves its `supportedReasoningEfforts`. Claude discovery
+uses a bounded, initialization-only `--bare` control session with empty tools
+and MCP configuration and no session persistence, so hooks, plugins and prompts
+cannot run. It reads only returned model metadata and supported effort levels;
+an unsupported CLI fails visibly. This catalog does not establish authentication,
+account entitlements, configured alias overrides or managed-policy limits.
+Pi derives native levels from each model's `reasoning` and `thinkingLevelMap`,
+including explicit `xhigh`/`max` mappings and disabled levels; non-reasoning
+models expose only `off`. Codex/Pi verify the requested effort against the
+initialized session before submitting a prompt, rejecting silent changes.
+Claude receives an explicit effort through both `--effort` and the spawned
+child's `CLAUDE_CODE_EFFORT_LEVEL`, without changing the parent environment or
+provider configuration. Its model-only `agent-info` does not claim an effective
+effort that the CLI has not reported.
 
 After validating the complete workspace, the provider prompt uses semantic context: identities/counts for all sheets; active-sheet components, simulation fields, pin definitions and geometry-derived connections; selected-object geometry; PCB/Model counts and view-specific placement/solid summaries. Connection pins are `[reference,pinNumber]` tuples. Collections report `total`, `items` and optional `truncated:true`, capped at 256 entries with selected components/connections first. Native file/Source draft text, duplicate circuit data, artwork, copper geometry and preservation metadata are omitted. Source reports only `pending`, `error` and `draftCharacters`; UI, reviewed datasheets and bounded simulation/thermal observations remain. The summary is not a writable project document or rule-check evidence. Prompts use `core.state` for revisions; live `schematic.get`, `layout.get`, `modelCad.get`, `project.get` and `source.files` retain their complete contracts for explicit on-demand reads. Assembled text, including guidance, history, annotation metadata and user request, must fit 1,048,576 characters; excess fails visibly before provider launch without silently cutting conversation text.
 
@@ -1118,8 +1148,8 @@ Native output is read every 200 ms. Display reduction retains actual trace extre
 | ------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `connection()`                              | None                                                                                     | `{base,token}`; authenticated service connection.                                                                                                                                                                                                                                                 |
 | `writeWorkspaceRecovery(content)`           | Serialized `WorkspaceState` v2 string, or `null` to clear                                | `void` after validated, queued atomic recovery persistence.                                                                                                                                                                                                                                       |
-| `open()`                                    | None                                                                                     | Native file picker; `{source,name,native:true}`, an already-open `{fileId}`, or cancellation `null`.                                                                                                                                                                                              |
-| `acceptOpen()`                              | None                                                                                     | Creates an opaque grant for the verified pending open; returns `fileId:string`.                                                                                                                                                                                                                   |
+| `open()`                                    | None                                                                                     | Native file picker; `{source,name,native:true,openId}`, an already-open `{fileId}`, or cancellation `null`.                                                                                                                                                                                              |
+| `acceptOpen(openId)`                        | The numeric request ID returned by `open()` or `openRecent()`                                                                                     | Creates an opaque grant only for the matching verified pending open; stale or missing request IDs fail; returns `fileId:string`.                                                                                                                                                                                                                   |
 | `newFile()`                                 | None                                                                                     | `fileId:string` for a new project without a native destination.                                                                                                                                                                                                                                   |
 | `openDefaultExample(key)`                   | Bundled or discovered opaque example key                                                 | `{id,source,fileId,filename,warning?}` from the original native example directory, retaining actual filenames.                                                                                                                                                                                    |
 | `releaseFile(fileId)`                       | Opaque grant ID                                                                          | `void`; releases only that grant.                                                                                                                                                                                                                                                                 |
@@ -1141,7 +1171,50 @@ Native output is read every 200 ms. Display reduction retains actual trace extre
 | `exportImage(options)`                      | `{dataUrl,width,height,name}`                                                            | `{name}` or cancellation `null`.                                                                                                                                                                                                                                                                  |
 | `exportEnclosure(options)`                  | `{source}` validated complete private snapshot                                           | `{name}` or cancellation `null`; native STEP picker.                                                                                                                                                                                                                                              |
 
-`listExamples()` invokes `openpe:list-examples` with no path arguments and returns `{entries:[{id,title,description,section}],warnings:string[]}`. Sections are `recent` or `examples`. The host scans its two fixed sibling roots (`examples` and `recent`, packaged as `examples-native` and `recent-native`) and their immediate project subdirectories; local IDs are `local-` followed by a 64-character lowercase SHA-256 digest. Listing creates no grants or histories. `openDefaultExample` resolves local keys against a fresh scan; unknown, removed and linked entries cannot grant access. Home refreshes on activation and window focus.
+`listExamples()` invokes `openpe:list-examples` with no path arguments and returns `{entries:[{id,title,description,section}],warnings:string[]}`. Sections identify the resource roots, `project` or `examples`; they do not represent opening history. The host scans its two fixed sibling roots (`examples` and `project`, packaged as `examples-native` and `project-native`) and their immediate project subdirectories; local IDs are `local-` followed by a 64-character lowercase SHA-256 digest. Listing creates no grants or histories. `openDefaultExample` resolves local keys against a fresh scan; unknown, removed and linked entries cannot grant access. Home refreshes on activation and window focus.
+
+`listRecent()` invokes `openpe:list-recent` without arguments and returns
+`{initialized:boolean,entries:[{id,title,description}],warnings:string[]}` in newest-first order.
+`title` is the native filename and `description` its display-only absolute path.
+`openRecent(id)` invokes `openpe:open-recent` with a `recent:<64 lowercase hex>`
+host-derived ID and returns the same validated source or existing `fileId` shape
+as `open()`. New opens use `acceptOpen(openId)` bound to their exact staged request; existing destinations activate their
+editor. The renderer cannot submit paths. Host resolution precedes the ordinary
+bounded native reader, including link and unsupported-content rejection; missing
+files stay listed and fail visibly on open. Trusted-main-frame checks surround
+asynchronous calls. `onRecentChanged(callback)` subscribes to the payload-free
+`openpe:recent-changed` notification and returns an unsubscribe function.
+
+`electron/recent-projects.cjs` stores `{version:1,files:string[]}` at the fixed
+app-data `recent-projects.json` path: at most 32 unique absolute native entry
+paths, each at most 4,096 characters, and a 1 MiB read bound. Windows paths
+deduplicate case-insensitively. Accepted opens, selected examples and successful
+Save/Save as move their entry to the front; cancellation, rejected reads and
+example preparation never add entries. No grants or document content persist
+in this index, and listing grants no file access. Writes are serialized and
+atomically replace the index; malformed/linked data is preserved with a
+retryable error. Index-write failures surface on listing without failing an
+already-completed native open/save. Only an absent index returns `initialized:false`
+and lets the GUI show the default EMC Flyback entry; real history replaces that
+default. A saved empty index remains empty across restart. This index is separate
+from workspace recovery, Core/undo, Agent context and project dirty state.
+
+`removeRecent(id)` invokes `openpe:remove-recent` and atomically removes one
+listed ID. The fixed `default:emc-flyback-demo` selector may dismiss the default
+only before an index exists. Removal touches only the private index, never
+native files, grants, open editors or Git history. Errors preserve the list;
+success emits `openpe:recent-changed`.
+
+`previewRecent(id)` invokes `openpe:preview-recent` with a listed Recent ID and
+returns its validated primary `Circuit` for read-only schematic thumbnails.
+The host resolves the ID and uses the ordinary bounded native reader without
+allocating a grant or staging an open. It rechecks the entry and trusted frame
+after reading, limits the serialized circuit to 8 MB, coalesces concurrent reads
+by ID and serializes at most 32 pending preview IDs. It never updates Recent,
+Core, native bytes, models, fills or history. Visible Home cards load lazily,
+retain only their current thumbnail and refresh on Home/list activation; hidden
+or replaced card responses cannot publish. Missing/unsupported files show a
+per-card preview error without blocking other cards or opening actions.
 
 `openDefaultExample(key)` starts shared runtime preparation on its first request, including clean recovery, and rechecks the originating main frame before opening the selected example. Home does not request an example preflight.
 

@@ -83,16 +83,25 @@ export function LayoutCameraRender({
   return children(view);
 }
 
-/** Translation does not change screen-space widths, radii or scale readouts. */
+const inactiveCameraSubscription = () => () => {};
+
+/** Translation does not change screen-space widths, radii or scale readouts.
+ * Empty overlays keep their mounted state without subscribing to the camera. */
 export function LayoutCameraScaleRender({
   camera,
+  active = true,
   children,
 }: {
   camera: LayoutCamera;
+  active?: boolean;
   children: (view: Pick<LayoutView, 'width'>) => ReactNode;
 }) {
   const snapshot = useCallback(() => camera.getSnapshot().width, [camera]);
-  const width = useSyncExternalStore(camera.subscribe, snapshot, snapshot);
+  const width = useSyncExternalStore(
+    active ? camera.subscribe : inactiveCameraSubscription,
+    snapshot,
+    snapshot,
+  );
   return children({ width });
 }
 
@@ -190,6 +199,7 @@ function applyCameraTargets(
   hitTargets: boolean,
   fixedTargets = false,
   setViewport?: (value: string) => LayoutView | void,
+  deferHitTargets?: () => boolean,
 ) {
   const height = view.width / (size.width / size.height);
   const viewport = `${view.x} ${view.y} ${view.width} ${height}`;
@@ -197,8 +207,16 @@ function applyCameraTargets(
   if (!setViewport) attribute(svg, 'viewBox', viewport);
   applyCameraFrames(targets.frames, frameView || view, size);
   targets.grid(view.width / size.width);
-  if (!hitTargets) return;
-  const scale = view.width / size.width;
+  if (!hitTargets || deferHitTargets?.()) return false;
+  applyCameraHitTargets(targets, view.width / size.width, fixedTargets);
+  return true;
+}
+
+function applyCameraHitTargets(
+  targets: ReturnType<typeof cameraTargets>,
+  scale: number,
+  fixedTargets: boolean,
+) {
   if (!fixedTargets || !targets.tracksFixed)
     applyTrackCameraTargets(targets.tracks, scale, fixedTargets);
   targets.tracksFixed = fixedTargets;
@@ -258,13 +276,11 @@ export function createLayoutCameraApplicator(
     fixedTargets = false,
     compositor = false,
     frameScheduled = false,
-    panFrameReserve = false,
     frameReserve = false,
   }: {
     fixedTargets?: boolean;
     compositor?: boolean;
     frameScheduled?: boolean;
-    panFrameReserve?: boolean;
     frameReserve?: boolean;
   } = {},
 ) {
@@ -278,14 +294,9 @@ export function createLayoutCameraApplicator(
   } | null = null;
   let panLease: object | null = null;
   let panUpdate: object | null = null;
-  let panFrames: {
-    lease: object;
-    view: LayoutView;
-    width: number;
-    size: { width: number; height: number };
-  } | null = null;
   let frame: number | undefined;
   let disposed = false;
+  let deferredHits: { view: LayoutView; size: { width: number; height: number } } | null = null;
   const cancelFrame = () => {
     if (frame !== undefined) cancelAnimationFrame(frame);
     frame = undefined;
@@ -298,7 +309,6 @@ export function createLayoutCameraApplicator(
     panUpdate = null;
     disposed = true;
     presentation?.dispose();
-    restorePanFrames();
     presented = null;
   };
   // Retire the previous owner before reading its viewport or capturing styles.
@@ -329,58 +339,17 @@ export function createLayoutCameraApplicator(
   }
   presentation =
     compositor && viewport
-      ? createCompositorViewport(svg, viewport, frameReserve ? targets.frames : null)
+      ? createCompositorViewport(svg, viewport, frameReserve ? targets.frames : null, () => {
+          if (!deferredHits) return;
+          const { view, size } = deferredHits;
+          deferredHits = null;
+          applyCameraHitTargets(
+            targets,
+            view.width / size.width,
+            useFixedTargets(size, presentation!.supportsFixedTargets()),
+          );
+        })
       : null;
-  const restorePanFrames = () => {
-    if (!panFrames) return;
-    panFrames = null;
-    if (presented) applyCameraFrames(targets.frames, presented.view, presented.size);
-  };
-  const preparePanFrames = (
-    view: LayoutView,
-    size: { width: number; height: number },
-    lease: object,
-  ) => {
-    const value = `${view.x} ${view.y} ${view.width} ${view.width / (size.width / size.height)}`;
-    if (!panFrameReserve || !presentation?.canReplayNative(value, size)) return;
-    // A reserve is prepared before the compositor owns the host clip. The
-    // native SVG must therefore already clip both axes during a pan pickup.
-    const style = readLayoutCameraStyle(svg);
-    if (
-      !['hidden', 'clip'].includes(style('overflow-x')) ||
-      !['hidden', 'clip'].includes(style('overflow-y'))
-    )
-      return;
-    const bounds = svg.getBoundingClientRect();
-    if (
-      Math.abs(bounds.width - size.width) >= 0.000001 ||
-      Math.abs(bounds.height - size.height) >= 0.000001
-    )
-      return;
-    const height = view.width / (size.width / size.height);
-    const reserve = { x: view.x - view.width / 2, y: view.y - height / 2, width: view.width * 2 };
-    const reserveHeight = reserve.width / (size.width / size.height);
-    if (
-      ![
-        reserve.x,
-        reserve.y,
-        reserve.width,
-        reserve.x + reserve.width,
-        reserve.y + reserveHeight,
-      ].every(Number.isFinite) ||
-      !(reserve.width > 0 && height > 0) ||
-      !(
-        reserve.x < view.x &&
-        reserve.y < view.y &&
-        reserve.x + reserve.width > view.x + view.width &&
-        reserve.y + reserveHeight > view.y + height
-      )
-    )
-      return;
-    panFrames = { lease, view: reserve, width: view.width, size: { ...size } };
-    applyCameraFrames(targets.frames, reserve, size);
-    return reserve;
-  };
   const useFixedTargets = (size: { width: number; height: number }, untransformed: boolean) =>
     Boolean(
       fixedTargets &&
@@ -395,13 +364,12 @@ export function createLayoutCameraApplicator(
     hitTargets: boolean,
     pan: object | null,
   ) => {
-    if (!hitTargets && presentation && (!panFrames || pan === null)) {
+    if (!hitTargets && presentation) {
       const value = `${view.x} ${view.y} ${view.width} ${view.width / (size.width / size.height)}`;
       if (presentation.canReplayNative(value, size)) {
         // A drawing commit can replay old frame/grid props without changing
         // the settled camera. Restore only those attributes; no CSS is owned
         // or changed on this path, and picking targets were not requested.
-        panFrames = null;
         applyCameraTargets(
           svg,
           targets,
@@ -419,49 +387,30 @@ export function createLayoutCameraApplicator(
       }
     }
     const untransformed = !presentation || presentation.supportsFixedTargets();
-    if (
-      panFrames &&
-      (!untransformed ||
-        pan !== panLease ||
-        pan !== panFrames.lease ||
-        view.width !== panFrames.width ||
-        size.width !== panFrames.size.width ||
-        size.height !== panFrames.size.height)
-    )
-      panFrames = null;
-    applyCameraTargets(
+    // Transparent picking geometry is not painted during compositor motion.
+    // Retain only the latest scale, then restore exact targets at the same
+    // native boundary used by picking, captures, idle and binding disposal.
+    const updateHits = hitTargets || deferredHits !== null;
+    const appliedHits = applyCameraTargets(
       svg,
       targets,
       view,
       size,
-      hitTargets,
+      updateHits,
       useFixedTargets(size, untransformed),
       presentation
         ? (value) => {
-            if (panFrames) {
-              const reserve = panFrames.view;
-              const height = view.width / (size.width / size.height);
-              if (
-                view.x < reserve.x ||
-                view.y < reserve.y ||
-                view.x + view.width > reserve.x + reserve.width ||
-                view.y + height > reserve.y + reserve.width / (size.width / size.height)
-              ) {
-                // Rebase before exposing a pose beyond the finite reserve.
-                // The next reserve is again only twice this native viewport.
-                panFrames = null;
-                presentation.rebase(value);
-                return preparePanFrames(view, size, pan!);
-              }
-            }
-            if (!presentation.apply(value, size, untransformed, pan !== null && pan === panLease))
-              panFrames = null;
-            return frameReserve
-              ? presentation.retainFrames(value, size, untransformed)
-              : panFrames?.view;
+            presentation.apply(value, size, untransformed, pan !== null && pan === panLease);
+            return frameReserve ? presentation.retainFrames(value, size, untransformed) : undefined;
           }
         : undefined,
+      () => {
+        if (!presentation?.isTransient()) return false;
+        deferredHits = { view: { ...view }, size: { ...size } };
+        return true;
+      },
     );
+    if (appliedHits) deferredHits = null;
     presented = { view: { ...view }, size: { ...size } };
   };
   const drawNow = (
@@ -517,17 +466,14 @@ export function createLayoutCameraApplicator(
     // A just-consumed pose has written a fresh matrix in this same call. Keep
     // its native check rather than laying it out only to remove that matrix.
     presentation?.flush(!hadPendingPose);
-    restorePanFrames();
   };
   return Object.assign(apply, {
     applyNow,
     beginPan(): LayoutCameraPanLease {
-      if (panLease || panFrameReserve || frameReserve) flush();
+      if (panLease || frameReserve) flush();
       const lease = {};
       if (isCurrent()) {
         panLease = lease;
-        if (!frameReserve && panFrameReserve && presented && presentation?.supportsFixedTargets())
-          preparePanFrames(presented.view, presented.size, lease);
       }
       return {
         update(run) {
@@ -587,6 +533,7 @@ function createCompositorViewport(
   svg: SVGSVGElement,
   viewport: { width: number; height: number },
   reserveFrames: Element[] | null = null,
+  onNative?: () => void,
 ) {
   const host = svg.parentElement;
   const missingRootStyle = !svg.hasAttribute('style');
@@ -611,6 +558,7 @@ function createCompositorViewport(
   let frameCover: number[] | null = null;
   let reserveViewportValid = true;
   let reserveInitialized = false;
+  let nativeViewportProof: string | null = null;
   const ownedStyles = new Map<
     HTMLElement | SVGSVGElement,
     Map<
@@ -675,16 +623,16 @@ function createCompositorViewport(
   const settleNative = () => {
     clearTimeout(timer);
     timer = undefined;
-    if (!transform) {
-      if (reserveFrames && desired) attribute(svg, 'viewBox', desired);
-      return;
-    }
-    attribute(svg, 'viewBox', desired);
-    base = desired;
-    restore();
+    if (transform) {
+      attribute(svg, 'viewBox', desired);
+      base = desired;
+      restore();
+    } else if (reserveFrames && desired) attribute(svg, 'viewBox', desired);
+    onNative?.();
   };
   const flush = (measureBeforeNative = true) => {
     if (disposed) return;
+    nativeViewportProof = null;
     const measuredViewport = measureBeforeNative ? measureReserveBeforeNative() : undefined;
     settleNative();
     settleFrameCover(measuredViewport);
@@ -763,6 +711,31 @@ function createCompositorViewport(
       coverIncludes(frameCover, parsedView(value)) &&
       coverIncludes(frameCover, parsedView(base)),
     );
+  const resizedFrameCover = (value: string, size: { width: number; height: number }) => {
+    const previous = parsedView(base),
+      next = parsedView(value);
+    const margin = Math.max(previous[2], next[2]) / size.width;
+    const ratio = size.width / size.height;
+    const minX = Math.min(previous[0], next[0]),
+      minY = Math.min(previous[1], next[1]),
+      maxX = Math.max(previous[0] + previous[2], next[0] + next[2]),
+      maxY = Math.max(previous[1] + previous[3], next[1] + next[3]);
+    const width = Math.max(maxX - minX + margin * 2, (maxY - minY + margin * 2) * ratio);
+    const height = width / ratio;
+    const cover = [
+      minX + (maxX - minX - width) / 2,
+      minY + (maxY - minY - height) / 2,
+      width,
+      height,
+    ];
+    return margin > 0 &&
+      ratio > 0 &&
+      [...cover, margin, ratio, cover[0] + width, cover[1] + height].every(Number.isFinite) &&
+      coverIncludes(cover, previous) &&
+      coverIncludes(cover, next)
+      ? cover
+      : null;
+  };
   const viewportMatches = (bounds: { width: number; height: number }, scale = 1) =>
     Math.abs(bounds.width / scale - viewport.width) < 0.000001 &&
     Math.abs(bounds.height / scale - viewport.height) < 0.000001;
@@ -821,15 +794,32 @@ function createCompositorViewport(
       dropFrameCover();
     else if (reserveFrames) applyCameraFrameBounds(reserveFrames, frameCover);
   };
+  const settleForApplication = (value: string, settleCover = false) => {
+    // Reserve escape changes the native viewBox before retainFrames runs.
+    // Restore owned presentation before measuring the exact physical box;
+    // transformed DOMRects cannot establish its size without rounding loss.
+    // The old native viewBox stays intact until after this read. Uncertain
+    // ownership retains the ordinary settled measurement instead.
+    let measuredViewport: boolean | undefined;
+    if (reserveFrames && reserveInitialized && reserveViewportValid && untransformed()) {
+      if (transform) restore();
+      measuredViewport = checkReserveViewport();
+    }
+    settleNative();
+    if (settleCover) settleFrameCover(measuredViewport);
+    nativeViewportProof = measuredViewport === true ? value : null;
+  };
   const retainFrames = (
     value: string,
     size: { width: number; height: number },
     eligible: boolean,
   ) => {
+    const measuredViewport = nativeViewportProof === value;
+    nativeViewportProof = null;
     if (!reserveFrames) return;
     // The first committed application reuses the binding's measured viewport.
     // Native replays must also notice a physical resize not yet delivered to React.
-    if (reserveInitialized && !transform) checkReserveViewport();
+    if (reserveInitialized && !transform && !measuredViewport) checkReserveViewport();
     reserveInitialized = true;
     if (!reserveEligible(size, eligible)) {
       dropFrameCover();
@@ -864,6 +854,7 @@ function createCompositorViewport(
     return frameCover ? { x: frameCover[0], y: frameCover[1], width: frameCover[2] } : undefined;
   };
   return {
+    isTransient: () => Boolean(transform),
     canReplayNative(value: string, size: { width: number; height: number }) {
       return (
         !disposed &&
@@ -880,12 +871,6 @@ function createCompositorViewport(
     },
     supportsFixedTargets: untransformed,
     retainFrames,
-    rebase(value: string) {
-      desired = value;
-      settleNative();
-      attribute(svg, 'viewBox', value);
-      base = value;
-    },
     apply(
       value: string,
       size: { width: number; height: number },
@@ -893,6 +878,7 @@ function createCompositorViewport(
       heldPan = false,
     ) {
       if (disposed) return false;
+      nativeViewportProof = null;
       desired = value;
       const sameSize =
         Math.abs(viewport.width - size.width) < 0.000001 &&
@@ -904,14 +890,24 @@ function createCompositorViewport(
         base = value;
         return false;
       }
-      if (frameCover && (!reserveEligible(size, untransformed) || !coverMatches(value))) {
-        // Never expose a CSS overflow pose outside the old finite cover, or
-        // scale it beyond four current/native viewport dimensions.
-        settleNative();
-        attribute(svg, 'viewBox', value);
-        base = value;
-        dropFrameCover();
-        return false;
+      if (frameCover) {
+        const eligible = reserveEligible(size, untransformed);
+        if (!eligible || !coverMatches(value)) {
+          // Resize only the three clipped frame rectangles while their union
+          // can cover both poses within the existing four-viewport bound.
+          // This avoids rebasing all board geometry at half the native width.
+          const cover = eligible ? resizedFrameCover(value, size) : null;
+          if (cover) {
+            frameCover = cover;
+            applyCameraFrameBounds(reserveFrames!, cover);
+          } else {
+            settleForApplication(value);
+            attribute(svg, 'viewBox', value);
+            base = value;
+            dropFrameCover();
+            return false;
+          }
+        }
       }
       if (value === base && !transform) {
         attribute(svg, 'viewBox', value);
@@ -929,7 +925,7 @@ function createCompositorViewport(
         Math.abs(x) > size.width * 3 ||
         Math.abs(y) > size.height * 3
       ) {
-        flush();
+        settleForApplication(value, true);
         attribute(svg, 'viewBox', value);
         base = value;
         return false;
@@ -938,28 +934,23 @@ function createCompositorViewport(
       // traversal until the promotion actually scales, including pan-to-zoom.
       if (scale !== 1 && !strokesCaptured) {
         strokes = Array.from(
-          svg.querySelectorAll<SVGElement>('[vector-effect="non-scaling-stroke"][stroke-width]'),
-        )
-          .filter(
-            (node) =>
-              !node.matches('[data-layout-track-target], [data-layout-body-bounds]') &&
-              !node.closest('[data-layout-graphic-target]') &&
-              node.getAttribute('stroke') !== 'transparent',
-          )
-          .map((node) => ({
-            node,
-            values: ['stroke-width', 'stroke-dasharray', 'stroke-dashoffset']
-              .filter((name) => node.hasAttribute(name))
-              .map((name) => {
-                const original = node.getAttribute(name)!;
-                return {
-                  name,
-                  original,
-                  numbers: original.trim().split(/[ ,]+/).map(Number),
-                  owned: '',
-                };
-              }),
-          }));
+          svg.querySelectorAll<SVGElement>(
+            '[vector-effect="non-scaling-stroke"][stroke-width]:not([data-layout-track-target], [data-layout-body-bounds], [stroke="transparent"], [data-layout-graphic-target], [data-layout-graphic-target] *)',
+          ),
+        ).map((node) => ({
+          node,
+          values: ['stroke-width', 'stroke-dasharray', 'stroke-dashoffset']
+            .filter((name) => node.hasAttribute(name))
+            .map((name) => {
+              const original = node.getAttribute(name)!;
+              return {
+                name,
+                original,
+                numbers: original.trim().split(/[ ,]+/).map(Number),
+                owned: '',
+              };
+            }),
+        }));
         if (
           strokes.some((stroke) =>
             stroke.values.some((value) => value.numbers.some((number) => !Number.isFinite(number))),
@@ -1021,6 +1012,7 @@ function createCompositorViewport(
     },
     flush,
     dispose() {
+      nativeViewportProof = null;
       settleNative();
       dropFrameCover();
       disposed = true;

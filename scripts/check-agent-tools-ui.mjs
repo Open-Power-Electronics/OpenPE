@@ -154,7 +154,14 @@ try {
     if (pathname === '/api/agents')
       return route.fulfill({ json: [{ id: 'codex', available: true, supportsEffort: true }] });
     if (pathname === '/api/models')
-      return route.fulfill({ json: { models: [], defaultModel: '' } });
+      return route.fulfill({
+        json: {
+          models: [
+            { id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium', 'high'] },
+          ],
+          defaultModel: 'fixture-model',
+        },
+      });
     if (pathname === '/api/workbench-plugins')
       return route.fulfill({ json: bundledWorkbenchCatalog() });
     if (/^\/(brand|agents|cursors)\/[\w.-]+\.(svg|png)$/.test(pathname))
