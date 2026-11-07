@@ -11,7 +11,7 @@ and [simulation contract](../SIMULATION.md).
   provider or a real solver. The recording request must cover the demonstrated work.
 - Use a separate `OPENPE_DATA_DIR` and a new output directory for each take.
   Preserve the user's running application and unsaved projects.
-- Open the original example, show its initial state, then use native **Save as**
+- Open the selected native source, show its initial state, then use native **Save as**
   to create a demonstration copy before changing it. Retain source checksums.
 - Capture continuously from application opening through the final inspection.
   Keep provider latency, solver waits, failed attempts, corrections and retries.
@@ -23,10 +23,14 @@ and [simulation contract](../SIMULATION.md).
 - Keep all submitted prompts and Agent replies in English. Use the real selected
   provider and actual OpenPE capabilities. Do not insert replies, mocked solver
   results or substitute waveform images. Preserve the transcript and prompts.
-- Split long design work into observable turns: deletion/research, construction,
-  preflight, first run and measured iteration. If a provider turn stops, retain
-  its output and continue from the accepted design with a focused prompt.
-  Keep the interruption in the continuous recording.
+- Prompts must sound like a person using OpenPE: short goals and constraints,
+  without capability IDs, revision instructions, coordinates or precomputed
+  component values. The upstream operator enters prompts and makes visible UI
+  choices; the OpenPE Agent performs the requested design and simulation.
+- Respect the scenario's conversation and time budget. The short LM25017
+  scenario allows two English prompts and approximately five minutes. Stop and
+  discuss an incomplete result instead of adding hidden continuation prompts,
+  direct design mutations or off-camera repair.
 - Automation may select an approved Save as destination and operate application
   controls. Record that automation in the script/report. Do not represent an
   automated picker response as a recorded human interaction.
@@ -35,9 +39,8 @@ and [simulation contract](../SIMULATION.md).
   identities and ordinary validated edits. Do not restore the old circuit to
   simulate a redesign.
 - For construction and redraw demonstrations, follow the
-  [schematic drafting contract](../../DESIGN.md#schematic-canvas). Rehearse the
-  supported workflow on a separate disposable copy before starting a new take;
-  keep that rehearsal distinct from the continuously recorded redesign. Inspect
+  [schematic drafting contract](../../DESIGN.md#schematic-canvas). Do not solve
+  the recorded task in a hidden Agent rehearsal. Inspect
   the actual native rendering and electrical pin groups before simulation. A
   collection of labelled pin stubs or a successful solver run does not establish
   a readable drawing. Preserve accepted drawings during value-only tuning.
@@ -85,4 +88,5 @@ check and video finalization run. Without `--control`, the recorder leaves the
 window available for manual operation and saves the video after it closes; its
 manual path does not produce the controlled completion report automatically.
 
-See the [LM25017 8 V runbook](lm25017-8v.md) for the first scenario.
+See the [short LM25017 runbook](lm25017-short.md) for the two-turn scenario and
+the [full-rebuild runbook](lm25017-8v.md) for the separate, longer scenario.

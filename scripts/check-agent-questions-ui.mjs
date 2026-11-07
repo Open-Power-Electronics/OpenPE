@@ -14,14 +14,18 @@ const bundle = await build({
     import Questions from './components/AgentQuestions';
     import Process from './components/AgentProcess';
     import Tool from './components/AgentToolCall';
+    import ToolList from './components/AgentToolList';
     const questions=[{id:'voltage',header:'Voltage',question:'Output voltage?',options:[{label:'12 V',description:'Nominal'},{label:'24 V',description:'Higher'}],multiSelect:false},
       {id:'features',header:'Features',question:'Which features?',options:[{label:'Filter',description:''},{label:'Protection',description:''}],multiSelect:true}];
     window.answers=[];window.attempts=0;
-    function Fixture(){const [running,setRunning]=useState(true),[attention,setAttention]=useState(false),[closed,setClosed]=useState(false);
-      return <><div className="fixture-controls"><button onClick={()=>setRunning(false)}>Finish run</button><button onClick={()=>setAttention(true)}>Review needed</button><button onClick={()=>setClosed(true)}>Cancel question</button></div>
+    function Fixture(){const [running,setRunning]=useState(true),[attention,setAttention]=useState(false),[closed,setClosed]=useState(false),[toolCount,setToolCount]=useState(32);
+      return <><div className="fixture-controls"><button onClick={()=>setRunning(false)}>Finish run</button><button onClick={()=>setAttention(true)}>Review needed</button><button onClick={()=>setClosed(true)}>Cancel question</button><button onClick={()=>setToolCount(count=>count+1)}>Add tool</button></div>
       <Process running={running} attention={attention}><p>Checking output</p>
+        <ToolList>
+        {attention && Array.from({length:toolCount},(_,index)=><Tool key={index} activity={{id:'tool-'+index,messageId:'fixture',tool:'openpe_query',name:'project.inspect.'+index,status:'completed',arguments:{text:'{}',truncated:false},result:{text:'Project inspected',truncated:false}}}/>)}
         {attention && <Tool activity={{id:'review',messageId:'fixture',tool:'openpe_execute',name:'part.properties',status:'review',arguments:{text:'{"reference":"R1","value":"10k"}',truncated:false}}}
           onApply={()=>setAttention(false)} onReject={()=>setAttention(false)}/>}
+        </ToolList>
       </Process>
       <p>Final answer remains visible</p>
       <Questions questions={questions} disabled={closed} onAnswer={async answers=>{window.attempts++;if(window.attempts===1)throw new Error('Retry delivery');window.answers.push(answers)}}/></>}
@@ -133,6 +137,66 @@ try {
   await page.getByText('Checking output', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Review needed', exact: true }).click();
   assert.equal(await page.locator('.agent-process').evaluate((element) => element.open), true);
+  const tools = page.locator('.agent-tool-list');
+  assert.equal(await tools.locator('.agent-tool-call').count(), 33);
+  const checkToolScroll = async () => {
+    const bounds = await tools.evaluate((element) => ({
+      height: element.clientHeight,
+      content: element.scrollHeight,
+      limit: Math.min(5 * parseFloat(getComputedStyle(element).getPropertyValue('--control-height')) + 8, innerHeight * 0.35),
+      containment: getComputedStyle(element).overscrollBehaviorY,
+    }));
+    assert.ok(bounds.height <= bounds.limit + 1);
+    assert.ok(bounds.content > bounds.height * 3);
+    assert.equal(bounds.containment, 'contain');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  };
+  await checkToolScroll();
+  const atLatest = () => tools.evaluate(
+    (element) => element.scrollHeight - element.scrollTop - element.clientHeight < 2,
+  );
+  assert.equal(await atLatest(), true);
+  const visibleToolCount = () => tools.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return [...element.querySelectorAll('.agent-tool-call')].filter((tool) => {
+      const row = tool.getBoundingClientRect();
+      return row.bottom > bounds.top + 1 && row.top < bounds.bottom - 1;
+    }).length;
+  });
+  assert.ok(await visibleToolCount() <= 5);
+  await page.getByRole('button', { name: 'Add tool', exact: true }).click();
+  assert.equal(await tools.locator('.agent-tool-call').count(), 34);
+  assert.equal(await atLatest(), true);
+  await tools.evaluate((element) => { element.scrollTop = 0; });
+  await page.waitForTimeout(50);
+  await page.getByRole('button', { name: 'Add tool', exact: true }).click();
+  assert.equal(await tools.evaluate((element) => element.scrollTop), 0);
+  await tools.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await page.waitForTimeout(50);
+  await page.getByRole('button', { name: 'Add tool', exact: true }).click();
+  assert.equal(await atLatest(), true);
+  assert.ok(await visibleToolCount() <= 5);
+  await page.setViewportSize({ width: 360, height: 600 });
+  await checkToolScroll();
+  const firstTool = tools.locator('summary').first();
+  await firstTool.click();
+  await tools.getByLabel('project.inspect.0 result', { exact: true }).waitFor();
+  await checkToolScroll();
+  await firstTool.click();
+  await firstTool.focus();
+  // Keyboard navigation must reveal the pending actions below the settled rows.
+  for (let index = 0; index < 36; index++) await page.keyboard.press('Tab');
+  await page.waitForFunction(
+    () => document.activeElement?.getAttribute('aria-label') === 'Reject part.properties',
+  );
+  assert.ok(await tools.evaluate((element) => element.scrollTop > 0));
+  await page.keyboard.press('Tab');
+  assert.equal(
+    await page
+      .getByRole('button', { name: 'Apply part.properties', exact: true })
+      .evaluate((element) => element === document.activeElement),
+    true,
+  );
   assert.equal(
     await page.getByRole('button', { name: 'Apply part.properties', exact: true }).isVisible(),
     true,
@@ -149,7 +213,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Closed', exact: true }).isDisabled(), true);
   assert.deepEqual(errors, []);
   console.log(
-    'Agent question choices, custom/multiple answers, IME, retry, cancellation and process collapse passed.',
+    'Agent questions, IME, retry, cancellation, process collapse and bounded tool scrolling with keyboard-accessible review actions passed.',
   );
 } finally {
   await browser.close();

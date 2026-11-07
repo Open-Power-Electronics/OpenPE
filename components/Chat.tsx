@@ -15,6 +15,7 @@ import SidebarToggle from './SidebarToggle';
 import AgentLogo from './AgentLogo';
 import AgentComposer from './AgentComposer';
 import AgentToolCall from './AgentToolCall';
+import AgentToolList from './AgentToolList';
 import AgentFileChanges from './AgentFileChanges';
 import AgentQuestions from './AgentQuestions';
 import AgentProcess from './AgentProcess';
@@ -828,7 +829,7 @@ export default function Chat({
                             <AssistantResponse text={item.text} />
                           </div>
                         ))}
-                      <div className="agent-tool-list" aria-label="OpenPE tool activity">
+                      <AgentToolList>
                         {toolCalls
                           .filter((item) => item.messageId === m.id)
                           .map((item) => {
@@ -869,7 +870,7 @@ export default function Chat({
                               />
                             );
                           })}
-                      </div>
+                      </AgentToolList>
                     </AgentProcess>
                   )}
                   {questions

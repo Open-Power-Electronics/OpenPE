@@ -1030,8 +1030,14 @@ body[data-workspace-resizing='true'] * {
 
 .agent-tool-list {
   display: grid;
+  grid-auto-rows: max-content;
   gap: 2px;
+  min-width: 0;
+  max-height: min(calc(5 * var(--control-height) + 8px), 35dvh);
   margin: 2px 0 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .agent-process {

@@ -1,7 +1,7 @@
 import type { ChatOutcome, ChatTimings } from './chat-stream';
 import { validateAnnotations, type AgentAnnotation } from './agent-annotations';
 import { displayName } from './display-name';
-import { validSuggestedTitle } from './session-title';
+import { compactSessionTitle, validSuggestedTitle } from './session-title';
 
 export type Message = {
   id: string;
@@ -96,7 +96,7 @@ export function sessionTitle(session: ChatSession): string {
   if (session.name !== undefined) return session.name;
   const message = session.messages.find((message) => message.role === 'user');
   const prompt = message?.text || message?.annotations?.[0]?.comment;
-  return prompt?.trim().replace(/\s+/g, ' ').slice(0, 60) || 'New session';
+  return compactSessionTitle(prompt?.trim().replace(/\s+/g, ' ') || 'New session');
 }
 
 export function applySuggestedSessionTitle(

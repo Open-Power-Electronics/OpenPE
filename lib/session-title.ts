@@ -1,9 +1,20 @@
 import { displayName } from './display-name';
 
+/** Compact automatic labels without changing manually assigned session names. */
+export function compactSessionTitle(value: string): string {
+  const characters = Array.from(value);
+  if (characters.length <= 24) return value;
+  let prefix = characters.slice(0, 23).join('');
+  const boundary = prefix.lastIndexOf(' ');
+  if (characters[23] !== ' ' && !prefix.endsWith(' ') && boundary >= 12)
+    prefix = prefix.slice(0, boundary);
+  return prefix.trimEnd() + '…';
+}
+
 export function validSuggestedTitle(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length > 60) return;
   try {
-    return displayName(value);
+    return compactSessionTitle(displayName(value));
   } catch {
     return;
   }
