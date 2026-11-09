@@ -52,7 +52,15 @@ test('empty board is valid; placement embeds all supported geometry with stable 
   validateProject(empty);
   const { project, footprint, detail } = fixture();
   validateProject(project);
-  assert.equal(footprint.graphics.length, 4);
+  assert.equal(footprint.graphics.filter((g) => g.kind !== 'text').length, 4);
+  const fields = footprint.graphics.filter((g) => g.kind === 'text');
+  assert.deepEqual(
+    fields.map((g) => [g.text?.property, g.layer]),
+    [
+      ['Reference', 'F.SilkS'],
+      ['Value', 'F.Fab'],
+    ],
+  );
   assert.equal(footprint.pads.length, 2);
   assert.ok(footprint.pads.every((p) => p.netId === null));
   assert.equal(val(detail.footprint), 'TwoPin');
@@ -63,6 +71,10 @@ test('empty board is valid; placement embeds all supported geometry with stable 
   assert.equal(val(exported), detail.id);
   assert.equal(val(child(exported, 'uuid')), footprint.id);
   assert.equal(children(exported, 'fp_line').length, 4);
+  assert.deepEqual(
+    children(exported, 'property').map((field) => val(child(field, 'uuid'))),
+    fields.map((field) => field.id),
+  );
   assert.deepEqual(
     children(exported, 'pad').map((p) => val(child(p, 'uuid'))),
     footprint.pads.map((p) => p.id),
@@ -156,18 +168,8 @@ test('bundled 0805 placement preserves six-decimal artwork and rounded pad corne
   const reopened = projectFromNativeFiles(files);
   const restored = reopened.pcb!.footprints[0];
   for (const graphic of footprint.graphics) {
-    const actual = restored.graphics.find((item) => item.id === graphic.id)!;
-    assert.ok(actual);
-    assert.deepEqual(
-      {
-        id: actual.id,
-        start: actual.start,
-        end: actual.end,
-        width: actual.width,
-        layer: actual.layer,
-      },
-      graphic,
-    );
+    const { stroke: _stroke, ...actual } = restored.graphics.find((item) => item.id === graphic.id)!;
+    assert.deepEqual(actual, graphic);
   }
   const padGeometry = (pad: (typeof footprint.pads)[number]) => ({
     id: pad.id,
@@ -206,7 +208,7 @@ test(
       { x: 0, y: 0 },
     );
     assert.equal(
-      footprint.graphics.length,
+      footprint.graphics.filter((g) => g.kind !== 'text').length,
       children(raw, 'fp_line').length + 4 * children(raw, 'fp_rect').length,
     );
     assert.deepEqual(
@@ -233,7 +235,9 @@ test('rotated and back-side pad positions match native export local coordinates 
   assert.deepEqual(footprint, before);
   assert.equal(back.side, 'back');
   assert.equal(back.pads[0].id, footprint.pads[0].id);
-  assert.ok(back.graphics.every((g) => g.layer === 'B.SilkS'));
+  assert.ok(
+    back.graphics.every((g) => g.layer === (g.text?.property === 'Value' ? 'B.Fab' : 'B.SilkS')),
+  );
   assert.deepEqual(padPosition(back, back.pads[0]), { x: 26.035, y: 24.13 });
   assert.deepEqual(flipPCBFootprint(back), before);
   project.pcb!.footprints = [back];

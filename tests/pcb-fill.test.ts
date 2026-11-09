@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { uid } from '../lib/circuit';
 import {
   createProject,
@@ -27,6 +28,7 @@ import { convertExamplePCB } from '../scripts/example-pcb';
 import { referenceExamples, createReferenceExample } from '../lib/reference-examples';
 import { runPCBDesignRules } from '../lib/pcb-drc';
 import { isOwnedPCB, ownProjectData } from '../lib/immutable-project';
+import { parseKiCadPCB } from '../lib/kicad-pcb';
 
 const rectangle = (x: number, y: number, w: number, h: number) => [
   { x, y },
@@ -197,6 +199,34 @@ for (const example of referenceExamples) {
     assert.deepEqual(board, before, 'Pinned example input is unchanged.');
   });
 }
+
+test('LM25017 native GND2 refill matches the saved copper along all three exposed L1 keepout edges', () => {
+  const source = readFileSync(
+    'examples/lm25017-wson8-flybuck/lm25017-wson8-flybuck.kicad_pcb',
+    'utf8',
+  );
+  const { board } = parseKiCadPCB(source, createProject().schematic, 'lm25017');
+  const saved = filledCopperPolygons(board);
+  const net = board.nets.find(({ name }) => name === 'GND2')!;
+  for (const layer of ['F.Cu', 'B.Cu']) {
+    const zone = board.zones.find((item) => item.layer === layer && item.netId === net.id)!;
+    const refilled = filledCopperPolygons(fillCopperZone(board, zone.id)).get(zone.id)!;
+    for (const copper of [saved.get(zone.id)!, refilled]) {
+      for (const [x, y] of [
+        [48, 48.05],
+        [43.6, 49.2],
+        [52.1, 49.2],
+      ])
+        assert.equal(contains(copper, x, y), true, `${layer} outside the keepout at ${x}, ${y}`);
+      for (const [x, y] of [
+        [48, 48.4],
+        [43.95, 49.2],
+        [51.75, 49.2],
+      ])
+        assert.equal(contains(copper, x, y), false, `${layer} inside the keepout at ${x}, ${y}`);
+    }
+  }
+});
 
 test('manual fill persists separated copper, foreign-track/via clearances and holes in JSON/native exports', () => {
   const board = fixture();
@@ -460,6 +490,7 @@ test('dynamic fills use edited zone bounds, board edges and copper-pour keepouts
     id: uid(),
     netId: null,
     outline: rectangle(18, 4, 4, 3),
+    clearance: 0,
     fillEnabled: false,
     keepout: { tracks: false, vias: false, pads: false, copperpour: true, footprints: false },
   };

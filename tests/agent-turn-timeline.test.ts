@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentTurnTimeline, type ActivityAnchor } from '../components/agent-turn-timeline';
+import {
+  agentTurnSections,
+  agentTurnTimeline,
+  type ActivityAnchor,
+} from '../components/agent-turn-timeline';
 import type { AgentToolActivity } from '../lib/agent-tool-activity';
 import { responseText } from '../lib/chat-stream';
 
@@ -17,6 +21,77 @@ const anchor = (kind: ActivityAnchor['kind'], id: string, offset = 0): ActivityA
   kind,
   id,
   offset,
+});
+
+test('one work disclosure contains intermediate text while the latest answer stays outside', () => {
+  const text = 'Before.\n\nBetween.\n\nFinal answer.';
+  const parts = agentTurnTimeline(
+    text,
+    [anchor('tool', 'one', 7), anchor('tool', 'two', 17)],
+    [],
+    ['one', 'two'].map(tool),
+  );
+  const { work, answer } = agentTurnSections(parts);
+  assert.deepEqual(
+    work.map((part) => part.kind),
+    ['text', 'tools', 'text', 'tools'],
+  );
+  assert.equal(answer?.text.trim(), 'Final answer.');
+  assert.deepEqual([...work, answer], parts);
+});
+
+test('plain replies need no work disclosure and stopped turns do not invent an answer', () => {
+  const plain = agentTurnSections(agentTurnTimeline('A plain reply.', [], [], []));
+  assert.deepEqual(plain.work, []);
+  assert.equal(plain.answer?.text, 'A plain reply.');
+  const stopped = agentTurnSections(
+    agentTurnTimeline('Inspecting.', [anchor('tool', 'one', 11)], [], [tool('one')]),
+  );
+  assert.equal(stopped.answer, undefined);
+  assert.equal(stopped.work.length, 2);
+  assert.deepEqual(agentTurnSections([]), { work: [], answer: undefined, reviews: [] });
+});
+
+test('unresolved reviews stay outside work even before later tools and after completion', () => {
+  const tools: AgentToolActivity[] = [
+    { ...tool('review-one'), status: 'review' },
+    tool('query'),
+    { ...tool('review-two'), status: 'applying' },
+    tool('last-query'),
+  ];
+  for (const text of ['', 'Apply the pending commands.']) {
+    const parts = agentTurnTimeline(
+      text,
+      tools.map((item) => anchor('tool', item.id)),
+      [],
+      tools,
+    );
+    const original = structuredClone(parts);
+    const { work, answer, reviews } = agentTurnSections(parts);
+    assert.deepEqual(
+      reviews.map((item) => item.id),
+      ['review-one', 'review-two'],
+    );
+    assert.deepEqual(
+      work.flatMap((part) => (part.kind === 'tools' ? part.entries.map((item) => item.id) : [])),
+      ['query', 'last-query'],
+    );
+    assert.equal(answer?.text, text || undefined);
+    assert.deepEqual(parts, original, 'Partitioning cannot mutate retained timeline data.');
+  }
+});
+
+test('review-only turns need no work disclosure and resolved reviews return to history', () => {
+  const review: AgentToolActivity = { ...tool('edit'), status: 'review' };
+  const parts = agentTurnTimeline('', [anchor('tool', 'edit')], [], [review]);
+  assert.deepEqual(agentTurnSections(parts), { work: [], answer: undefined, reviews: [review] });
+  for (const status of ['applied', 'rejected', 'failed', 'cancelled'] as const) {
+    const resolved = agentTurnSections(
+      agentTurnTimeline('', [anchor('tool', 'edit')], [], [{ ...review, status }]),
+    );
+    assert.deepEqual(resolved.reviews, []);
+    assert.equal(resolved.work[0].kind === 'tools' && resolved.work[0].entries[0].status, status);
+  }
 });
 
 test('tool batches stay between the progress and response text where they arrived', () => {

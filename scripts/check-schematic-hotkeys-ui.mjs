@@ -234,6 +234,8 @@ async function run(name, check, appearance = null) {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') {
       if (route.request().method() === 'POST') appearance = route.request().postDataJSON();
       return route.fulfill({ json: appearance });

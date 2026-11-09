@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import Workbench from './Workbench';
+import type { Agent } from './Chat';
 import { createWorkspacePresentation, WorkspacePresentationContext } from './WorkspacePresentation';
 import type { ProjectAction, ProjectFileAction, ProjectNavigationItem } from './ProjectNavigation';
 import { useAppearance } from './AppearanceSettings';
@@ -107,6 +108,25 @@ export default function DesktopWorkspace() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeRef = useRef(activeId);
   const [preferences, setPreferences] = useState<AgentPreferences>(defaultAgentPreferences);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const [agentError, setAgentError] = useState('');
+  const detectionInFlight = useRef(false);
+  const detectAgents = useCallback(async () => {
+    if (!window.openpe || detectionInFlight.current) return;
+    detectionInFlight.current = true;
+    setDetecting(true);
+    setAgentError('');
+    try {
+      setAgents(await (await api('agents')).json());
+    } catch (error) {
+      setAgentError((error as Error).message);
+    } finally {
+      detectionInFlight.current = false;
+      setDetecting(false);
+    }
+  }, []);
+  useEffect(() => void detectAgents(), [detectAgents]);
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
   const [loaded, setLoaded] = useState(false);
@@ -728,6 +748,10 @@ export default function DesktopWorkspace() {
               onDocumentChange={reportDocument}
               registerController={register}
               preferences={preferences}
+              agents={agents}
+              detecting={detecting}
+              agentError={agentError}
+              detectAgents={detectAgents}
               setPreferences={setPreferences}
               appearanceSettings={appearanceSettings}
               startupError={error}

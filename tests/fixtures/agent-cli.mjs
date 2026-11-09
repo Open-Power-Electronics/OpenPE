@@ -139,7 +139,7 @@ if (mode.startsWith('claude-catalog')) {
   const input = createInterface({ input: process.stdin });
   input.on('line', async (line) => {
     const e = JSON.parse(line);
-    if (e.method === 'initialize') send({ id: e.id, result: {} });
+    if (e.method === 'initialize' && mode !== 'handshake-hang') send({ id: e.id, result: {} });
     if (e.method === 'config/read') {
       assert.equal(e.params.includeLayers, false);
       assert.equal(e.params.cwd, process.cwd());
@@ -235,7 +235,43 @@ if (mode.startsWith('claude-catalog')) {
         assert.match(e.params.input[0].text, /Reference/);
         writeFileSync('annotation-input.json', JSON.stringify(e.params.input));
       }
-      send({ id: e.id, result: { turn: { id: 'turn' } } });
+      const echoedItems =
+        mode === 'codex-large-echo'
+          ? [
+              {
+                type: 'userMessage',
+                id: 'user',
+                content: [
+                  ...e.params.input,
+                  { type: 'image', url: 'data:image/png;base64,' + 'A'.repeat(2_100_000) },
+                ],
+              },
+            ]
+          : undefined;
+      send({ id: e.id, result: { turn: { id: 'turn', items: echoedItems } } });
+      if (echoedItems) {
+        for (const method of ['item/started', 'item/completed'])
+          send({ method, params: { threadId: 'thread', turnId: 'turn', item: echoedItems[0] } });
+        send({
+          method: 'item/completed',
+          params: {
+            threadId: 'thread',
+            turnId: 'turn',
+            item: {
+              type: 'dynamicToolCall',
+              id: 'result-echo',
+              tool: 'openpe_query',
+              contentItems: [{ type: 'inputText', text: 'R'.repeat(2_100_000) }],
+              success: true,
+            },
+          },
+        });
+      }
+      if (mode === 'codex-oversized-answer') return send(delta('A'.repeat(2_100_000)));
+      if (mode.startsWith('codex-steer')) {
+        send(delta('Initial response.'));
+        return;
+      }
       if (mode === 'approval')
         return send({ id: 90, method: 'item/commandExecution/requestApproval', params: {} });
       if (mode === 'failure')
@@ -254,6 +290,22 @@ if (mode.startsWith('claude-catalog')) {
         method: 'item/completed',
         params: { item: { id: 'a', type: 'agentMessage', text: '电感 ripple.' } },
       });
+      send({
+        method: 'turn/completed',
+        params: { turn: { id: 'turn', status: 'completed', items: echoedItems } },
+      });
+    }
+    if (e.method === 'turn/steer') {
+      assert.ok(mode.startsWith('codex-steer'));
+      assert.equal(e.params.threadId, 'thread');
+      assert.equal(e.params.expectedTurnId, 'turn');
+      assert.deepEqual(e.params.input, [{ type: 'text', text: 'Use 24 V. $(literal)' }]);
+      if (mode === 'codex-steer-reject')
+        send({ id: e.id, error: { message: 'Steering rejected' } });
+      else if (mode !== 'codex-steer-close') {
+        send({ id: e.id, result: { turnId: 'turn' } });
+        send(delta(' Using 24 V.'));
+      }
       send({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
     }
   });

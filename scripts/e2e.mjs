@@ -1197,7 +1197,7 @@ async function checkSimulationProperties(page) {
   await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   const properties = page.getByRole('complementary', { name: 'Object properties', exact: true });
-  const simulation = properties.locator('.property-simulation summary');
+  const simulation = properties.getByRole('tab', { name: 'SPICE', exact: true });
   const model = properties.getByLabel('Sim.Name', { exact: true });
   assert.equal(await model.isVisible(), false);
   await simulation.focus();
@@ -1205,7 +1205,7 @@ async function checkSimulationProperties(page) {
   assert.equal(await model.isVisible(), true);
   await model.fill('changed_model');
   await model.press('Enter');
-  await simulation.click();
+  await properties.getByRole('tab', { name: 'General', exact: true }).click();
   assert.equal(await model.isVisible(), false);
   await button('Source').click();
   const changed = JSON.parse(await readSnapshotFromNative(page));
@@ -2292,7 +2292,8 @@ try {
       .locator('.project-navigation > span')
       .first()
       .locator('.project-folder > button')
-      .click();
+      .click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'New session', exact: true }).click();
     assert.equal(await page.locator('.chat-panel:not([hidden]) .message').count(), 0);
     assert.equal(await readSnapshotFromNative(page), beforeConversation);
     await page.getByRole('button', { name: 'Schematic', exact: true }).click();

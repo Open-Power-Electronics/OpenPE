@@ -6,6 +6,9 @@ import AppearanceSettings, { type useAppearance } from './AppearanceSettings';
 import AgentLogo from './AgentLogo';
 import Dialog from './Dialog';
 import { agentProviders } from '@/lib/agent-providers';
+import { useAgentSettings } from './AgentSettings';
+import Select from './Select';
+import type { FollowUpMode } from '@/lib/agent-settings';
 
 export default function SettingsDialog({
   appearance,
@@ -14,6 +17,7 @@ export default function SettingsDialog({
   error,
   onDetect,
   onClose,
+  initialSection = 'appearance',
 }: {
   appearance: ReturnType<typeof useAppearance>;
   agents: Agent[];
@@ -21,8 +25,10 @@ export default function SettingsDialog({
   error: string;
   onDetect: () => Promise<void>;
   onClose: () => void;
+  initialSection?: 'appearance' | 'agents';
 }) {
-  const [section, setSection] = useState('appearance');
+  const [section, setSection] = useState<string>(initialSection);
+  const agentSettings = useAgentSettings();
   const id = useId();
   const sections = [
     { id: 'appearance', label: 'Appearance', icon: Sun },
@@ -114,6 +120,24 @@ export default function SettingsDialog({
                 {error}
               </p>
             )}
+            <div className="settings-field">
+              <span>Messages sent while the Agent is running</span>
+              <Select
+                label="Messages sent while running"
+                value={agentSettings.settings.followUpMode}
+                disabled={!agentSettings.ready}
+                onChange={(value) => agentSettings.update({ followUpMode: value as FollowUpMode })}
+                options={[
+                  { value: 'queue', label: 'Queue' },
+                  { value: 'steer', label: 'Steer' },
+                ]}
+              />
+              {agentSettings.error && (
+                <p className="dialog-error" role="alert">
+                  {agentSettings.error}
+                </p>
+              )}
+            </div>
             <div className="agent-connections">
               {agentProviders.map(({ id, settingsName }) => {
                 const a = agents.find((a) => a.id === id);

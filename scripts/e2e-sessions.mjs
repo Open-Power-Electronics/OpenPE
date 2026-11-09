@@ -77,6 +77,14 @@ try {
   };
   const openConversation = () =>
     page.locator('.project-navigation > span').first().locator('.project-folder > button').click();
+  const newConversation = async () => {
+    await page
+      .locator('.project-navigation > span')
+      .first()
+      .locator('.project-folder > button')
+      .click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'New session', exact: true }).click();
+  };
   const send = async (prompt) => {
     await input().fill(prompt);
     await input().press('Enter');
@@ -102,11 +110,15 @@ try {
   await openConversation();
   assert.equal(await input().inputValue(), 'Unsent initial draft');
   await send('First session prompt');
-  await page
-    .locator('.project-navigation > span')
-    .first()
-    .locator('.project-folder > button')
-    .click();
+  await openConversation();
+  assert.equal(await page.locator('.project-session').count(), 1);
+  assert.ok(
+    await visible()
+      .locator('.message-text')
+      .filter({ hasText: 'Answer for First session prompt' })
+      .isVisible(),
+  );
+  await newConversation();
   assert.equal(await page.getByRole('dialog').count(), 0);
   assert.equal(await input().inputValue(), '');
   assert.equal(await visible().locator('.message').count(), 0);
@@ -124,11 +136,10 @@ try {
   assert.equal(await input().inputValue(), 'Second draft');
   await send('Second session prompt');
   await finish();
-  await page
-    .locator('.project-navigation > span')
-    .first()
-    .locator('.project-folder > button')
-    .click();
+  await openConversation();
+  assert.equal(await page.locator('.project-session').count(), 2);
+  assert.equal(await visible().locator('.message').count(), 2);
+  await newConversation();
   await input().fill('Keep this unsent draft');
   await select('First session prompt');
   await send('Follow up in first');
@@ -194,7 +205,7 @@ try {
   await writeFile('test-results/sessions.png', Buffer.from(png, 'base64'));
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: immediate new sessions, independent history/drafts, switching during streaming, recovery, unchanged schematic and compact session menu.',
+    'PASS: folders reopen the latest session; explicit new sessions retain independent history/drafts, streaming, recovery and unchanged schematic.',
   );
 } finally {
   await application

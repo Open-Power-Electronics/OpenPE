@@ -160,8 +160,12 @@ test('workspace observations reject forged specifications, cross-project binding
   });
   assert.match(prompt, /project\.datasheet/);
   assert.match(prompt, /Peak switch-current limits are not output-current ratings/);
-  assert.match(prompt, /520000/);
   assert.match(prompt, /SNVS485I/);
+  const reference = (text: string) =>
+    JSON.parse(text.split('<circuit>\n')[1].split('\n</circuit>')[0]).workspace.icDatasheet;
+  assert.equal(reference(prompt).record, undefined);
+  const detailedPrompt = makePrompt({ prompt: 'Check frequency', context: { workspace: context } });
+  assert.equal(reference(detailedPrompt).record.parameters.switching_frequency.values.typ, 520000);
 });
 
 test('the host exposes an origin-bound read query while pending Source stays independent', async () => {

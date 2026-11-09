@@ -13,6 +13,23 @@ export type TurnPart =
   | { kind: 'process'; key: string; entry: AgentProcessEntry }
   | { kind: 'tools'; key: string; entries: AgentToolActivity[] };
 
+/** Keep the latest reply and unresolved reviews outside collapsible work. */
+export function agentTurnSections(parts: TurnPart[]) {
+  const last = parts.at(-1);
+  const answer = last?.kind === 'text' ? last : undefined;
+  const reviews: AgentToolActivity[] = [];
+  const work = (answer ? parts.slice(0, -1) : parts).flatMap((part): TurnPart[] => {
+    if (part.kind !== 'tools') return [part];
+    const entries = part.entries.filter((entry) => {
+      if (entry.status !== 'review' && entry.status !== 'applying') return true;
+      reviews.push(entry);
+      return false;
+    });
+    return entries.length ? [{ ...part, entries }] : [];
+  });
+  return { work, answer, reviews };
+}
+
 /** Sanitize the complete reply before splitting it around transient activity. */
 export function agentTurnTimeline(
   text: string,

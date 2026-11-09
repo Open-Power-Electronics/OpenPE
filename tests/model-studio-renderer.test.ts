@@ -1058,7 +1058,8 @@ test('backpressure and partial-sample continuations avoid duplicate copies while
   f.target.dispose();
 });
 
-test('filter cadence preserves early feedback, explicit repaint and the complete final image', () => {
+test('filter cadence preserves early feedback, explicit repaint and the complete final image', (t) => {
+  t.mock.method(performance, 'now', () => 0);
   const f = fixture();
   const continuation = { ...f.options, continuation: true };
   const presented: number[] = [];
@@ -1127,11 +1128,11 @@ test('movement and physical scene changes reset samples without needless geometr
   f.target.dispose();
 });
 
-test('path tracing keeps its normal-density resolution and caps high-density work at CSS pixels', () => {
-  for (const ratio of [1, 1.25, 2, 3]) {
+test('path tracing supersamples up to 1.5 times the drawing and CSS dimensions', () => {
+  for (const ratio of [0.5, 1, 1.25, 2, 3]) {
     const css = new THREE.Vector2(960, 640);
     const drawing = css.clone().multiplyScalar(ratio);
-    const expectedScale = Math.min(0.75 * ratio, 1);
+    const expectedScale = 1.5 * Math.min(ratio, 1);
     assert.deepEqual(modelRenderWorkingSize(drawing, css), {
       width: 960 * expectedScale,
       height: 640 * expectedScale,
@@ -1147,7 +1148,7 @@ test('path tracing retains aspect ratio and its working-size bound for large and
     [4320, 7680],
   ]) {
     const size = modelRenderWorkingSize({ x, y }, { x: x / 2, y: y / 2 });
-    assert.equal(Math.max(size.width, size.height), MODEL_RENDER_MAX_DIMENSION * 0.75);
+    assert.equal(Math.max(size.width, size.height), MODEL_RENDER_MAX_DIMENSION);
     assert.equal(size.width / size.height, x / y);
   }
   assert.deepEqual(modelRenderWorkingSize({ x: 2, y: 2 }, { x: 1, y: 1 }), {
@@ -1159,8 +1160,8 @@ test('path tracing retains aspect ratio and its working-size bound for large and
     height: 1,
   });
   assert.deepEqual(modelRenderWorkingSize({ x: 2002, y: 1002 }, { x: 1001, y: 501 }), {
-    width: 1001,
-    height: 501,
+    width: 1501,
+    height: 751,
   });
 });
 
@@ -1169,18 +1170,18 @@ test('path tracing bounds working resolution and restarts accumulation after res
   f.state.drawing.set(7680, 4320);
   f.state.css.set(1920, 1080);
   f.studio.render(f.camera, f.options);
-  assert.deepEqual(f.calls.sizes.at(-1), [MODEL_RENDER_MAX_DIMENSION * 0.75, 1080]);
+  assert.deepEqual(f.calls.sizes.at(-1), [MODEL_RENDER_MAX_DIMENSION, 1080]);
   f.state.drawing.set(1000, 800);
   f.state.css.set(1000, 800);
   f.studio.render(f.camera, f.options);
-  assert.deepEqual(f.calls.sizes.at(-1), [750, 600]);
+  assert.deepEqual(f.calls.sizes.at(-1), [1500, 1200]);
   assert.deepEqual(f.state.drawing.toArray(), [1000, 800], 'The output canvas keeps its size.');
   assert.equal(f.studio.samples, 0.75);
   f.state.drawing.set(2000, 1600);
   f.studio.render(f.camera, f.options);
-  assert.deepEqual(f.calls.sizes.at(-1), [1000, 800]);
+  assert.deepEqual(f.calls.sizes, [[1920, 1080], [1500, 1200]]);
   assert.deepEqual(f.state.drawing.toArray(), [2000, 1600], 'High-density output keeps its size.');
-  assert.equal(f.studio.samples, 0.75, 'Changing working resolution starts a new image.');
+  assert.equal(f.studio.samples, 1.5, 'A density change alone keeps the current accumulation.');
   f.studio.dispose();
   f.target.dispose();
 });

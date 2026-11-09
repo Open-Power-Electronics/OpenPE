@@ -43,6 +43,7 @@ export default function ProjectNavigation({
   active = true,
   activeId,
   onSelect,
+  onNewSession,
   onAction,
   activeSessionId,
   onSelectSession,
@@ -54,7 +55,8 @@ export default function ProjectNavigation({
   activeSessionId?: string;
   onSelectSession?: (projectId: string, sessionId: string) => void;
   onSessionAction?: (projectId: string, sessionId: string, action: SessionAction) => void;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, sessionId?: string) => void;
+  onNewSession: (id: string) => void;
   onAction: (id: string, action: ProjectAction) => void;
 }) {
   const projects = useWorkspaceProjects(fallbackProjects, active);
@@ -185,7 +187,11 @@ export default function ProjectNavigation({
                   unsaved={project.unsaved}
                   accessibleLabel={`${project.title}, Project ${index + 1}${project.pinned ? ', Pinned project' : ''}${project.unsaved ? ', Unsaved changes' : ''}`}
                   onClick={() => {
-                    if (active) onSelect(project.id);
+                    if (active)
+                      onSelect(
+                        project.id,
+                        project.sessions?.findLast((session) => !session.archived)?.id,
+                      );
                   }}
                   hasMenu
                   menuOpen={menu?.id === project.id}
@@ -347,7 +353,7 @@ export default function ProjectNavigation({
                     onClick={() => {
                       if (!active || !projects.some((project) => project.id === menu.id)) return;
                       dismiss(true);
-                      if (id === 'new-session') onSelect(menu.id);
+                      if (id === 'new-session') onNewSession(menu.id);
                       else onAction(menu.id, id);
                     }}
                   >

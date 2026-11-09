@@ -8,6 +8,7 @@ export type CapabilityMutation = false | 'document' | 'session' | 'external';
 export type CapabilityReview = 'none' | 'optional' | 'required';
 export type CapabilityOwner = 'core' | 'host' | 'plugin' | 'api';
 export type CapabilityLevel = 'object' | 'operation' | 'task';
+export type CapabilityRevision = 'project' | 'independent';
 export type CapabilitySchema = Record<string, unknown> | boolean;
 export type CapabilityEvent = {
   seq: number;
@@ -41,6 +42,8 @@ export type CapabilityDefinition<Input = unknown> = {
   inputSchema: CapabilitySchema;
   mutation?: CapabilityMutation;
   review?: CapabilityReview;
+  /** Only session commands may opt out of project revision preconditions. */
+  revision?: CapabilityRevision;
   /** Every registration declares its architectural owner. */
   owner: CapabilityOwner;
   /** Domain abstraction, omitted for infrastructure and presentation controls. */
@@ -57,6 +60,7 @@ export type CapabilityDescription = {
   inputSchema: CapabilitySchema;
   mutation: CapabilityMutation;
   review: CapabilityReview;
+  revision: CapabilityRevision;
   owner: CapabilityOwner;
   level?: CapabilityLevel;
   plugin?: string;
@@ -192,9 +196,10 @@ export function createCapabilityHost(
       };
     }
   }
-  function requireRevision(kind: 'query' | 'command', expectedRevision: string | undefined) {
+  function requireRevision(entry: Entry, expectedRevision: string | undefined) {
     if (
-      kind === 'command' &&
+      entry.definition.kind === 'command' &&
+      entry.definition.revision !== 'independent' &&
       expectedRevision !== undefined &&
       hostOptions.revision &&
       expectedRevision !== hostOptions.revision()
@@ -214,7 +219,7 @@ export function createCapabilityHost(
     const entry = entries.get(id);
     if (!entry || entry.definition.kind !== kind)
       throw new Error(`Unknown ${kind} capability: ${id}.`);
-    requireRevision(kind, options.expectedRevision);
+    requireRevision(entry, options.expectedRevision);
     const data = copyJson(input === undefined ? {} : input, maxDataBytes);
     const validation = entry.validate(data);
     if (!validation.valid) throw new Error(`Invalid input for ${id}: ${validation.error}.`);
@@ -254,7 +259,7 @@ export function createCapabilityHost(
         throw cancelled();
       }
       // Synchronous availability/started observers can also advance the project.
-      requireRevision(kind, options.expectedRevision);
+      requireRevision(entry, options.expectedRevision);
       const result = await entry.definition.handler(data, {
         signal: control.signal,
         actor,
@@ -344,6 +349,16 @@ export function createCapabilityHost(
         throw new Error(`Capability ${definition.id} is already registered.`);
       if (definition.kind === 'query' && definition.mutation)
         throw new Error('A query capability cannot mutate state.');
+      if (
+        definition.revision !== undefined &&
+        !['project', 'independent'].includes(definition.revision)
+      )
+        throw new Error('Invalid capability revision policy.');
+      if (
+        definition.revision === 'independent' &&
+        (definition.kind !== 'command' || definition.mutation !== 'session')
+      )
+        throw new Error('Only session commands may be independent of the project revision.');
       const owner = definition.owner;
       if (!['core', 'host', 'plugin', 'api'].includes(owner))
         throw new Error('Invalid capability owner.');
@@ -386,6 +401,7 @@ export function createCapabilityHost(
           inputSchema,
           mutation = false,
           review = 'none',
+          revision = 'project',
           owner,
           level,
           plugin,
@@ -398,6 +414,7 @@ export function createCapabilityHost(
             inputSchema,
             mutation,
             review,
+            revision,
             owner,
             ...(level ? { level } : {}),
             ...(plugin ? { plugin } : {}),

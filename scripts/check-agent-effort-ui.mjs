@@ -1,7 +1,7 @@
 // Actual AgentComposer/ModelSelect with isolated model catalogs and preferences.
 // No Electron, installed provider, external service or solver is launched.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
@@ -36,18 +36,19 @@ const bundle = await build({
       import {createRoot} from 'react-dom/client';
       import AgentComposer from './components/AgentComposer';
       import {defaultAgentPreferences} from './lib/workspace-state';
-      const submissions = [];
+      const submissions = [], settingsOpens = [];
       function Fixture() {
         const [state,setState] = useState({
           provider:'codex', available:true, agentSupportsEffort:true,
           effort:defaultAgentPreferences.effort, model:'', input:'Explain ripple', busy:false,
         });
         const patch = next => setState(previous=>({...previous,...next}));
-        window.effortFixture = {state,submissions,patch};
+        window.effortFixture = {state,submissions,settingsOpens,patch};
         return <main><AgentComposer {...state}
           setEffort={effort=>patch({effort})} setModel={model=>patch({model})}
           setInput={input=>patch({input})} approvalMode="review" setApprovalMode={()=>{}}
-          onSubmit={effort=>submissions.push({effort:effort ?? null})} onStop={()=>{}}/>
+          onSubmit={effort=>submissions.push({effort:effort ?? null})} onStop={()=>{}}
+          onAgentSettings={()=>settingsOpens.push(state.provider)}/>
         </main>;
       }
       createRoot(document.getElementById('root')).render(<Fixture/>);`,
@@ -73,6 +74,9 @@ try {
   let initialCodex = true;
   let releasePi;
   let failCodex = false;
+  let holdCodexRetry = false;
+  let releaseCodexRetry;
+  let codexRequests = 0;
   await page.addInitScript(() => {
     window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
   });
@@ -80,11 +84,14 @@ try {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/models') {
       const provider = url.searchParams.get('provider');
+      if (provider === 'codex') codexRequests++;
       if (provider === 'codex' && initialCodex) {
         initialCodex = false;
         await new Promise((resolve) => (releaseCodex = resolve));
       }
       if (provider === 'pi') await new Promise((resolve) => (releasePi = resolve));
+      if (provider === 'codex' && holdCodexRetry)
+        await new Promise((resolve) => (releaseCodexRetry = resolve));
       if (provider === 'codex' && failCodex)
         return route.fulfill({ status: 502, json: { error: 'Fixture discovery unavailable.' } });
       assert.ok(catalogs[provider], `Unexpected provider: ${provider}`);
@@ -103,6 +110,8 @@ try {
   const model = page.getByRole('combobox', { name: 'Choose model', exact: true });
   const input = page.getByRole('textbox', { name: 'Message your agent', exact: true });
   const send = page.getByRole('button', { name: 'Send message', exact: true });
+  const availability = page.locator('.composer-availability');
+  const retryModels = availability.getByRole('button', { name: 'Retry models', exact: true });
   const snapshot = () => page.evaluate(() => window.effortFixture.state);
   const submissions = () => page.evaluate(() => window.effortFixture.submissions);
   const patch = async (next) => {
@@ -154,6 +163,7 @@ try {
   };
 
   await waitEffort('Medium');
+  await availability.getByText('Loading models…', { exact: true }).waitFor();
   assert.equal((await snapshot()).effort, 'medium', 'New preferences default to medium.');
   await assertNoEffortChoices();
   await assertSendBlocked();
@@ -230,7 +240,15 @@ try {
 
   await choose(model, 'Full reasoning');
   await waitEffort('Ultra');
-  await patch({ available: false });
+  await patch({ available: false, agentAvailabilityKnown: false });
+  assert.equal(await availability.count(), 0);
+  assert.equal(await availability.getByRole('button', { name: 'Agent settings' }).count(), 0);
+  await patch({ agentAvailabilityKnown: true });
+  await availability.getByText('Codex is unavailable.', { exact: true }).waitFor();
+  const agentSettings = availability.getByRole('button', { name: 'Agent settings', exact: true });
+  await agentSettings.press('Enter');
+  assert.deepEqual(await page.evaluate(() => window.effortFixture.settingsOpens), ['codex']);
+  assert.ok(await input.evaluate((field) => document.activeElement === field));
   await assertNoEffortChoices();
   assert.equal(await model.isDisabled(), true);
   assert.equal(await send.isDisabled(), true);
@@ -240,6 +258,7 @@ try {
   // The shared Home composer creates local projects and must remain usable
   // without any installed or connected Agent.
   await patch({ requiresAgent: false });
+  assert.equal(await availability.count(), 0);
   await submitEffort('ultra');
   await patch({ requiresAgent: true });
   await assertSendBlocked();
@@ -278,30 +297,88 @@ try {
   await submitEffort('off');
   failCodex = true;
   await patch({ provider: 'codex', model: '' });
-  await page.getByRole('status', { name: 'Model list unavailable', exact: true }).waitFor();
+  await availability.getByText('Could not load models.', { exact: true }).waitFor();
   await assertNoEffortChoices();
   await assertSendBlocked();
+  const main = page.locator('main');
+  await main.evaluate((element) => {
+    element.style.width = '328px';
+  });
+  await mkdir('test-results/agent-effort', { recursive: true });
+  await main
+    .locator('.composer')
+    .screenshot({ path: 'test-results/agent-effort/model-retry-328.png' });
+  await main.evaluate((element) => {
+    element.style.width = '';
+  });
   assert.equal(
     (await snapshot()).effort,
     'off',
     'Discovery failure preserves the saved preference.',
   );
+  await input.focus();
+  const beforeRetry = codexRequests;
+  const beforeDraft = await input.inputValue();
+  await input.evaluate((field) => field.setSelectionRange(2, 8, 'backward'));
+  await input.dispatchEvent('compositionstart');
+  await retryModels.click();
+  assert.equal(codexRequests, beforeRetry);
+  assert.ok(await input.evaluate((field) => document.activeElement === field));
+  await input.dispatchEvent('compositionend');
+  await retryModels.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  assert.equal(codexRequests, beforeRetry);
   failCodex = false;
-  await patch({ available: false });
-  await patch({ available: true });
+  holdCodexRetry = true;
+  await retryModels.press('Enter');
+  await availability.getByText('Loading models…', { exact: true }).waitFor();
+  assert.equal(await retryModels.count(), 0);
+  assert.equal(await input.inputValue(), beforeDraft);
+  assert.deepEqual(
+    await input.evaluate((field) => [
+      field.selectionStart,
+      field.selectionEnd,
+      field.selectionDirection,
+    ]),
+    [2, 8, 'backward'],
+  );
+  await assertSendBlocked();
+  const retryDeadline = Date.now() + 10000;
+  while (!releaseCodexRetry) {
+    assert.ok(Date.now() < retryDeadline, 'Explicit model discovery retry did not start.');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(codexRequests, beforeRetry + 1);
+  holdCodexRetry = false;
+  await model.evaluate((control) => {
+    if (!control.disabled) throw Error('Loading model choice should be disabled.');
+  });
+  await page.locator('main').evaluate((element) => {
+    element.tabIndex = -1;
+    element.focus();
+  });
+  releaseCodexRetry();
   await waitEffort('Medium');
+  assert.equal(await availability.count(), 0);
+  assert.ok(await page.locator('main').evaluate((element) => document.activeElement === element));
   await submitEffort('medium');
   assert.equal((await snapshot()).effort, 'off');
+  await patch({ model: 'fixture/retired' });
+  await availability.getByText('Choose an available model to send.', { exact: true }).waitFor();
+  await assertSendBlocked();
+  assert.equal((await snapshot()).model, 'fixture/retired');
+  await choose(model, 'Full reasoning');
+  await availability.waitFor({ state: 'detached' });
 
   // Refresh failure for the same provider must revoke the previously loaded
   // catalog, rather than restoring stale efforts when availability returns.
   failCodex = true;
   await patch({ available: false });
   await patch({ available: true });
-  await page.getByRole('status', { name: 'Model list unavailable', exact: true }).waitFor();
+  await availability.getByText('Could not load models.', { exact: true }).waitFor();
   await assertNoEffortChoices();
   await assertSendBlocked();
   await patch({ requiresAgent: false });
+  await page.getByRole('status', { name: 'Model list unavailable', exact: true }).waitFor();
   await submitEffort('medium');
   assert.deepEqual(errors, []);
   console.log(

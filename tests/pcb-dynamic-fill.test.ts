@@ -182,6 +182,8 @@ test('zone resizing and rule-area changes update saved copper in the originating
     keepout: { tracks: false, vias: false, pads: false, copperpour: true, footprints: false },
   });
   const withKeepout = agent.getSnapshot().project!.pcb!;
+  const keepout = withKeepout.zones[1];
+  assert.equal(keepout.clearance, 0);
   assert.equal(withKeepout.zones[0].filledPolygons !== undefined, true);
   assert.equal(copperAt(withKeepout, 14, 5), false);
   assert.equal(copperAt(withKeepout, 8, 5), true);
@@ -191,7 +193,26 @@ test('zone resizing and rule-area changes update saved copper in the originating
   const changed = agent.getSnapshot().project!.pcb!;
   assert.equal(changed.zones[0].clearance, 0.8);
   assert.equal(copperAt(changed, 14, 5), false);
-  assert.equal(copperAt(changed, 11.4, 5), false);
+  assert.equal(
+    copperAt(changed, 11.4, 5),
+    true,
+    'Copper clearance is independent of the rule area.',
+  );
+  const withoutMargin = agent.getNativeFiles();
+  const properties = new ProjectCore(agent.getSnapshot().project!);
+  properties.replaceBoard({
+    ...changed,
+    zones: [changed.zones[0], { ...keepout, clearance: 0.8 }],
+  });
+  agent.execute('layout.zone', { boardId: board.id, zoneId: keepout.id, clearance: 0.8 });
+  assert.deepEqual(agent.getNativeFiles(), properties.getNativeFiles());
+  assert.equal(agent.getSnapshot().undoDepth, 4);
+  const reopened = projectFromNativeFiles(agent.getNativeFiles()).pcb!;
+  assert.equal(reopened.zones[1].clearance, 0.8);
+  assert.equal(copperAt(reopened, 11.4, 5), false);
+  assert.equal(copperAt(reopened, 11.1, 5), true);
+  agent.undo();
+  assert.deepEqual(agent.getNativeFiles(), withoutMargin);
   agent.undo();
   agent.undo();
   assert.deepEqual(agent.getNativeFiles(), resized);

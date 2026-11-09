@@ -41,7 +41,7 @@ export function createEmptyPCB(): PCB {
  * KiCad 10 rotates local coordinates counterclockwise in its downward-Y canvas;
  * applying another reflection merely because side is back would misplace pads.
  */
-export function footprintPoint(footprint: Footprint, local: Point): Point {
+export function footprintPoint(footprint: Point & { rotation: number }, local: Point): Point {
   const radians = (-footprint.rotation * Math.PI) / 180;
   return {
     x: round(footprint.x + local.x * Math.cos(radians) - local.y * Math.sin(radians)),
@@ -160,8 +160,7 @@ function sourcePositive(node: SExpr | undefined, index: number, context: string)
 }
 
 /** Convert only geometry represented exactly by the existing PCB v1 schema.
- * Library metadata/3D links and standard reference/value captions are not board
- * geometry: the board serializer regenerates those captions from the schematic.
+ * Author standard captions as native fields whose content follows the schematic.
  * Pads remain unassigned until the user explicitly assigns a board net.
  */
 export function createPCBFootprint(
@@ -370,6 +369,26 @@ export function createPCBFootprint(
       fail('This footprint exceeds the supported geometry limit.');
   }
   if (!pads.length) fail('Choose a footprint with numbered electrical pads.');
+  for (const [property, layer, y] of [
+    ['Reference', 'F.SilkS', -3],
+    ['Value', 'F.Fab', 3],
+  ] as const) {
+    graphics.push({
+      id: uid(),
+      kind: 'text',
+      layer,
+      width: 0,
+      start: { x: 0, y },
+      end: { x: 0, y },
+      text: {
+        property,
+        value: '${' + property.toUpperCase() + '}',
+        rotation: 0,
+        size: { x: 1, y: 1 },
+        thickness: 0.15,
+      },
+    });
+  }
   return {
     id: uid(),
     symbolId,
@@ -389,11 +408,85 @@ function selected(selection: Selection, kind: PCBSelection['kind'], id: string) 
   );
 }
 
+/** Footprint text has its own native identity. Other footprint artwork belongs to the body. */
+export function findPCBGraphic(
+  board: PCB,
+  id: string,
+): { graphic: BoardLine; owner?: Footprint } | undefined {
+  const graphic = board.graphics.find((item) => item.id === id);
+  if (graphic) return { graphic };
+  for (const owner of board.footprints) {
+    const graphic = owner.graphics.find((item) => item.kind === 'text' && item.id === id);
+    if (graphic) return { graphic, owner };
+  }
+}
+
+export function replacePCBGraphic(board: PCB, graphic: BoardLine): PCB {
+  const existing = findPCBGraphic(board, graphic.id);
+  if (!existing) fail('This board graphic no longer exists.');
+  const { owner } = existing;
+  if (!owner)
+    return { ...board, graphics: board.graphics.map((g) => (g.id === graphic.id ? graphic : g)) };
+  if (
+    graphic.kind !== 'text' ||
+    !graphic.text ||
+    graphic.text.property !== existing.graphic.text?.property
+  )
+    fail('Preserve the footprint text type and field identity.');
+  if (
+    (graphic.text.property === 'Reference' || graphic.text.property === 'Value') &&
+    graphic.text.value !== existing.graphic.text?.value
+  )
+    fail('Edit the footprint field content through its owning component.');
+  return {
+    ...board,
+    footprints: board.footprints.map((f) =>
+      f === owner
+        ? { ...f, graphics: f.graphics.map((g) => (g.id === graphic.id ? graphic : g)) }
+        : f,
+    ),
+  };
+}
+
+function mapSelectedFootprintText(
+  owner: Footprint,
+  selection: Selection,
+  edit: (graphic: BoardLine) => BoardLine | undefined,
+): Footprint {
+  if (!owner.graphics.some((g) => g.kind === 'text' && selected(selection, 'graphic', g.id)))
+    return owner;
+  return {
+    ...owner,
+    graphics: owner.graphics.flatMap((g) => {
+      const next = g.kind === 'text' && selected(selection, 'graphic', g.id) ? edit(g) : g;
+      return next ? [next] : [];
+    }),
+  };
+}
+
+function footprintLocalPoint(owner: Footprint, at: Point): Point {
+  return footprintPoint(
+    { x: 0, y: 0, rotation: -owner.rotation },
+    {
+      x: at.x - owner.x,
+      y: at.y - owner.y,
+    },
+  );
+}
+
 export function assertPCBSelectionUnlocked(board: PCB, selection: Selection) {
   if (
     board.graphics.some((graphic) => graphic.locked && selected(selection, 'graphic', graphic.id))
   )
     fail('Unlock selected graphics before editing.');
+  if (
+    board.footprints.some((f) =>
+      f.graphics.some(
+        (g) => g.kind === 'text' && (g.locked || f.locked) && selected(selection, 'graphic', g.id),
+      ),
+    )
+  )
+    fail('Unlock selected footprint text before editing.');
   if (
     board.footprints.some(
       (footprint) => footprint.locked && selected(selection, 'footprint', footprint.id),
@@ -449,7 +542,12 @@ export function movePCBSelection(board: PCB, selection: Selection, delta: Point)
   return {
     ...board,
     footprints: board.footprints.map((f) =>
-      selected(selection, 'footprint', f.id) ? { ...f, ...move(f) } : f,
+      selected(selection, 'footprint', f.id)
+        ? { ...f, ...move(f) }
+        : mapSelectedFootprintText(f, selection, (g) => {
+            const local = footprintLocalPoint(f, { x: f.x + d.x, y: f.y + d.y });
+            return transformPCBGraphic(g, (p) => point({ x: p.x + local.x, y: p.y + local.y }));
+          }),
     ),
     vias: board.vias.map((v) => (selected(selection, 'via', v.id) ? { ...v, ...move(v) } : v)),
     tracks: board.tracks.map((t) =>
@@ -476,10 +574,13 @@ export function rotatePCBSelection(
   assertPCBSelectionUnlocked(board, selection);
   const rotate = (p: Point, center: Point) =>
     point(
-      footprintPoint({ ...center, rotation: degrees } as Footprint, {
-        x: p.x - center.x,
-        y: p.y - center.y,
-      }),
+      footprintPoint(
+        { ...center, rotation: degrees },
+        {
+          x: p.x - center.x,
+          y: p.y - center.y,
+        },
+      ),
     );
   const line = <T extends { start: Point; end: Point }>(item: T): T => {
     const center = origin ?? {
@@ -493,7 +594,13 @@ export function rotatePCBSelection(
     footprints: board.footprints.map((f) =>
       selected(selection, 'footprint', f.id)
         ? { ...f, ...(origin ? rotate(f, origin) : {}), rotation: angle(f.rotation + degrees) }
-        : f,
+        : mapSelectedFootprintText(f, selection, (g) =>
+            transformPCBGraphic(
+              g,
+              (p) => (origin ? footprintLocalPoint(f, rotate(footprintPoint(f, p), origin)) : p),
+              (n) => angle(n + degrees),
+            ),
+          ),
     ),
     vias: origin
       ? board.vias.map((v) =>
@@ -564,7 +671,15 @@ export function deletePCBSelection(board: PCB, selection: Selection): PCB {
   assertPCBSelectionUnlocked(board, selection);
   return {
     ...board,
-    footprints: board.footprints.filter((f) => !selected(selection, 'footprint', f.id)),
+    footprints: board.footprints.flatMap((f) =>
+      selected(selection, 'footprint', f.id)
+        ? []
+        : [
+            mapSelectedFootprintText(f, selection, (g) =>
+              g.text?.property ? { ...g, text: { ...g.text, hidden: true } } : undefined,
+            ),
+          ],
+    ),
     tracks: board.tracks.filter((t) => !selected(selection, 'track', t.id)),
     vias: board.vias.filter((v) => !selected(selection, 'via', v.id)),
     graphics: board.graphics.filter((g) => !selected(selection, 'graphic', g.id)),

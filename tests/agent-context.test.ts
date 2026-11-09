@@ -20,6 +20,7 @@ import { makePrompt } from '../server/agents.mjs';
 import { readFile } from 'node:fs/promises';
 import { parseProject } from '../lib/project';
 import { projectDatasheetContext } from '../lib/example-datasheets';
+import { createDatasheetService } from '../server/datasheets.mjs';
 
 function fixture() {
   const circuit = emptyCircuit();
@@ -119,7 +120,7 @@ test('workspace context retains Source metadata and rejects private native files
   }
 });
 
-test('authenticated chat forwards reviewed IC specifications to every supported provider and rejects modified records', async () => {
+test('a greeting starts every runnable Agent without preparing the reviewed PDF', async () => {
   const project = parseProject(
     await readFile('tests/fixtures/reference/lm2735-msop8-sepic.json', 'utf8'),
   );
@@ -131,61 +132,79 @@ test('authenticated chat forwards reviewed IC specifications to every supported 
     source: agentSource(null, ''),
     ui: { activeSchematicId: circuit.id },
     simulation: { status: 'disabled' },
-    icDatasheet: projectDatasheetContext(project),
   };
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'openpe-datasheet-context-'));
-  const received: any[] = [];
+  const prompts: string[] = [];
   const service = await startServer({
     dataDir,
-    agentRunner: async (provider, request, _cwd, emit) => {
-      received.push({ provider, request });
-      emit({ type: 'text', text: 'Reference received' });
+    datasheetFetcher: async () => assert.fail('Send cannot fetch the datasheet PDF'),
+    datasheetServiceFactory: (options) =>
+      createDatasheetService({
+        ...options,
+        render: async () => assert.fail('Send cannot render the datasheet PDF'),
+      }),
+    agentRunner: async (provider, request, _cwd, emit, _signal, options) => {
+      const capabilities = !!options?.capabilities && ['codex', 'claude'].includes(provider);
+      const prompt = makePrompt({ ...request, capabilities });
+      assert.match(prompt, /SNVS485I/);
+      assert.doesNotMatch(prompt, /<datasheet-pdf>/);
+      const context = JSON.parse(prompt.split('<circuit>\n')[1].split('\n</circuit>')[0]);
+      if (capabilities) {
+        assert.equal(context.workspace.icDatasheet.record, undefined);
+        assert.equal(context.workspace.project.schematics[0].connections, undefined);
+      } else {
+        assert.ok(context.workspace.icDatasheet.record.parameters.switching_frequency);
+        assert.ok(context.workspace.project.schematics[0].connections);
+      }
+      prompts.push(prompt);
+      emit({ type: 'text', text: 'Fixture greeting' });
       return { outcome: 'completed' };
     },
   });
   try {
     const headers = { 'X-OpenPE-Token': service.token, 'Content-Type': 'application/json' };
+    const request = {
+      sessionId: 'datasheet-session',
+      prompt: 'hello',
+      history: [],
+      capabilities: true,
+    };
     for (const provider of ['codex', 'claude', 'deepseek', 'pi']) {
       const response = await fetch(service.base + '/api/chat', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          sessionId: 'datasheet-session',
+          ...request,
           provider,
-          prompt: 'Explain IC limits',
-          history: [],
           context: { id: circuit.id, basis: circuitFingerprint(circuit), workspace },
         }),
       });
       assert.equal(response.status, 200);
-      await response.text();
-      assert.deepEqual(
-        received.at(-1).request.context.workspace.icDatasheet,
-        workspace.icDatasheet,
-      );
-      assert.match(makePrompt(received.at(-1).request), /SNVS485I/);
+      assert.match(await response.text(), /Fixture greeting/);
     }
-    const forged = structuredClone(workspace);
-    forged.icDatasheet!.record!.parameters.switching_frequency.values.typ = 1600000;
+    assert.equal(prompts.length, 4);
+    const forged = projectDatasheetContext(project);
+    forged.record!.parameters.switching_frequency.values.typ = 1600000;
     const response = await fetch(service.base + '/api/chat', {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        sessionId: 'datasheet-session',
+        ...request,
         provider: 'codex',
-        prompt: 'Forged',
-        history: [],
-        context: { id: circuit.id, basis: circuitFingerprint(circuit), workspace: forged },
+        context: {
+          id: circuit.id,
+          basis: circuitFingerprint(circuit),
+          workspace: { ...workspace, icDatasheet: forged },
+        },
       }),
     });
     assert.equal(response.status, 400);
-    assert.equal(received.length, 4);
+    assert.equal(prompts.length, 4);
   } finally {
     await service.close();
     await rm(dataDir, { recursive: true, force: true });
   }
 });
-
 test('Agent receives every trace with native extrema, endpoints, visible ranges and exact crossed cursors', () => {
   const { workspace } = fixture();
   const simulation = workspace.simulation;

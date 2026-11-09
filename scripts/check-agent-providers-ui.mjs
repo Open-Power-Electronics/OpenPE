@@ -24,8 +24,20 @@ let state = {
       sourceDraft: null,
       dirty: false,
       filename: 'agent-providers.kicad_pro',
-      sessions: [{ id: 'provider-session', messages: [], draft: '' }],
+      sessions: [
+        { id: 'provider-session', messages: [], draft: '' },
+        { id: 'second-session', messages: [], draft: 'Second draft' },
+      ],
       activeSessionId: 'provider-session',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000002',
+      source: serializeProject(createProject()),
+      sourceDraft: null,
+      dirty: false,
+      filename: 'second-project.kicad_pro',
+      sessions: [{ id: 'other-project-session', messages: [], draft: 'Other project draft' }],
+      activeSessionId: 'other-project-session',
     },
   ],
   activeDocumentId: documentId,
@@ -50,6 +62,7 @@ const bundle = await build({
 const workbench = bundledWorkbenchCatalog();
 const modelRequests = [];
 let detections = 0;
+const initialDetection = Promise.withResolvers();
 let chats = 0;
 const waitUntil = async (condition, message) => {
   const deadline = Date.now() + 10000;
@@ -77,6 +90,9 @@ try {
       connection: async () => ({ base: 'http://localhost', token: 'fixture' }),
       writeWorkspaceRecovery: (content) => window.persistWorkspaceRecovery(content),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -88,9 +104,12 @@ try {
       assert.equal(route.request().method(), 'GET', 'Recovery writes use the native bridge.');
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents') {
       detections++;
+      if (detections === 1) await initialDetection.promise;
       return route.fulfill({
         json: agentProviderIds.map((id) =>
           id === 'codex'
@@ -182,9 +201,30 @@ try {
     await waitUntil(() => state.provider === provider.id, 'Selected Agent was not persisted.');
   };
   await mount();
+  await picker.waitFor().catch(async (error) => {
+    throw new Error(
+      `${error.message}\n${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0, 4000)}`,
+    );
+  });
   assert.equal(await picker.getAttribute('aria-description'), 'DeepSeek Harness');
   assert.equal(await composer.getAttribute('placeholder'), 'Work with DeepSeek Harness');
   assert.equal(await modelPicker.innerText(), originalModels.deepseek);
+  await waitUntil(() => detections === 1, 'Initial Agent detection did not start.');
+  for (const [session, draft] of [
+    ['second-session', 'Second draft'],
+    ['other-project-session', 'Other project draft'],
+    ['provider-session', ''],
+  ]) {
+    await page.locator(`button[data-session-id="${session}"]:visible`).click();
+    await page.waitForFunction(
+      (value) => document.querySelector('.chat-panel:not([hidden]) textarea')?.value === value,
+      draft,
+    );
+    assert.equal(await page.locator('.composer-availability:visible').count(), 0);
+    assert.ok(await button('Send message').isDisabled());
+  }
+  assert.equal(detections, 1, 'Changing conversations and projects cannot start detection.');
+  initialDetection.resolve();
 
   await button('Settings').click();
   const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
@@ -209,8 +249,10 @@ try {
     }
   }
   const beforeDetect = detections;
+  assert.equal(beforeDetect, 1);
   await settings.getByRole('button', { name: 'Detect agents', exact: true }).click();
   await waitUntil(() => detections > beforeDetect, 'Detect agents did not refresh local status.');
+  assert.equal(detections, 2);
   await settings.getByRole('button', { name: 'Detect agents', exact: true }).waitFor();
   assert.equal(await settings.locator('.connection-item').count(), 5);
   await page.waitForFunction(() =>

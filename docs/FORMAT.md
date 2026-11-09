@@ -12,7 +12,7 @@ need to be selected separately.
 
 Component simulation data retains optional `initialVoltage` and `initialCurrent` strings in the canonical component record, represented natively by `OpenPE.InitialVoltage` and `OpenPE.InitialCurrent`. Unset values remain absent; inspection does not write defaults.
 
-Model selection retains optional canonical `simulation.modelSource` (`basic` or `external`) as native `OpenPE.ModelSource`, independently of the saved external Sim.Library/Sim.Name/Sim.Pins. An absent override follows the current native library binding. Selecting an intrinsic model preserves external settings, and undo/save/recovery retain both. Declaration catalogs and model bodies are not native fields.
+Model selection retains optional canonical `simulation.modelSource` (`basic` or `external`) as native `OpenPE.ModelSource`, independently of the saved external Sim.Library/Sim.Name/Sim.Pins. An absent override follows the current native library binding. Selecting an intrinsic model preserves external settings, and undo/save/recovery retain both. An explicit passive choice uses canonical `simulation.passiveModel` (R, C or L) and native `OpenPE.PassiveModel`. It preserves physical pins, Value, stored simulation fields and the participation flag. Clearing an unassigned two-pin connector removes the explicit passive selection. Declaration catalogs and model bodies are not native fields.
 
 Voltage-source and EMC IPULSE current-source waveform selection stores optional canonical simulation.sourceType (DC, PULSE or SIN) as native OpenPE.SourceType. It applies to the active intrinsic source independently of inactive external Device/Type/Pins and uses the existing Sim.Params/Value storage; native symbol IDs, geometry and connectivity stay unchanged.
 
@@ -73,6 +73,9 @@ the first retains the native UUID and later instances use deterministic UUIDs.
 Clean files retain their exact original bytes; a PCB edit writes equivalent
 single-layer zones with their original per-layer fills and rules. Disabled
 placement-rule metadata is preserved; enabled placement rules remain unsupported.
+OpenPE stores the rule area's pour margin in its native `connect_pads`
+clearance. KiCad displays the saved contours and uses the rule area's
+unexpanded outline when refilling.
 Zone names remain metadata. The EMC generator uses the official
 KiCad upgrader and exact custom-pad/keepout decomposition; pinned inputs remain
 unchanged.

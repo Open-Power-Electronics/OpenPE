@@ -299,8 +299,58 @@ export function rerouteSelectionConnections(
     }
     return flexible.get(k)!;
   };
-  // Slide free bends (and collinear subdivisions) before adding new elbows.
-  // Pins and branches stay anchored; incidental crossings never enter this graph.
+  const slidingBranches = new Map<string, ReadonlySet<string>>();
+  const slideBranch = (point: Point, lead: Wire, axis: 'x' | 'y', target: Point) => {
+    const k = key(point);
+    if (pins.has(k) || targets.has(k)) return false;
+    const trunk = source.wires.filter((wire) => wire.id !== lead.id && onWire(point, wire));
+    const fixedAxis = axis === 'x' ? 'y' : 'x';
+    if (
+      !trunk.length ||
+      trunk.some(
+        (wire) =>
+          selected.has(wire.id) ||
+          wire.a[fixedAxis] !== point[fixedAxis] ||
+          wire.b[fixedAxis] !== point[fixedAxis],
+      )
+    )
+      return false;
+    // Include contiguous subdivisions so a later drag can pass the old contact
+    // in either direction without stretching any of those stationary segments.
+    const collinear = source.wires
+      .filter(
+        (wire) =>
+          wire.id !== lead.id &&
+          !selected.has(wire.id) &&
+          wire.a[fixedAxis] === point[fixedAxis] &&
+          wire.b[fixedAxis] === point[fixedAxis],
+      )
+      .sort((a, b) => Math.min(a.a[axis], a.b[axis]) - Math.min(b.a[axis], b.b[axis]));
+    let min = Infinity,
+      max = -Infinity;
+    const trunkIds = new Set<string>();
+    for (const wire of collinear) {
+      const start = Math.min(wire.a[axis], wire.b[axis]),
+        end = Math.max(wire.a[axis], wire.b[axis]);
+      if (start > max) {
+        if (min <= point[axis] && point[axis] <= max) break;
+        min = start;
+        trunkIds.clear();
+      }
+      max = Math.max(max, end);
+      trunkIds.add(wire.id);
+    }
+    if (min >= point[axis] || max <= point[axis] || target[axis] < min || target[axis] > max)
+      return false;
+    // The branch changes its contact along an existing trunk. Its old wire
+    // subdivisions and stationary pins stay exact instead of folding backwards
+    // when the contact passes them. Interior crossings are not propagated.
+    slidingBranches.set(k, trunkIds);
+    moving.push(point);
+    return true;
+  };
+  // Slide free bends, subdivisions and branch contacts before adding elbows.
+  // A branch can slide only along its existing straight trunk; pins stay fixed.
   const queue = [...targets.keys()];
   for (let i = 0; i < queue.length; i++) {
     const k = queue[i];
@@ -311,7 +361,8 @@ export function rerouteSelectionConnections(
       const axis = w.a.y === w.b.y ? 'y' : w.a.x === w.b.x ? 'x' : null;
       if (!axis) continue;
       const next = targets.get(key(other)) || other;
-      if (next[axis] === target[axis] || !canSlide(other)) continue;
+      if (next[axis] === target[axis] || (!canSlide(other) && !slideBranch(other, w, axis, target)))
+        continue;
       // Each free coordinate is assigned at most once, bounding propagation.
       if (next[axis] !== other[axis]) continue;
       targets.set(key(other), { ...next, [axis]: target[axis] });
@@ -319,6 +370,8 @@ export function rerouteSelectionConnections(
     }
   }
   const moved = (p: Point) => targets.get(key(p)) || p;
+  const movedOnWire = (p: Point, wire: Wire) =>
+    slidingBranches.get(key(p))?.has(wire.id) ? p : moved(p);
   const fixedAnchors = [
     ...geometry.wireEnds,
     ...source.junctions,
@@ -358,7 +411,7 @@ export function rerouteSelectionConnections(
           .map((other) =>
             selected.has(other.id)
               ? posedWires.get(other.id)!
-              : { ...other, a: moved(other.a), b: moved(other.b) },
+              : { ...other, a: movedOnWire(other.a, other), b: movedOnWire(other.b, other) },
           ),
       ];
     const clear = (route: Point[]) =>
@@ -408,16 +461,21 @@ export function rerouteSelectionConnections(
     const routed: Wire[] = [];
     segments.set(w.id, routed);
     const connectionMoved =
-      !samePoint(moved(w.a), w.a) ||
-      !samePoint(moved(w.b), w.b) ||
-      moving.some((point) => attached(point, w) && !samePoint(moved(point), point));
+      !samePoint(movedOnWire(w.a, w), w.a) ||
+      !samePoint(movedOnWire(w.b, w), w.b) ||
+      moving.some((point) => attached(point, w) && !samePoint(movedOnWire(point, w), point));
     const splits = [
       w.a,
       // A moving connection or free bend can pass an interior branch. Keep its
       // anchor in the route even when it does not itself follow the selection.
       // Labels alone remain free to follow the routed wire below.
       ...[...moving, ...(connectionMoved ? fixedAnchors : [])].filter(
-        (p) => !selected.has(w.id) && attached(p, w) && !samePoint(p, w.a) && !samePoint(p, w.b),
+        (p) =>
+          !selected.has(w.id) &&
+          !slidingBranches.get(key(p))?.has(w.id) &&
+          attached(p, w) &&
+          !samePoint(p, w.a) &&
+          !samePoint(p, w.b),
       ),
       w.b,
     ]
@@ -425,8 +483,8 @@ export function rerouteSelectionConnections(
       .filter((p, i, all) => !i || !samePoint(p, all[i - 1]));
     let first = true;
     for (let i = 1; i < splits.length; i++) {
-      const a = moved(splits[i - 1]),
-        b = moved(splits[i]);
+      const a = movedOnWire(splits[i - 1], w),
+        b = movedOnWire(splits[i], w);
       const aMoved = !samePoint(a, splits[i - 1]);
       const bMoved = !samePoint(b, splits[i]);
       const straight = a.x === b.x || a.y === b.y || (w.a.x !== w.b.x && w.a.y !== w.b.y);
@@ -511,16 +569,18 @@ export function rerouteSelectionConnections(
     )
       d.junctions.push({ id: uid(), ...pin });
   }
-  const result = simplifyWiresWithPins(
-    d,
-    [...ids],
-    immutableSource,
-    d.parts.flatMap((part, index) =>
+  const stationaryTrunks = new Set([...slidingBranches.values()].flatMap((ids) => [...ids]));
+  const result = simplifyWiresWithPins(d, [...ids], immutableSource, [
+    ...d.parts.flatMap((part, index) =>
       source.parts[index] === part && source.libraries[part.libId] === d.libraries[part.libId]
         ? geometry.partPins.get(part.id)!
         : posedPinsFor(part),
     ),
-  );
+    // Relocating a contact does not replace the trunk's existing UUIDs.
+    ...source.wires
+      .filter((wire) => stationaryTrunks.has(wire.id))
+      .flatMap((wire) => [wire.a, wire.b]),
+  ]);
   if (immutableSource) {
     // Cache only a complete successful pose. Invalid proposals remain retryable
     // without certifying partially prepared source geometry.

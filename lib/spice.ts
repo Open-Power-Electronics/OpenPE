@@ -1,6 +1,9 @@
 import { pinPositions, libraries, type Circuit, type Part, type Point } from './circuit';
 import { displayPartValue, partFields, unitGraphics } from './library';
 import {
+  activePassiveModel,
+  canSelectPassiveSimulationModel,
+  passiveConnectorSymbol,
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
 } from './simulation-model-source';
@@ -110,10 +113,14 @@ export function simulationSupportError(d: Circuit): string {
   if (isModelBuck(d)) return modelBuckSupportError(d);
   if (exampleSimulationProfile(d)) return exampleSimulationSupportError(d);
   for (const p of simulationParts(d)) {
-    const model = effectiveSimulationModelFields(p, partFields(p), {})['Sim.Library'];
+    const fields = partFields(p);
+    const passive = activePassiveModel(fields);
+    if (passive && !canSelectPassiveSimulationModel(p, d))
+      return `${p.ref}: the selected model requires supported terminals 1 and 2.`;
+    const model = effectiveSimulationModelFields(p, fields, {})['Sim.Library'];
     if (model)
       return `${p.ref}: external model "${model}" is not included or supported. This schematic cannot be simulated here. Use a supported OpenPE simulation circuit.`;
-    if (!supported.has(p.libId))
+    if (!supported.has(p.libId) && !(passive && p.libId === passiveConnectorSymbol))
       return `${p.ref}: no simulation model for ${p.libId}. Use the supported symbols listed in the simulation model documentation.`;
   }
   return '';
@@ -340,9 +347,14 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
         )
         .sort()
         .join('|');
+    const connector =
+      p.libId === passiveConnectorSymbol &&
+      activePassiveModel(partFields(p)) &&
+      canSelectPassiveSimulationModel(p, d);
     if (
-      (p.unit || 1) !== 1 ||
-      pinSignature(d.libraries[p.libId]) !== pinSignature(libraries[p.libId])
+      !connector &&
+      ((p.unit || 1) !== 1 ||
+        pinSignature(d.libraries[p.libId]) !== pinSignature(libraries[p.libId]))
     )
       throw new Error(
         `${p.ref}: modified pin definitions are not supported by this simulation model.`,
@@ -376,6 +388,8 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
   const output = get(c.outputId, SPICE_PORT, 'voltage probe terminal');
   const sw = get(c.switchId, vendor?.id || SPICE_SWITCH, 'switch or supported TI regulator');
   const inductor = get(c.currentId, 'Device:L', 'current probe inductor');
+  if ((activePassiveModel(partFields(inductor)) ?? 'L') !== 'L')
+    throw new Error('The Buck current probe requires an inductor model.');
   if (simulationParts(d).filter((p) => p.libId === SPICE_SWITCH || tiPart(p.libId)).length !== 1)
     throw new Error('This model supports exactly one PWM-controlled switch.');
   const { node, probeNodes } = spiceNets(d);
@@ -419,14 +433,16 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
   const currentTraces: SpiceTrace[] = [];
   d.parts.forEach((p, i) => {
     if (!participatesInSimulation(p)) return;
+    const selectedModel = activePassiveModel(partFields(p));
     const kind =
-      p.libId === 'Device:R'
+      selectedModel ??
+      (p.libId === 'Device:R'
         ? 'R'
         : p.libId === 'Device:C'
           ? 'C'
           : p.libId === 'Device:L'
             ? 'L'
-            : null;
+            : null);
     if (kind || p.libId === 'Device:D_Schottky') {
       const a = node(p, '1'),
         b = node(p, '2');
@@ -446,7 +462,7 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
       if (measured) lines.push(`VSENSE${i + 1} ${positive} ${internal} 0`);
       const initial =
         kind === 'C' || kind === 'L'
-          ? primitiveInitialCondition(kind, partFields(p), p.ref)
+          ? primitiveInitialCondition(kind, effectiveSimulationModelFields(p, partFields(p)), p.ref)
           : undefined;
       if (initial !== undefined && (kind === 'C' || kind === 'L'))
         initialConditions.push({
@@ -458,7 +474,7 @@ export function buildSpiceDeck(d: Circuit, input: unknown): SpiceDeck {
         });
       lines.push(
         kind
-          ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(partFields(p)['OpenPE.ModelSource'] === 'basic' ? displayPartValue(p) : p.value, kind)}${initial === undefined ? '' : ` IC=${initial}`}`
+          ? `${name} ${measured ? internal : positive} ${b} ${passiveValue(selectedModel || partFields(p)['OpenPE.ModelSource'] === 'basic' ? displayPartValue(p) : p.value, kind)}${initial === undefined ? '' : ` IC=${initial}`}`
           : `${name} ${measured ? internal : positive} ${a} OPENPE_DIODE`,
       );
       currentTraces.push({

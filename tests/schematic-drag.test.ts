@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
@@ -18,6 +18,9 @@ import { projectNetGroups } from '../lib/project-net-groups';
 import { ProjectCore } from '../core/project-core';
 import { child, val } from '../lib/sexpr';
 import { onWire, samePoint } from '../lib/wiring';
+import { visibleJunctions } from '../lib/schematic-view';
+import { createCapabilityHost } from '../api/capabilities';
+import { registerProjectCapabilities } from '../core/register-project';
 
 const topology = (d: Circuit) =>
   projectNetGroups(d)
@@ -46,6 +49,165 @@ function fixture() {
   d.labels.push({ id: uid(), x: 50.8, y: 40.64, text: 'SIGNAL' });
   return { d, a, b, middle };
 }
+
+for (const vertical of [false, true])
+  for (const split of [false, true])
+    for (const reverse of [false, true])
+      test(`component drag slides its junction along a ${vertical ? 'vertical' : 'horizontal'} ${split ? 'split' : 'unsplit'} trunk with ${reverse ? 'reversed' : 'forward'} wires`, () => {
+        const d = emptyCircuit();
+        const orient = ({ x, y }: Point): Point => (vertical ? { x: y, y: x } : { x, y });
+        const tee = orient({ x: 38.1, y: 40.64 });
+        const fixedTee = orient({ x: 63.5, y: 40.64 });
+        const portAt = (point: Point) => {
+          const part = createPart(d, 'Port', point.x, point.y);
+          const pin = pinPositions(part, d.libraries[part.libId])[0];
+          part.x += point.x - pin.x;
+          part.y += point.y - pin.y;
+          d.parts.push(part);
+          return part;
+        };
+        const left = orient({ x: 12.7, y: 40.64 }),
+          right = orient({ x: 88.9, y: 40.64 });
+        portAt(left);
+        portAt(right);
+        const movingPart = portAt(orient({ x: 38.1, y: 60.96 }));
+        const stationaryPin = orient({ x: 63.5, y: 60.96 });
+        portAt(stationaryPin);
+        const trunk = split ? [wire(d, left, tee), wire(d, tee, right)] : [wire(d, left, right)];
+        const lead = wire(d, tee, orient({ x: 38.1, y: 60.96 }));
+        const stationaryBranch = wire(d, fixedTee, stationaryPin);
+        const crossing = wire(d, orient({ x: 50.8, y: 30.48 }), orient({ x: 50.8, y: 50.8 }));
+        d.junctions.push({ id: uid(), ...tee }, { id: uid(), ...fixedTee });
+        d.labels.push({ id: uid(), ...tee, text: 'SUPPLY' });
+        if (reverse) for (const wire of d.wires) [wire.a, wire.b] = [wire.b, wire.a];
+        const source = parseCircuit(exportKiCad(createProject(d), 'schematic'));
+        const before = structuredClone(source);
+        // Pass both an existing subdivision and an unrelated crossing. The
+        // stationary branch and every trunk segment must remain exact.
+        const delta = orient({ x: 30.48, y: 0 });
+        const target = orient({ x: 68.58, y: 40.64 });
+        const blocked = orient({ x: 12.7, y: 0 });
+        assert.throws(
+          () => previewSchematicMove(source, [movingPart.id], { x: 0, y: 0 }, blocked, [], true),
+          /would join another net/,
+          'the branch cannot introduce a join at an incidental crossing',
+        );
+        for (const moved of [
+          moveSelection(source, [movingPart.id], delta, true),
+          previewSchematicMove(source, [movingPart.id], { x: 0, y: 0 }, delta, [], true),
+        ]) {
+          assert.deepEqual(source, before);
+          assert.deepEqual(topology(moved), topology(source));
+          assert.equal(moved.wires.length, source.wires.length, 'no overlapping return stub');
+          for (const original of [...trunk, stationaryBranch, crossing])
+            assert.deepEqual(
+              moved.wires.find((wire) => wire.id === original.id),
+              source.wires.find((wire) => wire.id === original.id),
+            );
+          assert.deepEqual(
+            moved.parts.filter((part) => part.id !== movingPart.id),
+            source.parts.filter((part) => part.id !== movingPart.id),
+          );
+          const junction = moved.junctions.find((point) => point.id === d.junctions[0].id)!;
+          assert.ok(samePoint(junction, target));
+          assert.deepEqual({ ...junction, x: tee.x, y: tee.y }, source.junctions[0]);
+          assert.ok(samePoint(moved.labels[0], target));
+          assert.ok(samePoint(moved.junctions[1], fixedTee));
+          assert.ok(visibleJunctions(moved).some((point) => samePoint(point, target)));
+          assert.ok(!visibleJunctions(moved).some((point) => samePoint(point, tee)));
+          const movedLead = moved.wires.find((wire) => wire.id === lead.id)!;
+          assert.ok(samePoint(movedLead.a, target) || samePoint(movedLead.b, target));
+          const reopened = parseCircuit(exportKiCad(createProject(moved), 'schematic'));
+          assert.deepEqual(topology(reopened), topology(source));
+          assert.ok(samePoint(reopened.junctions[0], target));
+          const ordinaryMove = moveSelection(source, [movingPart.id], delta);
+          assert.deepEqual(ordinaryMove.wires, source.wires);
+          assert.deepEqual(ordinaryMove.junctions, source.junctions);
+          const returned = moveSelection(moved, [movingPart.id], orient({ x: -50.8, y: 0 }), true);
+          assert.ok(
+            samePoint(returned.junctions[0], orient({ x: 17.78, y: 40.64 })),
+            'repeated drag can cross old trunk subdivisions',
+          );
+          assert.deepEqual(topology(returned), topology(source));
+          for (const original of trunk)
+            assert.deepEqual(
+              returned.wires.find((wire) => wire.id === original.id),
+              source.wires.find((wire) => wire.id === original.id),
+            );
+        }
+      });
+
+test('native C3 branch drag has GUI-Agent file parity and restores original native bytes in one undo', async () => {
+  const source = parseCircuit(
+    readFileSync('examples/lm25017-wson8-flybuck/lm25017-wson8-flybuck.kicad_sch', 'utf8'),
+  );
+  const part = source.parts.find((part) => part.ref === 'C3')!;
+  const junction = source.junctions.find((point) => samePoint(point, { x: 113.03, y: 83.82 }))!;
+  const project = createProject(source);
+  const gui = new ProjectCore(project),
+    agent = new ProjectCore(project);
+  const original = gui.getNativeFiles();
+  const host = createCapabilityHost();
+  const dispose = registerProjectCapabilities(host, agent);
+  async function withStableIds<T>(operation: () => T | Promise<T>): Promise<T> {
+    let sequence = 0;
+    const replacement = mock.method(
+      crypto,
+      'randomUUID',
+      () =>
+        `00000000-0000-4000-8000-${(++sequence).toString(16).padStart(12, '0')}` as ReturnType<
+          typeof crypto.randomUUID
+        >,
+    );
+    try {
+      return await operation();
+    } finally {
+      replacement.mock.restore();
+    }
+  }
+  try {
+    const preview = await withStableIds(() =>
+      previewSchematicMove(
+        gui.getSnapshot().project!.schematic,
+        [part.id],
+        part,
+        { x: part.x + 1.27, y: part.y },
+        [],
+        true,
+      ),
+    );
+    assert.ok(
+      samePoint(
+        preview.junctions.find((point) => point.id === junction.id)!,
+        { x: 114.3, y: 83.82 },
+      ),
+    );
+    assert.deepEqual(topology(preview), topology(source));
+    assert.equal(gui.replaceSchematic(preview), true);
+    await withStableIds(() =>
+      host.execute(
+        'schematic.drag',
+        { schematicId: source.id, ids: [part.id], delta: { x: 1.27, y: 0 } },
+        { actor: 'agent', expectedRevision: '0' },
+      ),
+    );
+    assert.equal(JSON.stringify(agent.getNativeFiles()), JSON.stringify(gui.getNativeFiles()));
+    assert.deepEqual(
+      topology(projectFromNativeFiles(agent.getNativeFiles()).schematic),
+      topology(source),
+    );
+    for (const core of [gui, agent]) {
+      assert.equal(core.getSnapshot().undoDepth, 1);
+      assert.equal(core.undo(), true);
+      assert.deepEqual(core.getNativeFiles(), original);
+      assert.equal(core.redo(), true);
+      assert.deepEqual(topology(core.getSnapshot().project!.schematic), topology(source));
+    }
+  } finally {
+    dispose();
+    host.dispose();
+  }
+});
 
 for (const pose of [
   { name: 'horizontal leads', target: { x: 167.64, y: 74.93 }, wires: 204 },

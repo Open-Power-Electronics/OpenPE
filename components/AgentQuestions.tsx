@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, ChevronRight, MessageCircleQuestion } from 'lucide-react';
 import type { AgentQuestion } from '@/lib/chat-stream';
 
@@ -7,10 +7,12 @@ export default function AgentQuestions({
   questions,
   onAnswer,
   disabled,
+  requestId,
 }: {
   questions: AgentQuestion[];
   onAnswer: (answers: Record<string, string[]>) => Promise<void>;
   disabled: boolean;
+  requestId?: string;
 }) {
   const [selected, setSelected] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(questions.map((q) => [q.id, []])),
@@ -18,10 +20,33 @@ export default function AgentQuestions({
   const [custom, setCustom] = useState<Record<string, string>>(() =>
     Object.fromEntries(questions.map((q) => [q.id, ''])),
   );
-  const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [delivery, setDelivery] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const busy = delivery === 'sending';
+  const sent = delivery === 'sent';
   const [error, setError] = useState('');
   const composing = useRef(false);
+  const submitted = useRef(false);
+  const form = useRef<HTMLFormElement>(null);
+  const submitButton = useRef<HTMLButtonElement>(null);
+  const receiptSummary = useRef<HTMLElement>(null);
+  const restoreFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!restoreFocus.current) return;
+    if (busy) {
+      const movedFocus = (event: FocusEvent) => {
+        if (event.target instanceof Node && !form.current?.contains(event.target))
+          restoreFocus.current = false;
+      };
+      document.addEventListener('focusin', movedFocus);
+      return () => document.removeEventListener('focusin', movedFocus);
+    }
+    restoreFocus.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && !form.current?.contains(active)) return;
+    const target = sent ? receiptSummary.current : submitButton.current;
+    if (target?.getClientRects().length && !target.matches(':disabled'))
+      target.focus({ preventScroll: true });
+  }, [busy, sent, error]);
   const answers = Object.fromEntries(
     questions.map((q) => [
       q.id,
@@ -31,6 +56,7 @@ export default function AgentQuestions({
     ]),
   );
   const answered = questions.filter((q) => answers[q.id].length > 0).length;
+  const canSubmit = !disabled && !busy && !sent && answered === questions.length;
   if (sent)
     return (
       <details
@@ -40,7 +66,7 @@ export default function AgentQuestions({
           if (event.nativeEvent.isComposing || event.keyCode === 229) event.preventDefault();
         }}
       >
-        <summary>
+        <summary ref={receiptSummary}>
           <Check size={15} className="agent-question-check" aria-hidden="true" />
           <span className="agent-question-receipt-label">Answered</span>
           <span className="agent-question-receipt-preview">
@@ -48,40 +74,44 @@ export default function AgentQuestions({
           </span>
           <ChevronRight size={14} className="agent-question-receipt-chevron" aria-hidden="true" />
         </summary>
-        <dl>
-          {questions.map((q) => (
-            <div key={q.id}>
-              <dt>{q.question}</dt>
-              <dd>{answers[q.id].join(', ')}</dd>
-            </div>
-          ))}
-        </dl>
+        <div
+          className="agent-question-answers"
+          role="region"
+          aria-label="Submitted answers"
+          tabIndex={0}
+        >
+          <dl>
+            {questions.map((q) => (
+              <div key={q.id}>
+                <dt>{q.question}</dt>
+                <dd>{answers[q.id].join(', ')}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </details>
     );
   return (
     <form
+      ref={form}
       className="agent-questions"
+      data-question-request={requestId}
       data-state={disabled ? 'closed' : busy ? 'sending' : 'pending'}
       aria-label="Agent questions"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (
-          composing.current ||
-          disabled ||
-          busy ||
-          sent ||
-          questions.some((q) => !answers[q.id].length)
-        )
-          return;
-        setBusy(true);
+        if (composing.current || submitted.current || !canSubmit) return;
+        submitted.current = true;
+        restoreFocus.current = !!form.current?.contains(document.activeElement);
+        setDelivery('sending');
         setError('');
         try {
           await onAnswer(answers);
-          setSent(true);
+          setDelivery('sent');
         } catch (e) {
+          submitted.current = false;
           setError((e as Error).message);
-        } finally {
-          setBusy(false);
+          setDelivery('failed');
         }
       }}
       onCompositionStart={() => {
@@ -93,7 +123,22 @@ export default function AgentQuestions({
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || event.keyCode === 229 || composing.current) {
           event.stopPropagation();
-          if (event.key === 'Enter') event.preventDefault();
+          if (event.key === 'Enter' || event.target === submitButton.current)
+            event.preventDefault();
+          return;
+        }
+        if (
+          event.key === 'Enter' &&
+          event.ctrlKey !== event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          !disabled
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          const submit = submitButton.current;
+          if (!event.repeat && canSubmit && submit && event.currentTarget.getClientRects().length)
+            event.currentTarget.requestSubmit(submit);
         }
       }}
     >
@@ -105,8 +150,12 @@ export default function AgentQuestions({
         </span>
       </div>
       {questions.map((q, index) => (
-        <fieldset key={q.id} disabled={disabled || busy || sent}>
-          <legend>
+        <fieldset
+          key={q.id}
+          disabled={!disabled && (busy || sent)}
+          data-awaiting-answer={!answers[q.id].length || undefined}
+        >
+          <legend tabIndex={!disabled && !busy ? -1 : undefined}>
             {questions.length > 1 && <span className="agent-question-number">{index + 1}</span>}
             {q.header}
           </legend>
@@ -123,8 +172,10 @@ export default function AgentQuestions({
                 <input
                   type={q.multiSelect ? 'checkbox' : 'radio'}
                   name={q.id}
+                  disabled={disabled}
                   checked={(selected[q.id] || []).includes(option.label)}
                   onChange={() => {
+                    if (disabled || busy || sent) return;
                     setSelected((values) => ({
                       ...values,
                       [q.id]: q.multiSelect
@@ -144,14 +195,26 @@ export default function AgentQuestions({
             ))}
           </div>
           <label className="agent-question-custom">
-            <span>{q.options.length ? 'Your own answer' : 'Your answer'}</span>
+            <span>
+              {disabled ? 'Retained answer' : q.options.length ? 'Your own answer' : 'Your answer'}
+            </span>
             <textarea
               rows={1}
               aria-label={`Your answer: ${q.header}`}
-              placeholder={q.options.length ? 'Type an alternative…' : 'Type your answer…'}
+              placeholder={
+                disabled
+                  ? q.options.length
+                    ? 'No custom answer'
+                    : 'No answer entered'
+                  : q.options.length
+                    ? 'Type an alternative…'
+                    : 'Type your answer…'
+              }
+              readOnly={disabled}
               value={custom[q.id] || ''}
               maxLength={16000}
               onChange={(event) => {
+                if (disabled || busy || sent) return;
                 const value = event.target.value;
                 setCustom((values) => ({ ...values, [q.id]: value }));
                 if (!q.multiSelect && value.trim())
@@ -173,9 +236,18 @@ export default function AgentQuestions({
             : `${answered} of ${questions.length} answered`}
         </span>
         <button
+          ref={submitButton}
           type="submit"
           className="dialog-button primary"
-          disabled={disabled || busy || sent || questions.some((q) => !answers[q.id].length)}
+          disabled={!canSubmit}
+          aria-keyshortcuts={canSubmit ? 'Control+Enter Meta+Enter' : undefined}
+          title={canSubmit ? 'Continue (Ctrl+Enter / ⌘Enter)' : undefined}
+          onPointerDown={(event) => {
+            if (composing.current) event.preventDefault();
+          }}
+          onClick={(event) => {
+            if (composing.current) event.preventDefault();
+          }}
         >
           {busy ? 'Sending…' : disabled ? 'Closed' : 'Continue'}
           {!busy && !disabled && <ArrowRight size={14} aria-hidden="true" />}

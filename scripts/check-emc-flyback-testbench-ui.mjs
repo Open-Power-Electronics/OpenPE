@@ -76,12 +76,24 @@ try {
     );
   const open = async (ref) => {
     await page.getByRole('button', { name: `Inspect ${ref}`, exact: true }).click();
-    const section = page.locator('details.property-simulation');
-    if ((await section.getAttribute('open')) === null) await section.locator('summary').click();
+    const spice = page.getByRole('tab', { name: 'SPICE', exact: true });
+    if ((await spice.getAttribute('aria-selected')) !== 'true') await spice.click();
   };
   await open('I1');
-  assert.equal(await page.getByLabel('Initial current (A)', { exact: true }).inputValue(), '0.5');
-  assert.equal(await page.getByLabel('Pulsed current (A)', { exact: true }).inputValue(), '0');
+  assert.equal(
+    Number(await page.getByLabel('Initial current (A)', { exact: true }).inputValue()),
+    500,
+  );
+  assert.equal(
+    await page
+      .getByRole('combobox', { name: 'Initial current (A) unit', exact: true })
+      .textContent(),
+    'mA',
+  );
+  assert.equal(
+    Number(await page.getByLabel('Pulsed current (A)', { exact: true }).inputValue()),
+    0,
+  );
   await mkdir('test-results', { recursive: true });
   const text = await page.locator('svg.bench').textContent();
   assert.match(text, /SIMULATION TESTBENCH \(virtual\)/);
@@ -92,7 +104,7 @@ try {
   for (const [ref, label, value, expected] of [
     ['V1', 'Voltage (V)', '30', '^V1 \\w+ 0 DC 30$'],
     ['V2', 'Voltage (V)', '13', '^V2 \\w+ 0 DC 13$'],
-    ['I1', 'Initial current (A)', '0.75', '^I1 \\w+ 0 PULSE\\(0\\.75 '],
+    ['I1', 'Initial current (A)', '750', '^I1 \\w+ 0 PULSE\\(0\\.75 '],
   ]) {
     await open(ref);
     const field = page.getByLabel(label, { exact: true });

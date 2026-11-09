@@ -155,7 +155,9 @@ export function createModelRenderDenoiser(renderer: THREE.WebGLRenderer) {
         for (let pass = 0; pass < 3; pass++) {
           const output = pass === 1 ? scratch : target;
           material.uniforms.map.value = input;
-          material.uniforms.stride.value = 1 << pass;
+          // Mix adjacent pixels before and after the wide pass to suppress
+          // pixel-scale grain while the guide boundary guard preserves edges.
+          material.uniforms.stride.value = pass === 1 ? 4 : 1;
           material.uniforms.colorSigma.value = [0.18, 0.1, 0.06][pass] * noiseScale;
           material.uniforms.opticalSigma.value = [0.08, 0.055, 0.04][pass] * noiseScale;
           renderer.setRenderTarget(output);

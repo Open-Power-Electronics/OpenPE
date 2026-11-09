@@ -207,7 +207,7 @@ async function withACPSession(provider, signal, options, task) {
         }
       }
     });
-    function call(method, params, timeoutMs = 30000) {
+    function call(method, params, timeoutMs = options.timeoutMs || 30000) {
       if (closed || signal.aborted) return Promise.reject(new Error('Agent connection is closed.'));
       return new Promise((resolve, reject) => {
         const id = ++nextId;
@@ -289,8 +289,12 @@ export async function runACPAgent(provider, request, emit, signal, options) {
             value: request.model,
           });
         }
-        const annotations = request.annotations || [];
-        if (annotations.length && !initialized.agentCapabilities?.promptCapabilities?.image)
+        const images =
+          options.images ??
+          (request.annotations || []).map((annotation) => ({
+            data: annotation.image.dataUrl.split(',')[1],
+          }));
+        if (images.length && !initialized.agentCapabilities?.promptCapabilities?.image)
           throw new Error(
             `${agentName(provider)} does not advertise image support. Remove the attachments or choose another Agent.`,
           );
@@ -328,13 +332,13 @@ export async function runACPAgent(provider, request, emit, signal, options) {
         });
         const prompt = [
           { type: 'text', text: request.prompt },
-          ...annotations.map((annotation) => ({
+          ...images.map((image) => ({
             type: 'image',
             mimeType: 'image/png',
-            data: annotation.image.dataUrl.split(',')[1],
+            data: image.data,
           })),
         ];
-        const result = await call('session/prompt', { sessionId, prompt }, options.timeoutMs || 0);
+        const result = await call('session/prompt', { sessionId, prompt }, 0);
         if (result?.stopReason !== 'end_turn')
           throw new Error(
             `${agentName(provider)} stopped before completing the response (${result?.stopReason || 'unknown'}).`,

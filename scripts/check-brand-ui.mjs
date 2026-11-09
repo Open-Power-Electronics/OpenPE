@@ -108,6 +108,7 @@ try {
   }, exampleSources);
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/agent-settings') return route.fulfill({json:{followUpMode:'queue'}});
     if (licensePaths.has(url.pathname)) {
       licenseRequests.push(url.pathname);
       const body = await readFile('public' + url.pathname, 'utf8');

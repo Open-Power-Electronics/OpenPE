@@ -1,10 +1,13 @@
 'use client';
-import { type ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import type { AgentProcessEntry } from '@/lib/agent-process';
 import type { AgentToolActivity } from '@/lib/agent-tool-activity';
+import type { ChatOutcome, ChatTimings } from '@/lib/chat-stream';
 import AgentProcess from './AgentProcess';
+import AgentAnswerOutline from './AgentAnswerOutline';
+import { summarizeToolIssues } from './AgentToolIssues';
 import AgentToolList from './AgentToolList';
-import { agentTurnTimeline, type ActivityAnchor, type TurnPart } from './agent-turn-timeline';
+import { agentTurnSections, agentTurnTimeline, type ActivityAnchor } from './agent-turn-timeline';
 
 export default function AgentTurn({
   text,
@@ -12,52 +15,91 @@ export default function AgentTurn({
   progress,
   tools,
   running,
+  visible = true,
+  heading,
+  startedAt,
+  timings,
+  outcome,
   renderText,
   renderTool,
+  onNavigateHeading,
 }: {
   text: string;
   anchors: ActivityAnchor[];
   progress: AgentProcessEntry[];
   tools: AgentToolActivity[];
   running: boolean;
+  visible?: boolean;
+  heading: ReactNode;
+  startedAt?: number;
+  timings?: ChatTimings;
+  outcome?: ChatOutcome;
   renderText: (text: string) => ReactNode;
   renderTool: (tool: AgentToolActivity) => ReactNode;
+  onNavigateHeading: (heading: HTMLElement) => void;
 }) {
-  const groups: { key: string; parts: TurnPart[] }[] = [];
-  for (const part of agentTurnTimeline(text, anchors, progress, tools)) {
-    const previous = groups.at(-1);
-    if (part.kind !== 'text' && previous && previous.parts[0].kind !== 'text')
-      previous.parts.push(part);
-    else groups.push({ key: part.key, parts: [part] });
-  }
-  return groups.map((group) => {
-    const first = group.parts[0];
-    if (first.kind === 'text')
-      return (
-        <div key={group.key} className="agent-answer-part">
-          {renderText(first.text)}
-        </div>
-      );
-    return (
+  const answerRef = useRef<HTMLDivElement>(null);
+  const { work, answer, reviews } = agentTurnSections(
+    agentTurnTimeline(text, anchors, progress, tools),
+  );
+  const latestTools = work.findLast((part) => part.kind === 'tools');
+  const latestCallId = latestTools?.kind === 'tools' ? latestTools.entries.at(-1)?.id : undefined;
+  return (
+    <>
       <AgentProcess
-        key={group.key}
         running={running}
-        attention={group.parts.some(
-          (part) =>
-            part.kind === 'tools' &&
-            part.entries.some((entry) => ['review', 'applying', 'failed'].includes(entry.status)),
-        )}
+        visible={visible}
+        timings={timings}
+        outcome={outcome}
+        heading={heading}
+        startedAt={startedAt}
+        hasWork={work.length > 0}
+        issues={
+          running
+            ? undefined
+            : summarizeToolIssues(
+                work.flatMap((part) => (part.kind === 'tools' ? part.entries : [])),
+              )
+        }
       >
-        {group.parts.map((part) =>
-          part.kind === 'process' ? (
-            <div className="agent-process-text" key={part.key}>
-              {renderText(part.entry.text)}
+        {work.map((part) =>
+          part.kind === 'tools' ? (
+            <AgentToolList
+              key={part.key}
+              latestCallId={latestCallId}
+              running={part.entries.some((entry) => entry.status === 'running')}
+              issues={summarizeToolIssues(part.entries)}
+            >
+              {part.entries.map(renderTool)}
+            </AgentToolList>
+          ) : (
+            <div
+              className="agent-process-text"
+              key={part.key}
+              role={running ? undefined : 'region'}
+              aria-label={running ? undefined : 'Work note'}
+              tabIndex={running ? undefined : 0}
+            >
+              {renderText(part.kind === 'text' ? part.text : part.entry.text)}
             </div>
-          ) : part.kind === 'tools' ? (
-            <AgentToolList key={part.key}>{part.entries.map(renderTool)}</AgentToolList>
-          ) : null,
+          ),
         )}
       </AgentProcess>
-    );
-  });
+      {answer && (
+        <>
+          {!running && (
+            <AgentAnswerOutline
+              answer={answerRef}
+              active={visible}
+              onNavigate={onNavigateHeading}
+            />
+          )}
+          <div ref={answerRef} className="agent-answer-part">
+            {renderText(answer.text)}
+          </div>
+        </>
+      )}
+      {reviews.map(renderTool)}
+    </>
+  );
 }

@@ -92,7 +92,7 @@ const finishPrompt = () => {
     // One buffered protocol write proves cancellation discards following deltas.
     process.stdout.write(notifications.map((event) => JSON.stringify(event)).join('\n') + '\n');
   }
-  if (mode === 'cancel' || mode === 'timeout') return;
+  if (mode === 'cancel') return;
   if (mode === 'error')
     return send({ id: promptRequest.id, error: { code: -32000, message: 'Fixture ACP failure.' } });
   if (mode === 'invalid-json') return process.stdout.write('null\n');
@@ -118,6 +118,7 @@ input.on('line', (line) => {
     return;
   }
   if (request.method === 'initialize') {
+    if (mode === 'handshake-hang') return;
     assert.equal(request.params.protocolVersion, 1);
     assert.deepEqual(request.params.clientCapabilities, {
       fs: { readTextFile: false, writeTextFile: false },

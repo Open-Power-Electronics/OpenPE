@@ -7,7 +7,7 @@ import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 import { validateAgentWorkspaceContext } from '../server/agent-context-format.mjs';
-import { fillSource } from './source-editor-test-helpers.mjs';
+import { fillSource, selectSourceFile } from './source-editor-test-helpers.mjs';
 
 const { switchingStageFixture } = await tsImport(
   '../tests/fixtures/switching-stage.ts',
@@ -20,6 +20,7 @@ const { createProject, serializeProject, parseProject } = await tsImport(
 const { buildSpiceDeck } = await tsImport('../lib/spice.ts', import.meta.url);
 const { pinPositions } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const project = createProject(switchingStageFixture());
 project.pcb = createEmptyPCB();
 const source = serializeProject(project);
@@ -41,7 +42,7 @@ let state = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: defaultAgentPreferences.models,
 };
 const workbench = bundledWorkbenchCatalog();
 const chats = [];
@@ -81,6 +82,10 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'fixture' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -92,6 +97,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (pathname === '/api/appearance') return route.fulfill({ json: null });
     if (pathname === '/api/agents')
       return route.fulfill({ json: [{ id: 'codex', available: true, supportsEffort: true }] });
@@ -150,7 +157,11 @@ try {
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const button = (name) => page.getByRole('button', { name, exact: true });
   const canvas = page.getByTestId('schematic-canvas');
-  await canvas.waitFor();
+  await canvas.waitFor().catch(async (error) => {
+    throw new Error(
+      `${error.message}\n${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0, 4000)}`,
+    );
+  });
   const presentation = await page.evaluate(() => {
     const host = document.createElement('section');
     host.style.cssText = 'position:fixed;left:10px;top:10px;width:240px;height:160px';
@@ -187,7 +198,9 @@ try {
   assert.equal(context.simulation.status, 'not-opened');
   assert.equal(runs, 0);
   assert.equal(context.ui.mode, 'interaction');
-  assert.ok(context.ui.presentation.controls.some((control) => control.label === 'Simulation'));
+  assert.ok(
+    context.ui.presentation.controls.some((control) => control.label === 'SPICE Simulation'),
+  );
   // Keep the submitted draft unchanged while editing: the retained conversation
   // must obtain the live design at Send, even without another composer render.
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
@@ -201,9 +214,12 @@ try {
   await button('Send message').click();
   const editedPayload = (await editedChat).postDataJSON();
   assert.equal(
-    editedPayload.context.parts.find((part) => part.ref === 'R1').x,
+    editedPayload.context.workspace.project.schematic.components.find(
+      (part) => part.reference === 'R1',
+    ).position.x,
     Number((project.schematic.parts.find((part) => part.ref === 'R1').x + 1.27).toFixed(4)),
   );
+  assert.equal(editedPayload.context.parts, undefined);
   assert.notEqual(editedPayload.context.basis, chats[0].context.basis);
   await page.waitForFunction(() => document.querySelectorAll('.agent-markdown').length >= 2);
   await button('Stop generation').waitFor({ state: 'hidden' });
@@ -230,10 +246,11 @@ try {
   }, position);
   await page.mouse.click(point.x, point.y);
   await page.locator('.simulation-waveform').first().waitFor();
-  await button('Cursor A').click();
-  await button('Cursor B').click();
   const cursorA = page.getByRole('slider', { name: /cursor A$/ }).first();
   const cursorB = page.getByRole('slider', { name: /cursor B$/ }).first();
+  assert.equal(await cursorA.count(), 1);
+  assert.equal(await cursorB.count(), 0);
+  await button('Add second cursor').click();
   await cursorA.press('Home');
   await cursorB.press('End');
   context = await send('Read the simulation and cursor measurements');
@@ -284,14 +301,17 @@ try {
   assert.deepEqual(context.simulation.resultConfig, completedConfig);
   assert.ok(context.simulation.errors.length);
   await button('Source').click();
+  await selectSourceFile(page, 'context.kicad_pro');
   await fillSource(page, '{invalid source');
   context = await send('Review my unapplied Source draft');
   assert.equal(context.source.pending, true);
-  const draftFiles = JSON.parse(context.source.draft);
   assert.equal(
-    draftFiles.files.find((file) => file.name === draftFiles.entry).source,
-    '{invalid source',
+    context.source.draft,
+    null,
+    'Agent context cannot expose pending native draft bytes.',
   );
+  assert.ok(context.source.draftCharacters > 0);
+  assert.doesNotMatch(JSON.stringify(context), /\{invalid source/);
   assert.deepEqual(context.project, JSON.parse(source));
   assert.equal(context.simulation.result, null);
   await button('New project').click();

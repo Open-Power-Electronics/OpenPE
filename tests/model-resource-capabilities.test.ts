@@ -367,6 +367,38 @@ test('switching retained intrinsic/external bindings preserves inactive fields a
   }
 });
 
+test('the SPICE binding capability selects a passive model and clears it without a file', async (t) => {
+  const project = fixture();
+  const part = project.schematic.parts[0];
+  part.fields = { Manufacturer: 'Retained evidence' };
+  const h = harness(project);
+  t.after(h.dispose);
+  const baseline = h.core.getNativeFiles();
+  const bind = (passiveModel: string | null) =>
+    h.host.execute('part.spiceModel.bind', {
+      ...partInput(project),
+      source: 'basic',
+      passiveModel,
+    });
+  await assert.rejects(bind('D'));
+  assert.deepEqual(h.core.getNativeFiles(), baseline);
+  await bind('C');
+  const chosen = h.core.getSnapshot();
+  assert.equal(chosen.undoDepth, 1);
+  assert.deepEqual(partFields(chosen.project!.schematic.parts[0]), {
+    ...partFields(part),
+    'OpenPE.ModelSource': 'basic',
+    'OpenPE.PassiveModel': 'C',
+  });
+  await bind(null);
+  assert.deepEqual(h.core.getNativeFiles(), baseline);
+  h.core.undo();
+  assert.equal(
+    partFields(h.core.getSnapshot().project!.schematic.parts[0])['OpenPE.PassiveModel'],
+    'C',
+  );
+});
+
 test('source waveform capability matches GUI parameter-row conversion in native files and undo', async (t) => {
   const project = createExample('kicad-buck'),
     part = project.schematic.parts.find((item) => item.ref === 'V102')!;

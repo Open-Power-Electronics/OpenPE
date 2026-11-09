@@ -1,5 +1,5 @@
 import type { PCB } from './pcb';
-import type { PCBSelection } from './pcb-layout';
+import { findPCBGraphic, flipPCBFootprint, type PCBSelection } from './pcb-layout';
 
 export type PCBLockTarget = PCBSelection | { kind: 'pad'; id: string };
 
@@ -11,8 +11,10 @@ export function pcbLockObject(board: PCB, target: PCBLockTarget): { locked?: tru
       return board.tracks.find((item) => item.id === target.id);
     case 'via':
       return board.vias.find((item) => item.id === target.id);
-    case 'graphic':
-      return board.graphics.find((item) => item.id === target.id);
+    case 'graphic': {
+      const item = findPCBGraphic(board, target.id);
+      return item?.owner?.locked ? item.owner : item?.graphic;
+    }
     case 'zone':
       return board.zones.find((item) => item.id === target.id);
     case 'pad':
@@ -35,6 +37,14 @@ export function setPCBLocked(board: PCB, targets: readonly PCBLockTarget[], lock
       )
     )
       throw new Error('Unlock the footprint before changing its pads.');
+    if (target.kind === 'graphic') {
+      const owner = findPCBGraphic(board, target.id)?.owner;
+      if (
+        owner?.locked &&
+        !targets.some((item) => item.kind === 'footprint' && item.id === owner.id)
+      )
+        throw new Error('Unlock the footprint before changing its text lock.');
+    }
   }
   const selected = (kind: PCBLockTarget['kind'], id: string) =>
     targets.some((target) => target.kind === kind && target.id === id);
@@ -53,7 +63,10 @@ export function setPCBLocked(board: PCB, targets: readonly PCBLockTarget[], lock
     footprints: board.footprints.map((f) => {
       const next = update(f, 'footprint');
       const pads = f.pads.map((p) => update(p, 'pad'));
-      return pads.some((p, i) => p !== f.pads[i]) ? { ...next, pads } : next;
+      const graphics = f.graphics.map((g) => (g.kind === 'text' ? update(g, 'graphic') : g));
+      return pads.some((p, i) => p !== f.pads[i]) || graphics.some((g, i) => g !== f.graphics[i])
+        ? { ...next, pads, graphics }
+        : next;
     }),
     tracks: board.tracks.map((item) => update(item, 'track')),
     vias: board.vias.map((item) => update(item, 'via')),
@@ -83,6 +96,20 @@ export function assertPCBLockedEdits(before: PCB, after: PCB): void {
       const candidate = next.pads.find((item) => item.id === pad.id);
       if (pad.locked && (!candidate || (candidate.locked && value(pad) !== value(candidate))))
         throw new Error('Unlock the pad before editing.');
+    }
+    for (const graphic of f.graphics) {
+      if (graphic.kind !== 'text' || !graphic.locked) continue;
+      const candidate = next.graphics.find((item) => item.id === graphic.id);
+      if (!candidate || (candidate.locked && value(graphic) !== value(candidate))) {
+        // Whole-package side changes transform its local artwork with the package.
+        if (
+          next.side !== f.side &&
+          candidate?.locked &&
+          value(flipPCBFootprint(f).graphics.find((g) => g.id === graphic.id)) === value(candidate)
+        )
+          continue;
+        throw new Error('Unlock the footprint text before editing.');
+      }
     }
   }
 }

@@ -101,6 +101,9 @@ try {
           });
         },
         connection: async () => ({ base: 'http://localhost', token: 'test' }),
+        listExamples: async () => ({ entries: [], warnings: [] }),
+        listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+        onRecentChanged: () => () => {},
         newFile: async () => `fixture-grant-${nextGrant++}`,
         projectDirectory: async (fileId) => ({
           entries: [
@@ -142,13 +145,20 @@ try {
       if (route.request().method() === 'POST') recovery = route.request().postDataJSON();
       return route.fulfill({ json: recovery });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents')
       return route.fulfill({
         json: [{ id: 'codex', available: true, supportsCapabilities: true }],
       });
     if (url.pathname === '/api/models')
-      return route.fulfill({ json: { models: [], defaultModel: '' } });
+      return route.fulfill({
+        json: {
+          models: [{ id: 'fixture-model', label: 'Fixture model', efforts: [] }],
+          defaultModel: 'fixture-model',
+        },
+      });
     if (url.pathname === '/api/chat') {
       sent.push(route.request().postDataJSON());
       return route.fulfill({
@@ -270,7 +280,7 @@ try {
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await page.getByText('IC reference received.', { exact: true }).waitFor();
   assert.equal(sent.length, 1);
-  assert.deepEqual(sent[0].context.workspace.icDatasheet.record, records[1]);
+  assert.equal(sent[0].context.workspace.icDatasheet, undefined);
   await projectButton(ids[0]).click();
   await selectSourceFile(page, 'notes/review.json');
   assert.equal(await readSource(page), editedText);

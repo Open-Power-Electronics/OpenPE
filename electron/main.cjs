@@ -88,6 +88,8 @@ app.whenReady().then(async () => {
     thermalRoot: app.isPackaged ? process.resourcesPath : undefined,
     // Model downloads follow the desktop's system proxy instead of Node's direct HTTP stack.
     simulationModelFetcher: modelFetcher,
+    datasheetFetcher: modelFetcher,
+    datasheetRoots: { examples: examplesRoot, project: projectRoot },
     simulationProjectRoot: projectRoot,
     componentModelFiles: { resolve: (id) => fileGrants.location(id) },
     simulationModelFiles: {

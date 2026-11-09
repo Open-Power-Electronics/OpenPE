@@ -41,7 +41,10 @@ const bundle = await build({
       const capacitor = createPart(circuit, 'C', 2.54, 0);
       const source=createLibraryPart(circuit,libraries['Simulation_SPICE:VDC'],5.08,0);
       circuit.libraries[source.libId]=structuredClone(libraries[source.libId]);
-      circuit.parts.push(initial, capacitor, source);
+      const connectorLibrary=emcProject.schematic.libraries['Connector_Generic:Conn_01x02'];
+      const connector=createLibraryPart(circuit,connectorLibrary,7.62,0);
+      circuit.libraries[connector.libId]=structuredClone(connectorLibrary);
+      circuit.parts.push(initial, capacitor, source, connector);
       const core = new ProjectCore(createProject(circuit));
       const getRevision = () => core.getSnapshot().revision;
       window.modelPickerCalls=[];
@@ -81,7 +84,7 @@ const bundle = await build({
         });
         window.undoModelEdit=()=>core.undo();
         const part=snapshot.project.schematic.parts[partIndex];
-        window.modelState={fields:partFields(part),revision:snapshot.revision,
+        window.modelState={fields:partFields(part),excluded:part.excludeFromSimulation,revision:snapshot.revision,
           undoDepth:snapshot.undoDepth,source:snapshot.source};
         const save=useCallback((reference,value,fields)=>{
           core.execute('part.properties',{schematicId:circuit.id,partId:part.id,
@@ -137,7 +140,9 @@ try {
   const model = page.getByRole('combobox', { name: 'Simulation model', exact: true });
   const fileModels = model;
   const filePopup = page.getByRole('listbox', { name: 'Simulation model', exact: true });
-  const section = page.locator('details.property-simulation');
+  const spice = page.getByRole('tab', { name: 'SPICE', exact: true });
+  const general = page.getByRole('tab', { name: 'General', exact: true });
+  const section = page.getByRole('tabpanel', { name: 'SPICE', exact: true });
   const reference = field('Component reference');
   const externalFile = 'C:\\SPICE models\\Vendor\\long-controller-transient-library-name.lib';
   const resistanceCatalog = [
@@ -164,7 +169,7 @@ try {
       () => !document.querySelector('[aria-label="Browse SPICE models"]')?.disabled,
     );
   const ensureOpen = async () => {
-    if ((await section.getAttribute('open')) === null) await section.locator('summary').click();
+    if ((await spice.getAttribute('aria-selected')) !== 'true') await spice.click();
   };
   const reopen = async () => {
     const previous = await section.elementHandle();
@@ -185,6 +190,7 @@ try {
   await model.waitFor();
 
   const original = await state();
+  const library = page.getByLabel('Model library', { exact: true });
   const popup = page.getByRole('listbox', { name: 'Simulation model', exact: true });
   const pick = async (label) => {
     if (!(await popup.isVisible())) await model.click();
@@ -195,9 +201,27 @@ try {
     await browse.click();
     await idle();
   };
+  await configure({ partIndex: 3 });
+  await ensureOpen();
+  assert.equal(await library.inputValue(), '');
+  assert.equal(await model.textContent(), 'Unassigned');
+  const participation = (await state()).excluded;
+  for (const [label, stored] of [
+    ['ngspice R', 'R'],
+    ['ngspice C', 'C'],
+    ['ngspice L', 'L'],
+    ['Unassigned', undefined],
+  ]) {
+    await pick(label);
+    assert.equal(await model.textContent(), label);
+    assert.equal((await state()).fields['OpenPE.PassiveModel'], stored);
+    assert.equal((await state()).excluded, participation);
+  }
+  await undoTo(0);
+  await configure({ partIndex: 0 });
+  await ensureOpen();
   assert.equal(await model.textContent(), 'RES_A');
   assert.equal(await fileModels.isDisabled(), false, 'Intrinsic models remain available.');
-  const library = page.getByLabel('Model library', { exact: true });
   assert.equal(await library.inputValue(), 'vendor.lib');
   assert.equal(await library.getAttribute('readonly'), '');
   assert.equal(await library.getAttribute('title'), 'circuits/vendor.lib');
@@ -326,11 +350,15 @@ try {
   }
   await open(externalFile);
   await undoTo(0);
+  await general.click();
   await reference.fill('');
+  await spice.click();
   await pick('ngspice R');
   await page.getByRole('alert').waitFor();
   assert.equal((await state()).source, original.source);
+  await general.click();
   await reference.press('Escape');
+  await spice.click();
   const beforeIME = await state();
   await model.dispatchEvent('compositionstart');
   await pick('ngspice R');
@@ -465,6 +493,10 @@ try {
     ['U4', 'LTV817'],
   ]) {
     await page.evaluate((reference) => window.openEmcModelFixture(reference), reference);
+    await page.waitForFunction(
+      (ref) => document.querySelector('[aria-label="Component reference"]')?.value === ref,
+      reference,
+    );
     await ensureOpen();
     await page.waitForFunction(
       (name) => document.querySelector('[aria-label="Simulation model"]')?.textContent === name,
@@ -488,12 +520,12 @@ try {
     window.modelInspectionResult = { path: 'circuits/LM5001.lib', ...models };
     window.openLmModelFixture();
   }, lm5001Models);
+  await spice.click();
   await page.waitForFunction(
     () =>
       document.querySelector('[aria-label="Model library"]')?.value === 'LM5001.lib' &&
       document.querySelector('[aria-label="Simulation model"]')?.textContent === 'LM5001_TRANS',
   );
-  await ensureOpen();
   assert.equal(await model.textContent(), 'LM5001_TRANS');
   await model.click();
   assert.equal(await popup.getByRole('option').count(), 1);
@@ -524,6 +556,9 @@ try {
   await page.waitForFunction(() => typeof window.resolveModelInspection === 'function');
   await page.evaluate(() => window.openEmcModelFixture('U4', false));
   await page.evaluate(() => window.resolveModelInspection(window.modelInspectionResult));
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="Component reference"]')?.value === 'U4',
+  );
   await ensureOpen();
   assert.equal(
     await page.locator('.property-model-file').count(),

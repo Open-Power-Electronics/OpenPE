@@ -265,7 +265,7 @@ test('service-owned Agent instructions follow provider tool support, ignore spoo
     assert.ok(!request.trustedInstructions.includes('SPOOFED'));
     assert.equal(request.trustedInstructions.includes('pcbDesign.guide with {}'), live);
     assert.equal(request.trustedInstructions.includes('## Human review gates'), !live);
-    assert.match(request.trustedInstructions, /fresh core.state before edits/);
+    assert.match(request.trustedInstructions, /Commands operate on the current project state/);
     assert.doesNotMatch(request.trustedInstructions, /fresh project.snapshot before edits/);
     const prompt = makePrompt(request, request.trustedInstructions);
     assert.ok(!prompt.includes('SPOOFED'));

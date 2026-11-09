@@ -658,6 +658,7 @@ component.properties.simulation = object(
     initialCurrent: text,
     coupling: text,
     modelSource: { type: 'string', enum: ['basic', 'external'] },
+    passiveModel: { type: 'string', enum: ['R', 'C', 'L'] },
     sourceType: { type: 'string', enum: ['DC', 'PULSE', 'SIN'] },
     excluded: { type: 'boolean' },
     nativeOrder: { type: 'integer', minimum: 0, maximum: 2000 },
@@ -681,6 +682,7 @@ component.properties.simulation = object(
     'initialCurrent',
     'coupling',
     'modelSource',
+    'passiveModel',
     'sourceType',
     'excluded',
     'nativeOrder',
@@ -701,6 +703,7 @@ component.properties.fields.propertyNames = {
           'OpenPE.InitialCurrent',
           'OpenPE.Coupling',
           'OpenPE.ModelSource',
+          'OpenPE.PassiveModel',
           'OpenPE.SourceType',
         ],
       },
@@ -871,6 +874,9 @@ await Promise.all([
     banner,
   }),
   service('lib/agent-providers.ts', 'server/agent-provider-format.mjs'),
+  service('lib/example-datasheets.ts', 'server/datasheet-format.mjs'),
+  writeGeneratedFile('server/datasheet-format.d.mts', declaration('../lib/example-datasheets')),
+  service('lib/agent-settings.ts', 'server/agent-settings-format.mjs'),
   service('lib/agent-annotations.ts', 'server/annotation-format.mjs'),
   build({
     stdin: {

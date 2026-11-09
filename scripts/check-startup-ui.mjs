@@ -250,6 +250,8 @@ try {
     }
     if (url.pathname === '/api/workbench-plugins')
       return route.fulfill({ json: bundledWorkbenchCatalog() });
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/simulation/status') {

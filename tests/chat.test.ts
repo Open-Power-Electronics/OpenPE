@@ -265,6 +265,52 @@ test('real child transport streams before completion, sends effort and records o
   }
 });
 
+test('large Codex input and tool result echoes stay out of the response stream', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-codex-echo-'));
+  const events: ChatEvent[] = [];
+  const result = await runAgent(
+    'codex',
+    { ...request, effort: 'high', model: 'fixture-model' },
+    cwd,
+    (event) => events.push(event),
+    new AbortController().signal,
+    { resolve: resolver('codex-large-echo') },
+  );
+  assert.equal(result.outcome, 'completed', JSON.stringify(events));
+  assert.deepEqual(
+    events.filter((event) => event.type === 'text-delta'),
+    [
+      { type: 'text-delta', delta: '电感' },
+      { type: 'text-delta', delta: ' ripple.' },
+    ],
+  );
+  assert.ok(events.every((event) => JSON.stringify(event).length < 1_000));
+  await assertStopped(cwd);
+});
+
+test('the Codex adapter still rejects oversized assistant output events', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-codex-output-limit-'));
+  const events: ChatEvent[] = [];
+  const result = await runAgent(
+    'codex',
+    { ...request, effort: 'high', model: 'fixture-model' },
+    cwd,
+    (event) => events.push(event),
+    new AbortController().signal,
+    { resolve: resolver('codex-oversized-answer') },
+  );
+  assert.equal(result.outcome, 'failed');
+  assert.deepEqual(
+    events.filter((event) => event.type === 'error'),
+    [{ type: 'error', text: 'Agent event exceeds the 2 MB limit.' }],
+  );
+  assert.equal(
+    events.some((event) => event.type === 'text-delta'),
+    false,
+  );
+  await assertStopped(cwd);
+});
+
 test('native reasoning levels reach Codex and Claude unchanged', async () => {
   for (const [provider, efforts] of [
     ['codex', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
@@ -353,7 +399,7 @@ test('Codex rejects a changed reasoning effort before submitting its prompt', as
   await assertStopped(cwd);
 });
 
-test('cancellation, timeout, CLI failure, unexpected close and approval requests never report success', async (t) => {
+test('cancellation, startup timeout, CLI failure, unexpected close and approval requests never report success', async (t) => {
   type ObservedChild = {
     child: ChildProcess;
     command: unknown;
@@ -405,14 +451,14 @@ test('cancellation, timeout, CLI failure, unexpected close and approval requests
   try {
     for (const mode of [
       'cancel',
-      'hang',
+      'handshake-hang',
       'failure',
       'disconnect',
       'approval',
       'timeout-before-pid',
     ]) {
       const cwd = await mkdtemp(path.join(os.tmpdir(), 'openpe-stop-'));
-      const launch = await resolver(mode === 'timeout-before-pid' ? 'hang' : mode)();
+      const launch = await resolver(mode === 'timeout-before-pid' ? 'handshake-hang' : mode)();
       if (mode === 'timeout-before-pid')
         launch.args.unshift(
           '--import',
@@ -444,7 +490,7 @@ test('cancellation, timeout, CLI failure, unexpected close and approval requests
         controller.signal,
         {
           resolve: async () => launch,
-          timeoutMs: mode === 'hang' || mode === 'timeout-before-pid' ? 700 : 5000,
+          timeoutMs: mode === 'handshake-hang' || mode === 'timeout-before-pid' ? 700 : 5000,
         },
       );
       try {

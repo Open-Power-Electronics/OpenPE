@@ -77,6 +77,7 @@ import ModelSpatialScale, { modelScaleAxes } from './ModelSpatialScale';
 import type { ModelCadSketch, ModelCadSketchPlane } from './ModelCadSketchPanel';
 import { useModelCadTools, type CadHit } from './useModelCadTools';
 import { pcbSilkscreen } from '@/lib/pcb-silkscreen';
+import { pcbStrokeText } from '@/lib/pcb-stroke-text';
 import { solderMaskOpenings } from '@/lib/pcb-solder-mask';
 import { saveDrawingPNG } from '@/lib/drawing-export';
 import { previewFootprint, previewModel, type PreviewFootprint } from '@/lib/pcb-preview-cache';
@@ -131,6 +132,8 @@ import {
 import { modelMeasurementPoint } from '@/lib/model-measurement';
 import type { ModelSketchPointer } from './ModelSketchCoordinates';
 import type { ModelCheckIssue, ModelCheckReport, ModelCheckFocus } from './model-checks';
+
+const modelSilkscreenGeometryLimit = 8192;
 
 function shape(p: Polygon) {
   const outline = new THREE.Shape(p.outer.map((v) => new THREE.Vector2(v.x, -v.y)));
@@ -1166,7 +1169,34 @@ function PCBModelPreview({
           modelBoardDisplayColors.silkscreen,
           side === 'front' ? 'F.SilkS' : 'B.SilkS',
         );
-        const texts = silk.filter((g) => g.text && !g.text.hidden);
+        const inkPolygons: Polygon[] = [];
+        const texts: typeof silk = [];
+        let remainingCharacters = modelSilkscreenGeometryLimit;
+        let remainingSegments = modelSilkscreenGeometryLimit;
+        for (const graphic of silk) {
+          const text = graphic.text;
+          if (!text || text.hidden) continue;
+          if (remainingSegments > 0 && text.value.length <= remainingCharacters) {
+            remainingCharacters -= text.value.length;
+            const ink = pcbStrokeText(text, graphic.start);
+            if ('paths' in ink) {
+              const segments = ink.paths.reduce((total, path) => total + path.length - 1, 0);
+              if (segments <= remainingSegments) {
+                remainingSegments -= segments;
+                for (const path of ink.paths) inkPolygons.push(...strokePolygon(path, ink.width));
+                continue;
+              }
+            }
+          }
+          texts.push(graphic);
+        }
+        await surface(
+          boardGroups.silkscreen,
+          inkPolygons,
+          (side === 'front' ? 1 : -1) * (board.thickness / 2 + 0.03),
+          modelBoardDisplayColors.silkscreen,
+          side === 'front' ? 'F.SilkS' : 'B.SilkS',
+        );
         if (texts.length) {
           const points = boundary.flatMap((p) => p.outer);
           const minX = Math.min(...points.map((p) => p.x)),

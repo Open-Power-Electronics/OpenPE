@@ -19,6 +19,30 @@ const activity = (id: string): AgentToolActivity => ({
   arguments: toolPreview({ name: 'project.snapshot' }),
 });
 
+test('review descriptions stay visible as plain text while arguments remain collapsed', () => {
+  for (const status of ['review', 'applying'] as const) {
+    const html = renderToStaticMarkup(
+      createElement(AgentToolCall, {
+        activity: { ...activity('review'), status },
+        reviewDescription: 'Edit a component value. <b>Exact arguments remain below.</b>',
+        onApply: () => {},
+        onReject: () => {},
+      }),
+    );
+    assert.match(html, /tool-review-description/);
+    assert.match(html, /Edit a component value\. &lt;b&gt;/);
+    assert.doesNotMatch(html, /<b>|open=""/);
+    assert.ok(html.indexOf('</details>') < html.indexOf('tool-review-description'));
+  }
+  const settled = renderToStaticMarkup(
+    createElement(AgentToolCall, {
+      activity: activity('done'),
+      reviewDescription: 'Edit a component value.',
+    }),
+  );
+  assert.doesNotMatch(settled, /tool-review-description/);
+});
+
 test('tool previews bound deep, broad and long results without retaining mutable inputs', () => {
   const value = {
     parts: Array.from({ length: 1000 }, (_, id) => ({ id, text: 'x'.repeat(10000) })),

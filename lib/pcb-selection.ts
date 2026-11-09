@@ -1,11 +1,25 @@
 import type { Point } from './circuit';
-import type { BoardLayer, BoardLine, BoardText, BoardZone, PCB } from './pcb';
-import { pcbDisplayForLayer, pcbFootprintBodyBounds, type PCBDisplay } from './pcb-display';
+import {
+  resolvePCBGraphic,
+  type BoardLayer,
+  type BoardLine,
+  type BoardText,
+  type BoardZone,
+  type Footprint,
+  type PCB,
+} from './pcb';
+import {
+  pcbDisplayForLayer,
+  pcbFootprintBodyBounds,
+  pcbReadableTextAngle,
+  type PCBDisplay,
+} from './pcb-display';
 import { pcbArc } from './pcb-geometry';
-import { footprintPoint, padPosition, type PCBSelection } from './pcb-layout';
+import { findPCBGraphic, footprintPoint, padPosition, type PCBSelection } from './pcb-layout';
 import { padCopperLayers } from './pcb-connectivity';
 import { filledCopperPolygons, padPolygon, type Polygon } from './pcb-polygons';
 import { isOwnedPCB } from './immutable-project';
+import { pcbStrokeText } from './pcb-stroke-text';
 
 export type PCBSelectionFilters = Record<PCBSelection['kind'], boolean> & {
   pad?: boolean;
@@ -75,8 +89,13 @@ export function pcbSelectionEligible(
         )
       );
     case 'graphic': {
-      const graphic = board.graphics.find((item) => item.id === selection.id);
-      return !!graphic && pcbGraphicSelectionEligible(graphic, filters);
+      const hit = findPCBGraphic(board, selection.id);
+      return (
+        !!hit &&
+        (!hit.owner ||
+          (!hit.graphic.text?.hidden && (!hit.owner.locked || filters.locked !== false))) &&
+        pcbGraphicSelectionEligible(hit.graphic, filters)
+      );
     }
     case 'zone': {
       const zone = board.zones.find((item) => item.id === selection.id);
@@ -94,6 +113,8 @@ export type PCBPointSelectionOptions = {
   includeRegionInteriors?: boolean;
   /** Eligible DOM body, caption and outline hits, excluding saved-fill targets. */
   preciseCandidates?: readonly PCBSelection[];
+  /** Current resolved captions, keyed by the original text UUID. */
+  footprintTextValues?: ReadonlyMap<string, string>;
   /** Read-only pad inspection can suppress broad fill fallback without selecting its owner. */
   hasPrecisePad?: boolean;
 };
@@ -134,6 +155,44 @@ function pointObjects(board: PCB) {
     ownedPointObjects.set(board, result);
   }
   return result;
+}
+
+function pointPadLayers(board: PCB, owner: Footprint, pad: Footprint['pads'][number]) {
+  return pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad);
+}
+
+/** Pad inspection uses the same visible copper geometry and margin as point selection. */
+export function selectPCBPadPoint(
+  board: PCB,
+  layers: PCBDisplay,
+  filters: PCBSelectionFilters,
+  at: Point,
+  tolerance: number,
+): string[] {
+  if (!layers.footprints || !filters.pad) return [];
+  const ids: string[] = [];
+  for (const owner of board.footprints) {
+    if (owner.locked && filters.locked === false) continue;
+    for (const pad of owner.pads) {
+      if (pad.locked && filters.locked === false) continue;
+      const center = padPosition(owner, pad);
+      if (
+        Math.hypot(at.x - center.x, at.y - center.y) >
+        Math.hypot(pad.size.x, pad.size.y) / 2 + tolerance + epsilon
+      )
+        continue;
+      if (!pointPadLayers(board, owner, pad).some((layer) => layers[layer as BoardLayer])) continue;
+      const { outer } = padPolygon(owner, pad);
+      if (
+        inContour(at, outer) ||
+        outer.some(
+          (p, i) => pointDistance(at, p, outer[(i + 1) % outer.length]) <= tolerance + epsilon,
+        )
+      )
+        ids.push(pad.id);
+    }
+  }
+  return ids;
 }
 const corners = (r: Rectangle): Point[] => [
   { x: r.minX, y: r.minY },
@@ -256,6 +315,68 @@ function textContour(text: BoardText, at: Point): Point[] {
     };
   });
 }
+function resolvedFootprintText(
+  owner: Footprint,
+  graphic: BoardLine,
+  values?: ReadonlyMap<string, string>,
+) {
+  const text = graphic.text!;
+  const value =
+    values?.get(graphic.id) ??
+    resolvePCBGraphic(graphic, owner.reference ?? '', owner.value ?? '').text!.value;
+  return {
+    ...text,
+    value,
+    rotation: pcbReadableTextAngle(text.rotation + owner.rotation) - owner.rotation,
+  };
+}
+
+function footprintTextContour(
+  owner: Footprint,
+  graphic: BoardLine,
+  values?: ReadonlyMap<string, string>,
+) {
+  return textContour(resolvedFootprintText(owner, graphic, values), graphic.start).map((p) =>
+    footprintPoint(owner, p),
+  );
+}
+
+function selectFootprintText(
+  board: PCB,
+  layers: PCBDisplay,
+  filters: PCBSelectionFilters,
+  rectangle: Rectangle,
+  contained: boolean,
+  values?: ReadonlyMap<string, string>,
+  coveredOwners?: ReadonlySet<string>,
+): PCBSelection[] {
+  if (!layers.footprints || !(filters.text ?? filters.graphic)) return [];
+  const selected: PCBSelection[] = [];
+  for (const owner of board.footprints) {
+    if (coveredOwners?.has(owner.id) || (owner.locked && filters.locked === false)) continue;
+    for (const graphic of owner.graphics) {
+      if (
+        graphic.kind !== 'text' ||
+        graphic.text?.hidden ||
+        !layers[graphic.layer] ||
+        !pcbGraphicSelectionEligible(graphic, filters)
+      )
+        continue;
+      const outer = footprintTextContour(owner, graphic, values);
+      if (
+        outer.length &&
+        shapeMatches(
+          { paths: [], polygons: [{ outer, holes: [] }], radius: 0 },
+          rectangle,
+          contained,
+        )
+      )
+        selected.push({ kind: 'graphic', id: graphic.id });
+    }
+  }
+  return selected;
+}
+
 function graphicShape(g: BoardLine): Shape {
   if (g.kind === 'text') {
     const outer = g.text ? textContour(g.text, g.start) : [];
@@ -368,8 +489,8 @@ function selectionFills(
 export type PCBPointCandidate = {
   selection?: PCBSelection;
   padId?: string;
-  /** Layers of renderer-confirmed glyph hits, without enlarging ordinary body targets. */
-  directFootprintCaptionLayers?: readonly BoardLayer[];
+  /** The renderer confirmed a hit on this exact footprint text record. */
+  directFootprintText?: boolean;
 };
 type PointScore = {
   distance: number;
@@ -378,7 +499,13 @@ type PointScore = {
   priority: boolean;
   layerRank?: number;
   inspection?: boolean;
+  /** Comparable coverage for individually selectable copper and silk. */
+  overlapArea?: number;
+  overlapDistance?: number;
+  active?: boolean;
+  silk?: boolean;
 };
+const silkLayer = (layer: string | undefined) => layer === 'F.SilkS' || layer === 'B.SilkS';
 const contourArea = (points: Point[]) =>
   Math.abs(
     points.reduce((sum, p, i) => {
@@ -394,11 +521,7 @@ const closerScore = (a: PointScore, b: PointScore) => {
   );
 };
 
-/** Pick eligible geometry on the selected visible layer first, then other layers.
- * Within a layer group, precise geometry precedes region/body/fill fallback;
- * surface and centre/centreline distance precede physical paint order and area ties.
- * Without an explicit layer, keep the nearest visible geometry and lazy fill lookup.
- */
+/** Rank precise copper/silkscreen overlaps before resolving remaining layer and geometry ties. */
 export function choosePCBPointCandidate<T extends PCBPointCandidate>(
   board: PCB,
   layers: PCBDisplay,
@@ -409,11 +532,18 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     /** Optional subpixel distance tie supplied in board units by the viewport. */
     tieTolerance?: number;
     priorityLayer?: string;
+    /** Ordinary selection uses the active copper layer even in the physical-stack view. */
+    activeCopperLayer?: BoardLayer;
+    /** Track manipulation retains its nearest-segment pickup and layer preference. */
+    trackPickup?: boolean;
+    /** Stationary clicks can clarify similar-size overlapping copper and silk. */
+    onAmbiguous?: (candidates: T[]) => void;
     /** Optional visible paint order, from back/bottom to front/top, for geometric ties. */
     layerOrder?: readonly string[];
     filters?: PCBSelectionFilters;
     preparedFills?: ReadonlyMap<string, Polygon[]>;
     includeRegionInteriors?: boolean;
+    footprintTextValues?: ReadonlyMap<string, string>;
   },
 ): T | undefined {
   const tieTolerance = options.tieTolerance ?? epsilon;
@@ -434,6 +564,15 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     : undefined;
   let objects: ReturnType<typeof pointObjects> | undefined;
   const allObjects = () => (objects ??= pointObjects(board));
+  const selectedLayer = options.priorityLayer as BoardLayer | undefined;
+  const activeLayer = selectedLayer ?? options.activeCopperLayer ?? 'F.Cu';
+  const activeSilk = silkLayer(selectedLayer) && layers[activeLayer];
+  // Ordinary layout point queries use a three-screen-pixel collection margin.
+  const pixel = options.tolerance / 3;
+  const overlap = (list: readonly string[], area: number) => ({
+    overlapArea: area,
+    active: layers[activeLayer] && list.includes(activeLayer),
+  });
   const priority = (list: string[]) =>
     !!options.priorityLayer &&
     !!layers[options.priorityLayer as keyof PCBDisplay] &&
@@ -449,7 +588,11 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
           -1,
         )
       : undefined;
-  const shapeScore = (shape: Shape, transform = (point: Point) => point): PointScore => {
+  const shapeScore = (
+    shape: Shape,
+    transform = (point: Point) => point,
+    areaMargin = 0,
+  ): PointScore => {
     let distance = Infinity,
       local = Infinity,
       area = 0;
@@ -467,9 +610,12 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       for (let i = 1; i < path.length; i++) {
         const d = pointDistance(at, path[i - 1], path[i]);
         consider(Math.max(0, d - shape.radius), d);
-        area += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y) * shape.radius * 2;
+        area +=
+          Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y) *
+          (shape.radius + areaMargin) *
+          2;
       }
-      if (path.length > 1) area += Math.PI * shape.radius ** 2;
+      if (path.length > 1) area += Math.PI * (shape.radius + areaMargin) ** 2;
     }
     for (const original of shape.polygons) {
       const outer = original.outer.map(transform),
@@ -509,6 +655,28 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       priority: false,
     };
   };
+  const silkScore = (graphic: BoardLine, score: PointScore, owner?: Footprint): PointScore => {
+    if (!silkLayer(graphic.layer) || graphic.kind === 'dimension') return score;
+    let area = graphic.fill ? score.area : graphic.width ** 2;
+    let distance = score.distance;
+    if (graphic.kind === 'text' && graphic.text) {
+      const text = owner
+        ? resolvedFootprintText(owner, graphic, options.footprintTextValues)
+        : graphic.text;
+      const ink = pcbStrokeText(text, graphic.start);
+      area = score.area;
+      if ('paths' in ink && ink.paths.length) {
+        const strokes = shapeScore(
+          { paths: ink.paths, polygons: [], radius: ink.width / 2 },
+          owner ? (p) => footprintPoint(owner, p) : undefined,
+          options.tolerance,
+        );
+        area = strokes.area;
+        distance = Math.max(0, strokes.distance - 2.5 * pixel);
+      }
+    }
+    return { ...score, ...overlap([graphic.layer], area), overlapDistance: distance, silk: true };
+  };
   const keyOf = (candidate: T) =>
     candidate.padId
       ? `pad:${candidate.padId}`
@@ -518,15 +686,45 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     if (score.distance > options.tolerance + epsilon) return;
     scores.push({ candidate, score });
   };
+  const overlapPool = () => {
+    if (options.trackPickup) return;
+    if (activeSilk) {
+      const silk = scores.filter(({ score }) => score.silk);
+      if (silk.length) return silk;
+    }
+    if (
+      selectedLayer &&
+      !selectedLayer.endsWith('.Cu') &&
+      !silkLayer(selectedLayer) &&
+      scores.some(({ score }) => score.priority)
+    )
+      return;
+    const comparable = scores.filter(({ score }) => score.overlapArea !== undefined);
+    if (comparable.length > 1) return scores;
+  };
+  const overlapDistance = (score: PointScore) => score.overlapDistance ?? score.distance;
+  const coverage = (score: PointScore) => score.overlapArea ?? score.area;
+  const narrowOverlap = (pool: typeof scores) => {
+    const best = pool.reduce((min, { score }) => Math.min(min, overlapDistance(score)), Infinity);
+    const byArea = pool
+      .filter(({ score }) => overlapDistance(score) <= best + pixel + epsilon)
+      .sort((a, b) => coverage(a.score) - coverage(b.score));
+    // Keep the first group of similarly sized objects, with a 1.5× gap between groups.
+    const gap = byArea.findIndex(
+      (item, i) => i > 0 && coverage(item.score) > coverage(byArea[i - 1].score) * 1.5,
+    );
+    const sizeGroup = gap < 0 ? byArea : byArea.slice(0, gap);
+    const active = sizeGroup.filter(({ score }) => score.active ?? score.priority);
+    return active.length ? active : sizeGroup;
+  };
   const choose = () => {
     if (!scores.length) return;
-    const preferred = scores.filter((item) => item.score.priority),
-      pool = preferred.length ? preferred : scores;
-    const surface = pool.reduce(
-        (distance, item) => Math.min(distance, item.score.distance),
-        Infinity,
-      ),
-      nearest = pool.filter((item) => item.score.distance <= surface + tieTolerance),
+    const comparable = overlapPool();
+    const preferred = scores.filter((item) => item.score.priority);
+    const pool = comparable ? narrowOverlap(comparable) : preferred.length ? preferred : scores;
+    const distance = comparable ? overlapDistance : (score: PointScore) => score.distance;
+    const surface = pool.reduce((min, item) => Math.min(min, distance(item.score)), Infinity),
+      nearest = pool.filter((item) => distance(item.score) <= surface + tieTolerance),
       local = nearest.reduce((distance, item) => Math.min(distance, item.score.local), Infinity);
     let winner: (typeof scores)[number] | undefined;
     for (const item of nearest) {
@@ -539,7 +737,34 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       )
         winner = item;
     }
-    return winner?.candidate;
+    const kinds =
+      comparable && options.onAmbiguous
+        ? new Set(
+            pool.flatMap(({ score, candidate }) =>
+              score.silk
+                ? ['silk']
+                : candidate.padId
+                  ? ['pad']
+                  : candidate.selection?.kind === 'track'
+                    ? ['track']
+                    : [],
+            ),
+          )
+        : undefined;
+    return {
+      winner: winner?.candidate,
+      rankedOverlap: Boolean(comparable),
+      ambiguous:
+        kinds && kinds.size > 1
+          ? pool
+              .filter(({ score }) => score.overlapArea !== undefined)
+              .map(({ candidate }) => candidate)
+          : undefined,
+    };
+  };
+  const finish = (result: ReturnType<typeof choose>) => {
+    if (result?.ambiguous) options.onAmbiguous?.(result.ambiguous);
+    return result?.winner;
   };
   const fallback: { candidate: T; body?: PointScore; zones: BoardZone[] }[] = [];
   for (const candidate of candidates) {
@@ -552,23 +777,16 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
         ((found.pad.locked || found.owner.locked) && filters.locked === false)
       )
         continue;
-      const { owner, pad } = found,
-        visible =
-          pad.type === 'np_thru_hole'
-            ? layers['Edge.Cuts']
-            : padCopperLayers(board, owner, pad).some((layer) => layers[layer as keyof PCBDisplay]);
-      if (!visible) continue;
+      const { owner, pad } = found;
+      const padLayers = pointPadLayers(board, owner, pad);
+      if (!padLayers.some((layer) => layers[layer as BoardLayer])) continue;
       const score = shapeScore({ paths: [], polygons: [padPolygon(owner, pad)], radius: 0 }),
         center = padPosition(owner, pad);
       score.local = Math.hypot(at.x - center.x, at.y - center.y);
-      score.priority = priority(
-        pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
-      );
-      score.layerRank = layerRank(
-        pad.type === 'np_thru_hole' ? ['Edge.Cuts'] : padCopperLayers(board, owner, pad),
-      );
+      score.priority = priority(padLayers);
+      score.layerRank = layerRank(padLayers);
       score.inspection = true;
-      accept(candidate, score);
+      accept(candidate, { ...score, ...overlap(padLayers, score.area) });
       continue;
     }
     const object = candidate.selection;
@@ -589,7 +807,7 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       });
       score.priority = priority([track.layer]);
       score.layerRank = layerRank([track.layer]);
-      accept(candidate, score);
+      accept(candidate, { ...score, ...overlap([track.layer], track.width ** 2) });
     } else if (object.kind === 'via') {
       const via = allObjects().vias.get(object.id);
       if (
@@ -606,9 +824,12 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
         area: Math.PI * (via.diameter / 2) ** 2,
         priority: priority(board.layers),
         layerRank: layerRank(board.layers),
+        ...overlap(board.layers, (via.drill / 2) ** 2),
       });
     } else if (object.kind === 'graphic') {
-      const graphic = allObjects().graphics.get(object.id);
+      const boardGraphic = allObjects().graphics.get(object.id);
+      const owned = boardGraphic ? undefined : findPCBGraphic(board, object.id);
+      const graphic = boardGraphic ?? owned?.graphic;
       if (
         !graphic ||
         !layers[graphic.layer] ||
@@ -616,8 +837,33 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
         !pcbGraphicSelectionEligible(graphic, filters)
       )
         continue;
+      if (owned?.owner) {
+        if (
+          !layers.footprints ||
+          graphic.text?.hidden ||
+          (owned.owner.locked && filters.locked === false)
+        )
+          continue;
+        const outer = footprintTextContour(owned.owner, graphic, options.footprintTextValues);
+        const score = shapeScore({
+          paths: [],
+          polygons: outer.length ? [{ outer, holes: [] }] : [],
+          radius: 0,
+        });
+        const ranked = silkScore(graphic, score, owned.owner);
+        if (candidate.directFootprintText) {
+          ranked.distance = 0;
+          ranked.local = 0;
+        }
+        accept(candidate, {
+          ...ranked,
+          priority: priority([graphic.layer]),
+          layerRank: layerRank([graphic.layer]),
+        });
+        continue;
+      }
       accept(candidate, {
-        ...graphicScore(graphic),
+        ...silkScore(graphic, graphicScore(graphic)),
         priority: priority([graphic.layer]),
         layerRank: layerRank([graphic.layer]),
       });
@@ -714,22 +960,6 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
             priority: priority([graphic.layer]),
             layerRank: layerRank([graphic.layer]),
           });
-        else if (
-          candidate.directFootprintCaptionLayers?.includes(graphic.layer) &&
-          layers[graphic.layer] &&
-          !graphic.text?.hidden &&
-          pcbGraphicSelectionEligible(graphic, filters) &&
-          (graphic.kind === 'text' || graphic.kind === 'dimension')
-        ) {
-          const score = graphicScore(graphic, transform);
-          if (Number.isFinite(score.distance))
-            accept(candidate, {
-              ...score,
-              distance: 0,
-              priority: priority([graphic.layer]),
-              layerRank: layerRank([graphic.layer]),
-            });
-        }
       const ownZones = (owner.zones ?? []).filter(
         (zone) => layers[zone.layer] && pcbZoneSelectionEligible(zone, filters),
       );
@@ -770,9 +1000,15 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       fallback.push({ candidate, body, zones: ownZones });
     }
   }
-  const precise = choose();
-  if (precise && (!options.priorityLayer || scores.some((item) => item.score.priority)))
-    return precise;
+  const preciseResult = choose();
+  const precise = preciseResult?.winner;
+  if (
+    precise &&
+    (preciseResult.rankedOverlap ||
+      !options.priorityLayer ||
+      scores.some((item) => item.score.priority))
+  )
+    return finish(preciseResult);
   const needsFills =
     layers.copper &&
     fallback.some((item) =>
@@ -797,7 +1033,7 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
           });
       }
   }
-  return choose();
+  return finish(choose());
 }
 
 /** Left-to-right windows contain objects; right-to-left windows touch visible geometry.
@@ -811,22 +1047,41 @@ export function selectPCBRectangle(
   end: Point,
   preparedFills?: ReadonlyMap<string, Polygon[]>,
   activeLayer?: BoardLayer,
+  footprintTextValues?: ReadonlyMap<string, string>,
+  includeOwnedText = false,
 ): PCBSelection[] {
   if (![start.x, start.y, end.x, end.y].every(Number.isFinite)) return [];
   if (activeLayer) layers = pcbDisplayForLayer(layers, activeLayer);
-  return selectPCBGeometry(
+  const rectangle = {
+    minX: Math.min(start.x, end.x),
+    minY: Math.min(start.y, end.y),
+    maxX: Math.max(start.x, end.x),
+    maxY: Math.max(start.y, end.y),
+  };
+  const contained = end.x >= start.x;
+  const selected = selectPCBGeometry(
     board,
     layers,
     filters,
-    {
-      minX: Math.min(start.x, end.x),
-      minY: Math.min(start.y, end.y),
-      maxX: Math.max(start.x, end.x),
-      maxY: Math.max(start.y, end.y),
-    },
-    end.x >= start.x,
+    rectangle,
+    contained,
     selectionFills(board, layers, filters, preparedFills),
   );
+  const coveredOwners = includeOwnedText
+    ? undefined
+    : new Set(selected.filter((s) => s.kind === 'footprint').map((s) => s.id));
+  return [
+    ...selected,
+    ...selectFootprintText(
+      board,
+      layers,
+      filters,
+      rectangle,
+      contained,
+      footprintTextValues,
+      coveredOwners,
+    ),
+  ];
 }
 
 function selectPCBGeometry(
@@ -1218,7 +1473,16 @@ export function selectPCBPoint(
         : precisePointGeometry(board, layers, filters, rectangle),
       'add',
     );
-  if (!precise.length && !options.hasPrecisePad && options.includeRegionInteriors) {
+  const text = selectFootprintText(
+    board,
+    layers,
+    filters,
+    rectangle,
+    false,
+    options.footprintTextValues,
+  );
+  const objects = text.length ? mergePCBSelection(precise, text, 'add') : precise;
+  if (!objects.length && !options.hasPrecisePad && options.includeRegionInteriors) {
     const regions: PCBSelection[] = [];
     for (const graphic of board.graphics)
       if (
@@ -1240,8 +1504,8 @@ export function selectPCBPoint(
           regions.push({ kind: 'zone', id: zone.id });
     if (regions.length) return finish(regions);
   }
-  if (options.includeFills || precise.length || options.hasPrecisePad || !layers.copper)
-    return finish(precise);
+  if (options.includeFills || objects.length || options.hasPrecisePad || !layers.copper)
+    return finish(objects);
   const fills = selectionFills(board, layers, filters, options.preparedFills),
     selected: PCBSelection[] = [];
   const hits = (zone: BoardZone) =>

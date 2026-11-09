@@ -24,6 +24,11 @@ export {
 } from './kicad-project';
 import { validateSimulationModels, type SimulationModelReference } from './simulation-models';
 import {
+  canSelectPassiveSimulationModel,
+  isPassiveSimulationModel,
+} from './simulation-model-source';
+import { simulationFieldNames } from './simulation-fields';
+import {
   isOwnedCircuit,
   isOwnedPCB,
   isOwnedProject,
@@ -296,6 +301,16 @@ function validateProjectContent(input: unknown): void {
           fields: JSON.stringify(p.fields || {}),
         });
       if (!Object.hasOwn(d.libraries, p.libId)) fail(`missing embedded symbol ${p.libId}.`);
+      const passiveField = simulationFieldNames.passiveModel;
+      const rawPassive = children(p.raw ?? [], 'property').find(
+        (item) => val(item) === passiveField,
+      );
+      const passive = p.fields?.[passiveField] ?? (rawPassive && val(rawPassive, 2));
+      if (
+        passive !== undefined &&
+        (!isPassiveSimulationModel(passive) || !canSelectPassiveSimulationModel(p, d))
+      )
+        fail(`${p.ref}: a passive simulation model requires a supported two-terminal symbol.`);
     }
     // Atoms are KiCad syntax, not arbitrary interpolated source strings.
     const checkSExpr = (n: SExpr) => {

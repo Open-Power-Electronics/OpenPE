@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Check, ChevronRight, FolderSearch, Plus, Trash2 } from 'lucide-react';
+import { Activity, Check, FolderSearch, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { type Part, type Circuit } from '@/lib/circuit';
 import { displayPartValue, partFields } from '@/lib/library';
 import {
@@ -30,10 +30,15 @@ import {
 import type { FootprintDetail } from './LibraryChooser';
 import DeferredDialog from './DeferredDialog';
 import Select from './Select';
+import { PropertyTab, PropertyTabs } from './PropertyTabs';
 import type { CapabilityHost } from '@/api/capabilities';
 import type { SpiceModelDeclaration } from '@/lib/bridge';
 import {
   simulationModelSource,
+  activePassiveModel,
+  canSelectPassiveSimulationModel,
+  isPassiveSimulationModel,
+  passiveSimulationModels,
   basicSimulationAvailable,
   basicSimulationKind,
 } from '@/lib/simulation-model-source';
@@ -136,6 +141,7 @@ function PartProperties({
   onRequestSave,
   capabilityHost,
   active = true,
+  locked = false,
   spiceAvailable = false,
   fileId,
   getRevision,
@@ -145,6 +151,7 @@ function PartProperties({
   geometryFields?: ReactNode;
   circuit?: Circuit;
   active?: boolean;
+  locked?: boolean;
   /** Shared component controls owned by the installed and enabled SPICE plugin. */
   spiceAvailable?: boolean;
   fileId?: string;
@@ -177,6 +184,7 @@ function PartProperties({
       'Sim.Name',
       'Sim.Library',
       'OpenPE.ModelSource',
+      'OpenPE.PassiveModel',
       'OpenPE.SourceType',
       'OpenPE.SeriesResistance',
       'OpenPE.Coupling',
@@ -209,6 +217,9 @@ function PartProperties({
   );
   const externalModel = simulationModelSource(rowFields) === 'external';
   const basicAvailable = basicSimulationAvailable(part);
+  const basicKind = basicSimulationKind(part);
+  const passive = isPassiveSimulationModel(basicKind) ? basicKind : null;
+  const passiveChoices = canSelectPassiveSimulationModel(part, circuit);
   const libraryPath = simulationLibraryPath(rowFields['Sim.Library'] || '');
   const libraryFilename = libraryPath.split(/[\\/]/).at(-1) || '';
   const externalName = rowFields['Sim.Name'] || '';
@@ -305,7 +316,7 @@ function PartProperties({
     };
   }, [active, spiceAvailable, fileId, part.id, libraryPath, snapshot, catalog]);
   function save(draftRows = rows, footprintDetail?: FootprintDetail): boolean {
-    if (!active || composing.current || basis !== snapshot) return false;
+    if (!active || locked || composing.current || basis !== snapshot) return false;
     try {
       const change = preparePartProperties(part, ref, value, draftRows);
       if (change && !onSave(change.ref, change.value, change.fields, footprintDetail)) {
@@ -380,7 +391,14 @@ function PartProperties({
   }
 
   function selectModel(selection: string) {
-    if (!active || !spiceAvailable || modelBrowsing || composing.current || basis !== snapshot)
+    if (
+      !active ||
+      locked ||
+      !spiceAvailable ||
+      modelBrowsing ||
+      composing.current ||
+      basis !== snapshot
+    )
       return;
     if (selection.startsWith('source:')) {
       try {
@@ -400,15 +418,32 @@ function PartProperties({
       }
       return;
     }
-    if (selection === 'intrinsic') {
-      if (!basicAvailable) return;
-      setMapping(null);
-      const next = withPreparedModelFields(
-        rows,
-        prepareSimulationModelSelection(circuit, part, rowFields, { source: 'basic' }),
-      );
-      setRows(next);
-      save(next);
+    const passiveModel = selection.startsWith('passive:') ? selection.slice(8) : undefined;
+    if (
+      selection === 'intrinsic' ||
+      selection === 'unassigned' ||
+      isPassiveSimulationModel(passiveModel)
+    ) {
+      try {
+        const next = withPreparedModelFields(
+          rows,
+          prepareSimulationModelSelection(circuit, part, rowFields, {
+            source: 'basic',
+            passiveModel:
+              selection === 'unassigned'
+                ? null
+                : isPassiveSimulationModel(passiveModel)
+                  ? passiveModel
+                  : undefined,
+          }),
+        );
+        if (save(next)) {
+          setRows(next);
+          setMapping(null);
+        }
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Invalid intrinsic model.');
+      }
       return;
     }
     if (!selection.startsWith('external:') || !libraryPath) return;
@@ -525,7 +560,21 @@ function PartProperties({
   }
 
   function modelSelector() {
-    const currentBuiltin = !externalModel && !basicAvailable && !rowFields['OpenPE.ModelSource'];
+    const selectedPassive = activePassiveModel(rowFields) ?? passive;
+    const storedPassive = rowFields['OpenPE.PassiveModel'];
+    const retainedPassive = isPassiveSimulationModel(storedPassive) ? storedPassive : passive;
+    const availablePassives = libraryPath
+      ? retainedPassive
+        ? [retainedPassive]
+        : []
+      : passiveSimulationModels;
+    const unassigned = passiveChoices && !passive && !libraryPath;
+    const currentBuiltin =
+      !externalModel &&
+      !basicAvailable &&
+      !selectedPassive &&
+      !unassigned &&
+      !rowFields['OpenPE.ModelSource'];
     const sourceDevice = basicSimulationKind(part);
     const waveformSource = sourceDevice === 'V' || sourceDevice === 'I';
     const sourceType = rowFields['OpenPE.SourceType'] || simulationSourceProperties(part)?.type;
@@ -533,10 +582,14 @@ function PartProperties({
       ? `external:${mapping.declaration.name}`
       : currentBuiltin
         ? 'current'
-        : !externalModel && basicAvailable
+        : !externalModel && (basicAvailable || selectedPassive || unassigned)
           ? waveformSource
             ? 'source:' + sourceType
-            : 'intrinsic'
+            : selectedPassive
+              ? 'passive:' + selectedPassive
+              : unassigned
+                ? 'unassigned'
+                : 'intrinsic'
           : externalName && libraryPath
             ? `external:${externalName}`
             : '';
@@ -547,9 +600,16 @@ function PartProperties({
             label: type + (sourceDevice === 'I' ? ' current source' : ' voltage source'),
             disabled: false,
           }))
-        : basicAvailable
-          ? [{ value: 'intrinsic', label: presentation.basicModel, disabled: false }]
-          : []),
+        : passiveChoices
+          ? availablePassives.map((model) => ({
+              value: 'passive:' + model,
+              label: 'ngspice ' + model,
+              disabled: false,
+            }))
+          : basicAvailable
+            ? [{ value: 'intrinsic', label: presentation.basicModel, disabled: false }]
+            : []),
+      ...(unassigned ? [{ value: 'unassigned', label: 'Unassigned', disabled: false }] : []),
       ...(currentBuiltin
         ? [{ value: 'current', label: presentation.basicModel, disabled: true }]
         : []),
@@ -856,56 +916,58 @@ function PartProperties({
           }
         }}
       >
-        <div className="property-primary">
-          <label>
-            Reference
-            <input
-              aria-label="Component reference"
-              value={ref}
-              disabled={!active}
-              onChange={(e) => {
-                if (active) setRef(e.target.value);
-              }}
-            />
-          </label>
-          <label>
-            Value
-            <input
-              aria-label="Component value"
-              readOnly={spiceAvailable && rows.some((row) => row.sourceKey)}
-              value={value}
-              disabled={!active}
-              onChange={(e) => {
-                if (active) setValue(e.target.value);
-              }}
-            />
-          </label>
-        </div>
-        <div className="property-fields">
-          {renderFields(false)}
-          <button
-            type="button"
-            className="property-add-field"
-            disabled={!active}
-            onClick={() =>
-              setRows([...rows, { name: '', value: '', fresh: true, simulation: false }])
-            }
-          >
-            <Plus size={15} />
-            Add field
-          </button>
-        </div>
-        {geometryFields && <div ref={geometryContainer}>{geometryFields}</div>}
-        {spiceAvailable && (
-          <details className="property-simulation">
-            <summary className="property-simulation-heading">
-              <ChevronRight size={15} aria-hidden="true" />
-              <span>SPICE Simulation</span>
-            </summary>
-            {modelSelector()}
-            <div className="property-fields">{renderFields(true)}</div>
-          </details>
-        )}
+        <PropertyTabs locked={locked}>
+          <PropertyTab label="General" icon={SlidersHorizontal}>
+            <div className="property-primary">
+              <label>
+                Reference
+                <input
+                  aria-label="Component reference"
+                  value={ref}
+                  disabled={!active}
+                  onChange={(e) => {
+                    if (active) setRef(e.target.value);
+                  }}
+                />
+              </label>
+              <label>
+                Value
+                <input
+                  aria-label="Component value"
+                  readOnly={spiceAvailable && rows.some((row) => row.sourceKey)}
+                  value={value}
+                  disabled={!active}
+                  onChange={(e) => {
+                    if (active) setValue(e.target.value);
+                  }}
+                />
+              </label>
+            </div>
+            <div className="property-fields">
+              {renderFields(false)}
+              <button
+                type="button"
+                className="property-add-field"
+                disabled={!active}
+                onClick={() =>
+                  setRows([...rows, { name: '', value: '', fresh: true, simulation: false }])
+                }
+              >
+                <Plus size={15} />
+                Add field
+              </button>
+            </div>
+            {geometryFields && <div ref={geometryContainer}>{geometryFields}</div>}
+          </PropertyTab>
+          {spiceAvailable && (
+            <PropertyTab label="SPICE" icon={Activity}>
+              <div className="property-simulation">
+                {modelSelector()}
+                <div className="property-fields">{renderFields(true)}</div>
+              </div>
+            </PropertyTab>
+          )}
+        </PropertyTabs>
         {error && (
           <p className="dialog-error" role="alert">
             {error}
@@ -946,6 +1008,7 @@ export default memo(
     previous.circuit === next.circuit &&
     previous.onRequestSave === next.onRequestSave &&
     previous.active === next.active &&
+    previous.locked === next.locked &&
     previous.spiceAvailable === next.spiceAvailable &&
     previous.fileId === next.fileId &&
     previous.getRevision === next.getRevision &&

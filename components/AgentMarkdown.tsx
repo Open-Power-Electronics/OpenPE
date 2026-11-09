@@ -1,14 +1,18 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useId, useMemo } from 'react';
 import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import type { Root, RootContent } from 'hast';
+import type { Element, Root, RootContent } from 'hast';
 import type { PluggableList } from 'unified';
 import { responseText } from '@/lib/chat-stream';
 import { normalizeAgentMath } from '@/lib/agent-math';
+import AgentCodeBlock from './AgentCodeBlock';
+import AgentTable, { AgentTableSource } from './AgentTable';
+import AgentMathBlock from './AgentMathBlock';
+import { followAgentFootnote, isAgentFootnote, scopeAgentFootnotes } from './agent-footnotes';
 
 const plugins = [remarkGfm, remarkMath];
 
@@ -43,40 +47,72 @@ const mathPlugins: PluggableList = [
   accessibleDescriptions,
 ];
 const components: Components = {
-  a: ({ href, children }) =>
+  a: ({ href, children, node, ...props }) =>
     href ? (
-      <a href={href} target="_blank" rel="noopener noreferrer" aria-description={href}>
-        {children}
-      </a>
+      node && isAgentFootnote(node) ? (
+        <a
+          {...props}
+          href={href}
+          onClick={followAgentFootnote}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.keyCode === 229) event.preventDefault();
+          }}
+        >
+          {children}
+        </a>
+      ) : (
+        <a href={href} target="_blank" rel="noopener noreferrer" aria-description={href}>
+          {children}
+        </a>
+      )
     ) : (
       <span>{children}</span>
     ),
   // Agent-authored images must not make unsolicited network requests.
   img: ({ alt }) => <span>{alt || 'Image'}</span>,
-  pre: ({ children }) => <pre tabIndex={0}>{children}</pre>,
-  table: ({ children }) => (
-    <div className="message-table" role="region" aria-label="Response table" tabIndex={0}>
-      <table>{children}</table>
-    </div>
-  ),
+  pre: ({ children, node }) => <AgentCodeBlock node={node}>{children}</AgentCodeBlock>,
+  table: ({ children, node }) => <AgentTable node={node}>{children}</AgentTable>,
+  span: ({ className, children, node, ...props }) => {
+    const content = (
+      <span className={className} {...props}>
+        {children}
+      </span>
+    );
+    return className?.split(' ').includes('katex-display') ? (
+      <AgentMathBlock node={node}>{content}</AgentMathBlock>
+    ) : (
+      content
+    );
+  },
 };
 
-function safeUrl(url: string) {
-  return /^https?:\/\//i.test(url) ? url : '';
+function safeUrl(url: string, key: string, node: Element) {
+  return /^https?:\/\//i.test(url) ||
+    (key === 'href' && isAgentFootnote(node) && url.startsWith('#'))
+    ? url
+    : '';
 }
 
 export default memo(function AgentMarkdown({ text }: { text: string }) {
+  const id = useId();
+  const scopedPlugins = useMemo<PluggableList>(
+    () => [...mathPlugins, [scopeAgentFootnotes, { prefix: `openpe-${id}-` }]],
+    [id],
+  );
+  const source = normalizeAgentMath(responseText(text));
   return (
     <div className="message-text agent-markdown">
-      <Markdown
-        remarkPlugins={plugins}
-        rehypePlugins={mathPlugins}
-        components={components}
-        urlTransform={safeUrl}
-        skipHtml
-      >
-        {normalizeAgentMath(responseText(text))}
-      </Markdown>
+      <AgentTableSource value={source}>
+        <Markdown
+          remarkPlugins={plugins}
+          rehypePlugins={scopedPlugins}
+          components={components}
+          urlTransform={safeUrl}
+          skipHtml
+        >
+          {source}
+        </Markdown>
+      </AgentTableSource>
     </div>
   );
 });

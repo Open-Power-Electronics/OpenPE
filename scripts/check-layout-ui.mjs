@@ -185,6 +185,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
@@ -653,6 +655,7 @@ try {
   await canvas.press('Enter');
   await canvas.locator('[data-copper-zone]').first().waitFor({ state: 'attached' });
   assert.equal(await canvas.locator('[data-copper-zone]').last().getAttribute('d'), '');
+  await page.getByRole('tab', { name: 'Fill', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).fill('0.5');
   await page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).press('Enter');
   await button('Source').click();

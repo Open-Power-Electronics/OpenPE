@@ -9480,12 +9480,13 @@ var bounded2 = (items) => ({
   items: items.slice(0, collectionLimit),
   ...items.length > collectionLimit ? { truncated: true } : {}
 });
-function agentPromptContext(value) {
+function agentPromptContext(value, progressive = false) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   const context = value;
   const workspace = context.workspace;
   if (!workspace) return value;
   const project = parseProject(JSON.stringify(workspace.project));
+  const datasheet = projectDatasheetContext(project);
   const selected = new Set(
     Array.isArray(workspace.ui.selection) ? workspace.ui.selection : []
   );
@@ -9503,6 +9504,13 @@ function agentPromptContext(value) {
       }
     };
     if (!active) return summary;
+    if (progressive)
+      return {
+        ...summary,
+        selectedComponents: bounded2(
+          circuit.parts.filter((part) => selected.has(part.id)).map(({ id, ref, value: value2 }) => ({ id, ref, value: value2 }))
+        )
+      };
     const parts = [...circuit.parts].sort(
       (a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id))
     );
@@ -9605,7 +9613,7 @@ function agentPromptContext(value) {
               (key) => [key, board[key].length]
             )
           ),
-          ...workspace.ui.view === "layout" ? {
+          ...!progressive && workspace.ui.view === "layout" ? {
             footprints: bounded2(
               board.footprints.map(
                 ({ id, reference, libraryId, x, y, rotation, side, pads }) => ({
@@ -9624,7 +9632,7 @@ function agentPromptContext(value) {
         } : null,
         modelCad: model ? {
           objectCount: model.objects.length,
-          ...workspace.ui.view === "3d" ? {
+          ...!progressive && workspace.ui.view === "3d" ? {
             objects: model.objects.map(({ id, name, kind, position, rotation, size }) => ({
               id,
               name,
@@ -9641,10 +9649,19 @@ function agentPromptContext(value) {
         error: workspace.source.error,
         draftCharacters: workspace.source.draftCharacters
       },
-      ui: workspace.ui,
-      icDatasheet: workspace.icDatasheet,
-      simulation: workspace.simulation,
-      thermal: workspace.thermal
+      ui: progressive ? {
+        active: workspace.ui.active,
+        view: workspace.ui.view,
+        activeSchematicId: workspace.ui.activeSchematicId,
+        selection: bounded2([...selected])
+      } : workspace.ui,
+      icDatasheet: progressive ? {
+        status: datasheet.status,
+        bindings: bounded2(datasheet.bindings),
+        document: datasheet.record?.datasheet
+      } : datasheet,
+      simulation: progressive ? { status: workspace.simulation?.status } : workspace.simulation,
+      thermal: progressive && workspace.thermal ? { status: workspace.thermal.status } : workspace.thermal
     }
   };
 }

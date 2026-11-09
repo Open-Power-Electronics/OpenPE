@@ -114,7 +114,8 @@ try {
     .locator('.project-navigation > span')
     .first()
     .locator('.project-folder > button')
-    .click();
+    .click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'New session', exact: true }).click();
   await finish();
   assert.ok(
     (await source()).includes('330uF'),
@@ -150,7 +151,8 @@ try {
     .locator('.project-navigation > span')
     .first()
     .locator('.project-folder > button')
-    .click();
+    .click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'New session', exact: true }).click();
   await page.waitForTimeout(5600);
   await panel().getByRole('combobox', { name: 'Agent permissions', exact: true }).click();
   const box = await page.getByRole('listbox').boundingBox();

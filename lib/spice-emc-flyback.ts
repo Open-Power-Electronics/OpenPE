@@ -1,7 +1,8 @@
 import { pinPositions, type Circuit, type Part } from './circuit';
-import { partFields, unitGraphics } from './library';
+import { displayPartValue, partFields, unitGraphics } from './library';
 import { primitiveInitialCondition } from './simulation-initial-conditions';
 import {
+  activePassiveModel,
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
 } from './simulation-model-source';
@@ -87,8 +88,8 @@ export function emcFlybackDefaults(): TransientConfig {
     step: 5e-9,
   };
 }
-function value(p: Part, kind: 'R' | 'C') {
-  const text = p.value.trim().split(/\s+/)[0];
+function value(p: Part, kind: 'R' | 'C' | 'L', explicit = false) {
+  const text = (explicit ? displayPartValue(p) : p.value).trim().split(/\s+/)[0];
   return passiveValue(kind === 'R' ? text.replace(/R$/i, '') : text, kind);
 }
 function validate(d: Circuit) {
@@ -114,9 +115,13 @@ function validate(d: Circuit) {
         `${p.ref}: this bounded EMC Flyback model requires the original simulation participation.`,
       );
     const initial = partFields(p);
+    const model = activePassiveModel(initial);
+    if (model && !resistors.includes(p.ref) && !capacitors.includes(p.ref))
+      throw new Error(`${p.ref}: this EMC Flyback device requires its original model.`);
     if (
-      initial['OpenPE.InitialCurrent'] !== undefined ||
-      (initial['OpenPE.InitialVoltage'] !== undefined && !capacitors.includes(p.ref))
+      !model &&
+      (initial['OpenPE.InitialCurrent'] !== undefined ||
+        (initial['OpenPE.InitialVoltage'] !== undefined && !capacitors.includes(p.ref)))
     )
       throw new Error(
         `${p.ref}: initial conditions are not supported for this omitted EMC Flyback device.`,
@@ -156,6 +161,7 @@ function validate(d: Circuit) {
       [...new Set([...Object.keys(simulation), ...Object.keys(expected.simulation)])].some(
         (key) =>
           !(sources.has(p.ref) && ['Sim.Params', 'Sim.Type'].includes(key)) &&
+          !(model && ['Sim.Device', 'Sim.Params'].includes(key)) &&
           simulation[key] !== (expected.simulation as Record<string, string>)[key],
       )
     )
@@ -171,7 +177,7 @@ function validate(d: Circuit) {
         throw new Error(
           `${p.ref}: retain the original value rating and use a single numeric component value.`,
         );
-      value(p, resistors.includes(p.ref) ? 'R' : 'C');
+      value(p, model ?? (resistors.includes(p.ref) ? 'R' : 'C'), model !== undefined);
     } else if (p.value !== expected.value)
       throw new Error(
         `${p.ref}: this bounded EMC Flyback model requires the bundled value ${expected.value}.`,
@@ -248,46 +254,42 @@ export function buildEmcFlybackSpice(d: Circuit, c: TransientConfig): SpiceDeck 
   ];
   const currents: SpiceTrace[] = [];
   const addNodes = (...ns: string[]) => ns.forEach((n) => nodes.add(n));
-  for (const ref of resistors) {
+  for (const ref of [...resistors, ...capacitors]) {
     const p = part(ref),
       a = node(ref, '1'),
       b = node(ref, '2');
+    const stored = partFields(p);
+    const model = activePassiveModel(stored);
+    const original = resistors.includes(ref) ? 'R' : 'C';
+    const kind = model ?? original;
+    const name = kind === original ? ref : `${kind}_OPENPE_${ref}`;
+    const esr = emcFlybackCapacitorEsr[ref];
+    const positive = esr ? `emc_${ref}` : a;
+    const initial =
+      kind === 'R'
+        ? undefined
+        : primitiveInitialCondition(kind, effectiveSimulationModelFields(p, stored), ref);
     addNodes(a, b);
-    lines.push(`${ref} ${a} ${b} ${value(p, 'R')}`);
+    if (esr) lines.push(`RESR_${ref} ${a} emc_${ref} ${esr}`);
+    lines.push(
+      `${name} ${positive} ${b} ${value(p, kind, model !== undefined)}${initial === undefined ? '' : ` IC=${initial}`}`,
+    );
     currents.push({
       label: `I(${ref}) · pin 1 → 2`,
       unit: 'A',
-      vector: `@${ref.toLowerCase()}[i]`,
+      vector: kind === 'L' ? `i(${name.toLowerCase()})` : `@${name.toLowerCase()}[i]`,
       targets: [{ kind: 'current', id: p.id }],
-      ...(!virtualResistors.has(ref)
+      ...(kind === 'R' && !virtualResistors.has(ref)
         ? {
             dissipation: {
               positivePin: '1',
               negativePin: '2',
-              positiveNode: a,
+              positiveNode: positive,
               negativeNode: b,
               method: 'resistor',
             },
           }
         : {}),
-    });
-  }
-  const esr = emcFlybackCapacitorEsr;
-  for (const ref of capacitors) {
-    const a = node(ref, '1'),
-      b = node(ref, '2'),
-      r = esr[ref];
-    addNodes(a, b);
-    if (r) lines.push(`RESR_${ref} ${a} emc_${ref} ${r}`);
-    const initial = primitiveInitialCondition('C', partFields(part(ref)), ref);
-    lines.push(
-      `${ref} ${r ? `emc_${ref}` : a} ${b} ${value(part(ref), 'C')}${initial === undefined ? '' : ` IC=${initial}`}`,
-    );
-    currents.push({
-      label: `I(${ref}) · pin 1 → 2`,
-      unit: 'A',
-      vector: `@${ref.toLowerCase()}[i]`,
-      targets: [{ kind: 'current', id: part(ref).id }],
     });
   }
   for (const ref of ['D2', 'D3', 'D7']) {

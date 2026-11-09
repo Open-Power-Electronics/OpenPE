@@ -171,6 +171,8 @@ async function run(
           ? libraryDetail
           : { entries: [libraryDetail], libraries: [libraryDetail.library], total: 1 },
       });
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     return route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
   });
@@ -373,41 +375,60 @@ try {
           kind === 'zone' ? 1 : 0,
         );
         if (kind === 'zone') {
-          const bounds = panel
-            .locator('details')
-            .filter({ has: page.locator('summary', { hasText: /^Zone bounds$/ }) });
-          const rules = panel
-            .locator('details')
-            .filter({ has: page.locator('summary', { hasText: /^Fill rules$/ }) });
-          assert.equal(await bounds.getAttribute('open'), null);
-          assert.equal(await rules.getAttribute('open'), null);
+          const tabs = panel.getByRole('tablist', { name: 'Property sections' });
+          const general = tabs.getByRole('tab', { name: 'General', exact: true });
+          const bounds = tabs.getByRole('tab', { name: 'Bounds', exact: true });
+          const rules = tabs.getByRole('tab', { name: 'Fill', exact: true });
           assert.deepEqual(
-            await panel.locator('details > summary').allTextContents(),
-            ['Zone bounds', 'Fill rules'],
-            'Secondary zone controls are collapsed with fill rules last.',
+            await tabs.getByRole('tab').evaluateAll((nodes) => nodes.map((node) => node.title)),
+            ['General', 'Bounds', 'Fill'],
           );
-          const beforeDisclosure = await snapshot();
-          const summary = bounds.locator('summary');
-          await summary.focus();
-          await summary.press('Enter');
-          const width = bounds.getByRole('spinbutton', { name: 'Width (mm)', exact: true });
+          assert.equal(await tabs.getByRole('tab').locator('svg').count(), 3);
+          assert.equal(await general.getAttribute('aria-selected'), 'true');
+          const labelOpacity = (tab) =>
+            tab.locator('.reveal-button-label').evaluate(async (label) => {
+              await Promise.all(label.getAnimations().map((animation) => animation.finished));
+              return getComputedStyle(label).opacity;
+            });
+          assert.equal(await labelOpacity(rules), '0');
+          const restingWidth = (await rules.boundingBox()).width;
+          await rules.hover();
+          assert.equal(await labelOpacity(rules), '1');
+          assert.ok((await rules.boundingBox()).width > restingWidth);
+          assert.equal(await general.getAttribute('aria-selected'), 'true');
+          await page.mouse.move(1, 1);
+          assert.equal(await labelOpacity(rules), '0');
+          const beforeSwitch = await snapshot();
+          await general.dispatchEvent('keydown', {
+            key: 'ArrowRight',
+            keyCode: 229,
+            isComposing: true,
+          });
+          assert.equal(await general.getAttribute('aria-selected'), 'true');
+          await general.press('ArrowRight');
+          assert.equal(await bounds.getAttribute('aria-selected'), 'true');
+          assert.equal(await labelOpacity(bounds), '1');
+          const width = panel
+            .getByRole('tabpanel', { name: 'Bounds' })
+            .getByRole('spinbutton', { name: 'Width (mm)', exact: true });
           await width.fill('0');
           await width.press('Enter');
-          await summary.click();
-          assert.equal(await bounds.getAttribute('open'), null);
-          await summary.press('Space');
+          await bounds.press('ArrowRight');
+          assert.equal(await rules.getAttribute('aria-selected'), 'true');
+          assert.equal(await width.count(), 0);
+          await rules.press('ArrowLeft');
           assert.equal(
             await width.inputValue(),
             '0',
-            'Collapsing retains an invalid bounds draft.',
+            'Switching tabs retains an invalid bounds draft.',
           );
           await width.press('Escape');
-          assert.equal(await width.inputValue(), '20');
-          await summary.click();
+          assert.equal(Number(await width.inputValue()), 20);
+          await bounds.press('Home');
           assert.deepEqual(
             await snapshot(),
-            beforeDisclosure,
-            'Disclosure and rejected drafts never edit geometry.',
+            beforeSwitch,
+            'Tab switches and rejected drafts never edit geometry.',
           );
           const fill = panel.getByRole('button', { name: 'Fill zone', exact: true });
           assert.equal((await fill.textContent()).trim(), '', 'Fill is an icon-only action.');

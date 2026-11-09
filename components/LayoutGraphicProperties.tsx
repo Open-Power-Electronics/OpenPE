@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { AlignLeft, Hash, ListOrdered, Ruler, SlidersHorizontal, Type } from 'lucide-react';
 import type { Point } from '@/lib/circuit';
 import type { BoardLayer, BoardLine, BoardText } from '@/lib/pcb';
 import {
@@ -14,30 +15,33 @@ import {
   PropertySection,
   PropertyGrid,
   PropertyToggle,
-  PropertyDetails,
 } from './LayoutPropertyFields';
+import { PropertyTab, PropertyTabs } from './PropertyTabs';
 
 type Props = {
   graphic: BoardLine;
   active: boolean;
+  locked: boolean;
   resetKey: boolean;
   snap: (value: number) => number;
   layers: BoardLayer[];
   onCommit: (graphic: BoardLine) => boolean;
   geometry?: boolean;
+  fieldContent?: { value: string; onCommit?: (value: string) => boolean };
 };
 
 /** Fields edit native graphic records without replacing their IDs or unrelated metadata. */
 export default function LayoutGraphicProperties({
   graphic,
   active,
+  locked,
   resetKey,
   snap,
   layers,
   onCommit,
   geometry = true,
+  fieldContent,
 }: Props) {
-  const [verticesOpen, setVerticesOpen] = useState(false);
   const [vertexLimit, setVertexLimit] = useState(128);
   const field = { active, resetKey };
   const update = (changes: Partial<BoardLine>) => active && onCommit({ ...graphic, ...changes });
@@ -87,7 +91,7 @@ export default function LayoutGraphicProperties({
     text: BoardText,
     onChange: (text: BoardText) => boolean,
     hideable: boolean,
-    editableContent = true,
+    commitContent: ((value: string) => boolean) | undefined,
     positionFields?: ReactNode,
   ) => {
     const change = (changes: Partial<BoardText>) => onChange({ ...text, ...changes });
@@ -99,13 +103,13 @@ export default function LayoutGraphicProperties({
     };
     const controls = (
       <>
-        {editableContent ? (
+        {commitContent ? (
           <TextField
             {...field}
             label="Text content"
             value={text.value}
-            onCommit={(value) => change({ value })}
-            multiline
+            onCommit={commitContent}
+            multiline={!fieldContent}
           />
         ) : (
           <PropertyRow label="Text content" value={text.value} />
@@ -128,70 +132,73 @@ export default function LayoutGraphicProperties({
             min: 0.0001,
           })}
         </PropertyGrid>
-        <PropertyDetails title="Text style">
-          {select(
-            'Horizontal alignment',
-            text.justify?.find((item) => item === 'left' || item === 'right') ?? 'center',
-            ['left', 'center', 'right'].map((value) => ({
-              value,
-              label: value[0].toUpperCase() + value.slice(1),
-            })),
-            (value) => align('horizontal', value),
-          )}
-          {select(
-            'Vertical alignment',
-            text.justify?.find((item) => item === 'top' || item === 'bottom') ?? 'center',
-            ['top', 'center', 'bottom'].map((value) => ({
-              value,
-              label: value[0].toUpperCase() + value.slice(1),
-            })),
-            (value) => align('vertical', value),
-          )}
-          <PropertyGrid>
-            <PropertyToggle
-              active={active}
-              label="Bold"
-              checked={Boolean(text.bold)}
-              onChange={(bold) => change({ bold })}
-            />
-            <PropertyToggle
-              active={active}
-              label="Italic"
-              checked={Boolean(text.italic)}
-              onChange={(italic) => change({ italic })}
-            />
-            <PropertyToggle
-              active={active}
-              label="Mirrored text"
-              checked={Boolean(text.justify?.includes('mirror'))}
-              onChange={(mirrored) =>
-                change({
-                  justify: [
-                    ...(text.justify ?? []).filter((item) => item !== 'mirror'),
-                    ...(mirrored ? ['mirror' as const] : []),
-                  ],
-                })
-              }
-            />
-            {hideable && (
-              <PropertyToggle
-                active={active}
-                label="Hidden text"
-                checked={Boolean(text.hidden)}
-                onChange={(hidden) => change({ hidden })}
-              />
-            )}
-          </PropertyGrid>
-        </PropertyDetails>
       </>
     );
-    return editableContent ? (
-      <PropertySection title="Text" showTitle={false}>
-        {controls}
+    const style = (
+      <PropertySection title="Text style" showTitle={false}>
+        {select(
+          'Horizontal alignment',
+          text.justify?.find((item) => item === 'left' || item === 'right') ?? 'center',
+          ['left', 'center', 'right'].map((value) => ({
+            value,
+            label: value[0].toUpperCase() + value.slice(1),
+          })),
+          (value) => align('horizontal', value),
+        )}
+        {select(
+          'Vertical alignment',
+          text.justify?.find((item) => item === 'top' || item === 'bottom') ?? 'center',
+          ['top', 'center', 'bottom'].map((value) => ({
+            value,
+            label: value[0].toUpperCase() + value.slice(1),
+          })),
+          (value) => align('vertical', value),
+        )}
+        <PropertyGrid>
+          <PropertyToggle
+            active={active}
+            label="Bold"
+            checked={Boolean(text.bold)}
+            onChange={(bold) => change({ bold })}
+          />
+          <PropertyToggle
+            active={active}
+            label="Italic"
+            checked={Boolean(text.italic)}
+            onChange={(italic) => change({ italic })}
+          />
+          <PropertyToggle
+            active={active}
+            label="Mirrored text"
+            checked={Boolean(text.justify?.includes('mirror'))}
+            onChange={(mirrored) =>
+              change({
+                justify: [
+                  ...(text.justify ?? []).filter((item) => item !== 'mirror'),
+                  ...(mirrored ? ['mirror' as const] : []),
+                ],
+              })
+            }
+          />
+          {hideable && (
+            <PropertyToggle
+              active={active}
+              label="Hidden text"
+              checked={Boolean(text.hidden)}
+              onChange={(hidden) => change({ hidden })}
+            />
+          )}
+        </PropertyGrid>
       </PropertySection>
-    ) : (
-      <PropertyDetails title="Text">{controls}</PropertyDetails>
     );
+    return {
+      controls: (
+        <PropertySection title="Text" showTitle={false}>
+          {controls}
+        </PropertySection>
+      ),
+      style,
+    };
   };
   const dimension = graphic.dimension;
   const updateDimension = (changes: Partial<NonNullable<BoardLine['dimension']>>) =>
@@ -216,91 +223,120 @@ export default function LayoutGraphicProperties({
     </PropertySection>
   ) : null;
 
+  const graphicText = graphic.text;
+  const text = graphicText
+    ? textFields(
+        fieldContent ? { ...graphicText, value: fieldContent.value } : graphicText,
+        (text) => update({ text: { ...text, value: graphicText.value } }),
+        true,
+        fieldContent
+          ? fieldContent.onCommit
+          : (value) => update({ text: { ...graphicText, value } }),
+        geometryFields,
+      )
+    : dimension
+      ? textFields(
+          dimension.caption,
+          (caption) => updateDimension({ caption: { ...dimension.caption, ...caption } }),
+          false,
+          undefined,
+        )
+      : null;
+
   return (
-    <>
-      <PropertySection title="Appearance" showTitle={false}>
-        {select(
-          'Graphic layer',
-          graphic.layer,
-          [...new Set([graphic.layer, ...layers])].map((value) => ({ value, label: value })),
-          (layer) => update({ layer: layer as BoardLayer }),
-        )}
-        {graphic.kind !== 'text' &&
-          number('Line width (mm)', graphic.width, (width) => update({ width }), {
-            min: 0,
-            max: 100,
-          })}
-        {graphic.kind !== 'text' &&
-          graphic.kind !== 'dimension' &&
-          select(
-            'Line style',
-            graphic.stroke ?? 'default',
-            [
-              { value: 'default', label: 'Default' },
-              { value: 'solid', label: 'Solid' },
-              { value: 'dash', label: 'Dashed' },
-              { value: 'dot', label: 'Dotted' },
-              { value: 'dash_dot', label: 'Dash dot' },
-              { value: 'dash_dot_dot', label: 'Dash dot dot' },
-            ],
-            (stroke) => update({ stroke: stroke as BoardLine['stroke'] }),
+    <PropertyTabs locked={locked}>
+      <PropertyTab label="General" icon={SlidersHorizontal}>
+        <PropertySection title="Appearance" showTitle={false}>
+          {select(
+            'Graphic layer',
+            graphic.layer,
+            [...new Set([graphic.layer, ...layers])].map((value) => ({ value, label: value })),
+            (layer) => update({ layer: layer as BoardLayer }),
           )}
-        {(graphic.kind === 'circle' || graphic.kind === 'polygon') && (
-          <PropertyToggle
-            active={active}
-            label="Filled"
-            checked={Boolean(graphic.fill)}
-            onChange={(fill) => update({ fill })}
-          />
-        )}
-      </PropertySection>
-      {!graphic.text && !dimension && geometryFields}
-      {graphic.text &&
-        textFields(graphic.text, (text) => update({ text }), true, true, geometryFields)}
-      {dimension && (
-        <>
-          <PropertySection title="Dimension" showTitle={false}>
-            <PropertyRow
-              label="Dimension type"
-              value={
-                dimension.type === 'aligned'
-                  ? 'Aligned'
-                  : dimension.type === 'radial'
-                    ? 'Radial'
-                    : 'Leader'
-              }
+          {graphic.kind !== 'text' &&
+            number('Line width (mm)', graphic.width, (width) => update({ width }), {
+              min: 0,
+              max: 100,
+            })}
+          {graphic.kind !== 'text' &&
+            graphic.kind !== 'dimension' &&
+            select(
+              'Line style',
+              graphic.stroke ?? 'default',
+              [
+                { value: 'default', label: 'Default' },
+                { value: 'solid', label: 'Solid' },
+                { value: 'dash', label: 'Dashed' },
+                { value: 'dot', label: 'Dotted' },
+                { value: 'dash_dot', label: 'Dash dot' },
+                { value: 'dash_dot_dot', label: 'Dash dot dot' },
+              ],
+              (stroke) => update({ stroke: stroke as BoardLine['stroke'] }),
+            )}
+          {(graphic.kind === 'circle' || graphic.kind === 'polygon') && (
+            <PropertyToggle
+              active={active}
+              label="Filled"
+              checked={Boolean(graphic.fill)}
+              onChange={(fill) => update({ fill })}
             />
-            <TextField
-              {...field}
-              label="Override value"
-              value={pcbDimensionOverrideValue(dimension)}
-              disabled={pcbDimensionUnitSuffix(dimension) === null}
-              onCommit={(value) => {
-                try {
-                  return updateDimension(setPCBDimensionOverrideValue(dimension, value));
-                } catch {
-                  return false;
+          )}
+        </PropertySection>
+        {!graphic.text && !dimension && geometryFields}
+        {graphic.text && text?.controls}
+        {dimension && (
+          <>
+            <PropertySection title="Dimension" showTitle={false}>
+              <PropertyRow
+                label="Dimension type"
+                value={
+                  dimension.type === 'aligned'
+                    ? 'Aligned'
+                    : dimension.type === 'radial'
+                      ? 'Radial'
+                      : 'Leader'
                 }
-              }}
-              multiline
-            />
-            {dimension.type === 'aligned' &&
-              number('Dimension height (mm)', dimension.height ?? 0, (height) =>
-                updateDimension({ height }),
-              )}
-            {dimension.type === 'leader' &&
-              number('Leader length (mm)', dimension.leaderLength ?? 0, (leaderLength) =>
-                updateDimension({ leaderLength }),
-              )}
-          </PropertySection>
-          {geometryFields}
-          {textFields(
-            dimension.caption,
-            (caption) => updateDimension({ caption: { ...dimension.caption, ...caption } }),
-            false,
-            false,
-          )}
-          <PropertyDetails title="Dimension format">
+              />
+              <TextField
+                {...field}
+                label="Override value"
+                value={pcbDimensionOverrideValue(dimension)}
+                disabled={pcbDimensionUnitSuffix(dimension) === null}
+                onCommit={(value) => {
+                  try {
+                    return updateDimension(setPCBDimensionOverrideValue(dimension, value));
+                  } catch {
+                    return false;
+                  }
+                }}
+                multiline
+              />
+              {dimension.type === 'aligned' &&
+                number('Dimension height (mm)', dimension.height ?? 0, (height) =>
+                  updateDimension({ height }),
+                )}
+              {dimension.type === 'leader' &&
+                number('Leader length (mm)', dimension.leaderLength ?? 0, (leaderLength) =>
+                  updateDimension({ leaderLength }),
+                )}
+            </PropertySection>
+            {geometryFields}
+          </>
+        )}
+      </PropertyTab>
+      {dimension && text && (
+        <PropertyTab label="Text" icon={Type}>
+          {text.controls}
+        </PropertyTab>
+      )}
+      {text && (
+        <PropertyTab label="Typography" icon={AlignLeft}>
+          {text.style}
+        </PropertyTab>
+      )}
+      {dimension && (
+        <PropertyTab label="Format" icon={Hash}>
+          <PropertySection title="Dimension format" showTitle={false}>
             <PropertyRow label="Prefix" value={dimension.format.prefix || 'None'} />
             <PropertyRow label="Suffix" value={dimension.format.suffix || 'None'} />
             <PropertyRow
@@ -311,8 +347,12 @@ export default function LayoutGraphicProperties({
               label="Precision"
               value={dimension.format.precision === 6 ? 'By unit' : dimension.format.precision}
             />
-          </PropertyDetails>
-          <PropertyDetails title="Dimension style">
+          </PropertySection>
+        </PropertyTab>
+      )}
+      {dimension && (
+        <PropertyTab label="Style" icon={Ruler}>
+          <PropertySection title="Dimension style" showTitle={false}>
             {number(
               'Arrow length (mm)',
               dimension.style.arrowLength,
@@ -401,37 +441,37 @@ export default function LayoutGraphicProperties({
                 updateDimension({ style: { ...dimension.style, keepTextAligned } })
               }
             />
-          </PropertyDetails>
-        </>
+          </PropertySection>
+        </PropertyTab>
       )}
       {geometry && graphic.points && (
-        <details
-          className="layout-property-details"
-          open={verticesOpen}
-          onToggle={(event) => setVerticesOpen(event.currentTarget.open)}
-        >
-          <summary>Polygon vertices</summary>
-          {verticesOpen &&
-            graphic.points.slice(0, vertexLimit).map((vertex, index) => (
-              <div key={index}>
-                {point(`Vertex ${index + 2}`, vertex, (value) =>
-                  update({
-                    points: graphic.points!.map((existing, i) => (i === index ? value : existing)),
-                  }),
-                )}
-              </div>
-            ))}
-          {verticesOpen && vertexLimit < graphic.points.length && (
-            <button
-              className="secondary"
-              disabled={!active}
-              onClick={() => setVertexLimit((limit) => limit + 128)}
-            >
-              Show more vertices
-            </button>
+        <PropertyTab label="Vertices" icon={ListOrdered}>
+          {() => (
+            <PropertySection title="Polygon vertices" showTitle={false}>
+              {graphic.points!.slice(0, vertexLimit).map((vertex, index) => (
+                <div key={index}>
+                  {point(`Vertex ${index + 2}`, vertex, (value) =>
+                    update({
+                      points: graphic.points!.map((existing, i) =>
+                        i === index ? value : existing,
+                      ),
+                    }),
+                  )}
+                </div>
+              ))}
+              {vertexLimit < graphic.points!.length && (
+                <button
+                  className="secondary"
+                  disabled={!active}
+                  onClick={() => setVertexLimit((limit) => limit + 128)}
+                >
+                  Show more vertices
+                </button>
+              )}
+            </PropertySection>
           )}
-        </details>
+        </PropertyTab>
       )}
-    </>
+    </PropertyTabs>
   );
 }

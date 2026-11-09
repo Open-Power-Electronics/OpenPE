@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { createModelCopperRelief } from './model-copper-relief';
 
+export const modelRenderFloorName = 'OpenPE Render studio floor';
+export const modelRenderFloorScale = 200;
+export const modelRenderFloorFade = /* glsl */ `
+  float studioFloorFade( vec2 offset ) {
+    return smoothstep( 1.0, 9.0, dot( offset, offset ) );
+  }
+`;
+
 type SurfaceRole = 'substrate' | 'copper' | 'mask' | 'silkscreen' | 'component';
 type CadMaterial = 'pmma' | 'aluminium' | 'abs' | null;
 type SourceMesh = THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>;
@@ -373,7 +381,29 @@ export function createModelRenderScene(content: THREE.Group) {
     side: THREE.FrontSide,
   });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMaterial);
-  floor.name = 'OpenPE Render studio floor';
+  floor.name = modelRenderFloorName;
+  const floorBackground = { value: new THREE.Color() };
+  floorMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.studioFloorBackground = floorBackground;
+    shader.vertexShader = 'varying vec2 studioFloorUV;\n' + shader.vertexShader.replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+       studioFloorUV = uv;
+       // The editing camera clips tightly around the assembly. Keep only the
+       // private floor at the far plane once it extends beyond that range.
+       gl_Position.z = min( gl_Position.z, gl_Position.w );`,
+    );
+    shader.fragmentShader = `
+      uniform vec3 studioFloorBackground;
+      varying vec2 studioFloorUV;
+      ${modelRenderFloorFade}
+    ` + shader.fragmentShader.replace(
+      '#include <colorspace_fragment>',
+      `gl_FragColor.rgb = mix( gl_FragColor.rgb, studioFloorBackground,
+         studioFloorFade( ( studioFloorUV - 0.5 ) * ${modelRenderFloorScale}.0 ) );
+       #include <colorspace_fragment>`,
+    );
+  };
   floor.userData.modelMeasurementExcluded = true;
   floor.raycast = () => {};
   const lights = [
@@ -504,9 +534,10 @@ export function createModelRenderScene(content: THREE.Group) {
       textures = [...nextTextures.values(), ...reliefTextures];
       const { center, span, minZ } = framing(bounds);
       floor.position.set(center.x, center.y, minZ - Math.max(0.01, span * 0.001));
-      floor.scale.set(span * 200, span * 200, 1);
+      floor.scale.set(span * modelRenderFloorScale, span * modelRenderFloorScale, 1);
       floorMaterial.color.setHex(dark ? 0x3b4149 : 0xc9ced3);
       scene.background = new THREE.Color(dark ? 0x242931 : 0xd8dde2);
+      floorBackground.value.copy(scene.background);
       const positions = [
         [0.65, -0.85, 1.4],
         [-1.15, -0.15, 0.8],

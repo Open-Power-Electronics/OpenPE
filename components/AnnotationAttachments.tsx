@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Clock3, Trash2, MessageSquareText } from 'lucide-react';
 import type { AgentAnnotation } from '@/lib/agent-annotations';
 import Dialog from './Dialog';
@@ -10,18 +10,49 @@ export default function AnnotationAttachments({
   onChange,
   basis,
   layoutBasis,
+  onFocusInput,
 }: {
   annotations: AgentAnnotation[];
   onChange?: (next: AgentAnnotation[]) => void;
   basis?: string;
   layoutBasis?: string;
+  onFocusInput?: () => void;
 }) {
   const [opened, setOpened] = useState<string | null>(null);
+  const tray = useRef<HTMLDivElement>(null);
+  const removeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const focusAfterRemove = useRef<{ id: string; index: number } | null>(null);
+  useLayoutEffect(() => {
+    const request = focusAfterRemove.current;
+    if (!request || annotations.some((item) => item.id === request.id)) return;
+    focusAfterRemove.current = null;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const container = tray.current;
+    if (!container?.getClientRects().length) return;
+    const target = annotations[Math.min(request.index, annotations.length - 1)];
+    const button = target ? removeButtons.current.get(target.id) : undefined;
+    if (!button?.getClientRects().length) return;
+    button.focus({ preventScroll: true });
+    const bounds = container.getBoundingClientRect();
+    const row = button.getBoundingClientRect();
+    if (row.top < bounds.top) container.scrollTop += row.top - bounds.top;
+    else if (row.bottom > bounds.bottom) container.scrollTop += row.bottom - bounds.bottom;
+  }, [annotations]);
   const selected = annotations.find((a) => a.id === opened);
   return (
     <div
+      ref={tray}
       className={`annotation-attachments${onChange ? ' annotation-attachments-pending' : ''}`}
       aria-label={onChange ? 'Pending annotations' : 'Message annotations'}
+      onKeyDown={(event) => {
+        if (
+          (event.nativeEvent.isComposing || event.keyCode === 229) &&
+          event.target instanceof Element &&
+          event.currentTarget.contains(event.target) &&
+          event.target.closest('button')
+        )
+          event.preventDefault();
+      }}
     >
       {annotations.map((annotation, index) => {
         const name =
@@ -79,10 +110,20 @@ export default function AnnotationAttachments({
               <button
                 type="button"
                 className="icon-button annotation-attachment-remove"
+                ref={(button) => {
+                  if (button) removeButtons.current.set(annotation.id, button);
+                  else removeButtons.current.delete(annotation.id);
+                }}
                 aria-label={`Remove annotation ${index + 1}`}
                 title="Remove"
                 aria-description="Remove annotation"
-                onClick={() => onChange(annotations.filter((a) => a.id !== annotation.id))}
+                onClick={(event) => {
+                  if (event.currentTarget === document.activeElement) {
+                    if (annotations.length === 1) onFocusInput?.();
+                    else focusAfterRemove.current = { id: annotation.id, index };
+                  }
+                  onChange(annotations.filter((a) => a.id !== annotation.id));
+                }}
               >
                 <Trash2 size={15} aria-hidden="true" />
               </button>

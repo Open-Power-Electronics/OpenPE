@@ -9,7 +9,7 @@ import { agentSource } from '../context/agent-workspace-context';
 import { makePrompt, runAgent } from '../server/agents.mjs';
 import {
   agentCapabilityTools,
-  agentRevisionGuidance,
+  agentExecutionGuidance,
   agentDiscoveryGuidance,
   agentSimulationGuidance,
 } from '../server/agent-capabilities.mjs';
@@ -67,32 +67,31 @@ test('context-only drafting guidance keeps unsupported wiring outside the propos
   assert.match(guidance, /readable trunks and branches/);
 });
 
-test('live prompts and command discovery share explicit accepted-edit revision reuse', () => {
+test('live prompts and command discovery use current-state execution without revision preconditions', () => {
   const text = makePrompt({ prompt: 'Redraw the circuit.', context: {}, capabilities: true });
-  assert.ok(text.includes(agentRevisionGuidance));
+  assert.ok(text.includes(agentExecutionGuidance));
   assert.ok(text.includes(agentDiscoveryGuidance));
   assert.ok(
     agentCapabilityTools
       .find((tool) => tool.name === 'openpe_query')!
       .description.includes(agentDiscoveryGuidance),
   );
-  assert.ok(draftingGuidance(text).includes(agentRevisionGuidance));
+  assert.ok(draftingGuidance(text).includes(agentExecutionGuidance));
   assert.ok(
     agentCapabilityTools
       .find((tool) => tool.name === 'openpe_execute')!
-      .description.includes(agentRevisionGuidance),
+      .description.includes(agentExecutionGuidance),
   );
-  assert.match(
-    agentRevisionGuidance,
-    /explicitly pass the fresh revision returned by the preceding accepted edit/,
+  assert.match(agentExecutionGuidance, /Commands execute against the current project state/);
+  assert.match(agentExecutionGuidance, /Do not send expectedRevision/);
+  assert.match(agentExecutionGuidance, /Execute project-changing commands one at a time/);
+  assert.equal(
+    'expectedRevision' in
+      agentCapabilityTools.find((tool) => tool.name === 'openpe_execute')!.inputSchema.properties,
+    false,
   );
-  assert.match(
-    agentRevisionGuidance,
-    /Re-query core.state after a stale-revision rejection, any error/,
-  );
-  assert.match(agentRevisionGuidance, /Never guess or increment revisions/);
   assert.ok(
-    !makePrompt({ prompt: 'Explain the circuit.', context: {} }).includes(agentRevisionGuidance),
+    !makePrompt({ prompt: 'Explain the circuit.', context: {} }).includes(agentExecutionGuidance),
   );
 });
 
@@ -164,7 +163,17 @@ test('the native EMC Flyback prompt fits provider input while preserving electri
     original.length > 1_048_576,
     'The actual native project reproduces the oversized input.',
   );
-  const text = makePrompt({ prompt: '这个电路中的功率管是哪个', context, capabilities: true });
+  const text = makePrompt({ prompt: '这个电路中的功率管是哪个', context });
+  const overview = makePrompt({ prompt: 'hello', context, capabilities: true });
+  assert.ok(
+    overview.length < text.length / 2,
+    'The same large project starts with a compact overview.',
+  );
+  const summary = promptContext(overview).workspace.project.schematics[0];
+  assert.equal(summary.counts.components, circuit.parts.length);
+  assert.equal(summary.components, undefined);
+  assert.equal(summary.connections, undefined);
+  assert.equal(summary.symbolPins, undefined);
   assert.ok(text.length < 70_000, 'Send semantic context with ample headroom for a conversation.');
   const sent = promptContext(text);
   const observed = sent.workspace.project;
@@ -254,7 +263,8 @@ test('prompt projection summarizes other sheets and pending Source while retaini
     draftCharacters: context.workspace.source.draftCharacters,
   });
   assert.equal(sent.workspace.source.draft, undefined);
-  assert.deepEqual(sent.workspace.icDatasheet, context.workspace.icDatasheet);
+  assert.equal(sent.workspace.icDatasheet.status, 'not-example');
+  assert.equal(sent.workspace.icDatasheet.record, null);
   assert.deepEqual(sent.workspace.thermal, context.workspace.thermal);
   assert.deepEqual(sent.workspace.ui, context.workspace.ui);
   const sheets = sent.workspace.project.schematics;

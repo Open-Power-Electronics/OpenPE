@@ -45,7 +45,7 @@ test('opening an unused conversation repeatedly preserves its identity, draft an
   assert.deepEqual(restoreSessions(state), initial);
 });
 
-test('project-folder navigation reuses its latest visible idle conversation and prefers the active one', () => {
+test('New session reuses its latest visible idle conversation and prefers the active one', () => {
   const used = createSession();
   used.messages.push({ id: 'message', role: 'user', text: 'Started conversation' });
   const first = createSession('Earlier draft');

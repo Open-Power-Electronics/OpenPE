@@ -74,7 +74,7 @@ export function registerSimulationCapabilities(
       description:
         'Update transient settings. Numeric config uses V, Hz, percent and seconds; drafts use the visible card units.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       inputSchema: {
         type: 'object',
         minProperties: 1,
@@ -109,7 +109,7 @@ export function registerSimulationCapabilities(
       description:
         'Probe a current or voltage target, clear the probe, or select visible waveform vectors.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       inputSchema: {
         type: 'object',
         minProperties: 1,
@@ -158,10 +158,11 @@ export function registerSimulationCapabilities(
       ...shared,
       id: 'simulation.cancel',
       kind: 'command',
+      revision: 'independent',
       description:
         'Stop the active transient run and retain received samples as partial results for inspection.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       inputSchema: emptyCapabilityInput,
       handler: () => adapter.cancel(),
     }),
@@ -197,7 +198,7 @@ export function registerSimulationPresentationCapability(
     description:
       'Set waveform layout, linked/visible cursors, cursor times, per-trace time/value axes, zoom mode or view history. Times use seconds; values use the trace unit.',
     mutation: 'session',
-    review: 'optional',
+    review: 'none',
     plugin: 'spice-simulation@openpe',
     available: adapter.available,
     inputSchema: {

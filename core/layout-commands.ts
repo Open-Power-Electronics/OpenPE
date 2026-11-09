@@ -2,9 +2,11 @@ import { uid, type Point } from '../lib/circuit';
 import { type BoardZone, type CopperLayer, type PCB } from '../lib/pcb';
 import {
   deletePCBSelection,
+  findPCBGraphic,
   flipPCBSelection,
   movePCBSelection,
   previewPCBMove,
+  replacePCBGraphic,
   rotatePCBSelection,
   setPCBTrackProperties,
   type PCBSelection,
@@ -346,7 +348,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'layout.graphic',
-    'Create or replace a complete board drawing, outline polygon, text or dimension. Updates retain the selected UUID; query layout.object first to preserve unrelated metadata.',
+    'Create a board graphic or replace an existing board graphic or footprint text. Updates retain the selected UUID and footprint ownership; query layout.object first to preserve unrelated metadata.',
     {
       graphicId: identity,
       graphic: {
@@ -372,11 +374,12 @@ function checkSelection(board: PCB, selection: PCBSelection[]) {
     footprint: board.footprints,
     track: board.tracks,
     via: board.vias,
-    graphic: board.graphics,
     zone: board.zones,
   };
   for (const selected of selection)
-    if (!items[selected.kind].some((item) => item.id === selected.id))
+    if (selected.kind === 'graphic'
+      ? !findPCBGraphic(board, selected.id)
+      : !items[selected.kind].some((item) => item.id === selected.id))
       throw new Error(
         'A selected board object no longer exists. Query the current board and try again.',
       );
@@ -406,7 +409,9 @@ export function queryLayout(board: PCB | null | undefined, id: string, args: Rec
       graphic: board.graphics,
       zone: board.zones,
     };
-    const item = items[args.kind as keyof typeof items].find((item) => item.id === args.id);
+    const item = args.kind === 'graphic'
+      ? findPCBGraphic(board, args.id)?.graphic
+      : items[args.kind as keyof typeof items].find((item) => item.id === args.id);
     if (!item) throw new Error('This board object no longer exists.');
     return structuredClone(item);
   }
@@ -486,6 +491,18 @@ export function executeLayout(
       const copies: PCBSelection[] = [];
       next = { ...board };
       for (const item of selected) {
+        const ownedText = item.kind === 'graphic' ? findPCBGraphic(board, item.id) : undefined;
+        if (ownedText?.owner) {
+          const { owner, graphic } = ownedText;
+          if (graphic.text?.property || selected.some((item) => item.kind === 'footprint' && item.id === owner.id))
+            continue;
+          const copy = freshIds(graphic);
+          next.footprints = next.footprints.map((f) =>
+            f.id === owner.id ? { ...f, graphics: [...f.graphics, copy] } : f,
+          );
+          copies.push({ ...item, id: copy.id });
+          continue;
+        }
         const key = collection[item.kind];
         const original = board[key].find((entry) => entry.id === item.id)!;
         const copy = freshIds(original);
@@ -630,7 +647,7 @@ export function executeLayout(
         existing ??
           ({
             id: uid(),
-            clearance: 0.25,
+            clearance: changes.keepout ? 0 : 0.25,
             minThickness: 0.2,
             thermalGap: 0.3,
             thermalBridge: 0.3,
@@ -712,17 +729,10 @@ export function executeLayout(
       break;
     }
     case 'layout.graphic': {
-      const existing = args.graphicId
-        ? board.graphics.find((graphic) => graphic.id === args.graphicId)
-        : undefined;
-      if (args.graphicId && !existing) throw new Error('This board graphic no longer exists.');
-      const graphic = { ...args.graphic, id: existing?.id ?? uid() };
-      next = {
-        ...board,
-        graphics: existing
-          ? board.graphics.map((item) => (item === existing ? graphic : item))
-          : [...board.graphics, graphic],
-      };
+      const graphic = { ...args.graphic, id: args.graphicId ?? uid() };
+      next = args.graphicId
+        ? replacePCBGraphic(board, graphic)
+        : { ...board, graphics: [...board.graphics, graphic] };
       result = { graphicId: graphic.id };
       break;
     }

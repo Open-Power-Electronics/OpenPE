@@ -461,7 +461,7 @@ try {
       );
       await page
         .getByRole('complementary', { name: 'Layout properties' })
-        .getByRole('heading', { name: 'Pad', exact: true })
+        .getByRole('heading', { name: 'Pad 1', exact: true })
         .waitFor();
       assert.equal(await page.getByRole('spinbutton', { name: 'Pad width (mm)' }).count(), 1);
       assert.equal(await page.getByRole('combobox', { name: 'Pad net', exact: true }).count(), 0);
@@ -501,21 +501,129 @@ try {
     },
   });
   await run(
-    'visible external captions pick their owner without enlarging the body',
-    async ({ page, canvas, point, menu, selection, clean }) => {
+    'visible external captions select the native text without selecting the body',
+    async ({ page, canvas, point, menu, selection, snapshot, clean }) => {
       const text = canvas.locator('[data-footprint-captions="B2"] text').first();
       const bounds = await text.boundingBox();
       assert.ok(bounds);
       await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
       assert.equal(await menu.count(), 0);
-      assert.deepEqual(await selection(), [{ kind: 'footprint', id: 'B2' }]);
-      await point({ x: 63, y: 25 }, true);
-      assert.deepEqual(await selection(), []);
+      assert.deepEqual(await selection(), [{ kind: 'graphic', id: 'B2-caption' }]);
+      assert.equal(
+        await canvas.locator('[data-footprint-text="B2-caption"] [data-selection-only]').count(),
+        1,
+      );
+      assert.equal(
+        await canvas.locator('[data-selection-id="B2"] [data-selection-only]').count(),
+        0,
+      );
+      await page.keyboard.press('e');
+      const properties = page.getByRole('complementary', { name: 'Layout properties' });
+      await properties.getByText('Footprint text', { exact: true }).waitFor();
+      await properties.getByText('B2', { exact: true }).waitFor();
+      await toggleLayoutVisualization(page, 'Selection');
+      const filters = page.getByRole('group', { name: 'Selection', exact: true });
+      const textFilter = filters.getByRole('checkbox', { name: 'Text', exact: true });
+      const footprintsFilter = filters.getByRole('checkbox', { name: 'Footprints', exact: true });
+      await textFilter.uncheck();
+      await point({ x: 63, y: 21 }, true);
+      assert.deepEqual(await selection(), [{ kind: 'graphic', id: 'edge' }]);
       await clean();
+      await textFilter.check();
+      await footprintsFilter.uncheck();
+      await point({ x: 63, y: 21 }, true);
+      assert.deepEqual(await selection(), [{ kind: 'graphic', id: 'B2-caption' }]);
+      await canvas.focus();
+      await page.keyboard.press('m');
+      await point({ x: 65, y: 21 }, true);
+      const moved = await snapshot();
+      assert.equal(moved.commits, 1);
+      const expected = structuredClone(caption);
+      const field = expected.footprints[1].graphics.at(-1);
+      field.start.x += 2;
+      field.end.x += 2;
+      assert.deepEqual(moved.board, expected);
     },
     caption,
   );
   const holes = structuredClone(board);
+  const mixed = structuredClone(caption);
+  const legend = mixed.footprints[1].graphics.at(-1);
+  legend.start = { x: 0, y: 0 };
+  legend.end = { ...legend.start };
+  mixed.tracks.push({
+    id: 'caption-track',
+    start: { x: 50, y: 25 },
+    end: { x: 60, y: 25 },
+    width: 2,
+    layer: 'F.Cu',
+    netId: 'signal',
+  });
+  await run(
+    'mixed silk and copper obey active silk priority and clarify similarly sized pad and track',
+    async ({ page, canvas, point, menu, selection, screen, clean }) => {
+      await selectLayoutLayer(page, 'B.SilkS');
+      await point({ x: 55, y: 25 }, true);
+      assert.deepEqual(await selection(), [{ kind: 'graphic', id: 'B2-caption' }]);
+      assert.equal(await menu.count(), 0);
+      await selectLayoutLayer(page, 'F.Cu');
+      await point({ x: 55, y: 25 }, true);
+      await menu.waitFor();
+      assert.deepEqual(await selection(), [{ kind: 'graphic', id: 'B2-caption' }]);
+      await menu.getByRole('menuitem', { name: 'Pad 1 · B2' }).waitFor();
+      await menu.getByRole('menuitem', { name: 'Track · F.Cu · SIGNAL' }).waitFor();
+      await menu
+        .locator('button')
+        .first()
+        .evaluate((button) => {
+          button.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              key: 'Escape',
+              bubbles: true,
+              cancelable: true,
+              isComposing: true,
+            }),
+          );
+        });
+      assert.equal(await menu.count(), 1);
+      await page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'hidden' });
+      assert.equal(await canvas.evaluate((element) => document.activeElement === element), true);
+      await point({ x: 55, y: 25 }, true);
+      await menu.waitFor();
+      await menu.getByRole('menuitem', { name: 'Pad 1 · B2' }).click();
+      assert.equal(
+        await page.evaluate(() => window.layoutContext.current.inspectedPadId),
+        'B2-pad',
+      );
+      assert.deepEqual(await selection(), []);
+      const at = await screen({ x: 55, y: 25 });
+      await page.mouse.click(at.x, at.y, { button: 'right' });
+      const actions = page.getByRole('menu', { name: 'Canvas actions', exact: true });
+      await actions.getByRole('menuitem', { name: 'Properties', exact: true }).waitFor();
+      assert.equal(await menu.count(), 0);
+      await page.keyboard.press('Escape');
+      await toggleLayoutVisualization(page, 'Selection');
+      const pads = page
+        .getByRole('group', { name: 'Selection', exact: true })
+        .getByRole('checkbox', { name: 'Pads', exact: true });
+      await pads.uncheck();
+      await point({ x: 55, y: 25 }, true);
+      assert.equal(await menu.count(), 0);
+      assert.deepEqual(await selection(), [{ kind: 'track', id: 'caption-track' }]);
+      await pads.check();
+      await point({ x: 55, y: 25 }, true);
+      await menu.waitFor();
+      assert.deepEqual(await selection(), [{ kind: 'track', id: 'caption-track' }]);
+      await page.keyboard.press('Escape');
+      await selectLayoutLayer(page, 'F.SilkS');
+      await point({ x: 55, y: 25 }, true, ['Control', 'Shift']);
+      assert.deepEqual(await selection(), []);
+      assert.equal(await menu.count(), 0);
+      await clean();
+    },
+    mixed,
+  );
   const hole = rectangle(18, 27, 22, 31);
   holes.zones[0].holes = [hole];
   holes.zones[0].filledPolygons = [
@@ -525,6 +633,7 @@ try {
     'saved fill holes have no target while visible copper remains directly selectable',
     async ({ page, point, menu, selection, clean }) => {
       await setLayoutVisibility(page, 'Zone outlines', false);
+      await setLayoutVisibility(page, 'Edge.Cuts', false);
       await point({ x: 20, y: 29 }, true);
       assert.equal(await menu.count(), 0);
       assert.deepEqual(await selection(), []);

@@ -171,6 +171,8 @@ try {
       if (route.request().method() === 'POST') recovery = route.request().postDataJSON();
       return route.fulfill({ json: recovery });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
@@ -204,10 +206,13 @@ try {
       return { undoDepth, redoDepth, sourceDraft, sourceError };
     });
   const headerDirty = page.locator('.breadcrumb > .dirty-dot');
-  await page.getByTestId('schematic-canvas').waitFor().catch(async (error) => {
-    console.error(await page.locator('body').innerText());
-    throw error;
-  });
+  await page
+    .getByTestId('schematic-canvas')
+    .waitFor()
+    .catch(async (error) => {
+      console.error(await page.locator('body').innerText());
+      throw error;
+    });
   assert.equal(await headerDirty.count(), 0, 'Opening starts with a clean project title.');
   await button('Source').click();
   await files.waitFor();
@@ -267,18 +272,9 @@ try {
     };
   });
   assert.notEqual(latest.source, savedBaseline);
-  await headerDirty.waitFor();
-  assert.equal(await headerDirty.getAttribute('aria-label'), 'Unsaved changes');
-  const titleBounds = await page.locator('.breadcrumb strong').boundingBox();
-  const dotBounds = await headerDirty.boundingBox();
-  assert.equal(dotBounds.width, 5);
-  assert.equal(dotBounds.height, 5);
-  assert.ok(dotBounds.x >= titleBounds.x + titleBounds.width);
-  assert.ok(
-    dotBounds.y >= titleBounds.y &&
-      dotBounds.y + dotBounds.height < titleBounds.y + titleBounds.height / 2,
-    'The dot sits at the upper right of the project name.',
-  );
+  assert.equal(await headerDirty.count(), 0, 'The project title omits unsaved dots.');
+  await page.locator('.project-navigation .dirty-dot').waitFor();
+  assert.equal(await page.locator('.editor-view-switch .dirty-dot').count(), 0);
   await mkdir('test-results', { recursive: true });
   await page.locator('.app-header').screenshot({ path: 'test-results/project-title-dirty.png' });
   const hiddenContext = await page.evaluate(() => window.readNativeSourceContext());
@@ -311,7 +307,7 @@ try {
     0,
     'Source presentation never changes the dirty baseline.',
   );
-  assert.equal(await headerDirty.count(), 0, 'Undo to saved bytes clears the title dot.');
+  assert.equal(await headerDirty.count(), 0, 'The project title stays free of unsaved dots.');
 
   // Context resolves current names independently of the deferred presentation.
   await button('Source').click();
@@ -370,7 +366,7 @@ try {
   );
   const pendingContext = await page.evaluate(() => window.readNativeSourceContext());
   assert.equal(pendingContext.source.pending, true);
-  await headerDirty.waitFor();
+  assert.equal(await headerDirty.count(), 0, 'Pending Source does not add a project-title dot.');
   assert.equal(pendingContext.ui.sourceFile, 'circuit.kicad_sch');
   const blocked = await page.evaluate(() => {
     try {
@@ -394,7 +390,7 @@ try {
   assert.equal(
     await headerDirty.count(),
     0,
-    'Discarding the pending Source draft clears the title dot.',
+    'Discarding the pending Source draft keeps the project title free of dots.',
   );
   await page.evaluate(() =>
     window.nativeSourceCore.execute('source.updateFile', {

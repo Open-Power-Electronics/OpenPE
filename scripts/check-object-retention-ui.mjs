@@ -209,6 +209,8 @@ try {
       if (route.request().method() === 'POST') recovery = route.request().postDataJSON();
       return route.fulfill({ json: recovery });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: defaultAppearance });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/libraries/footprints') {

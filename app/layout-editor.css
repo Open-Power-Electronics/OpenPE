@@ -102,33 +102,6 @@
 .layout-appearance .editor-visualization-drawer[data-expanded='true'] {
   max-height: min(320px, 40%);
 }
-.layout-appearance-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 4px 8px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--panel);
-}
-.layout-appearance-tabs button {
-  flex: 1;
-  min-width: 0;
-  min-height: 30px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-}
-.layout-appearance-tabs button:hover:not(:disabled):not([aria-selected='true']) {
-  color: var(--text-strong);
-  background: var(--surface-hover);
-}
-.layout-appearance-tabs button[aria-selected='true'] {
-  color: var(--text-strong);
-  background: var(--tint);
-}
 .layout-appearance-content {
   flex: 1;
   min-height: 0;
@@ -693,8 +666,17 @@
   scrollbar-width: none;
 }
 .layout-inspector-footer .property-fill-action {
+  --fill-action-ink: light-dark(#985021, #e4a56e);
+
   width: 30px;
   height: 30px;
+  color: var(--fill-action-ink);
+}
+.layout-inspector-footer .property-fill-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--fill-action-ink) 10%, transparent);
+}
+.layout-inspector-footer .property-fill-action:disabled {
+  color: color-mix(in srgb, var(--fill-action-ink) 55%, var(--surface));
 }
 .layout-part-inspector .part-properties input {
   height: auto;
@@ -827,9 +809,6 @@
 .layout-property-grid[data-columns='2'] > :last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
-.layout-fill-rules > .layout-property-grid {
-  margin-top: 8px;
-}
 .layout-property-grid > .layout-property-toggle {
   align-self: end;
 }
@@ -928,26 +907,6 @@
 }
 .layout-property-select > span {
   overflow-wrap: anywhere;
-}
-.layout-property-details {
-  min-width: 0;
-  padding-top: 0;
-}
-.layout-property-details summary {
-  cursor: pointer;
-  min-height: 30px;
-  padding: 5px 0;
-  border-radius: var(--radius);
-  background: transparent;
-  font-size: var(--font-small);
-  color: var(--text-strong);
-  line-height: 1.4;
-}
-.layout-property-details summary:hover {
-  background: var(--surface-hover);
-}
-.layout-property-details[open] > :not(summary) {
-  margin-top: var(--properties-row-gap);
 }
 .layout-property-section > .layout-field,
 .layout-property-section > .layout-property-select,

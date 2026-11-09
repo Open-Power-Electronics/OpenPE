@@ -1,10 +1,27 @@
-import type { Part } from './circuit';
-import { partFields } from './library';
+import type { Circuit, Part } from './circuit';
+import { partFields, unitGraphics } from './library';
+import { child, children, val } from './sexpr';
 import examples from './example-simulation.json';
 import references from './reference-simulation.json';
 
 export type SimulationModelSource = 'basic' | 'external';
 export type BasicSimulationKind = 'R' | 'C' | 'L' | 'V' | 'I' | 'D' | 'Q' | 'M';
+export const passiveSimulationModels = ['R', 'C', 'L'] as const;
+export const passiveConnectorSymbol = 'Connector_Generic:Conn_01x02';
+export type PassiveSimulationModel = (typeof passiveSimulationModels)[number];
+
+export function isPassiveSimulationModel(value: unknown): value is PassiveSimulationModel {
+  return value === 'R' || value === 'C' || value === 'L';
+}
+
+export function activePassiveModel(
+  fields: Record<string, string>,
+): PassiveSimulationModel | undefined {
+  const model = fields['OpenPE.PassiveModel'];
+  return isPassiveSimulationModel(model) && simulationModelSource(fields) === 'basic'
+    ? model
+    : undefined;
+}
 type BasicDefinition = {
   libId: string;
   kind: string;
@@ -54,6 +71,22 @@ export function basicSimulationAvailable(part: Pick<Part, 'libId'>): boolean {
   return basicSimulationKind(part) !== null;
 }
 
+export function canSelectPassiveSimulationModel(part: Part, circuit?: Circuit): boolean {
+  if ((part.unit || 1) !== 1) return false;
+  if (!isPassiveSimulationModel(basicSimulationKind(part)) && part.libId !== passiveConnectorSymbol)
+    return false;
+  if (!circuit) return true;
+  const library = circuit.libraries[part.libId];
+  const pins = library ? unitGraphics(library, 1).flatMap((unit) => children(unit, 'pin')) : [];
+  return (
+    pins.length === 2 &&
+    pins
+      .map((pin) => val(child(pin, 'number')))
+      .sort()
+      .join() === '1,2'
+  );
+}
+
 /** Symbol-owned device family survives selecting a SUBCKT instance override.
  * Ambiguous or unreviewed transistor polarity is never inferred from its pins. */
 export function reviewedSimulationDevice(part: Pick<Part, 'libId'>): string | null {
@@ -95,13 +128,19 @@ export function reviewedSimulationPins(part: Pick<Part, 'libId'>): string | null
 export function assertSimulationModelConfiguration(part: Part, fields = partFields(part)): void {
   const explicit = fields['OpenPE.ModelSource'];
   simulationModelSource(fields);
+  const passive = fields['OpenPE.PassiveModel'];
+  if (
+    passive !== undefined &&
+    (!isPassiveSimulationModel(passive) || !canSelectPassiveSimulationModel(part))
+  )
+    throw new Error(`${part.ref}: choose R, C or L for a supported two-terminal passive symbol.`);
   if (
     fields['OpenPE.SourceType'] !== undefined &&
     (!['V', 'I'].includes(basicSimulationKind(part) || '') ||
       !['DC', 'PULSE', 'SIN'].includes(fields['OpenPE.SourceType']))
   )
     throw new Error(`${part.ref}: unsupported source waveform.`);
-  if (explicit === 'basic' && !basicSimulationAvailable(part))
+  if (explicit === 'basic' && !basicSimulationAvailable(part) && !activePassiveModel(fields))
     throw new Error(`${part.ref}: no basic simulation model is available for this component.`);
   if (explicit === 'external' && (!fields['Sim.Library']?.trim() || !fields['Sim.Name']?.trim()))
     throw new Error(`${part.ref}: choose an external model file and model name before running.`);
@@ -130,11 +169,12 @@ export function effectiveSimulationModelFields(
     fields['OpenPE.SourceType']
   )
     result['Sim.Type'] = fields['OpenPE.SourceType'];
-  if (fields['OpenPE.ModelSource'] !== 'basic') return result;
-  if (!basicSimulationAvailable(part)) return result;
+  const passive = activePassiveModel(fields);
+  if (fields['OpenPE.ModelSource'] !== 'basic' && !passive) return result;
+  if (!basicSimulationAvailable(part) && !passive) return result;
   for (const name of ['Sim.Library', 'Sim.Name', 'Sim.Device', 'Sim.Type', 'Sim.Pins'])
     delete result[name];
-  const kind = basicSimulationKind(part)!;
+  const kind = basicSimulationKind(part) ?? passive!;
   const definition = definitions.find(
     (candidate) => candidate.libId === part.libId && candidate.kind === kind,
   );
@@ -148,6 +188,12 @@ export function effectiveSimulationModelFields(
         : {});
   for (const name of ['Sim.Device', 'Sim.Type', 'Sim.Pins'])
     if (defaults[name] !== undefined) result[name] = defaults[name];
+  if (passive && canSelectPassiveSimulationModel(part)) {
+    if (result['Sim.Device'] !== undefined) result['Sim.Device'] = passive;
+    delete result['Sim.Params'];
+    if (passive !== 'C') delete result['OpenPE.InitialVoltage'];
+    if (passive !== 'L') delete result['OpenPE.InitialCurrent'];
+  }
   if (['V', 'I'].includes(kind) && fields['OpenPE.SourceType'])
     result['Sim.Type'] = fields['OpenPE.SourceType'];
   return result;

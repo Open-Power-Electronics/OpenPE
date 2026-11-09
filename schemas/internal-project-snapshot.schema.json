@@ -2649,6 +2649,14 @@
                 "external"
               ]
             },
+            "passiveModel": {
+              "type": "string",
+              "enum": [
+                "R",
+                "C",
+                "L"
+              ]
+            },
             "sourceType": {
               "type": "string",
               "enum": [
@@ -2732,6 +2740,7 @@
                     "OpenPE.InitialCurrent",
                     "OpenPE.Coupling",
                     "OpenPE.ModelSource",
+                    "OpenPE.PassiveModel",
                     "OpenPE.SourceType"
                   ]
                 }

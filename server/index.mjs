@@ -11,6 +11,7 @@ import { detectAgents, runAgent } from './agents.mjs';
 import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
 import { createAgentCapabilityBridge } from './agent-capabilities.mjs';
 import { agentQuestions, createAgentQuestionBridge } from './agent-questions.mjs';
+import { createAgentInputBridge } from './agent-input.mjs';
 import { listAgentModels } from './agent-models.mjs';
 import { createPluginService, registerPlugins } from './plugins.mjs';
 import {
@@ -22,10 +23,12 @@ import { createPcbDesignGuidance, registerPcbDesignGuidance } from './pcb-design
 import { validModelId } from './model-id.mjs';
 import { createLibraryService } from './libraries.mjs';
 import { registerAppearance } from './appearance.mjs';
+import { registerAgentSettings } from './agent-settings.mjs';
 import { registerSpice, runSimulation, detectSpice, findSimulationResult } from './spice.mjs';
 import { registerThermal } from './thermal.mjs';
 import { detectThermal, runThermalSimulation } from './thermal-runtime.mjs';
 import { createModelCadPreviewService } from './model-cad-kernel.mjs';
+import { createDatasheetService, registerDatasheets } from './datasheets.mjs';
 export async function startServer({
   dataDir,
   staticDir = undefined,
@@ -43,6 +46,9 @@ export async function startServer({
   thermalRunner = runThermalSimulation,
   thermalDetector = detectThermal,
   modelCadPreviewFactory = createModelCadPreviewService,
+  datasheetFetcher = fetch,
+  datasheetRoots = undefined,
+  datasheetServiceFactory = createDatasheetService,
   simulationModelFetcher = fetch,
   simulationModelFiles = undefined,
   componentModelFiles = undefined,
@@ -66,6 +72,7 @@ export async function startServer({
   const active = new Map();
   const agentBridges = new Map();
   const questionBridges = new Map();
+  const inputBridges = new Map();
   const recovery = createWorkspaceRecoveryStore(dataDir);
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -129,12 +136,16 @@ export async function startServer({
     express.json({ limit: '24mb' }),
   );
   app.use('/api/chat/tool-result', express.json({ limit: '40mb' }));
+  app.use(['/api/chat/steer', '/api/agent-settings'], express.json({ limit: '128kb' }));
   app.use('/api/chat', express.json({ limit: '32mb' }));
   app.use('/api/model-cad/preview', express.json({ limit: '512kb' }));
   app.use('/api/component-model', express.json({ limit: '24mb' }));
   app.use(express.json({ limit: '8mb' }));
   registerComponentModels(app, componentModels, libraries, componentModelFiles);
   registerAppearance(app, dataDir, atomicWrite);
+  registerAgentSettings(app, dataDir, atomicWrite);
+  const datasheets = datasheetServiceFactory({ request: datasheetFetcher, roots: datasheetRoots });
+  registerDatasheets(app, datasheets);
   const plugins = registerPlugins(app, cwd, { service: pluginServiceFactory(cwd, { dataDir }) });
   const workbenchPlugins = createWorkbenchPlugins(dataDir);
   registerWorkbenchPlugins(app, workbenchPlugins);
@@ -263,6 +274,18 @@ export async function startServer({
     await recovery.clear();
     res.json({ ok: true });
   });
+  app.post('/api/chat/steer', async (req, res) => {
+    try {
+      const bridge = inputBridges.get(req.body?.runId);
+      if (!bridge) throw new Error('The originating Agent run is no longer active.');
+      res.json(await bridge.submit(req.body, req.get('origin')));
+    } catch (error) {
+      res.status(409).json({
+        error: error.message,
+        ...(error.code === 'OPENPE_STEER_REJECTED' ? { code: error.code } : {}),
+      });
+    }
+  });
   app.post('/api/chat/answer', (req, res) => {
     try {
       const bridge = questionBridges.get(req.body?.runId);
@@ -343,6 +366,13 @@ export async function startServer({
     });
     questions.provider = b.provider;
     questionBridges.set(questions.id, questions);
+    const inputBridge = createAgentInputBridge({
+      sessionId,
+      emit,
+      signal: control.signal,
+      origin: req.get('origin'),
+    });
+    inputBridges.set(inputBridge.id, inputBridge);
     const heartbeat = setInterval(() => {
       if (!res.destroyed) res.write(': keepalive\n\n');
     }, 15000);
@@ -362,13 +392,13 @@ export async function startServer({
       if (!pcbDesignInstructions) pcbDesignTurns.delete(control);
       control.signal.throwIfAborted();
       const result = await agentRunner(b.provider, b, cwd, emit, control.signal, {
+        input: inputBridge,
         questions: { ...questions, url: `${base}/api/agent-questions/${questions.id}` },
         pcbDesignInstructions,
         ...(bridge
           ? {
               capabilities: {
                 call: (tool, args) => bridge.call(tool, args),
-                executing: () => bridge.executing(),
                 url: `${base}/api/agent-tools/${bridge.id}`,
                 token: bridge.token,
               },
@@ -383,6 +413,8 @@ export async function startServer({
       clearInterval(heartbeat);
       bridge?.close();
       questions.close();
+      inputBridge.close();
+      inputBridges.delete(inputBridge.id);
       questionBridges.delete(questions.id);
       if (bridge) agentBridges.delete(bridge.id);
       if (active.get(sessionId) === control) active.delete(sessionId);
@@ -415,6 +447,7 @@ export async function startServer({
       simulations.close();
       thermal.close();
       modelCadPreviews.close();
+      datasheets.close();
       libraries.close();
       for (const control of active.values()) control.abort();
       server.close();

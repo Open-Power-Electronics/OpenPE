@@ -1,11 +1,15 @@
 import type { Part } from './circuit';
 import { partFields } from './library';
 import { simulationParameterValue } from './simulation-parameters';
+import { activePassiveModel } from './simulation-model-source';
 
 /** Two-terminal storage primitives; coupled windings have separate model rules. */
 export function storagePrimitive(part: Part): 'C' | 'L' | null {
   if (/Coupled/.test(part.libId)) return null;
-  const device = partFields(part)['Sim.Device'];
+  const fields = partFields(part);
+  const passive = activePassiveModel(fields);
+  if (passive) return passive === 'R' ? null : passive;
+  const device = fields['Sim.Device'];
   if (device === 'C' || device === 'L') return device;
   if (/^Device:(?:C|CP)(?:_|$)/.test(part.libId)) return 'C';
   if (/^Device:L(?:_|$)/.test(part.libId) && !/Coupled/.test(part.libId)) return 'L';

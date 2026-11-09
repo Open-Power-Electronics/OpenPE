@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { LoaderCircle, MessageCircleQuestion } from 'lucide-react';
 import type { ChatTimings } from '@/lib/chat-stream';
 
 function elapsedTime(ms: number) {
@@ -11,30 +12,56 @@ function elapsedTime(ms: number) {
   return `${minutes}m${remainder ? ` ${remainder}s` : ''}`;
 }
 
-export function ChatTiming({ timings: t }: { timings: ChatTimings }) {
-  if (t.clientTotalMs === undefined || !Number.isFinite(t.clientTotalMs) || t.clientTotalMs < 0)
+export function ChatTiming({ timings: t }: { timings?: ChatTimings }) {
+  if (t?.clientTotalMs === undefined || !Number.isFinite(t.clientTotalMs) || t.clientTotalMs < 0)
     return null;
   return (
-    <div className="message-timing" aria-label="Elapsed time">
+    <span className="message-timing" aria-label="Elapsed time">
       {elapsedTime(t.clientTotalMs)}
-    </div>
+    </span>
   );
 }
-export function ChatProgress({ status, startedAt }: { status: string; startedAt: number }) {
+export function ChatLiveTiming({
+  startedAt,
+  active = true,
+}: {
+  startedAt: number;
+  active?: boolean;
+}) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
+    if (!active) return;
     const update = () => setElapsed(performance.now() - startedAt);
     update();
     const timer = setInterval(update, 250);
     return () => clearInterval(timer);
-  }, [startedAt]);
+  }, [startedAt, active]);
+  return (
+    <span className="message-timing" aria-label="Elapsed time">
+      {elapsedTime(elapsed)}
+    </span>
+  );
+}
+export function ChatProgress({
+  status,
+  questionState,
+}: {
+  status: string;
+  questionState?: 'waiting' | 'sending';
+}) {
   return (
     <div className="chat-progress">
+      {questionState === 'waiting' ? (
+        <MessageCircleQuestion size={13} aria-hidden="true" />
+      ) : (
+        <LoaderCircle size={13} className="spin" aria-hidden="true" />
+      )}
       <span className="chat-stage-text" role="status">
-        {status}
-      </span>
-      <span className="chat-elapsed" aria-label="Elapsed time">
-        {elapsedTime(elapsed)}
+        {questionState === 'waiting'
+          ? 'Waiting for your answer…'
+          : questionState === 'sending'
+            ? 'Sending answers…'
+            : status}
       </span>
     </div>
   );

@@ -215,13 +215,13 @@ test('ACP failed, incomplete, empty and invalid protocol responses never complet
       ['empty', /no response content/],
       ['invalid-json', /invalid ACP response/],
       ['bad-version', /ACP version 1/],
-      ['timeout', /did not answer session\/prompt/],
+      ['handshake-hang', /did not answer initialize/],
     ] as const) {
       const mock = await fixture(t, provider, mode);
       await assert.rejects(
         runACPAgent(provider, request, () => {}, new AbortController().signal, {
           launch: mock.launch,
-          timeoutMs: mode === 'timeout' ? 150 : 2000,
+          timeoutMs: 2000,
         }),
         error,
       );

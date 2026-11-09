@@ -41,7 +41,7 @@ export function registerThermalCapabilities(
       description:
         'Update session thermal inputs: ambient in °C, convection in W/(m²·K), conductivity in W/(m·K), geometry in mm and each footprint heat input in W into the board. Heat sources replace the complete list.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       inputSchema: {
         type: 'object',
         required: ['config'],
@@ -60,7 +60,7 @@ export function registerThermalCapabilities(
       description:
         'Load heat inputs from a verified matching completed SPICE result, using signed average terminal V·I over full-resolution native samples in the final 20% of the transient. No solver is started. Only supported dissipative paths with linked PCB footprints are included; the assumed heat into pads remains an analysis input.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       available: () =>
         adapter.available() === true
           ? (adapter.canImport?.() ??
@@ -90,7 +90,7 @@ export function registerThermalCapabilities(
       description:
         'Stop the active thermal heat-source import, mesh or solver process. Incomplete temperature fields are discarded.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       inputSchema: emptyCapabilityInput,
       handler: () => adapter.cancel(),
     }),
@@ -102,7 +102,7 @@ export function registerThermalCapabilities(
       description:
         'Inspect the closest real thermal solver node to a point in PCB millimetres, or clear the probe. Omitting z uses the visible board surface.',
       mutation: 'session',
-      review: 'optional',
+      review: 'none',
       inputSchema: {
         type: 'object',
         required: ['point'],

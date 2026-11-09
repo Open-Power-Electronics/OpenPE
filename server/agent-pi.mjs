@@ -109,17 +109,13 @@ function piRPCSession(launch, cwd, signal, options, handlers) {
     };
     const abort = () => finish(new Error('Pi connection cancelled.'));
     const onTimeout = () => {
-      if (options.questions?.waiting()) {
-        timer = setTimeout(onTimeout, options.timeoutMs || 300000);
-        return;
-      }
       finish(
         new Error(
           options.timeoutMessage || 'Pi connection timed out. Check the CLI connection and retry.',
         ),
       );
     };
-    let timer = setTimeout(onTimeout, options.timeoutMs || 300000);
+    const timer = setTimeout(onTimeout, options.timeoutMs || 30000);
     const send = (record) => {
       if (!settled && !proc.stdin.destroyed) proc.stdin.write(JSON.stringify(record) + '\n');
     };
@@ -140,7 +136,12 @@ function piRPCSession(launch, cwd, signal, options, handlers) {
           throw new Error(
             'Pi attempted a tool or interactive action in an isolated OpenPE session.',
           );
-        handlers.record(event, send, (value) => finish(null, value));
+        handlers.record(
+          event,
+          send,
+          (value) => finish(null, value),
+          () => clearTimeout(timer),
+        );
       } catch (error) {
         finish(error);
       }
@@ -188,6 +189,12 @@ function piRPCSession(launch, cwd, signal, options, handlers) {
 }
 
 export async function runPiAgent(request, prompt, launch, cwd, emit, signal, options = {}) {
+  const images =
+    options.images ??
+    (request.annotations || []).map((annotation) => ({
+      mimeType: 'image/png',
+      data: annotation.image.dataUrl.slice('data:image/png;base64,'.length),
+    }));
   const started = performance.now();
   const timings = {};
   const mark = (key) => {
@@ -211,7 +218,7 @@ export async function runPiAgent(request, prompt, launch, cwd, emit, signal, opt
           emit({ type: 'status', stage: 'initializing', text: 'Connecting to Pi…' });
           send({ id: 'openpe-state', type: 'get_state' });
         },
-        record(event, send, finish) {
+        record(event, send, finish, ready) {
           mark('firstEventMs');
           if (event.type === 'response' && event.id === 'openpe-state' && !submitted) {
             submitted = true;
@@ -227,16 +234,17 @@ export async function runPiAgent(request, prompt, launch, cwd, emit, signal, opt
               reasoningEffort: state.thinkingLevel,
             });
             mark('submittedMs');
+            ready();
             send({
               id: 'openpe-prompt',
               type: 'prompt',
               message: prompt,
-              ...(request.annotations?.length
+              ...(images.length
                 ? {
-                    images: request.annotations.map((annotation) => ({
+                    images: images.map((image) => ({
                       type: 'image',
                       mimeType: 'image/png',
-                      data: annotation.image.dataUrl.slice('data:image/png;base64,'.length),
+                      data: image.data,
                     })),
                   }
                 : {}),

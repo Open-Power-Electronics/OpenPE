@@ -2,7 +2,7 @@ import type { Point } from './circuit';
 import type { BoardLine, Footprint, Pad } from './pcb';
 import { pcbArc } from './pcb-geometry';
 import { padPosition, padRotation } from './pcb-layout';
-import glyphs from './manufacturing-font.json';
+import { pcbStrokeText } from './pcb-stroke-text';
 
 const decimal = (v: number) => String(Number(v.toFixed(6)));
 const coordinate = (v: number) => {
@@ -155,60 +155,10 @@ export class GerberLayer {
     }
   }
   private text(g: BoardLine) {
-    const t = g.text!;
-    if (/\$\{|[~^_]\{/.test(t.value))
-      throw new Error('Gerber export does not support unresolved or formatted text.');
-    const lines = t.value.split('\n'),
-      angle = (-t.rotation * Math.PI) / 180;
-    const glyph = (char: string) => {
-      const code = char.codePointAt(0)!;
-      if (code < 32 || code >= 0x400 || glyphs[code - 32] === glyphs[0x7f - 32])
-        throw new Error(
-          `Gerber export does not support text character U+${code.toString(16).toUpperCase()}.`,
-        );
-      return glyphs[code - 32];
-    };
-    const spacing = 1.25 * t.size.y;
-    const top = t.justify?.includes('top')
-      ? t.size.y
-      : t.justify?.includes('bottom')
-        ? -(lines.length - 1) * spacing
-        : t.size.y / 2 - ((lines.length - 1) * spacing) / 2;
-    for (const [index, line] of lines.entries()) {
-      const width = [...line].reduce((n, char) => {
-        const s = glyph(char);
-        return n + ((s.charCodeAt(1) - s.charCodeAt(0)) * t.size.x) / 21;
-      }, 0);
-      let cursor = t.justify?.includes('left')
-        ? 0
-        : t.justify?.includes('right')
-          ? -width
-          : -width / 2;
-      for (const char of line) {
-        const s = glyph(char),
-          left = s.charCodeAt(0);
-        let previous: Point | undefined;
-        for (let i = 2; i < s.length; i += 2) {
-          if (s.slice(i, i + 2) === ' R') {
-            previous = undefined;
-            continue;
-          }
-          const y = ((s.charCodeAt(i + 1) - 82 - 8) * t.size.y) / 21;
-          const x =
-            (cursor + ((s.charCodeAt(i) - left) * t.size.x) / 21 - (t.italic ? y / 8 : 0)) *
-            (t.justify?.includes('mirror') ? -1 : 1);
-          const yy = y + top + index * spacing;
-          const at = {
-            x: g.start.x + x * Math.cos(angle) - yy * Math.sin(angle),
-            y: g.start.y + x * Math.sin(angle) + yy * Math.cos(angle),
-          };
-          if (previous)
-            this.line(previous, at, t.thickness || Math.min(t.size.x, t.size.y) / (t.bold ? 5 : 8));
-          previous = at;
-        }
-        cursor += ((s.charCodeAt(1) - left) * t.size.x) / 21;
-      }
-    }
+    const ink = pcbStrokeText(g.text!, g.start);
+    if ('unsupported' in ink) throw new Error(`Gerber export does not support ${ink.unsupported}.`);
+    for (const path of ink.paths)
+      for (let i = 1; i < path.length; i++) this.line(path[i - 1], path[i], ink.width);
   }
   finish() {
     return [

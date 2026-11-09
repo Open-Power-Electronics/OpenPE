@@ -13,6 +13,7 @@ export type ComponentPropertiesProps = {
   footprint: Footprint;
   schematic: Circuit;
   active: boolean;
+  locked?: boolean;
   resetKey: boolean;
   snap: (v: number) => number;
   onFootprint: (f: Footprint) => boolean;
@@ -38,6 +39,7 @@ export default function ComponentProperties({
   footprint,
   schematic,
   active,
+  locked,
   resetKey,
   snap,
   onFootprint,
@@ -122,6 +124,7 @@ export default function ComponentProperties({
             modelFields={assignmentFields}
             geometryFields={geometryFields}
             active={active && !!onSavePartProperties}
+            locked={locked}
             capabilityHost={capabilityHost}
             onRequestSave={onRequestSave}
             onSave={(ref, value, fields, footprintDetail) =>

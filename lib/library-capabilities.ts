@@ -322,11 +322,14 @@ export function registerLibraryCapabilities(
         'Select the intrinsic model or bind an exact observed external declaration with validated terminal mapping, retaining inactive fields and one whole-project undo edit.',
       inputSchema: {
         anyOf: [
-          object({ ...partSelection, source: { const: 'basic' } }, [
-            'schematicId',
-            'partId',
-            'source',
-          ]),
+          object(
+            {
+              ...partSelection,
+              source: { const: 'basic' },
+              passiveModel: { enum: ['R', 'C', 'L', null] },
+            },
+            ['schematicId', 'partId', 'source'],
+          ),
           object({ ...partSelection, source: { const: 'external' } }, [
             'schematicId',
             'partId',
@@ -349,7 +352,10 @@ export function registerLibraryCapabilities(
         ],
       },
       available: () => resourceAvailability(true),
-      handler: ({ schematicId, partId, source, observationId, name, mapping }, context) => {
+      handler: (
+        { schematicId, partId, source, observationId, name, mapping, passiveModel },
+        context,
+      ) => {
         const basis = begin(context.expectedRevision, true),
           { schematic, part } = component(basis, schematicId, partId);
         const observation = observationId ? observations.get(observationId) : undefined;
@@ -370,7 +376,7 @@ export function registerLibraryCapabilities(
           part,
           partFields(part),
           source === 'basic'
-            ? { source }
+            ? { source, passiveModel }
             : {
                 source,
                 name: name ?? partFields(part)['Sim.Name'] ?? '',

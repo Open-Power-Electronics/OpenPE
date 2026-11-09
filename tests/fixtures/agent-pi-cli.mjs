@@ -26,6 +26,7 @@ if (process.argv.includes('--help')) {
   input.on('line', (line) => {
     const event = JSON.parse(line);
     if (event.type === 'get_state') {
+      if (mode === 'handshake-hang') return;
       send({ id: event.id, type: 'response', command: event.type, success: true, data: state });
     } else if (event.type === 'get_available_models') {
       setTimeout(

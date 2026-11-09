@@ -138,6 +138,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/workbench-plugins') return route.fulfill({ json: plugins });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
@@ -1091,7 +1093,7 @@ try {
     .getByRole('textbox', { name: 'Component reference', exact: true })
     .waitFor();
   await layoutProperties.getByRole('textbox', { name: 'Component value', exact: true }).waitFor();
-  assert.equal(await layoutProperties.locator('.property-simulation').count(), 0);
+  assert.equal(await layoutProperties.getByRole('tab', { name: 'SPICE', exact: true }).count(), 0);
   assert.equal(
     await layoutProperties.getByRole('switch', { name: /^Include .*in SPICE simulation$/ }).count(),
     0,

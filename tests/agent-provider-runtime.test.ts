@@ -246,7 +246,7 @@ test('Pi fails clearly on incompatible versions, forbidden actions, model failur
   for (const [mode, expected] of [
     ['tool', /attempted a tool/],
     ['error', /Fixture model failure/],
-    ['hang', /timed out/],
+    ['handshake-hang', /timed out/],
   ] as const) {
     const events: any[] = [];
     const result = await runAgent(
@@ -257,7 +257,7 @@ test('Pi fails clearly on incompatible versions, forbidden actions, model failur
       new AbortController().signal,
       {
         resolve: async () => launch(mode),
-        timeoutMs: mode === 'hang' ? 300 : 10000,
+        timeoutMs: mode === 'handshake-hang' ? 1000 : 10000,
       },
     );
     assert.equal(result.outcome, 'failed');

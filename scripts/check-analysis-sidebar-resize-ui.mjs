@@ -102,6 +102,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (pathname === '/api/appearance') return route.fulfill({ json: null });
     if (pathname === '/api/workbench-plugins')
       return route.fulfill({ json: bundledWorkbenchCatalog() });

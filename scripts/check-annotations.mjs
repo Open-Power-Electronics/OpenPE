@@ -7,6 +7,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { tsImport } from 'tsx/esm/api';
 import { readNativeFiles, fillNativeProject } from './source-editor-test-helpers.mjs';
 import { parseProject } from '../server/project-format.mjs';
 import {
@@ -17,6 +18,7 @@ import {
 // Isolated renderer regression: no Electron, real CLIs, native dialogs or user data.
 await mkdir('test-results', { recursive: true });
 const source = await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8');
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 let state = {
   version: 2,
   documents: [
@@ -26,7 +28,15 @@ let state = {
       sourceDraft: null,
       dirty: false,
       filename: 'rc.kicad_pro',
-      sessions: [{ id: 'session-one', messages: [], draft: '' }],
+      sessions: [
+        {
+          id: 'session-one',
+          messages: [
+            { id: 'annotation-history', role: 'user', text: 'Review captured design notes.' },
+          ],
+          draft: '',
+        },
+      ],
       activeSessionId: 'session-one',
     },
   ],
@@ -34,7 +44,7 @@ let state = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: structuredClone(defaultAgentPreferences.models),
 };
 const sent = [],
   errors = [];
@@ -75,6 +85,10 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
       onCloseRequested: () => () => {},
@@ -92,6 +106,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents')
       return route.fulfill({ json: [{ id: 'codex', available: true, version: 'mock' }] });
@@ -128,7 +144,13 @@ try {
     for (const file of bundle.outputFiles.filter((file) => file.path.endsWith('.css')))
       await page.addStyleTag({ content: file.text });
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    await page.getByTestId('schematic-canvas').waitFor();
+    try {
+      await page.getByTestId('schematic-canvas').waitFor();
+    } catch (error) {
+      await page.screenshot({ path: 'test-results/annotations-mount-failure.png' });
+      console.log((await page.locator('body').innerText()).slice(0, 3000));
+      throw error;
+    }
   }
   await mount();
   const button = (name) => page.getByRole('button', { name, exact: true });
@@ -136,6 +158,7 @@ try {
   const nativeBaseline = await readNativeFiles(page);
   await button('Schematic').click();
   await page.getByTestId('part-R1').click();
+  await page.getByTestId('schematic-canvas').press('Escape');
   await exportCanvasImage(page);
   await page.getByText('Exported schematic.png', { exact: true }).waitFor();
   const schematicImage = await page.evaluate(() => window.exportedImages[0]);
@@ -196,7 +219,7 @@ try {
   const annotationFilters = async (mode, canvas, target, masterName, category) => {
     await button(mode).click();
     await button('Annotation mode').click();
-    await button('Select elements').click();
+    await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
     const filters = page.getByRole('group', { name: 'Selection', exact: true });
     const setAll = async (checked) => {
       await openDisplayDrawer(page, 'Selection');
@@ -228,7 +251,7 @@ try {
     assert.equal(await page.locator('.annotation-pin:visible').count(), 0);
     assert.equal(await page.locator('.annotation-marks rect:visible').count(), 0);
 
-    await button('Draw rectangle').click();
+    await annotationToolbar.getByRole('button', { name: 'Draw rectangle', exact: true }).click();
     await page.mouse.move(bounds.x - 10, bounds.y - 10);
     await page.mouse.down();
     await page.mouse.move(bounds.x + bounds.width + 10, bounds.y + bounds.height + 10, {
@@ -242,7 +265,7 @@ try {
     assert.deepEqual(region.elements, [], `${mode} region capture excludes disabled objects.`);
     await button('Clear annotations').click();
     await waitQueuedAnnotations((items) => items.length === 0);
-    await button('Select elements').click();
+    await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
 
     await openDisplayDrawer(page, 'Selection');
     await filters.getByRole('checkbox', { name: category, exact: true }).check();
@@ -255,7 +278,7 @@ try {
       interactionPaint = await selectedGeometryPaint(target);
       assert.ok(interactionPaint.length > 0, 'The symbol has selected geometry paint.');
       await button('Annotation mode').click();
-      await button('Select elements').click();
+      await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
     }
     await clickTarget();
     await comment.fill(`Retain ${mode} snapshot.`);
@@ -394,6 +417,7 @@ try {
   await runCanvasAction(page, 'Actual size (100%)');
   for (const zoom of [100, 144]) {
     if (zoom !== 100) {
+      await layoutCanvas.press('Escape');
       await runCanvasAction(page, 'Zoom in');
       await runCanvasAction(page, 'Zoom in');
     }
@@ -412,7 +436,7 @@ try {
     const interactionPaint = await selectedGeometryPaint(trackTarget);
     assert.ok(interactionPaint.length > 0, 'The trace has selected geometry paint.');
     await button('Annotation mode').click();
-    await button('Select elements').click();
+    await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
     const annotationPoint = await nearTrack();
     assert.equal(annotationPoint.directlyHit, false);
     await page.mouse.click(annotationPoint.x, annotationPoint.y);
@@ -477,6 +501,7 @@ try {
   await openDisplayDrawer(page, 'Selection');
   await layoutFilters.getByRole('checkbox', { name: 'All items', exact: true }).check();
   await closeDisplayDrawer(page, 'Selection');
+  await layoutCanvas.press('Escape');
   await runCanvasAction(page, 'Fit board to canvas');
   await button('Interaction mode').click();
   await button('Source').click();
@@ -534,7 +559,7 @@ try {
   assert.equal(sent.length, 0, 'Update replaces one queued comment without sending.');
   const r = await page.getByTestId('part-R1').boundingBox();
   const c = await page.getByTestId('part-C1').boundingBox();
-  await button('Draw rectangle').click();
+  await annotationToolbar.getByRole('button', { name: 'Draw rectangle', exact: true }).click();
   await page.mouse.move(Math.min(r.x, c.x) - 25, Math.min(r.y, c.y) - 35);
   await page.mouse.down();
   await page.mouse.move(
@@ -545,7 +570,7 @@ try {
   await page.mouse.up();
   await comment.fill('Review this whole stage.');
   await button('Add').click();
-  await button('Draw freehand').click();
+  await annotationToolbar.getByRole('button', { name: 'Draw freehand', exact: true }).click();
   const canvas = page.getByTestId('schematic-canvas');
   const bounds = await canvas.boundingBox();
   const x = bounds.x + bounds.width - 140,
@@ -715,7 +740,7 @@ try {
     'test-results/agent-annotation-crop.png',
     Buffer.from(queued[2].image.dataUrl.split(',')[1], 'base64'),
   );
-  await button('Select elements').click();
+  await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
   await page.getByTestId('part-C1').click();
   await page.getByRole('alert').filter({ hasText: 'up to 4' }).waitFor();
   await button('Dismiss annotation error').click();
@@ -734,6 +759,7 @@ try {
   assert.ok(Math.abs(movedPin.y - pin.y - 20) < 2);
   await canvas.press('Delete');
   await canvas.press('r');
+  await button('Interaction mode').click();
   await exportCanvasImage(page);
   await page.waitForFunction(() => window.exportedImages.length === 2);
   const pannedImage = await page.evaluate(() => window.exportedImages[1]);
@@ -751,19 +777,45 @@ try {
     .raw()
     .toBuffer();
   let changedPixels = 0,
-    maxDelta = 0;
+    maxDelta = 0,
+    flatChanges = 0,
+    maxChannelDelta = 0;
   for (let i = 0; i < pixels.length; i += 3) {
     const delta =
       Math.abs(pixels[i] - pannedPixels[i]) +
       Math.abs(pixels[i + 1] - pannedPixels[i + 1]) +
       Math.abs(pixels[i + 2] - pannedPixels[i + 2]);
-    if (delta) changedPixels++;
+    if (delta) {
+      changedPixels++;
+      maxChannelDelta = Math.max(
+        maxChannelDelta,
+        ...[0, 1, 2].map((c) => Math.abs(pixels[i + c] - pannedPixels[i + c])),
+      );
+      const x = (i / 3) % schematicImage.width,
+        y = Math.floor(i / 3 / schematicImage.width);
+      let edge = false;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (
+            x + dx < 0 ||
+            x + dx >= schematicImage.width ||
+            y + dy < 0 ||
+            y + dy >= schematicImage.height
+          )
+            continue;
+          const j = ((y + dy) * schematicImage.width + x + dx) * 3;
+          if ([0, 1, 2].some((c) => pixels[i + c] !== pixels[j + c])) edge = true;
+        }
+      }
+      if (!edge) flatChanges++;
+    }
     maxDelta = Math.max(maxDelta, delta);
   }
   assert.ok(
-    // Camera matrix rounding can shift a few antialiasing channels by one level.
-    changedPixels <= 64 && maxDelta <= 6,
-    `Export omits overlays and preserves ink after pan, allowing only subpixel raster rounding (${changedPixels} pixels, delta ${maxDelta}).`,
+    // Camera rounding may affect antialiased edges by one channel level;
+    // flat ink/background pixels must remain exact.
+    flatChanges === 0 && maxChannelDelta <= 1,
+    `Export preserves ink after leaving annotation mode and panning (${changedPixels} edge pixels, ${flatChanges} flat changes, channel delta ${maxChannelDelta}, RGB delta ${maxDelta}).`,
   );
   await page.evaluate(() => {
     window.imageExportMode = 'cancel';
@@ -796,14 +848,15 @@ try {
     .locator('.project-navigation > span')
     .first()
     .locator('.project-folder > button')
-    .click();
+    .click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'New session', exact: true }).click();
   assert.equal(await page.locator('.annotation-pin').count(), 0);
-  await page.locator('.project-navigation .project-session').last().click();
+  await page.locator('.project-navigation .project-session[data-session-id="session-one"]').click();
   await button('Annotation mode').click();
   assert.equal(await page.locator('.annotation-pin').count(), 4);
   await page.locator('.nav-rail').getByRole('button', { name: 'New project', exact: true }).click();
   assert.equal(await page.getByLabel('Pending annotations', { exact: true }).count(), 0);
-  await page.locator('.project-navigation .project-session').first().click();
+  await page.locator('.project-navigation .project-session[data-session-id="session-one"]').click();
   await page.getByLabel('Pending annotations', { exact: true }).waitFor();
   await page.waitForTimeout(900);
   await mount();
@@ -869,8 +922,10 @@ try {
   assert.equal(await page.locator('.file-tab .dirty-dot').count(), 0);
   // Cancellation and removal never create another provider request.
   // Resizing preserves drawing scale/origin; bring the test target back inside the compact canvas.
+  await button('Interaction mode').click();
   await runCanvasAction(page, 'Fit to canvas');
-  await button('Select elements').click();
+  await button('Annotation mode').click();
+  await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
   await page.getByTestId('part-C1').click();
   await comment.waitFor();
   await comment.fill('Cancel this capture.');
@@ -913,7 +968,7 @@ try {
   await button('Delete annotation').click();
   await waitQueuedAnnotations((items) => items.length === 0);
   assert.equal(await page.locator('.annotation-pin').count(), 0);
-  await button('Draw rectangle').click();
+  await annotationToolbar.getByRole('button', { name: 'Draw rectangle', exact: true }).click();
   const smallCanvas = await canvas.boundingBox();
   await page.mouse.move(smallCanvas.x + 30, smallCanvas.y + 40);
   await page.mouse.down();
@@ -935,7 +990,7 @@ try {
   // A capture completing after navigation cannot reopen an obsolete local editor.
   await button('Schematic').click();
   await button('Annotation mode').click();
-  await button('Select elements').click();
+  await annotationToolbar.getByRole('button', { name: 'Select elements', exact: true }).click();
   await page.evaluate(() => {
     const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     window.restoreAnnotationImage = () =>
@@ -992,6 +1047,7 @@ try {
   const beforeActualSize = await page
     .locator('.pcb-model-canvas')
     .getAttribute('data-render-count');
+  await button('Interaction mode').click();
   await runCanvasAction(page, 'Actual size (100%)');
   await page.waitForFunction(
     (before) =>
@@ -1108,7 +1164,7 @@ try {
   await button('View annotations').click();
   await page.getByText('Captured from another view', { exact: true }).waitFor();
   await button('View annotations').click();
-  await button('Draw rectangle').click();
+  await annotationToolbar.getByRole('button', { name: 'Draw rectangle', exact: true }).click();
   const objectBounds = await objectCanvas.boundingBox();
   await page.mouse.move(objectBounds.x + 40, objectBounds.y + 40);
   await page.mouse.down();
@@ -1116,7 +1172,7 @@ try {
   await page.mouse.up();
   await comment.fill('Check the board clearance here.');
   await comment.press('Enter');
-  await button('Draw freehand').click();
+  await annotationToolbar.getByRole('button', { name: 'Draw freehand', exact: true }).click();
   await page.mouse.move(objectBounds.x + 50, objectBounds.y + 150);
   await page.mouse.down();
   await page.mouse.move(objectBounds.x + 100, objectBounds.y + 175, { steps: 5 });
@@ -1161,7 +1217,7 @@ try {
   assert.deepEqual(sent[1].annotations, objectQueued);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: complete schematic PNG export, overlay-free pixels, cancellation/errors, shared mode controls, context-menu/wheel zoom without floating controls, Model annotations, recovery and clean project data.',
+    'PASS: schematic PNG export after tool cancellation, bounds/flat-pixel preservation across pan, cancellation/errors, scoped mode controls, context-menu/wheel zoom, Model annotations, recovery and clean project data.',
   );
 } finally {
   await browser.close();

@@ -25,6 +25,8 @@ export default function CanvasContextMenu({
   onOpen,
   onError,
   label = 'Canvas actions',
+  initialPosition,
+  onDismiss,
 }: {
   target: RefObject<Element | null>;
   active: boolean;
@@ -33,24 +35,30 @@ export default function CanvasContextMenu({
   onOpen?: (target: EventTarget | null, position?: { x: number; y: number }) => void;
   onError: (message: string) => void;
   label?: string;
+  /** An explicit one-shot popup instead of the ordinary right-click gesture. */
+  initialPosition?: { x: number; y: number };
+  onDismiss?: () => void;
 }) {
   const [position, setPosition] = useState<{ x: number; y: number; identity: unknown } | null>(
-    null,
+    () => (initialPosition ? { ...initialPosition, identity } : null),
   );
   const popup = useRef<HTMLDivElement>(null);
-  const current = useRef({ active, identity, actions, onOpen, onError });
+  const current = useRef({ active, identity, actions, onOpen, onError, onDismiss });
   useLayoutEffect(() => {
-    current.current = { active, identity, actions, onOpen, onError };
+    current.current = { active, identity, actions, onOpen, onError, onDismiss };
   });
   const visible =
     active && actions.length > 0 && position !== null && position.identity === identity;
   useLayoutEffect(() => {
-    if (!visible) setPosition(null);
-  }, [visible]);
+    if (!visible && position) {
+      setPosition(null);
+      current.current.onDismiss?.();
+    }
+  }, [visible, position]);
 
   useEffect(() => {
     const element = target.current;
-    if (!element || !active) return;
+    if (!element || !active || initialPosition) return;
     const gesture = createCanvasContextGesture<EventTarget | null>();
     const pointer = (e: PointerEvent) => ({
       id: e.pointerId,
@@ -112,7 +120,7 @@ export default function CanvasContextMenu({
     return () => {
       for (const [name, handler] of events) element.removeEventListener(name, handler, true);
     };
-  }, [target, active]);
+  }, [target, active, initialPosition]);
 
   useLayoutEffect(() => {
     if (!visible || !popup.current || !position) return;
@@ -126,7 +134,10 @@ export default function CanvasContextMenu({
 
   useEffect(() => {
     if (!visible) return;
-    const hide = () => setPosition(null);
+    const hide = () => {
+      setPosition(null);
+      current.current.onDismiss?.();
+    };
     const outside = (event: PointerEvent) => {
       if (!popup.current?.contains(event.target as Node)) hide();
     };
@@ -152,7 +163,10 @@ export default function CanvasContextMenu({
   }, [visible, target]);
 
   function dismiss() {
-    flushSync(() => setPosition(null));
+    flushSync(() => {
+      setPosition(null);
+      current.current.onDismiss?.();
+    });
     (target.current as HTMLElement | SVGElement | null)?.focus({ preventScroll: true });
   }
   if (!visible || !position) return null;

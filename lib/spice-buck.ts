@@ -5,10 +5,13 @@ import {
   type SpiceInitialCondition,
 } from './simulation-initial-conditions';
 import {
+  activePassiveModel,
+  canSelectPassiveSimulationModel,
+  passiveConnectorSymbol,
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
 } from './simulation-model-source';
-import { partFields, unitGraphics } from './library';
+import { displayPartValue, partFields, unitGraphics } from './library';
 import { child, children, val } from './sexpr';
 import {
   passiveValue,
@@ -49,8 +52,16 @@ const defaults: Record<string, { device: string; type?: string; roles: string[] 
   'power:GND': { device: '', roles: ['0'] },
 };
 
+function basicDevice(d: Circuit, p: Part) {
+  if (p.libId !== passiveConnectorSymbol) return defaults[p.libId];
+  const device = activePassiveModel(partFields(p));
+  return device && canSelectPassiveSimulationModel(p, d)
+    ? { device, type: '=', roles: ['+', '-'] }
+    : undefined;
+}
+
 function fields(d: Circuit, p: Part) {
-  const basic = defaults[p.libId];
+  const basic = basicDevice(d, p);
   return effectiveSimulationModelFields(
     p,
     {
@@ -91,7 +102,7 @@ function number(value: string) {
 }
 /** KiCad Sim.Pins maps symbol pin numbers to model terminal names, not list order. */
 export function buckPinMap(d: Circuit, p: Part) {
-  const roles = defaults[p.libId]?.roles;
+  const roles = basicDevice(d, p)?.roles;
   if (!roles) throw new Error(`${p.ref}: unsupported simulation symbol ${p.libId}.`);
   const text = fields(d, p)['Sim.Pins'];
   const mapping = new Map<string, string>();
@@ -119,8 +130,8 @@ export function modelBuckSupportError(d: Circuit) {
   try {
     for (const p of simulationParts(d)) {
       assertSimulationModelConfiguration(p);
-      const expected = defaults[p.libId];
-      if (!expected || !pins[p.libId])
+      const expected = basicDevice(d, p);
+      if (!expected || (p.libId !== passiveConnectorSymbol && !pins[p.libId]))
         throw new Error(`${p.ref}: no supported model for ${p.libId}.`);
       const signature = unitGraphics(d.libraries[p.libId], p.unit || 1)
         .flatMap((s) => children(s, 'pin'))
@@ -134,11 +145,15 @@ export function modelBuckSupportError(d: Circuit) {
         )
         .sort()
         .join('|');
-      if ((p.unit || 1) !== 1 || signature !== pins[p.libId])
+      if (
+        (p.unit || 1) !== 1 ||
+        (p.libId !== passiveConnectorSymbol && signature !== pins[p.libId])
+      )
         throw new Error(
           `${p.ref}: modified pin definitions are not supported by this simulation model.`,
         );
       const f = fields(d, p);
+      const model = activePassiveModel(partFields(p));
       for (const key of Object.keys(f))
         if (/^spice|^sim[._]/i.test(key) && !permitted.has(key))
           throw new Error(`${p.ref}: unsupported simulation field ${key}.`);
@@ -152,13 +167,13 @@ export function modelBuckSupportError(d: Circuit) {
       if (f['Sim.Name'] && (p.libId !== BUCK_MOSFET || f['Sim.Name'] !== 'IRF540N'))
         throw new Error(`${p.ref}: unsupported model name.`);
       if (
-        (f['Sim.Device'] && f['Sim.Device'] !== expected.device) ||
+        (f['Sim.Device'] && f['Sim.Device'] !== (model ?? expected.device)) ||
         (f['Sim.Type'] &&
           f['Sim.Type'] !== expected.type &&
           !(p.libId === BUCK_DC && partFields(p)['OpenPE.SourceType']))
       )
         throw new Error(`${p.ref}: unsupported simulation device or type.`);
-      const kind = p.libId.match(/^Device:([RCL])$/)?.[1];
+      const kind = model ?? p.libId.match(/^Device:([RCL])$/)?.[1];
       const allowed = kind
         ? [kind.toLowerCase()]
         : p.libId === BUCK_DC
@@ -303,6 +318,11 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
     sw = get(c.switchId, BUCK_MOSFET);
   const output = get(c.outputId, 'Device:C'),
     inductor = get(c.currentId, 'Device:L');
+  if (
+    (activePassiveModel(partFields(output)) ?? 'C') !== 'C' ||
+    (activePassiveModel(partFields(inductor)) ?? 'L') !== 'L'
+  )
+    throw new Error('The Buck probes require a capacitor and an inductor model.');
   // Electrical values come only from the validated schematic snapshot.
   const inputFields = fields(d, dc),
     inputValues = simulationSourceValues(
@@ -359,14 +379,16 @@ export function buildModelBuck(d: Circuit, c: TransientConfig): SpiceDeck {
       throw new Error(`${p.ref}: simulation terminals are shorted together.`);
     nodes.slice(1).forEach((n) => link(nodes[0], n));
     const a = (role: string) => terminal(p, role);
-    const kind = p.libId.match(/^Device:([RCL])$/)?.[1] as 'R' | 'C' | 'L' | undefined;
+    const model = activePassiveModel(partFields(p));
+    const kind = model ?? (p.libId.match(/^Device:([RCL])$/)?.[1] as 'R' | 'C' | 'L' | undefined);
     const name = `${kind || (p.libId === BUCK_MOSFET ? 'M' : p.libId === 'Simulation_SPICE:D' ? 'D' : 'V')}${i + 1}`;
     let vector = `i(${name.toLowerCase()})`,
       direction = '';
     if (kind) {
       const f = fields(d, p),
         params = parameters(f['Sim.Params'] || '', [kind.toLowerCase()]);
-      const value = params[kind.toLowerCase()] ?? passiveValue(p.value, kind);
+      const value =
+        params[kind.toLowerCase()] ?? passiveValue(model ? displayPartValue(p) : p.value, kind);
       if (value <= 0) throw new Error(`${p.ref}: ${kind} must be positive.`);
       if (kind !== 'L') vector = `@${name.toLowerCase()}[i]`;
       const initial =

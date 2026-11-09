@@ -413,6 +413,7 @@ test('unrouted results use physical connectivity across track layers and plated 
 test('pour keepouts allow shared boundaries and holes but reject actual filled-area overlap', () => {
   const board = fixture();
   const keepout = zone(board, rect(4, 4, 6, 6));
+  keepout.clearance = 0;
   keepout.keepout = {
     tracks: false,
     vias: false,
@@ -438,6 +439,11 @@ test('pour keepouts allow shared boundaries and holes but reject actual filled-a
     assert.equal(issues(board, 'pcb.keepout').length, expected);
     assert.deepEqual(board, before);
   }
+  keepout.clearance = 0.5;
+  pour.filledPolygons = [{ points: rect(2, 4, 3.5, 6) }];
+  assert.equal(issues(board, 'pcb.keepout').length, 0);
+  pour.filledPolygons = [{ points: rect(2, 4, 3.6, 6) }];
+  assert.equal(issues(board, 'pcb.keepout').length, 1);
   keepout.layer = 'B.Cu';
   pour.filledPolygons = [{ points: rect(4.5, 4.5, 5.5, 5.5) }];
   assert.equal(issues(board, 'pcb.keepout').length, 0);
@@ -451,6 +457,7 @@ test('pour keepouts tolerate coordinate rounding along a shared sloped boundary'
   const a = { x: 8.575314, y: 5.026666 };
   const b = { x: 9.74, y: 5.18 };
   const keepout = zone(board, [a, b, { x: b.x, y: 4 }]);
+  keepout.clearance = 0;
   keepout.keepout = {
     tracks: false,
     vias: false,

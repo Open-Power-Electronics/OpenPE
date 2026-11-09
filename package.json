@@ -48,8 +48,10 @@
     "cad:check-model": "node --import tsx scripts/check-model-cad.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.1.0",
     "express": "^5.1.0",
-    "occt-import-js": "0.0.23"
+    "occt-import-js": "0.0.23",
+    "pdfjs-dist": "6.5.438"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -224,7 +226,8 @@
       }
     ],
     "asarUnpack": [
-      "node_modules/occt-import-js/**/*"
+      "node_modules/occt-import-js/**/*",
+      "node_modules/@napi-rs/**/*"
     ]
   }
 }

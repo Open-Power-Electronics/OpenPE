@@ -1,10 +1,20 @@
 'use client';
-import { useCallback, useState, type ReactNode } from 'react';
-import { ArrowUp, Square, ShieldCheck, ShieldAlert } from 'lucide-react';
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
+import { ArrowUp, Maximize2, Minimize2, Square, ShieldCheck, ShieldAlert } from 'lucide-react';
 import type { ReasoningEffort } from '@/lib/chat-stream';
 import { smartPunctuationEdit } from '@/lib/appearance';
 import Select from './Select';
-import ModelSelect from './ModelSelect';
+import ModelSelect, { useAgentModelCatalog } from './ModelSelect';
+import useRetiringConversationControl from './useRetiringConversationControl';
 import {
   agentName,
   defaultReasoningEffort,
@@ -22,10 +32,10 @@ const effortLabels: Record<ReasoningEffort, string> = {
   max: 'Max',
   ultra: 'Ultra',
 };
-
 export type AgentComposerProps = {
   provider: string;
   available: boolean;
+  agentAvailabilityKnown?: boolean;
   requiresAgent?: boolean;
   agentSupportsEffort?: boolean;
   effort: ReasoningEffort;
@@ -38,8 +48,12 @@ export type AgentComposerProps = {
   setInput: (value: string) => void;
   onSubmit: (effort: ReasoningEffort | undefined) => void;
   onStop?: () => void;
+  onAgentSettings?: () => void;
+  onRecall?: (direction: -1 | 1) => boolean;
   busy?: boolean;
   autoFocus?: boolean;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
+  expandableDraft?: boolean;
   observedModel?: string;
   className?: string;
   inputLabel?: string;
@@ -47,11 +61,16 @@ export type AgentComposerProps = {
   maxLength?: number;
   attachments?: ReactNode;
   hasAttachments?: boolean;
+  followUpMode?: 'queue' | 'steer';
+  allowFollowUp?: boolean;
+  canSteer?: boolean;
+  submitting?: boolean;
 };
 
 export default function AgentComposer({
   provider,
   available,
+  agentAvailabilityKnown = true,
   requiresAgent = true,
   agentSupportsEffort,
   effort,
@@ -64,8 +83,12 @@ export default function AgentComposer({
   setInput,
   onSubmit,
   onStop,
+  onAgentSettings,
+  onRecall,
   busy = false,
   autoFocus = false,
+  inputRef,
+  expandableDraft = false,
   observedModel = '',
   className = '',
   inputLabel = 'Message your agent',
@@ -73,26 +96,49 @@ export default function AgentComposer({
   maxLength,
   attachments,
   hasAttachments = false,
+  followUpMode = 'queue',
+  allowFollowUp = false,
+  canSteer = false,
+  submitting = false,
 }: AgentComposerProps) {
   const name = agentName(provider);
-  const [effortCatalog, setEffortCatalog] = useState<{
-    provider: string;
-    model: string;
-    observedModel: string;
-    efforts: ReasoningEffort[] | null;
-  } | null>(null);
-  const receiveEfforts = useCallback(
-    (efforts: ReasoningEffort[] | null) =>
-      setEffortCatalog({ provider, model, observedModel, efforts }),
-    [provider, model, observedModel],
-  );
-  const modelEfforts =
-    available &&
-    effortCatalog?.provider === provider &&
-    effortCatalog.model === model &&
-    effortCatalog.observedModel === observedModel
-      ? effortCatalog.efforts
-      : null;
+  const ownInput = useRef<HTMLTextAreaElement>(null);
+  const field = inputRef ?? ownInput;
+  const inputId = useId();
+  const composing = useRef(false);
+  const [draftExpanded, setDraftExpanded] = useState(false);
+  const [draftOverflows, setDraftOverflows] = useState(false);
+  const focusDraft = useCallback(() => field.current?.focus({ preventScroll: true }), [field]);
+  const measureDraft = useCallback(() => {
+    const element = field.current;
+    if (element?.clientWidth) setDraftOverflows(element.scrollHeight > element.clientHeight + 1);
+  }, [field]);
+  const retainExpandControl = useRetiringConversationControl(expandableDraft, focusDraft);
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (!expandableDraft || !element) return;
+    const observer = new ResizeObserver(measureDraft);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [expandableDraft, field, measureDraft]);
+  useLayoutEffect(() => {
+    if (!input) setDraftExpanded(false);
+    if (expandableDraft) measureDraft();
+  }, [input, expandableDraft, draftExpanded, measureDraft]);
+  const expandLabel = draftExpanded ? 'Collapse draft' : 'Expand draft';
+  function guardComposition(event: KeyboardEvent<HTMLButtonElement>) {
+    if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
+  function stop() {
+    if (composing.current) return;
+    focusDraft();
+    onStop?.();
+  }
+  const catalog = useAgentModelCatalog({ provider, available, value: model, observedModel });
+  const modelEfforts = catalog.selected?.efforts ?? null;
   const supportsEffort =
     modelEfforts === null ? provider === 'codex' || agentSupportsEffort : modelEfforts.length > 0;
   const submissionBlocked =
@@ -107,49 +153,151 @@ export default function AgentComposer({
     : isProviderReasoningEffort(provider, effort)
       ? effort
       : defaultReasoningEffort;
+  const effectiveFollowUp =
+    followUpMode === 'steer' && canSteer && !hasAttachments ? 'steer' : 'queue';
+  const hasDraft = Boolean(input.trim() || hasAttachments);
+  const isStop = busy && (!allowFollowUp || !hasDraft);
+  const actionLabel = isStop
+    ? 'Stop generation'
+    : busy
+      ? effectiveFollowUp === 'steer'
+        ? 'Steer current run'
+        : 'Queue message'
+      : submitLabel;
+  let availabilityText = '';
+  let availabilityAction: { label: string; run: () => void } | undefined;
+  if (requiresAgent) {
+    if (!available) {
+      if (agentAvailabilityKnown) {
+        availabilityText = `${name} is unavailable.`;
+        if (onAgentSettings) availabilityAction = { label: 'Agent settings', run: onAgentSettings };
+      }
+    } else if (catalog.loading) {
+      if (submissionBlocked) availabilityText = 'Loading models…';
+    } else if (catalog.error || !catalog.models.length || (submissionBlocked && catalog.selected)) {
+      availabilityText = catalog.error
+        ? 'Could not load models.'
+        : catalog.models.length
+          ? 'Reasoning options unavailable for this model.'
+          : 'No models available.';
+      if (!busy) availabilityAction = { label: 'Retry models', run: catalog.retry };
+    } else if (submissionBlocked) {
+      availabilityText = 'Choose an available model to send.';
+    }
+  }
+  const availabilityId = `${inputId}-availability`;
   function submit() {
-    if ((!input.trim() && !hasAttachments) || busy || submissionBlocked) return;
+    if (
+      composing.current ||
+      (!input.trim() && !hasAttachments) ||
+      (busy && !allowFollowUp) ||
+      submissionBlocked ||
+      submitting
+    )
+      return;
+    // Focus before dispatch so a synchronous dialog or navigation keeps its own focus.
+    focusDraft();
     onSubmit(supportsEffort ? effectiveEffort : undefined);
   }
   return (
     <div className={`composer-stack ${className}`}>
       {attachments}
-      <div className="composer">
+      <div className="composer" data-draft-expanded={draftExpanded || undefined}>
         <textarea
+          ref={field}
+          id={inputId}
           autoFocus={autoFocus}
           aria-label={inputLabel}
+          aria-describedby={availabilityText ? availabilityId : undefined}
+          aria-keyshortcuts={onRecall ? 'ArrowUp ArrowDown' : undefined}
           maxLength={maxLength}
           placeholder={`Work with ${name}`}
           value={input}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
           onChange={(e) => {
             const input = e.currentTarget;
             const event = e.nativeEvent as InputEvent;
             if (
               document.documentElement.dataset.smartPunctuation === 'true' &&
               event.inputType === 'insertText' &&
+              !composing.current &&
               !event.isComposing
             ) {
               const edit = smartPunctuationEdit(input.value, input.selectionStart);
               setInput(edit.value);
               if (edit.value !== input.value)
                 requestAnimationFrame(() => {
-                  if (document.activeElement === input)
+                  if (
+                    !composing.current &&
+                    document.activeElement === input &&
+                    input.value === edit.value
+                  )
                     input.setSelectionRange(edit.caret, edit.caret);
                 });
             } else setInput(input.value);
           }}
           onKeyDown={(e) => {
-            if (
-              e.key === 'Enter' &&
-              !e.shiftKey &&
-              !e.nativeEvent.isComposing &&
-              e.nativeEvent.keyCode !== 229
-            ) {
+            if (composing.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) {
+              e.stopPropagation();
+              return;
+            }
+            const plainKey = !e.repeat && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+            const { selectionStart, selectionEnd, value } = e.currentTarget;
+            if (plainKey && onRecall && selectionStart === selectionEnd) {
+              const direction =
+                e.key === 'ArrowUp' && selectionStart === 0
+                  ? -1
+                  : e.key === 'ArrowDown' && selectionEnd === value.length
+                    ? 1
+                    : null;
+              if (direction && onRecall(direction)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
+            }
+            if (e.key === 'Escape' && busy && onStop && plainKey) {
               e.preventDefault();
-              submit();
+              e.stopPropagation();
+              stop();
+              return;
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (!e.repeat) submit();
             }
           }}
         />
+        {expandableDraft && (draftOverflows || draftExpanded) && (
+          <button
+            ref={retainExpandControl}
+            className="composer-draft-size"
+            type="button"
+            aria-controls={inputId}
+            aria-expanded={draftExpanded}
+            onPointerDown={(event) => {
+              if (composing.current) event.preventDefault();
+            }}
+            onKeyDown={guardComposition}
+            onClick={() => {
+              if (composing.current || !field.current?.clientWidth) return;
+              focusDraft();
+              setDraftExpanded((expanded) => !expanded);
+            }}
+          >
+            {draftExpanded ? (
+              <Minimize2 size={14} aria-hidden="true" />
+            ) : (
+              <Maximize2 size={14} aria-hidden="true" />
+            )}
+            {expandLabel}
+          </button>
+        )}
         <div className="composer-bottom">
           <div className="approval-control">
             <Select
@@ -170,10 +318,10 @@ export default function AgentComposer({
               options={[
                 {
                   value: 'review',
-                  label: 'Review commands',
+                  label: 'Review changes',
                   description: (
-                    <span aria-description="Approve commands before running.">
-                      Approve commands before running.
+                    <span aria-description="Confirm file and design changes before applying.">
+                      Confirm file and design changes before applying.
                     </span>
                   ),
                   icon: <ShieldCheck className="permission-review" size={18} />,
@@ -194,13 +342,12 @@ export default function AgentComposer({
           <div className="composer-settings">
             <ModelSelect
               key={provider}
-              provider={provider}
-              available={available}
-              value={model}
-              observedModel={observedModel}
+              models={catalog.models}
+              currentModel={catalog.currentModel}
+              loading={catalog.loading && !availabilityText}
+              error={requiresAgent ? undefined : catalog.error}
               onChange={setModel}
-              disabled={busy}
-              onEfforts={receiveEfforts}
+              disabled={busy || !available || catalog.loading}
             />
             {supportsEffort ? (
               <Select
@@ -228,23 +375,60 @@ export default function AgentComposer({
               </span>
             )}
           </div>
+          {busy && allowFollowUp && hasDraft && (
+            <button
+              className="send-button stop"
+              aria-label="Stop generation"
+              title="Stop generation"
+              type="button"
+              onPointerDown={(event) => {
+                if (composing.current) event.preventDefault();
+              }}
+              onKeyDown={guardComposition}
+              onClick={stop}
+            >
+              <Square size={14} />
+            </button>
+          )}
           <button
-            className={`send-button ${busy ? 'stop' : ''}`}
-            aria-label={busy ? 'Stop generation' : submitLabel}
-            title={
-              busy
-                ? 'Stop generation'
-                : submissionBlocked
-                  ? 'Choose an available model before sending.'
-                  : submitLabel
-            }
+            className={`send-button ${isStop ? 'stop' : ''}`}
+            aria-label={actionLabel}
+            title={actionLabel}
+            aria-describedby={availabilityText && !isStop ? availabilityId : undefined}
             type="button"
-            disabled={!busy && (submissionBlocked || (!input.trim() && !hasAttachments))}
-            onClick={() => (busy ? onStop?.() : submit())}
+            onPointerDown={(event) => {
+              if (composing.current) event.preventDefault();
+            }}
+            onKeyDown={guardComposition}
+            disabled={isStop ? false : submissionBlocked || submitting || !hasDraft}
+            onClick={() => (isStop ? stop() : submit())}
           >
-            {busy ? <Square size={14} /> : <ArrowUp size={17} />}
+            {isStop ? <Square size={14} /> : <ArrowUp size={17} />}
           </button>
         </div>
+        {availabilityText && (
+          <div className="composer-availability">
+            <span id={availabilityId} role="status" aria-description={catalog.error}>
+              {availabilityText}
+            </span>
+            {availabilityAction && (
+              <button
+                type="button"
+                onPointerDown={(event) => {
+                  if (composing.current) event.preventDefault();
+                }}
+                onKeyDown={guardComposition}
+                onClick={() => {
+                  if (composing.current || !field.current?.clientWidth) return;
+                  focusDraft();
+                  availabilityAction.run();
+                }}
+              >
+                {availabilityAction.label}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { createPart, emptyCircuit } from '../lib/circuit';
 import { partFields, displayPartValue } from '../lib/library';
 import { preparePartProperties } from '../lib/part-properties';
@@ -18,26 +16,20 @@ import {
 } from '../lib/simulation-initial-conditions';
 import { buildSpiceDeck, defaultTransient, type SpiceDeck } from '../lib/spice';
 import { runSimulation } from '../server/spice.mjs';
-import PartProperties from '../components/PartProperties';
 import type { KiCadProjectFiles } from '../lib/kicad-project';
 import { parseProject as serviceParse } from '../server/project-format.mjs';
 import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
 
-test('every capacitor and inductor exposes its applicable optional initial condition without dirtying inspection', () => {
-  for (const [kind, name, label] of [
-    ['C', 'OpenPE.InitialVoltage', 'Initial voltage (V)'],
-    ['L', 'OpenPE.InitialCurrent', 'Initial current (A)'],
+test('optional capacitor and inductor initial conditions commit and undo without storing implicit defaults', () => {
+  for (const [kind, name] of [
+    ['C', 'OpenPE.InitialVoltage'],
+    ['L', 'OpenPE.InitialCurrent'],
   ] as const) {
     const circuit = emptyCircuit(),
       part = createPart(circuit, kind, 0, 0);
     circuit.parts.push(part);
     const fields = partFields(part),
       before = structuredClone(part);
-    const html = renderToStaticMarkup(
-      createElement(PartProperties, { part, spiceAvailable: true, onSave: () => true }),
-    );
-    assert.ok(html.includes(`aria-label="${label}"`));
-    assert.match(html, /placeholder="Computed"/);
     const rows = [
       ...Object.entries(fields).map(([name, value]) => ({ name, value })),
       { name, value: '' },
@@ -77,12 +69,6 @@ test('every capacitor and inductor exposes its applicable optional initial condi
     core.undo();
     assert.equal(core.getSnapshot().source, baseline);
   }
-  const circuit = emptyCircuit(),
-    resistor = createPart(circuit, 'R', 0, 0);
-  const html = renderToStaticMarkup(
-    createElement(PartProperties, { part: resistor, spiceAvailable: true, onSave: () => true }),
-  );
-  assert.doesNotMatch(html, /aria-label="Initial (?:voltage|current)/);
 });
 
 test('ideal, model Buck and curated compilers apply capacitor voltage and inductor current with UIC', () => {

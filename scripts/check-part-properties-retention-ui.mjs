@@ -165,10 +165,11 @@ try {
   const beforePluginVisibility = await page.evaluate(() => window.propertySaves.length);
   await page.evaluate(() => window.setPropertySpiceAvailable(false));
   await settle();
-  assert.equal(await page.locator('.property-simulation').count(), 0);
+  assert.equal(await page.getByRole('tab', { name: 'SPICE', exact: true }).count(), 0);
   assert.equal(await value.inputValue(), 'retained SPICE draft');
   await page.evaluate(() => window.setPropertySpiceAvailable(true));
   await settle();
+  assert.equal(await page.getByRole('tab', { name: 'SPICE', exact: true }).count(), 1);
   assert.equal(await page.getByRole('switch').count(), 0);
   assert.equal(await value.inputValue(), 'retained SPICE draft');
   assert.equal(await page.evaluate(() => window.propertySaves.length), beforePluginVisibility);

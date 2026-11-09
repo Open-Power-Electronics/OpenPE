@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { readNativeProject } from './source-editor-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
+import { waitForAsync } from './async-browser-test-helpers.mjs';
 
 const { emptyCircuit, createPart, uid } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { createEmptyPCB } = await tsImport('../lib/pcb-layout.ts', import.meta.url);
@@ -126,6 +127,8 @@ try {
       connection: async () => ({ base, token: 'fixture' }),
       newFile: async () => crypto.randomUUID(),
       listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
@@ -139,6 +142,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: defaultAppearance });
     if (url.pathname === '/api/agents')
       return route.fulfill({ json: [{ id: 'codex', available: true, supportsEffort: true }] });
@@ -173,7 +178,12 @@ try {
   );
   await page
     .getByRole('textbox', { name: 'Message your agent' })
-    .fill('Controlled interaction check');
+    .fill('Controlled interaction check')
+    .catch(async (error) => {
+      throw new Error(
+        `${error.message}\n${errors.join('\n')}\n${await page.locator('body').innerText()}`,
+      );
+    });
   await button('Send message').click();
   await button('Stop generation').waitFor();
   const event = (value) => streams.at(-1).write(`data: ${JSON.stringify(value)}\n\n`);
@@ -306,6 +316,49 @@ try {
 
   // Scrolling back pauses following; resuming at the bottom follows later output.
   const chat = page.locator('.chat-scroll:visible');
+  const atBottom = () =>
+    waitForAsync(page, () => {
+      const element = document.querySelector('.chat-scroll');
+      return element && element.scrollHeight - element.scrollTop - element.clientHeight < 2;
+    });
+  // Layout can settle after the stream render (deferred Markdown, fonts or disclosures).
+  // Change only content geometry, without a message update or viewport resize.
+  await chat.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await button('Latest messages').waitFor({ state: 'hidden' });
+  const viewportHeight = await chat.evaluate((element) => element.clientHeight);
+  await chat.locator('.chat-transcript').evaluate((element) => {
+    element.style.paddingBottom = '240px';
+  });
+  await atBottom();
+  // A small upward wheel gesture must pause even within the former 80 px threshold.
+  const chatBounds = await chat.boundingBox();
+  await page.mouse.move(chatBounds.x + chatBounds.width / 2, chatBounds.y + chatBounds.height / 2);
+  await page.mouse.wheel(0, -36);
+  await button('Latest messages').waitFor();
+  assert.equal(
+    await chat.evaluate((element) => element.clientHeight),
+    viewportHeight,
+    'The Latest messages control floats without changing the reading viewport.',
+  );
+  const readingTop = await chat.evaluate((element) => element.scrollTop);
+  await append();
+  assert.equal(await chat.evaluate((element) => element.scrollTop), readingTop);
+  await chat.locator('.chat-transcript').evaluate((element) => {
+    element.style.paddingBottom = '480px';
+  });
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  assert.equal(await chat.evaluate((element) => element.scrollTop), readingTop);
+  await button('Latest messages').click();
+  await atBottom();
+  await chat.locator('.chat-transcript').evaluate((element) => {
+    element.style.paddingBottom = '';
+  });
+  await atBottom();
   await chat.evaluate((el) => {
     el.scrollTop = 0;
     el.dispatchEvent(new Event('scroll'));
@@ -319,22 +372,56 @@ try {
   });
   await button('Latest messages').waitFor({ state: 'hidden' });
   await append();
-  await page.waitForFunction(
-    () => {
-      const el = document.querySelector('.chat-scroll');
-      return el.scrollHeight - el.scrollTop - el.clientHeight < 2;
-    },
-    undefined,
-    { timeout: 3000 },
-  );
+  await page
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('.chat-scroll');
+        return el.scrollHeight - el.scrollTop - el.clientHeight < 2;
+      },
+      undefined,
+      { timeout: 3000 },
+    )
+    .catch(async (error) => {
+      const details = await chat.evaluate((element) => {
+        const selection = window.getSelection();
+        return {
+          top: element.scrollTop,
+          height: element.scrollHeight,
+          viewport: element.clientHeight,
+          selection: selection?.toString().slice(0, 80),
+          collapsed: selection?.isCollapsed,
+          anchor: selection?.anchorNode?.parentElement?.className,
+          focus: selection?.focusNode?.parentElement?.className,
+          intersects: selection?.rangeCount
+            ? selection.getRangeAt(0).intersectsNode(element)
+            : false,
+        };
+      });
+      throw new Error(`${error.message}\n${JSON.stringify(details)}`);
+    });
   event({ type: 'done', outcome: 'completed' });
   streams.at(-1).end();
   await button('Send message').waitFor();
   assert.deepEqual(errors, []);
   await mkdir('test-results/agent-interaction', { recursive: true });
   await page.screenshot({ path: 'test-results/agent-interaction/success.png' });
+  await chat.evaluate((element) => {
+    element.scrollTop -= 120;
+  });
+  await button('Latest messages').waitFor();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    await page.setViewportSize({ width: 1120, height: 760 });
+    const latest = await button('Latest messages').boundingBox();
+    const viewport = await chat.boundingBox();
+    assert.ok(latest.x >= viewport.x && latest.x + latest.width <= viewport.x + viewport.width);
+    assert.ok(latest.y >= viewport.y && latest.y + latest.height <= viewport.y + viewport.height);
+    await chat.screenshot({ path: `test-results/agent-interaction/reading-${theme}.png` });
+  }
   console.log(
-    'Agent streaming preserves editor menus, focus, wire gestures and viewports; Layout uses 0.5 mm; popup anchor dismissal and chat following pass.',
+    'Agent streaming preserves editor menus, focus, wire gestures and viewports; deferred layout, small upward scrolls, floating Latest messages, themes and popup anchor dismissal pass.',
   );
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];

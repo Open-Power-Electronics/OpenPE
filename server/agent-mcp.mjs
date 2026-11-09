@@ -3,8 +3,8 @@ import { pathToFileURL } from 'node:url';
 import {
   agentCapabilityTools,
   validateAgentCapabilityCall,
-  boundedAgentJSON,
   agentCapabilityLimits,
+  agentCapabilityContent,
 } from './agent-capabilities.mjs';
 
 /** The helper can contact only its one ephemeral loopback capability endpoint.
@@ -99,12 +99,14 @@ export function startAgentMCP({
       const result = JSON.parse(text);
       if (!response.ok || result.error)
         throw new Error(result.error || 'OpenPE rejected the request.');
+      const content = agentCapabilityContent(name, args, result.result);
       reply({
         content: [
           {
             type: 'text',
-            text: boundedAgentJSON(result.result, agentCapabilityLimits.resultBytes),
+            text: content.text,
           },
+          ...(content.image ? [{ type: 'image', mimeType: 'image/png', data: content.image }] : []),
         ],
       });
     } catch (error) {

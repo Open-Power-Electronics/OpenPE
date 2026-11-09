@@ -63,7 +63,6 @@ input.on('line', (line) => {
         arguments: {
           name: 'schematic.setValue',
           input: { id: 'R1', value: '10k' },
-          expectedRevision: '1',
         },
       },
     });

@@ -6,6 +6,9 @@ import {
   type SpiceInitialCondition,
 } from './simulation-initial-conditions';
 import {
+  activePassiveModel,
+  canSelectPassiveSimulationModel,
+  passiveConnectorSymbol,
   assertSimulationModelConfiguration,
   effectiveSimulationModelFields,
 } from './simulation-model-source';
@@ -15,10 +18,16 @@ import {
   simulationParameterValue,
 } from './simulation-parameters';
 import { libraries, type Circuit, type Part } from './circuit';
-import { partFields, unitGraphics } from './library';
+import { displayPartValue, partFields, unitGraphics } from './library';
 import { child, children, val } from './sexpr';
 import { schematicTexts } from './schematic-text';
-import { spiceNets, type SpiceDeck, type SpiceTrace, type TransientConfig } from './spice';
+import {
+  passiveValue,
+  spiceNets,
+  type SpiceDeck,
+  type SpiceTrace,
+  type TransientConfig,
+} from './spice';
 import snapshot from './example-simulation.json';
 import referenceSnapshot from './reference-simulation.json';
 import { transientOutputStep, validateTransientTiming } from './spice-timing';
@@ -147,14 +156,21 @@ export function exampleSimulationProfile(d: Circuit) {
             binding['Sim.Name'] === def.sim['Sim.Name']
           : def.libId === p.libId),
     );
-    if (definition) return { ...definition, ref: p.ref, libId: p.libId };
+    const connectorModel =
+      p.libId === passiveConnectorSymbol && canSelectPassiveSimulationModel(p, d)
+        ? activePassiveModel(partFields(p))
+        : undefined;
+    if (definition && !connectorModel) return { ...definition, ref: p.ref, libId: p.libId };
     const kind = /^Device:([RCL])$/.exec(p.libId)?.[1];
-    if (kind && libraries[p.libId] && signature({ ...d, libraries }, p) === actualSignature)
+    if (
+      connectorModel ||
+      (kind && libraries[p.libId] && signature({ ...d, libraries }, p) === actualSignature)
+    )
       return {
         ref: p.ref,
         libId: p.libId,
         signature: actualSignature,
-        kind,
+        kind: connectorModel ?? kind!,
         terminals: ['1', '2'],
         pinOrder: ['1', '2'],
         sim: {},
@@ -210,6 +226,8 @@ function modelParameters(text: string, expected: string) {
   );
 }
 function passive(d: Circuit, p: Part, def: Pick<Definition, 'kind'>) {
+  const model = activePassiveModel(partFields(p));
+  if (model) return String(passiveValue(displayPartValue(p), model));
   const text = (fields(d, p)['Sim.Params'] || p.value).trim();
   const load = text.match(
     new RegExp(
@@ -259,7 +277,12 @@ function source(d: Circuit, p: Part) {
 function validate(d: Circuit, profile: Profile) {
   for (const p of simulationParts(d)) {
     assertSimulationModelConfiguration(p);
-    const def = profile.parts.find((v) => v.ref === p.ref)!;
+    const original = profile.parts.find((v) => v.ref === p.ref)!;
+    const model = activePassiveModel(partFields(p));
+    const def =
+      model && ['R', 'C', 'L'].includes(original.kind) ? { ...original, kind: model } : original;
+    if (model && def === original)
+      throw new Error(`${p.ref}: the example requires its original simulation device.`);
     if (def.kind === 'unsupported')
       throw new Error(`${p.ref}: unsupported model identity or simulation field for ${p.libId}.`);
     const signature = unitGraphics(d.libraries[p.libId], p.unit || 1)
@@ -281,12 +304,13 @@ function validate(d: Circuit, profile: Profile) {
     const defaults = def.sim as Record<string, string>;
     const sim = fields(d, p, defaults),
       expected =
-        partFields(p)['OpenPE.ModelSource'] === 'basic'
+        partFields(p)['OpenPE.ModelSource'] === 'basic' || model
           ? effectiveSimulationModelFields(
               p,
               {
                 ...defaults,
                 'OpenPE.ModelSource': 'basic',
+                ...(model ? { 'OpenPE.PassiveModel': model } : {}),
                 ...(partFields(p)['OpenPE.SourceType']
                   ? { 'OpenPE.SourceType': partFields(p)['OpenPE.SourceType'] }
                   : {}),
@@ -380,7 +404,10 @@ function validate(d: Circuit, profile: Profile) {
     )
       throw new Error('Connect the input voltage source to the controller VIN and ground pins.');
     for (const p of active)
-      if (profile.parts.find((def) => def.ref === p.ref)?.kind === 'C') {
+      if (
+        (activePassiveModel(partFields(p)) ??
+          profile.parts.find((def) => def.ref === p.ref)?.kind) === 'C'
+      ) {
         const voltage = initialVoltage(d, p);
         if (voltage !== undefined && Math.abs(voltage) > profile.input.initialLimit)
           throw new Error(
@@ -484,7 +511,9 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
   const identifiers = new Map<string, string>();
   d.parts.forEach((p, i) => {
     if (!participatesInSimulation(p)) return;
-    const def = profile.parts.find((v) => v.ref === p.ref)!;
+    const original = profile.parts.find((v) => v.ref === p.ref)!;
+    const model = activePassiveModel(partFields(p));
+    const def = model ? { ...original, kind: model } : original;
     if (def.kind === 'power') return;
     const ns = def.pinOrder.map((pin) => nets.node(p, pin));
     const name = `${def.kind}${i + 1}`;

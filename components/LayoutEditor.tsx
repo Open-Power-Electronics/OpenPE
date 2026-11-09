@@ -37,6 +37,7 @@ import {
   SlidersHorizontal,
   Square,
   Trash2,
+  Type,
   Pentagon,
   Scan,
   X,
@@ -70,10 +71,12 @@ import {
   pcbGraphicSelectionEligible,
   pcbSelectionEligible,
   pcbZoneSelectionEligible,
+  selectPCBPadPoint,
   selectPCBPoint,
   selectPCBTrackPoint,
   selectPCBRectangle,
   type PCBSelectionFilters,
+  type PCBSelectionMode,
 } from '@/lib/pcb-selection';
 import { expandPCBTrackSelection } from '@/lib/pcb-track-selection';
 import { previewConstrainedPCBTrackDrag, type PCBTrackDragPreview } from '@/lib/pcb-track-drag';
@@ -88,6 +91,7 @@ import {
 } from '@/lib/pcb-outline-resize';
 import {
   invalidatePCBFill,
+  resolvePCBGraphic,
   type PCB,
   type Footprint,
   type CopperLayer,
@@ -115,6 +119,7 @@ import {
   boardPolygons,
   defaultCopperFillClearance,
   fillCopperZone,
+  fillCopperZones,
   polygonPath,
   worldZones,
   type Polygon,
@@ -139,12 +144,14 @@ import {
   createPCBFootprint,
   assertPCBSelectionUnlocked,
   deletePCBSelection,
+  findPCBGraphic,
   flipPCBFootprint,
   flipPCBSelection,
   footprintPoint,
   movePCBSelection,
   padPosition,
   pcbBounds,
+  type PCBSelection,
   projectPointToTrack,
   rotatePCBSelection,
   setPCBTrackProperties,
@@ -207,10 +214,24 @@ const RetainedLayoutProperties = memo(
   (previous, next) => !previous.visible && !next.visible && previous.shown === next.shown,
 );
 
-type Selection = { kind: 'footprint' | 'track' | 'via' | 'graphic' | 'zone'; id: string };
-type SelectionCandidate = { id: string; directFootprintCaptionLayers?: readonly BoardLayer[] } & (
+type Selection = PCBSelection;
+type SelectionCandidate = { id: string; directFootprintText?: boolean } & (
   { selection: Selection; padId?: never } | { padId: string; selection?: never }
 );
+type LayoutSelectionChoice = {
+  candidates: SelectionCandidate[];
+  mode: PCBSelectionMode;
+  basis: PCB;
+};
+function mergeSelectionMode(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
+  return e.ctrlKey || e.metaKey
+    ? e.shiftKey
+      ? ('subtract' as const)
+      : ('toggle' as const)
+    : e.shiftKey
+      ? ('add' as const)
+      : ('replace' as const);
+}
 type Tool =
   'select' | 'hand' | 'place' | 'route' | 'via' | 'outline' | 'zone' | 'annotate' | 'measure';
 type View = { x: number; y: number; width: number };
@@ -237,6 +258,7 @@ type Props = {
   getRevision?: () => number;
   spiceAvailable?: boolean;
   onSavePartProperties?: ComponentProps<typeof LayoutProperties>['onSavePartProperties'];
+  onEditFootprintText?: ComponentProps<typeof LayoutProperties>['onEditFootprintText'];
   onRequestSave?: (saveAs: boolean) => void;
   syncStatus?: { pending: boolean; error: string; warnings: string[] };
   annotations: AgentAnnotation[];
@@ -300,6 +322,7 @@ function LayoutEditor({
   getRevision,
   spiceAvailable,
   onSavePartProperties,
+  onEditFootprintText,
   onRequestSave,
   syncStatus,
   annotations,
@@ -398,12 +421,30 @@ function LayoutEditor({
   const expandedSelection = useRef<{ board: PCB; key: string } | null>(null);
   const [netSearch, setNetSearch] = useState('');
   const [filters, setFilters] = useState<PCBSelectionFilters>(defaultPCBSelectionFilters);
+  const partsById = useMemo(
+    () => new Map(schematic.parts.map((part) => [part.id, part])),
+    [schematic.parts],
+  );
+  const footprintTextValues = useMemo(() => {
+    const values = new Map<string, string>();
+    for (const owner of pcb.footprints) {
+      const part = partsById.get(owner.symbolId ?? '');
+      for (const graphic of owner.graphics)
+        if (graphic.kind === 'text' && graphic.text)
+          values.set(graphic.id, resolvePCBGraphic(
+            graphic,
+            part?.ref ?? owner.reference ?? '',
+            part?.value ?? owner.value ?? '',
+          ).text!.value);
+    }
+    return values;
+  }, [pcb.footprints, partsById]);
   const annotationSelectableIds = useMemo(
     () =>
       active && visible && tool === 'annotate'
-        ? new Set(allVisibleSelections().map((item) => item.id))
+        ? new Set(allVisibleSelections(true).map((item) => item.id))
         : undefined,
-    [active && visible && tool === 'annotate', pcb, layers, filters],
+    [active && visible && tool === 'annotate', pcb, layers, filters, footprintTextValues],
   );
   const [inspectedPadId, setInspectedPadId] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -569,7 +610,11 @@ function LayoutEditor({
     mode: 'replace' | 'add' | 'toggle' | 'subtract';
     basis: PCB;
     clickCandidate?: SelectionCandidate;
+    clickChoices?: SelectionCandidate[];
   } | null>(null);
+  const [selectionChoice, setSelectionChoice] = useState<
+    (LayoutSelectionChoice & { position: { x: number; y: number } }) | null
+  >(null);
   const [gesture, setGesture] = useState<{
     start: Point;
     end: Point;
@@ -579,7 +624,11 @@ function LayoutEditor({
   const pointer = useRef<number | null>(null);
   const pointerStart = useRef<Point | null>(null);
   const pointerMoved = useRef(false);
-  const pointerSelection = useRef<{ selection: Selection; basis: PCB } | null>(null);
+  const pointerSelection = useRef<{
+    selection: Selection;
+    basis: PCB;
+    choices?: SelectionCandidate[];
+  } | null>(null);
   const pointerPosition = useRef<{ clientX: number; clientY: number } | null>(null);
   const lastCanvasPoint = useRef<Point | null>(null);
   const pan = useRef<{
@@ -600,8 +649,8 @@ function LayoutEditor({
     selected?.kind === 'track' ? pcb.tracks.find((t) => t.id === selected.id) : undefined;
   const selectedVia =
     selected?.kind === 'via' ? pcb.vias.find((v) => v.id === selected.id) : undefined;
-  const selectedGraphic =
-    selected?.kind === 'graphic' ? pcb.graphics.find((g) => g.id === selected.id) : undefined;
+  const graphicSelection = selected?.kind === 'graphic' ? findPCBGraphic(pcb, selected.id) : undefined;
+  const selectedGraphic = graphicSelection?.graphic;
   const selectedRectangle = useMemo(() => findPCBRectangle(pcb, selection), [pcb, selection]);
   const outlineResizePreview = useMemo(() => {
     if (!outlineResize || outlineResize.basis !== pcb) return null;
@@ -953,10 +1002,6 @@ function LayoutEditor({
       })) ?? [],
     [pcb, route?.legs, route?.netId, routeClearance],
   );
-  const partsById = useMemo(
-    () => new Map(schematic.parts.map((part) => [part.id, part])),
-    [schematic.parts],
-  );
   const netNames = useMemo(() => new Map(pcb.nets.map((n) => [n.id, n.name])), [pcb.nets]);
   const [emptyCopper] = useState(() => ({ fills: new Map<string, Polygon[]>(), error: '' }));
   const baselineCopper = useMemo(() => {
@@ -1285,7 +1330,7 @@ function LayoutEditor({
   });
   useEffect(() => {
     cancelGesture();
-    const eligible = new Set(allVisibleSelections().map((item) => `${item.kind}:${item.id}`));
+    const eligible = new Set(allVisibleSelections(true).map((item) => `${item.kind}:${item.id}`));
     setAnnotationIds((current) => {
       const next = current.filter((id) => {
         const item = objectSelection(pcb, id);
@@ -1324,6 +1369,7 @@ function LayoutEditor({
     setDrag(null);
     setTrackDrag(null);
     setMarquee(null);
+    setSelectionChoice(null);
     setRoute(null);
     setRoutePointer(null);
     lastCanvasPoint.current = null;
@@ -1358,6 +1404,7 @@ function LayoutEditor({
   }, [Boolean(onAnalysisProbe)]);
   useEffect(() => {
     if (visible) return;
+    setSelectionChoice(null);
     if (pan.current) releasePointer();
     // Leaving this view cancels unfinished drawing transactions. Temporary
     // modal input suspension keeps them, along with retained tool settings.
@@ -1574,6 +1621,7 @@ function LayoutEditor({
     setDrag(null);
     setTrackDrag(null);
     setMarquee(null);
+    setSelectionChoice(null);
     setGesture(null);
     setOutlineResize(null);
   }
@@ -1760,11 +1808,11 @@ function LayoutEditor({
     if (b.footprints.some((f) => f.id === id)) return { kind: 'footprint', id };
     if (b.tracks.some((t) => t.id === id)) return { kind: 'track', id };
     if (b.vias.some((v) => v.id === id)) return { kind: 'via', id };
-    if (b.graphics.some((g) => g.id === id)) return { kind: 'graphic', id };
+    if (findPCBGraphic(b, id)) return { kind: 'graphic', id };
     if (b.zones.some((z) => z.id === id)) return { kind: 'zone', id };
     return null;
   }
-  function allVisibleSelections() {
+  function allVisibleSelections(includeOwnedText = false) {
     const bounds = pcbBounds(pcb);
     return selectPCBRectangle(
       pcb,
@@ -1772,6 +1820,10 @@ function LayoutEditor({
       filters,
       { x: bounds.maxX + 1, y: bounds.minY - 1 },
       { x: bounds.minX - 1, y: bounds.maxY + 1 },
+      undefined,
+      undefined,
+      footprintTextValues,
+      includeOwnedText,
     );
   }
   function hit(e: { target: EventTarget | null }) {
@@ -1779,11 +1831,6 @@ function LayoutEditor({
     const owner = element.closest('[data-selection-id], [data-footprint-body]');
     const id =
       owner?.getAttribute('data-selection-id') ?? owner?.getAttribute('data-footprint-body');
-    const padId = element.closest('[data-pad-id]')?.getAttribute('data-pad-id');
-    const footprint = pcb.footprints.find((f) => f.pads.some((p) => p.id === padId));
-    const pad = footprint?.pads.find((p) => p.id === padId);
-    const via = pcb.vias.find((v) => v.id === id);
-    const track = pcb.tracks.find((t) => t.id === id);
     const graphicId = element
       .closest('[data-footprint-graphic]')
       ?.getAttribute('data-footprint-graphic');
@@ -1793,10 +1840,9 @@ function LayoutEditor({
       element.closest('[data-copper-fill]')?.getAttribute('data-copper-fill');
     const zone = zoneId ? selectionZones.get(zoneId) : null;
     const eligible =
-      (!element.closest('[data-footprint-captions]') || (filters.text ?? filters.graphic)) &&
       (!graphic || pcbGraphicSelectionEligible(graphic, filters)) &&
       (!zone || pcbZoneSelectionEligible(zone, filters));
-    return { id, footprint, pad, via, track, eligible };
+    return { id, eligible };
   }
   function openPlacement() {
     if (tool === 'place' && placement) {
@@ -1865,7 +1911,7 @@ function LayoutEditor({
             )
           : includePads,
       );
-      const candidate = pointCandidate(at, candidates);
+      const candidate = pointCandidate(at, candidates, kinds?.length === 1 && kinds[0] === 'track');
       if (candidate) {
         onChoose(candidate, pickup);
         return null;
@@ -1942,21 +1988,49 @@ function LayoutEditor({
     setHighlightNets(new Set(nets));
     setCanvasFocusRequest((value) => value + 1);
   }
-  function selectCandidate(
-    candidate: SelectionCandidate,
-    mode: 'replace' | 'add' | 'toggle' | 'subtract',
-  ) {
+  function selectCandidate(candidate: SelectionCandidate, mode: PCBSelectionMode) {
     if (candidate.selection && !pcbSelectionEligible(pcb, candidate.selection, filters)) return;
     if (!candidate.selection && !filters.pad) return;
     expandedSelection.current = null;
     if (!candidate.selection) {
-      setInspectedPadId(candidate.padId);
+      const clear = mode === 'subtract' || (mode === 'toggle' && inspectedPadId === candidate.padId);
+      setInspectedPadId(clear ? '' : candidate.padId);
       setSelection([]);
     } else {
       setInspectedPadId('');
       setSelection((current) => mergePCBSelection(current, [candidate.selection], mode));
     }
     setInspector(true);
+  }
+  function selectionChoiceAction(
+    candidate: SelectionCandidate,
+    mode: PCBSelectionMode,
+  ): CanvasMenuAction {
+    let label = 'Via';
+    let icon = CircleDot;
+    if (!candidate.selection) {
+      const owner = pcb.footprints.find((item) =>
+        item.pads.some((pad) => pad.id === candidate.padId),
+      );
+      const pad = owner?.pads.find((item) => item.id === candidate.padId);
+      const reference = partsById.get(owner?.symbolId ?? '')?.ref ?? owner?.reference;
+      label = [`Pad ${pad?.number || '—'}`, reference].filter(Boolean).join(' · ');
+      icon = Square;
+    } else if (candidate.selection.kind === 'track') {
+      const track = pcb.tracks.find((item) => item.id === candidate.selection.id);
+      label = ['Track', track?.layer, track && netNames.get(track.netId)]
+        .filter(Boolean)
+        .join(' · ');
+      icon = Route;
+    } else if (candidate.selection.kind === 'graphic') {
+      const graphic = findPCBGraphic(pcb, candidate.selection.id)?.graphic;
+      const value = footprintTextValues.get(candidate.selection.id) ?? graphic?.text?.value;
+      label = [value?.trim() || 'Silkscreen graphic', graphic?.layer]
+        .filter(Boolean)
+        .join(' · ');
+      icon = graphic?.kind === 'text' ? Type : Pentagon;
+    }
+    return { id: candidate.id, label, icon, run: () => selectCandidate(candidate, mode) };
   }
   function selectionCandidates(
     e: { clientX: number; clientY: number },
@@ -1976,8 +2050,7 @@ function LayoutEditor({
         }),
       );
     const objects: Selection[] = [];
-    const padIds = new Set<string>();
-    const captionLayers = new Map<string, Set<BoardLayer>>();
+    const directText = new Set<string>();
     for (const element of document.elementsFromPoint(e.clientX, e.clientY)) {
       if (!svg.current?.contains(element)) continue;
       if (!includeFills && element.closest('[data-copper-fill]')) continue;
@@ -1990,20 +2063,11 @@ function LayoutEditor({
         (object.kind !== 'footprint' || layers.footprints)
       ) {
         objects.push(object);
-        if (object.kind === 'footprint' && element.closest('[data-footprint-captions]')) {
-          const captionLayer = element
-            .closest('[data-pcb-layer]')
-            ?.getAttribute('data-pcb-layer') as BoardLayer | null;
-          if (captionLayer) {
-            const hitLayers = captionLayers.get(object.id) ?? new Set<BoardLayer>();
-            hitLayers.add(captionLayer);
-            captionLayers.set(object.id, hitLayers);
-          }
-        }
+        if (object.kind === 'graphic' && element.closest('[data-footprint-text]'))
+          directText.add(object.id);
       }
-      if (filters.pad && target.pad) padIds.add(target.pad.id);
     }
-    const candidates: SelectionCandidate[] = [...padIds].map((id) => ({
+    const candidates: SelectionCandidate[] = selectPCBPadPoint(pcb, layers, filters, raw, margin).map((id) => ({
       id: `pad:${id}`,
       padId: id,
     }));
@@ -2013,15 +2077,14 @@ function LayoutEditor({
       includeFills,
       includeRegionInteriors: tool === 'select',
       preciseCandidates: objects,
+      footprintTextValues,
       hasPrecisePad: candidates.length > 0,
     });
     for (const object of uniqueObjects) {
       candidates.push({
         id: `${object.kind}:${object.id}`,
         selection: object,
-        ...(captionLayers.has(object.id)
-          ? { directFootprintCaptionLayers: [...captionLayers.get(object.id)!] }
-          : {}),
+        ...(directText.has(object.id) ? { directFootprintText: true } : {}),
       });
     }
     return candidates;
@@ -2029,25 +2092,22 @@ function LayoutEditor({
   function pointCandidate(
     at: { clientX: number; clientY: number },
     candidates = selectionCandidates(at),
+    trackPickup = false,
+    onAmbiguous?: (candidates: SelectionCandidate[]) => void,
   ) {
     return choosePCBPointCandidate(pcb, layers, candidates, canvasPoint(at, false), {
       tolerance: (view.width / size.width) * 3,
       tieTolerance: (view.width / size.width) * 0.1,
       priorityLayer: priorityLayer ?? undefined,
+      activeCopperLayer: layer,
+      trackPickup,
+      onAmbiguous,
       layerOrder: physicalLayerOrder,
       filters,
       preparedFills: placed === pcb ? copper.fills : undefined,
       includeRegionInteriors: tool === 'select',
+      footprintTextValues,
     });
-  }
-  function selectionMode(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
-    return e.ctrlKey || e.metaKey
-      ? e.shiftKey
-        ? ('subtract' as const)
-        : ('toggle' as const)
-      : e.shiftKey
-        ? ('add' as const)
-        : ('replace' as const);
   }
   function beginMove(targets?: Selection[], pickup?: Point, padId?: string) {
     if (tool !== 'select' || drag || trackDrag || marquee || pointer.current !== null) return;
@@ -2085,11 +2145,14 @@ function LayoutEditor({
           )?.padId
         : undefined);
     const pickupPad = footprint?.pads.find((pad) => pad.id === pickupPadId);
+    const graphic = ids.length === 1 && ids[0].kind === 'graphic'
+      ? findPCBGraphic(pcb, ids[0].id)
+      : undefined;
     const anchor = footprint
       ? pickupPad
         ? padPosition(footprint, pickupPad)
         : { x: footprint.x, y: footprint.y }
-      : at;
+      : graphic?.owner ? footprintPoint(graphic.owner, graphic.graphic.start) : at;
     setSelection(ids);
     setInspectedPadId('');
     setInspector(true);
@@ -2276,7 +2339,16 @@ function LayoutEditor({
             footprints: pcb.footprints.filter((f) => has(f.id)),
             tracks: pcb.tracks.filter((t) => has(t.id)),
             vias: pcb.vias.filter((v) => has(v.id)),
-            graphics: pcb.graphics.filter((g) => has(g.id)),
+            graphics: [
+              ...pcb.graphics.filter((g) => has(g.id)),
+              ...ids.flatMap((item) => {
+                if (item.kind !== 'graphic') return [];
+                const hit = findPCBGraphic(pcb, item.id);
+                if (!hit?.owner || has(hit.owner.id)) return [];
+                const at = footprintPoint(hit.owner, hit.graphic.start);
+                return [{ ...hit.graphic, start: at, end: at }];
+              }),
+            ],
             zones: pcb.zones.filter((z) => has(z.id)),
           })
         : null;
@@ -2623,14 +2695,17 @@ function LayoutEditor({
   function updateZone(next: PCB['zones'][number]) {
     return commit({ ...pcb, zones: pcb.zones.map((z) => (z.id === next.id ? next : z)) });
   }
-  async function fillZone(zoneId: string) {
+  async function fillZone(zoneId?: string) {
     if (!active || fillBusy) return;
     setFillBusy(true);
     try {
       if (capabilityHost) {
-        await capabilityHost.execute('layout.fill', { boardId: pcb.id, zoneId });
+        await capabilityHost.execute('layout.fill', {
+          boardId: pcb.id,
+          ...(zoneId ? { zoneId } : {}),
+        });
       } else {
-        const next = fillCopperZone(pcb, zoneId);
+        const next = zoneId ? fillCopperZone(pcb, zoneId) : fillCopperZones(pcb);
         if (!onCommit(next)) return;
       }
       setLayers((current) => ({ ...current, copper: true }));
@@ -2804,23 +2879,36 @@ function LayoutEditor({
       else if (!same(corner, outlinePoints.at(-1)!)) setOutlinePoints([...outlinePoints, corner]);
       return;
     }
+    const mode = mergeSelectionMode(e);
     let candidate: SelectionCandidate | undefined;
+    let choices: SelectionCandidate[] | undefined;
     try {
-      candidate = pointCandidate(e, selectionCandidates(e, e.altKey));
+      const candidates = selectionCandidates(e, e.altKey);
+      const eligible =
+        mode === 'subtract'
+          ? candidates.filter((item) =>
+              item.selection
+                ? selection.some((selected) => selected.id === item.selection!.id)
+                : item.padId === inspectedPadId,
+            )
+          : candidates;
+      candidate = pointCandidate(e, eligible, false, (items) => {
+        choices = items;
+      });
     } catch (error) {
       releasePointer();
       setError((error as Error).message);
       return;
     }
-    const mode = selectionMode(e);
+    const selectedForDrag = (item: SelectionCandidate) =>
+      selection.some(
+        (selected) => selected.kind === item.selection?.kind && selected.id === item.selection.id,
+      );
+    const pickedForDrag = mode === 'replace' ? choices?.find(selectedForDrag) : undefined;
+    if (pickedForDrag) candidate = pickedForDrag;
     if (
       candidate &&
-      !pointerDragsObject(
-        leftButtonDrag,
-        selection.some(
-          (item) => item.kind === candidate.selection?.kind && item.id === candidate.selection.id,
-        ),
-      )
+      ((choices && !pickedForDrag) || !pointerDragsObject(leftButtonDrag, selectedForDrag(candidate)))
     ) {
       setMarquee({
         start: canvasPoint(e, false),
@@ -2829,6 +2917,7 @@ function LayoutEditor({
         mode,
         basis: pcb,
         clickCandidate: candidate,
+        clickChoices: choices,
       });
       return;
     }
@@ -2839,7 +2928,7 @@ function LayoutEditor({
     setInspectedPadId('');
     const object = candidate?.selection;
     if (object) {
-      if (mode === 'replace') pointerSelection.current = { selection: object, basis: pcb };
+      if (mode === 'replace') pointerSelection.current = { selection: object, basis: pcb, choices };
       const ids =
         mode === 'replace'
           ? selection.some((s) => s.id === object.id)
@@ -3085,7 +3174,16 @@ function LayoutEditor({
       if (!moved) inspectAnalysisComponent(canvasPoint(e, false));
       return;
     }
-    if (!moved && picked?.basis === latestBoard.current) setSelection([picked.selection]);
+    if (!moved && picked?.basis === latestBoard.current) {
+      if (picked.choices)
+        setSelectionChoice({
+          candidates: picked.choices,
+          mode: 'replace',
+          basis: pcb,
+          position: { x: e.clientX, y: e.clientY },
+        });
+      else setSelection([picked.selection]);
+    }
     if (trackDrag?.pointer)
       finishTrackDrag(
         e.ctrlKey || e.metaKey ? routeFreePoint(canvasPoint(e, false)) : canvasPoint(e),
@@ -3108,9 +3206,17 @@ function LayoutEditor({
             end,
             placed === pcb ? copper.fills : undefined,
             priorityLayer ?? undefined,
+            footprintTextValues,
           )
         : [];
-      if (!moved && marquee.clickCandidate) selectCandidate(marquee.clickCandidate, marquee.mode);
+      if (!moved && marquee.clickChoices)
+        setSelectionChoice({
+          candidates: marquee.clickChoices,
+          mode: marquee.mode,
+          basis: pcb,
+          position: { x: e.clientX, y: e.clientY },
+        });
+      else if (!moved && marquee.clickCandidate) selectCandidate(marquee.clickCandidate, marquee.mode);
       else {
         const next = mergePCBSelection(marquee.selection, ids, marquee.mode);
         setSelection(next);
@@ -3146,6 +3252,7 @@ function LayoutEditor({
                 gesture.end,
                 placed === pcb ? copper.fills : undefined,
                 priorityLayer ?? undefined,
+                footprintTextValues,
               ).map((item) => item.id)
             : [];
         if (annotationMode !== 'element') {
@@ -4040,6 +4147,21 @@ function LayoutEditor({
     () => ({ pcb, selection, inspectedPadId, tool, revision: getRevision?.() }),
     [pcb, selection, inspectedPadId, tool, getRevision?.()],
   );
+  const enabledPour = (zone: PCB['zones'][number]) =>
+    !zone.keepout && zone.fillEnabled !== false && zone.layer.endsWith('.Cu');
+  const contextFillAll: CanvasMenuAction[] =
+    contextIdle &&
+    (pcb.zones.some(enabledPour) || pcb.footprints.some((item) => item.zones?.some(enabledPour)))
+      ? [
+          {
+            id: 'fill-all',
+            label: 'Fill all copper zones',
+            icon: PaintBucket,
+            disabled: contextEditingBlocked,
+            run: () => fillZone(),
+          },
+        ]
+      : [];
   const contextObjectActions: CanvasMenuAction[] = [];
   if (contextIdle && (selection.length || inspectedPad)) {
     contextObjectActions.push({
@@ -4137,7 +4259,7 @@ function LayoutEditor({
         run: () => highlightSelectionNet(selection, inspectedPad?.id),
       });
     }
-    contextObjectActions.push({
+    contextObjectActions.push(...contextFillAll, {
       id: 'lock',
       label: contextAllLocked ? 'Unlock selection' : 'Lock selection',
       icon: LockKeyhole,
@@ -4422,6 +4544,7 @@ function LayoutEditor({
               }}
               onWheel={(e) => {
                 if (!active || hasOpenOverlay() || e.deltaY === 0) return;
+                setSelectionChoice(null);
                 const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
                 const width = camera.getSnapshot().width;
                 if (layoutZoomWidth(width, factor) === width) zoom(factor);
@@ -5037,14 +5160,43 @@ function LayoutEditor({
                 );
               }}
             </LayoutCameraScaleRender>
+            {selectionChoice && selectionChoice.basis === pcb && contextIdle && visible && (
+              <CanvasContextMenu
+                target={svg}
+                active={active}
+                identity={contextIdentity}
+                label="Choose layout object"
+                initialPosition={selectionChoice.position}
+                onDismiss={() => setSelectionChoice(null)}
+                onError={setError}
+                actions={selectionChoice.candidates.map((candidate) =>
+                  selectionChoiceAction(candidate, selectionChoice.mode),
+                )}
+              />
+            )}
             <CanvasContextMenu
               target={svg}
-              active={active}
+              active={active && !selectionChoice}
               identity={contextIdentity}
               onError={setError}
               onOpen={(_target, position) => {
                 if (!contextIdle || contextEditingBlocked || !position) return;
-                const candidate = pointCandidate({ clientX: position.x, clientY: position.y });
+                const at = { clientX: position.x, clientY: position.y };
+                let choices: SelectionCandidate[] | undefined;
+                let candidate = pointCandidate(at, selectionCandidates(at), false, (items) => {
+                  choices = items;
+                });
+                if (choices) {
+                  candidate = choices.find((item) =>
+                    item.selection
+                      ? selection.some((selected) => selected.id === item.selection!.id)
+                      : item.padId === inspectedPadId,
+                  );
+                  if (!candidate) {
+                    setSelectionChoice({ candidates: choices, basis: pcb, mode: 'replace', position });
+                    return;
+                  }
+                }
                 if (!candidate) return;
                 if (
                   candidate.selection
@@ -5088,6 +5240,7 @@ function LayoutEditor({
                         disabled: exporting,
                         run: exportImage,
                       },
+                      ...contextFillAll,
                       {
                         id: 'select-all',
                         label: 'Select all',
@@ -5248,6 +5401,8 @@ function LayoutEditor({
                         track={selectedTrack}
                         via={selectedVia}
                         graphic={selectedGraphic}
+                        graphicOwner={graphicSelection?.owner}
+                        graphicDisplayText={selectedGraphic && footprintTextValues.get(selectedGraphic.id)}
                         zone={selectedZone}
                         pad={inspectedPad}
                         padOwner={inspectedFootprint}
@@ -5278,6 +5433,7 @@ function LayoutEditor({
                         getRevision={getRevision}
                         spiceAvailable={spiceAvailable}
                         onSavePartProperties={onSavePartProperties}
+                        onEditFootprintText={onEditFootprintText}
                         onRequestSave={onRequestSave}
                         capabilityHost={capabilityHost}
                         onTrack={updateTrack}

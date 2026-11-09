@@ -12,12 +12,17 @@ const bundle = await build({
       import React from 'react';
       import {createRoot} from 'react-dom/client';
       import Navigation from './components/ProjectNavigation';
-      const projects=[{id:'a',title:'Project A',unsaved:false,sessions:[{id:'session-a',title:'Existing conversation'}]},
-        {id:'b',title:'Project B',unsaved:false}];
+      const projects=[{id:'a',title:'Project A',unsaved:false,sessions:[
+        {id:'session-a',title:'Existing conversation',pinned:true},
+        {id:'session-a-latest',title:'Latest conversation'},
+        {id:'session-a-archived',title:'Archived conversation',archived:true}]},
+        {id:'b',title:'Project B',unsaved:false,sessions:[{id:'session-b',title:'Other project conversation'}]},
+        {id:'empty',title:'Empty navigation',unsaved:false}];
       window.menuEvents=[];
       createRoot(document.getElementById('root')).render(<nav className="nav-rail">
         <Navigation projects={projects} activeId="a" activeSessionId="session-a"
-          onSelect={id=>window.menuEvents.push({kind:'session',id})}
+          onSelect={(id,sessionId)=>window.menuEvents.push({kind:'select',id,sessionId})}
+          onNewSession={id=>window.menuEvents.push({kind:'session',id})}
           onAction={(id,action)=>window.menuEvents.push({kind:'file',id,action})}
           onSelectSession={()=>{}} onSessionAction={()=>{}}/>
       </nav>);`,
@@ -44,6 +49,39 @@ try {
   const first = page.locator('[data-project-id="a"] .project-folder button');
   const second = page.locator('[data-project-id="b"] .project-folder button');
   const menu = page.getByRole('menu', { name: 'Project file actions', exact: true });
+  const rings = await page.locator('.project-session').count();
+  await first.click();
+  await first.click();
+  await second.click();
+  await first.focus();
+  await first.press('Enter');
+  await first.press('Space');
+  const beforeComposition = await page.evaluate(() => window.menuEvents.length);
+  await first.evaluate((element) =>
+    element.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    ),
+  );
+  assert.equal(await page.evaluate(() => window.menuEvents.length), beforeComposition);
+  await page.locator('[data-project-id="empty"] .project-folder button').click();
+  assert.deepEqual(await page.evaluate(() => window.menuEvents), [
+    { kind: 'select', id: 'a', sessionId: 'session-a-latest' },
+    { kind: 'select', id: 'a', sessionId: 'session-a-latest' },
+    { kind: 'select', id: 'b', sessionId: 'session-b' },
+    { kind: 'select', id: 'a', sessionId: 'session-a-latest' },
+    { kind: 'select', id: 'a', sessionId: 'session-a-latest' },
+    { kind: 'select', id: 'empty', sessionId: undefined },
+  ]);
+  assert.equal(await page.locator('.project-session').count(), rings);
+  await page.evaluate(() => {
+    window.menuEvents = [];
+  });
   await first.click({ button: 'right' });
   assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), [
     'Pin',
@@ -53,6 +91,7 @@ try {
     'Save as',
     'Show in File Explorer',
     'Close project',
+    'Restore Archived conversation',
   ]);
   await menu.getByRole('menuitem', { name: 'New session', exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.menuEvents), [{ kind: 'session', id: 'a' }]);
@@ -97,6 +136,9 @@ try {
   );
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 360, height: 400 });
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
   await second.dispatchEvent('contextmenu', { clientX: 350, clientY: 390 });
   await menu.waitFor();
   const bounds = await menu.boundingBox();
@@ -115,7 +157,7 @@ try {
   await page.screenshot({ path: 'test-results/project-session-menu/dark.png' });
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: New session menu targets the clicked project, preserves file actions, and supports keyboard/IME, focus return and narrow layouts.',
+    'PASS: Project folders select the latest unarchived session without creating one; New session stays explicit, with keyboard/IME, focus and narrow-layout coverage.',
   );
 } finally {
   await browser.close();

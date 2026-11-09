@@ -148,7 +148,7 @@ export default function ModelDisplayPanel({
       >
         <>
           <div
-            className="layout-appearance-tabs model-visualization-tabs"
+            className="editor-dock-tabs editor-visualization-tabs model-visualization-tabs"
             role="tablist"
             aria-label="Model visualization"
           >
@@ -156,6 +156,7 @@ export default function ModelDisplayPanel({
               <button
                 key={name}
                 type="button"
+                className="editor-dock-tab"
                 role="tab"
                 id={`${id}-${name}-tab`}
                 aria-selected={tab === name}

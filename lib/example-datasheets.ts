@@ -60,6 +60,12 @@ export type ProjectDatasheetContext = {
 // maps; build-format validates every record against the exact record schema.
 const records = catalog as unknown as readonly ICDatasheetRecord[];
 
+/** Fixed host resource identity; never accepts a path or download URL. */
+export function datasheetRecord(id: string): ICDatasheetRecord | null {
+  const record = records.find((record) => record.example.id === id);
+  return record ? structuredClone(record) : null;
+}
+
 export function projectDatasheetContext(project: Project | null): ProjectDatasheetContext {
   const identity = (part: NonNullable<Project['schematic']['parts']>[number]) =>
     (part.raw && val(child(part.raw, 'lib_id'))) || part.libId;

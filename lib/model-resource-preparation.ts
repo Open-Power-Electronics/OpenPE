@@ -3,7 +3,14 @@ import type { Footprint, FootprintModel } from './pcb';
 import type { SpiceModelDeclaration } from './bridge';
 import { partFields } from './library';
 import { validateFootprintModelPath } from './pcb-properties';
-import { basicSimulationAvailable, simulationModelSource } from './simulation-model-source';
+import {
+  basicSimulationAvailable,
+  basicSimulationKind,
+  canSelectPassiveSimulationModel,
+  isPassiveSimulationModel,
+  simulationModelSource,
+  type PassiveSimulationModel,
+} from './simulation-model-source';
 import {
   simulationLibraryForPath,
   simulationLibraryDeclaration,
@@ -58,7 +65,7 @@ export function prepareSimulationModelSelection(
   part: Part,
   current: Record<string, string>,
   selection:
-    | { source: 'basic' }
+    | { source: 'basic'; passiveModel?: PassiveSimulationModel | null }
     | {
         source: 'external';
         name: string;
@@ -67,8 +74,35 @@ export function prepareSimulationModelSelection(
       },
 ) {
   if (selection.source === 'basic') {
-    if (!basicSimulationAvailable(part)) throw new Error('This component has no intrinsic model.');
-    return { ...current, 'OpenPE.ModelSource': 'basic' };
+    const fields: Record<string, string> = { ...current, 'OpenPE.ModelSource': 'basic' };
+    if (selection.passiveModel === null) {
+      if (!canSelectPassiveSimulationModel(part, circuit) || current['Sim.Library']?.trim())
+        throw new Error('Clear the built-in model on a supported symbol without a library file.');
+      delete fields['OpenPE.PassiveModel'];
+      delete fields['OpenPE.ModelSource'];
+      return fields;
+    }
+    if (selection.passiveModel !== undefined) {
+      if (
+        !canSelectPassiveSimulationModel(part, circuit) ||
+        !isPassiveSimulationModel(selection.passiveModel)
+      )
+        throw new Error('Choose R, C or L for a supported two-terminal passive symbol.');
+      if (
+        fields['OpenPE.PassiveModel'] !== undefined ||
+        selection.passiveModel !== basicSimulationKind(part)
+      )
+        fields['OpenPE.PassiveModel'] = selection.passiveModel;
+    }
+    if (
+      !basicSimulationAvailable(part) &&
+      !(
+        canSelectPassiveSimulationModel(part, circuit) &&
+        isPassiveSimulationModel(fields['OpenPE.PassiveModel'])
+      )
+    )
+      throw new Error('This component has no intrinsic model.');
+    return fields;
   }
   const library = current['Sim.Library'];
   if (!library) throw new Error('Choose a model library first.');

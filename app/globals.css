@@ -639,9 +639,6 @@ p {
 .message.user .message-author {
   justify-content: flex-end;
 }
-.message.error .message-text {
-  font-size: var(--font-small);
-}
 .running {
   display: flex;
   align-items: center;
@@ -761,7 +758,7 @@ button:where(:hover:not(:disabled)) {
   margin-top: 8px;
   font-size: var(--font-small);
   line-height: 1.6;
-  color: var(--error);
+  color: var(--text);
 }
 @media (max-width: 1250px) {
   .chat-panel {
@@ -813,7 +810,6 @@ button:where(:hover:not(:disabled)) {
 .green {
   color: var(--brand-ink);
 }
-.message.error .message-text,
 .proposal-invalid {
   color: var(--error);
 }

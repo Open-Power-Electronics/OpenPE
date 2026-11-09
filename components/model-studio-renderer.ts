@@ -8,15 +8,20 @@ import { TexturePass } from 'three/addons/postprocessing/TexturePass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
-import { createModelRenderScene } from './model-render-scene';
+import {
+  createModelRenderScene,
+  modelRenderFloorFade,
+  modelRenderFloorName,
+  modelRenderFloorScale,
+} from './model-render-scene';
 import { createModelRenderEnvironment } from './model-render-environment';
 import { createModelRenderDenoiser } from './model-render-denoise';
 import { prepareModelShaders } from '@/lib/model-shader-warmup';
 
 export const MODEL_RENDER_SAMPLES = 64;
-export const MODEL_RENDER_MAX_DIMENSION = 2560;
+export const MODEL_RENDER_MAX_DIMENSION = 1920;
 export const MODEL_RENDER_COMPILE_TIMEOUT_MS = 120000;
-const MODEL_RENDER_RESOLUTION_SCALE = 0.75;
+const modelRenderSupersampling = 1.5;
 const MODEL_RENDER_FRAME_BUDGET_MS = 8;
 const MODEL_RENDER_TILES_PER_FRAME = 3;
 const MODEL_RENDER_MAX_TILES_PER_FRAME = 27;
@@ -52,10 +57,10 @@ export function modelRenderWorkingSize(
 ) {
   if (drawing.x <= 0 || drawing.y <= 0 || css.x <= 0 || css.y <= 0) return { width: 1, height: 1 };
   const scale = Math.min(
-    MODEL_RENDER_RESOLUTION_SCALE,
-    css.x / drawing.x,
-    css.y / drawing.y,
-    (MODEL_RENDER_RESOLUTION_SCALE * MODEL_RENDER_MAX_DIMENSION) / Math.max(drawing.x, drawing.y),
+    modelRenderSupersampling,
+    (modelRenderSupersampling * css.x) / drawing.x,
+    (modelRenderSupersampling * css.y) / drawing.y,
+    MODEL_RENDER_MAX_DIMENSION / Math.max(drawing.x, drawing.y),
   );
   return {
     width: Math.max(1, Math.floor(drawing.x * scale)),
@@ -377,6 +382,35 @@ export function specializeModelRenderShader(source: string): string {
   );
   replaceBlock('traceScene( ray, state.fogMaterial, surfaceHit )', 'traceScene( ray, surfaceHit )');
   replaceBlock('traceScene( ray, fogMaterial, surfaceHit )', 'traceScene( ray, surfaceHit )');
+  replaceBlock(
+    'uniform float backgroundAlpha;',
+    `uniform float backgroundAlpha;
+      uniform int studioFloorIndex;
+      uniform vec3 studioFloorFrame, studioFloorBackground;
+      ${modelRenderFloorFade}`,
+  );
+  replaceBlock(
+    'gl_FragColor = vec4( 0, 0, 0, 1 );',
+    'gl_FragColor = vec4( 0, 0, 0, 1 );\nfloat floorFade = 0.0;',
+  );
+  const primaryMaterial =
+    '\t\t\t\t\t\tuint materialIndex = uTexelFetch1D( materialIndexAttribute, surfaceHit.faceIndices.x ).r;';
+  replaceBlock(
+    primaryMaterial,
+    `${primaryMaterial}
+      if ( state.firstRay && int( materialIndex ) == studioFloorIndex && surfaceHit.side == 1.0 ) {
+        vec2 offset = ( ray.origin.xy + ray.direction.xy * surfaceHit.dist - studioFloorFrame.xy )
+          * studioFloorFrame.z;
+        floorFade = studioFloorFade( offset );
+        if ( floorFade >= 1.0 ) break;
+      }`,
+  );
+  replaceBlock(
+    'gl_FragColor.a *= opacity;',
+    `if ( floorFade > 0.0 )
+        gl_FragColor.rgb = mix( gl_FragColor.rgb, studioFloorBackground, floorFade );
+      gl_FragColor.a *= opacity;`,
+  );
   // The scene adapter constructs fresh physical materials without sheen or
   // iridescence. Remove their expensive spectral/velvet functions and texture
   // reads before driver optimization, retaining GGX, clearcoat and transmission.
@@ -718,6 +752,11 @@ function createPathTracingBackend(
   );
   material.backgroundMap = background;
   material.backgroundAlpha = 1;
+  const studioFloorIndex = (material.uniforms.studioFloorIndex = { value: -1 });
+  const studioFloorFrame = (material.uniforms.studioFloorFrame = { value: new THREE.Vector3() });
+  const studioFloorBackground = (material.uniforms.studioFloorBackground = {
+    value: new THREE.Color(),
+  });
   let environmentSource: THREE.DataTexture | undefined;
   const denoiser = createModelRenderDenoiser(renderer);
   let renderScene: THREE.Scene;
@@ -725,6 +764,49 @@ function createPathTracingBackend(
     type: THREE.HalfFloatType,
     depthBuffer: false,
   });
+  const resolved = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    depthBuffer: false,
+  });
+  const drawingSize = new THREE.Vector2();
+  const resolveMaterial = new THREE.ShaderMaterial({
+    name: 'OpenPE Render subpixel resolve',
+    uniforms: {
+      source: { value: image.texture },
+      sourceSize: { value: new THREE.Vector2() },
+      footprint: { value: new THREE.Vector2() },
+    },
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.NoBlending,
+    toneMapped: false,
+    vertexShader: /* glsl */ `
+      void main() {
+        gl_Position = vec4( position.xy, 0.0, 1.0 );
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D source;
+      uniform vec2 sourceSize, footprint;
+
+      void main() {
+        vec2 start = ( gl_FragCoord.xy - 0.5 ) * footprint;
+        vec2 end = start + footprint;
+        vec2 first = floor( start );
+        vec4 sum = vec4( 0.0 );
+        // A 1.5× footprint can overlap at most three source cells per axis.
+        for ( int y = 0; y < 3; y++ ) {
+          for ( int x = 0; x < 3; x++ ) {
+            vec2 cell = first + vec2( float( x ), float( y ) );
+            vec2 overlap = max( vec2( 0.0 ), min( end, cell + 1.0 ) - max( start, cell ) );
+            sum += texture2D( source, ( cell + 0.5 ) / sourceSize ) * overlap.x * overlap.y;
+          }
+        }
+        gl_FragColor = sum / ( footprint.x * footprint.y );
+      }
+    `,
+  });
+  const resolveQuad = new FullScreenQuad(resolveMaterial);
   const copyMaterial = new THREE.MeshBasicMaterial({
     map: image.texture,
     depthWrite: false,
@@ -734,6 +816,7 @@ function createPathTracingBackend(
   const copyQuad = new FullScreenQuad(copyMaterial);
   let disposed = false;
   let denoisedSample = -1;
+  let resolvedCurrent = false;
   const controller = new AbortController();
   const frameBudget = createModelRenderFrameBudget(context);
   const primary = tracer;
@@ -814,6 +897,9 @@ function createPathTracingBackend(
     releaseOutline();
     denoiser.dispose();
     image.dispose();
+    resolved.dispose();
+    resolveMaterial.dispose();
+    resolveQuad.dispose();
     copyMaterial.dispose();
     copyQuad.dispose();
     background.dispose();
@@ -865,6 +951,16 @@ function createPathTracingBackend(
         );
       generator.setObjects(scene);
       const results = generator.generate();
+      const floor = scene.children.find((object) => object.name === modelRenderFloorName);
+      if (!(floor instanceof THREE.Mesh) || Array.isArray(floor.material))
+        throw new Error('The Model studio requires its matte floor.');
+      studioFloorIndex.value = results.materials.indexOf(floor.material);
+      studioFloorFrame.value.set(
+        floor.position.x,
+        floor.position.y,
+        modelRenderFloorScale / floor.scale.x,
+      );
+      studioFloorBackground.value.copy(scene.background).multiplyScalar(scene.backgroundIntensity);
       if (results.bvhChanged) {
         material.bvh.updateFrom(results.bvh);
         material.attributesArray.updateFrom(
@@ -946,12 +1042,30 @@ function createPathTracingBackend(
       const { width, height } = tracer.target;
       const completed = modelRenderPresentationSample(tracer.samples);
       if (denoisedSample !== completed || image.width !== width || image.height !== height) {
+        resolvedCurrent = false;
         image.setSize(width, height);
         denoiser.render(tracer.target.texture, image, renderScene, camera, tracer.samples);
         denoisedSample = completed;
       }
+      renderer.getDrawingBufferSize(drawingSize);
+      const outputWidth = Math.max(1, Math.min(width, drawingSize.x));
+      const outputHeight = Math.max(1, Math.min(height, drawingSize.y));
+      const downsample = width !== outputWidth || height !== outputHeight;
+      if (downsample) {
+        if (!resolvedCurrent || resolved.width !== outputWidth || resolved.height !== outputHeight) {
+          resolvedCurrent = false;
+          resolved.setSize(outputWidth, outputHeight);
+          resolveMaterial.uniforms.sourceSize.value.set(width, height);
+          resolveMaterial.uniforms.footprint.value.set(width / outputWidth, height / outputHeight);
+          renderer.setRenderTarget(resolved);
+          resolveQuad.render(renderer);
+          resolvedCurrent = true;
+        }
+      }
+      const display = downsample ? resolved : image;
       renderer.setRenderTarget(null);
       if (!selected.length) {
+        copyMaterial.map = display.texture;
         copyQuad.render(renderer);
         return;
       }
@@ -962,7 +1076,7 @@ function createPathTracingBackend(
           new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }),
         );
         composer.setPixelRatio(1);
-        const texture = new TexturePass(image.texture);
+        const texture = new TexturePass(display.texture);
         const outline = new OutlinePass(new THREE.Vector2(1, 1), originalScene, camera);
         outline.visibleEdgeColor.set('#528bff');
         outline.hiddenEdgeColor.set(0x000000);
@@ -974,7 +1088,8 @@ function createPathTracingBackend(
         outlineState = { composer, texture, outline, output, cameraType: camera.type };
       }
       const state = outlineState;
-      state.composer.setSize(width, height);
+      state.texture.map = display.texture;
+      state.composer.setSize(display.width, display.height);
       state.outline.renderCamera = camera;
       state.outline.selectedObjects = selected;
       withOutlineState(originalScene, helpers, () => state.composer.render());
@@ -1034,6 +1149,9 @@ export function createModelStudioRenderer(
     retainedSceneBasis = '';
   let presentedSamples = -1;
   let presentedSelection: THREE.Object3D[] = [];
+  const drawing = new THREE.Vector2();
+  const css = new THREE.Vector2();
+  const presentedDrawingSize = new THREE.Vector2();
   let needsSync = true,
     needsSceneUpload = true,
     moved = false,
@@ -1086,8 +1204,8 @@ export function createModelStudioRenderer(
           presentedSamples = -1;
           moved = false;
         }
-        const drawing = renderer.getDrawingBufferSize(new THREE.Vector2()),
-          css = renderer.getSize(new THREE.Vector2());
+        renderer.getDrawingBufferSize(drawing);
+        renderer.getSize(css);
         const { width: nextWidth, height: nextHeight } = modelRenderWorkingSize(drawing, css);
         if (nextWidth !== width || nextHeight !== height) {
           backend.resize(nextWidth, nextHeight);
@@ -1103,12 +1221,14 @@ export function createModelStudioRenderer(
           if (
             !options.continuation ||
             completed !== presentedSamples ||
+            !drawing.equals(presentedDrawingSize) ||
             selected.length !== presentedSelection.length ||
             selected.some((object, index) => object !== presentedSelection[index])
           ) {
             if (backend.samples >= 1) backend.present(camera!, selected);
             else renderModelRasterPreview(renderer, physical.scene, camera!);
             presentedSamples = completed;
+            presentedDrawingSize.copy(drawing);
             presentedSelection = [...selected];
           }
           successfulFrame = true;

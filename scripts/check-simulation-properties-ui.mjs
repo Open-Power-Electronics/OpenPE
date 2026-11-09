@@ -2,12 +2,18 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
+import { tsImport } from 'tsx/esm/api';
+
+const { createPart, emptyCircuit } = await tsImport('../lib/circuit.ts', import.meta.url);
+const { createExample } = await tsImport('../lib/examples.ts', import.meta.url);
+const { createHomeExample } = await tsImport('../lib/create-home-example.ts', import.meta.url);
 
 // Isolated renderer and real document owner: no Electron, service, provider or solver.
 const bundle = await build({
   stdin: {
     contents: `
       import React, {useState, useSyncExternalStore} from 'react';
+      import {flushSync} from 'react-dom';
       import {createRoot} from 'react-dom/client';
       import PartProperties from './components/PartProperties';
       import {ProjectCore} from './core/project-core';
@@ -46,7 +52,17 @@ const bundle = await build({
             }}/></div>
         </>;
       }
-      createRoot(document.getElementById('root')).render(<Fixture/>);
+      const root = createRoot(document.getElementById('root'));
+      root.render(<Fixture/>);
+      let inspection = 0;
+      window.showSpicePresentation = ({part, circuit}) => {
+        let saves = 0;
+        window.readSpicePresentation = () => ({part, circuit, saves});
+        flushSync(() => root.render(<div className="panel inspector">
+          <PartProperties key={++inspection} part={part} circuit={circuit} spiceAvailable
+            onSave={() => { saves++; return true; }} />
+        </div>));
+      };
     `,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -83,22 +99,24 @@ try {
   const component = (snapshot) => JSON.parse(snapshot.source).schematic.components[0];
   const field = (name) => page.getByLabel(name, { exact: true });
   const button = (name) => page.getByRole('button', { name, exact: true });
-  const disclosure = page.locator('details.property-simulation');
-  const ordinary = page.locator('.part-properties > .property-fields');
+  const general = page.getByRole('tab', { name: 'General', exact: true });
+  const spice = page.getByRole('tab', { name: 'SPICE', exact: true });
+  const disclosure = page.getByRole('tabpanel', { name: 'SPICE', exact: true });
+  const ordinary = page.getByRole('tabpanel', { name: 'General', exact: true });
   const labels = {
     'OpenPE.InitialVoltage': 'Initial voltage (V)',
   };
   await field('Component value').waitFor();
   const original = await state();
-  assert.equal(await disclosure.getAttribute('open'), null);
+  assert.equal(await spice.getAttribute('aria-selected'), 'false');
   for (const label of Object.values(labels)) {
     assert.equal(await ordinary.getByLabel(label, { exact: true }).count(), 0);
     assert.equal(await field(label).isVisible(), false);
   }
-  await disclosure.locator('summary').click();
+  await general.press('ArrowRight');
+  assert.equal(await spice.getAttribute('aria-selected'), 'true');
+  assert.equal(await field('Component value').isVisible(), false);
   const sharedFields = await disclosure.evaluate((section) => {
-    const root = section.closest('.part-properties');
-    const assignment = root.querySelector('.property-resource-field .property-field-value');
     const file = section.querySelector('.property-model-choice');
     const model = section.querySelector('.property-file-models .select-trigger');
     const parameter = section.querySelector('.property-simulation-value .quantity-input');
@@ -108,21 +126,18 @@ try {
       return { left: box.left, width: box.width, height: box.height };
     };
     return {
-      assignment: bounds(assignment),
       file: bounds(file),
       model: bounds(model),
       parameter: bounds(parameter),
       inputBorder: getComputedStyle(input).borderTopWidth,
-      headingWeight: getComputedStyle(section.querySelector('summary')).fontWeight,
     };
   });
-  for (const field of [sharedFields.file, sharedFields.model, sharedFields.parameter]) {
-    assert.ok(Math.abs(field.left - sharedFields.assignment.left) <= 1);
-    assert.ok(Math.abs(field.width - sharedFields.assignment.width) <= 1);
-    assert.ok(Math.abs(field.height - sharedFields.assignment.height) <= 1);
+  for (const field of [sharedFields.model, sharedFields.parameter]) {
+    assert.ok(Math.abs(field.left - sharedFields.file.left) <= 1);
+    assert.ok(Math.abs(field.width - sharedFields.file.width) <= 1);
+    assert.ok(Math.abs(field.height - sharedFields.file.height) <= 1);
   }
   assert.equal(sharedFields.inputBorder, '0px', 'SPICE library selection has one outer outline.');
-  assert.equal(sharedFields.headingWeight, '400');
   assert.equal(await field('Series resistance (Ω)').count(), 0);
   assert.equal(await field('Coupling (unitless)').count(), 0);
   assert.equal(
@@ -146,7 +161,8 @@ try {
   assert.equal(await field('Scratch').inputValue(), '2');
   assert.deepEqual(await state(), original, 'Inspecting parameters stays clean.');
 
-  assert.equal(await field('Scratch').isVisible(), true);
+  assert.equal(await field('Scratch').isVisible(), false);
+  await general.click();
   await field('Scratch').fill('3');
   await field('Scratch').press('Enter');
   const edited = await state();
@@ -158,6 +174,7 @@ try {
   await page.waitForFunction(() => window.propertiesState.undoDepth === 0);
   assert.equal((await state()).source, original.source);
 
+  await spice.click();
   for (const [label, key, value] of [['Initial voltage (V)', 'initialVoltage', '-5']]) {
     await field(label).fill(value);
     await field(label).press('Enter');
@@ -171,6 +188,8 @@ try {
   await button('Undo').focus();
   await page.getByRole('alert').waitFor();
   assert.equal((await state()).source, original.source);
+  await general.click();
+  await spice.click();
   assert.equal(await field('Initial voltage (V)').inputValue(), 'invalid');
   await field('Initial voltage (V)').fill('2.5');
   await field('Initial voltage (V)').press('Enter');
@@ -215,6 +234,7 @@ try {
   );
   assert.equal((await state()).source, original.source);
   await button('Reopen').click();
+  await spice.click();
   assert.equal((await state()).source, original.source);
   assert.equal(await field(labels['OpenPE.InitialVoltage']).inputValue(), '1.20');
   assert.equal(await disclosure.locator('.property-simulation-parameter input').count(), 1);
@@ -290,9 +310,136 @@ try {
     0,
     'Participation belongs to SPICE settings.',
   );
+
+  async function inspectSpice(part, verify, circuit = null) {
+    await page.evaluate((fixture) => window.showSpicePresentation(fixture), { part, circuit });
+    assert.equal(await spice.getAttribute('aria-selected'), 'false');
+    assert.equal(await page.locator('.property-simulation').count(), 0);
+    await spice.click();
+    await disclosure.waitFor();
+    await verify(await disclosure.innerHTML());
+    assert.deepEqual(await page.evaluate(() => window.readSpicePresentation()), {
+      part,
+      circuit,
+      saves: 0,
+    });
+  }
+
+  const buck = createExample('kicad-buck').schematic;
+  for (const [ref, label] of [
+    ['V102', 'Voltage (V)'],
+    ['V101', 'Pulsed voltage (V)'],
+  ]) {
+    await inspectSpice(
+      buck.parts.find((part) => part.ref === ref),
+      async (html) => {
+        assert.equal(await disclosure.getByLabel(label, { exact: true }).isEditable(), true);
+        assert.doesNotMatch(html, /aria-label="(?:Device|Type|Pins|Params)"/);
+        assert.equal(await field('Component value').isVisible(), false);
+      },
+    );
+  }
+
+  const resistor = createPart(emptyCircuit(), 'R', 0, 0);
+  for (const libId of [
+    'Device:R',
+    'Device:C',
+    'Device:L',
+    'Device:D',
+    'power:GND',
+    'Connector_Generic:Conn_01x02',
+  ]) {
+    await inspectSpice({ ...resistor, libId }, (html) => {
+      assert.match(
+        html,
+        /role="combobox"[^>]*aria-label="Simulation model"|aria-label="Simulation model"[^>]*role="combobox"/,
+      );
+      assert.match(html, /aria-label="Browse SPICE models"/);
+      assert.doesNotMatch(
+        html,
+        /<select|role="(?:radio|switch)"|>Basic<|>External<|Default model|placeholder="Default"/,
+      );
+      if (libId === 'Device:R')
+        assert.doesNotMatch(html, /aria-label="Initial (?:voltage|current)/);
+    });
+  }
+
+  const external = {
+    ...resistor,
+    fields: {
+      ...resistor.fields,
+      'Sim.Device': 'SUBCKT',
+      'Sim.Name': 'OPENPE_DERIVED_LM2596_ADJ_TRANS',
+      'Sim.Library': 'OpenPE:lm2596-adj-derived',
+      'Sim.Pins': '1=1 2=2',
+      'OpenPE.SeriesResistance': '50m',
+    },
+  };
+  await inspectSpice(external, async (html) => {
+    const file = disclosure.getByLabel('Model library', { exact: true });
+    assert.equal(await file.inputValue(), 'LM2596-5.lib');
+    assert.equal(await file.getAttribute('title'), 'circuits/LM2596-5.lib');
+    assert.equal(await file.isEditable(), false);
+    const model = disclosure.getByRole('combobox', { name: 'Simulation model', exact: true });
+    assert.equal(await disclosure.getByRole('combobox').count(), 1);
+    assert.match(await model.innerText(), /LM2596_ADJ_TRANS/);
+    assert.match(html, /<span>File<\/span>.*<span>Model<\/span>/s);
+    assert.doesNotMatch(
+      html,
+      /Models in file|Remove field|Series resistance|Coupling|SUBCKT|1=1 2=2|OpenPE:lm2596-adj-derived|aria-label="(?:Device|Pins)"/,
+    );
+    assert.doesNotMatch(html.replace(/<input\b[^>]*readonly=""[^>]*>/gi, ''), /<input/);
+    assert.doesNotMatch(await disclosure.innerText(), /Sim\.(?:Device|Name|Pins)|OPENPE_DERIVED_/);
+  });
+
+  for (const [kind, key, label, other, value, display, unit] of [
+    ['C', 'OpenPE.InitialVoltage', 'Initial voltage (V)', 'Initial current (A)', '2.5', 2.5, 'V'],
+    ['L', 'OpenPE.InitialCurrent', 'Initial current (A)', 'Initial voltage (V)', '40m', 40, 'mA'],
+  ]) {
+    const part = createPart(emptyCircuit(), kind, 0, 0);
+    const input = disclosure.getByLabel(label, { exact: true });
+    await inspectSpice(part, async () => {
+      assert.equal(await input.getAttribute('placeholder'), 'Computed');
+      assert.equal(await input.isEditable(), true);
+      assert.equal(await disclosure.getByLabel(other, { exact: true }).count(), 0);
+    });
+    const fields = {
+      ...part.fields,
+      'Sim.Device': kind,
+      'Sim.Name': 'VENDOR_' + kind,
+      'Sim.Library': 'circuits/storage.lib',
+      'Sim.Pins': '1=+ 2=-',
+      'OpenPE.ModelSource': 'external',
+      [key]: value,
+    };
+    await inspectSpice({ ...part, fields }, async () => {
+      assert.equal(Number(await input.inputValue()), display);
+      assert.equal(await input.isEditable(), true);
+      assert.equal(await disclosure.getByLabel(other, { exact: true }).count(), 0);
+      assert.equal(
+        await disclosure.getByRole('combobox', { name: label + ' unit' }).innerText(),
+        unit,
+      );
+    });
+    await inspectSpice(
+      { ...part, fields: { ...fields, 'Sim.Device': 'SUBCKT', 'Sim.Pins': '1=1 2=2' } },
+      (html) => assert.doesNotMatch(html, /aria-label="Initial (?:voltage|current) \([VA]\)"/),
+    );
+  }
+  const emc = createHomeExample('emc-flyback-demo').schematic;
+  await inspectSpice(
+    emc.parts.find((part) => part.ref === 'C4'),
+    async () => {
+      const initial = disclosure.getByLabel('Initial voltage (V)', { exact: true });
+      assert.equal(await initial.getAttribute('placeholder'), '24');
+      assert.equal(Number(await initial.inputValue()), 24);
+    },
+    emc,
+  );
+
   assert.deepEqual(errors, []);
   console.log(
-    'Editable SPICE parameters, shared numeric limits, invalid retry, IME/Escape, edit/undo, labels/units, compact themes and Core refresh/reopen passed.',
+    'SPICE tab activation, model and source controls, initial conditions, invalid retry, IME/Escape, edit/undo, compact themes and Core refresh/reopen passed.',
   );
 } finally {
   await browser.close();

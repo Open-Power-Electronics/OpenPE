@@ -12,9 +12,6 @@ import { createReferenceExample } from '../lib/reference-examples';
 import { switchingStageFixture } from './fixtures/switching-stage';
 import { buildSpiceDeck, defaultTransient } from '../lib/spice';
 import { partFields } from '../lib/library';
-import PartProperties from '../components/PartProperties';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 
 test('model lookup stays inside the selected library, with only the reviewed derivative using its pinned source declaration', () => {
   const declarations = [{ name: 'RES_A' }, { name: 'RES_B' }];
@@ -51,10 +48,6 @@ test('implicit models identify their primitives and computed initial states with
     const part = createPart(circuit, kind, 0, 0),
       before = structuredClone(part);
     assert.equal(simulationComponentPresentation(part).model, model);
-    const html = renderToStaticMarkup(
-      createElement(PartProperties, { part, spiceAvailable: true, onSave: () => true }),
-    );
-    assert.doesNotMatch(html, /Default model|placeholder="Default"/);
     assert.deepEqual(part, before);
   }
   const stage = switchingStageFixture(),
@@ -89,15 +82,6 @@ test('EMC initial values and model names match the generated execution bench', (
     assert.equal(Number(presentation.initial), expected);
     assert.equal(presentation.model, 'ngspice C');
   }
-  const part = circuit.parts.find((p) => p.ref === 'C4')!;
-  const html = renderToStaticMarkup(
-    createElement(PartProperties, { part, circuit, spiceAvailable: true, onSave: () => true }),
-  );
-  assert.match(html, /placeholder="24"/);
-  const initialValue = html.match(/aria-label="Initial voltage \(V\)"[^>]*value="([^"]+)"/);
-  assert.ok(initialValue);
-  assert.equal(Number(initialValue[1]), 24);
-  assert.doesNotMatch(html, /Default model|placeholder="Default"/);
   assert.equal(
     simulationComponentPresentation(
       circuit.parts.find((p) => p.ref === 'Q1')!,

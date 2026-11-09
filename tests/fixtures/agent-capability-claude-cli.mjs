@@ -54,7 +54,6 @@ createInterface({ input: process.stdin }).on('line', (line) => {
             schematicId: 'sheet',
             operations: [{ type: 'setValue', ref: 'R1', value: '10k' }],
           },
-          expectedRevision: '8',
         },
       });
     }

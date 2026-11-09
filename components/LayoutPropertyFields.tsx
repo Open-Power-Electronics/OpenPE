@@ -210,7 +210,13 @@ export function TextField({
         }
         return;
       }
-      if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+      if (
+        !active ||
+        composing.current ||
+        event.nativeEvent.isComposing ||
+        event.nativeEvent.keyCode === 229
+      )
+        return;
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -322,60 +328,11 @@ export function PropertySection({
   );
 }
 
-/** Native disclosure keeps local field drafts mounted while hiding secondary controls. */
-export function PropertyDetails({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <details className="layout-property-details">
-      <summary>{title}</summary>
-      <div className="layout-property-section">{children}</div>
-    </details>
-  );
-}
-
 export function PropertyGrid({ columns = 2, children }: { columns?: 2 | 3; children: ReactNode }) {
   return (
     <div className="layout-property-grid" data-columns={columns}>
       {children}
     </div>
-  );
-}
-
-/** Retain opened drafts while keeping unopened/large native vertex lists cheap. */
-export function PropertyVertices({
-  title,
-  count,
-  active,
-  children,
-}: {
-  title: string;
-  count: number;
-  active: boolean;
-  children: (index: number) => ReactNode;
-}) {
-  const [mounted, setMounted] = useState(false);
-  const [limit, setLimit] = useState(128);
-  return (
-    <details
-      className="layout-property-details"
-      onToggle={(event) => {
-        if (event.currentTarget.open) setMounted(true);
-      }}
-    >
-      <summary>{title}</summary>
-      {mounted &&
-        Array.from({ length: Math.min(count, limit) }, (_, index) => (
-          <div key={index}>{children(index)}</div>
-        ))}
-      {mounted && limit < count && (
-        <button
-          className="secondary"
-          disabled={!active}
-          onClick={() => setLimit((value) => value + 128)}
-        >
-          Show more vertices
-        </button>
-      )}
-    </details>
   );
 }
 

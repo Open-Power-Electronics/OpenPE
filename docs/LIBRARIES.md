@@ -182,6 +182,13 @@ About OpenPE displays packaged `public/licenses/` notices. Three.js uses MIT;
 `occt-import-js` uses LGPL-2.1, and Open Cascade has its LGPL-2.1 exception.
 OpenPE permits modification and reverse engineering needed to debug changes.
 
+Full datasheet pages use pinned `pdfjs-dist` 6.5.438 (Apache-2.0) and
+`@napi-rs/canvas` 1.1.0 (MIT) in a host worker. About OpenPE includes
+`public/licenses/pdf-reader.txt`, preserving their upstream license texts and
+the bundled PDF.js font/CMap/codec notices. npm production dependencies deliver
+the PDF.js worker, fonts, CMaps and WASM; the canvas native packages are unpacked
+from ASAR. No system PDF renderer or runtime executable discovery is used.
+
 Model Render bundles `three-gpu-pathtracer` 0.0.24 and `three-mesh-bvh` 0.9.5
 under MIT. Their unmodified license texts are delivered as
 `public/licenses/three-gpu-pathtracer.txt` and `public/licenses/three-mesh-bvh.txt`

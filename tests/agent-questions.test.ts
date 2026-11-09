@@ -11,6 +11,7 @@ import { runAgent } from '../server/agents.mjs';
 import { readChatEvents, type AgentQuestionRequest } from '../lib/chat-stream';
 import { updateAgentProcess } from '../lib/agent-process';
 import AgentProcess from '../components/AgentProcess';
+import AgentTurn from '../components/AgentTurn';
 import AgentQuestions from '../components/AgentQuestions';
 
 const raw = [{ id: 'voltage', header: 'Voltage', question: 'Output voltage?', options: [] }];
@@ -78,12 +79,56 @@ test('native cancellation revokes a pending question without affecting another r
   bridge.close();
 });
 
-test('work details collapse after completion, keep actionable reviews open and questions have no automatic answer', () => {
-  const render = (running: boolean, attention: boolean) =>
-    renderToStaticMarkup(createElement(AgentProcess, { running, attention, children: 'Progress' }));
-  assert.match(render(true, false), /open=""/);
-  assert.doesNotMatch(render(false, false), /open=""/);
-  assert.match(render(false, true), /open=""/);
+test('completed work shares the Agent header and elapsed time without an arrow or tool total', () => {
+  const html = renderToStaticMarkup(
+    createElement(AgentProcess, {
+      running: false,
+      heading: 'Codex',
+      hasWork: true,
+      timings: { clientTotalMs: 69_000 },
+      children: 'Details',
+    }),
+  );
+  assert.match(html, /aria-label="Work details"/);
+  assert.match(html, /<summary[^>]+class="message-author"/);
+  assert.match(html, /Codex/);
+  assert.match(html, /aria-label="Elapsed time">1m 9s/);
+  assert.doesNotMatch(html, /tool calls/);
+  assert.doesNotMatch(html, /<svg|open=""|>Work details</);
+  const plain = renderToStaticMarkup(
+    createElement(AgentTurn, {
+      text: 'A plain reply.',
+      anchors: [],
+      progress: [],
+      tools: [],
+      running: false,
+      heading: 'Codex',
+      timings: { clientTotalMs: 13_000 },
+      renderText: (text) => text,
+      renderTool: () => null,
+      onNavigateHeading: () => {},
+    }),
+  );
+  assert.match(plain, /aria-label="Elapsed time">13s/);
+  assert.doesNotMatch(plain, /<details|Work details/);
+  assert.ok(plain.indexOf('13s') < plain.indexOf('A plain reply.'));
+});
+
+test('live work displays directly and completed work stays collapsed without an attention label', () => {
+  const render = (running: boolean) =>
+    renderToStaticMarkup(
+      createElement(AgentProcess, {
+        running,
+        heading: 'Codex',
+        hasWork: true,
+        children: 'Progress',
+      }),
+    );
+  assert.doesNotMatch(render(true), /open=""/);
+  assert.doesNotMatch(render(true), /<summary|Working|tool calls/);
+  assert.match(render(true), /Progress/);
+  assert.doesNotMatch(render(false), /tool calls/);
+  assert.doesNotMatch(render(false), /open=""|Needs attention/);
   const html = renderToStaticMarkup(
     createElement(AgentQuestions, {
       questions: agentQuestions('codex', raw),

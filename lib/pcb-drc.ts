@@ -17,6 +17,7 @@ import {
   offsetPolygons,
   padPolygon,
   polygonResolution,
+  pourKeepoutPolygons,
   worldZones,
   type Polygon,
 } from './pcb-polygons';
@@ -690,23 +691,28 @@ export function runPCBDesignRules(
               : copper.kind === 'pad'
                 ? zone.keepout!.pads
                 : zone.keepout!.copperpour;
-        if (!blocked || !copper.layers.includes(zone.layer) || !overlapsBounds(copper, area, 0))
+        const pour = copper.kind === 'zone' ? copper.polygon : undefined;
+        if (
+          !blocked ||
+          !copper.layers.includes(zone.layer) ||
+          !overlapsBounds(copper, area, pour ? zone.clearance : 0)
+        )
           continue;
         // Rounding a shared sloped edge and its split vertices onto the clipping
         // grid can create slivers. Allow one grid cell at the keepout boundary,
         // while retaining even tiny copper areas farther inside it.
         let enters: boolean;
-        if (copper.kind === 'zone' && copper.polygon) {
+        if (pour) {
           if (!pourInterior) {
             spend(area.edges.length);
-            pourInterior = offsetPolygons([polygon], -polygonResolution);
+            pourInterior = offsetPolygons(pourKeepoutPolygons(zone), -polygonResolution);
             pourInteriorEdges = pourInterior.reduce(
               (n, p) => n + p.outer.length + p.holes.reduce((m, h) => m + h.length, 0),
               0,
             );
           }
           spend(copper.edges.length * pourInteriorEdges);
-          enters = intersectPolygons([copper.polygon], pourInterior).length > 0;
+          enters = intersectPolygons([pour], pourInterior).length > 0;
         } else enters = distance(copper, area) <= epsilon;
         if (enters)
           issue(

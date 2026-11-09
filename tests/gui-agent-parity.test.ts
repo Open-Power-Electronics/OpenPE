@@ -1146,6 +1146,9 @@ test('Agent footprint placement uses the Layout chooser preparation, rejects dup
     const identities = new Map<string, string>([
       [placed.id, footprint.id],
       ...placed.pads.map((pad, index) => [pad.id, footprint.pads[index].id] as [string, string]),
+      ...placed.graphics.map(
+        (graphic, index) => [graphic.id, footprint.graphics[index].id] as [string, string],
+      ),
     ]);
     let native = JSON.stringify(core.getNativeFiles());
     for (const [agentId, humanId] of identities) native = native.replaceAll(agentId, humanId);

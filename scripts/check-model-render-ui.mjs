@@ -102,6 +102,15 @@ board.graphics = [
     ],
     end: { x: 0, y: 30 },
   },
+  {
+    id: randomUUID(),
+    kind: 'text',
+    layer: 'F.SilkS',
+    width: 0,
+    start: { x: 32, y: 26 },
+    end: { x: 32, y: 26 },
+    text: { value: 'O', size: { x: 1, y: 1 }, thickness: 0.15, rotation: 0 },
+  },
 ];
 const netId = randomUUID();
 board.nets = [{ id: netId, name: 'GND' }];
@@ -287,7 +296,7 @@ createRoot(document.getElementById('root')).render(<Harness/>);`,
               try{return action();}finally{Math.random=original;}};
             const tracer=withTraceRandom(()=>new PathTracingRenderer(renderer));
             window.renderPhaseTimings.backendMs=performance.now()-backendStarted;
-            window.inspectPathTracer=()=>({samples:tracer.samples,compiling:tracer.isCompiling,compilePending:!!tracer._compilePromise,geometry:generator.geometry.attributes.position?.count,programs:renderer.info.programs?.length,quality:{samples:MODEL_RENDER_SAMPLES,bounces:material.bounces,transmissiveBounces:material.transmissiveBounces,resolutionScale:MODEL_RENDER_RESOLUTION_SCALE,mis:material.defines.FEATURE_MIS},maskMaterials:(window.traceMaterials??[]).filter(material=>material.name==='OpenPE Render mask').map(material=>({normal:!!material.normalMap,clearcoatNormal:!!material.clearcoatNormalMap,transmission:material.transmission}))});`,
+            window.inspectPathTracer=()=>({samples:tracer.samples,compiling:tracer.isCompiling,compilePending:!!tracer._compilePromise,geometry:generator.geometry.attributes.position?.count,programs:renderer.info.programs?.length,quality:{samples:MODEL_RENDER_SAMPLES,bounces:material.bounces,transmissiveBounces:material.transmissiveBounces,workingSize:[tracer.target.width,tracer.target.height],mis:material.defines.FEATURE_MIS},maskMaterials:(window.traceMaterials??[]).filter(material=>material.name==='OpenPE Render mask').map(material=>({normal:!!material.normalMap,clearcoatNormal:!!material.clearcoatNormalMap,transmission:material.transmission}))});`,
           );
           source = source.replace(
             '      const results = generator.generate();',
@@ -745,10 +754,10 @@ try {
       samples: expectedRenderSamples,
       bounces: 3,
       transmissiveBounces: 3,
-      resolutionScale: 0.75,
+      workingSize: [1359, 1120],
       mis: 1,
     },
-    'Render retains full sampling and optical paths with guided reconstruction.',
+    'Render supersamples the viewport and retains full sampling and optical paths.',
   );
   const maskMaterials = await page.evaluate(() => window.inspectPathTracer().maskMaterials);
   assert.ok(
@@ -768,6 +777,28 @@ try {
     .toBuffer({ resolveWithObject: true });
   const studio = await sharp(studioPNG).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   assert.deepEqual(studio.info, standard.info, 'Studio exports retain viewport dimensions.');
+  const silkProbes = await page.evaluate(({ width, height }) => {
+    const { board, camera } = window.inspectRender();
+    // Centre of the O counter, followed by the four native stroke centre lines.
+    const probes = [[32, 26.05], [31.667, 26.05], [32.333, 26.05], [32, 25.548], [32, 26.548]];
+    return probes.map(([x, y]) => {
+      const ndc = camera.position.clone().set(x, -y, board.thickness / 2 + 0.03).project(camera);
+      return [
+        Math.max(0, Math.min(width - 1, Math.floor(((ndc.x + 1) * width) / 2))),
+        Math.max(0, Math.min(height - 1, Math.floor(((1 - ndc.y) * height) / 2))),
+      ];
+    });
+  }, studio.info);
+  const [silkCounter, ...silkStrokes] = silkProbes.map(([x, y]) => {
+    const i = (y * studio.info.width + x) * studio.info.channels;
+    return 0.2126 * studio.data[i] + 0.7152 * studio.data[i + 1] + 0.0722 * studio.data[i + 2];
+  });
+  const silkContrast = Math.min(...silkStrokes) - silkCounter;
+  if (!lifecycleOnly)
+    assert.ok(
+      silkContrast > 25,
+      `1 mm silkscreen retains its counter and fine strokes (${silkContrast}).`,
+    );
   let changedPixels = 0,
     coloredPixels = 0,
     redPixels = 0,
@@ -1152,6 +1183,7 @@ try {
         floorNoise,
         surfaceNoise,
         edgeContrast,
+        silkContrast,
         maskMaterials,
         pendingExportCancelled,
         exportedWidth: studio.info.width,

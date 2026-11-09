@@ -241,6 +241,7 @@ test('preview clips follow edited world regions and mask changed keepouts withou
     netId: null,
     outline: rectangle(10, 3, 3, 3),
     holes: undefined,
+    clearance: 0,
     fillEnabled: false,
     keepout: { tracks: false, vias: false, pads: false, copperpour: true, footprints: false },
   };
@@ -259,7 +260,14 @@ test('preview clips follow edited world regions and mask changed keepouts withou
     polygonPath([{ outer: candidateZone.outline, holes: candidateZone.holes }]),
   );
   assert.deepEqual(preview.zones[0].blockers, [
-    { path: polygonPath([{ outer: keepout.outline, holes: [] }]), strokeWidth: 0.6 },
+    { path: polygonPath([{ outer: keepout.outline, holes: [] }]), strokeWidth: 0 },
+  ]);
+  const margin = preparePCBFillPreview(basis, {
+    ...candidate,
+    zones: [candidateZone, { ...keepout, clearance: 0.5 }],
+  });
+  assert.deepEqual(margin.zones[0].blockers, [
+    { path: preview.zones[0].blockers[0].path, strokeWidth: 1 },
   ]);
   assert.equal(preparePCBFillPreview(basis, { ...candidate, zones: [] }).zones.length, 0);
   assert.equal(

@@ -38,7 +38,7 @@ try {
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
-  const fields = page.locator('.part-properties > .property-fields').first();
+  const fields = page.locator('.part-properties .property-fields').first();
   try {
     await fields.waitFor();
   } catch (error) {
@@ -395,13 +395,21 @@ try {
         await page.getByRole('button', { name: choice, exact: true }).click();
         const disclosure = page.locator('.layout-inspector summary');
         const summaries = await disclosure.all();
+        const tabs = await page.locator('.layout-inspector .property-tabs').getByRole('tab').all();
+        for (const tab of tabs) {
+          await tab.click();
+          await assertControlBounds(
+            `${theme} ${width}px ${choice} ${await tab.getAttribute('title')}`,
+          );
+        }
+        if (tabs.length) await tabs[0].click();
         for (const summary of summaries) {
           await summary.click();
           await assertControlBounds(`${theme} ${width}px ${choice} expanded`);
         }
         for (const summary of summaries.reverse()) await summary.click();
         await assertControlBounds(`${theme} ${width}px ${choice}`);
-        audit.push({ theme, width, choice, disclosures: summaries.length });
+        audit.push({ theme, width, choice, disclosures: summaries.length, tabs: tabs.length });
         await page.locator('.layout-inspector-content').evaluate((element) => {
           element.scrollTop = 0;
         });

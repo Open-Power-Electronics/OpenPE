@@ -11,6 +11,7 @@ export const simulationFieldNames = {
   initialCurrent: 'OpenPE.InitialCurrent',
   coupling: 'OpenPE.Coupling',
   modelSource: 'OpenPE.ModelSource',
+  passiveModel: 'OpenPE.PassiveModel',
   sourceType: 'OpenPE.SourceType',
 } as const;
 

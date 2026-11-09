@@ -1,4 +1,5 @@
 import { withoutSessionTitle } from './session-title';
+import type { CapabilityDescription, CapabilityHost } from '../api/capabilities';
 
 export type ChatTimings = {
   connectionMs?: number;
@@ -24,7 +25,6 @@ export type AgentCapabilities = {
     name: string,
     input?: unknown,
     options?: {
-      expectedRevision?: string;
       signal?: AbortSignal;
       resultDelivery?: Promise<boolean>;
       onAfterResult?: (completion: Promise<void>) => void;
@@ -39,24 +39,45 @@ export type AgentCapabilityRequest = {
   requestId: string;
   token: string;
   tool: 'openpe_query' | 'openpe_execute' | 'openpe_observe';
-  arguments: { name?: string; input?: unknown; expectedRevision?: string; after?: number };
+  arguments: { name?: string; input?: unknown; after?: number };
 };
 export type AgentCommandReview = {
   id: string;
   name: string;
   input?: unknown;
-  expectedRevision: string;
 };
-export type AgentCapabilityRevision = { current?: string };
+
+/** One project adapter serializes document edits; each handler starts on current Core data. */
+export function agentCapabilitiesForHost(host: CapabilityHost): AgentCapabilities {
+  let edits = Promise.resolve();
+  return {
+    query: (name, input, options) => host.query(name, input, { ...options, actor: 'agent' }),
+    observe: (after) => host.observe(after),
+    execute(name, input, options) {
+      const commandInput = structuredClone(input);
+      const invoke = async () => {
+        options?.signal?.throwIfAborted();
+        return host.execute(name, commandInput, { ...options, actor: 'agent' });
+      };
+      if (host.catalog().find((entry) => entry.id === name)?.mutation !== 'document')
+        return invoke();
+      const result = edits.then(invoke);
+      edits = result.then(
+        () => {},
+        () => {},
+      );
+      return result;
+    },
+  };
+}
 
 /** Transport adapter only: every operation resolves against the originating live host. */
 export async function resolveAgentCapability(
   event: AgentCapabilityRequest,
   host: AgentCapabilities,
   approvalMode: 'review' | 'auto',
-  review: (command: AgentCommandReview) => void,
+  review: (command: AgentCommandReview, description: string) => void,
   signal?: AbortSignal,
-  revision?: AgentCapabilityRevision,
 ) {
   signal?.throwIfAborted();
   const args = event.arguments;
@@ -69,42 +90,43 @@ export async function resolveAgentCapability(
   if (event.tool === 'openpe_query') {
     const result = await host.query(args.name, args.input, signal ? { signal } : undefined);
     signal?.throwIfAborted();
-    if (revision && ['project.snapshot', 'core.state', 'workbench.state'].includes(args.name)) {
-      const state = result as { revision?: unknown; ui?: { revision?: unknown } } | null;
-      const value = state?.revision ?? state?.ui?.revision;
-      if (
-        (typeof value === 'string' && value) ||
-        (typeof value === 'number' && Number.isSafeInteger(value))
-      )
-        revision.current = String(value);
-    }
     return result ?? null;
   }
   if (event.tool !== 'openpe_execute') throw new Error('Unknown OpenPE capability tool.');
-  const expectedRevision = args.expectedRevision ?? revision?.current;
-  if (!expectedRevision)
-    throw new Error(
-      'Query core.state to read the current project revision before executing a command.',
-    );
   signal?.throwIfAborted();
-  if (approvalMode === 'auto')
-    return (
-      (await host.execute(args.name, args.input, {
-        expectedRevision,
-        ...(signal ? { signal } : {}),
-      })) ?? null
-    );
   const command = structuredClone({
     id: event.requestId,
     name: args.name,
     ...(args.input !== undefined ? { input: args.input } : {}),
-    expectedRevision,
   });
-  review(command);
-  return { status: 'review-required', reviewId: command.id, command };
+  if (approvalMode === 'review') {
+    const catalog = (await host.query(
+      'capabilities.list',
+      { ids: [command.name], kind: 'command', includeSchema: false },
+      signal ? { signal } : undefined,
+    )) as CapabilityDescription[];
+    signal?.throwIfAborted();
+    const description = catalog.find(
+      (entry) => entry.id === command.name && entry.kind === 'command',
+    );
+    if (!description) throw new Error(`Unknown command capability: ${command.name}`);
+    if (!description.available)
+      throw new Error(description.reason || 'This command is unavailable.');
+    if (description.review !== 'none') {
+      review(command, description.description);
+      return { status: 'review-required', reviewId: command.id, command };
+    }
+  }
+  const result = await host.execute(command.name, command.input, {
+    ...(signal ? { signal } : {}),
+  });
+  signal?.throwIfAborted();
+  return result ?? null;
 }
 
 export type ChatEvent =
+  | { type: 'input-ready'; runId: string; sessionId: string; token: string }
+  | { type: 'input-accepted'; requestId: string; sessionId: string; prompt: string }
   | { type: 'process'; id: string; text: string; append?: boolean }
   | AgentQuestionRequest
   | { type: 'question-closed'; requestId: string; sessionId: string }

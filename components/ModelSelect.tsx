@@ -12,40 +12,29 @@ type ModelOption = {
   description?: string;
   efforts?: ReasoningEffort[];
 };
-export default function ModelSelect({
+type ModelCatalog = { models: ModelOption[]; defaultModel?: string | null };
+
+export function useAgentModelCatalog({
   provider,
   available,
   value,
-  onChange,
-  disabled,
-  onEfforts,
   observedModel = '',
 }: {
   provider: string;
   available: boolean;
   value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-  onEfforts: (efforts: ReasoningEffort[] | null) => void;
   observedModel?: string;
 }) {
-  const [catalog, setCatalog] = useState<{
+  const [attempt, setAttempt] = useState(0);
+  const [result, setResult] = useState<{
     provider: string;
-    models: ModelOption[];
-    defaultModel?: string | null;
-  }>({
-    provider: '',
-    models: [],
-  });
-  const [error, setError] = useState('');
-  const models = available && catalog.provider === provider ? catalog.models : [];
-  const currentModel =
-    value || (catalog.provider === provider ? catalog.defaultModel : '') || observedModel;
-  const selected = models.find((m) => m.id === currentModel);
+    attempt: number;
+    catalog?: ModelCatalog;
+    error?: string;
+  } | null>(null);
   useEffect(() => {
     const control = new AbortController();
-    setError('');
-    setCatalog({ provider: '', models: [] });
+    setResult(null);
     if (!available) return;
     void api(`models?provider=${encodeURIComponent(provider)}`, { signal: control.signal })
       .then((r) => r.json())
@@ -64,25 +53,55 @@ export default function ModelSelect({
         )
           throw new Error('The agent returned an invalid model catalog.');
         if (!control.signal.aborted)
-          setCatalog({ provider, models: result.models, defaultModel: result.defaultModel });
+          setResult({
+            provider,
+            attempt,
+            catalog: { models: result.models, defaultModel: result.defaultModel },
+          });
       })
       .catch((e) => {
-        if (!control.signal.aborted) setError(e.message);
+        if (!control.signal.aborted)
+          setResult({ provider, attempt, error: e.message || 'Model discovery failed.' });
       });
     return () => control.abort();
-  }, [provider, available]);
-  useEffect(() => {
-    onEfforts(selected?.efforts ?? null);
-  }, [selected, onEfforts]);
+  }, [provider, available, attempt]);
+  const current =
+    available && result?.provider === provider && result.attempt === attempt ? result : null;
+  const models = current?.catalog?.models ?? [];
+  const currentModel = value || current?.catalog?.defaultModel || observedModel;
+  return {
+    models,
+    currentModel,
+    selected: models.find((model) => model.id === currentModel),
+    loading: available && !current,
+    error: current?.error,
+    retry: () => setAttempt((value) => value + 1),
+  };
+}
+
+export default function ModelSelect({
+  models,
+  currentModel,
+  loading,
+  error,
+  onChange,
+  disabled,
+}: {
+  models: ModelOption[];
+  currentModel: string;
+  loading: boolean;
+  error?: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  const selected = models.some((model) => model.id === currentModel);
   return (
     <div className="composer-model-picker">
       <Select
         label="Choose model"
         value={currentModel}
-        placeholder={
-          available && catalog.provider !== provider && !error ? 'Loading model…' : 'Choose model'
-        }
-        disabled={disabled || !available || (!models.length && !currentModel)}
+        placeholder={loading ? 'Loading model…' : 'Choose model'}
+        disabled={disabled || (!models.length && !currentModel)}
         compact
         showChevron={false}
         options={[

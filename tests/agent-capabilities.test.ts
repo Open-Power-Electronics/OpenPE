@@ -18,7 +18,6 @@ import { registerProjectCapabilities } from '../core/register-project';
 import { createProject } from '../lib/project';
 import { createPart, emptyCircuit, pinPositions, uid } from '../lib/circuit';
 import { samePoint } from '../lib/wiring';
-import { switchingStageFixture } from './fixtures/switching-stage';
 import {
   resolveAgentCapability,
   readChatEvents,
@@ -52,21 +51,20 @@ function bridgeFixture(timeoutMs = 1000) {
   return { bridge, events, control, answer };
 }
 
-test('capability tools reject unsupported names, invalid cursors, revisions, recursive or oversized JSON', () => {
+test('capability tools reject unsupported names, invalid cursors, unsupported fields, recursive or oversized JSON', () => {
   for (const [tool, args] of [
     ['shell', { name: 'run' }],
     ['openpe_query', { name: '../files' }],
     ['openpe_query', { name: 'project.snapshot', path: 'private' }],
     ['openpe_observe', { after: -1 }],
     ['openpe_observe', { after: 0.5 }],
-    ['openpe_execute', { name: 'project.replace', expectedRevision: '' }],
+    ['openpe_execute', { name: 'project.replace', expectedRevision: '1' }],
   ])
     assert.throws(() => validateAgentCapabilityCall(tool, args));
   assert.doesNotThrow(() =>
     validateAgentCapabilityCall('openpe_execute', {
       name: 'project.replace',
       input: { source: '{}' },
-      expectedRevision: '1',
     }),
   );
   assert.throws(() => boundedAgentJSON({ value: Infinity }, 100));
@@ -143,10 +141,8 @@ test('execute waits for the host without imposing the query timeout on simulatio
   try {
     const pending = fixture.bridge.call('openpe_execute', { name: 'simulation.run' });
     await pause(25);
-    assert.equal(fixture.bridge.executing(), true);
     fixture.answer(fixture.events[0], { status: 'completed' });
     assert.deepEqual(await pending, { status: 'completed' });
-    assert.equal(fixture.bridge.executing(), false);
   } finally {
     fixture.bridge.close();
   }
@@ -164,38 +160,33 @@ const request = (
   requestId: 'review',
   token: 'token',
 });
-test('live queries and events share the host; Review retains an immutable revision-bound command and Auto executes it', async () => {
-  let revision = 1;
+test('live queries and events share the host; Review captures immutable arguments and Auto uses no revision precondition', async () => {
   const executed: unknown[] = [];
   const host: AgentCapabilities = {
-    query: () => ({ revision }),
+    query: (name) =>
+      name === 'capabilities.list'
+        ? [
+            {
+              id: 'schematic.setValue',
+              kind: 'command',
+              description: 'Change a component value.',
+              available: true,
+              review: 'optional',
+            },
+          ]
+        : { revision: 2 },
     execute: (name, input, options) => {
       executed.push({ name, input, options });
       return { applied: true };
     },
-    observe: (after) => ({ cursor: revision, events: [{ seq: revision, type: 'changed', after }] }),
+    observe: (after) => ({ cursor: 2, events: [{ seq: 2, type: 'changed', after }] }),
   };
-  const observedRevision: { current?: string } = {};
   assert.deepEqual(
     await resolveAgentCapability(
-      request('openpe_query', { name: 'project.snapshot' }),
+      request('openpe_query', { name: 'core.state' }),
       host,
       'auto',
       () => {},
-      undefined,
-      observedRevision,
-    ),
-    { revision: 1 },
-  );
-  revision++;
-  assert.deepEqual(
-    await resolveAgentCapability(
-      request('openpe_query', { name: 'project.snapshot' }),
-      host,
-      'auto',
-      () => {},
-      undefined,
-      observedRevision,
     ),
     { revision: 2 },
   );
@@ -208,118 +199,90 @@ test('live queries and events share the host; Review retains an immutable revisi
   assert.equal(observed.cursor, 2);
   const args = { name: 'schematic.setValue', input: { id: 'R1', value: '10k' } };
   const reviews: AgentCommandReview[] = [];
+  const reviewDescriptions: string[] = [];
   const result = (await resolveAgentCapability(
     request('openpe_execute', args),
     host,
     'review',
-    (command) => reviews.push(command),
-    undefined,
-    observedRevision,
+    (command, description) => {
+      reviews.push(command);
+      reviewDescriptions.push(description);
+    },
   )) as any;
   assert.equal(result.status, 'review-required');
   assert.equal(executed.length, 0);
-  assert.equal(reviews[0].expectedRevision, '2');
+  assert.deepEqual(reviews[0], { id: 'review', ...args });
+  assert.deepEqual(reviewDescriptions, ['Change a component value.']);
+  assert.deepEqual(
+    result.command,
+    { id: 'review', ...args },
+    'Display metadata cannot enter executable command arguments.',
+  );
   args.input.value = 'wrong';
   assert.deepEqual(reviews[0].input, { id: 'R1', value: '10k' });
   const control = new AbortController();
   await resolveAgentCapability(
-    request('openpe_execute', { name: 'schematic.setValue', expectedRevision: '2' }),
+    request('openpe_execute', { name: 'schematic.setValue' }),
     host,
     'auto',
     () => assert.fail(),
     control.signal,
   );
   assert.deepEqual(executed, [
-    {
-      name: 'schematic.setValue',
-      input: undefined,
-      options: { expectedRevision: '2', signal: control.signal },
-    },
+    { name: 'schematic.setValue', input: undefined, options: { signal: control.signal } },
   ]);
   control.abort();
   await assert.rejects(
     resolveAgentCapability(
-      request('openpe_execute', { name: 'schematic.setValue', expectedRevision: '2' }),
+      request('openpe_execute', { name: 'schematic.setValue' }),
       host,
       'auto',
-      () => {},
+      () => assert.fail(),
       control.signal,
     ),
   );
   assert.equal(executed.length, 1);
 });
 
-test('commands use the submission or explicitly observed revision and never silently refresh after a human edit', async () => {
-  const project = createProject(switchingStageFixture());
-  const part = project.schematic.parts.find((item) => item.ref === 'R1')!;
-  const core = new ProjectCore(project);
-  const host = createCapabilityHost();
-  const dispose = registerProjectCapabilities(host, core);
-  const snapshot = (await host.query('project.snapshot')) as { revision: string };
-  const revision = { current: snapshot.revision };
-  const args = {
-    name: 'part.properties',
-    input: { schematicId: project.schematic.id, partId: part.id, value: '47k' },
+test('Review captures arguments before live discovery and cancellation blocks late discovery', async () => {
+  let release!: (entries: unknown[]) => void;
+  let discoverySignal: AbortSignal | undefined;
+  const host: AgentCapabilities = {
+    query: (name, input, options) => {
+      assert.equal(name, 'capabilities.list');
+      assert.deepEqual(input, { ids: ['part.properties'], kind: 'command', includeSchema: false });
+      discoverySignal = options?.signal;
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    },
+    execute: () => assert.fail('Cancelled or reviewed commands must not execute.'),
+    observe: () => ({}),
   };
-  try {
-    await host.execute('part.properties', { ...args.input, value: '22k' }, { actor: 'human' });
-    await assert.rejects(
-      resolveAgentCapability(
-        request('openpe_execute', args),
-        host,
-        'auto',
-        () => {},
-        undefined,
-        revision,
-      ),
-      /project changed/,
-    );
-    assert.equal(revision.current, snapshot.revision);
-    const reviews: AgentCommandReview[] = [];
-    await resolveAgentCapability(
-      request('openpe_execute', args),
-      host,
-      'review',
-      (command) => reviews.push(command),
-      undefined,
-      revision,
-    );
-    assert.equal(reviews[0].expectedRevision, snapshot.revision);
-    await assert.rejects(
-      host.execute(reviews[0].name, reviews[0].input, {
-        expectedRevision: reviews[0].expectedRevision,
-      }),
-      /project changed/,
-    );
-    await assert.rejects(
-      resolveAgentCapability(request('openpe_execute', args), host, 'auto', () => {}),
-      /Query core.state/,
-    );
-    await resolveAgentCapability(
-      request('openpe_query', { name: 'core.state' }),
-      host,
-      'auto',
-      () => {},
-      undefined,
-      revision,
-    );
-    assert.notEqual(revision.current, snapshot.revision);
-    await resolveAgentCapability(
-      request('openpe_execute', args),
-      host,
-      'auto',
-      () => {},
-      undefined,
-      revision,
-    );
-    assert.equal(
-      core.getSnapshot().project!.schematic.parts.find((item) => item.id === part.id)!.value,
-      '47k',
-    );
-  } finally {
-    dispose();
-    host.dispose();
-  }
+  const entries = [{ id: 'part.properties', kind: 'command', available: true, review: 'optional' }];
+  const reviews: AgentCommandReview[] = [];
+  const args = { name: 'part.properties', input: { value: '47k' } };
+  const first = resolveAgentCapability(request('openpe_execute', args), host, 'review', (command) =>
+    reviews.push(command),
+  );
+  args.name = 'different.command';
+  args.input.value = 'wrong';
+  release(entries);
+  await first;
+  assert.equal(reviews[0].name, 'part.properties');
+  assert.deepEqual(reviews[0].input, { value: '47k' });
+  const control = new AbortController();
+  const cancelled = resolveAgentCapability(
+    request('openpe_execute', { name: 'part.properties' }),
+    host,
+    'review',
+    () => assert.fail(),
+    control.signal,
+  );
+  assert.equal(discoverySignal, control.signal);
+  control.abort();
+  release(entries);
+  await assert.rejects(cancelled, { name: 'AbortError' });
 });
 
 test('Agent connected component drag is discoverable, reviewable and uses the shared wire and undo transaction', async () => {
@@ -335,21 +298,13 @@ test('Agent connected component drag is discoverable, reviewable and uses the sh
   const core = new ProjectCore(createProject(schematic));
   const host = createCapabilityHost();
   const dispose = registerProjectCapabilities(host, core);
-  const revision: { current?: string } = {};
   const reviews: AgentCommandReview[] = [];
   const args = {
     name: 'schematic.drag',
     input: { schematicId: schematic.id, ids: [schematic.parts[0].id], delta: { x: 5.08, y: 0 } },
   };
   const query = (name: string) =>
-    resolveAgentCapability(
-      request('openpe_query', { name }),
-      host,
-      'auto',
-      () => {},
-      undefined,
-      revision,
-    );
+    resolveAgentCapability(request('openpe_query', { name }), host, 'auto', () => {});
   try {
     const catalog = (await query('capabilities.list')) as ReturnType<typeof host.catalog>;
     const capability = catalog.find((entry) => entry.id === 'schematic.drag');
@@ -361,15 +316,11 @@ test('Agent connected component drag is discoverable, reviewable and uses the sh
       host,
       'review',
       (command) => reviews.push(command),
-      undefined,
-      revision,
     );
     assert.equal((pending as { status: string }).status, 'review-required');
     assert.equal(core.getSnapshot(), initial);
     args.input.delta.x = 10.16;
-    await host.execute(reviews[0].name, reviews[0].input, {
-      expectedRevision: reviews[0].expectedRevision,
-    });
+    await host.execute(reviews[0].name, reviews[0].input, { actor: 'agent' });
     const reviewed = core.getSnapshot();
     assert.equal(reviewed.project!.schematic.parts[0].x, 30.48);
     assert.equal(reviewed.undoDepth, 1);
@@ -378,13 +329,8 @@ test('Agent connected component drag is discoverable, reviewable and uses the sh
 
     args.input.delta.x = 5.08;
     await query('project.snapshot');
-    await resolveAgentCapability(
-      request('openpe_execute', args),
-      host,
-      'auto',
-      () => assert.fail(),
-      undefined,
-      revision,
+    await resolveAgentCapability(request('openpe_execute', args), host, 'auto', () =>
+      assert.fail(),
     );
     const applied = core.getSnapshot();
     const circuit = applied.project!.schematic;
@@ -402,7 +348,6 @@ test('Agent connected component drag is discoverable, reviewable and uses the sh
         'auto',
         () => {},
         control.signal,
-        revision,
       ),
     );
     assert.equal(core.getSnapshot(), applied);
@@ -414,10 +359,9 @@ test('Agent connected component drag is discoverable, reviewable and uses the sh
   }
 });
 
-test('cancelled queries forward the turn signal and never update observed revisions after completion', async () => {
+test('cancelled queries forward the turn signal and reject late responses', async () => {
   let finish!: (result: unknown) => void;
   let querySignal: AbortSignal | undefined;
-  const revision = { current: '1' };
   const host: AgentCapabilities = {
     query: (_name, _input, options) => {
       querySignal = options?.signal;
@@ -435,21 +379,18 @@ test('cancelled queries forward the turn signal and never update observed revisi
     'auto',
     () => {},
     control.signal,
-    revision,
   );
   assert.equal(querySignal, control.signal);
   control.abort();
   finish({ revision: '2' });
   await assert.rejects(pending);
-  assert.equal(revision.current, '1');
   await assert.rejects(
     resolveAgentCapability(
-      request('openpe_execute', { name: 'part.properties', expectedRevision: '1' }),
+      request('openpe_execute', { name: 'part.properties' }),
       host,
       'review',
       () => assert.fail(),
       control.signal,
-      revision,
     ),
   );
 });
@@ -650,7 +591,6 @@ test('Codex dynamic-tool protocol exposes shared runtime capabilities and reject
       args: {
         name: 'schematic.setValue',
         input: { id: 'R1', value: '10k' },
-        expectedRevision: '1',
       },
     },
     { tool: 'openpe_observe', args: { after: 0 } },
@@ -669,7 +609,7 @@ test('Claude launch uses the scoped stdio MCP helper through the authenticated r
   const host: AgentCapabilities = {
     query: () => ({ revision }),
     execute: (name, input, options) => {
-      executed.push({ name, input, expectedRevision: options?.expectedRevision });
+      executed.push({ name, input, options });
       revision = '9';
       return { status: 'applied' };
     },
@@ -734,7 +674,7 @@ test('Claude launch uses the scoped stdio MCP helper through the authenticated r
     await Promise.all(responses);
     assert.equal(events.at(-1).outcome, 'completed');
     assert.equal(executed.length, 1);
-    assert.equal((executed[0] as any).expectedRevision, '8');
+    assert.equal('expectedRevision' in ((executed[0] as any).options ?? {}), false);
     assert.ok(
       events.some(
         (event) =>

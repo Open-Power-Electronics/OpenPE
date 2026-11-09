@@ -64,3 +64,26 @@ test('query revision hints remain independent of command preconditions', async (
   });
   host.dispose();
 });
+
+test('revision independence is explicit, discoverable and limited to session commands', () => {
+  const host = createCapabilityHost();
+  const base = {
+    owner: 'host' as const,
+    id: 'example.stop',
+    kind: 'command' as const,
+    description: 'Stop session work.',
+    inputSchema: emptyCapabilityInput,
+    handler: () => null,
+    revision: 'independent' as const,
+  };
+  try {
+    for (const mutation of [false, 'document', 'external'] as const)
+      assert.throws(() => host.register({ ...base, mutation }), /Only session commands/);
+    assert.throws(() => host.register({ ...base, kind: 'query' }), /Only session commands/);
+    assert.throws(() => host.register({ ...base, revision: 'unknown' as any }), /revision policy/);
+    host.register({ ...base, mutation: 'session' });
+    assert.equal(host.catalog().find((item) => item.id === base.id)?.revision, 'independent');
+  } finally {
+    host.dispose();
+  }
+});

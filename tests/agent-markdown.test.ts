@@ -3,9 +3,18 @@ import { test } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import AgentMarkdown from '../components/AgentMarkdown';
+import AgentResponse from '../components/AgentResponse';
 import { normalizeAgentMath } from '../lib/agent-math';
 
 const render = (text: string) => renderToStaticMarkup(createElement(AgentMarkdown, { text }));
+
+test('an unseen hidden response starts as filtered plain text without Markdown or math work', () => {
+  const text =
+    '```openpe_session\n{"title":"Hidden title"}\n```\n**Output** $V_{OUT}$\n\n```openpe\n[{"type":"removePart","ref":"R1"}]\n```';
+  const html = renderToStaticMarkup(createElement(AgentResponse, { text, active: false }));
+  assert.match(html, /\*\*Output\*\* \$V_\{OUT\}\$/);
+  assert.doesNotMatch(html, /<strong|class="katex"|Hidden title|removePart|Copy code|openpe/);
+});
 
 test('agent replies format emphasis, nested lists, tables and literal code', () => {
   const html = render(
@@ -18,8 +27,29 @@ test('agent replies format emphasis, nested lists, tables and literal code', () 
   assert.match(html, /<td>5 Ω<\/td>/);
   assert.match(
     html,
-    /<pre tabindex="0"><code class="language-spice">V1 in 0 12\n\* \*\*literal\*\*/,
+    /<pre id="[^"]+" data-numbered="true" tabindex="0" aria-label="spice code" aria-keyshortcuts="Control\+G Meta\+G"><code class="language-spice"/,
   );
+  assert.match(
+    html,
+    /aria-hidden="true" data-line="1"><\/span><span class="agent-code-line-source">V1 in 0 12\n/,
+  );
+  assert.match(
+    html,
+    /aria-hidden="true" data-line="2"><\/span><span class="agent-code-line-source">\* \*\*literal\*\*\n/,
+  );
+  assert.match(html, /aria-label="spice block"/);
+  assert.match(html, /aria-label="Copy code"/);
+});
+
+test('code blocks provide separate copy actions while inline code stays inline', () => {
+  const inline = render('Set `R1` to `55.3k`.');
+  assert.doesNotMatch(inline, /Copy code|agent-code-block/);
+  const html = render('```spice\nR1 out fb 55.3k\n```\n\n    Plain indented code');
+  assert.equal(html.match(/aria-label="Copy code"/g)?.length, 2);
+  assert.match(html, /aria-label="Code block"/);
+  const literal = render('```text\n<script>alert(1)</script>\n\\(V_{OUT}\\)\n```');
+  assert.doesNotMatch(literal, /<script|class="katex"/);
+  assert.match(literal, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
 test('streaming fragments remain renderable and proposal payloads stay hidden', () => {
@@ -45,6 +75,32 @@ test('agent markup cannot inject HTML, unsafe navigation or remote image request
   );
   assert.match(html, /aria-description="https:\/\/example.com\/data"/);
   assert.doesNotMatch(html, /\stitle=|<title\b|role="tooltip"/);
+});
+
+test('generated footnotes retain isolated reference and return targets across replies', () => {
+  const text =
+    'First measurement.[^scope] Second measurement.[^scope]\n\n[^scope]: 20 kHz bandwidth.';
+  const html = renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(AgentMarkdown, { text }),
+      createElement(AgentMarkdown, { text }),
+    ),
+  );
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+  const links = [...html.matchAll(/href="#([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(links.length, 8);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const target of links) assert.ok(ids.includes(target));
+  assert.equal(html.match(/aria-label="Back to reference/g)?.length, 4);
+  assert.equal(html.match(/tabindex="-1"/g)?.length, 2);
+  for (const description of html.matchAll(/aria-describedby="([^"]+)"/g))
+    assert.ok(ids.includes(description[1]));
+  const authored = render(
+    '[Local](#user-content-fn-scope) [Relative](/api/state) [Unsafe](javascript:alert%281%29)',
+  );
+  assert.doesNotMatch(authored, /<a\b|data-openpe-footnote/);
 });
 
 test('formulas support dollar and LaTeX delimiters, including the reported output voltage', () => {

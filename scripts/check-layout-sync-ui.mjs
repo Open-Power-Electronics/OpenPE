@@ -20,7 +20,8 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
-import { parseSExpr } from '../lib/sexpr.ts';
+import { tsImport } from 'tsx/esm/api';
+import { child, children, parseSExpr, val } from '../lib/sexpr.ts';
 import {
   fillSource,
   readSource,
@@ -30,6 +31,7 @@ import {
 } from './source-editor-test-helpers.mjs';
 
 // Isolated full workspace: no Electron, provider, solver or native file access.
+const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
 const fixture = parseProject(await readFile('tests/fixtures/rc-filter.openpe.json', 'utf8'));
 // This test exercises physical package synchronization, so assign the source
 // embedded packages explicitly rather than treating virtual parts as physical.
@@ -37,7 +39,9 @@ for (const footprint of fixture.pcb.footprints) {
   const part = fixture.schematic.parts.find((part) => part.id === footprint.symbolId);
   (part.fields ??= {}).Footprint = footprint.libraryId;
 }
-const source = serializeProject(fixture);
+const source = serializeProject(
+  projectFromNativeFiles(projectNativeFiles(fixture, 'layout.kicad_pro')),
+);
 
 const footprintId = 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical';
 const footprint = parseSExpr(
@@ -72,7 +76,7 @@ let state = {
   provider: 'codex',
   effort: 'low',
   approvalMode: 'review',
-  models: {},
+  models: { ...defaultAgentPreferences.models },
 };
 const bundle = await build({
   stdin: {
@@ -112,7 +116,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1460, height: 900 } });
   page.setDefaultTimeout(12000);
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+    console.error(error);
+  });
   await page.exposeFunction('writeLayoutSave', (value) => {
     saved = value;
   });
@@ -129,6 +136,10 @@ try {
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       newFile: async () => crypto.randomUUID(),
       releaseFile: async () => {},
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
+      projectDirectory: async () => ({ entries: [], truncated: false }),
       setDirty: async () => {},
       onCloseRequested: () => () => {},
       save: async ({ source }) => {
@@ -144,6 +155,8 @@ try {
       if (route.request().method() === 'POST') state = route.request().postDataJSON();
       return route.fulfill({ json: state });
     }
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (url.pathname === '/api/appearance') return route.fulfill({ json: null });
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
@@ -185,6 +198,41 @@ try {
   const baseline = await readNativeProject(page);
   await button('Layout').click();
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
+  const owner = baseline.pcb.footprints[0];
+  const reference = owner.graphics.find((graphic) => graphic.text?.property === 'Reference');
+  const part = baseline.schematic.parts.find((part) => part.id === owner.symbolId);
+  await canvas.locator(`[data-footprint-text="${reference.id}"] text`).click();
+  const content = page.getByRole('textbox', { name: 'Text content', exact: true });
+  assert.equal(await content.inputValue(), part.ref);
+  await content.fill('R97');
+  await content.dispatchEvent('compositionstart');
+  await content.press('Escape');
+  assert.equal(await content.inputValue(), 'R97');
+  await content.dispatchEvent('compositionend');
+  await content.press('Enter');
+  await button('Source').click();
+  const renamedPart = await readNativeProject(page);
+  assert.equal(renamedPart.schematic.parts.find(({ id }) => id === part.id).ref, 'R97');
+  const renamedReference = renamedPart.pcb.footprints
+    .find(({ id }) => id === owner.id)
+    .graphics.find(({ id }) => id === reference.id);
+  assert.deepEqual(renamedReference.start, reference.start);
+  const boardFile = renamedPart.nativeFiles.files.find(({ name }) => name === 'layout.kicad_pcb');
+  const nativeBoard = parseSExpr(boardFile.source);
+  const nativeFootprint = children(nativeBoard, 'footprint').find(
+    (item) => val(child(item, 'uuid')) === owner.id,
+  );
+  const nativeReference = children(nativeFootprint, 'property').find(
+    (item) => val(item) === 'Reference',
+  );
+  assert.equal(val(nativeReference, 2), 'R97');
+  await button('Layout').click();
+  await button('Undo').click();
+  await button('Source').click();
+  assert.deepEqual(await readNativeProject(page), baseline);
+  await button('Layout').click();
+  console.log('Footprint Reference text edits both native files and undoes in one step.');
+
   await button('Annotation mode').click();
   await canvas.locator('[data-pad-id]').first().click();
   await page
@@ -220,9 +268,13 @@ try {
   await button('Redo').click();
   await canvas.press('Control+s');
   await page.getByText('Save project', { exact: true }).waitFor();
+  const savedProject = projectFromNativeFiles(
+    projectNativeFiles(parseProject(saved), 'layout.kicad_pro'),
+  );
+  const byName = (a, b) => a.name.localeCompare(b.name);
   assert.deepEqual(
-    projectFromNativeFiles(projectNativeFiles(parseProject(saved), 'layout.kicad_pro')),
-    renamed,
+    savedProject.nativeFiles.files.toSorted(byName),
+    renamed.nativeFiles.files.toSorted(byName),
   );
   await button('Source').click();
   const assigned = structuredClone(renamed);

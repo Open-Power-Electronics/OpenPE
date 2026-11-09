@@ -29,6 +29,7 @@ export default function Home({
   onOpen,
   onExample,
   onResume,
+  onNewSession,
   onProjectAction,
   onSettings,
   onPlugins,
@@ -44,7 +45,8 @@ export default function Home({
   onNew: (brief?: string) => void;
   onOpen: () => void;
   onExample: (id: ExampleId) => void;
-  onResume: (id: string) => void;
+  onResume: (id: string, sessionId?: string) => void;
+  onNewSession: (id: string) => void;
   onProjectAction: (id: string, action: ProjectAction) => void;
   onSettings: () => void;
   onPlugins: () => void;
@@ -104,6 +106,7 @@ export default function Home({
           active={active}
           projects={projects}
           onSelect={onResume}
+          onNewSession={onNewSession}
           onAction={onProjectAction}
         />
         <div className="rail-spacer" />

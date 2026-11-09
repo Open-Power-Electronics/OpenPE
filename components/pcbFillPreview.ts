@@ -290,9 +290,9 @@ export function preparePCBFillPreview(basis: PCB, candidate: PCB): PCBFillPrevie
         for (const keepout of keepouts)
           if (
             keepout.layer === zone.layer &&
-            overlaps(bounds, inflate(zoneBounds(keepout), clearance))
+            overlaps(bounds, inflate(zoneBounds(keepout), keepout.clearance))
           )
-            blockers.push({ path: outlinePath(keepout), strokeWidth: 2 * clearance });
+            blockers.push({ path: outlinePath(keepout), strokeWidth: 2 * keepout.clearance });
         return {
           id: zone.id,
           layer: zone.layer,

@@ -224,6 +224,8 @@ export function worldZones(board: PCB): BoardZone[] {
   ];
 }
 const zonePolygon = (z: BoardZone): Polygon => ({ outer: z.outline, holes: z.holes ?? [] });
+export const pourKeepoutPolygons = (zone: BoardZone): Polygon[] =>
+  offset([zonePolygon(zone)], zone.clearance);
 export const polygonPath = (polygons: Polygon[]) =>
   polygons
     .flatMap((p) => [p.outer, ...p.holes])
@@ -308,7 +310,7 @@ function calculateCopperPolygons(
     const blocked: Polygon[] = [];
     for (const other of zones) {
       if (other.id === z.id || other.layer !== z.layer) continue;
-      if (other.keepout?.copperpour) blocked.push(...offset([zonePolygon(other)], clearance));
+      if (other.keepout?.copperpour) blocked.push(...pourKeepoutPolygons(other));
       else if (
         !other.keepout &&
         other.fillEnabled !== false &&

@@ -237,7 +237,7 @@ An explicitly selected layer moves its complete visible pass to the top.
 Clicking its row again clears the priority, restoring the physical stack while
 retaining the copper tool layer, gestures and pending drafts. Through pads and
 vias paint once; drill voids remain above physical artwork. Default marquees include all visible layers; explicit priority
-restricts them to that layer. Equal-distance point picks follow the visible stack.
+restricts them to that layer. Point overlaps use the [canvas picking rules](#layers-labels-and-selection).
 
 Properties uses shared labelled rows and sections for footprints, pads, tracks,
 vias, board graphics/text/dimensions, zones, rule areas and board settings.
@@ -281,7 +281,7 @@ graphics, dimensions, zones and rule areas. These supported categories default
 checked, so All items starts checked and reports a mixed state only when their
 eligibility differs. Locked items defaults unchecked, independently gates picking
 locked footprints, pads, tracks, vias, graphics, text, dimensions, zones and rule areas without unlocking them, and is excluded from All items. Unsupported
-Points stays disabled and unchecked. Direct nearest-geometry picking works through disabled
+Points stays disabled and unchecked. Point picking works through disabled
 categories and footprint overlays. Explicit inspection reveals a collapsed dock.
 
 Place footprint opens an independent centered component/library chooser with
@@ -292,6 +292,8 @@ Library placement retains coordinates through six decimal places and supports
 rectangular, circular, oval and rounded rectangular pads with an explicit
 0–0.5 corner ratio. Pad positions, corner ratios and straight artwork remain
 exact through native Save and reopening; unsupported geometry is rejected.
+Placement creates native Reference and Value fields with stable IDs so the
+captions are selectable immediately.
 Route tracks uses a compact nonmodal horizontal panel 8 px below the drawing top
 and 12 px from its left edge. Its width follows the content up to 720 px, with a
 Track width prefix, three inline numeric fields and pinned Close. The width, via
@@ -301,7 +303,7 @@ smaller drill. The rectangle and polygon strips share Net and Layer selectors wi
 
 Net/layer changes, unrelated board revisions and cancellation discard the complete preview without partial writes. Escape clears a draft before idle Escape exits. Polygon Backspace removes one corner. Rejection retains its exact draft for retry. Same-layer endpoints attract within eight screen pixels; Shift bypasses attraction and Ctrl/Cmd bypasses grid snapping. Preview and native output use the same layer/coordinates; hidden-layer drafts cannot commit. Edge.Cuts uses a 0.05 mm display floor, retaining native widths. Number-field Escape restores accepted input/canvas focus. Selector Escape closes options first; IME composition, including code 229, cannot apply or cancel.
 
-Closed-region interiors are fallback point targets behind precise copper and strokes, respecting visible outlines, filters and cutouts. Properties groups net/layer, clearance/minimum width and bounds into paired rows. Zone bounds and the following Fill rules are collapsed until requested; zone-corner and cutout coordinate lists are omitted without changing native geometry. Retained drafts survive disclosure and dock visibility changes. A fixed footer outside the scrolling fields keeps Delete object at the bottom right for every selected object or group. Copper zones also show a neutral paint-bucket Fill/Refill icon immediately before Delete. Pad inspection remains distinct from object selection and does not expose owner deletion.
+Closed-region interiors are fallback point targets behind precise copper and strokes, respecting visible outlines, filters and cutouts. The General tab shows the net and layer. The **Fill** tab pairs clearance and minimum width, and the **Bounds** tab pairs the position and size fields. The zone-corner and cutout coordinate lists are omitted without changing native geometry. Retained drafts survive tab and dock visibility changes. A fixed footer outside the scrolling fields keeps Delete object at the bottom right for every selected object or group. Copper zones also show a paint-bucket Fill/Refill icon immediately before Delete. Pad inspection remains distinct from object selection and does not expose owner deletion.
 
 ### Rectangular outline editing
 
@@ -370,16 +372,26 @@ electrical routing.
 Containment and crossing marquees cover all visible layers in the default view;
 explicit priority restricts them to that layer, retaining category filters and
 selection modifiers. Through pads/vias participate on each physical copper
-layer; restricted footprint bounds use only that layer's body geometry. Point
-picks prefer eligible hits on the explicitly selected visible layer before
-other layers, even when off-layer geometry is nearer. Within that layer, precise
-pad/stroke hits precede region/body/fill interiors. A missing, hidden or filtered
-current-layer hit falls back to other eligible visible geometry. With no explicit
-layer, nearest geometry and physical-stack ties retain their ordinary order.
-Selected-layer region and saved-fill candidates remain available behind off-layer
-precise hits; fill contours stay lazy until needed by the exact picker. Footprint
-priority follows the geometry under the pointer rather than distant child artwork;
-shared through copper belongs to each copper layer and non-plated holes to Edge.Cuts.
+layer; restricted footprint bounds use only that layer's body geometry.
+
+Point selection collects eligible copper and artwork within three screen pixels.
+Pad candidates use transformed pad geometry, including where overlaid by artwork.
+With either visible silkscreen layer active, eligible independent silk on either
+side takes precedence. For competing copper and silk, keep hits within one pixel
+of the best surface hit, then retain the smallest coverage group up to the first
+adjacent 1.5× size gap. Track coverage uses width squared, pad coverage uses its
+shape area, and supported silk text uses the bundled stroke glyphs. Similar
+candidates on the active layer take precedence at the end, using the retained
+copper layer in the default view. A remaining mixed silk, pad or track hit
+offers object choices on click. Same-kind ties use distance, paint order and
+stable identity. Track-tool pickup retains its nearest-segment ordering.
+
+For other point targets, explicitly prioritized layer geometry is considered
+first. Precise hits precede broad footprint, region and saved-fill interiors
+within that layer group. Missing, hidden or filtered hits fall through to
+eligible geometry. Fill contours stay lazy until needed. Footprint priority
+follows local body geometry. Shared through copper belongs to each physical
+copper layer and non-plated holes to Edge.Cuts.
 Select all and explicit report navigation still cover all eligible visible
 layers. Copper row selection also chooses the routing layer; a noncopper row
 retains the copper tool layer and exits active copper drawing
@@ -388,7 +400,18 @@ silently changes the priority row. New zones use the retained copper layer in
 the default view and reject an explicitly prioritized noncopper layer;
 an explicit routing anchor or via transition may select its actual copper layer.
 
-Captions retain source anchors/rotation/mirroring while resolving linked values.
+Native footprint Reference, Value and user text are independent Text targets.
+Their hits use the displayed caption and its own layer, including when
+Footprints is unchecked. Rendered text hits supplement geometric candidate
+collection. Marquees include eligible text whose owner is outside the selection.
+Hidden or locked captions follow the corresponding visibility and selection
+gates, including the owning footprint's lock. Selection highlights the caption
+alone. Move and Rotate edit its local geometry through the shared board
+transaction, preserving the owner, pads and tracks. Delete hides native fields
+and removes ordinary user text. In Properties, **Text content** on a Reference
+or Value field edits the owning schematic component or board-only footprint
+through its property command, retaining the text's native geometry and identity.
+Editing a linked Reference changes the component designator in both views.
 Pad numbers/net names have independent switches, fitted labels and full-name
 inspection. Source-hidden fields remain hidden. Selection preserves layer hues,
 uses theme-aware contrast and retains widths/geometry; exports omit selected
@@ -581,12 +604,18 @@ contours and rules, including when an intermediate candidate cleared its fills.
 Unrelated captions, models, locks, viewing, opening and saving retain native fills;
 Source applies the entered native contours without automatic refill.
 Bounded Clipper geometry clips closed
-edges/cutouts, subtracts foreign copper/holes/keepouts, resolves priority and
-creates solid/thermal contacts. Curves use nominal 0.01 mm tessellation within
-caps. Invalid/open/excessive geometry fails. Islands remain; complete KiCad
+edges/cutouts, subtracts foreign copper and holes, resolves priority and
+creates solid/thermal contacts. Each rule area's **Pour clearance (mm)** in
+**Fill** extends its copper-pour exclusion on the same layer by 0–1,000 mm.
+At 0 mm the exclusion follows the rule area outline. The setting applies when
+**Keep out copper pours** is enabled and is independent of zone-to-copper
+spacing and the other rule-area flags. Changing it refreshes existing enabled
+fills as part of the same undo edit, and temporary masks use the same margin.
+Curves use nominal 0.01 mm tessellation within caps. Invalid/open/excessive
+geometry fails. Islands remain; complete KiCad
 island/fabrication rules are unsupported.
 
-There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the footer Fill action. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
+The idle Layout canvas menu offers **Fill all copper zones** when at least one copper pour is enabled. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the footer Fill action. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
@@ -677,8 +706,11 @@ board thickness, closed edges/cutouts, drills, two-/four-layer copper, pads, sil
 available packages in mm. Clicking visible laminate, copper, mask or silk selects the board in Model and exposes its thickness field; Layout empty Properties has no thickness setting. Component/CAD occlusion and the body filter govern board picking. The field uses the existing validated PCB replacement transaction with the exact current board and Source/close guards, retaining its draft while hidden. Native thickness, 3D geometry and whole-project undo stay in agreement. Neutral fallback bodies are estimates; late real
 models replace them without camera movement. Filled silk and mask artwork retain
 their native stroke as well as their interior; closed strokes keep their inner
-clearance. Text retains linked values and transforms using bounded textures with
-the shared local UI font, without Newstroke parity.
+clearance. Supported silkscreen text uses the same pinned Newstroke stroke
+layout as Gerber. Model clips the ink geometry to the board and drill holes,
+using the resolved caption, placement, justification and stroke width. The
+vector pass processes up to 8,192 UTF-16 code units and 8,192 stroke segments
+per side. Other captions retain the bounded local-font texture presentation.
 Orthographic projection/silk default on. Fit includes visible world geometry,
 including transparent covers, and excludes hidden groups; empty scenes retain
 a finite fallback.
@@ -723,6 +755,11 @@ that scene; no native Blender process or downloaded environment is used. Materia
 interpretation is a display approximation, not measured optical data or a promise
 of matching Blender/Cycles output. Component colours, maps and authored opacity
 remain represented without inventing a measured glass or metal classification.
+The camera-visible floor keeps its full shading and contact shadows within one
+assembly span of the centre. It fades to the studio background by three spans,
+well inside the geometry boundary. Direct camera rays beyond the fade skip
+floor shading. The responsive raster preview shares the fade distance and keeps
+the private floor visible through the assembly camera's far clip.
 Render owns independent geometry, material and texture-state copies; only image
 bytes are shared read-only with the ordinary preview. Authored face groups are
 partitioned into single-material render meshes before tracing, preserving STEP
@@ -745,6 +782,8 @@ dielectric with transmission 0.26, refractive index 1.55, zero modelled thicknes
 and clearcoat, so covered copper remains visible through the coating. Existing
 native mask apertures expose bare pads; opaque FR4 blocks internal and underside
 layers. These bounded optical approximations do not change authored material records.
+Vector silkscreen enters Render as physical geometry, so small ink strokes and
+letter counters are sampled directly along with the surrounding board surface.
 
 `components/model-copper-relief.ts` derives owned mask normal and clearcoat-normal
 maps from the union of actual visible outer-copper triangles. Pairing requires
@@ -761,21 +800,25 @@ transmission traversals and geometry-guided denoising. A private raster pass
 caches first-surface view normals, depth, albedo and optical strength at working
 resolution. Its materials retain native apertures, alpha tests, texture/vertex
 colours and mapped normals; the physical tracing materials are restored after
-the pass. Camera, scene and size changes invalidate these guides; accumulation
+the pass. Camera, scene and working-size changes invalidate these guides; accumulation
 and selection reuse them.
-Three 5×5 à-trous passes at strides 1, 2 and 4 reconstruct linear radiance using
-normal, tangent-plane distance, albedo and perceptual-colour weights. Their
-75 kernel taps span a 14-pixel radius, with weights rejecting incompatible
-surfaces. Four immediate-neighbour probes per pass retain the original traced
+Three 5×5 spatial passes at strides 1, 4 and 1 reconstruct linear radiance using
+normal, tangent-plane distance, albedo and perceptual-colour weights. The first
+and final passes mix adjacent pixels to reduce fine grain. Their 75 kernel taps
+span a 12-pixel radius, with weights rejecting incompatible surfaces. Four
+immediate-neighbour probes per pass retain the original traced
 pixels along guide boundaries, preserving their sampled subpixel coverage.
 Filtering never feeds back into the accumulated samples or clips HDR reflections.
 Raster guides describe only the nearest surface; transmission/alpha retain a
 tighter original-colour guard, but refracted detail and low-contrast shadows
 can still soften. This is bounded spatial denoising, not an optical reference.
 Multiple importance sampling retains direct studio-light sampling to limit noise.
-The working image uses 75% of drawing-buffer dimensions, capped at one pixel
-per CSS pixel and 1,920 px on its longest side; the viewport and PNG retain
-their original dimensions. Sampling begins with three
+The working image supersamples up to 1.5× the drawing-buffer and CSS dimensions,
+with a 1,920 px longest-side limit. When the tracing grid is larger than the
+drawing buffer, a cached area-weighted resolve averages its subpixel coverage
+in linear light before tone mapping. This smooths component silhouettes and
+board edges in both the viewport and PNG, which retain their original sizes.
+Selection outlines compose over the same resolved image. Sampling begins with three
 tiles per animation frame and adapts up to 27 tiles as the preceding GPU batch
 finishes. A nonblocking fence after presentation keeps one tracing batch in
 flight; busy GPUs reduce the batch toward one tile. Tile submission checks an
@@ -790,8 +833,9 @@ filters the full 64-sample image for display and export.
 Accumulation-only continuation frames retain the composited raster image while
 shaders compile, and the current denoised image while the GPU is busy or only a
 partial presentation interval advances. Camera, scene, size and selection changes invalidate
-that presentation. Explicit view updates and captures always repaint, including
-after canvas resize or reactivation; failed draws remain retryable. Sampling and
+that presentation. A drawing-buffer resize repaints even when the working
+size and accumulated samples are retained. Explicit view updates and captures
+always repaint, including after reactivation; failed draws remain retryable. Sampling and
 the nonblocking GPU fence continue independently of duplicate presentation.
 These settings favour responsiveness over fine shadow, reflection and transmission
 detail. Camera motion uses a responsive preview and resets path
@@ -1123,7 +1167,7 @@ camera gestures pause during annotation. Agent observations are bounded;
 component proposals remain schematic-only.
 
 New Layout annotation element picks and object membership follow Selection
-eligibility. Element picks use Interaction's nearest-geometry ranking and three-screen-pixel
+eligibility. Element picks use Interaction's point ranking and three-screen-pixel
 surface tolerance; element marquees share its directional geometry and layer-priority rules.
 The element tool creates no annotation when a click or marquee
 finds no eligible objects. Filter changes clear ineligible live highlights and
@@ -1215,10 +1259,12 @@ bounded outer-copper normal maps and unchanged native geometry/UVs are covered b
 `node scripts/check-model-render-ui.mjs` exercises the GPU path tracer and PNG
 output, camera/material preservation, IME, retained display state and release
 across toggles. Its fixed-seed fixture checks floor grain, 1/4/8-pixel residuals
-on metal/translucent/PCB surfaces and authored colour-edge contrast;
-`--high-dpi` checks the same fixture at 2× device scale with the bounded working
-image and unchanged export dimensions. Holding publication of the real linked shader verifies unchanged
-visible pixels and no repeated raster scene draws during preparation continuations.
+on metal/translucent/PCB surfaces, authored colour-edge contrast and the
+contrast between the counter and fine strokes of a 1 mm silkscreen glyph;
+`--high-dpi` checks the same fixture at 2× device scale. Both variants check
+the bounded supersampled tracing target and unchanged export dimensions. Holding
+publication of the real linked shader verifies unchanged visible pixels and
+no repeated raster scene draws during preparation continuations.
 Delayed component/CAD fixtures verify import progress, no premature Render
 allocation, failed-import retry, hidden completion, export cancellation on view
 or document changes and successful export after import and convergence.

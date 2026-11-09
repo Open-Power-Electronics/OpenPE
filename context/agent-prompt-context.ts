@@ -5,6 +5,7 @@ import { projectNetGroups } from '../lib/project-net-groups';
 import { unitGraphics } from '../lib/library';
 import { child, children, val } from '../lib/sexpr';
 import { modelCadFromProject } from '../lib/model-cad';
+import { projectDatasheetContext } from '../lib/example-datasheets';
 
 const collectionLimit = 256;
 const bounded = <T>(items: T[]) => ({
@@ -15,12 +16,13 @@ const bounded = <T>(items: T[]) => ({
 
 /** Semantic provider observations, never writable project documents. Complete
  * canonical/native data stays behind explicit queries on the originating host. */
-export function agentPromptContext(value: unknown): unknown {
+export function agentPromptContext(value: unknown, progressive = false): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const context = value as Record<string, unknown>;
   const workspace = context.workspace as AgentWorkspaceContext | undefined;
   if (!workspace) return value;
   const project = parseProject(JSON.stringify(workspace.project));
+  const datasheet = projectDatasheetContext(project);
   const selected = new Set(
     Array.isArray(workspace.ui.selection) ? (workspace.ui.selection as string[]) : [],
   );
@@ -38,6 +40,15 @@ export function agentPromptContext(value: unknown): unknown {
       },
     };
     if (!active) return summary;
+    if (progressive)
+      return {
+        ...summary,
+        selectedComponents: bounded(
+          circuit.parts
+            .filter((part) => selected.has(part.id))
+            .map(({ id, ref, value }) => ({ id, ref, value })),
+        ),
+      };
     // Keep selected components visible when a large sheet exceeds the bound.
     const parts = [...circuit.parts].sort(
       (a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)),
@@ -161,7 +172,7 @@ export function agentPromptContext(value: unknown): unknown {
                   (key) => [key, board[key].length],
                 ),
               ),
-              ...(workspace.ui.view === 'layout'
+              ...(!progressive && workspace.ui.view === 'layout'
                 ? {
                     footprints: bounded(
                       board.footprints.map(
@@ -184,7 +195,7 @@ export function agentPromptContext(value: unknown): unknown {
         modelCad: model
           ? {
               objectCount: model.objects.length,
-              ...(workspace.ui.view === '3d'
+              ...(!progressive && workspace.ui.view === '3d'
                 ? {
                     objects: model.objects.map(({ id, name, kind, position, rotation, size }) => ({
                       id,
@@ -204,10 +215,24 @@ export function agentPromptContext(value: unknown): unknown {
         error: workspace.source.error,
         draftCharacters: workspace.source.draftCharacters,
       },
-      ui: workspace.ui,
-      icDatasheet: workspace.icDatasheet,
-      simulation: workspace.simulation,
-      thermal: workspace.thermal,
+      ui: progressive
+        ? {
+            active: workspace.ui.active,
+            view: workspace.ui.view,
+            activeSchematicId: workspace.ui.activeSchematicId,
+            selection: bounded([...selected]),
+          }
+        : workspace.ui,
+      icDatasheet: progressive
+        ? {
+            status: datasheet.status,
+            bindings: bounded(datasheet.bindings),
+            document: datasheet.record?.datasheet,
+          }
+        : datasheet,
+      simulation: progressive ? { status: workspace.simulation?.status } : workspace.simulation,
+      thermal:
+        progressive && workspace.thermal ? { status: workspace.thermal.status } : workspace.thermal,
     },
   };
 }

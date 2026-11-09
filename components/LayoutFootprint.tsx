@@ -5,6 +5,7 @@ import {
   type Footprint,
   type CopperLayer,
   type BoardLayer,
+  type BoardLine,
 } from '@/lib/pcb';
 import { padCopperLayers } from '@/lib/pcb-connectivity';
 import { padPosition, padRotation } from '@/lib/pcb-layout';
@@ -38,6 +39,27 @@ type CaptionProps = {
   onlyLayer?: BoardLayer;
   excludedLayer?: BoardLayer;
 };
+
+const LayoutFootprintText = memo(function LayoutFootprintText({
+  graphic,
+  ownerId,
+  rotation,
+  selection,
+}: {
+  graphic: BoardLine;
+  ownerId: string;
+  rotation: number;
+  selection: LayoutSelection;
+}) {
+  const selected = useLayoutSelection(selection, graphic.id, ownerId);
+  return (
+    <g data-selection-id={graphic.id} data-footprint-text={graphic.id}>
+      <PCBSelectionPaint color={layerColor(graphic.layer)} selected={selected}>
+        {(color) => <PCBGraphic graphic={graphic} color={color} footprintRotation={rotation} />}
+      </PCBSelectionPaint>
+    </g>
+  );
+});
 type GraphicProps = CaptionProps & {
   copperLayers: PCB['layers'];
   padLayerOrder?: readonly BoardLayer[];
@@ -310,22 +332,19 @@ export const LayoutFootprintCaptions = memo(function LayoutFootprintCaptions({
   return (
     <g
       key={f.id}
-      data-selection-id={f.id}
       data-footprint-captions={f.id}
       transform={`translate(${f.x} ${f.y}) rotate(${-f.rotation})`}
       pointerEvents={placement ? 'none' : undefined}
       opacity={placement ? 0.65 : undefined}
     >
       {graphics.map((g) => (
-        <PCBSelectionPaint key={g.id} color={layerColor(g.layer)} selected={selected}>
-          {(color) => (
-            <PCBGraphic
-              graphic={resolvePCBGraphic(g, reference ?? f.reference ?? '', value ?? f.value ?? '')}
-              color={color}
-              footprintRotation={f.rotation}
-            />
-          )}
-        </PCBSelectionPaint>
+        <LayoutFootprintText
+          key={g.id}
+          graphic={resolvePCBGraphic(g, reference ?? f.reference ?? '', value ?? f.value ?? '')}
+          ownerId={f.id}
+          rotation={f.rotation}
+          selection={selection}
+        />
       ))}
       {fallbackReference && (
         <PCBSelectionPaint

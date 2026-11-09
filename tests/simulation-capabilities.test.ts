@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCapabilityHost } from '../api/capabilities';
+import { resolveAgentCapability, type AgentCapabilityRequest } from '../lib/chat-stream';
 import {
   registerSimulationCapabilities,
   type SimulationCapabilityAdapter,
 } from '../lib/simulation-capabilities';
 
-function fixture() {
+function fixture(revision?: () => string) {
   let enabled = true;
   let visible = true;
   let running = false;
@@ -39,7 +40,7 @@ function fixture() {
       return { cancelled: true };
     },
   };
-  const host = createCapabilityHost();
+  const host = createCapabilityHost({ revision });
   const remove = registerSimulationCapabilities(host, adapter);
   return {
     host,
@@ -70,7 +71,7 @@ test('bundled simulation capabilities publish schemas and use the same commands 
   assert.equal(
     catalog
       .filter((entry) => entry.kind === 'command')
-      .every((entry) => entry.review === 'optional'),
+      .every((entry) => entry.review === (entry.mutation === 'document' ? 'optional' : 'none')),
     true,
   );
   assert.equal(catalog.find((entry) => entry.id === 'simulation.run')?.mutation, 'document');
@@ -142,4 +143,77 @@ test('simulation run remains awaitable while status and cancel share the host, w
     host.observe().events.some((event) => event.type === 'simulation.ready'),
     true,
   );
+});
+
+test('Stop ignores project revisions while Run and configuration retain stale-edit protection', async () => {
+  let revision = 'initial';
+  const { host } = fixture(() => revision);
+  try {
+    assert.equal(
+      host.catalog().find((item) => item.id === 'simulation.cancel')?.revision,
+      'independent',
+    );
+    const run = host.execute('simulation.run', {}, { expectedRevision: revision });
+    revision = 'edited';
+    await assert.rejects(
+      host.execute('simulation.configure', {}, { expectedRevision: 'initial' }),
+      /project changed/,
+    );
+    await assert.rejects(
+      host.execute('simulation.run', {}, { expectedRevision: 'initial' }),
+      /project changed/,
+    );
+    for (const actor of ['human', 'agent'] as const)
+      assert.deepEqual(
+        await host.execute('simulation.cancel', {}, { actor, expectedRevision: 'initial' }),
+        { cancelled: true },
+      );
+    assert.equal(((await run) as { running: boolean }).running, false);
+  } finally {
+    host.dispose();
+  }
+});
+
+test('Agent Stop executes immediately in Review and retains schema and lifecycle gates', async () => {
+  const { host, disable, remove } = fixture(() => 'newer');
+  const request: AgentCapabilityRequest = {
+    type: 'capability-request',
+    runId: 'run',
+    sessionId: 'session',
+    requestId: 'stop',
+    token: 'token',
+    tool: 'openpe_execute',
+    arguments: { name: 'simulation.cancel', input: {} },
+  };
+  const stop = () => resolveAgentCapability(request, host, 'auto', () => assert.fail());
+  try {
+    const run = host.execute('simulation.run');
+    const reviews: unknown[] = [];
+    await resolveAgentCapability(request, host, 'review', (command) => reviews.push(command));
+    assert.equal(reviews.length, 0);
+    assert.equal(((await host.query('simulation.status')) as { running: boolean }).running, false);
+    assert.deepEqual(await stop(), { cancelled: true });
+    await run;
+    await assert.rejects(
+      host.execute('simulation.cancel', { unexpected: true }, { expectedRevision: 'old' }),
+      /Invalid input/,
+    );
+    const control = new AbortController();
+    control.abort();
+    await assert.rejects(
+      host.execute('simulation.cancel', {}, { signal: control.signal }),
+      /cancelled/,
+    );
+    host.suspend('Closing');
+    await assert.rejects(stop(), /Closing/);
+    host.resume();
+    disable();
+    await assert.rejects(stop(), /Enable SPICE/);
+    remove();
+    await assert.rejects(stop(), /Unknown command capability/);
+    host.dispose();
+    await assert.rejects(stop(), /closed/);
+  } finally {
+    host.dispose();
+  }
 });

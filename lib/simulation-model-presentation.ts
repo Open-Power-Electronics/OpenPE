@@ -125,7 +125,10 @@ export function simulationComponentPresentation(part: Part, circuit?: Circuit) {
       }
       const definition = profile?.parts.find((p) => p.ref === part.ref);
       if (definition?.modelName) model = definition.modelName;
-      else if (definition && !['R', 'C', 'L', 'V', 'unsupported', 'T'].includes(definition.kind))
+      else if (
+        definition &&
+        !['R', 'C', 'L', 'V', 'unsupported', 'excluded', 'T'].includes(definition.kind)
+      )
         model = `OPENPE_DEFAULT_${fields['Sim.Device'] || definition.kind}`;
       else if (part.libId === 'Transistor_FET:IRF540N') model = 'IRF540N';
       else if (!profile && part.libId === 'Simulation_SPICE:D' && isModelBuck(circuit))

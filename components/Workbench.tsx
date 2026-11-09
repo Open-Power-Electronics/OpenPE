@@ -117,7 +117,7 @@ import {
   type SessionState,
   type ChatSession,
 } from '@/lib/chat-sessions';
-import type { AgentCapabilities, ReasoningEffort } from '@/lib/chat-stream';
+import { agentCapabilitiesForHost, type ReasoningEffort } from '@/lib/chat-stream';
 import PartIdentity from './PartIdentity';
 import Logo from './Logo';
 import NavigationButton from './NavigationButton';
@@ -131,6 +131,7 @@ import type { ModelCheckIssue, ModelCheckFocus, ModelCheckReport } from './model
 import type { RuleCheckKind } from './RuleCheckPanel';
 const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
 import { type PCB, type Footprint } from '@/lib/pcb';
+import { findPCBGraphic } from '@/lib/pcb-layout';
 import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
 import SchematicLayers from './SchematicLayers';
 import { visibleSchematicIds } from '@/lib/schematic-view';
@@ -277,6 +278,7 @@ type Modal =
   | 'power'
   | 'library'
   | 'settings'
+  | 'agent-settings'
   | 'about'
   | 'parts'
   | 'annotation'
@@ -338,6 +340,10 @@ export default function Workbench({
   onDocumentChange,
   registerController,
   preferences,
+  agents,
+  detecting,
+  agentError,
+  detectAgents,
   setPreferences,
   appearanceSettings,
   startupError,
@@ -373,6 +379,10 @@ export default function Workbench({
   onDocumentChange: (id: string, state: DocumentUpdate) => void;
   registerController: (id: string, controller: DocumentController | null) => void;
   preferences: AgentPreferences;
+  agents: Agent[];
+  detecting: boolean;
+  agentError: string;
+  detectAgents: () => Promise<void>;
   setPreferences: React.Dispatch<React.SetStateAction<AgentPreferences>>;
   appearanceSettings: ReturnType<typeof useAppearance>;
   startupError: string;
@@ -951,9 +961,6 @@ export default function Workbench({
       setPreferences((p) => ({ ...p, models: update(p.models) })),
     [setPreferences],
   );
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [detecting, setDetecting] = useState(false);
-  const [agentError, setAgentError] = useState('');
   const [sessionState, setSessionState] = useState<SessionState>(() => {
     const sessions = initialState?.sessions ?? [createSession()];
     return { sessions, activeSessionId: initialState?.activeSessionId ?? sessions[0].id };
@@ -1267,22 +1274,7 @@ export default function Workbench({
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 5500);
   }, []);
-  async function detect() {
-    setDetecting(true);
-    setAgentError('');
-    try {
-      setAgents(await (await api('agents')).json());
-    } catch (e) {
-      setAgentError((e as Error).message);
-      notify((e as Error).message);
-    } finally {
-      setDetecting(false);
-    }
-  }
   const cancelAppClose = useRef<(() => void) | null>(null);
-  useEffect(() => {
-    if (window.openpe && active && !agents.length && !detecting) void detect();
-  }, [active]);
   useEffect(() => {
     if (active) setScreen(projectRef.current ? 'workspace' : 'home');
     if (!active) setModal(null);
@@ -2048,13 +2040,14 @@ export default function Workbench({
     function key(e: KeyboardEvent) {
       const el = e.target as HTMLElement;
       const input = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
-      if (!active || e.defaultPrevented || e.isComposing || hasOpenOverlay()) return;
+      if (!active || e.defaultPrevented || e.isComposing || e.keyCode === 229 || hasOpenOverlay())
+        return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (screen === 'workspace') void save(e.shiftKey);
         return;
       }
-      if (input || screen === 'plugins') return;
+      if (input || screen === 'plugins' || el.closest('.chat-panel')) return;
       if (e.altKey) return;
       if (e.key === 'Escape') {
         setModal(null);
@@ -2222,13 +2215,35 @@ export default function Workbench({
     return reader.projectDatasheetContext(before.project);
   }
 
-  async function readWorkspaceContext(signal?: AbortSignal): Promise<AgentWorkspaceContext> {
+  async function readProjectDatasheetPage(page: number, image: boolean, signal: AbortSignal) {
+    const before = core.getSnapshot();
+    const reference = await readProjectDatasheet(signal);
+    if (!reference.record)
+      throw new Error('No reviewed datasheet is bound to the current controller.');
+    const result = await (
+      await api('datasheets/page', {
+        method: 'POST',
+        body: JSON.stringify({ exampleId: reference.record.example.id, page, image }),
+        signal,
+      })
+    ).json();
+    signal.throwIfAborted();
+    if (closingDocument.current || core.getSnapshot().revision !== before.revision)
+      throw new Error('The project changed while reading the datasheet. Read it again.');
+    return { ...result, projectId: reference.projectId, bindings: reference.bindings };
+  }
+
+  async function readWorkspaceContext(
+    signal?: AbortSignal,
+    includeReference = true,
+  ): Promise<AgentWorkspaceContext> {
     const state = core.getSnapshot();
     const schematic =
       state.project &&
       (findSchematic(state.project, activeSchematicRef.current ?? '') ?? state.project.schematic);
     if (!schematic) throw new Error('Open a project to read workspace content.');
-    const reference = await readProjectDatasheet(signal);
+    signal?.throwIfAborted();
+    const reference = includeReference ? await readProjectDatasheet(signal) : undefined;
     if (
       core.getSnapshot().revision !== state.revision ||
       core.getSnapshot().sourceDraft !== state.sourceDraft ||
@@ -2253,7 +2268,7 @@ export default function Workbench({
       version: 1,
       capturedAt: new Date().toISOString(),
       project: agentProject(core.query('project.get')),
-      icDatasheet: reference,
+      ...(reference ? { icDatasheet: reference } : {}),
       source: agentSource(state.sourceDraft, state.sourceError),
       ui: {
         active,
@@ -2343,9 +2358,20 @@ export default function Workbench({
   };
   capabilityPorts.current = {
     revision: () => String(core.getSnapshot().revision),
-    beforeAgentCommand: () => assertAgentSourceDraftSafe(core.getSnapshot()),
+    beforeAgentCommand: (id, input) => {
+      const snapshot = core.getSnapshot();
+      assertAgentSourceDraftSafe(snapshot);
+      if (
+        snapshot.sourceDraft !== null &&
+        ((id === 'workbench.view' && input.view !== 'source') ||
+          (id === 'workbench.panel' && ['layers', 'history'].includes(String(input.panel))) ||
+          ['workbench.sheet', 'simulation.show', 'thermal.show'].includes(id))
+      )
+        throw new Error('Apply the pending Source edits before changing the workspace view.');
+    },
     state: (signal) => (doc ? readWorkspaceContext(signal) : core.query('project.snapshot')),
     datasheet: readProjectDatasheet,
+    datasheetPage: readProjectDatasheetPage,
     view: changeView,
     sheet: async (id, signal) => {
       if (!projectRef.current || !findSchematic(projectRef.current, id))
@@ -2780,7 +2806,6 @@ export default function Workbench({
     if (!project || !doc) throw new Error('Open a schematic before sending a message.');
     return { doc, pcb: project.pcb, pcbSchematic: project.schematic };
   }, []);
-  const getChatNativeFiles = useCallback(() => core.getNativeFiles(), [core]);
   const chatAnnotationDesign = useMemo(
     () => (doc ? { doc, pcb: project?.pcb, pcbSchematic: project?.schematic } : undefined),
     [doc, project?.pcb, project?.schematic],
@@ -2797,19 +2822,15 @@ export default function Workbench({
     }
     setSessionState((current) => updateSession(current, id, action));
   });
-  const chatCapabilities = useMemo<AgentCapabilities>(
-    () => ({
-      query: (name, input, options) =>
-        capabilityHost.query(name, input, { ...options, actor: 'agent' }),
-      execute: (name, input, options) =>
-        capabilityHost.execute(name, input, { ...options, actor: 'agent' }),
-      observe: (after) => capabilityHost.observe(after),
-    }),
+  const chatCapabilities = useMemo(
+    () => agentCapabilitiesForHost(capabilityHost),
     [capabilityHost],
   );
-  const readChatContext = useEditorAction(readWorkspaceContext);
+  const readChatContext = useEditorAction((signal?: AbortSignal) =>
+    readWorkspaceContext(signal, false),
+  );
   const applyChatProposal = useEditorAction(onApply);
-  const openChatSettings = useCallback(() => setModal('settings'), []);
+  const openChatSettings = useCallback(() => setModal('agent-settings'), []);
   const newChatSession = useEditorAction(() => {
     const candidate = createSession();
     setSessionState((current) => openNewSession(current, candidate, runningSessions));
@@ -3348,7 +3369,6 @@ export default function Workbench({
             <span className="header-separator" />
             <div className="breadcrumb">
               <strong>{headerProjectTitle}</strong>
-              {unsaved && <span className="dirty-dot" role="img" aria-label="Unsaved changes" />}
             </div>
           </>
         )}
@@ -3382,7 +3402,6 @@ export default function Workbench({
       screen,
       hasDocument,
       headerProjectTitle,
-      unsaved,
       hasNativeTitlebar,
       headerFileOptions,
       runHeaderFileAction,
@@ -3449,6 +3468,47 @@ export default function Workbench({
   const saveCurrentPartProperties = useEditorAction(
     (id: string, ref: string, value: string, fields: Record<string, string>) =>
       canEditProperties() && part?.id === id ? saveFields(ref, value, fields, id) : false,
+  );
+  const editFootprintText = useEditorAction(
+    (board: PCB, schematic: Circuit, id: string, value: string) => {
+      const snapshot = core.getSnapshot();
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        view !== 'layout' ||
+        !rightSidebarVisible ||
+        thermalVisible ||
+        modal ||
+        confirmation ||
+        snapshot.project?.pcb !== board ||
+        snapshot.project.schematic !== schematic
+      )
+        return false;
+      const item = findPCBGraphic(board, id);
+      const property = item?.graphic.text?.property;
+      if (!item?.owner || item.owner.locked || item.graphic.locked) return false;
+      if (property !== 'Reference' && property !== 'Value') return false;
+      const changes = property === 'Reference' ? { reference: value } : { value };
+      try {
+        if (item.owner.symbolId) {
+          core.execute('part.properties', {
+            schematicId: schematic.id,
+            partId: item.owner.symbolId,
+            ...changes,
+          });
+        } else {
+          core.execute('layout.footprint.properties', {
+            boardId: board.id,
+            footprintId: item.owner.id,
+            changes,
+          });
+        }
+        return true;
+      } catch (error) {
+        notify((error as Error).message);
+        return false;
+      }
+    },
   );
   const propertiesPartId = part?.id;
   const propertiesBoard = project?.pcb;
@@ -3612,7 +3672,8 @@ export default function Workbench({
             onNew={(brief) => newFile(undefined, brief)}
             onOpen={() => void open()}
             onExample={(id) => newFile(id)}
-            onResume={onNewProjectSession}
+            onResume={onSelectProject}
+            onNewSession={onNewProjectSession}
             onSettings={() => setModal('settings')}
             onPlugins={openPlugins}
             agentPicker={{
@@ -3664,7 +3725,8 @@ export default function Workbench({
                   setSidebarVisible(true);
                   onSelectProject(id, sessionId);
                 }}
-                onSelect={onNewProjectSession}
+                onSelect={onSelectProject}
+                onNewSession={onNewProjectSession}
               />
               {workspaceNavigationSettings}
             </nav>
@@ -3676,7 +3738,6 @@ export default function Workbench({
                 session={session}
                 setSessions={setSessions}
                 getDesign={getChatDesign}
-                getNativeFiles={getChatNativeFiles}
                 annotationDesign={session.annotations?.length ? chatAnnotationDesign : undefined}
                 sidebarVisible={sidebarVisible}
                 onToggleSidebar={toggleSidebar}
@@ -4295,6 +4356,7 @@ export default function Workbench({
                         getRevision={getPropertiesRevision}
                         spiceAvailable={spiceAvailable}
                         onSavePartProperties={saveLayoutPartProperties}
+                        onEditFootprintText={editFootprintText}
                         onRequestSave={requestPropertiesSave}
                         syncStatus={layoutSyncStatus}
                         undoAction={undoAction}
@@ -4551,7 +4613,8 @@ export default function Workbench({
                 onSessionAction={onProjectSessionAction}
                 activeSessionId={activeSessionId}
                 onSelectSession={(id, sessionId) => onSelectProject(id, sessionId)}
-                onSelect={onNewProjectSession}
+                onSelect={onSelectProject}
+                onNewSession={onNewProjectSession}
               />
               <div className="rail-spacer" />
               <AgentPicker
@@ -4753,14 +4816,15 @@ export default function Workbench({
             />
           </Suspense>
         )}
-        {modal === 'settings' && (
+        {(modal === 'settings' || modal === 'agent-settings') && (
           <DeferredDialog title="Settings" onClose={() => setModal(null)}>
             <SettingsDialog
+              initialSection={modal === 'agent-settings' ? 'agents' : 'appearance'}
               appearance={appearanceSettings}
               agents={agents}
               detecting={detecting}
               error={agentError}
-              onDetect={detect}
+              onDetect={detectAgents}
               onClose={() => setModal(null)}
             />
           </DeferredDialog>

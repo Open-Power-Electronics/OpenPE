@@ -17,6 +17,7 @@ const sources = [
   ['thermal', 'Thermal tools', '/licenses/thermal.txt'],
   ['ai-pcb-layout', 'PE Layout Skill', '/licenses/ai-pcb-layout.txt'],
   ['occt-import-js', 'STEP parser', '/licenses/occt-import-js.txt'],
+  ['pdf-reader', 'PDF reader', '/licenses/pdf-reader.txt'],
   ['opencascade', 'Open CASCADE', '/licenses/opencascade.txt'],
   ['three', 'Three.js', '/licenses/three.txt'],
   ['three-gpu-pathtracer', 'three-gpu-pathtracer', '/licenses/three-gpu-pathtracer.txt'],

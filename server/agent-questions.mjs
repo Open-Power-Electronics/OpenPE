@@ -80,7 +80,6 @@ export function createAgentQuestionBridge({ sessionId, origin, emit, signal }) {
       typeof value === 'string' &&
       Buffer.byteLength(value) === Buffer.byteLength(token) &&
       timingSafeEqual(Buffer.from(value), Buffer.from(token)),
-    waiting: () => pending.size > 0,
     /** @param {import('../lib/chat-stream').AgentQuestion[]} questions @param {AbortSignal} [questionSignal] */
     ask(questions, questionSignal = undefined) {
       questionSignal?.throwIfAborted();

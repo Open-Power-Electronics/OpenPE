@@ -164,11 +164,16 @@ export default function LayoutAppearancePanel({
           open={visualizationExpanded}
           onOpenChange={actions.onVisualizationExpandedChange}
         >
-          <div className="layout-appearance-tabs" role="tablist" aria-label="Appearance">
+          <div
+            className="editor-dock-tabs editor-visualization-tabs"
+            role="tablist"
+            aria-label="Appearance"
+          >
             {tabs.map(([key, label], index) => (
               <button
                 key={key}
                 type="button"
+                className="editor-dock-tab"
                 role="tab"
                 id={`${id}-${key}-tab`}
                 aria-selected={tab === key}
