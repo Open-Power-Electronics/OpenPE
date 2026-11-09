@@ -214,7 +214,7 @@ try {
     );
     assert.equal(
       (await menu.getByRole('menuitem').last().textContent()).trim(),
-      'Delete selection',
+      'Delete',
       'Delete stays last in the selected-object menu.',
     );
   };
@@ -222,7 +222,7 @@ try {
     assert.equal(
       await menu
         .getByRole('menuitem', {
-          name: /^(Fit |Actual size|Zoom |Export image$|Select all$|Clear selection$|Properties$|Move selection$|Rotate selection$|Delete selection$)/,
+          name: /^(Fit |Actual size|Zoom |Export image$|Select all$|Clear selection$|Properties$|Move$|Rotate$|Delete$)/,
         })
         .count(),
       0,
@@ -289,7 +289,7 @@ try {
     'Tracks have no region fillet.',
   );
   assert.equal(
-    await menu.getByRole('menuitem', { name: 'Drag connected tracks', exact: true }).count(),
+    await menu.getByRole('menuitem', { name: 'Drag tracks', exact: true }).count(),
     1,
     'Tracks expose their drag operation.',
   );
@@ -417,14 +417,9 @@ try {
   // Direct right click changes inspection using the same geometric picker as left click.
   await open({ x: 58, y: 10 });
   assert.deepEqual((await context()).selection, [{ kind: 'footprint', id: ids.footprint }]);
-  assert.equal(
-    await menu.getByRole('menuitem', { name: 'Flip footprint', exact: true }).count(),
-    1,
-    'Footprints expose Flip.',
-  );
-  assert.equal(
-    await menu.getByRole('menuitem', { name: 'Fillet corners', exact: true }).count(),
-    0,
+  assert.deepEqual(
+    (await menu.getByRole('menuitem').allTextContents()).map((label) => label.trim()),
+    ['Properties', 'Move', 'Rotate', 'Flip', 'Lock', 'Delete'],
   );
   await compactSelectionMenu();
   await close();

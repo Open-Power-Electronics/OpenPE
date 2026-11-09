@@ -13,7 +13,7 @@
                 <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Window-wide Agent detection&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;Vector silkscreen · Path tracing · Denoising&#xa;PCB picking · Copper preview Worker" vertex="1">
                     <mxGeometry height="120" width="340" x="80" y="190" as="geometry"/>
                 </mxCell>
-                <mxCell id="context" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Context Management&#xa;Observations · Capture · Prompt projection" vertex="1">
+                <mxCell id="context" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Context Management&#xa;Project snapshot at open · Live capture at Send&#xa;Validated provider projection" vertex="1">
                     <mxGeometry height="90" width="330" x="510" y="190" as="geometry"/>
                 </mxCell>
                 <mxCell id="agent" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Agent adapters · Queue / Steer&#xa;Model / effort · Titles · User questions&#xa;Scoped tools · Drafting · On-demand references&#xa;File/design change review · Current-state edit queue" vertex="1">
@@ -31,7 +31,7 @@
                 <mxCell id="schematic" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Schematic&#xa;Drafting · Wires" vertex="1">
                     <mxGeometry height="54" width="160" x="20" y="140" as="geometry"/>
                 </mxCell>
-                <mxCell id="pcb" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="PCB Layout&#xa;Shared drag / Properties" vertex="1">
+                <mxCell id="pcb" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="PCB Layout&#xa;Footprint / track drag&#xa;Shared Properties" vertex="1">
                     <mxGeometry height="54" width="160" x="200" y="140" as="geometry"/>
                 </mxCell>
                 <mxCell id="cad" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Model CAD&#xa;Sketch corners / Booleans → extrusion" vertex="1">

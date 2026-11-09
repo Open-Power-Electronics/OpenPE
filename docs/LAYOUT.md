@@ -116,6 +116,18 @@ The drawing reports absolute mm in its status bar and distance through a scale b
 input does not zoom; bounded zoom
 retains its pointer/centre anchor, and pan retains tool world coordinates.
 
+The canvas menu follows the current selection. Board outline strokes are object
+targets and their open interiors remain available for blank-space commands.
+Footprint selections offer Flip
+and show Drag with tracks when at least one selected footprint has a
+net-assigned copper pad. Track-only selections offer Drag tracks and Drag corner.
+Select connected applies to track and via selections. Highlight nets requires
+net-bearing copper targets. Individual pads offer Properties and Lock/Unlock,
+plus Highlight nets when assigned. A single via has no Rotate command. A group
+can rotate around its shared pivot. Fillet corners applies to a single polygon
+or region. Fill/Refill applies to a single copper zone. Mixed selections show
+object actions that apply to the entire group.
+
 The camera updates root SVG/grid/hit bindings independently of drawing trees.
 Coordinate-only internally owned track previews retain their committed target
 binding. Track identity, ordering, layer or width changes refresh only track
@@ -229,15 +241,8 @@ Visualization contains Layers, Objects and Nets tabs with retained display choic
 independent search/highlight clearing accessible while scrolling; clearing search
 restores its focus. Layers/filters never edit design data.
 
-The initial top view has no display-priority layer. It paints complete layer
-passes in physical order from the back side through the native copper stack to
-the front side; front copper covers inner/back copper and front artwork covers
-front copper. Technical guides and annotations remain presentation overlays.
-An explicitly selected layer moves its complete visible pass to the top.
-Clicking its row again clears the priority, restoring the physical stack while
-retaining the copper tool layer, gestures and pending drafts. Through pads and
-vias paint once; drill voids remain above physical artwork. Default marquees include all visible layers; explicit priority
-restricts them to that layer. Point overlaps use the [canvas picking rules](#layers-labels-and-selection).
+Layer rows, display modes and canvas picking follow the
+[active layer and selection rules](#layers-labels-and-selection).
 
 Properties uses shared labelled rows and sections for footprints, pads, tracks,
 vias, board graphics/text/dimensions, zones, rule areas and board settings.
@@ -360,45 +365,42 @@ never move existing objects.
 
 ### Layers, labels and selection
 
-Click a layer row to prioritize that copper, silkscreen, fabrication, courtyard,
-mask/paste or edge layer; clicking the same row again restores the physical
-stack. Each visible layer's copper, pads, footprint/board artwork and captions
-share one pass. Shared through pads and vias belong to the highest visible
-copper pass, with drill voids above artwork. Airwires remain an observation
-overlay. Layer eye controls retain independent visibility;
-selecting a hidden layer never reveals it. Hidden geometry still obstructs
-electrical routing.
+Layout starts with F.Cu active. A layer row activates its layer and a repeat
+click retains it. Each visible layer paints its copper, pads, artwork and
+captions together. The active side's layers move above unrelated layers, with
+the active layer on top. Through pads and vias paint once at the highest
+visible copper pass, with drill voids above artwork. Airwires remain an
+overlay. Layer eyes control visibility independently of the active layer.
 
-Containment and crossing marquees cover all visible layers in the default view;
-explicit priority restricts them to that layer, retaining category filters and
-selection modifiers. Through pads/vias participate on each physical copper
-layer; restricted footprint bounds use only that layer's body geometry.
+The **Non-active layers** selector immediately left of **Grid** in the Layout footer offers Normal, Dim and Hide. Ctrl+H cycles the modes with
+canvas focus. In Normal, point, containment, crossing and Select all can pick
+any visible layer. Dim fades inactive layers and Hide removes their artwork
+from the canvas. Both restrict new picks to visible geometry on the active
+layer, including the active-layer body geometry of footprints and the copper
+span of through pads and vias. Category filters and selection modifiers still
+apply. Select all adds eligible objects to the existing selection. Selection
+and the eye settings survive mode changes. Explicit
+report navigation remains independent of the selection mode. Hidden geometry
+still obstructs electrical routing.
 
 Point selection collects eligible copper and artwork within three screen pixels.
-Pad candidates use transformed pad geometry, including where overlaid by artwork.
-With either visible silkscreen layer active, eligible independent silk on either
-side takes precedence. For competing copper and silk, keep hits within one pixel
-of the best surface hit, then retain the smallest coverage group up to the first
-adjacent 1.5× size gap. Track coverage uses width squared, pad coverage uses its
-shape area, and supported silk text uses the bundled stroke glyphs. Similar
-candidates on the active layer take precedence at the end, using the retained
-copper layer in the default view. A remaining mixed silk, pad or track hit
-offers object choices on click. Same-kind ties use distance, paint order and
-stable identity. Track-tool pickup retains its nearest-segment ordering.
+With either silkscreen layer active, eligible independent silk on either side
+takes precedence. An active courtyard in Dim or Hide prefers footprints.
+Keep hits within one pixel of the best surface hit, then
+retain the smallest coverage group up to the first adjacent 1.5× size gap.
+Track coverage uses width squared, pad coverage uses its shape area, and
+supported silk text uses the bundled stroke glyphs. Active-layer hits break
+ties after those comparisons. Remaining competing objects offer choices on
+click. Track-tool pickup retains its nearest-segment ordering. Broad footprint,
+unfilled region and saved-fill interiors are fallback targets behind precise
+hits. Fill contours stay lazy until needed. Footprint priority follows local
+body geometry. Non-plated holes are represented on Edge.Cuts.
 
-For other point targets, explicitly prioritized layer geometry is considered
-first. Precise hits precede broad footprint, region and saved-fill interiors
-within that layer group. Missing, hidden or filtered hits fall through to
-eligible geometry. Fill contours stay lazy until needed. Footprint priority
-follows local body geometry. Shared through copper belongs to each physical
-copper layer and non-plated holes to Edge.Cuts.
-Select all and explicit report navigation still cover all eligible visible
-layers. Copper row selection also chooses the routing layer; a noncopper row
+Copper row selection also chooses the routing layer. A noncopper row
 retains the copper tool layer and exits active copper drawing
-so its artwork can be selected. Opening copper tools or refilling zones never
-silently changes the priority row. New zones use the retained copper layer in
-the default view and reject an explicitly prioritized noncopper layer;
-an explicit routing anchor or via transition may select its actual copper layer.
+so its artwork can be selected. Opening copper tools or refilling zones retains
+the active layer. New zones require an active copper layer. An explicit routing
+anchor or via transition may activate its actual copper layer.
 
 Native footprint Reference, Value and user text are independent Text targets.
 Their hits use the displayed caption and its own layer, including when
@@ -477,7 +479,34 @@ transition; Escape cancels all. Existing legs/vias revalidate current
 width/clearance. Locked vias retain their size; changed sizes affect future ones.
 Through vias check full diameter/clearance across every copper layer and
 via-specific keepouts; track-only keepouts do not block them. Standalone vias
-share checks. With a closed board outline, standalone and route-transition via circles hide outside the board material, including cutouts; placement remains blocked there. Inside-board collisions retain their blocked preview. Routes never push tracks or reroute when footprints move.
+share checks. With a closed board outline, standalone and route-transition via circles hide outside the board material, including cutouts; placement remains blocked there. Inside-board collisions retain their blocked preview. Manual routes leave existing tracks fixed.
+
+### Connected footprint drag
+
+Drag a footprint with the pointer in Select mode, press D with footprints
+selected, or choose **Drag with tracks** in the canvas menu. M
+translates the selected objects independently. A footprint-only selection moves
+as a group. Affected native track ends follow their pad offsets on the connected
+copper layers. A track with both ends on moved pads translates with them.
+Single-ended leads reconnect with checked 45-degree Walk Around geometry. The
+original track keeps its ID, layer, width and net, and new elbows receive fresh
+IDs. Unselected footprints, vias, locked tracks and remote endpoints stay
+fixed. A contact through the middle of a track must remain connected.
+
+The planner checks the moved pad and drill envelopes and the rerouted tracks
+against hidden and visible copper, artwork, board edges, cutouts and applicable
+keepouts. It rejects poses that split a routed group or join a previously
+separate same-net island. Saved pours refresh on commit under the same rules as
+track drag. Footprints that own copper artwork, board edges or rule areas use M.
+Preparation is bounded to 256 footprints, 256 attached tracks, 15,000 copper
+objects, 120,000 anchor vertices and two million geometry work units.
+
+The canvas and `layout.drag` share preparation through
+`createPCBInteractiveDrag`. Preview, posture, cancellation, boundary placement
+and single-transaction commit follow the connected track rules below. For a
+footprint selection, omit `obstacleMode` or supply `walk-around`. Agent placement
+defaults to the exact displacement and requires explicit `constrain:true` to
+accept a legal boundary.
 
 ### Connected track drag
 
@@ -526,9 +555,9 @@ epsilon comparisons, exact contact candidates, visit order and geometry-work
 charges. A changed stationary body set rebuilds this private broad phase; it
 cannot certify connectivity or authorize an edit.
 
-GUI and Agent `layout.drag` share `createPCBInteractiveTrackDrag`: connected
-chain reshaping/local avoidance, picked corner/joint drag, posture and full-board
-checks. Connected mode defaults to Shove; Walk Around replans against stationary
+GUI and Agent `layout.drag` share `createPCBInteractiveDrag` for connected
+chain reshaping, local avoidance, picked corners, posture and full-board
+checks. Connected track mode defaults to Shove. Walk Around replans against stationary
 copper. The command accepts the exact pickup and a corner endpoint tolerance
 (default 0.5 mm); corner mode requires one track and pickup. Exact placement is
 the default. Explicit `constrain:true` uses the canvas boundary planner with an
@@ -615,7 +644,7 @@ Curves use nominal 0.01 mm tessellation within caps. Invalid/open/excessive
 geometry fails. Islands remain; complete KiCad
 island/fabrication rules are unsupported.
 
-The idle Layout canvas menu offers **Fill all copper zones** when at least one copper pour is enabled. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the footer Fill action. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
+Right-click blank space in idle Layout to access **Fill all zones** when at least one copper pour is enabled. The keyboard context menu offers it with an empty selection. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the footer Fill action. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
@@ -1168,7 +1197,7 @@ component proposals remain schematic-only.
 
 New Layout annotation element picks and object membership follow Selection
 eligibility. Element picks use Interaction's point ranking and three-screen-pixel
-surface tolerance; element marquees share its directional geometry and layer-priority rules.
+surface tolerance. Element marquees share its directional geometry and layer eligibility.
 The element tool creates no annotation when a click or marquee
 finds no eligible objects. Filter changes clear ineligible live highlights and
 reject captures started with older eligibility. Saved screenshots/comments

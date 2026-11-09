@@ -475,9 +475,9 @@ try {
       };
     });
     const { visibility, filter } = content;
-    assert.ok(visibility.row.height >= 30, 'Layer visibility retains a 30 px row target.');
+    assert.ok(visibility.row.height >= 26, 'Layer visibility retains a 26 px row target.');
     assert.equal(visibility.toggle.width, 30);
-    assert.equal(visibility.toggle.height, 30);
+    assert.equal(visibility.toggle.height, 26);
     assert.equal(visibility.eyeCount, 1, 'Each layer has one eye visibility indicator.');
     assert.ok(
       Math.abs(visibility.row.right - visibility.toggle.right) <= 1 &&
@@ -505,7 +505,7 @@ try {
       'Selection categories flow across each row before continuing below.',
     );
     for (const { row, checkbox, text, lines, overflow } of filter.rows) {
-      assert.ok(row.height >= 30, 'Selection rows retain the shared 30 px minimum height.');
+      assert.ok(row.height >= 26, 'Selection rows retain the shared 26 px minimum height.');
       assert.ok(checkbox.right <= text.left, 'Each filter checkbox precedes its label.');
       if (filter.schematic) {
         assert.equal(lines, 1, 'Every compact Schematic Selection label occupies one line.');

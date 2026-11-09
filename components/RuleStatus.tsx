@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, type KeyboardEvent, type Ref } from 'react';
-import { CircleCheck, CircleX, AlertTriangle } from 'lucide-react';
+import { Circle, CircleCheck, CircleX, AlertTriangle } from 'lucide-react';
 
 export default function RuleStatus({
   kind,
@@ -32,17 +32,17 @@ export default function RuleStatus({
   const warnings = current?.issues.filter((issue) => issue.severity === 'warning').length;
   const incomplete = current && (!current.complete || current.truncated);
   const clean = Boolean(current && !incomplete && errors === 0);
+  const ErrorIcon = clean ? CircleCheck : incomplete && errors === 0 ? Circle : CircleX;
   const label = {
     unchecked: 'Not checked',
-    stale: 'Outdated',
+    stale: '',
     checking: 'Checking…',
     failed: 'Check failed',
-    ready: incomplete ? 'Incomplete' : '',
+    ready: '',
   }[state];
   const description = [
     kind.toUpperCase(),
     current ? `${errors} errors, ${warnings} warnings` : label,
-    incomplete ? 'Incomplete checks' : '',
   ]
     .filter(Boolean)
     .join('. ');
@@ -93,7 +93,7 @@ export default function RuleStatus({
           data-rule-errors={errors ?? 'unknown'}
           aria-hidden="true"
         >
-          {clean ? <CircleCheck size={14} /> : <CircleX size={14} />}
+          <ErrorIcon size={14} />
           {errors ?? '—'}
         </span>
         <span

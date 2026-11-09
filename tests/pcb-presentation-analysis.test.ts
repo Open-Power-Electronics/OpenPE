@@ -11,6 +11,7 @@ import { uid } from '../lib/circuit';
 import { isOwnedPCB, ownProjectData } from '../lib/immutable-project';
 import { invalidatePCBFill, type PCB } from '../lib/pcb';
 import { analyzePCBConnectivity } from '../lib/pcb-connectivity';
+import type { RuleCheckResult } from '../lib/design-rule-checks';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import { filledCopperPolygons, polygonPath, refreshPCBFill } from '../lib/pcb-polygons';
 import { createPCBTrackDrag } from '../lib/pcb-track-drag';
@@ -456,7 +457,7 @@ test('Proxy reads retain actual stationary edits even when descriptors report th
   assert.equal(clean.board.footprints[0].value, coldBasis.footprints[0].value);
 });
 
-test('EMC dynamic fill preview reuses copper, retries bounded connectivity and retains Core/native/undo parity', async () => {
+test('EMC dynamic fill preview reuses copper and connectivity and retains Core/native/undo parity', async () => {
   const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
   for (const y of [0.5, -0.5]) {
     const core = new ProjectCore(project);
@@ -487,10 +488,8 @@ test('EMC dynamic fill preview reuses copper, retries bounded connectivity and r
     assert.ok(projected.zones.some((zone) => zone.filledPolygons !== undefined));
     assert.equal(refreshPCBFill(basis, projected), projected);
     const { analysis, calls } = counted();
-    assert.throws(
-      () => analysis.connectivity(projected),
-      /Airwire preview exceeds the geometry limit/,
-    );
+    const connectivity = analysis.connectivity(projected);
+    assert.deepEqual(connectivity, { edges: [], padCount: 194, warnings: [] });
     analysis.copper(projected);
     assert.equal(core.replaceBoard(projected), true);
     const committed = core.getSnapshot().project!;
@@ -499,12 +498,11 @@ test('EMC dynamic fill preview reuses copper, retries bounded connectivity and r
       true,
       'Core adopts the exact displayed dynamic fill.',
     );
-    assert.throws(
-      () => analysis.connectivity(committed.pcb!),
-      /Airwire preview exceeds the geometry limit/,
-    );
+    assert.deepEqual(analysis.connectivity(committed.pcb!), connectivity);
+    const report = (await core.query('layout.drc', { boardId: basis.id })) as RuleCheckResult;
+    assert.equal(report.complete, true, report.notes.join('\n'));
     analysis.copper(committed.pcb!);
-    assert.deepEqual(calls, { connectivity: 2, copper: 1 });
+    assert.deepEqual(calls, { connectivity: 1, copper: 1 });
     assert.deepEqual(projectNativeFiles(committed), projectNativeFiles(structuredClone(committed)));
     core.undo();
     assert.equal(core.getSnapshot().project!.pcb, basis);
@@ -512,7 +510,7 @@ test('EMC dynamic fill preview reuses copper, retries bounded connectivity and r
     assert.deepEqual(analysis.connectivity(basis), { edges: [], padCount: 194, warnings: [] });
     assert.equal(
       calls.connectivity,
-      3,
+      2,
       'The original saved-fill analysis runs once after undo and retains its successful result.',
     );
   }

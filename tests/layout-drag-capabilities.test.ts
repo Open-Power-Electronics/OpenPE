@@ -6,7 +6,8 @@ import { registerProjectCapabilities } from '../core/register-project';
 import { uid } from '../lib/circuit';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import { createProject } from '../lib/project';
-import { createPCBInteractiveTrackDrag } from '../lib/pcb-interactive-track-drag';
+import { projectFromNativeFiles } from '../lib/kicad-project';
+import { createPCBInteractiveDrag } from '../lib/pcb-interactive-drag';
 import { previewConstrainedPCBTrackDrag } from '../lib/pcb-track-drag';
 
 function fixture() {
@@ -65,7 +66,7 @@ test('Agent drag discovers the canvas parameters, rejects stale/Source edits and
     /blocked|collapse|contact/i,
   );
   assert.equal(core.getSnapshot(), before);
-  const engine = createPCBInteractiveTrackDrag(board, input.selection, input);
+  const engine = createPCBInteractiveDrag(board, input.selection, input);
   const preview = previewConstrainedPCBTrackDrag(engine, board, input.delta, false, {
     x: 0,
     y: -2,
@@ -118,7 +119,7 @@ test('Agent picked corner drag uses the canvas engine and rejects ambiguous corn
   const { pickup, ...ambiguous } = input;
   await assert.rejects(host.execute('layout.drag', ambiguous, { actor: 'agent' }), /pickup/);
   assert.deepEqual(core.getNativeFiles(), native);
-  const preview = createPCBInteractiveTrackDrag(board, input.selection, input).preview(input.delta);
+  const preview = createPCBInteractiveDrag(board, input.selection, input).preview(input.delta);
   assert.equal(preview.error, '');
   await host.execute('layout.drag', input, {
     actor: 'agent',
@@ -131,4 +132,150 @@ test('Agent picked corner drag uses the canvas engine and rejects ambiguous corn
   );
   core.undo();
   assert.deepEqual(core.getNativeFiles(), native);
+});
+
+function footprintFixture() {
+  const project = createProject();
+  const board = createEmptyPCB();
+  const netId = uid();
+  const foreignNet = uid();
+  board.nets = [
+    { id: netId, name: 'OUT' },
+    { id: foreignNet, name: 'GND' },
+  ];
+  const start = { x: 10.125, y: 10 };
+  const joint = { x: 15, y: 10 };
+  board.footprints = [
+    {
+      id: uid(),
+      ...start,
+      rotation: 0,
+      side: 'front',
+      symbolId: null,
+      libraryId: 'Test:Drag',
+      reference: 'J1',
+      value: 'Connector',
+      graphics: [],
+      pads: [
+        {
+          id: uid(),
+          number: '1',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          type: 'thru_hole',
+          shape: 'circle',
+          size: { x: 1, y: 1 },
+          drill: 0.5,
+          netId,
+        },
+      ],
+    },
+  ];
+  board.tracks = [
+    { id: uid(), netId, layer: 'F.Cu', width: 0.2, start, end: joint },
+    {
+      id: uid(),
+      netId,
+      layer: 'F.Cu',
+      width: 0.2,
+      start: joint,
+      end: { x: 20, y: 10 },
+      locked: true,
+    },
+    {
+      id: uid(),
+      netId: foreignNet,
+      layer: 'B.Cu',
+      width: 0.2,
+      start: { x: 8, y: 14 },
+      end: { x: 13, y: 14 },
+    },
+  ];
+  board.vias = [{ id: uid(), ...joint, netId, diameter: 1, drill: 0.4 }];
+  project.pcb = board;
+  return { project, board };
+}
+
+test('connected footprint drag shares native placement and undo between canvas and Agent', async () => {
+  const { project, board } = footprintFixture();
+  const canvas = new ProjectCore(project);
+  const agent = new ProjectCore(project);
+  const host = createCapabilityHost({ revision: () => String(agent.getSnapshot().revision) });
+  registerProjectCapabilities(host, agent);
+  const native = canvas.getNativeFiles();
+  const input = {
+    boardId: board.id,
+    selection: [{ kind: 'footprint' as const, id: board.footprints[0].id }],
+    delta: { x: 1, y: 0 },
+    clearance: 0.25,
+  };
+  const basis = canvas.getSnapshot().project!.pcb!;
+  const engine = createPCBInteractiveDrag(basis, input.selection, input);
+  assert.equal(engine.preview({ x: 0, y: 0 }).board, basis);
+  const preview = engine.preview(input.delta);
+  assert.equal(preview.error, '');
+  assert.deepEqual(preview.changedIds, [board.footprints[0].id, board.tracks[0].id]);
+  assert.equal(preview.board.footprints[0].x, 11.125);
+  assert.deepEqual(preview.board.tracks[0].start, { x: 11.125, y: 10 });
+  assert.equal(preview.board.tracks[1], basis.tracks[1]);
+  assert.equal(preview.board.vias[0], basis.vias[0]);
+  assert.equal(canvas.replaceBoard(preview.board), true);
+  await host.execute('layout.drag', input, { actor: 'agent' });
+  assert.deepEqual(agent.getNativeFiles(), canvas.getNativeFiles());
+  const reopened = projectFromNativeFiles(agent.getNativeFiles()).pcb!;
+  const trackNets = (pcb: typeof board) =>
+    pcb.tracks.map(({ netId, ...track }) => ({
+      ...track,
+      net: pcb.nets.find(({ id }) => id === netId)!.name,
+    }));
+  assert.deepEqual(trackNets(reopened), trackNets(preview.board));
+  assert.deepEqual(
+    reopened.footprints.map(({ x, y }) => ({ x, y })),
+    [{ x: 11.125, y: 10 }],
+  );
+  for (const core of [canvas, agent]) {
+    assert.equal(core.getSnapshot().undoDepth, 1);
+    core.undo();
+    assert.deepEqual(core.getNativeFiles(), native);
+  }
+});
+
+test('footprint drag bends native leads and checks hidden obstacles and same-net islands', () => {
+  const { project, board } = footprintFixture();
+  board.vias.push({ ...board.vias[0], id: uid(), x: 7, y: 10 });
+  const input = {
+    boardId: board.id,
+    selection: [{ kind: 'footprint' as const, id: board.footprints[0].id }],
+    delta: { x: 0, y: 4 },
+    clearance: 0.25,
+  };
+  const core = new ProjectCore(project);
+  const basis = core.getSnapshot().project!.pcb!;
+  const engine = createPCBInteractiveDrag(basis, input.selection, input);
+  const preview = engine.preview({ x: 0, y: 2 });
+  assert.equal(preview.error, '');
+  assert.equal(preview.board.tracks.length, board.tracks.length + 1);
+  assert.equal(preview.board.tracks[0].id, board.tracks[0].id);
+  assert.deepEqual(preview.board.tracks[0].start, { x: 10.125, y: 12 });
+  assert.deepEqual(preview.board.tracks.at(-1)!.end, board.tracks[0].end);
+  assert.deepEqual(engine.preview({ x: 0, y: 2 }), preview);
+  assert.match(engine.preview({ x: -3.125, y: 0 }).error, /connectivity/);
+  const before = core.getSnapshot();
+  assert.throws(() => core.execute('layout.drag', input), /blocked/i);
+  assert.equal(core.getSnapshot(), before);
+  const constrained = core.execute('layout.drag', { ...input, constrain: true }) as {
+    constrained: boolean;
+    appliedDelta: { x: number; y: number };
+  };
+  assert.equal(constrained.constrained, true);
+  assert.ok(constrained.appliedDelta.y > 0 && constrained.appliedDelta.y < 4);
+
+  const locked = {
+    ...board,
+    tracks: [{ ...board.tracks[0], locked: true as const }, ...board.tracks.slice(1)],
+  };
+  const blocked = createPCBInteractiveDrag(locked, input.selection, input).preview({ x: 0, y: 2 });
+  assert.match(blocked.error, /connectivity/);
+  assert.equal(blocked.board, locked);
 });

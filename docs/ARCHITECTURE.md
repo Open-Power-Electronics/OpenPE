@@ -189,7 +189,7 @@ flowchart LR
     UI --> Preview[Local gesture preview]
     Preview --> Core[ProjectCore]
     Host --> Core
-    Preview --> Drag[Shared track-drag preparation]
+    Preview --> Drag[Shared PCB drag preparation]
     Core --> Drag
     Host --> Ports[Host / plugin ports]
 ```
@@ -197,9 +197,9 @@ flowchart LR
 Host calls apply schemas, availability, revision and lifecycle checks before handlers. Core validates domain candidates and commits one transaction. Context reads current accepted state and bounded presentation through browser-safe ports; it cannot mutate design.
 
 Layout's GUI preview and `layout.drag` both prepare geometry through
-`lib/pcb-interactive-track-drag.ts`, including connected chains, local obstacle
-avoidance and picked corners. The command exposes the same input parameters;
-constrained placement requires explicit consent and reports the accepted
+`lib/pcb-interactive-drag.ts`, including connected footprint leads, track chains,
+local obstacle avoidance and picked corners. The command exposes the same input parameters.
+Constrained placement requires explicit consent and reports the accepted
 displacement. Model Properties deletes CAD bodies through `modelCad.remove` and
 physical components through `layout.delete`, sharing the Agent command paths.
 
@@ -218,7 +218,7 @@ capability data or native files: placement independently prepares current fills
 and validates geometry plus contours as one Core transaction. See
 [Layout](LAYOUT.md#saved-zone-fills) for geometry limits and preserved rules.
 
-The service validates the complete submitted workspace, then uses the browser-safe `context/agent-prompt-context.ts` projection for semantic provider context: active-sheet components/pins/connections, selected geometry, sheet/PCB/Model summaries and observed UI/results. Native and draft text, duplicate circuit data and detailed drawing/copper geometry stay outside initial provider context. Complete native/canonical queries remain available on demand through the same scoped host; revision checks prefer `core.state`. Prompt assembly checks its character bound before starting a provider process; the projection never becomes Core input.
+Workbench prepares accepted project data at open and adds current observations at Send. The service validates the submitted workspace before `context/agent-prompt-context.ts` projects it for the selected provider. Prompt assembly checks its character bound before starting a provider process. The projection never becomes Core input. [Core](CORE.md#agent-transport-and-review) owns preparation and [API](API.md#chat-requests-and-sse) owns provider context fields and scoped query access.
 
 The selected CLI can return bounded conversation-title metadata in the ordinary reply for an unnamed session. Chat filters it from presentation/provider history and ConversationSession adopts it only after successful origin-bound completion without replacing a manual name. The same provider turn and existing recovery name field are reused, without another process or capability.
 

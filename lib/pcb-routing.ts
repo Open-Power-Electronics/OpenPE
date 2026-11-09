@@ -16,11 +16,11 @@ import { insidePolygon, polygonEdges, segmentDistance, squaredDistance } from '.
 
 export type RoutingOptions = {
   layer: CopperLayer;
-  netId: string;
+  netId: string | null;
   width: number;
   clearance: number;
-  /** Through-via discs use their own keepout rule; ordinary routes use tracks. */
-  obstacleType?: 'track' | 'via';
+  /** Tracks, vias and pad placement use their respective keepout rules. */
+  obstacleType?: 'track' | 'via' | 'pad';
   /** Preserve an exact width captured from an existing validated track. */
   allowInheritedWidth?: boolean;
   /** Disable automatic detours for manually placed, collision-checked routing. */
@@ -272,10 +272,14 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
   } = options;
   if (
     !board.layers.some((value) => value === layer) ||
-    !board.nets.some((n) => n.id === netId) ||
+    (!(obstacleType === 'pad' && netId === null) && !board.nets.some((n) => n.id === netId)) ||
     !Number.isFinite(width) ||
-    (obstacleType === 'via' || allowInheritedWidth ? width <= 0 : width < 0.05) ||
-    width > (allowInheritedWidth ? 1000 : 20) ||
+    (obstacleType === 'pad'
+      ? width < 0
+      : obstacleType === 'via' || allowInheritedWidth
+        ? width <= 0
+        : width < 0.05) ||
+    width > (obstacleType === 'pad' || allowInheritedWidth ? 1000 : 20) ||
     !Number.isFinite(clearance) ||
     clearance < 0.05 ||
     clearance > 20
@@ -310,7 +314,7 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
   };
   for (const f of board.footprints)
     for (const p of f.pads) {
-      if (p.netId !== netId && padCopperLayers(board, f, p).includes(layer)) {
+      if ((netId === null || p.netId !== netId) && padCopperLayers(board, f, p).includes(layer)) {
         if (p.shape === 'circle') add([padPosition(f, p)], p.size.x / 2);
         else {
           const shape = borrowPCBPadOutline(f, p);
@@ -322,7 +326,7 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
         }
       }
       // A plated same-net pad is a legal routing anchor, including its center.
-      if (p.drill && (p.netId !== netId || p.type === 'np_thru_hole')) {
+      if (p.drill && (netId === null || p.netId !== netId || p.type === 'np_thru_hole')) {
         add([padDrillPosition(f, p)], p.drill / 2);
       }
     }
@@ -332,7 +336,7 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
   // New tracks invalidate saved pours; only explicit track keepouts block routing.
   for (const z of worldZones(board)) {
     if (z.layer !== layer) continue;
-    if (obstacleType === 'via' ? z.keepout?.vias : z.keepout?.tracks) {
+    if (z.keepout?.[obstacleType === 'pad' ? 'pads' : obstacleType === 'via' ? 'vias' : 'tracks']) {
       const shape = { outer: z.outline, holes: z.holes ?? [] };
       add(shape.outer, 0, shape);
     }

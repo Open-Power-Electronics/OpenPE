@@ -21,6 +21,15 @@
   font-size: var(--font-control);
 }
 
+.panel > :global(.bottom-panel-resize) > span {
+  display: none;
+}
+
+.panel > :global(.bottom-panel-resize):focus-visible {
+  outline: 1px solid var(--muted);
+  outline-offset: -1px;
+}
+
 .header {
   display: flex;
   flex: none;
@@ -51,6 +60,14 @@
   gap: 2px;
 }
 
+.actions .refresh {
+  animation-duration: 450ms;
+}
+
+.actions .refresh[data-busy='false'] {
+  animation-iteration-count: 1;
+}
+
 .runStatus {
   color: var(--muted);
   font-size: var(--font-caption);
@@ -62,11 +79,15 @@
 .body {
   flex: 1;
   min-block-size: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding: 0 8px 8px;
+}
+
+.body:focus-visible {
+  outline: 1px solid var(--muted);
+  outline-offset: -1px;
 }
 
 .summary {
@@ -95,6 +116,8 @@
 .issues {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  inline-size: max-content;
+  min-inline-size: 100%;
   gap: 3px;
   list-style: none;
   padding: 0;
@@ -137,9 +160,6 @@
 }
 .message,
 .ruleName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -148,7 +168,6 @@
 }
 
 .ruleName {
-  max-inline-size: 40%;
   color: var(--issue-ink);
   font-size: var(--font-caption);
 }

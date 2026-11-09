@@ -57,8 +57,8 @@ export default function LayoutAppearancePanel({
   displayLayers: BoardLayer[];
   layers: PCBDisplay;
   onLayersChange: (layers: PCBDisplay) => void;
-  priorityLayer: BoardLayer | null;
-  onPriorityLayerChange: (layer: BoardLayer | null) => void;
+  priorityLayer: BoardLayer;
+  onPriorityLayerChange: (layer: BoardLayer) => void;
   tab: LayoutAppearanceTab;
   onTabChange: (tab: LayoutAppearanceTab) => void;
   visualizationExpanded: boolean;
@@ -218,9 +218,7 @@ export default function LayoutAppearancePanel({
                       className="layout-layer-name editor-visibility-name"
                       aria-label={name}
                       aria-pressed={priorityLayer === name}
-                      onClick={() =>
-                        actions.onPriorityLayerChange(priorityLayer === name ? null : name)
-                      }
+                      onClick={() => actions.onPriorityLayerChange(name)}
                     >
                       <i
                         className="layout-layer-swatch editor-visibility-swatch"

@@ -155,6 +155,7 @@ test('ACP selected-model and image requests use explicit protocols without Claud
     assert.ok(methods.indexOf('session/set_config_option') < methods.indexOf('session/prompt'));
     const prompt = records.find((entry) => entry.method === 'session/prompt').params.prompt;
     assert.match(prompt[0].text, /Use only the supplied context and history/);
+    assert.doesNotMatch(prompt[0].text, /openpe_(query|execute|observe)/);
     assert.equal(prompt[1].data, png);
     await mock.assertCleaned();
   }

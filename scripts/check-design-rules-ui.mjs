@@ -296,6 +296,33 @@ try {
     });
   });
   await page.goto('http://localhost');
+  await page.evaluate(() => {
+    const requestIdle = window.requestIdleCallback.bind(window);
+    const cancelIdle = window.cancelIdleCallback.bind(window);
+    let waiting;
+    window.requestIdleCallback = (callback, options) => {
+      if (options || !window.releaseRuleIdle) return requestIdle(callback, options);
+      waiting = callback;
+      window.ruleIdleWaiting = true;
+      return -1;
+    };
+    window.cancelIdleCallback = (id) => {
+      if (id === -1) {
+        waiting = undefined;
+        window.ruleIdleWaiting = false;
+      } else cancelIdle(id);
+    };
+    window.holdRuleIdle = () => {
+      window.releaseRuleIdle = () => {
+        window.releaseRuleIdle = undefined;
+        window.ruleIdleWaiting = false;
+        const callback = waiting;
+        waiting = undefined;
+        callback?.({ didTimeout: false, timeRemaining: () => 20 });
+      };
+    };
+    window.holdRuleIdle();
+  });
   for (const file of ['app/globals.css', 'app/workspace.css', 'app/layout-editor.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
   for (const file of bundle.outputFiles.filter((file) => file.path.endsWith('.css')))
@@ -304,6 +331,12 @@ try {
     type: 'module',
     url: 'http://localhost/bundles/' + path.basename(entry),
   });
+  const recoveryToast = page.getByRole('status').filter({
+    hasText: 'Recovered your previous project draft.',
+  });
+  await recoveryToast.waitFor();
+  assert.equal(await recoveryToast.getByRole('button').count(), 0);
+  await recoveryToast.waitFor({ state: 'hidden', timeout: 3000 });
   const button = (name) => page.getByRole('button', { name, exact: true });
   const settled = async () => {
     // Successful writes hide the saving status. Observe persisted Core content
@@ -406,13 +439,20 @@ try {
   };
   const runCount = (id) =>
     page.evaluate((id) => window.ruleTestRuns.filter((value) => value === id).length, id);
+  const waitForRun = (id, count) =>
+    page.waitForFunction(
+      ({ id, count }) => window.ruleTestRuns.filter((value) => value === id).length >= count,
+      { id, count },
+    );
   const assertUnknownCounts = async (state) => {
     for (const severity of ['errors', 'warnings']) {
       const count = ruleButton.locator(`[data-rule-${severity}]`);
       assert.equal(await count.getAttribute(`data-rule-${severity}`), 'unknown');
       assert.equal((await count.textContent()).trim(), '—');
     }
-    assert.ok((await ruleButton.textContent()).includes(state));
+    const text = await ruleButton.textContent();
+    if (state) assert.ok(text.includes(state));
+    else assert.doesNotMatch(text, /Outdated|Checking/);
   };
   const waitForFooterCounts = async () => {
     await page.waitForFunction(() => {
@@ -469,6 +509,11 @@ try {
     const expected = view === '3d' ? 'Model checks' : view === 'layout' ? 'DRC' : 'ERC';
     await panel().getByRole('heading', { name: expected, exact: true }).waitFor();
   };
+  const waitForRuleReady = (kind) =>
+    panel(kind)
+      .getByRole('button', { name: new RegExp(`^(Run|Recheck) ${kind}$`) })
+      .and(panel(kind).locator('button:enabled'))
+      .waitFor();
   const openERC = async (wait = true, keyboard = false) => {
     const count = await runCount('schematic.erc');
     if (keyboard) {
@@ -478,12 +523,12 @@ try {
     await panel('ERC').waitFor();
     await assertViewReport();
     await assertRulePlacement('ERC');
-    if (wait)
-      await panel('ERC').getByText('Checking ERC…', { exact: true }).waitFor({ state: 'hidden' });
+    await waitForRun('schematic.erc', count + 1);
+    if (wait) await waitForRuleReady('ERC');
     assert.equal(
       await runCount('schematic.erc'),
       count + 1,
-      'Opening ERC runs exactly one ERC check.',
+      'Opening ERC queues exactly one idle ERC check.',
     );
   };
   const openDRC = async () => {
@@ -492,11 +537,12 @@ try {
     await panel('DRC').waitFor();
     await assertViewReport();
     await assertRulePlacement('DRC');
-    await panel('DRC').getByText('Checking DRC…', { exact: true }).waitFor({ state: 'hidden' });
+    await waitForRun('layout.drc', count + 1);
+    await waitForRuleReady('DRC');
     assert.equal(
       await runCount('layout.drc'),
       count + 1,
-      'Opening DRC runs exactly one DRC check.',
+      'Opening DRC queues exactly one idle DRC check.',
     );
   };
   const unchanged = async (index, baseline, reason) =>
@@ -505,7 +551,7 @@ try {
     panel(kind).getByText('No violations found in checked rules.', { exact: true });
   const layoutContext = () => page.evaluate((id) => window.ruleTestLayoutContexts[id], board.id);
   const markerUncovered = async (kind, testId) => {
-    await panel(kind).waitFor({ state: 'detached' });
+    assert.equal(await panel(kind).isVisible(), true, 'Locating keeps Rule open.');
     await page.waitForFunction((testId) => {
       const marker = document.querySelector(
         `[data-testid="${testId}"] [data-rule-check-marker] circle`,
@@ -513,15 +559,56 @@ try {
       if (!marker) return false;
       const point = marker.getBoundingClientRect();
       const drawing = document.querySelector(`[data-testid="${testId}"]`).getBoundingClientRect();
+      const popup = document.querySelector('[role="dialog"][aria-label="Rule"]').getBoundingClientRect();
       return (
         point.left >= drawing.left &&
         point.right <= drawing.right &&
         point.top >= drawing.top &&
-        point.bottom <= drawing.bottom
+        point.bottom <= drawing.bottom &&
+        (point.left >= popup.right || point.bottom <= popup.top)
       );
     }, testId);
   };
-  await page.getByTestId('schematic-canvas').waitFor();
+  const assertWindowResize = async (testId) => {
+    const canvas = page.getByTestId(testId);
+    await canvas.waitFor();
+    const viewport = page.viewportSize();
+    const measure = () =>
+      canvas.evaluate((svg) => {
+        const { x, y, width, height } = svg.viewBox.baseVal;
+        const chat = document.querySelector('.chat-panel:not([hidden])');
+        const composer = chat.querySelector('.composer');
+        const transcript = chat.querySelector('.chat-transcript');
+        const editor = svg.closest('.editor');
+        const left = chat.getBoundingClientRect().left;
+        return {
+          center: [x + width / 2, y + height / 2],
+          scale: width / svg.getBoundingClientRect().width,
+          gap: editor.getBoundingClientRect().left - composer.getBoundingClientRect().right,
+          leftInsets: [
+            parseFloat(getComputedStyle(chat.querySelector('.chat-header')).paddingLeft),
+            composer.getBoundingClientRect().left - left,
+            transcript.getBoundingClientRect().left - left,
+          ],
+        };
+      });
+    const before = await measure();
+    for (const size of [{ width: 3840, height: 2088 }, viewport]) {
+      await page.setViewportSize(size);
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      const after = await measure();
+      assert.ok(Math.abs(after.gap - 12) < 1, 'The Agent-to-editor gap stays at 12 px.');
+      assert.deepEqual(after.leftInsets, [12, 12, 12], 'Agent content keeps its left inset.');
+      assert.ok(Math.abs(after.scale - before.scale) < 0.001, 'Window resize keeps drawing scale.');
+      assert.ok(
+        after.center.every((coordinate, axis) => Math.abs(coordinate - before.center[axis]) < 0.1),
+        `Window resize keeps the drawing center: ${before.center} → ${after.center}.`,
+      );
+    }
+  };
+  await assertWindowResize('schematic-canvas');
   await settled();
   assert.equal(await button('Refresh rules').count(), 0);
   assert.equal(
@@ -538,6 +625,17 @@ try {
     'Unavailable plugins leave no empty toolbar group or separator.',
   );
   assert.equal(requested.has(drcChunk), false);
+  await page.waitForFunction(() => window.ruleIdleWaiting);
+  assert.equal(await runCount('schematic.erc'), 0, 'Settling alone cannot start a check.');
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, buttons: 1 }));
+    window.releaseRuleIdle();
+  });
+  await delay(1700);
+  assert.equal(await runCount('schematic.erc'), 0, 'A held pointer defers the idle check.');
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 9 }));
+  });
   await page.waitForFunction(() => window.ruleTestRuns.includes('schematic.erc'));
   await page.waitForFunction(() =>
     document.querySelector('.rule-status[aria-description*="Checking"]'),
@@ -573,7 +671,7 @@ try {
   assert.equal(
     requested.has(ercChunk),
     true,
-    'Clicking ERC immediately loads and runs the engine.',
+    'Opening ERC keeps the lazy engine available for the idle refresh.',
   );
 
   // Hold the first engine import to exercise the actual close barrier while a
@@ -607,6 +705,24 @@ try {
   });
   await ercIssue.waitFor();
   await assertCurrentCounts('ERC');
+  await button('Close Rule').click();
+  await page.evaluate(() => window.holdRuleIdle());
+  const beforeIdleOpen = await runCount('schematic.erc');
+  await ruleButton.click();
+  await ercIssue.waitFor();
+  assert.equal(await ercIssue.isEnabled(), true, 'The retained report is available immediately.');
+  await page.waitForFunction(() => window.ruleIdleWaiting);
+  assert.equal(await runCount('schematic.erc'), beforeIdleOpen, 'Opening waits for browser idle.');
+  await button('Recheck ERC').click();
+  await waitForRun('schematic.erc', beforeIdleOpen + 1);
+  await page.waitForFunction(() => !window.ruleIdleWaiting);
+  await page.evaluate(() => window.releaseRuleIdle());
+  await waitForFooterCounts();
+  assert.equal(
+    await runCount('schematic.erc'),
+    beforeIdleOpen + 1,
+    'Recheck replaces the idle run.',
+  );
   assert.equal(await ercIssue.getAttribute('title'), null);
   assert.equal(await ercIssue.locator('button, input, a').count(), 0);
   assert.equal(await panel('ERC').locator('.lucide-locate-fixed').count(), 0);
@@ -642,12 +758,15 @@ try {
     true,
   );
   await unchanged(0, afterBarrier, 'Locating an issue changes presentation only.');
+  await button('Source').click();
   await openERC();
+  const sourceERCRuns = await runCount('schematic.erc');
   await ercIssue.click();
+  await schematic.waitFor();
   await markerUncovered('ERC', 'schematic-canvas');
+  assert.equal(await runCount('schematic.erc'), sourceERCRuns);
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/design-rules-workspace-erc.png' });
-  await openERC();
 
   // Source drafts invalidate a result and block another query without applying it.
   await page.evaluate((id) => {
@@ -660,9 +779,18 @@ try {
   assert.equal(await page.locator('button[aria-label="Rule"]:visible').isDisabled(), true);
   assert.equal(await ercIssue.isDisabled(), true);
   assert.equal(await schematic.locator('[data-rule-check-marker]').count(), 0);
-  await page.evaluate((id) => window.ruleTestCores[id].updateSource(null), projectIds[0]);
-  await panel('ERC').getByText('Design or limits changed. Recheck ERC.').waitFor();
-  await assertUnknownCounts('Outdated');
+  await page.evaluate((id) => {
+    window.holdRuleIdle();
+    window.ruleTestCores[id].updateSource(null);
+  }, projectIds[0]);
+  await page.waitForFunction(() => window.ruleIdleWaiting);
+  await assertUnknownCounts();
+  assert.equal(
+    await panel('ERC')
+      .getByText(/Outdated|Design or limits changed/)
+      .count(),
+    0,
+  );
   assert.equal(
     await ercIssue.isDisabled(),
     true,
@@ -680,15 +808,13 @@ try {
     },
     { id: projectIds[0], nc },
   );
-  await panel('ERC').getByText('Design or limits changed. Recheck ERC.').waitFor();
   const fixedERC = await snapshot(0);
   assert.equal(fixedERC.undoDepth, beforeFix.undoDepth + 1);
-  await button('Recheck ERC').click();
+  await page.evaluate(() => window.releaseRuleIdle());
   await clean('ERC').waitFor();
   await assertCurrentCounts('ERC');
   await unchanged(0, fixedERC, 'Rechecking a repaired schematic adds no undo or native edits.');
   await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[0]);
-  await panel('ERC').getByText('Design or limits changed. Recheck ERC.').waitFor();
   assert.equal(
     (await snapshot(0)).source,
     sources[0],
@@ -718,7 +844,7 @@ try {
   await page.waitForFunction(() => window.ruleTestRuns.includes('layout.drc'));
   await assertUnknownCounts('Checking…');
   assert.equal(await panel().count(), 0, 'First Layout admission checks DRC without opening Rule.');
-  // Opening Rule cancels the deferred automatic work and runs the selected tab.
+  // Opening Rule cancels the previous check and queues a refresh for idle time.
   // Closing it must restart the missing check instead of stranding the footer.
   await ruleButton.click();
   await assertViewReport();
@@ -738,6 +864,7 @@ try {
   );
   assert.ok(beforePanelCloseRuns > initialDRCRuns);
   assert.equal(await panel().count(), 0);
+  await assertWindowResize('layout-canvas');
   await unchanged(
     1,
     beforeLayoutAdmission,
@@ -759,7 +886,7 @@ try {
   );
   await assertUnknownCounts('Check failed');
   const failedRuns = await runCount('layout.drc');
-  await delay(600);
+  await delay(1700);
   assert.equal(
     await runCount('layout.drc'),
     failedRuns,
@@ -783,7 +910,7 @@ try {
     for (let index = 0; index < 3; index++) {
       core.setEditingBlocked('Fixture changing revision.');
       core.setEditingBlocked(null);
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }, projectIds[1]);
   await waitForFooterCounts();
@@ -802,7 +929,7 @@ try {
       (element) => element.getClientRects().length && element.disabled,
     ),
   );
-  await delay(400);
+  await delay(1700);
   assert.equal(
     await runCount('layout.drc'),
     beforePending,
@@ -845,7 +972,6 @@ try {
     'DRC locating keeps Properties dismissed.',
   );
   await unchanged(1, boardBaseline, 'Locating a short remains a presentation action.');
-  await openDRC();
   await assertCurrentCounts('DRC');
   await button('Close Rule').click();
   await toggleLayoutVisualization(page, 'Selection');
@@ -870,7 +996,6 @@ try {
     .check();
   await toggleLayoutVisualization(page, 'Selection');
   await setLayoutVisibility(page, 'F.Cu', false);
-  await openDRC();
   await shortIssue.click();
   await markerUncovered('DRC', 'layout-canvas');
   assert.deepEqual(
@@ -879,7 +1004,6 @@ try {
     'Hidden-layer violations locate only the marker.',
   );
   await setLayoutVisibility(page, 'F.Cu', true);
-  await openDRC();
   const annular = panel('DRC').getByRole('spinbutton', {
     name: 'Minimum annular ring (mm)',
     exact: true,
@@ -910,8 +1034,9 @@ try {
     'Footprint and pad issue IDs select the owner exactly once.',
   );
   assert.equal((await layoutContext()).inspector, false);
-  await openDRC();
+  await annular.focus();
   await annular.fill('0.15');
+  assert.equal(Number(await annular.inputValue()), 0.15);
   await button('Recheck DRC').click();
   await padIssue.waitFor({ state: 'detached' });
   await unchanged(
@@ -924,7 +1049,12 @@ try {
     exact: true,
   });
   await minimum.fill('0.05');
-  await panel('DRC').getByText('Design or limits changed. Recheck DRC.').waitFor();
+  assert.equal(
+    await panel('DRC')
+      .getByText(/Outdated|Design or limits changed/)
+      .count(),
+    0,
+  );
   assert.equal(await shortIssue.isDisabled(), true);
   await button('Recheck DRC').click();
   await shortIssue.waitFor();
@@ -937,6 +1067,7 @@ try {
   await page.screenshot({ path: 'test-results/design-rules-workspace-drc.png' });
 
   await page.evaluate((id) => {
+    window.holdRuleIdle();
     const core = window.ruleTestCores[id],
       project = core.getSnapshot().project;
     core.commitProject({
@@ -949,11 +1080,11 @@ try {
       },
     });
   }, projectIds[1]);
-  await panel('DRC').getByText('Design or limits changed. Recheck DRC.').waitFor();
+  await page.waitForFunction(() => window.ruleIdleWaiting);
   assert.equal(await shortIssue.isDisabled(), true);
-  await assertUnknownCounts('Outdated');
+  await assertUnknownCounts();
   const fixedDRC = await snapshot(1);
-  await button('Recheck DRC').click();
+  await page.evaluate(() => window.releaseRuleIdle());
   await clean('DRC').waitFor();
   await assertCurrentCounts('DRC');
   await unchanged(1, fixedDRC, 'Rechecking the repaired PCB is read-only.');
@@ -1019,7 +1150,8 @@ try {
     'A board-wide issue does not invent a point marker.',
   );
   await unchanged(1, noOutline, 'Locating a board-wide issue changes only the viewport.');
-  await panel('DRC').waitFor({ state: 'detached' });
+  assert.equal(await panel('DRC').isVisible(), true);
+  await button('Close Rule').click();
   await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[1]);
   await settled();
   const navigationBaseline = await snapshot(1);
@@ -1078,7 +1210,7 @@ try {
   const modelIssue = panel().getByRole('button', { name: 'Locate J1: No 3D model', exact: true });
   await modelIssue.waitFor();
   await modelIssue.click();
-  await panel().waitFor({ state: 'detached' });
+  assert.equal(await panel().isVisible(), true);
   assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), '3d');
   assert.equal(
     await page
@@ -1101,7 +1233,7 @@ try {
     core.setEditingBlocked('Inactive fixture changed.');
     core.setEditingBlocked(null);
   }, projectIds[1]);
-  await delay(400);
+  await delay(1700);
   assert.equal(
     await runCount('layout.drc'),
     inactiveDRCRuns,

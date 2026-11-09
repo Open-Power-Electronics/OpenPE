@@ -39,13 +39,12 @@ import SymbolGraphic from './SymbolGraphic';
 import SchematicDrawing from './SchematicDrawing';
 import useCanvasBrightness from './useCanvasBrightness';
 import type { SchematicLayers } from '@/lib/schematic-layers';
+import { resizeDrawingView, type CanvasBounds } from '@/lib/drawing-viewport';
 import {
-  type CanvasBounds,
   fieldDragLinks,
   visibleSchematicIds,
   visibleSchematicWireTargetIds,
   visibleJunctions,
-  resizeSchematicView,
 } from '@/lib/schematic-view';
 import { schematicTexts, schematicPolylines } from '@/lib/schematic-text';
 import { type SExpr } from '@/lib/sexpr';
@@ -613,16 +612,23 @@ export default function Canvas({
   moveContext.current = { active, editingBlocked, doc, layers, tool, beginPickup };
   useEffect(() => {
     let previous: CanvasBounds | null = null;
+    let windowWidth = window.innerWidth;
+    let windowHeight = window.innerHeight;
     const observer = new ResizeObserver(() => {
       const b = svg.current?.getBoundingClientRect();
       if (!b?.width || !b.height) return;
       const before = previous;
       previous = b;
+      const windowResized = windowWidth !== window.innerWidth || windowHeight !== window.innerHeight;
+      windowWidth = window.innerWidth;
+      windowHeight = window.innerHeight;
       // ResizeObserver runs before paint. Commit the SVG viewBox and scale together
       // now, so a changed sidebar cannot paint one frame with the old viewport.
       flushSync(() => {
         if (before) {
-          setView((current) => resizeSchematicView(current, before, b));
+          setView((current) =>
+            resizeDrawingView(current, before, b, windowResized ? 'center' : 'screen'),
+          );
         } else if (initialViewport) {
           setView((current) => ({
             ...current,

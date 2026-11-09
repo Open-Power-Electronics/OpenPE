@@ -123,8 +123,9 @@ identity and official sources.
 
 EMC Flyback comes from the [pinned AI-PCB-layout demonstration](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo)
 under CC BY 4.0. Its originals and source hashes stay in `resources/example-catalog/sources/emc-flyback/`.
-The generated native project is in `project/emc-flyback/`; it uses KiCad 10, with
-source UUIDs, electrical connectivity, physical-package placement and copper retained. The two model-only enclosure placeholders are omitted from the PCB.
+The generated native project is in `project/emc-flyback/`; it uses KiCad 10 and retains
+the original electrical connectivity. The [EMC layout conversion](EMC-FLYBACK.md#pcb-design-rules)
+adjusts footprint placements and routing, then refills copper. The two model-only enclosure placeholders are omitted from the PCB.
 One custom pad is represented by an exact same-number rectangle union and
 multi-layer keepouts by per-layer zones. Native polylines, bold text, inert datasheet
 links and lock metadata survive import and save. The enclosure is four OpenPE Model CAD bodies: a 112 × 94 × 3 mm aluminium base, two 3 × 30 mm side walls
@@ -150,9 +151,8 @@ then `npm run thermal:check-emc-flyback` for explicit offline real-solver checks
 The latter imports supported full-resolution final-20% signed terminal power into
 PCB pads. The [SPICE](SIMULATION.md#emc-flyback-behavioural-model) and
 [thermal](THERMAL.md) contracts describe the approximate devices and omitted losses.
-`scripts/check-emc-flyback-kicad.py` uses KiCad 10's Python/CLI to independently compare
-source/converted netlists, source copper, footprint poses, UUIDs and locks. These checks
-do not establish ERC/DRC compliance, EMC emissions or package junction temperatures.
+The [native layout check](EMC-FLYBACK.md#pcb-design-rules) uses KiCad 10's Python and CLI to verify
+the generated connectivity, geometry and error-level DRC.
 
 The build-only PCB adapter represents rectangles as exact polygons, splits
 multi-layer zones per layer and preserves their filled polygons. Reference

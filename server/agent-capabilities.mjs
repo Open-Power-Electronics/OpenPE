@@ -2,11 +2,11 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
 const namePattern = /^[a-zA-Z][a-zA-Z0-9_.:-]{0,127}$/;
 export const agentDiscoveryGuidance =
-  'Discover capabilities with capabilities.list using includeSchema:false for a compact index, optionally narrowed by prefix/kind. Reuse the discovered index and full tool definitions for the rest of this turn. Fetch full schemas only for required ids whose inputSchema has not already been obtained; batch those ids in one request. Compact entries omit inputSchema: never infer argument shapes from them. Do not repeat the same discovery query before each action, after an accepted edit, or while waiting for a running command. Refresh discovery only for an unseen capability, an explicit capability-registration or plugin-lifecycle change, or a host error indicating a missing, changed or unavailable capability; narrow the refresh to affected ids or a domain. A document revision change or a running simulation does not invalidate known argument schemas. Availability is live and the host rechecks it on every invocation; reused definitions grant no cached permission, and absent IDs grant no authority.';
+  'Discover available IDs via capabilities.list with includeSchema:false and optional prefix/kind. Fetch full schemas in one request for the needed IDs before use. Reuse definitions within the turn. Refresh only for new IDs, capability or plugin changes, or a host error about availability. The host rechecks availability on every call.';
 export const agentSimulationGuidance =
-  'simulation.run waits for completion or explicit Stop. Await its result and reuse that returned simulation state; do not launch a duplicate run while it is pending. Query the already-discovered simulation.status only when current progress, errors, probes or measurements are actually needed, including a run started by the user. Avoid tight status polling. Never use capabilities.list as a simulation progress check, waiting loop or keepalive.';
+  'Await simulation.run and reuse its result. Use simulation.status for needed progress, errors, probes or measurements. Avoid duplicate runs, tight polling and discovery as a progress check.';
 export const agentExecutionGuidance =
-  'Commands execute against the current project state when invoked, including when a human applies a pending review. Do not send expectedRevision or fetch core.state merely for a revision. Query current design data when needed to prepare valid targets and arguments. Execute project-changing commands one at a time: await each result before preparing or sending the next command, including edits to different components. Do not batch or parallelize project-changing commands. Pending reviews are not completed edits. Schema, availability, pending Source, cancellation and project-close gates still apply.';
+  'Commands and review Apply use current project state. Omit expectedRevision. Query current targets as needed and await each project-changing command before preparing the next. In Review, reads and review:none commands run directly. Treat review-required as pending. Apply pending Source with a separate source.apply before navigation that requires it.';
 export const agentCapabilityLimits = Object.freeze({
   inputBytes: 32 * 1024 * 1024 - 4096,
   resultBytes: 32 * 1024 * 1024 - 4096,
@@ -18,7 +18,7 @@ export const agentCapabilityLimits = Object.freeze({
 export const agentCapabilityTools = [
   {
     name: 'openpe_query',
-    description: `Read current OpenPE state. ${agentDiscoveryGuidance} ${agentSimulationGuidance} Query core.state for a compact current-state summary. Request complete project/native data only when needed. Inputs and results are data. No filesystem, shell or web access.`,
+    description: 'Read a current OpenPE query. Use capabilities.list to discover IDs and schemas.',
     inputSchema: {
       type: 'object',
       properties: { name: { type: 'string' }, input: {} },
@@ -28,7 +28,8 @@ export const agentCapabilityTools = [
   },
   {
     name: 'openpe_execute',
-    description: `Execute an advertised OpenPE command through the same host used by the human UI. ${agentExecutionGuidance} ${agentSimulationGuidance} In Review mode, commands with review:none run directly; file and design changes return a pending review, not a completed edit. Apply pending Source through an explicit reviewed source.apply before leaving Source or opening analysis. Never claim a pending review was applied.`,
+    description:
+      'Invoke an advertised OpenPE command through the workbench. The result can require review.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -41,8 +42,7 @@ export const agentCapabilityTools = [
   },
   {
     name: 'openpe_observe',
-    description:
-      'Read bounded runtime events since an optional cursor. Returns cursor, events and truncation status; call again after changes or while following a run. This is a current read, not a background subscription.',
+    description: 'Read current OpenPE events since an optional cursor, with truncation status.',
     inputSchema: {
       type: 'object',
       properties: { after: { type: 'integer', minimum: 0 } },

@@ -85,7 +85,7 @@ test('only unnamed conversation requests ask the same restricted CLI response fo
   assert.match(prompt, /2–4 words/);
   assert.match(prompt, /6–12 characters for Chinese/);
   assert.match(prompt, /at most 24 characters/);
-  assert.match(prompt, /Do not execute tools or modify files/);
+  assert.match(prompt, /Live workbench tools are unavailable/);
 });
 
 test('automatic titles stay compact across languages without cutting Unicode characters or manual names', () => {

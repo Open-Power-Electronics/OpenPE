@@ -59,7 +59,7 @@ function fixture() {
     displayLayers: ['F.Cu', 'B.Cu'],
     layers: defaultPCBDisplay(),
     onLayersChange() {},
-    priorityLayer: null,
+    priorityLayer: 'F.Cu',
     onPriorityLayerChange() {},
     tab: 'nets',
     onTabChange() {},

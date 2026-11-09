@@ -148,7 +148,7 @@ test('EMC Home copies expose every retained native track lock in canonical state
     .filter((segment) => segment.includes('locked') || val(child(segment, 'locked')) === 'yes')
     .map((segment) => val(child(segment, 'uuid')))
     .sort();
-  assert.equal(canonical.length, 124);
+  assert.equal(canonical.length, 130);
   assert.deepEqual(canonical, native);
 });
 

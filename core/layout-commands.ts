@@ -12,7 +12,7 @@ import {
   type PCBSelection,
 } from '../lib/pcb-layout';
 import { previewConstrainedPCBTrackDrag } from '../lib/pcb-track-drag';
-import { createPCBInteractiveTrackDrag } from '../lib/pcb-interactive-track-drag';
+import { createPCBInteractiveDrag } from '../lib/pcb-interactive-drag';
 import { createPCBRouter } from '../lib/pcb-routing';
 import { createPCBViaValidator } from '../lib/pcb-via-routing';
 import { fillCopperZone, fillCopperZones } from '../lib/pcb-polygons';
@@ -192,7 +192,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   operationCommand(
     'layout.drag',
-    'Drag tracks with the canvas chain reshaping and local avoidance engine. Supports connected or picked corner drag. Default exact placement rejects blocked poses; constrain explicitly accepts a checked boundary and reports its displacement.',
+    'Drag a footprint-only selection with its attached track ends using Walk Around, or drag tracks with connected chain reshaping (default Shove) or picked corner editing. Default exact placement rejects blocked poses; constrain explicitly accepts a checked boundary and reports its displacement.',
     {
       selection,
       delta: point,
@@ -515,11 +515,9 @@ export function executeLayout(
     }
     case 'layout.drag': {
       const selected = args.selection as PCBSelection[];
-      if (selected.some((item) => item.kind !== 'track'))
-        throw new Error('Connected Layout drag requires track selections.');
       if (args.previousDelta && !args.constrain)
         throw new Error('A previous drag displacement requires constrain to be enabled.');
-      const engine = createPCBInteractiveTrackDrag(board, selected, {
+      const engine = createPCBInteractiveDrag(board, selected, {
         clearance: args.clearance,
         obstacleMode: args.obstacleMode,
         mode: args.mode,

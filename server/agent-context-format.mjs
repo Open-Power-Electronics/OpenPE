@@ -9591,10 +9591,14 @@ function agentPromptContext(value, progressive = false) {
   };
   const board = project.pcb;
   const model = modelCadFromProject(project);
+  const layout = context.layout;
+  const { projects: _projects, ...observedUI } = workspace.ui;
   return {
     id: context.id,
     basis: context.basis,
-    ...context.layout ? { layout: context.layout } : {},
+    // Attachment freshness uses these identities. The PCB overview below
+    // already carries the current board's design summary.
+    ...layout ? { layout: { id: layout.id, circuitId: layout.circuitId, basis: layout.basis } } : {},
     workspace: {
       version: workspace.version,
       capturedAt: workspace.capturedAt,
@@ -9654,7 +9658,7 @@ function agentPromptContext(value, progressive = false) {
         view: workspace.ui.view,
         activeSchematicId: workspace.ui.activeSchematicId,
         selection: bounded2([...selected])
-      } : workspace.ui,
+      } : observedUI,
       icDatasheet: progressive ? {
         status: datasheet.status,
         bindings: bounded2(datasheet.bindings),

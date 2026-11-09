@@ -104,6 +104,32 @@ try {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }, changes);
   const button = (name) => page.getByRole('button', { name, exact: true });
+  const assertScrollableIssue = async (body, text) => {
+    assert.equal(
+      await text.evaluate((message) => {
+        const style = getComputedStyle(message);
+        return (
+          style.whiteSpace === 'nowrap' &&
+          style.textOverflow === 'clip' &&
+          message.scrollWidth <= message.clientWidth
+        );
+      }),
+      true,
+      'The whole message occupies one line without internal clipping.',
+    );
+    await body.focus();
+    await body.press('ArrowRight');
+    await page.waitForFunction(() => document.activeElement?.scrollLeft > 0);
+    assert.equal(
+      await text.evaluate((message) => {
+        const body = message.closest('[data-rule-body]');
+        body.scrollLeft = body.scrollWidth;
+        return message.getBoundingClientRect().right <= body.getBoundingClientRect().right;
+      }),
+      true,
+      'Horizontal scrolling reaches the end of the message.',
+    );
+  };
   const assertRunIMEBlocked = async (action) => {
     assert.equal(await action.isEnabled(), true);
     const before = await page.evaluate(() => window.checkRuns.length);
@@ -160,14 +186,14 @@ try {
   assert.equal(await erc.getByText('No violations found in checked rules.').count(), 0);
   assert.deepEqual(
     await page.evaluate(() => window.checkRuns),
-    [null],
-    'Opening the panel automatically runs the selected ERC check once.',
+    [],
+    'Mounting the report does not run a check.',
   );
   assert.equal(await erc.getByRole('heading', { name: 'ERC', exact: true }).count(), 1);
   assert.equal(await erc.getByRole('tab').count(), 0);
   await assertRunIMEBlocked(button('Run ERC'));
   await button('Run ERC').click();
-  assert.deepEqual(await page.evaluate(() => window.checkRuns), [null, null]);
+  assert.deepEqual(await page.evaluate(() => window.checkRuns), [null]);
 
   await update({ report });
   await assertRunIMEBlocked(button('Recheck ERC'));
@@ -198,17 +224,7 @@ try {
   assert.equal(Math.round((await longRow.boundingBox()).height), Math.round(rowBox.height));
   const longText = longRow.getByText(longMessage, { exact: true });
   assert.equal(await longText.getAttribute('title'), longMessage);
-  assert.equal(
-    await longText.evaluate((message) => {
-      const style = getComputedStyle(message);
-      return (
-        style.whiteSpace === 'nowrap' &&
-        style.textOverflow === 'ellipsis' &&
-        message.scrollWidth > message.clientWidth
-      );
-    }),
-    true,
-  );
+  await assertScrollableIssue(erc.getByRole('region', { name: 'ERC report' }), longText);
   const powerMessage = '#PWR104 pin 1 on SGND has no power output on its network.';
   await update({
     report: {
@@ -217,22 +233,12 @@ try {
     },
   });
   const power = button(`Locate issue: ${powerMessage}`);
-  const compactPower = power.getByText('#PWR104 pin 1 on SGND', { exact: true });
-  assert.equal(await compactPower.getAttribute('title'), powerMessage);
-  assert.equal(
-    await compactPower.evaluate((message) => message.scrollWidth <= message.clientWidth),
-    true,
-  );
-  assert.equal(
-    await erc
-      .locator('[data-rule-body]')
-      .evaluate(
-        (body) =>
-          getComputedStyle(body).overflowX === 'hidden' && body.scrollWidth <= body.clientWidth,
-      ),
-    true,
-  );
+  assert.equal(await power.getByText(powerMessage, { exact: true }).textContent(), powerMessage);
   await update({ report });
+  assert.equal(
+    await erc.locator('[data-rule-body]').evaluate((body) => body.scrollWidth <= body.clientWidth),
+    true,
+  );
   assert.equal(
     await issueRow.evaluate((element) => {
       for (const key of ['Enter', ' ']) {
@@ -292,10 +298,10 @@ try {
   await page.screenshot({ path: 'test-results/rule-check-panel-erc.png' });
 
   await update({ stale: true });
-  assert.equal(await erc.getByText('Design or limits changed. Recheck ERC.').isVisible(), true);
+  assert.equal(await erc.getByText(/Outdated|Design or limits changed/).count(), 0);
   assert.equal(await button(`Locate issue: ${report.issues[0].message}`).isDisabled(), true);
   await button('Recheck ERC').click();
-  assert.equal(await page.evaluate(() => window.checkRuns.length), 3);
+  assert.equal(await page.evaluate(() => window.checkRuns.length), 2);
   await update({ busy: true, stale: false });
   assert.equal(await button('Recheck ERC').isDisabled(), true);
   const refreshAnimation = () =>
@@ -307,13 +313,25 @@ try {
   assert.equal(await refreshAnimation(), 'none');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   assert.equal(await issueRow.isDisabled(), true, 'Running checks disable whole-row locating.');
+  await update({ quietRefresh: true });
+  assert.equal(await erc.getByText('Checking ERC…', { exact: true }).count(), 0);
+  assert.equal(await button('Recheck ERC').locator('svg').getAttribute('data-busy'), 'false');
+  assert.equal(await issueRow.isDisabled(), true, 'Silent refreshes still guard locating.');
   assert.equal(
     await button('Close Rule').isDisabled(),
     false,
     'Read-only checks remain cancellable.',
   );
-  await update({ busy: false, sourcePending: true, stale: false, error: 'Fixture check failed.' });
-  assert.equal(await refreshAnimation(), 'none');
+  await update({
+    busy: false,
+    quietRefresh: false,
+    sourcePending: true,
+    stale: false,
+    error: 'Fixture check failed.',
+  });
+  await button('Recheck ERC')
+    .locator('svg')
+    .evaluate((icon) => Promise.all(icon.getAnimations().map((animation) => animation.finished)));
   assert.equal(await erc.getByText('Apply Source edits before checking rules.').isVisible(), true);
   assert.equal(await erc.getByRole('alert').innerText(), 'Fixture check failed.');
   assert.equal(await button('Recheck ERC').isDisabled(), true);
@@ -324,13 +342,10 @@ try {
     error: '',
     report: { ...clean, complete: false },
   });
-  assert.equal(await erc.getByText('Incomplete checks.', { exact: true }).isVisible(), true);
+  assert.equal(await erc.getByText(/Incomplete checks/).count(), 0);
   assert.equal(await erc.getByText('No violations found in checked rules.').count(), 0);
   await update({ report: { ...clean, truncated: true } });
-  assert.equal(
-    await erc.getByText('Incomplete checks: issue list truncated.', { exact: true }).isVisible(),
-    true,
-  );
+  assert.equal(await erc.getByText('Issue list truncated.', { exact: true }).isVisible(), true);
   assert.equal(await erc.getByText('No violations found in checked rules.').count(), 0);
   await update({ report: clean });
   await update({ blockedReason: 'Project is closing.' });
@@ -380,9 +395,9 @@ try {
   const clearance = drc.getByRole('spinbutton', { name: 'Copper clearance (mm)', exact: true });
   await clearance.waitFor();
   assert.deepEqual(
-    await page.evaluate(() => window.checkRuns.at(-1)),
-    settings,
-    'Opening DRC automatically runs with its validated settings.',
+    await page.evaluate(() => window.checkRuns),
+    [null, null],
+    'Mounting DRC does not run a check.',
   );
   assert.equal(await drc.getByRole('heading', { name: 'DRC', exact: true }).count(), 1);
   assert.equal(await drc.getByRole('tab').count(), 0);
@@ -401,16 +416,20 @@ try {
   });
   await drc.getByText('Loading models…', { exact: true }).waitFor();
   assert.equal(await drc.getByText('No model issues.', { exact: true }).count(), 0);
+  const modelError = 'Model preview failed. '.repeat(30).trim();
   await update({
     modelReport: {
       board: {},
       state: 'error',
-      issues: [{ message: 'Preview failed.', severity: 'error' }],
-      message: 'Preview failed.',
+      issues: [{ message: modelError, severity: 'error' }],
+      message: modelError,
       canLocate: false,
     },
   });
-  await drc.getByText('Preview failed.', { exact: true }).waitFor();
+  await assertScrollableIssue(
+    drc.getByRole('region', { name: 'Model report' }),
+    drc.getByText(modelError, { exact: true }),
+  );
   await update({
     modelReport: {
       board: {},
@@ -431,6 +450,18 @@ try {
   );
   await clearance.fill('0.154321');
   await button('Recheck DRC').click();
+  const refreshIcon = button('Recheck DRC').locator('svg');
+  const fastRefresh = await refreshIcon.evaluate((icon) =>
+    icon.getAnimations().map((animation) => {
+      const { duration, iterations } = animation.effect.getTiming();
+      return { duration, iterations };
+    }),
+  );
+  assert.deepEqual(
+    fastRefresh,
+    [{ duration: 450, iterations: 1 }],
+    'A fast recheck shows one turn without entering busy state.',
+  );
   await update({});
   assert.equal(await clearance.inputValue(), '0.15');
   assert.equal(
@@ -469,6 +500,7 @@ try {
   await update({ busy: false });
   await page.setViewportSize({ width: 400, height: 540 });
   const resize = drc.getByRole('separator', { name: 'Resize Rule panel' });
+  assert.equal(await resize.locator('span').isVisible(), false);
   await page.waitForFunction(() => {
     const grip = document.querySelector('[aria-label="Resize Rule panel"]');
     return Number(grip?.getAttribute('aria-valuenow')) < 300;
@@ -499,6 +531,21 @@ try {
     true,
     'Rule controls fit the narrow panel without horizontal overflow.',
   );
+  const geometryWarning =
+    'PCB DRC could not complete all geometry checks. Review the report notes and check the remaining geometry separately.';
+  await update({
+    report: {
+      ...clean,
+      kind: 'drc',
+      complete: false,
+      issues: [{ ...report.issues[1], ruleId: 'pcb.geometry-limit', message: geometryWarning }],
+    },
+  });
+  await assertScrollableIssue(
+    drc.getByRole('region', { name: 'DRC report' }),
+    drc.getByText(geometryWarning, { exact: true }),
+  );
+  await update({ report: { ...clean, kind: 'drc' } });
   await button('Close Rule').focus();
   await page.screenshot({ path: 'test-results/rule-check-panel-drc.png' });
   await page.keyboard.press('Escape');

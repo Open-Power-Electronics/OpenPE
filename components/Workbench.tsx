@@ -704,6 +704,8 @@ export default function Workbench({
   const rulesOpen = openRuleView === view ? ruleKind : null;
   const rulePanelId = useId();
   const ruleStatusButton = useRef<HTMLButtonElement>(null);
+  const ruleOpenRefresh = useRef<EditorView | null>(null);
+  const [ruleDRCDraftPending, setRuleDRCDraftPending] = useState(false);
   const rulePanelVisible =
     rulesOpen !== null && active && screen === 'workspace' && !modal && !confirmation;
   const [modelCheckReport, setModelCheckReport] = useState<ModelCheckReport | null>(null);
@@ -721,7 +723,9 @@ export default function Workbench({
     erc: null,
     drc: null,
   });
-  const [ruleBusy, setRuleBusy] = useState<'erc' | 'drc' | null>(null);
+  const [ruleBusy, setRuleBusy] = useState<{ kind: 'erc' | 'drc'; automatic: boolean } | null>(
+    null,
+  );
   const [ruleErrors, setRuleErrors] = useState({ erc: '', drc: '' });
   const ruleFailureBasis = useRef<{ erc: string | null; drc: string | null }>({
     erc: null,
@@ -735,13 +739,51 @@ export default function Workbench({
   );
   const ruleFocusSequence = useRef(0);
   const ruleWork = useRef<AbortController | null>(null);
+  const ruleInput = useRef({ lastActivity: 0, heldPointers: new Set<number>() });
+  useEffect(() => {
+    if (!active || screen !== 'workspace') return;
+    const input = ruleInput.current;
+    const noteActivity = () => {
+      input.lastActivity = performance.now();
+    };
+    const startPointer = (event: PointerEvent) => {
+      input.heldPointers.add(event.pointerId);
+      noteActivity();
+    };
+    const endPointer = (event: PointerEvent) => {
+      input.heldPointers.delete(event.pointerId);
+      noteActivity();
+    };
+    const resetPointers = () => {
+      input.heldPointers.clear();
+      noteActivity();
+    };
+    const activityEvents = ['pointermove', 'wheel', 'keydown', 'keyup', 'input'] as const;
+    for (const event of activityEvents)
+      window.addEventListener(event, noteActivity, { capture: true, passive: true });
+    window.addEventListener('pointerdown', startPointer, true);
+    window.addEventListener('pointerup', endPointer, true);
+    window.addEventListener('pointercancel', endPointer, true);
+    window.addEventListener('blur', resetPointers);
+    return () => {
+      for (const event of activityEvents) window.removeEventListener(event, noteActivity, true);
+      window.removeEventListener('pointerdown', startPointer, true);
+      window.removeEventListener('pointerup', endPointer, true);
+      window.removeEventListener('pointercancel', endPointer, true);
+      window.removeEventListener('blur', resetPointers);
+      resetPointers();
+    };
+  }, [active, screen]);
   const ruleLifetime = useRef({ active, screen, view, schematicId: doc?.id });
   ruleLifetime.current = { active, screen, view, schematicId: doc?.id };
   useEffect(() => {
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
-    if (!active || screen !== 'workspace') setOpenRuleView(null);
+    if (!active || screen !== 'workspace') {
+      ruleOpenRefresh.current = null;
+      setOpenRuleView(null);
+    }
     return () => ruleWork.current?.abort();
   }, [active, screen, view, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
   useEffect(() => {
@@ -749,7 +791,8 @@ export default function Workbench({
     setModelCheckFocus(null);
   }, [active, screen, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
   useEffect(() => {
-    setOpenRuleView(null);
+    if (ruleOpenRefresh.current !== view) ruleOpenRefresh.current = null;
+    setOpenRuleView((current) => (current === view ? current : null));
     if (view !== '3d') {
       setModelCheckFocus(null);
     }
@@ -763,6 +806,7 @@ export default function Workbench({
       ? ruleReportIsStale(currentRuleReport, rulesOpen, coreSnapshot.revision, doc?.id, drcSettings)
       : false;
   const closeRuleChecks = useCallback(() => {
+    ruleOpenRefresh.current = null;
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
@@ -791,23 +835,30 @@ export default function Workbench({
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
+    ruleOpenRefresh.current = ruleKind === 'model' ? null : view;
+    setRuleDRCDraftPending(false);
     setOpenRuleView(view);
     setRuleFocus(null);
   });
-  async function runRuleChecks(kind: 'erc' | 'drc', settings?: PCBDesignRuleConfig) {
+  async function runRuleChecks(
+    kind: 'erc' | 'drc',
+    settings?: PCBDesignRuleConfig,
+    automatic = false,
+  ) {
     const snapshot = core.getSnapshot();
     if (!ruleLifetime.current.active || ruleLifetime.current.screen !== 'workspace') return;
     if (!snapshot.project || !doc || ruleWork.current) return;
     if (snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
     const config = settings ?? drcSettings;
     const basis = ruleCheckBasis(kind, snapshot.revision, doc.id, snapshot.project.pcb?.id, config);
+    ruleOpenRefresh.current = null;
     if (kind === 'drc') setDRCSettings(config);
     const controller = new AbortController();
     ruleWork.current = controller;
-    setRuleBusy(kind);
+    setRuleBusy({ kind, automatic });
     setRuleErrors((current) => ({ ...current, [kind]: '' }));
     ruleFailureBasis.current[kind] = null;
-    setRuleFocus(null);
+    if (!automatic) setRuleFocus(null);
     const schematicId = doc.id;
     const isCurrent = () => {
       const lifetime = ruleLifetime.current;
@@ -852,7 +903,9 @@ export default function Workbench({
       }
     }
   }
-  const requestRuleCheck = useEditorAction((kind: 'erc' | 'drc') => runRuleChecks(kind));
+  const requestRuleCheck = useEditorAction((kind: 'erc' | 'drc') =>
+    runRuleChecks(kind, undefined, true),
+  );
   async function locateRuleIssue(issue: RuleCheckIssue) {
     if (
       !rulesOpen ||
@@ -863,9 +916,11 @@ export default function Workbench({
     )
       return;
     const kind = rulesOpen;
+    const targetView = kind === 'erc' ? 'canvas' : 'layout';
+    const panel = document.getElementById(rulePanelId);
     const revision = coreSnapshot.revision;
     const schematicId = doc?.id;
-    if (!(await changeView(kind === 'erc' ? 'canvas' : 'layout'))) return;
+    if (!(await changeView(targetView))) return;
     if (
       core.getSnapshot().revision !== revision ||
       core.getSnapshot().sourceDraft !== null ||
@@ -885,9 +940,10 @@ export default function Workbench({
       kind,
       request: ++ruleFocusSequence.current,
       objectIds: issue.objectIds,
+      occludedWidth: panel ? panel.offsetWidth + panel.offsetLeft : 0,
       ...(issue.location ? { location: issue.location } : {}),
     });
-    setOpenRuleView(null);
+    if (view !== targetView) setOpenRuleView(targetView);
   }
   async function locateModelCheckIssue(issue: ModelCheckIssue) {
     const report = currentModelCheckReport;
@@ -923,7 +979,6 @@ export default function Workbench({
       board: report.board,
       footprintId: issue.footprintId,
     });
-    closeRuleChecks();
   }
 
   const [navigation, setNavigation] = useState<{
@@ -1056,7 +1111,7 @@ export default function Workbench({
     () => !!project && !projectMetadataEqual(project, savedProject),
     [project?.name, project?.pcb, project?.extensions, savedProject],
   );
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<{ text: string; dismissible: boolean } | null>(null);
   const layers = useMemo(
     () => ({
       ...appearanceSettings.appearance.schematicLayers,
@@ -1278,10 +1333,10 @@ export default function Workbench({
     setModal(null);
   }, [doc?.id]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notify = useCallback((s: string) => {
-    setToast(s);
+  const notify = useCallback((text: string, kind: 'standard' | 'recovery' = 'standard') => {
+    setToast({ text, dismissible: kind === 'standard' });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 5500);
+    toastTimer.current = setTimeout(() => setToast(null), kind === 'recovery' ? 1800 : 5500);
   }, []);
   const cancelAppClose = useRef<(() => void) | null>(null);
   useEffect(() => {
@@ -1379,7 +1434,7 @@ export default function Workbench({
   }, [documentId, registerController]);
   useEffect(() => {
     if (initialNotice) notify(initialNotice);
-    else if (recovered) notify('Recovered your previous project draft.');
+    else if (recovered) notify('Recovered your previous project draft.', 'recovery');
   }, [recovered, initialNotice]);
   function commitProject(next: Project) {
     try {
@@ -2242,6 +2297,18 @@ export default function Workbench({
     return { ...result, projectId: reference.projectId, bindings: reference.bindings };
   }
 
+  const preparedChatProject = useRef<{ source: string; project: unknown } | null>(null);
+  const prepareChatProject = useCallback(() => {
+    const { source } = core.getSnapshot();
+    if (preparedChatProject.current?.source !== source)
+      preparedChatProject.current = { source, project: agentProject(core.query('project.get')) };
+    return preparedChatProject.current.project;
+  }, [core]);
+  useEffect(() => {
+    if (source) prepareChatProject();
+    else preparedChatProject.current = null;
+  }, [source, prepareChatProject]);
+
   async function readWorkspaceContext(
     signal?: AbortSignal,
     includeReference = true,
@@ -2276,7 +2343,9 @@ export default function Workbench({
     return {
       version: 1,
       capturedAt: new Date().toISOString(),
-      project: agentProject(core.query('project.get')),
+      // The prepared object stays inside Chat's request serialization. Public
+      // observations get their own project container from Core.
+      project: includeReference ? agentProject(core.query('project.get')) : prepareChatProject(),
       ...(reference ? { icDatasheet: reference } : {}),
       source: agentSource(state.sourceDraft, state.sourceError),
       ui: {
@@ -3047,7 +3116,7 @@ export default function Workbench({
           ruleCheckBasis(kind, coreSnapshot.revision, doc.id, project?.pcb?.id, drcSettings)) ||
       (kind === 'drc' && layoutSyncStatus.error);
     const state =
-      ruleBusy === kind
+      ruleBusy?.kind === kind && (!ruleBusy.automatic || !stored)
         ? 'checking'
         : failed
           ? 'failed'
@@ -3100,7 +3169,6 @@ export default function Workbench({
       coreSnapshot.editingBlocked ||
       modal ||
       confirmation ||
-      rulesOpen ||
       ruleBusy ||
       ruleWork.current ||
       ruleKind === 'model'
@@ -3109,15 +3177,44 @@ export default function Workbench({
     const kind = ruleKind;
     if (kind === 'drc' && (!project.pcb || layoutSyncStatus.pending || layoutSyncStatus.error))
       return;
-    const stored = ruleReports[kind];
-    if (stored && !ruleReportIsStale(stored, kind, coreSnapshot.revision, doc.id, drcSettings))
-      return;
-    const basis = ruleCheckBasis(kind, coreSnapshot.revision, doc.id, project.pcb?.id, drcSettings);
-    if (ruleFailureBasis.current[kind] === basis) return;
-    const timer = setTimeout(() => {
-      void requestRuleCheck(kind);
-    }, 250);
-    return () => clearTimeout(timer);
+    if (rulesOpen === 'drc' && ruleDRCDraftPending) return;
+    if (!rulesOpen || ruleOpenRefresh.current !== view) {
+      const stored = ruleReports[kind];
+      if (stored && !ruleReportIsStale(stored, kind, coreSnapshot.revision, doc.id, drcSettings))
+        return;
+      const basis = ruleCheckBasis(
+        kind,
+        coreSnapshot.revision,
+        doc.id,
+        project.pcb?.id,
+        drcSettings,
+      );
+      if (ruleFailureBasis.current[kind] === basis) return;
+    }
+    const settleMs = 1500;
+    let timer: ReturnType<typeof setTimeout>;
+    let idle: number | undefined;
+    const waitForIdle = () => {
+      const input = ruleInput.current;
+      const remaining = settleMs - (performance.now() - input.lastActivity);
+      if (input.heldPointers.size || remaining > 0) {
+        timer = setTimeout(waitForIdle, input.heldPointers.size ? settleMs : remaining);
+        return;
+      }
+      idle = window.requestIdleCallback(() => {
+        idle = undefined;
+        if (input.heldPointers.size || performance.now() - input.lastActivity < settleMs) {
+          timer = setTimeout(waitForIdle, settleMs);
+          return;
+        }
+        void requestRuleCheck(kind);
+      });
+    };
+    timer = setTimeout(waitForIdle, settleMs);
+    return () => {
+      clearTimeout(timer);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+    };
   }, [
     active,
     screen,
@@ -3131,6 +3228,7 @@ export default function Workbench({
     modal,
     confirmation,
     rulesOpen,
+    ruleDRCDraftPending,
     ruleBusy,
     ruleReports,
     ruleErrors,
@@ -3683,12 +3781,14 @@ export default function Workbench({
         panelId={rulePanelId}
         kind={rulesOpen}
         report={currentRuleReport?.result ?? null}
-        busy={ruleBusy === rulesOpen}
+        busy={ruleBusy?.kind === rulesOpen}
+        quietRefresh={ruleBusy?.automatic && !!currentRuleReport}
         error={rulesOpen === 'model' ? '' : ruleErrors[rulesOpen]}
         stale={ruleReportStale}
         sourcePending={sourcePending}
         blockedReason={coreSnapshot.editingBlocked ?? ''}
         drcSettings={drcSettings}
+        onDRCDraftChange={setRuleDRCDraftPending}
         onDRCSettingsChange={setDRCSettings}
         onRun={(settings) => {
           if (rulesOpen !== 'model') void runRuleChecks(rulesOpen, settings);
@@ -4592,14 +4692,16 @@ export default function Workbench({
         )}
         {toast && (
           <div className="toast" role="status" data-agent-private>
-            <span>{toast}</span>
-            <button
-              aria-label="Dismiss notification"
-              title="Dismiss notification"
-              onClick={() => setToast('')}
-            >
-              <X size={14} />
-            </button>
+            <span>{toast.text}</span>
+            {toast.dismissible && (
+              <button
+                aria-label="Dismiss notification"
+                title="Dismiss notification"
+                onClick={() => setToast(null)}
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         )}
         <input

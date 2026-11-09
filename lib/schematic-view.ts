@@ -6,30 +6,12 @@ import { extraSymbolAnnotations } from './library';
 import type { SchematicLayers } from './schematic-layers';
 import { isOwnedCircuit } from './immutable-project';
 
-export type CanvasBounds = { left: number; top: number; width: number; height: number };
-
 export function globalLabelPath(label: Label) {
   const end = Math.max(9, label.text.length * 1.4 + 5),
     shape = label.shape || 'input';
   const left = ['input', 'bidirectional'].includes(shape),
     right = ['output', 'bidirectional', 'tri_state'].includes(shape);
   return `M 0 0 L ${left ? 2 : 0} -2.3 H ${end - (right ? 2 : 0)} ${right ? `L ${end} 0 L ${end - 2} 2.3` : `V 2.3`} H ${left ? 2 : 0} Z`;
-}
-
-// Expand the visible world with the canvas, keeping each point at the same screen pixel.
-export function resizeSchematicView(
-  view: { x: number; y: number; width: number },
-  previous: CanvasBounds,
-  next: CanvasBounds,
-) {
-  if (previous.width <= 0 || previous.height <= 0 || next.width <= 0 || next.height <= 0)
-    return view;
-  const unitsPerPixel = view.width / previous.width;
-  return {
-    x: view.x + (next.left - previous.left) * unitsPerPixel,
-    y: view.y + (next.top - previous.top) * unitsPerPixel,
-    width: next.width * unitsPerPixel,
-  };
 }
 
 const ownedVisibleJunctions = new WeakMap<Circuit, Circuit['junctions']>();

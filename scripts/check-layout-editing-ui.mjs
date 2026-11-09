@@ -1616,7 +1616,7 @@ try {
   );
 
   await run(
-    'continuous editing: clearing layer priority retains the route and pending via',
+    'continuous editing: clicking the active layer retains the route and pending via',
     async ({ page, canvas, point, snapshot }) => {
       await page.getByRole('button', { name: 'Route tracks', exact: true }).click();
       const start = { x: 50, y: 35 };
@@ -1641,8 +1641,8 @@ try {
         .getByRole('button', { name: 'F.Cu', exact: true });
       assert.equal(await currentLayer.getAttribute('aria-pressed'), 'true');
       await currentLayer.click();
-      assert.equal(await currentLayer.getAttribute('aria-pressed'), 'false');
-      assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), null);
+      assert.equal(await currentLayer.getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), 'F.Cu');
       assert.equal(await page.evaluate(() => window.layoutContext().layer), 'F.Cu');
       await toggleLayoutVisualization(page, 'Visible layers');
       assert.equal(await route.count(), 1);

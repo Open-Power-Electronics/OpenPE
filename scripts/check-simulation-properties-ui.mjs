@@ -107,6 +107,10 @@ try {
     'OpenPE.InitialVoltage': 'Initial voltage (V)',
   };
   await field('Component value').waitFor();
+  const tabLabelOpacity = (tab) =>
+    tab.locator('.reveal-button-label').evaluate((label) => getComputedStyle(label).opacity);
+  assert.equal(await tabLabelOpacity(general), '1', 'The default tab shows its name at rest.');
+  assert.equal(await tabLabelOpacity(spice), '0', 'The inactive tab shows only its icon at rest.');
   const original = await state();
   assert.equal(await spice.getAttribute('aria-selected'), 'false');
   for (const label of Object.values(labels)) {
@@ -115,6 +119,13 @@ try {
   }
   await general.press('ArrowRight');
   assert.equal(await spice.getAttribute('aria-selected'), 'true');
+  await spice.blur();
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('.property-tabs [role="tab"]')].every((tab) => {
+      const opacity = getComputedStyle(tab.querySelector('.reveal-button-label')).opacity;
+      return opacity === (tab.getAttribute('aria-selected') === 'true' ? '1' : '0');
+    }),
+  );
   assert.equal(await field('Component value').isVisible(), false);
   const sharedFields = await disclosure.evaluate((section) => {
     const file = section.querySelector('.property-model-choice');

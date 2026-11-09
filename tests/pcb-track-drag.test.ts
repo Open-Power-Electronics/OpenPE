@@ -389,7 +389,7 @@ test('LM2596 VIN drag retains its existing pad lead without growing a second ter
 test('EMC VBUS drag slides its short diagonal neighbour without redundant width-contact doglegs', async () => {
   const board = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8')).pcb!;
   const id = '55e76c6c-a882-41a3-85b9-455b1a2d200e';
-  const leftId = '37c40dcd-8ba4-4959-8a4b-71e2c870ffd1';
+  const leftId = '0745d122-aa67-56d5-a373-53f9ea8d6f7f';
   const rightId = '99584615-cbf3-4d62-834f-a3dc112a6d99';
   const before = structuredClone(board);
   const withoutFills = (value: PCB) => ({
@@ -407,7 +407,7 @@ test('EMC VBUS drag slides its short diagonal neighbour without redundant width-
       for (const posture of [false, true]) {
         const result = plan.preview(delta, posture);
         assert.equal(result.error, '');
-        const start = { x: 114.3, y: Number((64.9017 + delta.y).toFixed(6)) };
+        const start = { x: 115 + delta.y, y: Number((64.9017 + delta.y).toFixed(6)) };
         const end = { x: Number((118.7931 - delta.y).toFixed(6)), y: start.y };
         assert.deepEqual(
           result.board.tracks,

@@ -272,14 +272,14 @@ try {
     },
   );
   await run(
-    'EMC span collapse holds a revalidated boundary instead of rebounding to its original pose',
+    'EMC VBUS drag holds a revalidated boundary at nearby copper',
     async ({ canvas, point, state, marker, preview, start }) => {
       const vbus = { x: 116.54655, y: 64.9017 };
       await canvas.press('PageUp');
       await start(vbus);
       await point({ x: vbus.x, y: vbus.y + 0.5 });
       assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
-      await point({ x: vbus.x, y: vbus.y - 1 });
+      await point({ x: vbus.x, y: vbus.y - 4 });
       assert.equal(await marker.getAttribute('data-track-drag-blocked'), 'false');
       assert.equal(await marker.getAttribute('data-track-drag-constrained'), 'true');
       const displayed = await preview();

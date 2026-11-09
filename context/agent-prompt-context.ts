@@ -1,4 +1,5 @@
 import type { AgentWorkspaceContext } from './agent-workspace-context';
+import type { LayoutAnnotationContext } from '../lib/agent-annotations';
 import { parseProject, projectSchematics } from '../lib/project';
 import { pinPositions, type Circuit } from '../lib/circuit';
 import { projectNetGroups } from '../lib/project-net-groups';
@@ -149,10 +150,16 @@ export function agentPromptContext(value: unknown, progressive = false): unknown
   };
   const board = project.pcb;
   const model = modelCadFromProject(project);
+  const layout = context.layout as LayoutAnnotationContext | undefined;
+  const { projects: _projects, ...observedUI } = workspace.ui;
   return {
     id: context.id,
     basis: context.basis,
-    ...(context.layout ? { layout: context.layout } : {}),
+    // Attachment freshness uses these identities. The PCB overview below
+    // already carries the current board's design summary.
+    ...(layout
+      ? { layout: { id: layout.id, circuitId: layout.circuitId, basis: layout.basis } }
+      : {}),
     workspace: {
       version: workspace.version,
       capturedAt: workspace.capturedAt,
@@ -222,7 +229,7 @@ export function agentPromptContext(value: unknown, progressive = false): unknown
             activeSchematicId: workspace.ui.activeSchematicId,
             selection: bounded([...selected]),
           }
-        : workspace.ui,
+        : observedUI,
       icDatasheet: progressive
         ? {
             status: datasheet.status,

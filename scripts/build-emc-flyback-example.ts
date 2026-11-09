@@ -11,6 +11,8 @@ import {
   validateProject,
 } from '../lib/project';
 import { parseKiCadPCB } from '../lib/kicad-pcb';
+import { runPCBDesignRules } from '../lib/pcb-drc';
+import { offsetPolygons } from '../lib/pcb-polygons';
 import { parseSExpr, child, children, val, quote, writeSExpr, type SExpr } from '../lib/sexpr';
 import { KICAD_SCHEMATIC_VERSION } from '../lib/kicad-version';
 import { MODEL_CAD_EXTENSION } from '../lib/model-cad';
@@ -21,6 +23,7 @@ import { homeExampleNativePath } from '../lib/home-examples';
 import models from '../resources/emc-flyback-models-lock.json';
 import { prepareEmcFlybackModelBindings } from './emc-flyback-model-bindings';
 import { prepareEmcFlybackTestbench } from './emc-flyback-testbench';
+import layout from './emc-flyback-layout.json';
 import { writeHomeExampleNativeFiles, writeExampleFile as writeFile } from './example-native-files';
 
 const root = 'resources/example-catalog/sources/emc-flyback';
@@ -215,6 +218,93 @@ function preparePCB(source: string) {
       }
     }
   }
+  return board;
+}
+
+function repairPlacement(board: SExpr) {
+  const footprints = new Map(
+    children(board, 'footprint').map((fp) => [
+      val(children(fp, 'property').find((p) => val(p) === 'Reference'), 2),
+      fp,
+    ]),
+  );
+  const segments = new Map(children(board, 'segment').map((t) => [val(child(t, 'uuid')), t]));
+  function setPosition(record: SExpr | undefined, key: string, xy: number[], id: string) {
+    const position = record && child(record, key);
+    if (!position) throw new Error(`Missing EMC layout target ${id} (${key}).`);
+    position.splice(1, 2, ...xy.map(String));
+  }
+  for (const [ref, xy] of Object.entries(layout.placements))
+    setPosition(footprints.get(ref), 'at', xy, ref);
+  for (const id of layout.removedTracks) {
+    const segment = segments.get(id);
+    if (!segment) throw new Error(`Missing redundant EMC segment ${id}.`);
+    board.splice(board.indexOf(segment), 1);
+    segments.delete(id);
+  }
+  const routes: Record<string, { points: number[][]; additionalIds?: string[] }> = layout.tracks;
+  for (const [id, { points, additionalIds = [] }] of Object.entries(routes)) {
+    const segment = segments.get(id);
+    if (!segment || points.length !== additionalIds.length + 2)
+      throw new Error(`Invalid EMC track path ${id}.`);
+    const legs = [id, ...additionalIds].map((legId, index) => {
+      const leg = structuredClone(segment);
+      setPosition(leg, 'start', points[index], legId);
+      setPosition(leg, 'end', points[index + 1], legId);
+      child(leg, 'uuid')![1] = quote(legId);
+      return leg;
+    });
+    board.splice(board.indexOf(segment), 1, ...legs);
+  }
+}
+
+async function refillPCB(board: SExpr, stem: string, settings: string, rules: string) {
+  const directory = `${conversion}/refill`;
+  await mkdir(directory, { recursive: true });
+  const filename = `${directory}/${stem}.kicad_pcb`;
+  const scratch = structuredClone(board);
+  const screwKeepouts = children(scratch, 'zone').filter(
+    (zone) => val(child(zone, 'name')) === 'Q1_SCREW_KEEPOUT',
+  );
+  if (screwKeepouts.length !== 2) throw new Error('Expected the two Q1 screw keepouts.');
+  // Leave 1 µm of fill clearance at this polygonal boundary. KiCad's refill
+  // otherwise leaves small copper slivers inside the nominal keepout.
+  for (const zone of screwKeepouts) {
+    const pts = child(child(zone, 'polygon')!, 'pts')!;
+    const outline = children(pts, 'xy').map((p) => ({ x: Number(val(p)), y: Number(val(p, 2)) }));
+    const [expanded] = offsetPolygons([{ outer: outline, holes: [] }], 0.001);
+    pts.splice(1, pts.length, ...expanded.outer.map(({ x, y }) => ['xy', String(x), String(y)]));
+  }
+  await writeFile(filename, writeSExpr(scratch) + '\n');
+  await writeFile(`${directory}/${stem}.kicad_pro`, settings);
+  await writeFile(`${directory}/${stem}.kicad_dru`, rules);
+  runKiCad([
+    'pcb',
+    'drc',
+    '--refill-zones',
+    '--save-board',
+    '--severity-error',
+    '--exit-code-violations',
+    '-o',
+    `${directory}/drc.rpt`,
+    filename,
+  ]);
+  const refilled = parseSExpr(await readFile(filename, 'utf8'));
+  const fills = new Map(
+    children(refilled, 'zone').map((zone) => [
+      val(child(zone, 'uuid')),
+      children(zone, 'filled_polygon'),
+    ]),
+  );
+  // Keep the fills together because adjacent pours depend on each other.
+  // Transfer no other records from the scratch board.
+  for (const zone of children(board, 'zone')) {
+    const id = val(child(zone, 'uuid'));
+    const updated = fills.get(id);
+    if (!updated) throw new Error(`Missing refilled EMC zone ${id}.`);
+    for (const fill of children(zone, 'filled_polygon')) zone.splice(zone.indexOf(fill), 1);
+    zone.push(...updated);
+  }
   return writeSExpr(board) + '\n';
 }
 
@@ -228,27 +318,25 @@ for (const file of manifest.files) {
 // Explicit example generation uses KiCad's own upgrader; ordinary application
 // startup/builds consume the checked generated template and never need KiCad.
 const conversion = 'test-results/emc-kicad10/build';
+function runKiCad(args: string[]) {
+  const result = spawnSync(process.env.KICAD_CLI || 'kicad-cli', args, {
+    encoding: 'utf8',
+    windowsHide: true,
+    env: { ...process.env, KICAD_CONFIG_HOME: path.resolve(`${conversion}/config`) },
+  });
+  if (result.error || result.status !== 0)
+    throw new Error(
+      `KiCad 10 ${args.slice(0, 2).join(' ')} failed. Check KICAD_CLI and the report. ${result.error?.message || result.stdout || result.stderr}`,
+    );
+}
 await mkdir(conversion, { recursive: true });
 for (const ext of ['pro', 'sch', 'pcb'])
   await writeFile(
     `${conversion}/emc_flyback.kicad_${ext}`,
     await readFile(`${root}/design/emc_flyback.kicad_${ext}`),
   );
-for (const kind of ['sch', 'pcb']) {
-  const result = spawnSync(
-    process.env.KICAD_CLI || 'kicad-cli',
-    [kind, 'upgrade', '--force', `${conversion}/emc_flyback.kicad_${kind}`],
-    {
-      encoding: 'utf8',
-      windowsHide: true,
-      env: { ...process.env, KICAD_CONFIG_HOME: path.resolve(`${conversion}/config`) },
-    },
-  );
-  if (result.error || result.status !== 0)
-    throw new Error(
-      `KiCad 10 conversion failed. Set KICAD_CLI to the KiCad 10 CLI. ${result.error?.message || result.stderr}`,
-    );
-}
+for (const kind of ['sch', 'pcb'])
+  runKiCad([kind, 'upgrade', '--force', `${conversion}/emc_flyback.kicad_${kind}`]);
 const project = importDocument(
   stableUpgrade(await readFile(`${conversion}/emc_flyback.kicad_sch`, 'utf8')),
 );
@@ -261,10 +349,23 @@ prepareEmcFlybackValues(project.schematic);
 prepareEmcFlybackModelBindings(project.schematic);
 arrangeExampleText(project.schematic, 'emc-flyback-demo');
 prepareEmcFlybackTestbench(project.schematic);
-const pcbSource = preparePCB(
+const filename = path.basename(homeExampleNativePath('emc-flyback-demo'));
+const stem = filename.replace(/\.kicad_pro$/, '');
+const settings = JSON.parse(await readFile(`${root}/design/emc_flyback.kicad_pro`, 'utf8'));
+settings.meta = { ...settings.meta, filename };
+const settingsSource = JSON.stringify(settings, null, 2) + '\n';
+const rules = await readFile(`${root}/design/emc_flyback.kicad_dru`, 'utf8');
+const board = preparePCB(
   stableUpgrade(await readFile(`${conversion}/emc_flyback.kicad_pcb`, 'utf8')),
 );
+repairPlacement(board);
+const pcbSource = await refillPCB(board, stem, settingsSource, rules);
 const parsed = parseKiCadPCB(pcbSource, project.schematic, 'emc-flyback-demo');
+const drc = runPCBDesignRules(parsed.board, {}, project.schematic);
+if (!drc.complete || drc.issues.length)
+  throw new Error(
+    `EMC Flyback failed OpenPE DRC. ${drc.issues.map((issue) => issue.message).join(' ')}`,
+  );
 project.pcb = parsed.board;
 project.extensions[MODEL_CAD_EXTENSION] = emcFlybackModelCad(parsed.board, stable);
 project.extensions['org.openpe.emc-flyback-example'] = {
@@ -275,15 +376,10 @@ project.extensions['org.openpe.emc-flyback-example'] = {
   license: 'CC-BY-4.0',
   attribution: 'Chengmin Li and AI-PCB-layout contributors; KiCad library contributors',
   changes:
-    'Native KiCad 7 board normalized to supported KiCad 10 records. Electrical geometry, copper, UUIDs, nets and physical packages are retained. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
+    'Native KiCad 7 board normalized to supported KiCad 10 records. Footprints are repositioned to clear courtyard overlaps and align local pad connections. Tracks use horizontal, vertical and 45-degree paths. Redundant local segments are removed and zones are refilled. Original nets, pad shapes, vias and retained track identities and locks are preserved. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
 };
-const filename = path.basename(homeExampleNativePath('emc-flyback-demo'));
-const stem = filename.replace(/\.kicad_pro$/, '');
 const native = projectNativeFiles(project, filename);
-const settings = JSON.parse(await readFile(`${root}/design/emc_flyback.kicad_pro`, 'utf8'));
-settings.meta = { ...settings.meta, filename };
-native.files.find((f) => f.name.endsWith('.kicad_pro'))!.source =
-  JSON.stringify(settings, null, 2) + '\n';
+native.files.find((f) => f.name.endsWith('.kicad_pro'))!.source = settingsSource;
 // Retain normalized board setup and fields in Source as well as the editor model.
 native.files.find((f) => f.name.endsWith('.kicad_pcb'))!.source = pcbSource;
 for (const file of await readdir(`${root}/design`, { withFileTypes: true })) {

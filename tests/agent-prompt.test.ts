@@ -28,26 +28,18 @@ test('live schematic drafting guidance works without the optional PCB guide and 
   const text = makePrompt(request);
   const guidance = draftingGuidance(text);
   assert.doesNotMatch(text, /<bundled-pcb-design-guidance>/);
-  assert.match(guidance, /continuous, short orthogonal wires/);
-  assert.match(guidance, /Do not give every pin a short wire and a repeated net label/);
-  assert.match(
-    guidance,
-    /Reserve labels for power\/ground notation, external or off-sheet interfaces/,
-  );
+  assert.match(guidance, /short orthogonal wires for local connections/);
+  assert.match(guidance, /Reserve labels for power, interfaces or distant nets/);
   assert.match(guidance, /schematic\.drafting/);
-  assert.match(guidance, /canonical annotation ID returned by schematic\.drafting/);
+  assert.match(guidance, /canonical field IDs for schematic\.text\.position/);
   assert.match(guidance, /schematic\.wires/);
   assert.doesNotMatch(guidance, /schematic\.(position|connections|arrange|batch)/);
-  assert.match(guidance, /omit repeated coordinate lists and raw tool argument dumps/);
-  assert.match(guidance, /does not search for paths or autoroute/);
-  assert.match(
-    guidance,
-    /retain exact imported pin or junction anchors even when they are off-grid/,
-  );
-  assert.match(guidance, /Preserve the existing drawing for value-only/);
-  assert.match(guidance, /Do not replace the whole project merely to avoid/);
+  assert.match(guidance, /explicit polylines/);
+  assert.match(guidance, /OpenPE does not autoroute them/);
+  assert.match(guidance, /retaining exact existing anchors/);
+  assert.match(guidance, /Preserve the drawing for value, model or simulation tuning/);
+  assert.match(guidance, /Prefer targeted commands to whole-project replacement/);
   assert.match(guidance, /schematic\.erc separately/);
-  assert.doesNotMatch(guidance, /This integration has no live schematic drafting tools/);
   assert.equal(
     draftingGuidance(makePrompt(request, 'Optional PCB engineering methodology')),
     guidance,
@@ -56,75 +48,45 @@ test('live schematic drafting guidance works without the optional PCB guide and 
 });
 
 test('context-only drafting guidance keeps unsupported wiring outside the proposal transport', () => {
-  const guidance = draftingGuidance(
-    makePrompt({ prompt: 'Redraw the feedback circuit.', context: { title: 'Feedback circuit' } }),
-  );
-  assert.match(guidance, /This integration has no live schematic drafting tools/);
-  assert.match(guidance, /emit only the documented supported proposal operations/);
-  assert.match(guidance, /Do not invent wire\/label proposal kinds/);
-  assert.match(guidance, /unwired part placements/);
-  assert.doesNotMatch(guidance, /schematic\.(drafting|wire|wires|erc)/);
-  assert.match(guidance, /readable trunks and branches/);
+  const text = makePrompt({
+    prompt: 'Redraw the feedback circuit.',
+    context: { title: 'Feedback circuit' },
+  });
+  assert.match(text, /Live workbench tools are unavailable/);
+  assert.match(text, /"type":"setValue".*"type":"addPart".*"type":"removePart"/);
+  assert.match(text, /Review requires Apply and Auto can apply after successful completion/);
+  assert.match(draftingGuidance(text), /proposal format cannot wire, label or redraw/);
+  assert.doesNotMatch(text, /openpe_(query|execute|observe)|schematic\.(drafting|wire|wires|erc)/);
 });
 
 test('live prompts and command discovery use current-state execution without revision preconditions', () => {
   const text = makePrompt({ prompt: 'Redraw the circuit.', context: {}, capabilities: true });
-  assert.ok(text.includes(agentExecutionGuidance));
-  assert.ok(text.includes(agentDiscoveryGuidance));
-  assert.ok(
-    agentCapabilityTools
-      .find((tool) => tool.name === 'openpe_query')!
-      .description.includes(agentDiscoveryGuidance),
-  );
-  assert.ok(draftingGuidance(text).includes(agentExecutionGuidance));
-  assert.ok(
-    agentCapabilityTools
-      .find((tool) => tool.name === 'openpe_execute')!
-      .description.includes(agentExecutionGuidance),
-  );
-  assert.match(agentExecutionGuidance, /Commands execute against the current project state/);
-  assert.match(agentExecutionGuidance, /Do not send expectedRevision/);
-  assert.match(agentExecutionGuidance, /Execute project-changing commands one at a time/);
+  assert.equal(text.split(agentExecutionGuidance).length, 2);
+  assert.match(agentExecutionGuidance, /Commands and review Apply use current project state/);
+  assert.match(agentExecutionGuidance, /Omit expectedRevision/);
+  assert.match(agentExecutionGuidance, /await each project-changing command/);
+  assert.match(agentExecutionGuidance, /Treat review-required as pending/);
+  assert.match(agentExecutionGuidance, /pending Source with a separate source.apply/);
   assert.equal(
     'expectedRevision' in
       agentCapabilityTools.find((tool) => tool.name === 'openpe_execute')!.inputSchema.properties,
     false,
   );
-  assert.ok(
-    !makePrompt({ prompt: 'Explain the circuit.', context: {} }).includes(agentExecutionGuidance),
-  );
 });
 
 test('live Agent instructions reuse discovery within a turn and inspect simulation state on demand', () => {
   const prompt = makePrompt({ prompt: 'Run the transient.', context: {}, capabilities: true });
-  assert.ok(prompt.includes(agentDiscoveryGuidance));
-  assert.ok(prompt.includes(agentSimulationGuidance));
-  assert.match(
-    agentDiscoveryGuidance,
-    /Reuse the discovered index and full tool definitions for the rest of this turn/,
-  );
-  assert.match(agentDiscoveryGuidance, /batch those ids in one request/);
-  assert.match(agentDiscoveryGuidance, /Do not repeat the same discovery query/);
-  assert.match(agentDiscoveryGuidance, /Refresh discovery only for an unseen capability/);
-  assert.match(agentDiscoveryGuidance, /host rechecks it on every invocation/);
-  assert.match(
-    agentSimulationGuidance,
-    /Await its result and reuse that returned simulation state/,
-  );
-  assert.match(agentSimulationGuidance, /simulation.status only when current progress/);
-  assert.match(
-    agentSimulationGuidance,
-    /Never use capabilities.list as a simulation progress check/,
-  );
-  for (const name of ['openpe_query', 'openpe_execute'])
-    assert.ok(
-      agentCapabilityTools
-        .find((tool) => tool.name === name)!
-        .description.includes(agentSimulationGuidance),
-    );
-  const contextOnly = makePrompt({ prompt: 'Explain the circuit.', context: {} });
-  assert.equal(contextOnly.includes(agentDiscoveryGuidance), false);
-  assert.equal(contextOnly.includes(agentSimulationGuidance), false);
+  assert.equal(prompt.split(agentDiscoveryGuidance).length, 2);
+  assert.equal(prompt.split(agentSimulationGuidance).length, 2);
+  assert.match(agentDiscoveryGuidance, /includeSchema:false/);
+  assert.match(agentDiscoveryGuidance, /Fetch full schemas in one request/);
+  assert.match(agentDiscoveryGuidance, /Reuse definitions within the turn/);
+  assert.match(agentDiscoveryGuidance, /Refresh only for new IDs/);
+  assert.match(agentDiscoveryGuidance, /rechecks availability on every call/);
+  assert.match(agentSimulationGuidance, /Await simulation\.run and reuse its result/);
+  assert.match(agentSimulationGuidance, /simulation\.status for needed progress/);
+  assert.match(agentSimulationGuidance, /Avoid duplicate runs, tight polling and discovery/);
+  assert.doesNotMatch(prompt, /Use \w+ for clarification/, 'No question tool without a bridge.');
 });
 
 test('the native EMC Flyback prompt fits provider input while preserving electrical and observed state', async () => {

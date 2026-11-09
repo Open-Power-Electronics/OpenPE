@@ -4,13 +4,19 @@ EMC Flyback is the fixed entry in Home's Recent section. It is converted from [A
 
 ## Native conversion
 
-The official KiCad 10 upgrader converts the schematic and board. The build adapter preserves original UUIDs and deterministically identifies newly explicit fields. Its single custom rectangular pad is represented by two same-number rectangles with the identical copper union. Multi-layer keepouts become individual layer records. Original electrical geometry is retained. The native schematic adds five virtual testbench components without moving the original circuit or changing PCB bytes.
+The official KiCad 10 upgrader converts the schematic and board. The build adapter preserves original UUIDs and deterministically identifies newly explicit fields. Its single custom rectangular pad is represented by two same-number rectangles with the identical copper union. Multi-layer keepouts become individual layer records. The native schematic adds five virtual testbench components while retaining the original circuit.
 
 Passive R/C/L Values contain only their nominal value and unit, such as L2 = `10uH` and C4 = `100u`. The original current/voltage/power ratings, dielectric, package and series text are retained in ordinary `Specifications` fields on schematic instances and PCB footprints. Pinned originals and reference notes retain their source text. Simulation signatures use the cleaned native Values.
 
 The Home annotation layout changes only instance Reference/Value placement and alignment. Rendered glyph checks cover the 228 original visible fields; five new virtual testbench components add their own references, Values and named rails in a separate framed area above the original circuit. Panel borders use a common 2.54 mm gap in both directions; the five virtual components use equal horizontal centre spacing. Section 7, the datasheet-link note panel, is removed from the generated schematic; component Datasheet/Product page fields and pinned upstream notes remain available. Regression checks retain embedded libraries, part poses, wires, labels, PCB bytes and the complete compiled SPICE deck.
 
-`scripts/check-emc-flyback-kicad.py` independently uses KiCad 10.0.1 to compare original and converted connectivity, footprint positions/UUIDs, pad copper, all 359 tracks and 155 vias, including 124 locked tracks and 32 locked vias. These are native-conversion checks rather than ERC/DRC or manufacturing approval.
+## PCB design rules
+
+The layout data in `scripts/emc-flyback-layout.json` records the courtyard-safe placements, adjusted paths and removed redundant segments. Both copper layers use horizontal, vertical and 45° segments. The edited paths chamfer sharp elbows, join branch endpoints and remove short steps where a pad or a continuous path already provides the connection. C16 aligns with R11 and SNUB for straight SNB and SNA connections. R4 connects to the straight PGND bus, and its CSRAW pad joins a wide vertical lead and a separate 0.5 mm sense branch. Split tracks retain the original net, width, layer and lock state, and the first segment retains the original UUID.
+
+The converter refills the copper zones together using KiCad 10 and the native project rules. The refill adds 1 µm of margin to the Q1 screw keepout on both copper layers to account for boundary clipping. The published board retains the original keepout outlines.
+
+`scripts/check-emc-flyback-kicad.py` uses KiCad 10's Python and CLI to verify original schematic connectivity, pad copper at the accepted placements, track/via geometry and lock metadata against the pinned source and the layout data. It runs error-level DRC on the saved board and requires zero violations and zero unconnected items. The saved native project also has a regression test requiring a complete, issue-free report under OpenPE's [default DRC rules](DESIGN-RULES.md#layout-drc). KiCad can also report silkscreen and footprint-library warnings.
 
 ## Electrical comparison
 

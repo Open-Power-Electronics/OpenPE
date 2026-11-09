@@ -45,26 +45,19 @@ function ruleLabel(id: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function issueSummary(issue: RuleCheckIssue) {
-  // The rule name already identifies the missing driver in these rows.
-  if (issue.ruleId === 'erc.power-undriven')
-    return issue.message.replace(/ has no power output on its network\.$/, '');
-  if (issue.ruleId === 'erc.input-undriven')
-    return issue.message.replace(/ has no signal driver on its network\.$/, '');
-  return issue.message;
-}
-
 export type RuleCheckKind = 'erc' | 'drc' | 'model';
 type RuleCheckPanelProps = {
   panelId?: string;
   kind: RuleCheckKind;
   report: RuleCheckResult | null;
   busy?: boolean;
+  quietRefresh?: boolean;
   error?: string;
   stale?: boolean;
   sourcePending?: boolean;
   blockedReason?: string;
   drcSettings?: PCBDesignRuleConfig;
+  onDRCDraftChange?: (pending: boolean) => void;
   onDRCSettingsChange?: (settings: PCBDesignRuleConfig) => void;
   onRun: (settings?: PCBDesignRuleConfig) => void;
   onSelectIssue: (issue: RuleCheckIssue) => void;
@@ -78,11 +71,13 @@ export default function RuleCheckPanel({
   kind,
   report,
   busy = false,
+  quietRefresh = false,
   error = '',
   stale = false,
   sourcePending = false,
   blockedReason = '',
   drcSettings,
+  onDRCDraftChange,
   onDRCSettingsChange,
   onRun,
   onSelectIssue,
@@ -95,6 +90,7 @@ export default function RuleCheckPanel({
   const closeButton = useRef<HTMLButtonElement>(null);
   const composing = useRef(false);
   const restoreRunFocus = useRef(false);
+  const [refreshCount, setRefreshCount] = useState(0);
   useEffect(() => {
     closeButton.current?.focus({ preventScroll: true });
   }, []);
@@ -123,6 +119,9 @@ export default function RuleCheckPanel({
     limitFields.some(
       ([key]) => !validLimit(drafts[key]) || Number(drafts[key]) !== drcSettings[key],
     );
+  useEffect(() => {
+    onDRCDraftChange?.(!!limitsChanged);
+  }, [limitsChanged, onDRCDraftChange]);
   const currentReport = report?.kind === kind ? report : null;
   const code = kind.toUpperCase();
   const errors = currentReport?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
@@ -131,11 +130,14 @@ export default function RuleCheckPanel({
   const modelErrors = modelReport?.issues.filter((issue) => issue.severity === 'error').length ?? 0;
   const modelWarnings =
     modelReport?.issues.filter((issue) => issue.severity === 'warning').length ?? 0;
+  const hasIssues =
+    kind === 'model' ? !!modelReport?.issues.length : !!currentReport?.issues.length;
   const incomplete = currentReport && (!currentReport.complete || currentReport.truncated);
   const outdated = stale || !!limitsChanged;
   const canRun =
     !busy && !sourcePending && !blockedReason && (kind === 'erc' || (!!drcSettings && !!limits));
   const canLocate = !busy && !sourcePending && !blockedReason && !outdated;
+  const showProgress = busy && !quietRefresh;
   const runLabel = `${currentReport ? 'Recheck' : 'Run'} ${code}`;
   function blockComposingActivation(event: KeyboardEvent<HTMLElement>) {
     if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
@@ -150,11 +152,6 @@ export default function RuleCheckPanel({
       onRun(limits);
     } else onRun();
   }
-  useEffect(() => {
-    // Opening the popup uses the same validated local drafts
-    // as Run. Editing a threshold alone never starts a background check.
-    run();
-  }, [kind]);
   return (
     <div className={styles.anchor} ref={anchor}>
       <section
@@ -207,7 +204,8 @@ export default function RuleCheckPanel({
                 aria-label={runLabel}
                 title={runLabel}
                 onClick={() => {
-                  if (composing.current) return;
+                  if (composing.current || !canRun) return;
+                  setRefreshCount((count) => count + 1);
                   restoreRunFocus.current = document.activeElement === runButton.current;
                   run();
                 }}
@@ -215,7 +213,13 @@ export default function RuleCheckPanel({
                 onKeyDown={blockComposingActivation}
                 onKeyUp={blockComposingActivation}
               >
-                <RefreshCw size={15} className={busy ? 'spin' : undefined} aria-hidden="true" />
+                <RefreshCw
+                  key={refreshCount}
+                  size={15}
+                  className={showProgress || refreshCount ? `spin ${styles.refresh}` : undefined}
+                  data-busy={showProgress}
+                  aria-hidden="true"
+                />
               </button>
             )}
             <button
@@ -234,10 +238,16 @@ export default function RuleCheckPanel({
             </button>
           </div>
         </div>
-        <div className={styles.body} data-rule-body>
+        <div
+          className={styles.body}
+          data-rule-body
+          role="region"
+          aria-label={kind === 'model' ? 'Model report' : `${code} report`}
+          tabIndex={hasIssues ? 0 : undefined}
+        >
           {kind !== 'model' && (
             <div className={styles.runStatus} role="status">
-              {busy ? `Checking ${code}…` : currentReport ? '' : 'Not checked'}
+              {showProgress ? `Checking ${code}…` : currentReport ? '' : 'Not checked'}
             </div>
           )}
           {kind === 'model' && (
@@ -349,11 +359,6 @@ export default function RuleCheckPanel({
               Apply Source edits before checking rules.
             </p>
           )}
-          {!sourcePending && outdated && currentReport && (
-            <p className={styles.statusMessage} role="status">
-              Design or limits changed. Recheck {code}.
-            </p>
-          )}
           {blockedReason && (
             <p className={styles.statusMessage} role="status">
               {blockedReason}
@@ -376,9 +381,9 @@ export default function RuleCheckPanel({
                   {warnings} {warnings === 1 ? 'warning' : 'warnings'}
                 </span>
               </div>
-              {incomplete && (
+              {currentReport.truncated && (
                 <p className={styles.statusMessage} role="status">
-                  Incomplete checks{currentReport.truncated ? ': issue list truncated.' : '.'}
+                  Issue list truncated.
                 </p>
               )}
               {!currentReport.issues.length &&
@@ -387,7 +392,9 @@ export default function RuleCheckPanel({
                 !sourcePending &&
                 !blockedReason &&
                 !error &&
-                !busy && <p className={styles.empty}>No violations found in checked rules.</p>}
+                !showProgress && (
+                  <p className={styles.empty}>No violations found in checked rules.</p>
+                )}
               {!!currentReport.issues.length && (
                 <ul className={styles.issues} aria-label={`${code} issues`}>
                   {currentReport.issues.map((issue) => (
@@ -418,7 +425,7 @@ export default function RuleCheckPanel({
                           {ruleLabel(issue.ruleId)}
                         </span>
                         <span className={styles.message} title={issue.message}>
-                          {issueSummary(issue)}
+                          {issue.message}
                         </span>
                       </button>
                     </li>

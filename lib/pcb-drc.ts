@@ -765,14 +765,20 @@ export function runPCBDesignRules(
           const between = Math.sqrt(squaredDistance(hole.at, copper.disk.at));
           gap = Math.max(0, between - copper.disk.outer, copper.disk.inner - between) - hole.radius;
         } else if (insideBody(hole.at, copper)) gap = -hole.radius;
-        else
-          for (const [a, b] of copper.edges) {
-            spend();
-            gap = Math.min(
-              gap,
-              Math.sqrt(pointSegmentDistance(hole.at, a, b)) - copper.radius - hole.radius,
-            );
-          }
+        else {
+          const { x, y } = hole.at;
+          query(
+            index(copper),
+            { minX: x, maxX: x, minY: y, maxY: y },
+            copper.radius + hole.radius + settings.copperToHole + epsilon,
+            ({ line: [a, b] }) => {
+              gap = Math.min(
+                gap,
+                Math.sqrt(pointSegmentDistance(hole.at, a, b)) - copper.radius - hole.radius,
+              );
+            },
+          );
+        }
         if (gap + epsilon < settings.copperToHole)
           issue(
             'pcb.copper-hole',
@@ -783,6 +789,7 @@ export function runPCBDesignRules(
       }
     }
     phase = 'copper keepouts';
+    const holeBounds = new WeakMap<Point[], Bounds>();
     for (const zone of zones.filter((z) => z.keepout)) {
       if (zone.keepout!.footprints)
         coverage(
@@ -793,8 +800,7 @@ export function runPCBDesignRules(
         );
       const polygon = { outer: zone.outline, holes: zone.holes ?? [] };
       const area = body(zone.id, 'zone', 'Keepout', null, [zone.layer], zone.outline, 0, polygon);
-      let pourInterior: Polygon[] | undefined;
-      let pourInteriorEdges = 0;
+      let pourInterior: { polygons: Polygon[]; bounds: Bounds; edgeCount: number } | undefined;
       for (const copper of bodies) {
         const blocked =
           copper.kind === 'track'
@@ -818,14 +824,38 @@ export function runPCBDesignRules(
         if (pour) {
           if (!pourInterior) {
             spend(area.edges.length);
-            pourInterior = offsetPolygons(pourKeepoutPolygons(zone), -polygonResolution);
-            pourInteriorEdges = pourInterior.reduce(
+            const polygons = offsetPolygons(pourKeepoutPolygons(zone), -polygonResolution);
+            const edgeCount = polygons.reduce(
               (n, p) => n + p.outer.length + p.holes.reduce((m, h) => m + h.length, 0),
               0,
             );
+            spend(edgeCount);
+            pourInterior = {
+              polygons,
+              bounds: pointBounds(polygons.flatMap((p) => p.outer)),
+              edgeCount,
+            };
           }
-          spend(copper.edges.length * pourInteriorEdges);
-          enters = intersectPolygons([pour], pourInterior).length > 0;
+          const { bounds: interiorBounds, polygons } = pourInterior;
+          if (!polygons.length || !overlapsBounds(copper, interiorBounds, polygonResolution))
+            continue;
+          // Holes outside the clipping bounds cannot affect the intersection.
+          // Include one grid cell in the bounds test for coordinate rounding.
+          let edgeCount = pour.outer.length;
+          const holes = pour.holes.filter((hole) => {
+            spend();
+            let bounds = holeBounds.get(hole);
+            if (!bounds) {
+              spend(hole.length);
+              bounds = pointBounds(hole);
+              holeBounds.set(hole, bounds);
+            }
+            if (!overlapsBounds(bounds, interiorBounds, polygonResolution)) return false;
+            edgeCount += hole.length;
+            return true;
+          });
+          spend(edgeCount * pourInterior.edgeCount);
+          enters = intersectPolygons([{ outer: pour.outer, holes }], polygons).length > 0;
         } else enters = distance(copper, area) <= epsilon;
         if (enters)
           issue(

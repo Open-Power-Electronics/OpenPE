@@ -13,6 +13,8 @@ const pcbDisplayOptions = [
   'airwires',
 ] as const;
 export type PCBDisplay = Record<BoardLayer | (typeof pcbDisplayOptions)[number], boolean>;
+export const pcbInactiveLayerModes = ['Normal', 'Dim', 'Hide'] as const;
+export type PCBInactiveLayerMode = (typeof pcbInactiveLayerModes)[number];
 export const copperFillOpacity = 0.8;
 export const boardOutlineMinWidth = 0.05;
 export function defaultPCBDisplay(): PCBDisplay {
@@ -66,6 +68,17 @@ export function pcbDisplayLayerPaintOrder(display: PCBDisplay): BoardLayer[] {
       visible && !pcbDisplayOptions.some((option) => option === name) ? [name as BoardLayer] : [],
     ),
   );
+}
+
+/** Promote the active side's passes as a group, with the active layer on top. */
+export function pcbActiveLayerPaintOrder(order: BoardLayer[], active: BoardLayer): BoardLayer[] {
+  const side = active.startsWith('F.') || active.startsWith('B.') ? active.slice(0, 2) : '';
+  const related = (name: BoardLayer) => name === active || (side && name.startsWith(side));
+  return [
+    ...order.filter((name) => !related(name)),
+    ...order.filter((name) => name !== active && related(name)),
+    ...order.filter((name) => name === active),
+  ];
 }
 
 /** A spanning pad has one owner: its uppermost visible pass in the current paint order. */

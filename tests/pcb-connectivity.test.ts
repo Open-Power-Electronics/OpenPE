@@ -416,7 +416,7 @@ test('the complete EMC saved fills analyze within the bounded budget and expose 
   const board = core.getSnapshot().project!.pcb!;
   const before = structuredClone(board);
   assert.equal(board.footprints.length, 88);
-  assert.equal(board.tracks.length, 359);
+  assert.equal(board.tracks.length, 336);
   assert.deepEqual(analyzePCBConnectivity(board), { edges: [], padCount: 194, warnings: [] });
   assert.deepEqual(board, before, 'Saved fills and native metadata remain unchanged.');
 

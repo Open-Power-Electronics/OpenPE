@@ -10,7 +10,7 @@ import {
   movePCBSelection,
   replacePCBGraphic,
 } from '../lib/pcb-layout';
-import { defaultPCBDisplay } from '../lib/pcb-display';
+import { defaultPCBDisplay, pcbDisplayForLayer } from '../lib/pcb-display';
 import { parseProject } from '../lib/project';
 import { parseKiCadPCB } from '../lib/kicad-pcb';
 import { ProjectCore } from '../core/project-core';
@@ -607,6 +607,28 @@ test('footprint priority comes from intersected artwork rather than a distant ch
   );
 });
 
+test('high contrast on a courtyard prefers its footprint over an overlapping board stroke', () => {
+  const part = owner();
+  const at = { x: 0, y: 0 };
+  const stroke = {
+    id: 'stroke',
+    layer: 'F.CrtYd' as const,
+    width: 0.1,
+    start: { x: -1, y: 0 },
+    end: { x: 1, y: 0 },
+  };
+  part.graphics.push({ ...stroke, id: 'courtyard' });
+  const board = { ...createEmptyPCB(), footprints: [part], graphics: [stroke] };
+  const layers = pcbDisplayForLayer(defaultPCBDisplay(), 'F.CrtYd');
+  const candidates = [candidate('graphic', stroke.id), candidate('footprint', part.id)];
+  const options = { tolerance: 0.15, priorityLayer: 'F.CrtYd', filters };
+  assert.equal(choosePCBPointCandidate(board, layers, candidates, at, options), candidates[0]);
+  assert.equal(
+    choosePCBPointCandidate(board, layers, candidates, at, { ...options, highContrast: true }),
+    candidates[1],
+  );
+});
+
 test('selected inner copper admits shared through pads and Edge.Cuts admits non-plated holes', () => {
   const through = owner();
   through.id = 'through';
@@ -894,12 +916,11 @@ test('native EMC C5 silkscreen is selectable, movable and hideable independently
   assert.ok(
     selectPCBRectangle(
       board,
-      layers,
+      pcbDisplayForLayer(layers, 'F.SilkS'),
       filters,
       { x: at.x - 0.7, y: at.y - 0.5 },
       { x: at.x + 0.7, y: at.y + 0.5 },
       undefined,
-      'F.SilkS',
       footprintTextValues,
     ).some((item) => item.id === target.id),
   );

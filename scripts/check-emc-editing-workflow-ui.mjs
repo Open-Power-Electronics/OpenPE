@@ -265,9 +265,9 @@ try {
   await schematic.waitFor();
   const original = await native();
   const baseline = await readNativeProject(page);
-  assert.equal(baseline.schematic.parts.length, 140);
+  assert.equal(baseline.schematic.parts.length, 145);
   assert.equal(baseline.pcb.footprints.length, 88);
-  assert.equal(baseline.pcb.tracks.length, 359);
+  assert.equal(baseline.pcb.tracks.length, 336);
   await clean();
 
   // Find a real resistor through the public list, edit it, visit both other
@@ -1057,9 +1057,9 @@ try {
   console.log(
     JSON.stringify({
       workflow: 'EMC Flyback',
-      symbols: 140,
-      footprints: 88,
-      tracks: 359,
+      symbols: baseline.schematic.parts.length,
+      footprints: baseline.pcb.footprints.length,
+      tracks: baseline.pcb.tracks.length,
       offlineModels: modelRequests.size,
       covered: [
         'component Properties',

@@ -2147,12 +2147,7 @@ try {
         if (trackEnabled || trackPacedEnabled) {
           const project = projectFromNativeFiles(original);
           const track = project.pcb?.tracks.find(
-            (item) =>
-              item.layer === 'F.Cu' &&
-              !item.locked &&
-              Math.abs(item.start.x - 114.3) < 0.001 &&
-              Math.abs(item.start.y - 64.9017) < 0.001 &&
-              Math.abs(item.end.x - 118.7931) < 0.001,
+            (item) => item.id === '55e76c6c-a882-41a3-85b9-455b1a2d200e' && !item.locked,
           );
           assert.ok(track, 'The retained EMC VBUS segment supplies a real connected-drag case.');
           const neighbor = project.pcb.tracks.find(

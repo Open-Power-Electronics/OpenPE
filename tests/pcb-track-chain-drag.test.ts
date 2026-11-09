@@ -7,10 +7,10 @@ import { registerProjectCapabilities } from '../core/register-project';
 import { createCapabilityHost } from '../api/capabilities';
 import type { Point } from '../lib/circuit';
 import type { PCB } from '../lib/pcb';
-import { parseProject, projectFromNativeFiles } from '../lib/project';
+import { parseProject, projectFromNativeFiles, projectNativeFiles } from '../lib/project';
 import { pointSegmentDistance } from '../lib/pcb-collision';
 import { previewConstrainedPCBTrackDrag } from '../lib/pcb-track-drag';
-import { createPCBInteractiveTrackDrag } from '../lib/pcb-interactive-track-drag';
+import { createPCBInteractiveDrag } from '../lib/pcb-interactive-drag';
 import { createPCBTrackChainDrag } from '../lib/pcb-track-chain-drag';
 import { createEmptyPCB } from '../lib/pcb-layout';
 
@@ -34,7 +34,13 @@ const reference = JSON.parse(
   };
   cases: Case[];
 };
-const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
+const sourceBoard = await readFile(reference.reference.sourceBoard);
+const nativeFiles = projectNativeFiles(
+  parseProject(await readFile('lib/emc-flyback-example.json', 'utf8')),
+);
+nativeFiles.files.find((file) => file.name.endsWith('.kicad_pcb'))!.source =
+  sourceBoard.toString('utf8');
+const project = projectFromNativeFiles(nativeFiles);
 
 test('chain reshaping declines a free-angle neighbour and retains the ordinary drag planner', () => {
   const board = createEmptyPCB();
@@ -82,13 +88,11 @@ const directedDistance = (a: Span[], b: Span[]) => {
   return maximum;
 };
 
-test('native KiCad drag references bind the ten cases to the unchanged EMC board', async () => {
+test('native KiCad drag references bind the ten cases to the pinned EMC board', () => {
   assert.equal(reference.reference.version, '10.0.1');
   assert.equal(reference.cases.length, 10);
   assert.equal(
-    createHash('sha256')
-      .update(await readFile(reference.reference.sourceBoard))
-      .digest('hex'),
+    createHash('sha256').update(sourceBoard).digest('hex'),
     reference.reference.sourceBoardSha256,
   );
 });
@@ -100,7 +104,7 @@ for (const obstacleMode of ['shove', 'walk-around'] as const)
       const before = core.getSnapshot();
       const basis = before.project!.pcb!;
       const native = core.getNativeFiles();
-      const engine = createPCBInteractiveTrackDrag(
+      const engine = createPCBInteractiveDrag(
         basis,
         entry.trackIds.map((id) => ({ kind: 'track', id })),
         {

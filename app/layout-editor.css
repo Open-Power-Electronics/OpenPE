@@ -106,7 +106,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 6px 8px;
+  padding: 4px 8px;
   overscroll-behavior: contain;
 }
 .layout-design-layer[data-active='true'],
@@ -479,9 +479,9 @@
 }
 .layout-net-controls {
   position: sticky;
-  top: -6px;
+  top: -4px;
   z-index: 1;
-  padding-top: 6px;
+  padding-top: 4px;
   padding-bottom: 4px;
   background: var(--surface);
 }

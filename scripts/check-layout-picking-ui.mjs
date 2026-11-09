@@ -388,7 +388,7 @@ try {
     },
   ];
   await run(
-    'current layer wins overlapping track picks before pointer distance and resets with its row',
+    'the active layer breaks similar copper hits and persists on a repeated row click',
     async ({ page, chooseLayer, expectPick }) => {
       const nearFront = { x: 30, y: 25.04 };
       await expectPick({ x: 30, y: 25.15 }, ['front-overlap']);
@@ -404,8 +404,8 @@ try {
         .getByRole('group', { name: 'Visible layers', exact: true })
         .getByRole('button', { name: 'B.Cu', exact: true })
         .click();
-      assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), null);
-      await expectPick(nearFront, ['front-overlap']);
+      assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), 'B.Cu');
+      await expectPick(nearFront, ['back-overlap']);
       await setLayoutVisibility(page, 'B.Cu', false);
       await chooseLayer('B.Cu');
       assert.equal(
@@ -440,19 +440,21 @@ try {
     },
   ];
   await run(
-    'current layer zone interior beats an off-layer pad and track while filters retain fallback',
+    'visible pads and tracks beat a zone interior in Normal mode',
     async ({ page, chooseLayer, setSelectionFilter, expectPick }) => {
       const at = { x: 28.6, y: 23.6 };
-      await expectPick(at, [], 'A1-pad');
+      await expectPick(at, ['front-pad-track']);
       await chooseLayer('B.Cu');
-      await expectPick(at, ['back-zone']);
+      await expectPick(at, ['front-pad-track']);
       await setSelectionFilter('Zones', false);
+      await setSelectionFilter('Tracks', false);
       await expectPick(at, [], 'A1-pad');
+      await setSelectionFilter('Tracks', true);
       await setSelectionFilter('Pads', false);
       await setSelectionFilter('Footprints', false);
       await expectPick(at, ['front-pad-track']);
       await setSelectionFilter('Zones', true);
-      await expectPick(at, ['back-zone']);
+      await expectPick(at, ['front-pad-track']);
       await setLayoutVisibility(page, 'B.Cu', false);
       await expectPick(at, ['front-pad-track']);
     },
@@ -474,18 +476,18 @@ try {
     ],
   });
   await run(
-    'current layer noncopper region beats off-layer copper and respects hidden or disabled graphics',
+    'visible copper beats an active-layer graphic interior in Normal mode',
     async ({ page, chooseLayer, setSelectionFilter, expectPick }) => {
       const at = { x: 28.6, y: 23.6 };
       await setLayoutVisibility(page, 'B.SilkS', true);
       await chooseLayer('B.SilkS');
-      await expectPick(at, ['back-silk-region']);
+      await expectPick(at, ['front-pad-track']);
       await setSelectionFilter('Graphics', false);
-      await expectPick(at, [], 'A1-pad');
+      await expectPick(at, ['front-pad-track']);
       await setSelectionFilter('Graphics', true);
-      await expectPick(at, ['back-silk-region']);
+      await expectPick(at, ['front-pad-track']);
       await setLayoutVisibility(page, 'B.SilkS', false);
-      await expectPick(at, [], 'A1-pad');
+      await expectPick(at, ['front-pad-track']);
     },
     layerGraphic,
   );
@@ -526,6 +528,117 @@ try {
       await clean();
     },
     adjacent,
+  );
+  const routedFootprint = structuredClone(board);
+  routedFootprint.tracks[0].start = { x: 28.6, y: 23.6 };
+  routedFootprint.tracks[0].end = { x: 40, y: 23.6 };
+  const menuBoard = structuredClone(routedFootprint);
+  menuBoard.vias.push({ ...menuBoard.vias[0], id: 'second-via', x: 72 });
+  menuBoard.zones.push({
+    ...menuBoard.zones[0],
+    id: 'rule-area',
+    netId: null,
+    outline: rectangle(60, 32, 67, 40),
+    filledPolygons: undefined,
+    fillEnabled: false,
+    keepout: { tracks: true, vias: true, pads: false, footprints: false, copperpour: false },
+  });
+  await run(
+    'context actions follow the selected PCB object types',
+    async ({ page, canvas, screen, point, selected, clean }) => {
+      const actions = page.getByRole('menu', { name: 'Canvas actions', exact: true });
+      const expectActions = async (position, labels) => {
+        const at = await screen(position);
+        await page.mouse.click(at.x, at.y, { button: 'right' });
+        await actions.waitFor();
+        assert.deepEqual(
+          (await actions.getByRole('menuitem').allTextContents()).map((label) => label.trim()),
+          labels,
+          `Context actions at (${position.x}, ${position.y})`,
+        );
+        await page.keyboard.press('Escape');
+        await actions.waitFor({ state: 'hidden' });
+      };
+      const edit = ['Properties', 'Move'];
+      const finish = ['Lock', 'Delete'];
+      const copper = ['Select connected', 'Highlight nets'];
+      const track = { x: 36, y: 23.6 };
+      const component = { x: 30, y: 26.2 };
+      const via = { x: 55, y: 35 };
+      const secondVia = { x: 72, y: 35 };
+      await expectActions(track, [
+        ...edit,
+        'Drag tracks',
+        'Drag corner',
+        'Rotate',
+        ...copper,
+        ...finish,
+      ]);
+      await expectActions(component, [...edit, 'Drag with tracks', 'Rotate', 'Flip', ...finish]);
+      await expectActions({ x: 53.6, y: 23.6 }, ['Properties', 'Highlight nets', 'Lock']);
+      await expectActions(via, [...edit, ...copper, ...finish]);
+      await point(secondVia, true, ['Shift']);
+      assert.deepEqual(await selected(), ['second-via', 'via']);
+      await expectActions(secondVia, [...edit, 'Rotate', ...copper, ...finish]);
+      await expectActions({ x: 45, y: 37 }, [
+        ...edit,
+        'Rotate',
+        'Fillet corners',
+        'Refill zone',
+        'Highlight nets',
+        ...finish,
+      ]);
+      await expectActions({ x: 60, y: 36 }, [...edit, 'Rotate', 'Fillet corners', ...finish]);
+      await expectActions({ x: 80, y: 12 }, [...edit, 'Rotate', 'Fillet corners', ...finish]);
+      await point(track, true);
+      await point(component, true, ['Shift']);
+      assert.deepEqual(await selected(), ['A1', 'underlying-track']);
+      await expectActions(component, [...edit, 'Rotate', ...finish]);
+      assert.deepEqual(await selected(), ['A1', 'underlying-track']);
+      await expectActions({ x: 50, y: 8 }, [...edit, 'Rotate', 'Fill all zones', ...finish]);
+      assert.deepEqual(await selected(), ['A1', 'underlying-track']);
+      await canvas.press('ContextMenu');
+      await actions.waitFor();
+      assert.equal(await actions.getByRole('menuitem', { name: 'Fill all zones' }).count(), 0);
+      await page.keyboard.press('Escape');
+      await canvas.press('Escape');
+      await clean();
+    },
+    menuBoard,
+  );
+  await run(
+    'connected footprint drag previews attached tracks and commits one undo edit',
+    async ({ page, canvas, point, drag, snapshot, renderedTracks, clean }) => {
+      const preview = canvas.locator('[data-footprint-drag-preview]');
+      const origin = { x: 30, y: 25 };
+      const target = { x: 30, y: 29 };
+      await point(origin, true);
+      await canvas.press('d');
+      await point(target);
+      await preview.waitFor({ state: 'attached' });
+      assert.equal(await preview.getAttribute('data-track-drag-blocked'), 'false');
+      await canvas.press('Escape');
+      await preview.waitFor({ state: 'detached' });
+      await clean();
+
+      await drag(origin, target);
+      await preview.waitFor({ state: 'attached' });
+      assert.equal(await preview.getAttribute('data-track-drag-blocked'), 'false');
+      assert.equal(await preview.getAttribute('data-track-drag-constrained'), 'false');
+      const shown = (await renderedTracks()).sort(byTrackId);
+      await clean();
+      await page.mouse.up();
+      const placed = await snapshot();
+      assert.equal(placed.commits, 1);
+      assert.equal(placed.board.footprints[0].y, 29);
+      assert.equal(placed.board.tracks[0].id, routedFootprint.tracks[0].id);
+      assert.deepEqual(placed.board.tracks[0].start, { x: 28.6, y: 27.6 });
+      assert.deepEqual(placed.board.tracks.at(-1).end, routedFootprint.tracks[0].end);
+      assert.deepEqual(placed.board.tracks.map(trackGeometry).sort(byTrackId), shown);
+      await page.getByRole('button', { name: 'Undo', exact: true }).click();
+      assert.deepEqual((await snapshot()).board, routedFootprint);
+    },
+    routedFootprint,
   );
   await run(
     'directly selected track dragging uses connected drag and one undo edit',

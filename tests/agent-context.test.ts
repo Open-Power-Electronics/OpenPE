@@ -11,6 +11,7 @@ import {
 } from '../context/agent-simulation-context';
 import {
   validateAgentWorkspaceContext,
+  agentPromptContext,
   agentSource,
   type AgentWorkspaceContext,
 } from '../context/agent-workspace-context';
@@ -78,6 +79,33 @@ function fixture() {
   };
   return { circuit, basis, state, workspace };
 }
+
+test('initial provider context keeps attachment identity and omits unrelated navigation', () => {
+  const { circuit, basis, workspace } = fixture();
+  const layout = {
+    id: 'board',
+    circuitId: circuit.id,
+    basis: 'board-basis',
+    layers: ['F.Cu', 'B.Cu'],
+    counts: { footprints: 2 },
+  };
+  const presentation = { text: 'Origin project controls', controls: [], drawings: [] };
+  workspace.ui.presentation = presentation;
+  workspace.ui.projects = [{ title: 'Unrelated project' }];
+  for (const scopedTools of [false, true]) {
+    const projected = agentPromptContext(
+      { id: circuit.id, basis, layout, workspace },
+      scopedTools,
+    ) as { layout: unknown; workspace: AgentWorkspaceContext };
+    assert.deepEqual(projected.layout, {
+      id: layout.id,
+      circuitId: circuit.id,
+      basis: layout.basis,
+    });
+    assert.equal(projected.workspace.ui.projects, undefined);
+    assert.deepEqual(projected.workspace.ui.presentation, scopedTools ? undefined : presentation);
+  }
+});
 
 test('workspace context retains Source metadata and rejects private native files, drafts and parser excerpts', () => {
   const { workspace, circuit, basis } = fixture();

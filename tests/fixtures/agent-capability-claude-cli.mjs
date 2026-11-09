@@ -14,7 +14,11 @@ assert.equal(server.command, process.execPath);
 assert.equal(server.args.length, 1);
 assert.match(server.args[0], /agent-mcp\.mjs$/);
 createInterface({ input: process.stdin }).on('line', (line) => {
-  if (JSON.parse(line).type !== 'user') return;
+  const event = JSON.parse(line);
+  if (event.type !== 'user') return;
+  const prompt = event.message.content[0].text;
+  assert.match(prompt, /Reuse definitions within the turn/);
+  assert.match(prompt, /Await simulation\.run and reuse its result/);
   const child = spawn(server.command, server.args, {
     env: { ...process.env, ...server.env },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -32,14 +36,6 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       assert.deepEqual(
         message.result.tools.map((tool) => tool.name),
         tools,
-      );
-      assert.match(
-        message.result.tools[0].description,
-        /Reuse the discovered index and full tool definitions for the rest of this turn/,
-      );
-      assert.match(
-        message.result.tools[1].description,
-        /Await its result and reuse that returned simulation state/,
       );
       request(3, 'tools/call', { name: tools[0], arguments: { name: 'project.snapshot' } });
     }

@@ -3,18 +3,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { exampleProject } from '../lib/project-example';
 import { fieldId, objectPosition, moveSelection } from '../lib/schematic-edit';
+import { resizeDrawingView, type CanvasBounds } from '../lib/drawing-viewport';
 import {
   defaultSchematicLayers,
   validateSchematicLayers,
   schematicTextColors,
 } from '../lib/schematic-layers';
 import {
-  type CanvasBounds,
   fieldDragLinks,
   visibleSchematicIds,
   visibleSchematicWireTargetIds,
   visibleJunctions,
-  resizeSchematicView,
 } from '../lib/schematic-view';
 import { defaultAppearance, validateAppearance, appearanceVariables } from '../lib/appearance';
 import { serializeProject, exportKiCad } from '../lib/project';
@@ -39,7 +38,7 @@ test('canvas expansion preserves screen positions and scale through collapse, re
     { left: 398.5, top: 202, width: 710, height: 510.5 },
     expandedPanel,
   ]) {
-    const resized = resizeSchematicView(view, bounds, next);
+    const resized = resizeDrawingView(view, bounds, next);
     assert.ok(Math.abs(resized.width / next.width - original.width / expandedPanel.width) < 1e-10);
     for (const point of worldPoints) {
       const before = screen(view, bounds, point);
@@ -53,8 +52,8 @@ test('canvas expansion preserves screen positions and scale through collapse, re
   for (const key of ['x', 'y', 'width'] as const)
     assert.ok(Math.abs(view[key] - original[key]) < 1e-10);
   const hidden = { left: 0, top: 0, width: 0, height: 0 };
-  assert.equal(resizeSchematicView(original, expandedPanel, hidden), original);
-  assert.equal(resizeSchematicView(original, hidden, expandedPanel), original);
+  assert.equal(resizeDrawingView(original, expandedPanel, hidden), original);
+  assert.equal(resizeDrawingView(original, hidden, expandedPanel), original);
 });
 
 test('layer visibility excludes hidden geometry from selection without changing project or exports', () => {

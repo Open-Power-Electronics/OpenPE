@@ -24,7 +24,7 @@ import {
   projectFromNativeFiles,
   serializeProject,
 } from '../lib/project';
-import { child, children, parseSExpr, val } from '../lib/sexpr';
+import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
 import { schematicPolylines, schematicTexts } from '../lib/schematic-text';
 import { defaultTransient, simulationSupportError } from '../lib/spice';
 import { modelCadFromProject, MODEL_CAD_NATIVE_VARIABLE } from '../lib/model-cad';
@@ -34,6 +34,7 @@ import { buildSpiceDeck } from '../lib/spice';
 import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
 import { prepareEmcFlybackModelBindings } from '../scripts/emc-flyback-model-bindings';
 import { prepareEmcFlybackTestbench } from '../scripts/emc-flyback-testbench';
+import layout from '../scripts/emc-flyback-layout.json';
 import { partFields } from '../lib/library';
 
 test('EMC native passive values separate specifications and retain them through native round trips', () => {
@@ -131,7 +132,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.equal(cadA.objects.flatMap(panelCuts).length, 8);
   assert.equal(a.schematic.parts.length, 145);
   assert.equal(a.pcb!.footprints.length, 88);
-  assert.equal(a.pcb!.tracks.length, 359);
+  assert.equal(a.pcb!.tracks.length, 336);
   assert.equal(a.pcb!.vias.length, 155);
   const q = a.schematic.parts.find((p) => p.ref === 'Q1')!;
   assert.ok(a.pcb!.footprints.some((fp) => fp.symbolId === q.id));
@@ -152,10 +153,18 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   );
   const board = parseSExpr(bundle.files.find((f) => f.name.endsWith('.kicad_pcb'))!.source);
   assert.equal(val(child(board, 'version')), '20260206');
-  assert.equal(
-    children(board, 'segment').filter((n) => val(child(n, 'locked')) === 'yes').length,
-    124,
-  );
+  const segments = children(board, 'segment');
+  assert.equal(segments.filter((n) => val(child(n, 'locked')) === 'yes').length, 130);
+  for (const net of ['SNA', 'SNB'])
+    assert.equal(segments.filter((n) => val(child(n, 'net')) === net).length, 1, net);
+  for (const segment of segments) {
+    const [start, end] = ['start', 'end'].map((key) =>
+      [1, 2].map((i) => Math.round(Number(val(child(segment, key), i)) * 1e6)),
+    );
+    const dx = Math.abs(end[0] - start[0]);
+    const dy = Math.abs(end[1] - start[1]);
+    assert.ok((dx || dy) && (!dx || !dy || dx === dy), val(child(segment, 'uuid')));
+  }
   const nativeCopy = projectFromNativeFiles(bundle);
   assert.equal(nativeCopy.pcb!.footprints.length, 88);
   assert.equal(Object.hasOwn(nativeCopy.extensions, 'org.openpe.enclosure'), false);
@@ -270,18 +279,48 @@ test('EMC enclosure exists only in Model CAD, outside PCB footprints and project
   const before = parseSExpr(
     readFileSync('tests/fixtures/emc-track-drag-kicad10-source.kicad_pcb', 'utf8'),
   );
-  const withoutCases = (board: ReturnType<typeof parseSExpr>) =>
+  const placements = new Map(Object.entries(layout.placements));
+  for (const fp of children(before, 'footprint')) {
+    const position = placements.get(reference(fp));
+    if (position) child(fp, 'at')!.splice(1, 2, ...position.map(String));
+  }
+  const tracks = new Map<string, { points: number[][]; additionalIds?: string[] }>(
+    Object.entries(layout.tracks),
+  );
+  for (const segment of children(before, 'segment')) {
+    const id = val(child(segment, 'uuid'));
+    if (layout.removedTracks.includes(id)) {
+      before.splice(before.indexOf(segment), 1);
+      continue;
+    }
+    const route = tracks.get(id);
+    if (!route) continue;
+    const { points, additionalIds = [] } = route;
+    const expectedLegs = [id, ...additionalIds].map((legId, index) => {
+      const leg = structuredClone(segment);
+      child(leg, 'uuid')![1] = quote(legId);
+      child(leg, 'start')!.splice(1, 2, ...points[index].map(String));
+      child(leg, 'end')!.splice(1, 2, ...points[index + 1].map(String));
+      return leg;
+    });
+    before.splice(before.indexOf(segment), 1, ...expectedLegs);
+  }
+  const withoutCasesOrFills = (board: ReturnType<typeof parseSExpr>) =>
     board.filter(
       (node) =>
         !Array.isArray(node) ||
         node[0] !== 'footprint' ||
         !['MECH1', 'MECH2'].includes(reference(node)),
+    ).map((node) =>
+      Array.isArray(node) && node[0] === 'zone'
+        ? node.filter((item) => !Array.isArray(item) || item[0] !== 'filled_polygon')
+        : node,
     );
-  assert.deepEqual(
-    generated,
-    withoutCases(before),
-    'All other native PCB records retain exact geometry, ordering and metadata.',
-  );
+  const expected = withoutCasesOrFills(before);
+  const actual = withoutCasesOrFills(generated);
+  assert.equal(actual.length, expected.length);
+  for (const [index, record] of expected.entries())
+    assert.deepEqual(actual[index], record, `Unexpected change to native PCB record ${index}.`);
 });
 
 test('native schematic note outlines reject unsupported or malformed geometry', () => {

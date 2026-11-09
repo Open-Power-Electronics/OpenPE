@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { ProjectCore } from '../core/project-core';
 import { uid, type Point } from '../lib/circuit';
 import { invalidatePCBFill, type BoardZone, type Footprint, type PCB } from '../lib/pcb';
 import { createEmptyPCB, flipPCBFootprint, padDrillPosition } from '../lib/pcb-layout';
 import { copperFillContour, fillCopperZones } from '../lib/pcb-polygons';
 import { defaultPCBDesignRules, runPCBDesignRules } from '../lib/pcb-drc';
 import { projectFromNativeFiles } from '../lib/kicad-project';
+import type { RuleCheckResult } from '../lib/design-rule-checks';
 
 const rect = (a: number, b: number, c: number, d: number): Point[] => [
   { x: a, y: b },
@@ -555,7 +557,7 @@ test('courtyards preserve independent contours and cutouts and reject crossing o
   assert.equal(issues(board, 'pcb.courtyard-malformed').length, 1);
 });
 
-test('native EMC Flyback reports the nine KiCad 10.0.1 courtyard pairs without changing files', async () => {
+test('native EMC Flyback passes default DRC with complete coverage and unchanged files', async () => {
   const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
   const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const native = await readNativeProject(filename);
@@ -565,28 +567,32 @@ test('native EMC Flyback reports the nine KiCad 10.0.1 courtyard pairs without c
   const report = runPCBDesignRules(board, {}, project.schematic);
   assert.equal(report.complete, true);
   assert.equal(report.truncated, false);
-  const references = new Map(project.schematic.parts.map((part) => [part.id, part.ref]));
-  const byId = new Map(
-    board.footprints.map((f) => [f.id, references.get(f.symbolId ?? '') ?? f.reference]),
-  );
-  assert.ok(
-    report.issues.every(
-      (issue) => issue.ruleId === 'pcb.courtyard-overlap' && issue.severity === 'error',
-    ),
-  );
-  assert.deepEqual(
-    report.issues
-      .map((issue) =>
-        issue.objectIds
-          .map((id) => byId.get(id))
-          .sort()
-          .join('/'),
-      )
-      .sort(),
-    ['C15/D2', 'C15/T1', 'C16/R11', 'C16/SNUB', 'C5/R4', 'D2/R4', 'J1/MH1', 'J3/MH2', 'R4/SNUB'],
-  );
+  assert.deepEqual(report.issues, []);
   assert.deepEqual(board, before);
   assert.deepEqual(await readNativeProject(filename), native);
+});
+
+test('EMC Flyback DRC completes after moving a track and refreshing saved fills', async () => {
+  const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
+  const native = await readNativeProject('project/emc-flyback/emc-flyback.kicad_pro');
+  const project = projectFromNativeFiles(native);
+  const board = project.pcb!;
+  const core = new ProjectCore(project);
+  core.execute('layout.move', {
+    boardId: board.id,
+    selection: [{ kind: 'track', id: '1d86d449-e059-45b0-ae66-5414983dc04d' }],
+    delta: { x: 0, y: 0.1 },
+  });
+  const moved = core.getSnapshot();
+  assert.notDeepEqual(
+    moved.project!.pcb!.zones.map((zone) => zone.filledPolygons),
+    board.zones.map((zone) => zone.filledPolygons),
+  );
+  const report = (await core.query('layout.drc', { boardId: board.id })) as RuleCheckResult;
+  assert.equal(report.complete, true, report.notes.join('\n'));
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(await core.query('layout.drc', { boardId: board.id }), report);
+  assert.equal(core.getSnapshot(), moved);
 });
 
 test('checks are deterministic and never change board geometry or fills', () => {

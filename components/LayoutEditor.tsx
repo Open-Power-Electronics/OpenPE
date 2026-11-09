@@ -1,5 +1,6 @@
 'use client';
 import PropertyDeleteButton from './PropertyDeleteButton';
+import { resizeDrawingView } from '@/lib/drawing-viewport';
 
 import {
   memo,
@@ -22,6 +23,7 @@ import {
   Cpu,
   ImageDown,
   FlipHorizontal2,
+  Layers2,
   LockKeyhole,
   Maximize,
   MessageSquareText,
@@ -81,7 +83,7 @@ import {
 import { expandPCBTrackSelection } from '@/lib/pcb-track-selection';
 import { previewConstrainedPCBTrackDrag, type PCBTrackDragPreview } from '@/lib/pcb-track-drag';
 import { createPCBTrackJointDrag } from '@/lib/pcb-track-joint-drag';
-import { createPCBInteractiveTrackDrag } from '@/lib/pcb-interactive-track-drag';
+import { connectedPCBDragKind, createPCBInteractiveDrag } from '@/lib/pcb-interactive-drag';
 import {
   findPCBRectangle,
   pcbRectangleDragBounds,
@@ -104,6 +106,9 @@ import { insidePolygon } from '@/lib/pcb-collision';
 import { createPCBRouteAnchorResolver, type PCBRouteAnchorResult } from '@/lib/pcb-route-anchor';
 import {
   defaultPCBDisplay,
+  pcbActiveLayerPaintOrder,
+  pcbDisplayForLayer,
+  pcbInactiveLayerModes,
   boardOutlineMinWidth,
   pcbDisplayBounds,
   pcbDisplayLayers,
@@ -111,6 +116,7 @@ import {
   pcbLayerColor,
   pcbDisplayLayerPaintOrder,
   type PCBDisplay,
+  type PCBInactiveLayerMode,
 } from '@/lib/pcb-display';
 import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
 import { preparePCBFillPreview } from './pcbFillPreview';
@@ -373,6 +379,7 @@ function LayoutEditor({
     ids: Selection[];
     basis: PCB;
   } | null>(null);
+  const footprintDrag = trackDrag?.ids[0]?.kind === 'footprint';
   const drawing = tool === 'outline' || tool === 'zone';
   const toolSettings = tool === 'route' || tool === 'via' || drawing;
   const [selection, writeSelection] = useState<Selection[]>([]);
@@ -402,7 +409,16 @@ function LayoutEditor({
   const ratio = size.width / Math.max(1, size.height);
   const renderedGrid = layoutGridMetrics(gridSpacing, view.width / size.width);
   const [darkBoard, setDarkBoard] = useState(false);
-  const [layers, setLayers] = useState(defaultPCBDisplay);
+  const [visibleLayers, setLayers] = useState(defaultPCBDisplay);
+  const [layer, setLayer] = useState<CopperLayer>('F.Cu');
+  const [priorityLayer, setPriorityLayer] = useState<BoardLayer | null>(null);
+  const activeLayer = priorityLayer ?? layer;
+  const [inactiveLayerMode, setInactiveLayerMode] = useState<PCBInactiveLayerMode>('Normal');
+  const selectionLayers = useMemo(
+    () => inactiveLayerMode === 'Normal' ? visibleLayers : pcbDisplayForLayer(visibleLayers, activeLayer),
+    [visibleLayers, inactiveLayerMode, activeLayer],
+  );
+  const layers = inactiveLayerMode === 'Hide' ? selectionLayers : visibleLayers;
   const [appearanceTab, setAppearanceTab] = useState<LayoutAppearanceTab>('layers');
   const [visualizationExpanded, setVisualizationExpanded] = useState(true);
   const [selectionFiltersOpen, setSelectionFiltersOpen] = useState(true);
@@ -444,9 +460,9 @@ function LayoutEditor({
   const annotationSelectableIds = useMemo(
     () =>
       active && visible && tool === 'annotate'
-        ? new Set(allVisibleSelections(true).map((item) => item.id))
+        ? new Set(allVisibleSelections(true, selectionLayers).map((item) => item.id))
         : undefined,
-    [active && visible && tool === 'annotate', pcb, layers, filters, footprintTextValues],
+    [active && visible && tool === 'annotate', pcb, selectionLayers, filters, footprintTextValues],
   );
   const [inspectedPadId, setInspectedPadId] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -464,9 +480,7 @@ function LayoutEditor({
   const propertiesPanel = useRef<HTMLElement>(null);
   const [inspectorFocus, setInspectorFocus] = useState(0);
   const focusedInspectorRequest = useRef(0);
-  const [layer, setLayer] = useState<CopperLayer>('F.Cu');
-  const [priorityLayer, setPriorityLayer] = useState<BoardLayer | null>(null);
-  const outlineLayer = priorityLayer ?? layer;
+  const outlineLayer = activeLayer;
   const [regionNet, setRegionNet] = useState('');
   const regionNetId = pcb.nets.some((item) => item.id === regionNet) ? regionNet : '';
   const [net, setNet] = useState('');
@@ -529,7 +543,7 @@ function LayoutEditor({
     const eligible = new Set(
       selectPCBRectangle(
         pcb,
-        layers,
+        visibleLayers,
         filters,
         { x: bounds.maxX + 1, y: bounds.minY - 1 },
         { x: bounds.minX - 1, y: bounds.maxY + 1 },
@@ -549,10 +563,10 @@ function LayoutEditor({
             const visiblePad =
               pad &&
               owner &&
-              layers.footprints &&
+              visibleLayers.footprints &&
               (pad.type === 'np_thru_hole'
-                ? layers['Edge.Cuts']
-                : padCopperLayers(pcb, owner, pad).some((layer) => layers[layer as BoardLayer]));
+                ? visibleLayers['Edge.Cuts']
+                : padCopperLayers(pcb, owner, pad).some((layer) => visibleLayers[layer as BoardLayer]));
             return visiblePad ? [{ kind: 'footprint' as const, id: owner.id }] : [];
           })
           .filter((target) => eligible.has(`${target.kind}:${target.id}`)),
@@ -584,7 +598,7 @@ function LayoutEditor({
       }
       setView({ ...fitted, width: (fitted.width * size.width) / available });
     }
-  }, [active, ruleFocus, pcb, ratio, layers, filters, size.width, size.height]);
+  }, [active, ruleFocus, pcb, ratio, layers, visibleLayers, filters, size.width, size.height]);
   const [partId, setPartId] = useState('');
   const [choosing, setChoosing] = useState(false);
   const [placement, setPlacement] = useState<Footprint | null>(null);
@@ -614,6 +628,7 @@ function LayoutEditor({
     clickCandidate?: SelectionCandidate;
     clickChoices?: SelectionCandidate[];
   } | null>(null);
+  const [contextMenuOnBlank, setContextMenuOnBlank] = useState(false);
   const [selectionChoice, setSelectionChoice] = useState<
     (LayoutSelectionChoice & { position: { x: number; y: number } }) | null
   >(null);
@@ -705,11 +720,11 @@ function LayoutEditor({
     if (!trackDrag || trackDrag.basis !== pcb) return { engine: null, error: '' };
     try {
       return {
-        engine: createPCBInteractiveTrackDrag(pcb, trackDrag.ids, {
+        engine: createPCBInteractiveDrag(pcb, trackDrag.ids, {
           mode: trackDrag.mode,
           clearance: routeClearance,
           endpointTolerance: trackDrag.endpointTolerance,
-          obstacleMode: dragObstacleMode,
+          obstacleMode: footprintDrag ? 'walk-around' : dragObstacleMode,
           pickup: trackDrag.pickup,
         }),
         error: '',
@@ -726,6 +741,7 @@ function LayoutEditor({
     trackDrag?.endpointTolerance,
     routeClearance,
     dragObstacleMode,
+    footprintDrag,
   ]);
   const acceptedTrackDrag = useRef<{
     engine: NonNullable<typeof trackDragEngine.engine>;
@@ -1064,11 +1080,10 @@ function LayoutEditor({
       ),
     [layers, copperLayers],
   );
-  const paintLayerOrder = useMemo(() => {
-    const visible = physicalLayerOrder.filter((name) => layers[name]);
-    if (priorityLayer === null || !visible.includes(priorityLayer)) return visible;
-    return [...visible.filter((name) => name !== priorityLayer), priorityLayer];
-  }, [physicalLayerOrder, layers, priorityLayer]);
+  const paintLayerOrder = useMemo(
+    () => pcbActiveLayerPaintOrder(physicalLayerOrder, activeLayer),
+    [physicalLayerOrder, activeLayer],
+  );
   useEffect(() => {
     const copperLayer = copperLayers.includes(layer) ? layer : copperLayers[0];
     if (copperLayer !== layer) setLayer(copperLayer);
@@ -1178,7 +1193,7 @@ function LayoutEditor({
       annotationIds,
       annotationMode,
       viewport: { ...view, height: view.width / ratio },
-      layers,
+      layers: visibleLayers,
       filters,
       hiddenNets: [...hiddenNets],
       highlightNets: [...highlightNets],
@@ -1219,25 +1234,26 @@ function LayoutEditor({
             ),
           }
         : null,
-      connectedTrackDrag: trackDrag
-        ? {
-            mode: trackDrag.mode,
-            trackIds: trackDrag.ids.map((item) => item.id),
-            pickup: trackDrag.pickup ? { ...trackDrag.pickup } : undefined,
-            endpointTolerance:
-              trackDrag.mode === 'corner' ? trackDrag.endpointTolerance : undefined,
-            posture: trackDrag.mode === 'connected' ? routePosture : undefined,
-            delta: {
-              x: trackDrag.current.x - trackDrag.start.x,
-              y: trackDrag.current.y - trackDrag.start.y,
-            },
-            clearance: routeClearance,
-            obstacleMode: trackDrag.mode === 'connected' ? dragObstacleMode : undefined,
-            blocked: Boolean(trackDragPreview?.error),
-            constrained: Boolean(trackDragPreview?.constraint),
-            appliedDelta: trackDragPreview?.constraint?.appliedDelta,
-          }
-        : null,
+      connectedTrackDrag:
+        trackDrag && !footprintDrag
+          ? {
+              mode: trackDrag.mode,
+              trackIds: trackDrag.ids.map((item) => item.id),
+              pickup: trackDrag.pickup ? { ...trackDrag.pickup } : undefined,
+              endpointTolerance:
+                trackDrag.mode === 'corner' ? trackDrag.endpointTolerance : undefined,
+              posture: trackDrag.mode === 'connected' ? routePosture : undefined,
+              delta: {
+                x: trackDrag.current.x - trackDrag.start.x,
+                y: trackDrag.current.y - trackDrag.start.y,
+              },
+              clearance: routeClearance,
+              obstacleMode: trackDrag.mode === 'connected' ? dragObstacleMode : undefined,
+              blocked: Boolean(trackDragPreview?.error),
+              constrained: Boolean(trackDragPreview?.constraint),
+              appliedDelta: trackDragPreview?.constraint?.appliedDelta,
+            }
+          : null,
       routing: {
         width,
         clearance: routeClearance,
@@ -1316,6 +1332,7 @@ function LayoutEditor({
     copperLayers,
     layer,
     priorityLayer,
+    visibleLayers,
   ]);
   useLayoutEffect(() => {
     const binding = committedCameraBinding.current;
@@ -1332,14 +1349,7 @@ function LayoutEditor({
   });
   useEffect(() => {
     cancelGesture();
-    const eligible = new Set(allVisibleSelections(true).map((item) => `${item.kind}:${item.id}`));
-    setAnnotationIds((current) => {
-      const next = current.filter((id) => {
-        const item = objectSelection(pcb, id);
-        return item && eligible.has(`${item.kind}:${id}`);
-      });
-      return next.length === current.length ? current : next;
-    });
+    const eligible = new Set(allVisibleSelections(true, visibleLayers).map((item) => `${item.kind}:${item.id}`));
     setSelection((current) => {
       const next = current.filter((item) => eligible.has(`${item.kind}:${item.id}`));
       return next.length === current.length ? current : next;
@@ -1353,16 +1363,23 @@ function LayoutEditor({
       return owner &&
         pad &&
         (!(owner.locked || pad.locked) || filters.locked !== false) &&
-        layers.footprints &&
+        visibleLayers.footprints &&
         (pad.type === 'np_thru_hole'
-          ? layers['Edge.Cuts']
-          : padCopperLayers(pcb, owner, pad).some((name) => layers[name as CopperLayer]))
+          ? visibleLayers['Edge.Cuts']
+          : padCopperLayers(pcb, owner, pad).some((name) => visibleLayers[name as CopperLayer]))
         ? current
         : '';
     };
     if (inspectedPadId && !retainPad(inspectedPadId)) setInspector(false);
     setInspectedPadId(retainPad);
-  }, [layers, filters, leftButtonDrag]);
+  }, [visibleLayers, filters, leftButtonDrag]);
+  useEffect(() => {
+    if (!annotationSelectableIds) return;
+    setAnnotationIds((current) => {
+      const next = current.filter((id) => annotationSelectableIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [annotationSelectableIds]);
 
   useEffect(() => {
     if (previousBoard.current === pcb) return;
@@ -1472,22 +1489,25 @@ function LayoutEditor({
   useLayoutEffect(() => {
     if (!host.current) return;
     let previous = host.current.getBoundingClientRect();
+    let windowWidth = window.innerWidth;
+    let windowHeight = window.innerHeight;
     const update = () => {
       const next = host.current?.getBoundingClientRect();
       if (!next || next.width < 1 || next.height < 1) return;
       const before = previous;
+      const windowResized = windowWidth !== window.innerWidth || windowHeight !== window.innerHeight;
+      windowWidth = window.innerWidth;
+      windowHeight = window.innerHeight;
       setSize({ width: next.width, height: next.height });
       if (!fitted.current) {
         fitted.current = true;
         setView(
           fittedView(latestBoard.current, next.width, next.height, 'all', defaultPCBDisplay()),
         );
-      } else if (before.width > 0)
-        setView((current) => ({
-          x: current.x + ((next.left - before.left) * current.width) / before.width,
-          y: current.y + ((next.top - before.top) * current.width) / before.width,
-          width: (current.width * next.width) / before.width,
-        }));
+      } else
+        setView((current) =>
+          resizeDrawingView(current, before, next, windowResized ? 'center' : 'screen'),
+        );
       previous = next;
     };
     const observer = new ResizeObserver(update);
@@ -1580,7 +1600,7 @@ function LayoutEditor({
       const footprint = pcb.footprints.find((item) => item.id === id);
       if (!footprint || !pcbSelectionEligible(pcb, { kind: 'footprint', id }, filters))
         return false;
-      const bounds = pcbFootprintBodyBounds(pcb, footprint, layers);
+      const bounds = pcbFootprintBodyBounds(pcb, footprint, visibleLayers);
       if (!bounds) return false;
       activate('select');
       setInspector(false);
@@ -1657,17 +1677,12 @@ function LayoutEditor({
       return false;
     }
   }
-  function changePriorityLayer(next: BoardLayer | null) {
-    if (next === priorityLayer) return;
-    if (priorityLayer === null && next === layer) {
-      setPriorityLayer(next);
+  function changePriorityLayer(next: BoardLayer) {
+    if (next === activeLayer) {
+      if (priorityLayer === null) setPriorityLayer(next);
       return;
     }
-    if (drawing && (next ?? layer) !== outlineLayer) setOutline(null);
-    if (next === null) {
-      setPriorityLayer(null);
-      return;
-    }
+    if (drawing) setOutline(null);
     cancelGesture();
     setRoute(null);
     setRoutePointer(null);
@@ -1682,6 +1697,11 @@ function LayoutEditor({
       setOutline(null);
       setOutlinePoints([]);
     }
+  }
+  function changeInactiveLayerMode(next: PCBInactiveLayerMode) {
+    if (next === inactiveLayerMode) return;
+    cancelGesture();
+    setInactiveLayerMode(next);
   }
   function fit(mode: 'board' | 'all') {
     try {
@@ -1814,15 +1834,14 @@ function LayoutEditor({
     if (b.zones.some((z) => z.id === id)) return { kind: 'zone', id };
     return null;
   }
-  function allVisibleSelections(includeOwnedText = false) {
+  function allVisibleSelections(includeOwnedText = false, display = selectionLayers) {
     const bounds = pcbBounds(pcb);
     return selectPCBRectangle(
       pcb,
-      layers,
+      display,
       filters,
       { x: bounds.maxX + 1, y: bounds.minY - 1 },
       { x: bounds.minX - 1, y: bounds.maxY + 1 },
-      undefined,
       undefined,
       footprintTextValues,
       includeOwnedText,
@@ -1891,7 +1910,9 @@ function LayoutEditor({
     if (!at) return [];
     try {
       const pickup = canvasPoint(at, false);
-      const available = selectionCandidates(at, false, kinds?.length === 1 && kinds[0] === 'track');
+      const available = selectionCandidates(at, {
+        tracksOnly: kinds?.length === 1 && kinds[0] === 'track',
+      });
       const padIds = new Set(
         available.flatMap((candidate) => (candidate.padId ? [candidate.padId] : [])),
       );
@@ -2027,17 +2048,28 @@ function LayoutEditor({
     } else if (candidate.selection.kind === 'graphic') {
       const graphic = findPCBGraphic(pcb, candidate.selection.id)?.graphic;
       const value = footprintTextValues.get(candidate.selection.id) ?? graphic?.text?.value;
-      label = [value?.trim() || 'Silkscreen graphic', graphic?.layer]
+      label = [value?.trim() || (graphic?.kind === 'dimension' ? 'Dimension' : 'Graphic'), graphic?.layer]
         .filter(Boolean)
         .join(' · ');
       icon = graphic?.kind === 'text' ? Type : Pentagon;
+    } else if (candidate.selection.kind === 'footprint') {
+      const { id } = candidate.selection;
+      const footprint = pcb.footprints.find((item) => item.id === id);
+      label = ['Footprint', footprint?.reference, footprint?.side === 'back' ? 'B.Cu' : 'F.Cu']
+        .filter(Boolean)
+        .join(' · ');
+      icon = Cpu;
+    } else if (candidate.selection.kind === 'zone') {
+      const { id } = candidate.selection;
+      const zone = pcb.zones.find((item) => item.id === id);
+      label = [zone?.keepout ? 'Rule area' : 'Zone', zone?.layer].filter(Boolean).join(' · ');
+      icon = Pentagon;
     }
     return { id: candidate.id, label, icon, run: () => selectCandidate(candidate, mode) };
   }
   function selectionCandidates(
     e: { clientX: number; clientY: number },
-    includeFills = false,
-    tracksOnly = false,
+    { includeFills = false, tracksOnly = false, excludeOutlineInteriors = false } = {},
   ) {
     flushLayoutCamera(svg.current);
     const raw = canvasPoint(e, false);
@@ -2045,7 +2077,7 @@ function LayoutEditor({
     // D/G rank only physical track surfaces within this same tolerance. DOM
     // caption/body/fill targets cannot contribute another winning track.
     if (tracksOnly)
-      return selectPCBTrackPoint(pcb, layers, filters, raw, margin).map(
+      return selectPCBTrackPoint(pcb, selectionLayers, filters, raw, margin).map(
         (selection): SelectionCandidate => ({
           id: `${selection.kind}:${selection.id}`,
           selection,
@@ -2055,6 +2087,8 @@ function LayoutEditor({
     const directText = new Set<string>();
     for (const element of document.elementsFromPoint(e.clientX, e.clientY)) {
       if (!svg.current?.contains(element)) continue;
+      const hitLayer = element.closest('[data-layout-layer]')?.getAttribute('data-layout-layer');
+      if (hitLayer && !selectionLayers[hitLayer as BoardLayer]) continue;
       if (!includeFills && element.closest('[data-copper-fill]')) continue;
       const target = hit({ target: element });
       const object = target.id ? objectSelection(pcb, target.id) : null;
@@ -2069,15 +2103,15 @@ function LayoutEditor({
           directText.add(object.id);
       }
     }
-    const candidates: SelectionCandidate[] = selectPCBPadPoint(pcb, layers, filters, raw, margin).map((id) => ({
+    const candidates: SelectionCandidate[] = selectPCBPadPoint(pcb, selectionLayers, filters, raw, margin).map((id) => ({
       id: `pad:${id}`,
       padId: id,
     }));
-    const uniqueObjects = selectPCBPoint(pcb, layers, filters, raw, margin, {
-      priorityLayer: priorityLayer ?? undefined,
+    const uniqueObjects = selectPCBPoint(pcb, selectionLayers, filters, raw, margin, {
       preparedFills: placed === pcb ? copper.fills : undefined,
       includeFills,
       includeRegionInteriors: tool === 'select',
+      excludeOutlineInteriors,
       preciseCandidates: objects,
       footprintTextValues,
       hasPrecisePad: candidates.length > 0,
@@ -2097,14 +2131,14 @@ function LayoutEditor({
     trackPickup = false,
     onAmbiguous?: (candidates: SelectionCandidate[]) => void,
   ) {
-    return choosePCBPointCandidate(pcb, layers, candidates, canvasPoint(at, false), {
+    return choosePCBPointCandidate(pcb, selectionLayers, candidates, canvasPoint(at, false), {
       tolerance: (view.width / size.width) * 3,
       tieTolerance: (view.width / size.width) * 0.1,
-      priorityLayer: priorityLayer ?? undefined,
-      activeCopperLayer: layer,
+      priorityLayer: trackPickup ? priorityLayer ?? undefined : activeLayer,
+      highContrast: inactiveLayerMode !== 'Normal',
       trackPickup,
       onAmbiguous,
-      layerOrder: physicalLayerOrder,
+      layerOrder: paintLayerOrder,
       filters,
       preparedFills: placed === pcb ? copper.fills : undefined,
       includeRegionInteriors: tool === 'select',
@@ -2135,14 +2169,14 @@ function LayoutEditor({
       (footprint && rawPickup
         ? choosePCBPointCandidate(
             pcb,
-            layers,
+            selectionLayers,
             footprint.pads.map((pad) => ({ padId: pad.id })),
             rawPickup,
             {
               tolerance: 0,
               filters: { ...filters, pad: true },
-              priorityLayer: priorityLayer ?? undefined,
-              layerOrder: physicalLayerOrder,
+              priorityLayer: activeLayer,
+              layerOrder: paintLayerOrder,
             },
           )?.padId
         : undefined);
@@ -2181,18 +2215,18 @@ function LayoutEditor({
     pickupOverride?: Point,
   ) {
     if (tool !== 'select' || drag || trackDrag || marquee || pointer.current !== null) return;
-    let ids =
-      targets ??
-      actionSelection(
-        (candidate, pickup) => beginTrackDrag(mode, [candidate.selection!], pickup),
-        ['track'],
-      );
+    const choose = (candidate: SelectionCandidate, pickup: Point) =>
+      beginTrackDrag(mode, [candidate.selection!], pickup);
+    let ids = targets ?? actionSelection(choose, ['track']);
+    if (!targets && mode === 'connected' && ids?.length === 0 && selection.length === 0)
+      ids = actionSelection(choose, ['footprint']);
     if (!ids?.length) return;
-    if (ids.some((item) => item.kind !== 'track')) {
+    const kind = connectedPCBDragKind(ids);
+    if (!kind || (mode === 'corner' && kind !== 'track')) {
       setError(
         mode === 'corner'
           ? 'Choose only tracks for corner drag.'
-          : 'Choose only tracks for connected drag.',
+          : 'Choose only footprints or only tracks for connected drag.',
       );
       return;
     }
@@ -2203,7 +2237,8 @@ function LayoutEditor({
       (pointerPosition.current
         ? canvasPoint(pointerPosition.current, false)
         : (lastCanvasPoint.current ?? cursorPosition.current));
-    const pickup = mode === 'connected' ? trackDragPickup(ids, rawPickup) : rawPickup;
+    const pickup =
+      mode === 'connected' && kind === 'track' ? trackDragPickup(ids, rawPickup) : rawPickup;
     const endpointTolerance = (view.width / size.width) * 6;
     let at = pickup;
     if (mode === 'corner') {
@@ -2775,7 +2810,9 @@ function LayoutEditor({
         try {
           id = pointCandidate(
             e,
-            selectionCandidates(e, e.altKey).filter((candidate) => candidate.selection),
+            selectionCandidates(e, { includeFills: e.altKey }).filter(
+              (candidate) => candidate.selection,
+            ),
           )?.selection?.id;
         } catch (error) {
           releasePointer();
@@ -2885,7 +2922,7 @@ function LayoutEditor({
     let candidate: SelectionCandidate | undefined;
     let choices: SelectionCandidate[] | undefined;
     try {
-      const candidates = selectionCandidates(e, e.altKey);
+      const candidates = selectionCandidates(e, { includeFills: e.altKey });
       const eligible =
         mode === 'subtract'
           ? candidates.filter((item) =>
@@ -2993,7 +3030,7 @@ function LayoutEditor({
       ? outlinePoint(e)
       : (tool === 'route' ||
             trackDrag ||
-            (drag?.mode === 'pointer' && drag.ids.every((item) => item.kind === 'track'))) &&
+            (drag?.mode === 'pointer' && connectedPCBDragKind(drag.ids))) &&
           (e.ctrlKey || e.metaKey)
         ? routeFreePoint(raw)
         : { x: snap(raw.x), y: snap(raw.y) };
@@ -3067,9 +3104,11 @@ function LayoutEditor({
       (drag.current.x !== p.x || drag.current.y !== p.y)
     ) {
       if (drag.mode === 'pointer' && !pointerMoved.current) return;
-      if (drag.mode === 'pointer' && drag.ids.every((item) => item.kind === 'track')) {
+      const kind = drag.mode === 'pointer' ? connectedPCBDragKind(drag.ids) : null;
+      if (kind) {
         const endpointTolerance = (view.width / size.width) * 6;
-        const pickup = trackDragPickup(drag.ids, drag.pickup ?? drag.start);
+        const pickup =
+          kind === 'track' ? trackDragPickup(drag.ids, drag.pickup ?? drag.start) : drag.start;
         const ids = drag.ids;
         const start = pickup;
         setTrackDrag({
@@ -3191,7 +3230,7 @@ function LayoutEditor({
         e.ctrlKey || e.metaKey ? routeFreePoint(canvasPoint(e, false)) : canvasPoint(e),
       );
     if (drag?.mode === 'pointer') {
-      if (!moved || drag.ids.every((item) => item.kind === 'track')) setDrag(null);
+      if (!moved || connectedPCBDragKind(drag.ids)) setDrag(null);
       else finishMove(canvasPoint(e));
     }
     if (marquee && marquee.basis === latestBoard.current) {
@@ -3202,12 +3241,11 @@ function LayoutEditor({
       const ids = moved
         ? selectPCBRectangle(
             pcb,
-            layers,
+            selectionLayers,
             filters,
             marquee.start,
             end,
             placed === pcb ? copper.fills : undefined,
-            priorityLayer ?? undefined,
             footprintTextValues,
           )
         : [];
@@ -3248,12 +3286,11 @@ function LayoutEditor({
           annotationMode === 'element'
             ? selectPCBRectangle(
                 pcb,
-                layers,
+                selectionLayers,
                 filters,
                 gesture.start,
                 gesture.end,
                 placed === pcb ? copper.fills : undefined,
-                priorityLayer ?? undefined,
                 footprintTextValues,
               ).map((item) => item.id)
             : [];
@@ -3348,14 +3385,17 @@ function LayoutEditor({
       return;
     }
     if (e.ctrlKey || e.metaKey) {
+      if (key === 'h' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const index = pcbInactiveLayerModes.indexOf(inactiveLayerMode);
+        changeInactiveLayerMode(pcbInactiveLayerModes[(index + 1) % pcbInactiveLayerModes.length]);
+        return;
+      }
       if (key === 'a' && tool === 'select') {
         e.preventDefault();
         e.stopPropagation();
-        cancelGesture();
-        const targets = allVisibleSelections();
-        setSelection(targets);
-        setInspectedPadId('');
-        if (targets.length) setInspector(true);
+        selectAll();
         return;
       }
       if (key === 'home') {
@@ -3545,6 +3585,13 @@ function LayoutEditor({
       if (!moving) setSelection([]);
       setInspectedPadId('');
     }
+  }
+  function selectAll() {
+    cancelGesture();
+    const targets = allVisibleSelections();
+    setSelection((current) => mergePCBSelection(current, targets, 'add'));
+    setInspectedPadId('');
+    if (targets.length) setInspector(true);
   }
   const fixedRouteIssue = useMemo(
     () => (route ? validateRoute(route.points) : ''),
@@ -4047,12 +4094,13 @@ function LayoutEditor({
   const viaLayer = paintLayerOrder.findLast((name) => copperLayers.includes(name as CopperLayer));
   const detailDrawing = useMemo(
     () => (
-      <g data-layout-stack={priorityLayer === null ? 'physical' : 'priority'}>
+      <g>
         {paintLayerOrder.map((name) => (
           <g
             key={name}
             data-layout-layer={name}
-            data-priority-layer={name === priorityLayer ? name : undefined}
+            data-priority-layer={name === activeLayer ? name : undefined}
+            opacity={inactiveLayerMode === 'Dim' && name !== activeLayer ? 0.25 : undefined}
           >
             {copperDrawing.get(name)}
             {footprintDrawing.get(name)}
@@ -4074,7 +4122,8 @@ function LayoutEditor({
       graphicDrawing,
       airwireDrawing,
       captionDrawing,
-      priorityLayer,
+      activeLayer,
+      inactiveLayerMode,
       paintLayerOrder,
       viaLayer,
       copperDrawing,
@@ -4088,9 +4137,9 @@ function LayoutEditor({
         panelRef={appearancePanel}
         board={appearanceBoard}
         displayLayers={displayLayers}
-        layers={layers}
+        layers={visibleLayers}
         onLayersChange={setLayers}
-        priorityLayer={priorityLayer}
+        priorityLayer={activeLayer}
         onPriorityLayerChange={changePriorityLayer}
         tab={appearanceTab}
         onTabChange={setAppearanceTab}
@@ -4115,9 +4164,8 @@ function LayoutEditor({
       tool,
       appearanceBoard,
       displayLayers,
-      layers,
-      layer,
-      priorityLayer,
+      visibleLayers,
+      activeLayer,
       appearanceTab,
       visualizationExpanded,
       filters,
@@ -4149,15 +4197,18 @@ function LayoutEditor({
     () => ({ pcb, selection, inspectedPadId, tool, revision: getRevision?.() }),
     [pcb, selection, inspectedPadId, tool, getRevision?.()],
   );
+  const copperPour = (zone: PCB['zones'][number]) =>
+    !zone.keepout && zone.layer.endsWith('.Cu');
   const enabledPour = (zone: PCB['zones'][number]) =>
-    !zone.keepout && zone.fillEnabled !== false && zone.layer.endsWith('.Cu');
+    copperPour(zone) && zone.fillEnabled !== false;
   const contextFillAll: CanvasMenuAction[] =
     contextIdle &&
+    contextMenuOnBlank &&
     (pcb.zones.some(enabledPour) || pcb.footprints.some((item) => item.zones?.some(enabledPour)))
       ? [
           {
             id: 'fill-all',
-            label: 'Fill all copper zones',
+            label: 'Fill all zones',
             icon: PaintBucket,
             disabled: contextEditingBlocked,
             run: () => fillZone(),
@@ -4173,44 +4224,61 @@ function LayoutEditor({
       run: () => inspect(selection, inspectedPad?.id),
     });
     if (selection.length) {
+      const dragKind = connectedPCBDragKind(selection);
+      const footprintIds = dragKind === 'footprint' ? new Set(selection.map(({ id }) => id)) : null;
+      const canDragWithTracks =
+        footprintIds &&
+        pcb.footprints.some(
+          (footprint) =>
+            footprintIds.has(footprint.id) &&
+            footprint.pads.some((pad) => pad.netId && padCopperLayers(pcb, footprint, pad).length),
+        );
       contextObjectActions.push({
         id: 'move',
-        label: 'Move selection',
+        label: 'Move',
         icon: Move,
         disabled: contextEditingBlocked || contextLocked,
         run: () => beginMove(selection),
       });
-      if (selection.every((item) => item.kind === 'track')) {
+      if (dragKind === 'track') {
         contextObjectActions.push(
           {
             id: 'track-drag',
-            label: 'Drag connected tracks',
+            label: 'Drag tracks',
             icon: Move,
             disabled: contextEditingBlocked || contextLocked,
             run: () => beginTrackDrag('connected', selection),
           },
           {
             id: 'corner-drag',
-            label: 'Drag track corner',
+            label: 'Drag corner',
             icon: Route,
             disabled: contextEditingBlocked || contextLocked,
             run: () => beginTrackDrag('corner', selection),
           },
         );
+      } else if (canDragWithTracks) {
+        contextObjectActions.push({
+          id: 'footprint-drag',
+          label: 'Drag with tracks',
+          icon: Route,
+          disabled: contextEditingBlocked || contextLocked,
+          run: () => beginTrackDrag('connected', selection),
+        });
       }
-      if (selection.some((item) => item.kind !== 'via') && selectedGraphic?.kind !== 'circle') {
+      if (selection.length > 1 || (!selectedVia && selectedGraphic?.kind !== 'circle')) {
         contextObjectActions.push({
           id: 'rotate',
-          label: 'Rotate selection',
+          label: 'Rotate',
           icon: RotateCw,
           disabled: contextEditingBlocked || contextLocked,
           run: () => rotate(90, selection),
         });
       }
-      if (selection.every((item) => item.kind === 'footprint')) {
+      if (dragKind === 'footprint') {
         contextObjectActions.push({
           id: 'flip',
-          label: 'Flip footprint',
+          label: 'Flip',
           icon: FlipHorizontal2,
           disabled: contextEditingBlocked || contextLocked,
           run: () => flip(selection),
@@ -4225,7 +4293,7 @@ function LayoutEditor({
           run: () => setFilletTarget(regionTarget),
         });
       }
-      if (selectedZone && !selectedZone.keepout) {
+      if (selectedZone && copperPour(selectedZone)) {
         contextObjectActions.push({
           id: 'fill',
           label: selectedZone.filledPolygons === undefined ? 'Fill zone' : 'Refill zone',
@@ -4234,10 +4302,10 @@ function LayoutEditor({
           run: () => fillZone(selectedZone.id),
         });
       }
-      if (selection.some((item) => item.kind === 'track' || item.kind === 'via')) {
+      if (selection.every((item) => item.kind === 'track' || item.kind === 'via')) {
         contextObjectActions.push({
           id: 'expand',
-          label: 'Expand track selection',
+          label: 'Select connected',
           icon: Scan,
           run: () => expandTracks(selection),
         });
@@ -4245,25 +4313,26 @@ function LayoutEditor({
     }
     if (
       inspectedPad?.netId ||
-      selection.some((item) => {
-        if (item.kind === 'track')
-          return pcb.tracks.some((track) => track.id === item.id && track.netId);
-        if (item.kind === 'via') return pcb.vias.some((via) => via.id === item.id && via.netId);
-        if (item.kind === 'zone')
-          return pcb.zones.some((zone) => zone.id === item.id && zone.netId && !zone.keepout);
-        return false;
-      })
+      (selection.length > 0 &&
+        selection.every((item) => {
+          if (item.kind === 'track')
+            return pcb.tracks.some((track) => track.id === item.id && track.netId);
+          if (item.kind === 'via') return pcb.vias.some((via) => via.id === item.id && via.netId);
+          if (item.kind === 'zone')
+            return pcb.zones.some((zone) => zone.id === item.id && zone.netId && copperPour(zone));
+          return false;
+        }))
     ) {
       contextObjectActions.push({
         id: 'highlight',
-        label: 'Highlight selected nets',
+        label: 'Highlight nets',
         icon: CircuitBoard,
         run: () => highlightSelectionNet(selection, inspectedPad?.id),
       });
     }
     contextObjectActions.push(...contextFillAll, {
       id: 'lock',
-      label: contextAllLocked ? 'Unlock selection' : 'Lock selection',
+      label: contextAllLocked ? 'Unlock' : 'Lock',
       icon: LockKeyhole,
       disabled: contextEditingBlocked || Boolean(inspectedFootprint?.locked),
       run: () => {
@@ -4273,7 +4342,7 @@ function LayoutEditor({
     if (selection.length)
       contextObjectActions.push({
         id: 'delete',
-        label: 'Delete selection',
+        label: 'Delete',
         icon: Trash2,
         destructive: true,
         disabled: contextEditingBlocked || contextLocked,
@@ -4423,15 +4492,13 @@ function LayoutEditor({
                           { value: 'highlight', label: 'Highlight selected nets' },
                         ]
                       : []),
-                    ...(tool === 'select' &&
-                    !drag &&
-                    !trackDrag &&
-                    selection.length &&
-                    selection.every((s) => s.kind === 'track')
-                      ? [
-                          { value: 'track-drag', label: 'Drag connected tracks' },
-                          { value: 'corner-drag', label: 'Drag track corner' },
-                        ]
+                    ...(tool === 'select' && !drag && !trackDrag && connectedPCBDragKind(selection)
+                      ? selection[0].kind === 'footprint'
+                        ? [{ value: 'track-drag', label: 'Drag footprints with tracks' }]
+                        : [
+                            { value: 'track-drag', label: 'Drag connected tracks' },
+                            { value: 'corner-drag', label: 'Drag track corner' },
+                          ]
                       : []),
                     ...((tool === 'select' && selection.length && !trackDrag) || placement
                       ? [{ value: 'rotate', label: 'Rotate selection' }]
@@ -4735,7 +4802,8 @@ function LayoutEditor({
                     {trackDrag && (
                       <g
                         data-annotation-overlay
-                        data-track-drag-preview
+                        data-track-drag-preview={!footprintDrag || undefined}
+                        data-footprint-drag-preview={footprintDrag || undefined}
                         data-track-drag-blocked={Boolean(trackDragPreview?.error)}
                         data-track-drag-constrained={Boolean(trackDragPreview?.constraint)}
                         data-track-drag-mode={trackDrag.mode}
@@ -5182,12 +5250,22 @@ function LayoutEditor({
               identity={contextIdentity}
               onError={setError}
               onOpen={(_target, position) => {
-                if (!contextIdle || contextEditingBlocked || !position) return;
+                if (!contextIdle || !position) {
+                  setContextMenuOnBlank(contextIdle && !selection.length && !inspectedPad);
+                  return;
+                }
                 const at = { clientX: position.x, clientY: position.y };
                 let choices: SelectionCandidate[] | undefined;
-                let candidate = pointCandidate(at, selectionCandidates(at), false, (items) => {
-                  choices = items;
-                });
+                let candidate = pointCandidate(
+                  at,
+                  selectionCandidates(at, { excludeOutlineInteriors: true }),
+                  false,
+                  (items) => {
+                    choices = items;
+                  },
+                );
+                setContextMenuOnBlank(!candidate && !choices);
+                if (contextEditingBlocked) return;
                 if (choices) {
                   candidate = choices.find((item) =>
                     item.selection
@@ -5249,11 +5327,7 @@ function LayoutEditor({
                         icon: Scan,
                         separated: true,
                         disabled: tool !== 'select' || Boolean(onAnalysisProbe),
-                        run: () => {
-                          cancelGesture();
-                          setSelection(allVisibleSelections());
-                          setInspectedPadId('');
-                        },
+                        run: selectAll,
                       },
                     ]
                   : []),
@@ -5282,7 +5356,9 @@ function LayoutEditor({
                 : trackDrag
                   ? trackDrag.mode === 'corner'
                     ? 'Dragging track corner'
-                    : 'Dragging connected tracks'
+                    : footprintDrag
+                      ? 'Dragging footprints with tracks'
+                      : 'Dragging connected tracks'
                   : drag
                     ? 'Moving selection'
                     : marquee
@@ -5316,7 +5392,26 @@ function LayoutEditor({
                 <CanvasCoordinates coordinates={coordinates} />
               )
             }
-            controls={gridControl}
+            actions={
+              <span className="layout-status-selects">
+                <Select
+                  label="Non-active layers"
+                  icon={<Layers2 size={14} aria-hidden="true" />}
+                  showChevron={false}
+                  popupClassName="grid-density-popup"
+                  popupPlacement="top-end"
+                  popupBoundary=".editor-drawing-region"
+                  active={active && visible}
+                  value={inactiveLayerMode}
+                  options={pcbInactiveLayerModes.map((mode) => ({ value: mode, label: mode }))}
+                  onChange={(value) => {
+                    const mode = pcbInactiveLayerModes.find((item) => item === value);
+                    if (mode) changeInactiveLayerMode(mode);
+                  }}
+                />
+                {gridControl}
+              </span>
+            }
             status={
               outlineResizePreview?.error ||
               trackDragPreview?.error ||

@@ -19,6 +19,7 @@ const { createProject, parseProject, serializeProject } = await tsImport(
   import.meta.url,
 );
 const { serializePCB } = await tsImport('../lib/pcb.ts', import.meta.url);
+const { parseKiCadPCB } = await tsImport('../lib/kicad-pcb.ts', import.meta.url);
 const { parseSExpr, children, child, val, num } = await tsImport(
   '../lib/sexpr.ts',
   import.meta.url,
@@ -817,21 +818,26 @@ try {
     );
 
   const emc = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
-  const nativeCases = JSON.parse(
+  const nativeDrag = JSON.parse(
     await readFile('tests/fixtures/emc-track-drag-kicad10.json', 'utf8'),
-  ).cases;
+  );
+  const nativeDragBoard = parseKiCadPCB(
+    await readFile(nativeDrag.reference.sourceBoard, 'utf8'),
+    emc.schematic,
+    'emc-flyback-demo',
+  ).board;
   for (const name of [
     'DRV left',
     'VD vertical',
     'J1 VIN diagonal',
     'VIN return two selected spans',
   ]) {
-    const reference = nativeCases.find((c) => c.name === name);
+    const reference = nativeDrag.cases.find((c) => c.name === name);
     for (const gesture of reference.trackIds.length > 1 ? ['D'] : ['D', 'pointer']) {
       await run(
         `native EMC chain: ${name} ${gesture} follows the native cursor path`,
         {
-          board: emc.pcb,
+          board: nativeDragBoard,
           schematic: emc.schematic,
           pickup: reference.pickup,
         },
@@ -931,7 +937,7 @@ try {
         assert.ok(original && lead, 'The pinned EMC example retains the reported J1 trace.');
         assert.deepEqual(original.start, { x: 64.8625, y: 53.8 });
         assert.deepEqual(original.end, lead.start);
-        assert.deepEqual(lead.end, { x: 61, y: 62.7 });
+        assert.deepEqual(lead.end, { x: 61, y: 63.55 });
         const detail = await canvas.evaluate((svg) => {
           const screen = new DOMPoint(63, 57).matrixTransform(svg.getScreenCTM());
           return { x: screen.x, y: screen.y };

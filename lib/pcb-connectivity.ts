@@ -4,11 +4,7 @@ import { padPosition } from './pcb-layout';
 import { isOwnedPCB, isOwnedProjectNode } from './immutable-project';
 import { borrowPCBPadCopperContour } from './pcb-pad-contour';
 import { filledCopperPolygons, worldZones, type Polygon } from './pcb-polygons';
-import {
-  squaredDistance as distance,
-  segmentDistance,
-  insidePolygon as inside,
-} from './pcb-collision';
+import { squaredDistance as distance, segmentDistance, polygonEdges } from './pcb-collision';
 
 export type Airwire = {
   id: string;
@@ -25,7 +21,7 @@ type Bounds = {
   maxX: number;
   maxY: number;
 };
-type Edge = { points: readonly [Point, Point] } & Bounds;
+type Edge = { points: readonly [Point, Point]; ring: number } & Bounds;
 type Spend = (units?: number) => void;
 type EdgeTree = Bounds & { edges?: Edge[]; children?: [EdgeTree, EdgeTree] };
 type PadGeometry = Bounds & {
@@ -89,14 +85,10 @@ function freezeCopperGeometry(body: Body): CopperGeometry {
   });
 }
 function bodyEdges(points: readonly Point[], polygon?: Polygon): [Point, Point][] {
-  const rings = polygon ? [polygon.outer, ...polygon.holes] : [points];
-  const edges: [Point, Point][] = rings.flatMap((ring) =>
-    ring.length === 1
-      ? [[ring[0], ring[0]]]
-      : ring.slice(1).map((point, index): [Point, Point] => [ring[index], point]),
-  );
-  if (polygon) for (const ring of rings) edges.push([ring[ring.length - 1], ring[0]]);
-  return edges;
+  if (polygon) return polygonEdges(polygon);
+  return points.length === 1
+    ? [[points[0], points[0]]]
+    : points.slice(1).map((point, index) => [points[index], point]);
 }
 function retainedPadGeometry(
   footprint: Footprint,
@@ -171,11 +163,18 @@ function edgeTree(body: Body, spend: Spend): EdgeTree {
       children: [build(edges.slice(0, middle)), build(edges.slice(middle))],
     };
   };
+  const lengths = body.polygon
+    ? [body.polygon.outer, ...body.polygon.holes].map((ring) => ring.length)
+    : [body.edges.length];
+  let ring = 0;
+  let ringEnd = lengths[0];
   const tree = build(
-    body.edges.map((points) => {
+    body.edges.map((points, index) => {
       charge();
+      while (index >= ringEnd && ring < lengths.length - 1) ringEnd += lengths[++ring];
       return {
         points,
+        ring,
         minX: Math.min(points[0].x, points[1].x),
         minY: Math.min(points[0].y, points[1].y),
         maxX: Math.max(points[0].x, points[1].x),
@@ -215,13 +214,32 @@ function boundaryTouches(a: Body, b: Body, spend: Spend): boolean {
   return false;
 }
 function containsRepresentative(body: Body, point: Point, spend: Spend): boolean {
-  return (
-    point.x >= body.minX - epsilon &&
-    point.x <= body.maxX + epsilon &&
-    point.y >= body.minY - epsilon &&
-    point.y <= body.maxY + epsilon &&
-    inside(point, body.polygon!, spend)
-  );
+  const { x, y } = point;
+  if (x < body.minX || x > body.maxX || y < body.minY || y > body.maxY) return false;
+  // Only visit edges that could cross the ray. Keep each ring's parity
+  // separate so drill holes and saved pour voids still subtract copper.
+  const crossings = new Set<number>();
+  const visit = (node: EdgeTree) => {
+    spend();
+    if (x > node.maxX || y < node.minY || y > node.maxY) return;
+    if (node.children) {
+      node.children.forEach(visit);
+      return;
+    }
+    for (const {
+      points: [a, b],
+      ring,
+      maxX,
+    } of node.edges!) {
+      spend();
+      if (x > maxX || a.y > y === b.y > y) continue;
+      // Match the ray cast's original edge direction for boundary rounding.
+      if (x < ((a.x - b.x) * (y - b.y)) / (a.y - b.y) + b.x)
+        if (!crossings.delete(ring)) crossings.add(ring);
+    }
+  };
+  visit(edgeTree(body, spend));
+  return crossings.size === 1 && crossings.has(0);
 }
 function touches(a: Body, b: Body, spend: Spend): boolean {
   if (
@@ -236,6 +254,74 @@ function touches(a: Body, b: Body, spend: Spend): boolean {
   if (a.polygon && containsRepresentative(a, b.points[0], spend)) return true;
   if (b.polygon && containsRepresentative(b, a.points[0], spend)) return true;
   return boundaryTouches(a, b, spend);
+}
+
+function copperGroups(items: Body[], spend: Spend) {
+  const parents = items.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parents[i] !== i) {
+      parents[i] = parents[parents[i]];
+      i = parents[i];
+    }
+    return i;
+  };
+  const sorted = items.map((body, i) => ({ body, i })).sort((a, b) => a.body.minX - b.body.minX);
+  for (let i = 0; i < sorted.length; i++)
+    for (
+      let j = i + 1;
+      j < sorted.length && sorted[j].body.minX <= sorted[i].body.maxX + epsilon;
+      j++
+    ) {
+      spend();
+      const a = sorted[i],
+        b = sorted[j];
+      if (find(a.i) !== find(b.i) && touches(a.body, b.body, spend)) parents[find(b.i)] = find(a.i);
+    }
+  return find;
+}
+
+/** Physical routing groups keyed by native IDs. Anchors describe pad/via copper,
+ * including drill voids. Saved fills do not certify a reconnect. */
+export function partitionPCBRoutingCopper(
+  tracks: PCB['tracks'],
+  anchors: readonly { id: string; netId: string; layers: string[]; polygon: Polygon }[],
+  spend: Spend,
+) {
+  const nets = new Map<string, (Body & { id: string })[]>();
+  const add = (
+    id: string,
+    netId: string,
+    points: Point[],
+    radius: number,
+    layers: readonly string[],
+    polygon?: Polygon,
+  ) => {
+    spend(points.length);
+    const items = nets.get(netId) ?? [];
+    items.push({
+      id,
+      points,
+      radius,
+      layers,
+      polygon,
+      edges: bodyEdges(points, polygon),
+      minX: Math.min(...points.map((point) => point.x)) - radius,
+      maxX: Math.max(...points.map((point) => point.x)) + radius,
+      minY: Math.min(...points.map((point) => point.y)) - radius,
+      maxY: Math.max(...points.map((point) => point.y)) + radius,
+    });
+    nets.set(netId, items);
+  };
+  for (const track of tracks)
+    add(track.id, track.netId, [track.start, track.end], track.width / 2, [track.layer]);
+  for (const anchor of anchors)
+    add(anchor.id, anchor.netId, anchor.polygon.outer, 0, anchor.layers, anchor.polygon);
+  const partition = new Map<string, string>();
+  for (const items of nets.values()) {
+    const group = copperGroups(items, spend);
+    items.forEach((item, index) => partition.set(item.id, items[group(index)].id));
+  }
+  return partition;
 }
 
 /** Link disconnected copper groups with a minimum spanning tree, independent
@@ -424,31 +510,11 @@ export function analyzePCBConnectivity(board: PCB): {
     }
     const firstEdge = edges.length;
     const firstOperation = operations;
-    const parents = items.map((_, i) => i);
-    const find = (i: number): number => {
-      while (parents[i] !== i) {
-        parents[i] = parents[parents[i]];
-        i = parents[i];
-      }
-      return i;
-    };
-    const sorted = items.map((body, i) => ({ body, i })).sort((a, b) => a.body.minX - b.body.minX);
-    for (let i = 0; i < sorted.length; i++)
-      for (
-        let j = i + 1;
-        j < sorted.length && sorted[j].body.minX <= sorted[i].body.maxX + epsilon;
-        j++
-      ) {
-        spend();
-        const a = sorted[i],
-          b = sorted[j];
-        if (find(a.i) !== find(b.i) && touches(a.body, b.body, spend))
-          parents[find(b.i)] = find(a.i);
-      }
+    const groupOf = copperGroups(items, spend);
     const groups = new Map<number, Anchor[]>();
     items.forEach((body, i) => {
       if (!body.anchor) return;
-      const key = find(i),
+      const key = groupOf(i),
         group = groups.get(key) ?? [];
       group.push(body.anchor);
       groups.set(key, group);

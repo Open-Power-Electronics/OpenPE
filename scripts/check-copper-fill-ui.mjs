@@ -67,7 +67,7 @@ try {
   const before = await state();
   assert.equal(await button('Fill copper zones').count(), 0);
   const menu = await openCanvasContextMenu(page);
-  const fillAll = menu.getByRole('menuitem', { name: 'Fill all copper zones', exact: true });
+  const fillAll = menu.getByRole('menuitem', { name: 'Fill all zones', exact: true });
   await fillAll.click();
   const bulk = await state();
   assert.equal(bulk.undoDepth, 1);
@@ -93,8 +93,9 @@ try {
     { x: (at.x + next.x) / 2, y: (at.y + next.y) / 2 },
   );
   await page.mouse.click(screen.x, screen.y, { button: 'right' });
-  await fillAll.waitFor();
-  await fillAll.press('Escape');
+  await menu.getByRole('menuitem', { name: 'Fill zone', exact: true }).waitFor();
+  assert.equal(await fillAll.count(), 0);
+  await page.keyboard.press('Escape');
   const panel = page.getByRole('complementary', { name: 'Layout properties' });
   assert.equal(await panel.getByRole('checkbox', { name: 'Filled', exact: true }).count(), 0);
   await panel.getByRole('button', { name: 'Fill zone', exact: true }).waitFor();

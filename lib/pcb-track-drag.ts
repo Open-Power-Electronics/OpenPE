@@ -20,6 +20,7 @@ import { preparePCBArtworkObstacles } from './pcb-routing-artwork';
 import { createPCBTrackShove } from './pcb-track-shove';
 import { createPCBTrackChainDrag } from './pcb-track-chain-drag';
 import { isOwnedProjectNode } from './immutable-project';
+import { footprintDragContactError } from './pcb-footprint-drag';
 
 type Track = PCB['tracks'][number];
 type Link = {
@@ -61,6 +62,8 @@ const constraintMessages = new Set([
   'Track shove would remove a copper connection. Move less.',
   'Track shove would change copper connectivity. Move less or choose another direction.',
   'Track corner drag would collapse a segment. Move away from the adjoining endpoint.',
+  'Footprint drag would collapse an attached track. Move less.',
+  footprintDragContactError,
 ]);
 const epsilon = 0.000001;
 const limitMessage =

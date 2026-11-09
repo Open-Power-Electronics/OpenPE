@@ -49,8 +49,22 @@ const chats = [];
 let runs = 0;
 const bundle = await build({
   stdin: {
-    contents:
-      "import React from 'react'; import {createRoot} from 'react-dom/client'; import Workspace from './components/DesktopWorkspace'; import {captureAgentPresentation} from './context/agent-presentation'; window.captureAgentPresentation=captureAgentPresentation; createRoot(document.getElementById('root')).render(<React.StrictMode><Workspace/></React.StrictMode>);",
+    contents: `
+      import React from 'react';
+      import {createRoot} from 'react-dom/client';
+      import Workspace from './components/DesktopWorkspace';
+      import {ProjectCore} from './core/project-core';
+      import {captureAgentPresentation} from './context/agent-presentation';
+      window.captureAgentPresentation = captureAgentPresentation;
+      window.agentProjectReads = [];
+      const query = ProjectCore.prototype.query;
+      ProjectCore.prototype.query = function(id, ...args) {
+        const result = query.call(this, id, ...args);
+        if (id === 'project.get') window.agentProjectReads.push(result?.project.id);
+        return result;
+      };
+      createRoot(document.getElementById('root')).render(<React.StrictMode><Workspace/></React.StrictMode>);
+    `,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -162,6 +176,9 @@ try {
       `${error.message}\n${errors.join('\n')}\n${(await page.locator('body').innerText()).slice(0, 4000)}`,
     );
   });
+  await page.waitForFunction((id) => window.agentProjectReads.includes(id), project.id);
+  assert.equal(chats.length, 0, 'Opening prepares project context without starting a turn.');
+  const preparedReads = await page.evaluate(() => window.agentProjectReads.length);
   const presentation = await page.evaluate(() => {
     const host = document.createElement('section');
     host.style.cssText = 'position:fixed;left:10px;top:10px;width:240px;height:160px';
@@ -194,6 +211,11 @@ try {
     return chats.at(-1).context.workspace;
   }
   let context = await send('Before simulation');
+  assert.equal(
+    await page.evaluate(() => window.agentProjectReads.length),
+    preparedReads,
+    'The first Send reuses the prepared project context.',
+  );
   assert.deepEqual(context.project, JSON.parse(source));
   assert.equal(context.simulation.status, 'not-opened');
   assert.equal(runs, 0);
@@ -208,11 +230,14 @@ try {
   await page.getByTestId('symbol-hit-R1').click();
   await canvas.press('ArrowRight');
   await page.locator('.dirty-dot').first().waitFor();
+  await page.waitForFunction((count) => window.agentProjectReads.length > count, preparedReads);
+  const editedReads = await page.evaluate(() => window.agentProjectReads.length);
   const editedChat = page.waitForRequest(
     (request) => new URL(request.url()).pathname === '/api/chat',
   );
   await button('Send message').click();
   const editedPayload = (await editedChat).postDataJSON();
+  assert.equal(await page.evaluate(() => window.agentProjectReads.length), editedReads);
   assert.equal(
     editedPayload.context.workspace.project.schematic.components.find(
       (part) => part.reference === 'R1',
@@ -314,8 +339,15 @@ try {
   assert.doesNotMatch(JSON.stringify(context), /\{invalid source/);
   assert.deepEqual(context.project, JSON.parse(source));
   assert.equal(context.simulation.result, null);
+  const previousReads = await page.evaluate(() => window.agentProjectReads.length);
+  const previousChats = chats.length;
   await button('New project').click();
+  await page.waitForFunction((count) => window.agentProjectReads.length > count, previousReads);
+  const newProjectId = await page.evaluate(() => window.agentProjectReads.at(-1));
+  assert.notEqual(newProjectId, project.id);
+  assert.equal(chats.length, previousChats, 'Creating a project prepares context locally.');
   context = await send('New project must not inherit results');
+  assert.equal(context.project.project.id, newProjectId);
   assert.notEqual(context.ui.activeSchematicId, project.schematic.id);
   assert.equal(context.simulation.status, 'not-opened');
   assert.equal(context.source.pending, false);

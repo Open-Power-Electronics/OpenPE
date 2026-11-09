@@ -70,7 +70,7 @@ if (process.argv.includes('--help')) {
     } else if (event.type === 'prompt') {
       assert.notEqual(mode, 'clamped-effort', 'A clamped effort must fail before prompting');
       assert.match(event.message, /Use only the supplied context and history/);
-      assert.doesNotMatch(event.message, /Use the OpenPE capability tools/);
+      assert.doesNotMatch(event.message, /openpe_(query|execute|observe)/);
       assert.equal(event.message.includes('private-bridge-token'), false);
       if (mode === 'hang') return;
       if (mode === 'images') {

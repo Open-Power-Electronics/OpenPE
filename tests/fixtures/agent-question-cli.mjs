@@ -65,12 +65,14 @@ input.on('line', async (line) => {
       if (e.method === 'initialize') return send({ id: e.id, result: {} });
       if (e.method === 'thread/start') {
         assert.equal(e.params.config['features.default_mode_request_user_input'], true);
+        assert.match(e.params.developerInstructions, /Use request_user_input for clarification/);
         return send({
           id: e.id,
           result: { thread: { id: 'thread' }, model: 'fixture', reasoningEffort: 'medium' },
         });
       }
       if (e.method === 'turn/start') {
+        assert.match(e.params.input[0].text, /Use request_user_input for clarification/);
         send({ id: e.id, result: { turn: { id: 'turn' } } });
         return send({
           id: 99,
@@ -104,6 +106,7 @@ input.on('line', async (line) => {
     } else if (provider === 'claude') {
       assert.equal(process.argv[process.argv.indexOf('--tools') + 1], 'AskUserQuestion');
       if (e.type === 'user') {
+        assert.match(e.message.content[0].text, /Use AskUserQuestion for clarification/);
         send({ type: 'stream_event', event: { type: 'message_start', message: { id: 'a' } } });
         send({
           type: 'stream_event',
@@ -141,6 +144,7 @@ input.on('line', async (line) => {
           data: { model: { id: 'fixture' } },
         });
       if (e.type === 'prompt') {
+        assert.match(e.message, /Use openpe_ask_user for clarification/);
         send({
           type: 'message_update',
           assistantMessageEvent: {
@@ -169,6 +173,7 @@ input.on('line', async (line) => {
       if (e.method === 'session/new') return send({ id: e.id, result: { sessionId: 'session' } });
       if (e.method === 'session/close') return send({ id: e.id, result: {} });
       if (e.method === 'session/prompt') {
+        assert.match(e.params.prompt[0].text, /Use ask_user_question for clarification/);
         send({
           method: 'session/update',
           params: {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Footprint, PCB } from '../lib/pcb';
-import { defaultPCBDisplay } from '../lib/pcb-display';
+import { defaultPCBDisplay, pcbDisplayForLayer } from '../lib/pcb-display';
 import { createEmptyPCB, flipPCBFootprint, padPosition } from '../lib/pcb-layout';
 import { copperFillContour, type Polygon } from '../lib/pcb-polygons';
 import {
@@ -120,7 +120,7 @@ test('closed region interiors are optional fallback picks, respect holes/layers 
   ]);
 });
 
-test('selected-layer graphic interiors survive off-layer precise hits and keep same-layer ink first', () => {
+test('precise visible hits take precedence over an active-layer graphic interior', () => {
   const board: PCB = {
     ...createEmptyPCB(),
     graphics: [
@@ -170,8 +170,8 @@ test('selected-layer graphic interiors survive off-layer precise hits and keep s
     };
   };
   const before = structuredClone(board);
-  assert.ok(pick().selections.some((item) => item.id === 'silk-region'));
-  assert.equal(pick().chosen, 'silk-region');
+  assert.deepEqual(pick().selections.map((item) => item.id), ['back-track']);
+  assert.equal(pick().chosen, 'back-track');
   assert.equal(pick({ ...layers, 'F.SilkS': false }).chosen, 'back-track');
   assert.equal(pick(layers, { ...filters, graphic: false }).chosen, 'back-track');
   board.graphics.push({
@@ -190,7 +190,7 @@ test('selected-layer graphic interiors survive off-layer precise hits and keep s
   assert.deepEqual(board, before);
 });
 
-test('selected-layer zones and saved fills survive off-layer copper while holes and filters fall back', () => {
+test('active-layer zone interiors and saved fills are fallback targets behind visible copper', () => {
   const outline = [
     { x: 0, y: 0 },
     { x: 10, y: 0 },
@@ -254,8 +254,8 @@ test('selected-layer zones and saved fills survive off-layer copper while holes 
   };
   for (const outlines of [true, false]) {
     layers.zoneOutlines = outlines;
-    assert.ok(pick({ x: 2, y: 2 }).selections.some((item) => item.id === 'front-zone'));
-    assert.equal(pick({ x: 2, y: 2 }).chosen, 'front-zone');
+    assert.equal(pick({ x: 2, y: 2 }).chosen, 'back-track');
+    assert.equal(pick({ x: 2, y: 3 }).chosen, 'front-zone');
     assert.equal(pick({ x: 5, y: 5 }).chosen, 'back-track', 'A zone hole admits off-layer copper.');
     assert.equal(pick({ x: 2, y: 2 }, { ...filters, zone: false }).chosen, 'back-track');
     layers['F.Cu'] = false;
@@ -462,12 +462,10 @@ test('active-layer rectangles select only visible geometry on that layer, includ
     ids(
       selectPCBRectangle(
         board,
-        layers,
+        pcbDisplayForLayer(layers, layer),
         filters,
         { x: crossing ? 6 : -1, y: -1 },
         { x: crossing ? -1 : 6, y: 1 },
-        undefined,
-        layer,
       ),
     );
   for (const crossing of [false, true]) {
@@ -508,12 +506,10 @@ test('active-layer footprint windows exclude other-layer pads, courtyards and di
     ids(
       selectPCBRectangle(
         board,
-        layers,
+        pcbDisplayForLayer(layers, layer),
         filters,
         { x: -2, y: -2 },
         { x: 12, y: 2 },
-        undefined,
-        layer,
       ),
     );
   assert.deepEqual(select('F.Cu'), ['front', 'through']);
