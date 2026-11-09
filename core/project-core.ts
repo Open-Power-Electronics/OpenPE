@@ -1015,7 +1015,7 @@ export class ProjectCore {
     const { runPCBDesignRules } = await import('../lib/pcb-drc');
     ready();
     return {
-      ...runPCBDesignRules(project.pcb, args.settings),
+      ...runPCBDesignRules(project.pcb, args.settings, project.schematic),
       revision: String(revision),
       boardId: project.pcb.id,
       settings: { ...defaultPCBDesignRules, ...args.settings },

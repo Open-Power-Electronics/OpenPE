@@ -7,6 +7,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -46,6 +47,7 @@ import {
   Blocks,
   FolderPlus,
   FolderOpen,
+  Grid3X3,
   MessageSquareText,
   Home as HomeIcon,
   List,
@@ -163,7 +165,7 @@ import PartProperties from './PartProperties';
 import FootprintModels, { UnassignedModelField } from './FootprintModels';
 import FieldProperties from './FieldProperties';
 import InspectorResize, { type InspectorSize } from './InspectorResize';
-import SimulationResize from './SimulationResize';
+import BottomPanelResize from './BottomPanelResize';
 import type { ProbeTarget } from '@/lib/spice';
 import AnnotationDialog from './AnnotationDialog';
 import { validateAnnotations, type AgentAnnotation } from '@/lib/agent-annotations';
@@ -697,7 +699,13 @@ export default function Workbench({
     : simulationVisible
       ? showSchematicSidebar
       : toggleRightSidebar;
-  const [rulesOpen, setRulesOpen] = useState<RuleCheckKind | null>(null);
+  const ruleKind: RuleCheckKind = view === '3d' ? 'model' : view === 'layout' ? 'drc' : 'erc';
+  const [openRuleView, setOpenRuleView] = useState<EditorView | null>(null);
+  const rulesOpen = openRuleView === view ? ruleKind : null;
+  const rulePanelId = useId();
+  const ruleStatusButton = useRef<HTMLButtonElement>(null);
+  const rulePanelVisible =
+    rulesOpen !== null && active && screen === 'workspace' && !modal && !confirmation;
   const [modelCheckReport, setModelCheckReport] = useState<ModelCheckReport | null>(null);
   const [modelCheckFocus, setModelCheckFocus] = useState<ModelCheckFocus | null>(null);
   const onModelChecksChange = useEditorAction((report: ModelCheckReport) => {
@@ -725,7 +733,6 @@ export default function Workbench({
   const [ruleFocus, setRuleFocus] = useState<(RuleCheckFocus & { kind: 'erc' | 'drc' }) | null>(
     null,
   );
-  const [rulePanelSize, setRulePanelSize] = useState<InspectorSize>({});
   const ruleFocusSequence = useRef(0);
   const ruleWork = useRef<AbortController | null>(null);
   const ruleLifetime = useRef({ active, screen, view, schematicId: doc?.id });
@@ -734,7 +741,7 @@ export default function Workbench({
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
-    if (!active || screen !== 'workspace') setRulesOpen(null);
+    if (!active || screen !== 'workspace') setOpenRuleView(null);
     return () => ruleWork.current?.abort();
   }, [active, screen, view, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
   useEffect(() => {
@@ -742,7 +749,7 @@ export default function Workbench({
     setModelCheckFocus(null);
   }, [active, screen, project, sourceDraft, doc?.id, coreSnapshot.editingBlocked]);
   useEffect(() => {
-    setRulesOpen(null);
+    setOpenRuleView(null);
     if (view !== '3d') {
       setModelCheckFocus(null);
     }
@@ -759,25 +766,32 @@ export default function Workbench({
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
-    setRulesOpen(null);
+    setOpenRuleView(null);
     setRuleFocus(null);
   }, []);
-  const openRuleChecks = useEditorAction((kind: RuleCheckKind) => {
+  const dismissRulePanel = useCallback(() => {
+    closeRuleChecks();
+    ruleStatusButton.current?.focus({ preventScroll: true });
+  }, [closeRuleChecks]);
+  useEffect(() => {
+    if (rulesOpen && (modal || confirmation)) closeRuleChecks();
+  }, [rulesOpen, modal, confirmation, closeRuleChecks]);
+  const openRuleChecks = useEditorAction(() => {
     const snapshot = core.getSnapshot();
     if (
       !active ||
       screen !== 'workspace' ||
+      modal ||
+      confirmation ||
       snapshot.sourceDraft !== null ||
       snapshot.editingBlocked ||
-      (kind !== 'erc' && !snapshot.project?.pcb)
+      (ruleKind !== 'erc' && !snapshot.project?.pcb)
     )
       return;
     ruleWork.current?.abort();
     ruleWork.current = null;
     setRuleBusy(null);
-    setModal(null);
-    setPropertiesDismissed(true);
-    setRulesOpen(kind);
+    setOpenRuleView(view);
     setRuleFocus(null);
   });
   async function runRuleChecks(kind: 'erc' | 'drc', settings?: PCBDesignRuleConfig) {
@@ -873,12 +887,7 @@ export default function Workbench({
       objectIds: issue.objectIds,
       ...(issue.location ? { location: issue.location } : {}),
     });
-    setRulesOpen(null);
-  }
-  async function openModelFromRules() {
-    if (!active || screen !== 'workspace' || sourcePending || core.getSnapshot().editingBlocked)
-      return;
-    if (await changeView('3d')) closeRuleChecks();
+    setOpenRuleView(null);
   }
   async function locateModelCheckIssue(issue: ModelCheckIssue) {
     const report = currentModelCheckReport;
@@ -2995,8 +3004,12 @@ export default function Workbench({
   );
   const ruleStatus = useMemo(() => {
     const disabled =
-      !active || screen !== 'workspace' || sourcePending || Boolean(coreSnapshot.editingBlocked);
-    if (view === '3d' && project?.pcb) {
+      !active ||
+      screen !== 'workspace' ||
+      sourcePending ||
+      Boolean(coreSnapshot.editingBlocked) ||
+      (ruleKind !== 'erc' && !project?.pcb);
+    if (ruleKind === 'model') {
       const report = currentModelCheckReport;
       const state =
         report?.state === 'ready'
@@ -3015,13 +3028,15 @@ export default function Workbench({
               ? { issues: report.issues, complete: report.state === 'ready' }
               : null
           }
-          expanded={rulesOpen !== null}
+          expanded={rulePanelVisible}
           disabled={disabled}
-          onOpen={() => openRuleChecks('model')}
+          panelId={rulePanelId}
+          buttonRef={ruleStatusButton}
+          onToggle={() => (rulePanelVisible ? dismissRulePanel() : openRuleChecks())}
         />
       );
     }
-    const kind = view === 'layout' && project?.pcb ? 'drc' : 'erc';
+    const kind = ruleKind;
     const stored = ruleReports[kind];
     const stale =
       ruleReportIsStale(stored, kind, coreSnapshot.revision, doc?.id, drcSettings) ||
@@ -3046,13 +3061,15 @@ export default function Workbench({
         kind={kind}
         report={state === 'ready' ? (stored?.result ?? null) : null}
         state={state}
-        expanded={rulesOpen !== null}
+        expanded={rulePanelVisible}
         disabled={disabled}
-        onOpen={() => openRuleChecks(kind)}
+        panelId={rulePanelId}
+        buttonRef={ruleStatusButton}
+        onToggle={() => (rulePanelVisible ? dismissRulePanel() : openRuleChecks())}
       />
     );
   }, [
-    view,
+    ruleKind,
     project?.pcb,
     ruleReports,
     coreSnapshot.revision,
@@ -3063,7 +3080,9 @@ export default function Workbench({
     ruleBusy,
     ruleErrors,
     currentModelCheckReport,
-    rulesOpen,
+    rulePanelVisible,
+    rulePanelId,
+    dismissRulePanel,
     active,
     screen,
     sourcePending,
@@ -3084,11 +3103,12 @@ export default function Workbench({
       rulesOpen ||
       ruleBusy ||
       ruleWork.current ||
-      view === '3d'
+      ruleKind === 'model'
     )
       return;
-    const kind = view === 'layout' && project.pcb ? 'drc' : 'erc';
-    if (kind === 'drc' && (layoutSyncStatus.pending || layoutSyncStatus.error)) return;
+    const kind = ruleKind;
+    if (kind === 'drc' && (!project.pcb || layoutSyncStatus.pending || layoutSyncStatus.error))
+      return;
     const stored = ruleReports[kind];
     if (stored && !ruleReportIsStale(stored, kind, coreSnapshot.revision, doc.id, drcSettings))
       return;
@@ -3102,6 +3122,7 @@ export default function Workbench({
     active,
     screen,
     view,
+    ruleKind,
     project,
     doc?.id,
     sourcePending,
@@ -3166,8 +3187,13 @@ export default function Workbench({
       <span className="grid-density">
         <Select
           label="Grid density"
+          icon={<Grid3X3 size={14} aria-hidden="true" />}
           showChevron={false}
-          icon={<span aria-hidden="true">Grid</span>}
+          popupClassName="grid-density-popup"
+          popupPlacement="top-end"
+          popupAnchor=".status-bar"
+          popupBoundary=".editor-drawing-region, .file-editor-surface"
+          active={active && screen === 'workspace'}
           value={grid ? String(activeGridSpacing) : 'off'}
           options={[
             ...activeGridSpacingOptions.map((spacing) => ({
@@ -3210,7 +3236,9 @@ export default function Workbench({
     [
       activeGridSpacing,
       activeGridSpacingOptions,
+      active,
       appearanceSettings,
+      screen,
       view,
       gridSpacing,
       layoutGridSpacing,
@@ -3649,6 +3677,29 @@ export default function Workbench({
       ruleStatus,
     ],
   );
+  const rulePanel = rulesOpen && rulePanelVisible && (
+    <Suspense fallback={null}>
+      <RuleCheckPanel
+        panelId={rulePanelId}
+        kind={rulesOpen}
+        report={currentRuleReport?.result ?? null}
+        busy={ruleBusy === rulesOpen}
+        error={rulesOpen === 'model' ? '' : ruleErrors[rulesOpen]}
+        stale={ruleReportStale}
+        sourcePending={sourcePending}
+        blockedReason={coreSnapshot.editingBlocked ?? ''}
+        drcSettings={drcSettings}
+        onDRCSettingsChange={setDRCSettings}
+        onRun={(settings) => {
+          if (rulesOpen !== 'model') void runRuleChecks(rulesOpen, settings);
+        }}
+        onSelectIssue={locateRuleIssue}
+        modelReport={currentModelCheckReport}
+        onSelectModelCheckIssue={locateModelCheckIssue}
+        onClose={dismissRulePanel}
+      />
+    </Suspense>
+  );
   return (
     <>
       <DesktopTitlebar
@@ -3985,11 +4036,13 @@ export default function Workbench({
                       className="simulation-host"
                       hidden={!simulationVisible || !waveformRequested}
                     >
-                      <SimulationResize
+                      <BottomPanelResize
+                        label="Resize waveform panel"
                         target={waveformHost}
                         visible={simulationVisible && waveformRequested}
                       />
                     </div>
+                    {view === 'canvas' && rulePanel}
                     {view === 'canvas' && drawingStatusBar}
                   </div>
                   <InspectorResize
@@ -4340,8 +4393,9 @@ export default function Workbench({
                         grid={grid}
                         gridSpacing={layoutGridSpacing}
                         leftButtonDrag={appearanceSettings.appearance.leftButtonDrag}
-                        gridControl={gridDensityControl}
-                        ruleStatus={ruleStatus}
+                        gridControl={view === 'layout' ? gridDensityControl : undefined}
+                        ruleStatus={view === 'layout' ? ruleStatus : undefined}
+                        rulePanel={view === 'layout' ? rulePanel : undefined}
                         draftStatus={draftStatus || undefined}
                         active={
                           active &&
@@ -4427,6 +4481,7 @@ export default function Workbench({
                           gridSpacing={modelGridSpacing}
                           viewState={pcb3DView}
                           statusBar={view === '3d' ? drawingStatusBar : undefined}
+                          rulePanel={view === '3d' ? rulePanel : undefined}
                           errorTarget={modelErrorTarget}
                           annotationProps={modelAnnotationProps}
                           modelCad={modelCad}
@@ -4447,7 +4502,8 @@ export default function Workbench({
                             Open Layout
                           </button>
                         </div>
-                        {drawingStatusBar}
+                        {view === '3d' && rulePanel}
+                        {view === '3d' && drawingStatusBar}
                       </div>
                     )}
                   </div>
@@ -4456,7 +4512,8 @@ export default function Workbench({
                   {sourceOpened && (
                     <Suspense fallback={<p role="status">Loading source editor…</p>}>
                       <RetainedSourceEditor
-                        ruleStatus={ruleStatus}
+                        ruleStatus={view === 'source' ? ruleStatus : undefined}
+                        rulePanel={view === 'source' ? rulePanel : undefined}
                         visible={sourceVisible}
                         active={
                           active &&
@@ -4788,33 +4845,6 @@ export default function Workbench({
           <DeferredDialog title="About OpenPE" onClose={() => setModal(null)}>
             <AboutDialog onClose={() => setModal(null)} />
           </DeferredDialog>
-        )}
-        {rulesOpen && active && screen === 'workspace' && !modal && !confirmation && (
-          <Suspense fallback={null}>
-            <RuleCheckPanel
-              kind={rulesOpen}
-              onKindChange={openRuleChecks}
-              drcAvailable={Boolean(project?.pcb)}
-              report={currentRuleReport?.result ?? null}
-              busy={ruleBusy === rulesOpen}
-              error={rulesOpen === 'model' ? '' : ruleErrors[rulesOpen]}
-              stale={ruleReportStale}
-              sourcePending={sourcePending}
-              blockedReason={coreSnapshot.editingBlocked ?? ''}
-              drcSettings={drcSettings}
-              onDRCSettingsChange={setDRCSettings}
-              onRun={(settings) => {
-                if (rulesOpen !== 'model') void runRuleChecks(rulesOpen, settings);
-              }}
-              onSelectIssue={locateRuleIssue}
-              modelReport={currentModelCheckReport}
-              onSelectModelCheckIssue={locateModelCheckIssue}
-              onOpenModel={openModelFromRules}
-              onClose={closeRuleChecks}
-              size={rulePanelSize}
-              onResize={setRulePanelSize}
-            />
-          </Suspense>
         )}
         {(modal === 'settings' || modal === 'agent-settings') && (
           <DeferredDialog title="Settings" onClose={() => setModal(null)}>

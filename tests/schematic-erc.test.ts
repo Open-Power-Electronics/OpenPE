@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { emptyCircuit, type Circuit, type Part } from '../lib/circuit';
+import { parseProject } from '../lib/project';
 import { runSchematicERC } from '../lib/schematic-erc';
 import { quote, type SExpr } from '../lib/sexpr';
 
@@ -215,9 +217,11 @@ test('no-connect markers suppress unused active pins and diagnose misplaced or w
   ];
   assert.equal(issues(circuit, 'erc.pin-unconnected').length, 0);
   assert.deepEqual(issues(circuit, 'erc.no-connect-misplaced')[0].objectIds, ['misplaced']);
+  assert.equal(issues(circuit, 'erc.no-connect-misplaced')[0].severity, 'warning');
   wire(circuit, 0, 0, 20, 0);
   const connected = issues(circuit, 'erc.no-connect-connected');
   assert.equal(connected.length, 1);
+  assert.equal(connected[0].severity, 'warning');
   assert.ok(connected[0].objectIds.includes(input.id));
   const forbidden = part(circuit, 'no_connect', 20, 0);
   assert.ok(
@@ -227,7 +231,7 @@ test('no-connect markers suppress unused active pins and diagnose misplaced or w
   );
 });
 
-test('unconnected resistor, connector and unspecified pins warn unless explicitly marked no-connect', () => {
+test('unconnected resistor, connector and unspecified pins error unless marked no-connect', () => {
   const circuit = emptyCircuit();
   const resistor = part(circuit, 'passive', 0, 0, { ref: 'R1', libId: 'Test:R', value: '1k' });
   circuit.libraries[resistor.libId] = [
@@ -245,7 +249,7 @@ test('unconnected resistor, connector and unspecified pins warn unless explicitl
     unconnected.map((issue) => issue.objectIds[0]).sort(),
     [connector.id, resistor.id, unspecified.id].sort(),
   );
-  assert.ok(unconnected.every((issue) => issue.severity === 'warning'));
+  assert.ok(unconnected.every((issue) => issue.severity === 'error'));
   assert.ok(unconnected.some((issue) => issue.message.includes('R1 pin 2 (passive)')));
   circuit.noConnects = [
     { id: 'resistor-nc', x: 5.08, y: 0 },
@@ -267,21 +271,26 @@ test('a no-connect on one shared multi-unit physical pin detects a connection at
   assert.equal(issues(circuit, 'erc.no-connect-connected').length, 1);
 });
 
-test('undriven input and power findings are explanatory warnings, while passive-only nets are allowed', () => {
+test('passive pins satisfy signal drive but power nets require a power output', () => {
   const circuit = emptyCircuit();
   part(circuit, 'input', 0, 0);
-  part(circuit, 'passive', 10, 0);
+  const driver = part(circuit, 'input', 10, 0);
   wire(circuit, 0, 0, 10, 0);
   const input = issues(circuit, 'erc.input-undriven');
   assert.equal(input.length, 1);
-  assert.equal(input[0].severity, 'warning');
-  assert.match(input[0].message, /No declared signal driver/);
-  circuit.parts[0].libId = 'Test:passive';
+  assert.equal(input[0].severity, 'error');
+  circuit.libraries['Test:passive'] = symbol('passive');
+  driver.libId = 'Test:passive';
   assert.equal(issues(circuit, 'erc.input-undriven').length, 0);
-  const power = part(circuit, 'power_in', 10, 0);
-  assert.ok(
-    issues(circuit, 'erc.power-undriven').some((issue) => issue.objectIds.includes(power.id)),
-  );
+  const power = part(circuit, 'power_in', 10, 0, { ref: '#PWR1', value: 'VIN' });
+  circuit.libraries[power.libId] = symbol('power_in', true);
+  const undriven = issues(circuit, 'erc.power-undriven');
+  assert.equal(undriven.length, 1);
+  assert.equal(undriven[0].severity, 'error');
+  assert.deepEqual(undriven[0].objectIds, [power.id]);
+  assert.equal(issues(circuit, 'erc.input-undriven').length, 0);
+  part(circuit, 'power_out', 0, 0);
+  assert.deepEqual(issues(circuit, 'erc.power-undriven'), []);
 });
 
 test('open-collector buses and tri-state buses are not treated as multiple strong outputs', () => {
@@ -299,7 +308,38 @@ test('open-collector buses and tri-state buses are not treated as multiple stron
   const mixed = emptyCircuit();
   part(mixed, 'open_collector', 0, 0);
   part(mixed, 'open_emitter', 0, 0);
+  assert.deepEqual(issues(mixed, 'erc.output-conflict'), []);
+  part(mixed, 'tri_state', 0, 0);
   assert.equal(issues(mixed, 'erc.output-conflict')[0].severity, 'warning');
+  part(mixed, 'power_out', 0, 0);
+  assert.equal(issues(mixed, 'erc.output-conflict')[0].severity, 'error');
+});
+
+test('unspecified pin type warns when sharing a network with an electrical pin', () => {
+  const circuit = emptyCircuit();
+  const unknown = part(circuit, 'unspecified', 0, 0);
+  part(circuit, 'free', 0, 0);
+  assert.deepEqual(issues(circuit, 'erc.pin-conflict'), []);
+  const passive = part(circuit, 'passive', 0, 0);
+  const conflict = issues(circuit, 'erc.pin-conflict');
+  assert.equal(conflict.length, 1);
+  assert.equal(conflict[0].severity, 'warning');
+  assert.deepEqual(conflict[0].objectIds, [unknown.id, passive.id]);
+});
+
+test('EMC Flyback reports the five undriven power nets identified by KiCad 10.0.1', () => {
+  const project = parseProject(readFileSync('lib/emc-flyback-example.json', 'utf8'));
+  const report = runSchematicERC(project.schematic);
+  assert.equal(report.complete, true);
+  assert.ok(
+    report.issues.every(
+      (issue) => issue.ruleId === 'erc.power-undriven' && issue.severity === 'error',
+    ),
+  );
+  assert.deepEqual(
+    report.issues.map((issue) => issue.message.match(/ on (\S+) has no power output/)?.[1]).sort(),
+    ['CHASSIS', 'PGND', 'SGND', 'VBUS', 'VOUT'],
+  );
 });
 
 test('conflicting physical net names and locally unattached labels are reported independently', () => {

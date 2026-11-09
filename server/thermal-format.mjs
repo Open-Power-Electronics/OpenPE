@@ -6216,16 +6216,20 @@ function boardPolygons(board) {
     )
   ];
   if (!edges.length) throw new Error("Draw a closed board outline before previewing copper or 3D.");
-  if (edges.length > 5e3) throw new Error("The board outline exceeds the preview limit.");
+  const result = polygonsFromContours(closedGraphicContours(edges, "board outline"));
+  if (!result.length) throw new Error("The board outline does not enclose a positive area.");
+  return result;
+}
+function closedGraphicContours(edges, context) {
+  if (edges.length > 5e3) throw new Error(`The ${context} exceeds the graphic limit.`);
   const loops = [], segments = [];
   let vertexCount = 0;
   for (const g of edges) {
     if (g.kind === "text" || g.kind === "dimension")
-      throw new Error("Unsupported board outline geometry.");
+      throw new Error(`Unsupported ${context} geometry.`);
     const pts = graphicVertices(g);
     vertexCount += pts.length;
-    if (vertexCount > 2e4)
-      throw new Error("The board outline exceeds the preview geometry limit.");
+    if (vertexCount > 2e4) throw new Error(`The ${context} exceeds the geometry limit.`);
     if (g.kind === "circle" || g.kind === "polygon") loops.push(pts);
     else segments.push(pts);
   }
@@ -6236,12 +6240,15 @@ function boardPolygons(board) {
       const end = loop[loop.length - 1];
       const matching = segments.map((s, i) => same(s[0], end) || same(s[s.length - 1], end) ? i : -1).filter((i) => i >= 0);
       if (matching.length !== 1)
-        throw new Error("The board outline is open or ambiguous. Join its Edge.Cuts endpoints.");
+        throw new Error(`The ${context} is open or ambiguous. Join its endpoints.`);
       const next = segments.splice(matching[0], 1)[0];
       loop.push(...(same(next[0], end) ? next : next.reverse()).slice(1));
     }
     loops.push(loop.slice(0, -1));
   }
+  return loops;
+}
+function polygonsFromContours(loops) {
   const engine = new import_clipper_lib.default.Clipper(), tree = new import_clipper_lib.default.PolyTree();
   engine.AddPaths(loops.map(integer), import_clipper_lib.default.PolyType.ptSubject, true);
   engine.Execute(
@@ -6250,12 +6257,10 @@ function boardPolygons(board) {
     import_clipper_lib.default.PolyFillType.pftEvenOdd,
     import_clipper_lib.default.PolyFillType.pftEvenOdd
   );
-  const result = import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  return import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal)
   }));
-  if (!result.length) throw new Error("The board outline does not enclose a positive area.");
-  return result;
 }
 function padPolygon(f, p) {
   const w = p.size.x, h = p.size.y;

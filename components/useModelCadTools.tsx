@@ -9,6 +9,7 @@ import {
   Copy,
   Cylinder,
   Hand,
+  MousePointer2,
   Move3d,
   PencilRuler,
   Pentagon,
@@ -703,34 +704,38 @@ export function useModelCadTools({
           {drawingSketch ? (
             <>
               {button(
+                'Select sketch contour',
+                MousePointer2,
+                () => sketchInput.current?.modify('adjust'),
+                blocked || !sketch?.canAdjust,
+                sketch?.adjusting === true,
+              )}
+              {button(
                 'Draw rectangle',
                 Square,
                 () => {
-                  sketchInput.current?.retainContour();
-                  setSketchShape('rectangle');
+                  if (sketchInput.current?.retainContour()) setSketchShape('rectangle');
                 },
-                blocked,
-                sketchShape === 'rectangle',
+                blocked || sketch?.adjusting,
+                !sketch?.adjusting && sketchShape === 'rectangle',
               )}
               {button(
                 'Draw circle',
                 Circle,
                 () => {
-                  sketchInput.current?.retainContour();
-                  setSketchShape('circle');
+                  if (sketchInput.current?.retainContour()) setSketchShape('circle');
                 },
-                blocked,
-                sketchShape === 'circle',
+                blocked || sketch?.adjusting,
+                !sketch?.adjusting && sketchShape === 'circle',
               )}
               {button(
                 'Draw polyline',
                 Pentagon,
                 () => {
-                  sketchInput.current?.retainContour();
-                  setSketchShape('polygon');
+                  if (sketchInput.current?.retainContour()) setSketchShape('polygon');
                 },
-                blocked,
-                sketchShape === 'polygon',
+                blocked || sketch?.adjusting,
+                !sketch?.adjusting && sketchShape === 'polygon',
               )}
               {button(
                 'Fillet sketch corners',

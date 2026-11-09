@@ -1,5 +1,5 @@
 .dialog {
-  width: 480px;
+  --dialog-width: 560px;
 }
 
 .dialog :global(.dialog-header) {

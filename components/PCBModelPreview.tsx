@@ -223,6 +223,7 @@ function PCBModelPreview({
   annotationProps,
   errorTarget,
   statusBar,
+  rulePanel,
   fileId,
   projectSource,
   getRevision,
@@ -272,6 +273,7 @@ function PCBModelPreview({
   annotationProps?: ObjectAnnotationProps;
   errorTarget: HTMLElement | null;
   statusBar?: ReactElement<{ center?: ReactNode }> | null;
+  rulePanel?: ReactNode;
   capabilityHost?: CapabilityHost;
   revision?: string;
   sourcePending?: boolean;
@@ -3277,6 +3279,7 @@ function PCBModelPreview({
               <div className="model-inline-errors">{errorFeedback}</div>
             ) : null}
           </div>
+          {!readOnly && rulePanel}
           {!readOnly && statusBar && cloneElement(statusBar, { center: statusFeedback })}
         </div>
         {!readOnly && (

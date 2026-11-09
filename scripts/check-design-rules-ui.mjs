@@ -1,4 +1,3 @@
-import { runCanvasAction } from './canvas-context-menu-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -198,8 +197,12 @@ function staticClosure(file, seen = new Set()) {
 const startupInputs = [...staticClosure(entry)].flatMap((file) =>
   Object.keys(outputs[file].inputs),
 );
-for (const engine of ['lib/schematic-erc.ts', 'lib/pcb-drc.ts'])
-  assert.equal(startupInputs.includes(engine), false, `${engine} stays outside startup loading.`);
+// Footprint drawing also uses the DRC implementation for its edit validation.
+assert.equal(
+  startupInputs.includes('lib/schematic-erc.ts'),
+  false,
+  'ERC stays outside startup loading.',
+);
 const files = new Map(
   bundle.outputFiles.map((file) => [
     '/bundles/' + path.relative(outputDirectory, file.path).replaceAll('\\', '/'),
@@ -244,6 +247,9 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'rules-test' }),
       newFile: async () => crypto.randomUUID(),
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       releaseFile: async () => {},
       setDirty: async () => {},
@@ -344,7 +350,7 @@ try {
   const ruleButton = button('Rule');
   const assertRulePlacement = async (kind) => {
     const action = page.locator('button[aria-label="Rule"]:visible');
-    assert.equal(await action.count(), 1, 'All Rule tabs share one footer summary.');
+    assert.equal(await action.count(), 1, 'Rule uses one footer summary.');
     assert.equal(
       await action.evaluate((element) => !!element.closest('.status-bar')),
       true,
@@ -370,24 +376,33 @@ try {
       );
     const sourceView =
       (await page.locator('.editor').getAttribute('data-editor-view')) === 'source';
-    assert.deepEqual(order, ['List', 'Git', ...(sourceView ? [] : ['Toggle right sidebar'])]);
+    assert.deepEqual(order, [
+      'Draw component',
+      'List',
+      'Git',
+      ...(sourceView ? [] : ['Toggle right sidebar']),
+    ]);
     assert.equal(await page.locator('.editor-mode-actions [aria-label="Rule"]').count(), 0);
     assert.equal(await page.getByRole('combobox', { name: 'Editor mode', exact: true }).count(), 0);
     assert.equal(await page.locator('.editor-toolbar [aria-label="Rule"]').count(), 0);
-    assert.equal(await panel(kind).getAttribute('aria-modal'), 'true');
-    assert.equal(await panel(kind).evaluate((dialog) => dialog.matches(':modal')), true);
     const bounds = await panel(kind).boundingBox();
-    const viewport = page.viewportSize();
-    assert.ok(
-      Math.abs(bounds.x + bounds.width / 2 - viewport.width / 2) <= 1,
-      `${kind} opens as an independent centered window: ${JSON.stringify({ bounds, viewport })}`,
-    );
-    assert.equal(await panel(kind).locator('.dialog-resize-edge').count(), 8);
-    const grip = await panel(kind)
-      .locator('.dialog-resize-edge[data-direction="se"]')
+    const drawing = await panel(kind).locator('xpath=../..').boundingBox();
+    const footer = await action
+      .locator('xpath=ancestor::*[contains(@class, "status-bar")]')
+      .first()
       .boundingBox();
-    assert.ok(Math.abs(grip.x + grip.width - bounds.x - bounds.width) <= 2);
-    assert.ok(Math.abs(grip.y + grip.height - bounds.y - bounds.height) <= 2);
+    assert.ok(Math.abs(bounds.x - drawing.x - 8) <= 2);
+    assert.ok(bounds.width <= 480 && bounds.width <= drawing.width - 16);
+    assert.ok(bounds.y > drawing.y);
+    assert.ok(Math.abs(bounds.y + bounds.height + 8 - footer.y) <= 2);
+    assert.equal(await panel(kind).getByRole('tab').count(), 0);
+    await panel(kind).getByRole('separator', { name: 'Resize Rule panel' }).waitFor();
+    assert.equal(await page.locator('dialog[open]').count(), 0);
+    assert.equal(await ruleButton.getAttribute('aria-expanded'), 'true');
+    assert.equal(
+      await ruleButton.getAttribute('aria-controls'),
+      await panel(kind).getAttribute('id'),
+    );
   };
   const runCount = (id) =>
     page.evaluate((id) => window.ruleTestRuns.filter((value) => value === id).length, id);
@@ -449,13 +464,10 @@ try {
       }
     }
   };
-  const assertDefaultTab = async () => {
+  const assertViewReport = async () => {
     const view = await page.locator('.editor').getAttribute('data-editor-view');
-    const expected = view === '3d' ? 'Model' : view === 'layout' ? 'DRC' : 'ERC';
-    assert.equal(
-      await panel().getByRole('tab', { name: expected, exact: true }).getAttribute('aria-selected'),
-      'true',
-    );
+    const expected = view === '3d' ? 'Model checks' : view === 'layout' ? 'DRC' : 'ERC';
+    await panel().getByRole('heading', { name: expected, exact: true }).waitFor();
   };
   const openERC = async (wait = true, keyboard = false) => {
     const count = await runCount('schematic.erc');
@@ -464,31 +476,27 @@ try {
       await page.keyboard.press('Enter');
     } else await ruleButton.click();
     await panel('ERC').waitFor();
-    await assertDefaultTab();
-    const tab = panel().getByRole('tab', { name: 'ERC', exact: true });
-    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await assertViewReport();
     await assertRulePlacement('ERC');
     if (wait)
       await panel('ERC').getByText('Checking ERC…', { exact: true }).waitFor({ state: 'hidden' });
     assert.equal(
       await runCount('schematic.erc'),
       count + 1,
-      'Opening or selecting ERC runs exactly one ERC check.',
+      'Opening ERC runs exactly one ERC check.',
     );
   };
   const openDRC = async () => {
     const count = await runCount('layout.drc');
     await ruleButton.click();
     await panel('DRC').waitFor();
-    await assertDefaultTab();
-    const tab = panel().getByRole('tab', { name: 'DRC', exact: true });
-    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await assertViewReport();
     await assertRulePlacement('DRC');
     await panel('DRC').getByText('Checking DRC…', { exact: true }).waitFor({ state: 'hidden' });
     assert.equal(
       await runCount('layout.drc'),
       count + 1,
-      'Opening or selecting DRC runs exactly one DRC check.',
+      'Opening DRC runs exactly one DRC check.',
     );
   };
   const unchanged = async (index, baseline, reason) =>
@@ -563,18 +571,10 @@ try {
   assert.equal(await panel('ERC').count(), 0);
   await openERC(false);
   assert.equal(
-    await panel().getByRole('tab', { name: 'ERC', exact: true }).getAttribute('aria-selected'),
-    'true',
-  );
-  assert.equal(await panel().getByRole('tab', { name: 'DRC', exact: true }).isDisabled(), true);
-  assert.equal(
     requested.has(ercChunk),
     true,
     'Clicking ERC immediately loads and runs the engine.',
   );
-  const defaultRuleBounds = await panel('ERC').boundingBox();
-  assert.equal(Math.round(defaultRuleBounds.width), 720);
-  assert.equal(Math.round(defaultRuleBounds.height), 560);
 
   // Hold the first engine import to exercise the actual close barrier while a
   // query is pending. Availability changes may advance revision, never content.
@@ -617,7 +617,7 @@ try {
     'ERC locating covers the entire issue row.',
   );
   await mkdir('test-results', { recursive: true });
-  await page.screenshot({ path: 'test-results/design-rules-window-erc.png' });
+  await page.screenshot({ path: 'test-results/design-rules-panel-erc.png' });
   assert.equal(requested.has(ercChunk), true);
   await unchanged(0, afterBarrier, 'ERC queries do not change native files, revision or undo.');
   const schematic = page.getByTestId('schematic-canvas');
@@ -643,9 +643,6 @@ try {
   );
   await unchanged(0, afterBarrier, 'Locating an issue changes presentation only.');
   await openERC();
-  await button('Resize rule bottom right').focus();
-  await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('ArrowRight');
   await ercIssue.click();
   await markerUncovered('ERC', 'schematic-canvas');
   await mkdir('test-results', { recursive: true });
@@ -699,7 +696,7 @@ try {
   );
   await button('Recheck ERC').click();
   await ercIssue.waitFor();
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   await settled();
   assert.equal(
     recovery.documents[0].dirty,
@@ -712,7 +709,7 @@ try {
   await selectProject(1);
   await openERC();
   await clean('ERC').waitFor();
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   const layout = page.getByTestId('layout-canvas');
   assert.equal(requested.has(drcChunk), false);
   const beforeLayoutAdmission = await snapshot(1);
@@ -724,11 +721,14 @@ try {
   // Opening Rule cancels the deferred automatic work and runs the selected tab.
   // Closing it must restart the missing check instead of stranding the footer.
   await ruleButton.click();
-  await assertDefaultTab();
-  await panel().getByRole('tab', { name: 'DRC', exact: true }).waitFor();
+  await assertViewReport();
+  await panel().getByRole('heading', { name: 'DRC', exact: true }).waitFor();
   await panel().getByText('Checking DRC…', { exact: true }).waitFor();
   const beforePanelCloseRuns = await runCount('layout.drc');
-  await button('Close dialog').click();
+  await ruleButton.click();
+  await panel().waitFor({ state: 'detached' });
+  assert.equal(await ruleButton.getAttribute('aria-expanded'), 'false');
+  assert.equal(await ruleButton.evaluate((element) => document.activeElement === element), true);
   releaseDRC();
   await waitForFooterCounts();
   assert.equal(
@@ -773,7 +773,7 @@ try {
     failedRuns + 1,
     'Opening Rule retries a failed basis exactly once.',
   );
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   const afterFailure = await snapshot(1);
   assert.deepEqual({ ...afterFailure, revision: beforeFailure.revision }, beforeFailure);
 
@@ -811,20 +811,14 @@ try {
   await page.evaluate((id) => window.ruleTestCores[id].updateSource(null), projectIds[1]);
   await waitForFooterCounts();
   assert.equal(await runCount('layout.drc'), beforePending + 1);
-  await button('Schematic').click();
   const boardBaseline = await snapshot(1);
   await openDRC();
-  assert.equal(
-    await page.locator('.editor').getAttribute('data-editor-view'),
-    'canvas',
-    'Selecting the DRC tab leaves the editor view unchanged.',
-  );
+  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'layout');
   assert.equal(
     requested.has(drcChunk),
     true,
     'The geometry engine remains available after automatic Layout DRC.',
   );
-  assert.ok((await panel('DRC').boundingBox()).width >= 720);
   const widthIssue = panel('DRC').getByRole('button', {
     name: 'Locate issue: Track width 0.1 mm is below 0.2 mm.',
     exact: true,
@@ -834,7 +828,7 @@ try {
   });
   await widthIssue.waitFor();
   await shortIssue.waitFor();
-  await page.screenshot({ path: 'test-results/design-rules-window-drc.png' });
+  await page.screenshot({ path: 'test-results/design-rules-panel-drc.png' });
   assert.equal(requested.has(drcChunk), true);
   await unchanged(
     1,
@@ -853,7 +847,7 @@ try {
   await unchanged(1, boardBaseline, 'Locating a short remains a presentation action.');
   await openDRC();
   await assertCurrentCounts('DRC');
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   await toggleLayoutVisualization(page, 'Selection');
   await page
     .getByRole('group', { name: 'Selection', exact: true })
@@ -890,18 +884,15 @@ try {
     name: 'Minimum annular ring (mm)',
     exact: true,
   });
-  const beforeInvalidTab = await runCount('layout.drc');
+  const beforeInvalidEdit = await runCount('layout.drc');
   await annular.fill('1000.1');
-  await panel().getByRole('tab', { name: 'ERC', exact: true }).click();
-  await clean('ERC').waitFor();
-  await panel().getByRole('tab', { name: 'DRC', exact: true }).click();
   assert.equal(Number(await annular.inputValue()), 1000.1);
   assert.equal(await annular.getAttribute('aria-invalid'), 'true');
   assert.equal(await button('Recheck DRC').isDisabled(), true);
   assert.equal(
     await runCount('layout.drc'),
-    beforeInvalidTab,
-    'Returning to invalid DRC drafts cannot run with older accepted limits.',
+    beforeInvalidEdit,
+    'An invalid DRC draft blocks rechecking.',
   );
   await annular.fill('1');
   await button('Recheck DRC').click();
@@ -966,7 +957,7 @@ try {
   await clean('DRC').waitFor();
   await assertCurrentCounts('DRC');
   await unchanged(1, fixedDRC, 'Rechecking the repaired PCB is read-only.');
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   await button('Schematic').click();
   await openERC();
   await clean('ERC').waitFor();
@@ -975,7 +966,7 @@ try {
     fixedDRC,
     'Refreshing another view checks the same current project without edits.',
   );
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   await button('Layout').click();
   await openDRC();
   assert.equal(
@@ -985,7 +976,7 @@ try {
   );
   await clean('DRC').waitFor();
   assert.equal(await layout.locator('[data-rule-check-marker]').count(), 0);
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[1]);
   await settled();
   assert.equal((await snapshot(1)).source, sources[1]);
@@ -995,10 +986,17 @@ try {
       project = core.getSnapshot().project;
     core.commitProject({ ...project, pcb: { ...project.pcb, graphics: [] } });
   }, projectIds[1]);
-  await runCanvasAction(page, 'Zoom in');
-  await runCanvasAction(page, 'Zoom in');
+  const beforeZoom = await layout.getAttribute('viewBox');
+  await layout.hover();
+  await page.mouse.wheel(0, -480);
+  await page.waitForFunction(
+    (previous) =>
+      document.querySelector('[data-testid="layout-canvas"]').getAttribute('viewBox') !== previous,
+    beforeZoom,
+  );
   const beforeOutlineFit = await layout.getAttribute('viewBox');
   const noOutline = await snapshot(1);
+  await waitForFooterCounts();
   await openDRC();
   await button('Recheck DRC').click();
   const outlineIssue = panel('DRC').locator('li:has(span[aria-description="pcb.outline"]) button');
@@ -1025,11 +1023,10 @@ try {
   await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[1]);
   await settled();
   const navigationBaseline = await snapshot(1);
-  await openERC();
-  await clean('ERC').waitFor();
-  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'layout');
-  await button('Close dialog').click();
+  await waitForFooterCounts();
+  await openDRC();
   await button('Source').click();
+  await panel().waitFor({ state: 'detached' });
   assert.equal(
     await ruleButton.evaluate((element) => !!element.closest('.source-editor .status-bar')),
     true,
@@ -1037,18 +1034,14 @@ try {
   assert.ok(
     (await page.locator('.source-editor .status-coordinate:visible').textContent()).includes('Ln '),
   );
-  await openDRC();
+  await waitForFooterCounts();
+  await openERC();
+  await clean('ERC').waitFor();
   assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'source');
-  await shortIssue.click();
-  await layout.waitFor();
-  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), 'layout');
-  await unchanged(
-    1,
-    navigationBaseline,
-    'Switching check tabs and locating across views preserves native files and undo.',
-  );
-  const modelDRCRuns = await runCount('layout.drc');
   await button('Model').click();
+  await panel().waitFor({ state: 'detached' });
+  await unchanged(1, navigationBaseline, 'Changing views preserves native files and undo.');
+  const modelDRCRuns = await runCount('layout.drc');
   await page.waitForFunction(
     () =>
       document.querySelector('.pcb-model-canvas canvas') &&
@@ -1070,8 +1063,8 @@ try {
     'Model uses its own preview counts, not DRC.',
   );
   await ruleButton.click();
-  await panel().getByRole('tab', { name: 'Model', exact: true }).waitFor();
-  await assertDefaultTab();
+  await assertRulePlacement('Model');
+  await assertViewReport();
   assert.equal(
     await runCount('layout.drc'),
     modelDRCRuns,
@@ -1099,20 +1092,8 @@ try {
     navigationBaseline,
     'Model issue inspection and locating preserve native files, revision and undo.',
   );
-  await button('Layout').click();
-  await ruleButton.click();
-  await panel().getByRole('tab', { name: 'Model', exact: true }).click();
-  await modelIssue.click();
-  await panel().waitFor({ state: 'detached' });
-  assert.equal(await page.locator('.editor').getAttribute('data-editor-view'), '3d');
-  await unchanged(
-    1,
-    navigationBaseline,
-    'Model issue locating from Layout retains the exact project basis.',
-  );
   await selectProject(0);
   await openERC(true, true);
-  assert.equal(await panel().getByRole('tab', { name: 'Model', exact: true }).isDisabled(), true);
   assert.equal(await modelIssue.count(), 0, 'Other projects never expose retained model issues.');
   const inactiveDRCRuns = await runCount('layout.drc');
   await page.evaluate((id) => {
@@ -1128,7 +1109,7 @@ try {
   );
   await ercIssue.waitFor();
   assert.equal(await schematic.locator('[data-rule-check-marker]').count(), 0);
-  await button('Close dialog').click();
+  await button('Close Rule').click();
   await settled();
   assert.deepEqual(
     recovery.documents.map((document) => document.source),

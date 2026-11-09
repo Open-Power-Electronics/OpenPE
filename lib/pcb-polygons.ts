@@ -127,17 +127,23 @@ export function boardPolygons(board: PCB): Polygon[] {
     ),
   ];
   if (!edges.length) throw new Error('Draw a closed board outline before previewing copper or 3D.');
-  if (edges.length > 5000) throw new Error('The board outline exceeds the preview limit.');
+  const result = polygonsFromContours(closedGraphicContours(edges, 'board outline'));
+  if (!result.length) throw new Error('The board outline does not enclose a positive area.');
+  return result;
+}
+
+/** Join line and arc endpoints; native circles and polygons are already closed. */
+export function closedGraphicContours(edges: BoardLine[], context: string): Point[][] {
+  if (edges.length > 5000) throw new Error(`The ${context} exceeds the graphic limit.`);
   const loops: Point[][] = [],
     segments: Point[][] = [];
   let vertexCount = 0;
   for (const g of edges) {
     if (g.kind === 'text' || g.kind === 'dimension')
-      throw new Error('Unsupported board outline geometry.');
+      throw new Error(`Unsupported ${context} geometry.`);
     const pts = graphicVertices(g);
     vertexCount += pts.length;
-    if (vertexCount > 20000)
-      throw new Error('The board outline exceeds the preview geometry limit.');
+    if (vertexCount > 20000) throw new Error(`The ${context} exceeds the geometry limit.`);
     if (g.kind === 'circle' || g.kind === 'polygon') loops.push(pts);
     else segments.push(pts);
   }
@@ -150,12 +156,17 @@ export function boardPolygons(board: PCB): Polygon[] {
         .map((s, i) => (same(s[0], end) || same(s[s.length - 1], end) ? i : -1))
         .filter((i) => i >= 0);
       if (matching.length !== 1)
-        throw new Error('The board outline is open or ambiguous. Join its Edge.Cuts endpoints.');
+        throw new Error(`The ${context} is open or ambiguous. Join its endpoints.`);
       const next = segments.splice(matching[0], 1)[0];
       loop.push(...(same(next[0], end) ? next : next.reverse()).slice(1));
     }
     loops.push(loop.slice(0, -1));
   }
+  return loops;
+}
+
+/** Even-odd nesting preserves cutouts and independent solid contours. */
+export function polygonsFromContours(loops: Point[][]): Polygon[] {
   const engine = new Clipper.Clipper(),
     tree = new Clipper.PolyTree();
   engine.AddPaths(loops.map(integer), Clipper.PolyType.ptSubject, true);
@@ -165,12 +176,10 @@ export function boardPolygons(board: PCB): Polygon[] {
     Clipper.PolyFillType.pftEvenOdd,
     Clipper.PolyFillType.pftEvenOdd,
   );
-  const result = Clipper.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  return Clipper.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal),
   }));
-  if (!result.length) throw new Error('The board outline does not enclose a positive area.');
-  return result;
 }
 export function padPolygon(f: Footprint, p: Pad): Polygon {
   const w = p.size.x,

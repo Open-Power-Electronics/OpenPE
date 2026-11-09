@@ -30,17 +30,11 @@ const bundle = await build({
       import React,{useState} from 'react';
       import {createRoot} from 'react-dom/client';
       import {flushSync} from 'react-dom';
-      import {CircuitBoard} from 'lucide-react';
-      import RuleCheckPanel from './components/RuleCheckPanel';
       import PartsList from './components/PartsList';
       import ProjectHistoryView from './components/ProjectHistoryView';
-      import RevealButton from './components/RevealButton';
-      import {SchematicIcon} from './components/EditorIcons';
-      import {defaultPCBDesignRules} from './lib/design-rule-checks';
       const source=${JSON.stringify(source)};
       const parts=${JSON.stringify(project.schematic.parts)};
       const writes=[];
-      const runs=[];
       const host={
         async query(id,input){
           if(id==='versions.list') return {version:'mock Git',commits:[{id:'a'.repeat(40),date:'2026-11-05T10:00:00+08:00',message:'Initial design'}],more:false};
@@ -50,19 +44,10 @@ const bundle = await build({
         async execute(id,input){writes.push({id,input});throw Error('Style inspection must not edit designs');}
       };
       function Fixture(){
-        const [config,setConfig]=useState({window:'rules',open:true,kind:'erc',sourcePending:false,drcAvailable:true});
-        window.windowStyles={writes,runs,render:next=>flushSync(()=>setConfig(current=>({...current,...next})))};
+        const [config,setConfig]=useState({window:'list',open:true});
+        window.windowStyles={writes,render:next=>flushSync(()=>setConfig(current=>({...current,...next})))};
         const close=()=>setConfig(current=>({...current,open:false}));
         return <>
-          <div id="reference" className="editor-view-switch" style={{position:'fixed',left:24,top:24}}>
-            <RevealButton icon={SchematicIcon} label="Schematic" active onClick={()=>{}}/>
-            <RevealButton icon={CircuitBoard} label="Layout" onClick={()=>{}}/>
-          </div>
-          {config.open && config.window==='rules' && <RuleCheckPanel kind={config.kind}
-            onKindChange={kind=>setConfig(current=>({...current,kind}))}
-            drcAvailable={config.drcAvailable} sourcePending={config.sourcePending}
-            report={null} drcSettings={defaultPCBDesignRules} onRun={()=>runs.push('run')}
-            onSelectIssue={()=>writes.push('locate')} onClose={close}/>}
           {config.open && config.window==='list' && <PartsList parts={parts} selected={null}
             onEdit={()=>writes.push('edit')} onLocate={()=>writes.push('locate')} onClose={close}/>}
           {config.open && config.window==='git' && <ProjectHistoryView visible source={source}
@@ -109,7 +94,6 @@ try {
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
   const dialog = () => page.locator('dialog[open]');
-  const tab = (name) => dialog().getByRole('tab', { name, exact: true });
   async function settle() {
     await page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
@@ -117,7 +101,7 @@ try {
   }
   async function render(next) {
     await page.evaluate((next) => window.windowStyles.render(next), next);
-    if (next.open !== false) await dialog().waitFor();
+    if (next.open === true) await dialog().waitFor();
     await settle();
   }
   async function shell() {
@@ -172,90 +156,23 @@ try {
       };
     });
   }
-  async function tabStyle(locator) {
-    return locator.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return Object.fromEntries(
-        [
-          'height',
-          'minHeight',
-          'paddingTop',
-          'paddingRight',
-          'paddingBottom',
-          'paddingLeft',
-          'borderTopWidth',
-          'borderRightWidth',
-          'borderBottomWidth',
-          'borderLeftWidth',
-          'borderTopColor',
-          'borderRightColor',
-          'borderBottomColor',
-          'borderLeftColor',
-          'borderTopLeftRadius',
-          'borderTopRightRadius',
-          'borderBottomRightRadius',
-          'borderBottomLeftRadius',
-          'backgroundColor',
-          'color',
-          'fontSize',
-          'fontWeight',
-          'lineHeight',
-        ].map((field) => [field, style[field]]),
-      );
-    });
-  }
-  async function footerStyle(kind) {
-    return dialog()
-      .locator(kind === 'git' ? '.history-footer' : ':scope > .dialog-footer')
-      .evaluate((element) => {
-        const style = getComputedStyle(element);
-        return Object.fromEntries(
-          [
-            'minHeight',
-            'paddingTop',
-            'paddingRight',
-            'paddingBottom',
-            'paddingLeft',
-            'backgroundColor',
-            'borderTopWidth',
-            'borderTopColor',
-          ].map((field) => [field, style[field]]),
-        );
-      });
-  }
   const references = {};
   for (const theme of ['light', 'dark']) {
     await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
     await render({ open: false });
-    await page.mouse.move(1400, 940);
-    // Theme changes animate the reference cards' colors and borders for 180 ms.
-    await page.waitForTimeout(220);
-    const referenceActive = await tabStyle(page.locator('#reference button').nth(0));
-    const referenceInactive = await tabStyle(page.locator('#reference button').nth(1));
-    await page.locator('#reference button').nth(1).hover();
-    await page.waitForTimeout(220);
-    const referenceHover = await tabStyle(page.locator('#reference button').nth(1));
-    await page.mouse.move(1400, 940);
-    let ruleFooter;
-    for (const kind of ['rules', 'list', 'git']) {
-      await render({
-        window: kind,
-        open: true,
-        kind: 'erc',
-        sourcePending: false,
-        drcAvailable: true,
-      });
+    for (const kind of ['list', 'git']) {
+      await render({ window: kind, open: true });
       if (kind === 'git')
         await waitForAsync(
           page,
           () =>
             document.querySelector('.project-history-view')?.getAttribute('aria-busy') === 'false',
         );
-      if (kind === 'rules' || kind === 'list') {
+      if (kind === 'list') {
         const bounds = await dialog().boundingBox();
         assert.deepEqual(
           [Math.round(bounds.width), Math.round(bounds.height)],
-          kind === 'rules' ? [720, 560] : [900, 680],
+          [900, 680],
           `${kind}: initial window dimensions in ${theme}`,
         );
         const viewport = page.viewportSize();
@@ -263,7 +180,7 @@ try {
         assert.ok(bounds.y >= 24 && bounds.y + bounds.height <= viewport.height - 24);
       }
       const actual = await shell();
-      if (kind === 'rules') references[theme] = actual;
+      if (kind === 'list') references[theme] = actual;
       else
         assert.deepEqual(
           actual,
@@ -295,7 +212,6 @@ try {
       assert.equal(actual.titleIcon.graphic.width, '16px');
       assert.equal(actual.titleIcon.graphic.height, '16px');
       const iconClass = {
-        rules: 'lucide-clipboard-check',
         list: 'lucide-list',
         git: 'lucide-git',
       }[kind];
@@ -312,76 +228,16 @@ try {
       const titleBox = await dialog().locator(':scope > .dialog-header h2').boundingBox();
       assert.ok(logoBox.x + logoBox.width <= titleBox.x, 'The logo sits to the left of the title.');
       assert.equal(await dialog().locator('.dialog-resize-edge').count(), 8);
-      if (kind === 'rules') ruleFooter = await footerStyle(kind);
-      if (kind === 'git')
-        assert.deepEqual(
-          await footerStyle(kind),
-          ruleFooter,
-          'Rule and Git use the same fixed footer surface and insets.',
-        );
       await dialog().getByRole('button', { name: 'Maximize dialog', exact: true }).waitFor();
       await dialog().getByRole('button', { name: 'Close dialog', exact: true }).waitFor();
-      if (kind === 'rules') {
-        await page.mouse.move(1400, 940);
-        await page.waitForTimeout(220);
-        assert.deepEqual(
-          await tabStyle(tab('ERC')),
-          referenceActive,
-          'ERC uses the active Schematic mode card style.',
-        );
-        assert.deepEqual(
-          await tabStyle(tab('DRC')),
-          referenceInactive,
-          'DRC uses the inactive Layout mode card style.',
-        );
-        await tab('DRC').hover();
-        await page.waitForTimeout(220);
-        assert.deepEqual(
-          await tabStyle(tab('DRC')),
-          referenceHover,
-          'ERC/DRC hover matches the editor mode card.',
-        );
-        await tab('ERC').focus();
-        await tab('ERC').dispatchEvent('keydown', { key: 'ArrowRight', keyCode: 229 });
-        assert.equal(
-          await tab('ERC').getAttribute('aria-selected'),
-          'true',
-          'IME does not switch tabs.',
-        );
-        await tab('ERC').press('ArrowRight');
-        assert.equal(await tab('DRC').getAttribute('aria-selected'), 'true');
-        const clearance = dialog().getByRole('spinbutton', {
-          name: 'Copper clearance (mm)',
-          exact: true,
-        });
-        await clearance.fill('1000.1');
-        await tab('ERC').click();
-        await tab('DRC').click();
-        assert.equal(
-          Number(await clearance.inputValue()),
-          1000.1,
-          'Switching tabs retains the invalid DRC draft.',
-        );
-        assert.equal(await clearance.getAttribute('aria-invalid'), 'true');
-        await tab('DRC').focus();
-        await tab('DRC').press('Home');
-        assert.equal(await tab('ERC').getAttribute('aria-selected'), 'true');
-        await render({ sourcePending: true });
-        assert.equal(await tab('ERC').isDisabled(), true);
-        assert.equal(await tab('DRC').isDisabled(), true);
-        await render({ sourcePending: false, drcAvailable: false });
-        assert.equal(await tab('DRC').isDisabled(), true);
-        await render({ drcAvailable: true });
-      }
+
       await page.screenshot({ path: `test-results/window-style-${kind}-${theme}.png` });
       await render({ open: false });
     }
   }
   assert.deepEqual(await page.evaluate(() => window.windowStyles.writes), []);
   assert.deepEqual(errors, []);
-  console.log(
-    'PASS: Rule checks/List/Git share window styling in light/dark; ERC/DRC matches editor mode cards and retains keyboard/IME/draft guards.',
-  );
+  console.log('PASS: List and Git share window styling in light and dark themes.');
 } catch (error) {
   if (page) {
     await page.screenshot({ path: 'test-results/window-styles-failure.png' });

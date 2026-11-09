@@ -210,7 +210,7 @@ try {
     'Schematic Grid density stays open while the Agent response scrolls.',
   );
   await page.getByRole('option', { name: '1 mm', exact: true }).click();
-  assert.match(await grid.innerText(), /1 mm/);
+  assert.equal(await grid.getAttribute('aria-description'), '1 mm');
 
   // Pointer capture and the right viewport survive several response appends.
   const at = (canvas, p) =>
@@ -235,7 +235,11 @@ try {
   await button('Layout').click();
   const layout = page.getByTestId('layout-canvas');
   await layout.waitFor();
-  assert.match(await grid.innerText(), /0\.5 mm/, 'Layout defaults independently to 0.5 mm.');
+  assert.equal(
+    await grid.getAttribute('aria-description'),
+    '0.5 mm',
+    'Layout defaults independently to 0.5 mm.',
+  );
   await grid.click();
   await append();
   assert.equal(

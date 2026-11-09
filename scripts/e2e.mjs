@@ -770,7 +770,7 @@ async function checkGrid(page) {
   const canvas = page.getByTestId('schematic-canvas');
   const density = page.getByRole('combobox', { name: 'Grid density', exact: true });
   const dirtyBefore = await page.locator('.project-navigation .dirty-dot').count();
-  assert.match(await density.innerText(), /2 mm/);
+  assert.equal(await density.getAttribute('aria-description'), '2 mm');
   for (const spacing of [0.5, 1, 2, 5, 10]) {
     await density.click();
     await page.getByRole('option', { name: `${spacing} mm`, exact: true }).click();
@@ -780,10 +780,10 @@ async function checkGrid(page) {
   await density.click();
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
-  assert.match(await density.innerText(), /Off/);
+  assert.equal(await density.getAttribute('aria-description'), 'Off');
   await density.click();
   await page.getByRole('option', { name: '10 mm', exact: true }).click();
-  assert.match(await density.innerText(), /10 mm/);
+  assert.equal(await density.getAttribute('aria-description'), '10 mm');
   await density.click();
   await page.getByRole('option', { name: '2 mm', exact: true }).click();
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), dirtyBefore);

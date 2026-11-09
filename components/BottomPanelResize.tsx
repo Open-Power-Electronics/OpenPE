@@ -1,15 +1,19 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { hasOpenOverlay } from './Dialog';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { hasOpenOverlay } from './openOverlay';
 
 /** Presentation only: each mounted workbench retains its own panel sizes. */
-export default function SimulationResize({
+export default function BottomPanelResize({
   target,
   visible,
+  label,
+  initialMaxHeight = 340,
 }: {
-  target: RefObject<HTMLDivElement | null>;
+  target: RefObject<HTMLElement | null>;
   visible: boolean;
+  label: string;
+  initialMaxHeight?: number;
 }) {
   const [preferred, setPreferred] = useState<number | null>(null);
   const [bounds, setBounds] = useState({ min: 0, max: 0, value: 0 });
@@ -28,7 +32,7 @@ export default function SimulationResize({
     if (current.handle.hasPointerCapture(current.id))
       current.handle.releasePointerCapture(current.id);
   }
-  useLayoutEffect(() => {
+  useEffect(() => {
     const panel = target.current;
     const parent = panel?.parentElement;
     if (!panel || !parent || !visible) {
@@ -40,19 +44,20 @@ export default function SimulationResize({
       if (!available) return;
       const max = Math.max(0, available - 120);
       const min = Math.min(max, 180);
-      const fallback = Math.min(340, available * 0.48);
+      const fallback = Math.min(initialMaxHeight, available * 0.48);
       const value = Math.min(max, Math.max(min, preferred ?? fallback));
-      panel.style.setProperty('--simulation-panel-size', `${value}px`);
+      panel.style.setProperty('--bottom-panel-size', `${value}px`);
       setBounds({ min, max, value });
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(parent);
     return () => observer.disconnect();
-  }, [target, visible, preferred]);
+  }, [target, visible, preferred, initialMaxHeight]);
   useLayoutEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !drag.current) return;
+      if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229 || !drag.current)
+        return;
       event.preventDefault();
       event.stopPropagation();
       finish(true);
@@ -64,10 +69,9 @@ export default function SimulationResize({
     };
   }, []);
   const resize = (value: number) => setPreferred(Math.min(bounds.max, Math.max(bounds.min, value)));
-  const label = 'Resize waveform panel';
   return (
     <div
-      className="simulation-resize simulation-resize-height"
+      className="bottom-panel-resize"
       role="separator"
       tabIndex={0}
       aria-label={label}
@@ -99,7 +103,8 @@ export default function SimulationResize({
       onLostPointerCapture={() => finish(true)}
       onDoubleClick={() => setPreferred(null)}
       onKeyDown={(event) => {
-        if (hasOpenOverlay()) return;
+        if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || hasOpenOverlay())
+          return;
         const increase = 'ArrowUp';
         const decrease = 'ArrowDown';
         if (![increase, decrease, 'Home'].includes(event.key)) return;

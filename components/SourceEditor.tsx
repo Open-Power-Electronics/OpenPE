@@ -178,6 +178,7 @@ function SourceEditor({
   status,
   trailingAction,
   ruleStatus,
+  rulePanel,
   active = true,
   visible = true,
   files,
@@ -197,6 +198,7 @@ function SourceEditor({
   status?: string;
   trailingAction?: ReactNode;
   ruleStatus?: ReactNode;
+  rulePanel?: ReactNode;
   active?: boolean;
   visible?: boolean;
   files?: readonly {
@@ -440,6 +442,7 @@ function SourceEditor({
           {fileError}
         </p>
       )}
+      {rulePanel}
       <EditorStatusBar
         ruleStatus={ruleStatus}
         mode="Source"

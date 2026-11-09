@@ -11,7 +11,7 @@ const bundle = await build({
         window.dividerFixture={setActive,setSecond};
         return <><div className="desktop-titlebar"/>{[0,...(second?[1]:[])].map(id=><section className="workspace" key={id} data-fixture={id}>
           <div className="nav-rail"/><div className="chat-panel"/><Divider active={active}/>
-          <svg style={{cursor:'crosshair'}}>{Array.from({length:500},(_,i)=><rect key={i} x={i%30} y={Math.floor(i/30)} width="1" height="1"/>)}</svg>
+          <svg className="editor" style={{cursor:'crosshair'}}>{Array.from({length:500},(_,i)=><rect key={i} x={i%30} y={Math.floor(i/30)} width="1" height="1"/>)}</svg>
         </section>)}</>}
       createRoot(document.getElementById('root')).render(<StrictMode><Fixture/></StrictMode>);`,
     resolveDir: process.cwd(),
@@ -40,19 +40,39 @@ try {
   for (const file of ['app/globals.css', 'app/workspace.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
   await page.addStyleTag({
-    content:
-      '.workspace{height:330px;display:flex;width:1380px}.nav-rail{width:52px;flex-shrink:0}.chat-panel{flex:none}svg{flex:1;height:300px}',
+    content: '.workspace{height:330px;display:flex;width:calc(100vw - 20px)}svg{height:300px}',
   });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const divider = page
     .getByRole('separator', { name: 'Resize conversation and schematic' })
     .first();
   await divider.waitFor();
+  const chat = page.locator('.chat-panel').first();
+  const chatWidth = async () => (await chat.boundingBox()).width;
+  const expectChatWidth = async (width) => {
+    const actual = await chatWidth();
+    assert.ok(
+      Math.abs(actual - width) < 0.05,
+      `Expected conversation width ${width}, got ${actual}.`,
+    );
+  };
   const settle = () =>
     page.evaluate(
       () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     );
+  const resize = async (width) => {
+    await page.setViewportSize({ width, height: 800 });
+    await settle();
+  };
   const marker = () => page.evaluate(() => document.body.getAttribute('data-workspace-resizing'));
+  const isDividerTransparent = () =>
+    divider.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return (
+        style.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+        getComputedStyle(element, '::after').content === 'none'
+      );
+    });
   const start = async () => {
     const b = await divider.boundingBox();
     await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
@@ -66,30 +86,59 @@ try {
       .evaluate((node) => getComputedStyle(node).cursor);
   assert.equal(await marker(), null);
   assert.equal(await cursor(), 'crosshair');
+  assert.equal(await isDividerTransparent(), true);
   await start();
   assert.equal(await marker(), 'true');
   assert.match(await cursor(), /col-resize/);
+  assert.equal(await isDividerTransparent(), true);
   await page.mouse.up();
   await settle();
   assert.equal(await marker(), null);
   assert.equal(await cursor(), 'crosshair');
-  const originalWidth = await page
-    .locator('.chat-panel')
-    .first()
-    .evaluate((node) => node.getBoundingClientRect().width);
+  const originalWidth = await chatWidth();
   await start();
   await page.mouse.move(620, 170);
   await page.keyboard.press('Escape');
   await page.mouse.up();
   await settle();
   assert.equal(await marker(), null);
-  assert.equal(
-    await page
-      .locator('.chat-panel')
-      .first()
-      .evaluate((node) => node.getBoundingClientRect().width),
-    originalWidth,
-  );
+  assert.equal(await chatWidth(), originalWidth);
+
+  const available = (viewportWidth) => viewportWidth - 20 - 52 - 8 - 12;
+  await expectChatWidth(available(1400) * 0.35);
+  await resize(1220);
+  await expectChatWidth(available(1220) * 0.35);
+  await resize(1020);
+  await expectChatWidth(328);
+  await resize(1400);
+  await expectChatWidth(originalWidth);
+
+  await start();
+  const grip = await divider.boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2 + 200, grip.y + grip.height / 2);
+  await page.mouse.up();
+  const draggedWidth = await chatWidth();
+  assert.ok(draggedWidth > originalWidth + 190);
+  await resize(1120);
+  await expectChatWidth(available(1120) - 560);
+  assert.equal((await page.locator('.editor').first().boundingBox()).width, 560);
+  await resize(1400);
+  await expectChatWidth(draggedWidth);
+  await resize(1300);
+  await expectChatWidth((draggedWidth / available(1400)) * available(1300));
+  await divider.dblclick();
+  await expectChatWidth(available(1300) * 0.35);
+  await resize(1220);
+  await expectChatWidth(available(1220) * 0.35);
+
+  await divider.dispatchEvent('keydown', { key: 'ArrowRight', isComposing: true });
+  await divider.dispatchEvent('keydown', { key: 'ArrowRight', keyCode: 229 });
+  await expectChatWidth(available(1220) * 0.35);
+  await divider.press('ArrowRight');
+  await expectChatWidth(Math.round(available(1220) * 0.35) + 16);
+  await divider.dblclick();
+  await resize(1400);
+
   // Synthetic additional pointer IDs exercise independent retained instances;
   // real pointer capture above verifies the ordinary mouse path.
   await page.evaluate(() => {
@@ -206,6 +255,8 @@ try {
   console.log(
     JSON.stringify({
       dividerCursor: 'passed',
+      transparentDivider: 'passed',
+      proportionalResize: 'passed',
       cancelDeactivationUnmount: 'passed',
       concurrentOwners: 'passed',
       previousSelectorGlobalInvalidations: globalInvalidations(before).length,

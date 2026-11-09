@@ -418,11 +418,6 @@ p {
   min-width: 0;
   overflow: hidden;
 }
-.file-tab {
-  display: flex;
-  align-items: center;
-  border-bottom: 2px solid var(--line);
-}
 .dirty-dot {
   width: 5px;
   height: 5px;
@@ -713,9 +708,6 @@ button:where(:hover:not(:disabled)) {
 .editor {
   border-left: 0;
 }
-.file-tab {
-  border-bottom-color: var(--accent);
-}
 .inspector {
   border-color: var(--line);
   backdrop-filter: none;
@@ -761,9 +753,6 @@ button:where(:hover:not(:disabled)) {
   color: var(--text);
 }
 @media (max-width: 1250px) {
-  .chat-panel {
-    width: 300px;
-  }
   .chat-header {
     padding: 23px 20px 18px;
   }

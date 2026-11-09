@@ -419,7 +419,7 @@ try {
   await button('Layout').click();
   const gridDensity = page.getByRole('combobox', { name: 'Grid density', exact: true });
   const assertGridLabel = async (value) =>
-    assert.equal((await gridDensity.innerText()).replace(/\s+/g, ' ').trim(), `Grid ${value}`);
+    assert.equal(await gridDensity.getAttribute('aria-description'), value);
   const chooseGrid = async (value) => {
     await gridDensity.click();
     await page.getByRole('option', { name: value, exact: true }).click();

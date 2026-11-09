@@ -1,4 +1,4 @@
-import type { Point } from './circuit';
+import type { Circuit, Point } from './circuit';
 import type { PCB } from './pcb';
 import {
   defaultPCBDesignRules,
@@ -11,12 +11,14 @@ import { transformPCBGraphic } from './pcb-geometry';
 import {
   boardPolygons,
   circlePolygon,
+  closedGraphicContours,
   filledCopperPolygons,
   graphicVertices,
   intersectPolygons,
   offsetPolygons,
   padPolygon,
   polygonResolution,
+  polygonsFromContours,
   pourKeepoutPolygons,
   worldZones,
   type Polygon,
@@ -57,6 +59,8 @@ const epsilon = 0.00001;
 const maxIssues = 1000;
 const rules = [
   'pcb.outline',
+  'pcb.courtyard-malformed',
+  'pcb.courtyard-overlap',
   'pcb.short',
   'pcb.clearance',
   'pcb.track-width',
@@ -67,6 +71,41 @@ const rules = [
   'pcb.keepout',
   'pcb.unrouted',
 ];
+const courtyardLayers = ['F.CrtYd', 'B.CrtYd'] as const;
+const pointBounds = (points: Point[], radius = 0): Bounds =>
+  points.reduce(
+    (bounds, p) => ({
+      minX: Math.min(bounds.minX, p.x - radius),
+      minY: Math.min(bounds.minY, p.y - radius),
+      maxX: Math.max(bounds.maxX, p.x + radius),
+      maxY: Math.max(bounds.maxY, p.y + radius),
+    }),
+    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+  );
+
+function courtyardContoursIntersect(contours: Point[][], spend: () => void): boolean {
+  const edges = contours.flatMap((outer, ring) =>
+    polygonEdges({ outer, holes: [] }).map((line, index) => ({ line, ring, index })),
+  );
+  for (let i = 0; i < edges.length; i++) {
+    const {
+      line: [a, b],
+      ring,
+      index,
+    } = edges[i];
+    if (squaredDistance(a, b) < 1e-14) return true;
+    for (let j = i + 1; j < edges.length; j++) {
+      spend();
+      const other = edges[j];
+      if (ring === other.ring) {
+        const delta = other.index - index;
+        if (delta === 1 || delta === contours[ring].length - 1) continue;
+      }
+      if (segmentDistance(a, b, ...other.line) < 1e-14) return true;
+    }
+  }
+  return false;
+}
 const mm = (value: number) => `${Number(value.toFixed(4))} mm`;
 function configuration(input: Partial<PCBDesignRuleConfig>): PCBDesignRuleConfig {
   if (!input || typeof input !== 'object' || Array.isArray(input))
@@ -89,8 +128,10 @@ function configuration(input: Partial<PCBDesignRuleConfig>): PCBDesignRuleConfig
 export function runPCBDesignRules(
   board: PCB,
   config: Partial<PCBDesignRuleConfig> = {},
+  schematic?: Circuit,
 ): RuleCheckResult {
   const settings = configuration(config);
+  const references = new Map(schematic?.parts.map((part) => [part.id, part.ref]));
   const result: RuleCheckResult = {
     kind: 'drc',
     complete: true,
@@ -99,6 +140,7 @@ export function runPCBDesignRules(
     issues: [],
     notes: [
       'Checks use the supported pads, tracks, through vias, copper graphics, saved fills and closed Edge.Cuts. Curves use the editor’s bounded polygon approximation.',
+      'Footprint courtyards are checked at zero minimum spacing on each courtyard layer. Missing courtyards and custom courtyard constraints are not checked.',
       'Unrouted checks use assigned-pad copper connectivity. Solder mask, silkscreen, creepage, impedance, net classes, differential pairs and fabrication rules are not checked.',
     ],
   };
@@ -296,15 +338,6 @@ export function runPCBDesignRules(
       points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))
     )
       throw new Error('PCB DRC encountered invalid copper geometry.');
-    const bounds = points.reduce(
-      (value, p) => ({
-        minX: Math.min(value.minX, p.x - radius),
-        minY: Math.min(value.minY, p.y - radius),
-        maxX: Math.max(value.maxX, p.x + radius),
-        maxY: Math.max(value.maxY, p.y + radius),
-      }),
-      { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-    );
     return {
       id,
       kind,
@@ -320,7 +353,7 @@ export function runPCBDesignRules(
           ? [[points[0], points[0]]]
           : points.slice(1).map((p, i) => [points[i], p]),
       at: points[0],
-      ...bounds,
+      ...pointBounds(points, radius),
     };
   };
   try {
@@ -357,6 +390,86 @@ export function runPCBDesignRules(
       result.notes.push(
         'Copper-to-edge clearance could not be checked without a valid closed outline.',
       );
+    }
+    phase = 'footprint courtyards';
+    for (const layer of courtyardLayers) {
+      const courtyards: (Bounds & {
+        id: string;
+        label: string;
+        polygons: Polygon[];
+        vertices: number;
+      })[] = [];
+      for (const footprint of board.footprints) {
+        spend(footprint.graphics.length + 1);
+        // Native courtyard layers already identify their board side, even for
+        // a back-side or through-hole footprint with graphics on both layers.
+        const artwork = footprint.graphics.filter(
+          (g) => g.layer === layer && g.kind !== 'text' && g.kind !== 'dimension',
+        );
+        if (!artwork.length) continue;
+        const label =
+          references.get(footprint.symbolId ?? '') || footprint.reference || footprint.libraryId;
+        const open = artwork.filter((g) => g.kind !== 'circle' && g.kind !== 'polygon').length;
+        spend((open * (open - 1)) / 2);
+        const malformed = () => {
+          result.complete = false;
+          issue(
+            'pcb.courtyard-malformed',
+            `${label} has a malformed ${layer} courtyard. Draw closed contours without intersections.`,
+            [footprint.id],
+            footprint,
+          );
+        };
+        let contours: Point[][];
+        try {
+          contours = closedGraphicContours(
+            artwork.map((g) => transformPCBGraphic(g, (p) => footprintPoint(footprint, p))),
+            'courtyard',
+          );
+        } catch {
+          malformed();
+          continue;
+        }
+        const points = contours.flat();
+        spend(points.length);
+        if (
+          contours.some((ring) => ring.length < 3) ||
+          courtyardContoursIntersect(contours, spend)
+        ) {
+          malformed();
+          continue;
+        }
+        const polygons = polygonsFromContours(contours);
+        if (!polygons.length) {
+          malformed();
+          continue;
+        }
+        courtyards.push({
+          id: footprint.id,
+          label,
+          polygons,
+          vertices: points.length,
+          ...pointBounds(points),
+        });
+      }
+      courtyards.sort((a, b) => a.minX - b.minX);
+      for (let i = 0; i < courtyards.length; i++) {
+        const a = courtyards[i];
+        for (let j = i + 1; j < courtyards.length && courtyards[j].minX <= a.maxX; j++) {
+          spend();
+          const b = courtyards[j];
+          if (!overlapsBounds(a, b, 0)) continue;
+          spend(a.vertices * b.vertices);
+          const overlap = intersectPolygons(a.polygons, b.polygons)[0];
+          if (overlap)
+            issue(
+              'pcb.courtyard-overlap',
+              `${a.label} and ${b.label} courtyards overlap on ${layer}.`,
+              [a.id, b.id],
+              overlap.outer[0],
+            );
+        }
+      }
     }
     phase = 'copper shapes and minimum dimensions';
     for (const f of board.footprints)
@@ -674,7 +787,7 @@ export function runPCBDesignRules(
       if (zone.keepout!.footprints)
         coverage(
           'pcb.keepout-footprint',
-          'Footprint keepout/courtyard occupancy is not checked; copper keepout flags are checked separately.',
+          'Footprint occupancy of rule areas is not checked; copper keepout flags are checked separately.',
           [zone.id],
           zone.outline[0],
         );

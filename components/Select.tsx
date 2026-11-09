@@ -1,5 +1,13 @@
 'use client';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { scrollMovesAnchor } from '@/lib/popup-scroll';
@@ -32,6 +40,8 @@ export default function Select({
   popupClassName = '',
   popupMaxHeight,
   popupPlacement = 'bottom',
+  popupAnchor,
+  popupBoundary,
   popupMatchWidth,
 }: {
   label: string;
@@ -50,7 +60,9 @@ export default function Select({
   placeholder?: string;
   popupClassName?: string;
   popupMaxHeight?: number;
-  popupPlacement?: 'bottom' | 'right';
+  popupPlacement?: 'bottom' | 'right' | 'top-end';
+  popupAnchor?: string;
+  popupBoundary?: string;
   popupMatchWidth?: 'trigger' | 'parent';
 }) {
   const id = useId();
@@ -66,6 +78,7 @@ export default function Select({
     top: 0,
     maxHeight: 300,
     width: undefined as number | undefined,
+    maxWidth: undefined as number | undefined,
   });
   const [childPosition, setChildPosition] = useState({ left: 8, top: 8, maxHeight: 300 });
   const chosen = options.findIndex((option) => option.value === value);
@@ -91,6 +104,7 @@ export default function Select({
       left: 8,
       top: rect.bottom + 6,
       maxHeight: Math.min(window.innerHeight - 16, popupMaxHeight ?? Infinity),
+      maxWidth: undefined,
       width: popupMatchWidth
         ? Math.min(
             (popupMatchWidth === 'parent'
@@ -127,56 +141,81 @@ export default function Select({
     trigger.current?.focus();
   }
   useLayoutEffect(() => {
-    if (!open || !enabled || !trigger.current || !popup.current) return;
+    const button = trigger.current;
+    const menu = popup.current;
+    if (!open || !enabled || !button || !menu) return;
+    const widthAnchor = popupMatchWidth === 'parent' ? button.parentElement! : button;
+    const anchor = (popupAnchor && button.closest(popupAnchor)) || widthAnchor;
+    const boundary = popupBoundary ? button.closest(popupBoundary) : null;
+    const topEnd = popupPlacement === 'top-end';
+    const gap = topEnd ? 8 : 6;
     const place = () => {
-      const rect = (
-        popupMatchWidth === 'parent' ? trigger.current!.parentElement! : trigger.current!
-      ).getBoundingClientRect();
-      const menu = popup.current!;
-      const anchor =
-        popupMatchWidth === 'parent' ? trigger.current!.parentElement! : trigger.current!;
+      const rect = anchor.getBoundingClientRect();
+      const bounds = boundary?.getBoundingClientRect();
+      const innerLeft = boundary && bounds ? bounds.left + boundary.clientLeft : 0;
+      const innerRight = boundary ? innerLeft + boundary.clientWidth : window.innerWidth;
+      const leftEdge = Math.max(0, innerLeft) + 8;
+      const rightEdge = Math.min(window.innerWidth, innerRight) - 8;
+      const topEdge = Math.max(0, bounds?.top ?? 0) + 8;
+      const bottomEdge = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight) - 8;
+      const availableWidth = Math.max(0, rightEdge - leftEdge);
+      const maxWidth = bounds ? availableWidth : undefined;
       const matchedWidth = popupMatchWidth
-        ? Math.min(anchor.getBoundingClientRect().width, window.innerWidth - 16)
+        ? Math.min(widthAnchor.getBoundingClientRect().width, availableWidth)
         : undefined;
-      const width = matchedWidth ?? menu.getBoundingClientRect().width;
+      const measuredWidth = matchedWidth ?? menu.getBoundingClientRect().width;
+      const width = Math.min(measuredWidth, maxWidth ?? Infinity);
       const height = Math.min(
         menu.scrollHeight + menu.offsetHeight - menu.clientHeight,
         popupMaxHeight ?? Infinity,
       );
-      const below = Math.max(0, window.innerHeight - rect.bottom - 14);
-      const above = Math.max(0, rect.top - 14);
-      const flip = below < height && above > below;
+      const below = Math.max(0, bottomEdge - rect.bottom - gap);
+      const above = Math.max(0, rect.top - topEdge - gap);
+      const flip = topEnd || (below < height && above > below);
       const right = popupPlacement === 'right';
       const maxHeight = Math.min(
-        right ? window.innerHeight - 16 : flip ? above : below,
+        right ? bottomEdge - topEdge : flip ? above : below,
         popupMaxHeight ?? Infinity,
       );
       const top = right
-        ? Math.max(8, Math.min(rect.bottom - height, window.innerHeight - height - 8))
+        ? Math.max(topEdge, Math.min(rect.bottom - height, bottomEdge - height))
         : flip
-          ? Math.max(8, rect.top - Math.min(height, maxHeight) - 6)
-          : rect.bottom + 6;
+          ? Math.max(topEdge, rect.top - Math.min(height, maxHeight) - gap)
+          : rect.bottom + gap;
       const left = Math.max(
-        8,
-        Math.min(right ? rect.right + 8 : rect.left, window.innerWidth - width - 8),
+        leftEdge,
+        Math.min(
+          right ? rect.right + 8 : topEnd ? rect.right - width : rect.left,
+          rightEdge - width,
+        ),
       );
       setPosition((current) =>
         current.top === top &&
         current.left === left &&
         current.maxHeight === maxHeight &&
+        current.maxWidth === maxWidth &&
         current.width === matchedWidth
           ? current
-          : { left, top, maxHeight, width: matchedWidth },
+          : { left, top, maxHeight, maxWidth, width: matchedWidth },
       );
     };
     place();
     const observer = new ResizeObserver(place);
-    observer.observe(popup.current);
-    observer.observe(
-      popupMatchWidth === 'parent' ? trigger.current.parentElement! : trigger.current,
-    );
+    observer.observe(menu);
+    observer.observe(widthAnchor);
+    if (anchor !== widthAnchor) observer.observe(anchor);
+    if (boundary) observer.observe(boundary);
     return () => observer.disconnect();
-  }, [open, enabled, options, popupMaxHeight, popupPlacement, popupMatchWidth]);
+  }, [
+    open,
+    enabled,
+    options,
+    popupMaxHeight,
+    popupPlacement,
+    popupAnchor,
+    popupBoundary,
+    popupMatchWidth,
+  ]);
   useLayoutEffect(() => {
     if (!childOpen || submenu === null || !popup.current || !childPopup.current) return;
     const parent = popup.current;
@@ -389,7 +428,13 @@ export default function Select({
             role="listbox"
             aria-label={label}
             className={`select-popup ${popupClassName}`}
-            style={position}
+            style={
+              {
+                ...position,
+                '--select-popup-width-limit':
+                  position.maxWidth === undefined ? undefined : `${position.maxWidth}px`,
+              } as CSSProperties
+            }
             onPointerDown={(e) => e.preventDefault()}
           >
             {options.map((option, index) => optionElement(option, index))}

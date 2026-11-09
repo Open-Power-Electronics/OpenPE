@@ -749,8 +749,8 @@ try {
           const sketch = window.modelCadGui.sketch;
           const world = new window.THREE.Vector3(
             sketch.origin.x + x,
-            -sketch.origin.y - y,
-            sketch.origin.z,
+            -sketch.origin.y - (sketch.plane === 'XY' ? y : 0),
+            sketch.origin.z + (sketch.plane === 'XZ' ? y : 0),
           ).project(window.camera);
           const rect = document.querySelector('.pcb-model-canvas canvas').getBoundingClientRect();
           return {
@@ -781,6 +781,103 @@ try {
       await page.evaluate(() => window.modelCadGui.sketch.contours[1].operation),
       'difference',
     );
+    const selectContour = button('Select sketch contour');
+    const applyContour = button('Apply sketch operation');
+    const centerX = drawing.getByRole('textbox', { name: 'Sketch center x (mm)', exact: true });
+    const diameter = drawing.getByRole('textbox', { name: 'Sketch diameter (mm)', exact: true });
+    const width = drawing.getByRole('textbox', { name: 'Sketch width (mm)', exact: true });
+    const clickPoint = async (x, y) => {
+      const screen = await point(x, y);
+      await page.mouse.click(screen.x, screen.y);
+    };
+    await selectContour.click();
+    assert.equal(await selectContour.getAttribute('aria-pressed'), 'true');
+    await clickPoint(-14, 0);
+    await width.waitFor();
+    assert.equal(await width.inputValue(), '28', 'Canvas picking selects the rectangle.');
+    await clickPoint(2, -1);
+    await diameter.waitFor();
+    assert.equal(await diameter.inputValue(), '6', 'Canvas picking selects the cutout.');
+    await diameter.fill('0');
+    assert.equal(await applyContour.isDisabled(), true);
+    assert.equal(await button('Finish sketch').isDisabled(), true);
+    await diameter.press('Escape');
+    assert.equal(await diameter.inputValue(), '6');
+    await diameter.fill('8');
+    await clickPoint(-14, 0);
+    assert.equal(
+      await diameter.inputValue(),
+      '8',
+      'Picking another contour retains the pending draft.',
+    );
+    await diameter.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+    assert.equal(await selectContour.getAttribute('aria-pressed'), 'true');
+    await canvas.press('Escape');
+    assert.equal(await selectContour.getAttribute('aria-pressed'), 'false');
+    await selectContour.click();
+    assert.equal(await diameter.inputValue(), '6', 'Canvas Escape discards the local adjustment.');
+    const dragStart = await point(2, -1);
+    const dragEnd = await point(4, -2);
+    await page.mouse.move(dragStart.x, dragStart.y);
+    await page.mouse.down();
+    await page.mouse.move(dragEnd.x, dragEnd.y, { steps: 6 });
+    await page.waitForFunction(() => window.modelCadGui.sketch.contours[1].position.x === 4);
+    await canvas.dispatchEvent('pointercancel');
+    await page.mouse.up();
+    assert.equal(await centerX.inputValue(), '2', 'Pointer cancellation rolls back the drag.');
+    await page.mouse.move(dragStart.x, dragStart.y);
+    await page.mouse.down();
+    await page.mouse.move(dragEnd.x, dragEnd.y, { steps: 6 });
+    await page.mouse.up();
+    assert.equal(await centerX.inputValue(), '4');
+    await diameter.fill('8');
+    await applyContour.click();
+    await button('Undo sketch edit').click();
+    await selectContour.click();
+    assert.equal(await centerX.inputValue(), '2');
+    assert.equal(await diameter.inputValue(), '6');
+    await centerX.fill('4');
+    await diameter.fill('8');
+    await applyContour.click();
+    await page.waitForFunction(() => {
+      const sketch = window.modelCadGui.sketch;
+      const contour = sketch.contours[1];
+      return !sketch.adjusting && contour.position.x === 4 && contour.size.x === 8;
+    });
+    await drawing.getByRole('combobox', { name: 'Sketch Boolean operation', exact: true }).click();
+    await page.getByRole('option', { name: 'Intersection', exact: true }).click();
+    await button('Draw polyline').click();
+    for (const [x, y] of [
+      [-22, -5],
+      [-17, -5],
+      [-20, 0],
+    ])
+      await clickPoint(x, y);
+    assert.equal(await selectContour.isDisabled(), true, 'An open polyline stays in drawing mode.');
+    await clickPoint(-22, -5);
+    await page.waitForFunction(() => window.modelCadGui.sketch?.closed);
+    assert.equal(
+      await button('Finish sketch').isDisabled(),
+      true,
+      'Disjoint intersection is invalid.',
+    );
+    await selectContour.click();
+    await centerX.fill('-9');
+    await width.fill('10');
+    await applyContour.click();
+    const polygon = await page.evaluate(() => window.modelCadGui.sketch.contours[2]);
+    assert.deepEqual(polygon.profile.points, [
+      { x: -5, y: -2.5 },
+      { x: 5, y: -2.5 },
+      { x: -1, y: 2.5 },
+    ]);
+    assert.equal(
+      await button('Finish sketch').isEnabled(),
+      true,
+      'Moving the polygon repairs the intersection.',
+    );
+    await button('Undo sketch edit').click();
+    await button('Undo sketch edit').click();
     await button('Finish sketch').click();
     await page.waitForFunction(() => window.modelCadGui.sketch?.phase === 'profile');
     await preview.screenshot({ path: 'test-results/model-sketch-boolean-profile.png' });
@@ -798,7 +895,8 @@ try {
     assert.equal(object.boolean.operation, 'difference');
     assert.equal(object.boolean.operands[0].shape.profile.kind, 'rectangle');
     assert.equal(object.boolean.operands[1].shape.profile.kind, 'circle');
-    assert.equal(object.boolean.operands[1].shape.size.x, 6);
+    assert.equal(object.boolean.operands[1].shape.size.x, 8);
+    assert.equal(object.boolean.operands[1].position.x - object.boolean.operands[0].position.x, 4);
     assert.equal(object.boolean.operands[0].shape.size.z, 6);
     assert.equal(object.boolean.operands[1].shape.size.z, 6);
     assert.equal((await state()).revision, before.revision + 1);
@@ -811,9 +909,19 @@ try {
     await button('Redo').click();
     await waitObjects(1);
     assert.deepEqual(await page.evaluate(() => window.cad.core.getNativeFiles()), native);
+    await button('Create sketch').click();
+    const planeSelector = plane.getByRole('combobox', { name: 'Sketch plane', exact: true });
+    for (const key of ['ArrowDown', 'Home', 'ArrowDown', 'Enter']) await planeSelector.press(key);
+    await plane.getByRole('button', { name: 'Start sketch', exact: true }).click();
+    await page.waitForFunction(() => window.modelCadGui.sketch?.phase === 'sketch');
+    await draw([-10, -8], [10, 8]);
+    await selectContour.click();
+    await drawing.getByRole('textbox', { name: 'Sketch center z (mm)', exact: true }).fill('2');
+    await applyContour.click();
+    await page.waitForFunction(() => window.modelCadGui.sketch?.contours[0]?.position.y === 2);
     assert.deepEqual(errors, []);
     console.log(
-      'PASS: real Sketch rectangle/circle Difference drawing, local draft, one prepared extrusion command, IME, native undo/redo and no dedicated Hole UI (kernel mocked).',
+      'PASS: sketch picking, snapped drag, dimension edits, cancellation, local undo, and prepared Boolean extrusion with native undo/redo (kernel mocked).',
     );
     throw sketchPlaneComplete;
   }
@@ -859,11 +967,34 @@ try {
     await modifications.getByRole('combobox', { name: 'Modify solids', exact: true }).count(),
     1,
   );
-  for (const group of [drawingTools, conversionTools, modifications])
-    assert.equal(
-      await group.evaluate((element) => getComputedStyle(element).borderLeftWidth),
-      '1px',
-    );
+  assert.deepEqual(
+    await drawingTools.evaluate((drawing) => {
+      const cad = drawing.parentElement;
+      return {
+        precedingGroup: cad.previousElementSibling?.getAttribute('aria-label'),
+        followingGroup: cad.nextElementSibling?.getAttribute('aria-label'),
+        outerDividers: [cad, cad.nextElementSibling].map((group) =>
+          group ? getComputedStyle(group).borderLeftWidth : null,
+        ),
+        subgroups: [...cad.children].map((group) => [
+          group.getAttribute('aria-label'),
+          getComputedStyle(group).borderLeftWidth,
+        ]),
+      };
+    }),
+    {
+      precedingGroup: 'Canvas modes',
+      followingGroup: 'Measurement',
+      outerDividers: ['1px', '1px'],
+      subgroups: [
+        ['2D drawing', '0px'],
+        ['3D primitives', '0px'],
+        ['2D to 3D', '0px'],
+        ['Solid modifications', '0px'],
+      ],
+    },
+    'Model uses one compact CAD group with dividers at Canvas modes and Measurement.',
+  );
   await toolbar.screenshot({ path: 'test-results/model-toolbar-categories.png' });
   for (const name of ['Modify solids', 'Edit model'])
     assert.equal(
@@ -1220,7 +1351,7 @@ try {
   await propertiesDisclosure.click();
   await inspector.waitFor({ state: 'hidden' });
   await propertiesDisclosure.click();
-  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '26');
+  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '26.00');
   assert.deepEqual(
     await state(),
     beforeDraftToggle,
@@ -1234,8 +1365,8 @@ try {
     await inspector.getByLabel('Solid name', { exact: true }).inputValue(),
     'Aluminium bracket',
   );
-  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '26');
-  assert.equal(await inspector.getByLabel('Opacity (%)', { exact: true }).inputValue(), '85');
+  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '26.00');
+  assert.equal(await inspector.getByLabel('Opacity (%)', { exact: true }).inputValue(), '85.00');
   assert.deepEqual(
     await state(),
     beforeDraftToggle,
@@ -1299,10 +1430,13 @@ try {
     true,
     'Footer Delete retains unapplied solid drafts.',
   );
-  await inspector.getByLabel('Length (mm)', { exact: true }).fill('-');
-  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '-');
+  const lengthField = inspector.getByLabel('Length (mm)', { exact: true });
+  await lengthField.focus();
+  await lengthField.fill('-');
+  assert.equal(await lengthField.inputValue(), '-');
   assert.equal(await sceneMeshState({ modelCadId: first.id, modelCadPreview: true }), null);
-  await inspector.getByLabel('Length (mm)', { exact: true }).fill('26');
+  await lengthField.fill('26');
+  await lengthField.blur();
   assert.deepEqual(
     await inspector
       .locator('input')
@@ -1310,7 +1444,7 @@ try {
         inputs.map((input) => ({ label: input.getAttribute('aria-label'), value: input.value })),
       ),
     stagedFields,
-    'Rejected valid and invalid drilling attempts retain every Properties draft field.',
+    'Correcting an invalid length restores every Properties draft field.',
   );
   assert.deepEqual(
     await sceneMeshState({ modelCadId: first.id, modelCadPreview: true }),
@@ -1329,7 +1463,8 @@ try {
   assert.deepEqual((await solids())[0].rotation, { x: 15, y: 20, z: 30 });
   assert.equal((await solids())[0].opacity, 0.85);
 
-  await inspector.getByLabel('Length (mm)', { exact: true }).fill('28');
+  await lengthField.focus();
+  await lengthField.fill('28');
   await page.evaluate(() => {
     const snapshot = window.cad.core.getSnapshot();
     const body = window.cad.state().modelCad.objects[0];
@@ -1349,9 +1484,9 @@ try {
     await inspector.getByRole('button', { name: 'Apply', exact: true }).isDisabled(),
     true,
   );
-  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '28');
+  assert.equal(Number(await lengthField.inputValue()), 28);
   await inspector.getByRole('button', { name: 'Reload solid parameters' }).click();
-  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '26');
+  assert.equal(await inspector.getByLabel('Length (mm)', { exact: true }).inputValue(), '26.00');
   assert.equal(await deleteSolid.isEnabled(), true);
   assert.equal(
     await inspector.getByRole('button', { name: 'Reload solid parameters', exact: true }).count(),
@@ -1376,7 +1511,7 @@ try {
         targetId: id,
         targetPoint: point,
         expectedName: object.name,
-        expectedX: String(object.position.x),
+        expectedX: object.position.x.toFixed(2),
         inspectorVisible: Boolean(inspector?.getClientRects().length),
         inspectedName: inspector?.querySelector('[aria-label="Solid name"]')?.value,
         inspectedX: inspector?.querySelector('[aria-label="Solid X position (mm)"]')?.value,
@@ -1402,7 +1537,7 @@ try {
     },
     { id: first.id, point: moveTargetPoint },
   );
-  const moveSelectionMessage = `Selecting the drilled solid before Move: ${JSON.stringify(moveSelection)}`;
+  const moveSelectionMessage = `Selecting the solid before Move: ${JSON.stringify(moveSelection)}`;
   assert.equal(moveSelection.inspectorVisible, true, moveSelectionMessage);
   assert.equal(moveSelection.inspectedName, moveSelection.expectedName, moveSelectionMessage);
   assert.equal(moveSelection.inspectedX, moveSelection.expectedX, moveSelectionMessage);
@@ -1440,7 +1575,7 @@ try {
   );
   assert.equal(
     await inspector.getByLabel('Solid X position (mm)', { exact: true }).inputValue(),
-    String(duplicated.position.x),
+    duplicated.position.x.toFixed(2),
   );
   assert.equal(
     await page
@@ -1579,15 +1714,15 @@ try {
     await inspector.getByLabel('Solid name', { exact: true }).inputValue(),
     cylinder.name,
   );
-  assert.equal(await inspector.getByLabel('Diameter (mm)', { exact: true }).inputValue(), '9');
-  assert.equal(await inspector.getByLabel('Height (mm)', { exact: true }).inputValue(), '12');
+  assert.equal(await inspector.getByLabel('Diameter (mm)', { exact: true }).inputValue(), '9.00');
+  assert.equal(await inspector.getByLabel('Height (mm)', { exact: true }).inputValue(), '12.00');
   assert.equal(
     await inspector.getByLabel('Solid X position (mm)', { exact: true }).inputValue(),
-    '30',
+    '30.00',
   );
   assert.equal(
     await inspector.getByLabel('Solid Y position (mm)', { exact: true }).inputValue(),
-    '30',
+    '30.00',
   );
   assert.equal(await canvas.evaluate((element) => document.activeElement === element), true);
   assert.equal((await state()).revision, beforeKeyboardPlacement.revision + 1);

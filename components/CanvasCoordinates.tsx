@@ -54,7 +54,8 @@ export default function CanvasCoordinates({
   );
   return (
     <>
-      X {point.x.toFixed(2)} Y {point.y.toFixed(2)} mm
+      <span>X {point.x.toFixed(2)}</span>{' '}
+      <span className="status-coordinate-next-axis">Y {point.y.toFixed(2)} mm</span>
       {relative && 'dx' in point && (
         <>
           {' '}

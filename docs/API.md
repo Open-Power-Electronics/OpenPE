@@ -685,6 +685,8 @@ DRC checks supported pads, tracks, through vias, copper graphics, holes, saved z
 
 Both reports cap issues at 1,000 and set `truncated:true` and `complete:false` when truncated. Unsupported geometry or work limits can return an explicitly incomplete report or reject with an actionable failure; an absent report is not a clean result. `checkedRules` lists the implemented rule families, while `notes` and coverage findings describe limitations. Even `complete:true` means completion of those bounded checks only. See [Design rules](DESIGN-RULES.md) for coverage and limits; native format validation and SPICE simulation remain separate.
 
+`pcb.courtyard-overlap` links both footprint IDs and returns a position at their shared area. `pcb.courtyard-malformed` links the affected footprint and leaves the report incomplete. DRC resolves linked footprint references from the primary schematic on the same checked revision.
+
 ## Workbench and history capabilities
 
 Owner is `host`, level is absent. All commands have optional review. Mutation is `session` unless the table specifies `document` or `external`.

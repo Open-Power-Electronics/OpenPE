@@ -12,6 +12,7 @@ const rules = [
   'erc.input-undriven',
   'erc.power-undriven',
   'erc.output-conflict',
+  'erc.pin-conflict',
   'erc.net-name-conflict',
   'erc.wire-dangling',
   'erc.wire-zero-length',
@@ -34,14 +35,24 @@ const pinTypes = new Set([
   'no_connect',
 ]);
 const optionalPins = new Set(['free', 'no_connect']);
-const signalDrivers = new Set([
-  'output',
-  'power_out',
-  'bidirectional',
-  'tri_state',
-  'open_collector',
-  'open_emitter',
-]);
+const signalDrivers = new Set(['output', 'power_out', 'bidirectional', 'tri_state', 'passive']);
+// Default KiCad 10 conflict pairs among supported driver and power pin types.
+const driverConflicts = [
+  ['error', 'output', 'output'],
+  ['error', 'power_out', 'power_out'],
+  ['error', 'output', 'power_out'],
+  ['error', 'output', 'open_collector'],
+  ['error', 'output', 'open_emitter'],
+  ['error', 'power_out', 'tri_state'],
+  ['error', 'power_out', 'open_collector'],
+  ['error', 'power_out', 'open_emitter'],
+  ['warning', 'output', 'tri_state'],
+  ['warning', 'bidirectional', 'power_out'],
+  ['warning', 'bidirectional', 'open_emitter'],
+  ['warning', 'tri_state', 'power_in'],
+  ['warning', 'tri_state', 'open_collector'],
+  ['warning', 'tri_state', 'open_emitter'],
+] as const;
 const coordinate = (p: Point) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
 const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 0.0001;
 const onSegment = (p: Point, w: Wire) => {
@@ -79,7 +90,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     issues: [],
     notes: [
       'Checks one schematic only; separate schematic files have no electrical joins.',
-      'Pin electrical types come from embedded libraries. Passive components and external interfaces do not establish a declared driver.',
+      'Pin electrical types come from embedded libraries. Signal inputs accept passive pins; power inputs require a power output on the same net.',
       'Conditional tri-state and open-collector/open-emitter drive states are not simulated.',
       'Simulation exclusion and footprint assignment do not remove physical ERC connections.',
     ],
@@ -297,12 +308,13 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
   );
   const connected = (index: number) => connections[index];
   for (const marker of circuit.noConnects ?? []) {
-    const attached = touchingPoints(marker).flatMap((entry) => (entry.pin ? [entry.pin] : []));
-    if (!attached.length) {
+    const nearby = touchingPoints(marker);
+    const attached = nearby.flatMap((entry) => (entry.pin ? [entry.pin] : []));
+    if (!nearby.length) {
       report(
         'erc.no-connect-misplaced',
-        'error',
-        'No-connect marker is not on a component pin.',
+        'warning',
+        'No-connect marker is not on a component pin or label.',
         [marker.id],
         marker,
       );
@@ -314,7 +326,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     if (linked)
       report(
         'erc.no-connect-connected',
-        'error',
+        'warning',
         'No-connect marker is on an electrically connected pin.',
         [marker.id, ...attached.map((pin) => pin.part.id)],
         marker,
@@ -384,7 +396,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       )
         report(
           'erc.pin-unconnected',
-          'warning',
+          'error',
           `${pin.part.ref} pin ${pin.number} (${pin.type}) is unconnected. Wire it or place a no-connect marker.`,
           [pin.part.id],
           pin.point,
@@ -416,66 +428,59 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
         named.map((item) => item.id),
         members[0]?.point ?? circuit.labels[group.labels[0]],
       );
-    const strong = unique.filter((pin) => pin.type === 'output' || pin.type === 'power_out');
-    const conditional = unique.filter((pin) =>
-      ['tri_state', 'open_collector', 'open_emitter'].includes(pin.type),
+    const byType = new Map<string, Pin[]>();
+    for (const pin of unique) {
+      const typed = byType.get(pin.type) ?? [];
+      if (typed.length < 2) typed.push(pin);
+      byType.set(pin.type, typed);
+    }
+    for (const [severity, first, second] of driverConflicts) {
+      const a = byType.get(first)?.[0];
+      const b = byType.get(second)?.[first === second ? 1 : 0];
+      if (!a || !b) continue;
+      report(
+        'erc.output-conflict',
+        severity,
+        `${a.part.ref} pin ${a.number} (${first}) and ${b.part.ref} pin ${b.number} (${second}) share this network.`,
+        [a.part.id, b.part.id],
+        a.point,
+      );
+      break;
+    }
+    const unspecified = byType.get('unspecified')?.[0];
+    const other = unique.find(
+      (pin) => pin !== unspecified && pinTypes.has(pin.type) && !optionalPins.has(pin.type),
     );
-    const open = conditional.filter((pin) => pin.type !== 'tri_state');
-    if (strong.length > 1 || (strong.length && open.length))
+    if (unspecified && other)
       report(
-        'erc.output-conflict',
-        'error',
-        'Multiple incompatible output drivers share this network. Verify the output types and wiring.',
-        [...strong, ...conditional].map((pin) => pin.part.id),
-        strong[0].point,
-      );
-    else if (strong.length && conditional.length)
-      report(
-        'erc.output-conflict',
+        'erc.pin-conflict',
         'warning',
-        'A driven output shares this network with a tri-state output. Verify that their active drive states cannot conflict.',
-        [...strong, ...conditional].map((pin) => pin.part.id),
-        strong[0].point,
+        `${unspecified.part.ref} pin ${unspecified.number} has unspecified electrical type and shares a network with ${other.part.ref} pin ${other.number}.`,
+        [unspecified.part.id, other.part.id],
+        unspecified.point,
       );
-    else if (
-      conditional.some((pin) => pin.type === 'open_collector') &&
-      conditional.some((pin) => pin.type === 'open_emitter')
-    )
-      report(
-        'erc.output-conflict',
-        'warning',
-        'Open-collector and open-emitter outputs share this network. Verify their allowed drive states.',
-        conditional.map((pin) => pin.part.id),
-        conditional[0].point,
-      );
-    const inputs = unique.filter((pin) => pin.type === 'input');
-    if (
-      !ambiguousTypes &&
-      connected(index) &&
-      inputs.length &&
-      !unique.some((pin) => signalDrivers.has(pin.type))
-    )
-      report(
-        'erc.input-undriven',
-        'warning',
-        'No declared signal driver. Check the input connection.',
-        inputs.map((pin) => pin.part.id),
-        inputs[0].point,
-      );
-    const powerInputs = unique.filter((pin) => pin.type === 'power_in' && !pin.marker);
-    if (
-      !ambiguousTypes &&
-      connected(index) &&
-      powerInputs.length &&
-      !unique.some((pin) => pin.type === 'power_out')
-    )
+    if (ambiguousTypes || !connected(index)) return;
+    const powerInput =
+      unique.find((pin) => pin.type === 'power_in' && !pin.marker) ?? byType.get('power_in')?.[0];
+    const input = byType.get('input')?.[0];
+    if (powerInput && !byType.has('power_out')) {
+      const name = names.length === 1 ? ` on ${names[0]}` : '';
       report(
         'erc.power-undriven',
-        'warning',
-        'No declared power output. Check the supply and external power flag.',
-        powerInputs.map((pin) => pin.part.id),
-        powerInputs[0].point,
+        'error',
+        `${powerInput.part.ref} pin ${powerInput.number}${name} has no power output on its network.`,
+        [powerInput.part.id],
+        powerInput.point,
       );
+    } else if (!powerInput && input && !unique.some((pin) => signalDrivers.has(pin.type))) {
+      report(
+        'erc.input-undriven',
+        'error',
+        `${input.part.ref} pin ${input.number} has no signal driver on its network.`,
+        [input.part.id],
+        input.point,
+      );
+    }
   });
   circuit.wires.forEach((wire, index) => {
     if (same(wire.a, wire.b))
@@ -493,11 +498,14 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
           );
   });
   for (const label of circuit.labels)
-    if (!touchingWires(label).length && !touchingPoints(label).some((entry) => entry.pin))
+    if (
+      !touchingWires(label).length &&
+      !touchingPoints(label).some((entry) => entry.pin || entry.labelId !== label.id)
+    )
       report(
         'erc.label-dangling',
-        'warning',
-        `Net label ${label.text} is not attached to a wire or component pin.`,
+        'error',
+        `Net label ${label.text} is not attached to a wire, component pin or another label.`,
         [label.id],
         label,
       );

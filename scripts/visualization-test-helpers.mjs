@@ -54,6 +54,10 @@ export async function assertEditorViewControls(page, selectedView) {
     const targets = [...header.querySelectorAll('.editor-view-switch button')].map(
       (element) => element.getBoundingClientRect().width,
     );
+    const icons = [...header.querySelectorAll('button > svg')].map((element) => {
+      const { y, width, height } = element.getBoundingClientRect();
+      return { offset: y + height / 2 - bar.y - bar.height / 2, width, height };
+    });
     const style = getComputedStyle(button);
     // Sample below the mode row itself, whether the next surface is the
     // schematic-file row or editor content. A child view's stacking context
@@ -70,6 +74,7 @@ export async function assertEditorViewControls(page, selectedView) {
       headerHeight: bar.height,
       weight: style.fontWeight,
       targets,
+      icons,
       seamCovered,
     };
   });
@@ -78,6 +83,12 @@ export async function assertEditorViewControls(page, selectedView) {
   assert.ok(geometry.inset >= 8 && geometry.height >= 36 && geometry.headerHeight >= 44);
   assert.ok(Number(geometry.weight) >= 600);
   assert.ok(geometry.targets.every((width) => width >= 44));
+  assert.ok(
+    geometry.icons.every(
+      ({ offset, width, height }) => width === 17 && height === 17 && Math.abs(offset) <= 0.5,
+    ),
+    `${selectedView}: view and project-action icons are the same size and centered in the mode row.`,
+  );
   assert.ok(
     geometry.seamCovered,
     `${selectedView}: the active tab covers the mode-row/content seam.`,

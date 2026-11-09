@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type KeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent, type Ref } from 'react';
 import { CircleCheck, CircleX, AlertTriangle } from 'lucide-react';
 
 export default function RuleStatus({
@@ -9,7 +9,9 @@ export default function RuleStatus({
   state,
   expanded,
   disabled,
-  onOpen,
+  panelId,
+  buttonRef,
+  onToggle,
 }: {
   kind: 'erc' | 'drc' | 'model';
   report: {
@@ -20,7 +22,9 @@ export default function RuleStatus({
   state: 'unchecked' | 'stale' | 'checking' | 'failed' | 'ready';
   expanded: boolean;
   disabled: boolean;
-  onOpen: () => void;
+  panelId?: string;
+  buttonRef?: Ref<HTMLButtonElement>;
+  onToggle: () => void;
 }) {
   const composing = useRef(false);
   const current = state === 'ready' || state === 'failed' ? report : null;
@@ -61,6 +65,7 @@ export default function RuleStatus({
       }}
     >
       <button
+        ref={buttonRef}
         type="button"
         className="rule-status"
         data-complete={current && current.complete && !current.truncated ? true : undefined}
@@ -68,12 +73,19 @@ export default function RuleStatus({
         title="Rule"
         aria-description={description}
         aria-haspopup="dialog"
+        aria-controls={expanded ? panelId : undefined}
         aria-expanded={expanded}
         disabled={disabled}
         onClick={() => {
-          if (!composing.current) onOpen();
+          if (!composing.current) onToggle();
         }}
-        onKeyDown={blockComposing}
+        onKeyDown={(event) => {
+          blockComposing(event);
+          if (event.defaultPrevented || event.key !== 'Escape' || !expanded) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onToggle();
+        }}
         onKeyUp={blockComposing}
       >
         <span

@@ -44,8 +44,12 @@ export default function ModelSketchCoordinates({
   if (!pointer) return null;
   return (
     <>
-      {pointer.plane === 'YZ' ? 'Y' : 'X'} {pointer.cursor?.x.toFixed(2) ?? '—'}{' '}
-      {pointer.plane === 'XY' ? 'Y' : 'Z'} {pointer.cursor?.y.toFixed(2) ?? '—'} mm
+      <span>
+        {pointer.plane === 'YZ' ? 'Y' : 'X'} {pointer.cursor?.x.toFixed(2) ?? '—'}
+      </span>{' '}
+      <span className="status-coordinate-next-axis">
+        {pointer.plane === 'XY' ? 'Y' : 'Z'} {pointer.cursor?.y.toFixed(2) ?? '—'} mm
+      </span>
     </>
   );
 }

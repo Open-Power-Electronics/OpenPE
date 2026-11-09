@@ -8,7 +8,11 @@ import ModelSketchCoordinates, {
 
 test('sketch readouts retain the exact preview point and label the active workplane axes', () => {
   const coordinates = createModelSketchCoordinates();
-  const render = () => renderToStaticMarkup(createElement(ModelSketchCoordinates, { coordinates }));
+  const render = () =>
+    renderToStaticMarkup(createElement(ModelSketchCoordinates, { coordinates })).replace(
+      /<[^>]+>/g,
+      '',
+    );
   assert.equal(render(), '');
   coordinates.update({ plane: 'XY', cursor: null });
   assert.equal(render(), 'X — Y — mm');

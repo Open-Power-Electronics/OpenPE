@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { hasOpenOverlay } from './Dialog';
 
+const defaultRatio = 0.35;
 const resizingAttribute = 'data-workspace-resizing';
 const resizingOwners = new WeakMap<HTMLElement, { owners: Set<object>; previous: string | null }>();
 
@@ -26,11 +27,9 @@ function resizeCursor(body: HTMLElement, owner: object) {
 export default function WorkspaceDivider({ active = true }: { active?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const cursorOwner = useRef({});
-  const ratio = useRef<number | null>(null);
-  const drag = useRef<{ id: number; start: number; width: number; ratio: number | null } | null>(
-    null,
-  );
-  const [range, setRange] = useState({ min: 0, max: 100, value: 35 });
+  const ratio = useRef(defaultRatio);
+  const drag = useRef<{ id: number; start: number; width: number; ratio: number } | null>(null);
+  const [range, setRange] = useState({ min: 0, max: 100, value: defaultRatio * 100 });
   const [dragging, setDragging] = useState(false);
 
   useLayoutEffect(() => {
@@ -55,32 +54,19 @@ export default function WorkspaceDivider({ active = true }: { active?: boolean }
     const chat = parent?.querySelector<HTMLElement>('.chat-panel:not([hidden])');
     const rail = parent?.querySelector<HTMLElement>('.nav-rail');
     // Collapsed panels have no measurable width; retain their last resize ratio.
-    if (
-      !divider ||
-      !parent ||
-      !chat ||
-      !parent.clientWidth ||
-      !chat.offsetWidth ||
-      !divider.offsetWidth
-    )
-      return null;
+    if (!divider || !parent || !chat || !divider.offsetWidth) return null;
     const available = parent.clientWidth - (rail?.offsetWidth ?? 0) - divider.offsetWidth - 12;
+    if (available <= 0) return null;
     return { parent, chat, available, min: 328, max: Math.max(328, available - 560) };
   }
 
   function update(width?: number) {
     const bounds = measure();
     if (!bounds) return;
-    const { parent, chat, available, min, max } = bounds;
-    const next = Math.max(
-      min,
-      Math.min(
-        max,
-        width ?? (ratio.current === null ? chat.offsetWidth : ratio.current * available),
-      ),
-    );
+    const { parent, available, min, max } = bounds;
+    const next = Math.max(min, Math.min(max, width ?? ratio.current * available));
     if (width !== undefined) ratio.current = next / available;
-    if (ratio.current !== null) parent.style.setProperty('--chat-width', `${next}px`);
+    parent.style.setProperty('--chat-width', `${next}px`);
     setRange({
       min: Math.round((min / available) * 100),
       max: Math.round((max / available) * 100),
@@ -88,7 +74,7 @@ export default function WorkspaceDivider({ active = true }: { active?: boolean }
     });
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const divider = ref.current;
     const parent = divider?.parentElement;
     if (!divider || !parent) return;
@@ -108,7 +94,6 @@ export default function WorkspaceDivider({ active = true }: { active?: boolean }
     drag.current = null;
     if (cancel) {
       ratio.current = current.ratio;
-      if (current.ratio === null) ref.current?.parentElement?.style.removeProperty('--chat-width');
       update();
     }
     if (ref.current?.hasPointerCapture(current.id)) ref.current.releasePointerCapture(current.id);
@@ -151,12 +136,17 @@ export default function WorkspaceDivider({ active = true }: { active?: boolean }
       onPointerCancel={() => finish(true)}
       onLostPointerCapture={() => finish(true)}
       onDoubleClick={() => {
-        ratio.current = null;
-        ref.current?.parentElement?.style.removeProperty('--chat-width');
+        ratio.current = defaultRatio;
         update();
       }}
       onKeyDown={(event) => {
-        if (!active || hasOpenOverlay()) return;
+        if (
+          !active ||
+          event.nativeEvent.isComposing ||
+          event.nativeEvent.keyCode === 229 ||
+          hasOpenOverlay()
+        )
+          return;
         if (event.key === 'Escape' && drag.current) {
           event.preventDefault();
           event.stopPropagation();

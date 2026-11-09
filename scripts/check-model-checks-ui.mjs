@@ -110,19 +110,19 @@ const bundle = await build({
 import Preview from'./components/PCBModelPreview';import RulePanel from'./components/RuleCheckPanel';import RuleStatus from'./components/RuleStatus';
 function Harness(){const[active,setActive]=useState(true),[readOnly,setReadOnly]=useState(false);
 const[sidebarVisible,setSidebarVisible]=useState(false),view=useRef(null),sequence=useRef(0);
-const[report,setReport]=useState(null),[open,setOpen]=useState(false),[kind,setKind]=useState('model');
+const[report,setReport]=useState(null),[open,setOpen]=useState(false);
 const[focus,setFocus]=useState(null),[sourcePending,setSourcePending]=useState(false);
 window.modelCheckHarness={setActive,setReadOnly,view,setSourcePending};window.modelCheckReport=report;
-return <div style={{height:'100vh'}}><div style={{position:'absolute',zIndex:20,right:12,top:12}}><RuleStatus kind="model"
+return <div className="editor" style={{height:'100vh'}}><div style={{position:'absolute',zIndex:20,right:12,top:12}}><RuleStatus kind="model"
 report={report?{issues:report.issues,complete:report.state==='ready'}:null}
 state={!report?'unchecked':report.state==='loading'?'checking':report.state==='error'?'failed':'ready'}
-expanded={open} disabled={false} onOpen={()=>setOpen(true)}/></div>
+expanded={open} disabled={false} onToggle={()=>setOpen(value=>!value)}/></div>
 <Preview board={window.fixture} schematic={window.schematicFixture} active={active} readOnly={readOnly}
 onModelChecksChange={setReport} modelCheckFocus={focus}
-viewState={view} sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)}/>
-{open&&<RulePanel kind={kind} onKindChange={setKind} report={null} sourcePending={sourcePending}
+viewState={view} sidebarVisible={sidebarVisible} onShowSidebar={()=>setSidebarVisible(true)}
+rulePanel={open&&<RulePanel kind="model" report={null} sourcePending={sourcePending}
 modelReport={report?{...report,canLocate:report.canLocate&&active}:null} onSelectModelCheckIssue={issue=>{setFocus({request:++sequence.current,board:window.fixture,footprintId:issue.footprintId});setOpen(false)}}
-onRun={()=>{throw Error('Model checks must not run ERC/DRC')}} onSelectIssue={()=>{}} onClose={()=>setOpen(false)}/>}
+onRun={()=>{throw Error('Model checks must not run ERC/DRC')}} onSelectIssue={()=>{}} onClose={()=>setOpen(false)}/>}/>
 </div>}
 createRoot(document.getElementById('root')).render(<Harness/>);`,
     loader: 'tsx',
@@ -218,10 +218,8 @@ try {
   const open = async () => {
     await page.getByRole('button', { name: 'Rule', exact: true }).click();
     await panel.waitFor();
-    assert.equal(
-      await panel.getByRole('tab', { name: 'Model', exact: true }).getAttribute('aria-selected'),
-      'true',
-    );
+    await panel.getByRole('heading', { name: 'Model checks', exact: true }).waitFor();
+    assert.equal(await panel.getByRole('tab').count(), 0);
   };
   const inspect = () =>
     page.evaluate(() => {
@@ -231,7 +229,7 @@ try {
   const assertWarningStyle = async () => {
     // Theme colors transition; wait until count, text and border all reach gray.
     await page.waitForFunction(() => {
-      const element = document.querySelector('dialog');
+      const element = document.querySelector('section[aria-label="Rule"]');
       const probe = document.createElement('span');
       probe.style.color = 'var(--muted)';
       element.append(probe);
@@ -317,14 +315,18 @@ try {
   await page.waitForFunction(() => !document.querySelector('[data-severity="warning"]').disabled);
   await page.setViewportSize({ width: 680, height: 600 });
   const layout = await panel.boundingBox();
-  assert.ok(layout.x >= 24 && layout.x + layout.width <= 680 - 24);
+  const drawing = await page.locator('.model-drawing-region').boundingBox();
+  const sidebar = await page.locator('.model-properties-dock').boundingBox();
+  assert.ok(Math.abs(layout.x - drawing.x - 9) <= 1);
+  assert.ok(layout.width <= 480 && layout.width <= drawing.width - 16);
+  assert.ok(layout.x + layout.width <= sidebar.x);
   await page.screenshot({ path: 'test-results/model-checks-ui/checks.png' });
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'dark';
   });
   await assertWarningStyle();
   await page.screenshot({ path: 'test-results/model-checks-ui/checks-dark.png' });
-  await panel.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await panel.getByRole('button', { name: 'Close Rule', exact: true }).click();
   await page.getByRole('button', { name: 'Orthographic projection', exact: true }).click();
   await page.waitForFunction(() => window.inspectModelChecks().camera.isPerspectiveCamera);
   await open();

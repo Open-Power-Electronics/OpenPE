@@ -27,20 +27,10 @@ const result = await build({
           path: 'jsx',
           namespace: 'rule-static',
         }));
-        build.onResolve({ filter: /^\.\/Dialog$/ }, (args) =>
-          args.importer.endsWith('RuleCheckPanel.tsx')
-            ? { path: 'dialog', namespace: 'rule-static' }
-            : undefined,
-        );
-        build.onLoad({ filter: /.*/, namespace: 'rule-static' }, ({ path: name }) => ({
+        build.onLoad({ filter: /.*/, namespace: 'rule-static' }, () => ({
           loader: 'js',
           resolveDir: process.cwd(),
-          contents:
-            name === 'dialog'
-              ? `import React from 'react'; export default function Dialog({children,footer,title}) {
-              return React.createElement('section',{'aria-label':title},children,footer);
-            }`
-              : `const runtime=require(${JSON.stringify(require.resolve('react/jsx-runtime'))});
+          contents: `const runtime=require(${JSON.stringify(require.resolve('react/jsx-runtime'))});
              exports.Fragment=runtime.Fragment;
              for(const name of ['jsx','jsxs']) exports[name]=(type,props,key)=>{
                if(typeof type==='string') globalThis[${JSON.stringify(captureKey)}].push({type,props});
@@ -85,7 +75,6 @@ function render(overrides = {}) {
   const html = renderToStaticMarkup(
     React.createElement(RuleCheckPanel, {
       kind: 'erc',
-      onKindChange() {},
       report,
       onRun() {},
       onSelectIssue: (value) => selected.push(value),
@@ -97,7 +86,9 @@ function render(overrides = {}) {
   const rows = records.filter(
     ({ type, props }) => type === 'button' && props['aria-label']?.startsWith('Locate issue: '),
   );
-  const panel = records.find(({ props }) => props.role === 'tabpanel')?.props;
+  const panel = records.find(
+    ({ type, props }) => type === 'section' && props['aria-label'] === 'Rule',
+  )?.props;
   return { html, rows, panel };
 }
 function key(key, nativeEvent = {}) {
@@ -117,6 +108,8 @@ function key(key, nativeEvent = {}) {
 
 try {
   const { html, rows, panel } = render();
+  assert.doesNotMatch(html, /<dialog\b|aria-modal=/);
+  assert.match(html, /<section\b[^>]*aria-label="Rule"/);
   assert.equal(rows.length, 1, 'Each issue exposes one locate action.');
   const action = rows[0].props;
   assert.equal(action.type, 'button');
@@ -140,7 +133,8 @@ try {
     'Issue messages remain escaped text.',
   );
   assert.match(html, /lucide-erc\b/);
-  assert.match(html, /lucide-drc\b/);
+  assert.doesNotMatch(html, /lucide-drc\b|role="tab"/);
+  assert.match(render({ kind: 'drc' }).html, /lucide-drc\b/);
 
   const severityCases = [
     { issue, expectedRule: 'Unconnected pin', expectedDescription: 'Error · Unconnected pin' },

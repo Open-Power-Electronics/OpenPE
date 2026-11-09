@@ -472,7 +472,7 @@ button:disabled {
   --font-heading: max(12px, calc(16px + var(--agent-font-step)));
   --agent-content-size: max(12px, calc(var(--content-size) - 1px));
   --agent-code-size: max(12px, calc(var(--code-size) - 1px));
-  width: var(--chat-width, 448px);
+  width: var(--chat-width, 100%);
   border-right: 0;
   background: var(--panel);
   font-size: var(--font-body);
@@ -480,30 +480,9 @@ button:disabled {
 
 .workspace-divider {
   flex: 0 0 8px;
-  position: relative;
   cursor: var(--cursor-resize-horizontal);
   touch-action: none;
   user-select: none;
-}
-
-.workspace-divider::after {
-  content: '';
-  position: absolute;
-  width: 2px;
-  height: 32px;
-  left: 3px;
-  top: calc(50% - 16px);
-  border-radius: 1px;
-  background: var(--soft);
-  opacity: 0.22;
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
-
-.workspace-divider:hover::after,
-.workspace-divider:focus-visible::after,
-.workspace-divider.dragging::after {
-  opacity: 0.75;
 }
 
 body[data-workspace-resizing='true'],
@@ -2568,22 +2547,21 @@ body[data-workspace-resizing='true'] * {
 }
 
 .editor-mode-bar {
-  height: auto;
+  --mode-bar-inset: 4px;
   min-height: 44px;
   display: flex;
-  align-items: flex-end;
-  padding: 4px 8px 0;
+  align-items: center;
+  padding: var(--mode-bar-inset) 8px;
   gap: 8px;
-  border-bottom: 1px solid var(--line-soft);
   background: var(--panel);
+  box-shadow: inset 0 -1px var(--line-soft);
 }
 .editor-mode-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  align-self: center;
   gap: 4px;
-  margin: 0 0 4px auto;
+  margin-left: auto;
 }
 .editor-mode-actions > button {
   flex: 0 0 30px;
@@ -2594,6 +2572,26 @@ body[data-workspace-resizing='true'] * {
 
 .editor > .editor-body {
   isolation: isolate;
+}
+
+.editor
+  > .editor-body
+  :is(
+    .editor-drawing-region,
+    .editor-sidebar-sections,
+    .simulation-settings-host,
+    .layout-analysis-dock [data-docked]
+  ) {
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.editor-body
+  .editor-sidebar-sections
+  > .editor-properties-drawer[data-expanded='true']
+  > .editor-dock-header {
+  border-top: 0;
 }
 
 .schematic-file-tabs {
@@ -2628,7 +2626,7 @@ body[data-workspace-resizing='true'] * {
 }
 
 .schematic-open-file .select-trigger {
-  width: 30px;
+  width: 34px;
   height: 36px;
   min-height: 36px;
   padding: 0;
@@ -2664,12 +2662,26 @@ body[data-workspace-resizing='true'] * {
 }
 
 .editor-mode-bar > .editor-view-switch {
-  margin-bottom: -1px;
+  /* Extend the tab profiles to the divider while keeping their content centered in the row. */
+  margin-bottom: calc(-1 * var(--mode-bar-inset));
+}
+
+.editor-view-switch .reveal-button,
+.editor-dock-tabs > .editor-dock-tab,
+.file-tab {
+  position: relative;
+  border: 1px solid transparent;
+  border-bottom-color: var(--line-soft);
+  border-radius: var(--radius) var(--radius) 0 0;
+  color: var(--muted);
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 .editor-view-switch .reveal-button,
 .editor-dock-tabs > .editor-dock-tab {
-  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -2678,33 +2690,42 @@ body[data-workspace-resizing='true'] * {
   min-height: 36px;
   padding: 7px 12px;
   gap: 0;
-  border: 1px solid transparent;
-  border-bottom-color: var(--line-soft);
-  border-radius: var(--radius) var(--radius) 0 0;
   background: transparent;
-  color: var(--muted);
   font-size: var(--font-control);
   line-height: max(18px, 1.2em);
   white-space: nowrap;
-  transition:
-    color 180ms ease,
-    background-color 180ms ease,
-    border-color 180ms ease;
+}
+
+.editor-mode-bar .reveal-button {
+  padding-block: 8px calc(8px + var(--mode-bar-inset));
+}
+
+.editor-mode-bar .reveal-button:not(.active) {
+  border-bottom-color: transparent;
+}
+
+.editor-mode-bar .reveal-button > svg {
+  width: 17px;
+  height: 17px;
 }
 
 .editor-view-switch .reveal-button:is(:hover, :focus-visible),
 .editor-dock-tabs > .editor-dock-tab:is(:hover, :focus-visible) {
-  background: var(--tint);
+  background: var(--surface-hover);
   color: var(--interface-green);
+}
+
+.editor-view-switch .reveal-button.active,
+.editor-dock-tabs > .editor-dock-tab[aria-selected='true'],
+.file-tab.active {
+  border-color: var(--line-soft);
+  border-bottom-color: var(--surface);
+  background: linear-gradient(var(--brand-surface), var(--surface));
 }
 
 .editor-view-switch .reveal-button.active,
 .editor-dock-tabs > .editor-dock-tab[aria-selected='true'] {
   z-index: 1;
-  border-color: var(--line-soft);
-  border-top-color: transparent;
-  border-bottom-color: var(--surface);
-  background: var(--surface);
   color: var(--interface-green);
   font-weight: 600;
 }
@@ -2774,31 +2795,22 @@ body[data-workspace-resizing='true'] * {
 }
 
 .file-tab {
-  position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 36px;
+  min-height: 36px;
   max-width: 220px;
   flex: 0 0 auto;
-  padding: 0;
-  border: 1px solid transparent;
-  border-bottom-color: var(--line-soft);
-  border-radius: var(--radius) var(--radius) 0 0;
-  background: var(--tint);
-  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 60%, var(--tint));
   font-size: var(--font-control);
 }
 
-.file-tab:hover {
-  background: var(--surface-hover);
+.file-tab:not(.active):is(:hover, :focus-within) {
+  background: var(--tint);
   color: var(--text-strong);
 }
 
 .file-tab.active {
-  border-color: var(--line-soft);
-  border-bottom-color: var(--surface);
-  background: var(--surface);
   color: var(--text-strong);
 }
 
@@ -2806,8 +2818,8 @@ body[data-workspace-resizing='true'] * {
   display: flex;
   align-items: center;
   min-width: 0;
-  height: 34px;
-  padding: 0 4px 0 8px;
+  min-height: 34px;
+  padding: 4px 4px 4px 10px;
   gap: 6px;
   border: 0;
   background: transparent;
@@ -2825,12 +2837,16 @@ body[data-workspace-resizing='true'] * {
   white-space: nowrap;
 }
 
-.file-tab svg {
-  color: var(--muted);
+.file-tab-select:focus-visible > span {
+  color: var(--interface-green);
 }
 
 .file-tab-select > svg {
   flex-shrink: 0;
+}
+
+.file-tab.active .file-tab-select > svg {
+  color: var(--interface-green);
 }
 
 .file-tab-action {
@@ -2843,18 +2859,37 @@ body[data-workspace-resizing='true'] * {
 }
 
 .file-tab-close {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 100%;
+  height: 100%;
   padding: 0;
   border: 0;
-  border-radius: var(--radius);
   background: transparent;
+  color: var(--muted);
 }
 
-.file-tab-close:hover:not(:disabled) {
+.file-tab-close:hover:not(:disabled),
+.file-tab-close:focus-visible {
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.file-tab-close::before {
+  position: absolute;
+  inset: 5px;
+  border-radius: var(--radius);
+  transition: background-color 180ms ease;
+  content: '';
+}
+
+.file-tab-close:is(:hover, :focus-visible):not(:disabled)::before {
   background: var(--line);
+}
+
+.file-tab-close > svg {
+  position: relative;
 }
 
 .file-tab-action .dirty-dot {
@@ -3774,6 +3809,8 @@ body[data-workspace-resizing='true'] * {
 
 .status-bar {
   --status-control-inset: 4px;
+  --status-item-height: 26px;
+  --status-item-fill: color-mix(in srgb, var(--surface) 70%, var(--tint));
   container: editor-status / inline-size;
   display: flex;
   flex: 0 0 auto;
@@ -3865,6 +3902,16 @@ body[data-workspace-resizing='true'] * {
 }
 .status-center .status-coordinate {
   display: block;
+  font-family: inherit;
+}
+.status-center .status-coordinate:not(:has(.measurement-distance)) {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+.status-coordinate-next-axis {
+  margin-inline-start: 8px;
 }
 .status-center:has(.measurement-distance) {
   white-space: normal;
@@ -3918,16 +3965,22 @@ body[data-workspace-resizing='true'] * {
 }
 .grid-density .select-trigger {
   width: auto;
-  min-height: 26px;
-  padding: 3px 8px;
-  border-color: transparent;
+  min-height: var(--status-item-height);
+  gap: 5px;
+  padding: 3px 7px;
+  border-color: var(--line-soft);
   border-radius: var(--radius);
-  background: transparent;
-  gap: 4px;
+  background: var(--status-item-fill);
   font-size: var(--font-caption);
   line-height: 1.35;
 }
-.grid-density .select-trigger:is(:hover:not(:disabled), [aria-expanded='true']) {
+.grid-density .select-value {
+  flex: none;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.grid-density .select-trigger:is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled) {
+  border-color: var(--line);
   background: var(--surface-hover);
 }
 .rule-status-controls {
@@ -3942,18 +3995,19 @@ body[data-workspace-resizing='true'] * {
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
-  min-height: 26px;
-  gap: 10px;
-  padding: 3px 8px;
-  border: 0;
+  min-height: var(--status-item-height, 26px);
+  gap: 6px;
+  padding: 3px 7px;
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius);
-  background: transparent;
+  background: var(--status-item-fill, var(--panel));
   color: var(--muted);
   font: inherit;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
 }
 .rule-status:is(:hover, :focus-visible, [aria-expanded='true']):not(:disabled) {
+  border-color: var(--line);
   background: var(--surface-hover);
 }
 .rule-status-count {
@@ -3961,6 +4015,11 @@ body[data-workspace-resizing='true'] * {
   align-items: center;
   flex: 0 0 auto;
   gap: 4px;
+  font-weight: 600;
+}
+.rule-status-count + .rule-status-count {
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid var(--line);
 }
 .rule-status-errors {
   color: var(--error-ink);
@@ -3978,17 +4037,6 @@ body[data-workspace-resizing='true'] * {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.grid-density .select-trigger > span[aria-hidden='true'] {
-  color: var(--muted);
-}
-.grid-density .select-value {
-  flex: none;
-  min-width: 6ch;
-  font-family: inherit;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-  text-align: left;
 }
 .grid-density .tool-button {
   width: 24px;
@@ -5919,7 +5967,10 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .select-popup {
   position: fixed;
   width: max-content;
-  min-width: min(180px, calc(100vw - 16px));
+  min-width: min(
+    var(--select-popup-min-width, 180px),
+    var(--select-popup-width-limit, calc(100vw - 16px))
+  );
   max-width: calc(100vw - 16px);
   z-index: 60;
   overflow: auto;
@@ -5930,6 +5981,16 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-floating);
+}
+
+.select-popup.grid-density-popup {
+  --select-popup-min-width: 88px;
+  padding: 4px;
+}
+
+.grid-density-popup .select-option {
+  gap: 4px;
+  padding-inline: 5px;
 }
 
 .select-option {
@@ -6538,10 +6599,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   .home-surface {
     padding-right: 24px;
     padding-left: 24px;
-  }
-
-  .chat-panel {
-    width: var(--chat-width, 400px);
   }
 
   .editor-toolbar {
@@ -7562,10 +7619,10 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   flex: 0 0 auto;
   min-height: 0;
   position: relative;
-  height: var(--simulation-panel-size, min(48%, 340px));
+  height: var(--bottom-panel-size, min(48%, 340px));
   display: flex;
 }
-.simulation-resize {
+.bottom-panel-resize {
   position: absolute;
   z-index: 5;
   display: flex;
@@ -7573,23 +7630,19 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   justify-content: center;
   touch-action: none;
   user-select: none;
-}
-.simulation-resize-height {
   top: -4px;
   left: 0;
   right: 0;
   height: 8px;
   cursor: row-resize;
 }
-.simulation-resize > span {
+.bottom-panel-resize > span {
   border-radius: 2px;
   background: var(--border-strong);
-}
-.simulation-resize-height > span {
   height: 3px;
   width: 28px;
 }
-.simulation-resize:hover > span {
+.bottom-panel-resize:is(:hover, :focus-visible) > span {
   background: var(--muted);
 }
 .simulation-dock:not([hidden]) {
@@ -7978,7 +8031,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .global-net-label {
   fill: var(--schematic-global-label);
 }
-/* Rule, List and Git use the same window chrome around their own content. */
+/* List and Git share window chrome around their own content. */
 .independent-window > .dialog-header {
   padding: 10px var(--dialog-inset);
   gap: 8px;

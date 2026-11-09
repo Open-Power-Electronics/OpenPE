@@ -59,7 +59,10 @@ test('default schematic coordinates retain their text while Layout may opt into 
   const coordinates = createCanvasCoordinates();
   coordinates.update({ x: 3, y: -4 });
   const render = (relative?: boolean) =>
-    renderToStaticMarkup(createElement(CanvasCoordinates, { coordinates, relative }));
+    renderToStaticMarkup(createElement(CanvasCoordinates, { coordinates, relative })).replace(
+      /<[^>]+>/g,
+      '',
+    );
   assert.equal(render(), 'X 3.00 Y -4.00 mm');
   assert.equal(render(true), 'X 3.00 Y -4.00 mm · dx 3.00 dy -4.00 dist 5.00 mm');
   coordinates.resetOrigin();

@@ -84,7 +84,7 @@ const projects = ['First board', 'Second board'].map((name, index) => {
   return native;
 });
 const ids = projects.map(() => crypto.randomUUID());
-const statusLayoutComplete = Symbol('status-layout-complete');
+const focusedLayoutComplete = Symbol('focused-layout-complete');
 let recovery = {
   ...defaultAgentPreferences,
   version: 2,
@@ -189,6 +189,8 @@ try {
       titleBarOverlay: false,
       projectDirectory: async () => ({ entries: [], truncated: false }),
       listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       writeWorkspaceRecovery: async (content) => {
         await fetch('http://localhost/api/state', {
           method: content === null ? 'DELETE' : 'POST',
@@ -250,7 +252,11 @@ try {
   await page.goto('http://localhost');
   for (const file of ['app/globals.css', 'app/workspace.css', 'app/layout-editor.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  for (const file of bundle.outputFiles.filter((file) => file.path.endsWith('.css')))
+    await page.addStyleTag({ content: file.text });
+  await page.addScriptTag({
+    content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
+  });
   const button = (name) => page.getByRole('button', { name, exact: true });
   const checkbox = (name) => page.getByRole('checkbox', { name, exact: true });
   const partsList = page.getByRole('dialog', { name: 'List', exact: true });
@@ -414,6 +420,119 @@ try {
       };
     });
   await page.getByTestId('schematic-canvas').waitFor();
+  const assertGridPopup = async (grid) => {
+    const spacing = await grid.getAttribute('aria-description');
+    assert.match(spacing, /^(?:Off|\d+(?:\.\d+)? mm)$/);
+    assert.equal((await grid.textContent()).trim(), spacing);
+    assert.equal(await grid.locator('svg.lucide-grid3x3').count(), 1);
+    await grid.press('Enter');
+    const list = page.getByRole('listbox', { name: 'Grid density', exact: true });
+    await list.waitFor();
+    assert.equal(
+      await list.getByRole('option', { name: spacing, exact: true }).getAttribute('aria-selected'),
+      'true',
+    );
+    const region = grid.locator(
+      'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " editor-drawing-region ")][1]',
+    );
+    const [menu, footer, drawing] = await Promise.all([
+      list.boundingBox(),
+      grid.locator('xpath=ancestor::footer').boundingBox(),
+      region.boundingBox(),
+    ]);
+    assert.ok(menu.x >= drawing.x && menu.x + menu.width <= drawing.x + drawing.width);
+    assert.ok(menu.y >= drawing.y);
+    assert.ok(Math.abs(footer.y - menu.y - menu.height - 8) <= 1);
+    assert.ok(menu.width >= 88 && menu.width < 104, 'Grid uses a compact option menu.');
+    assert.ok(Math.abs(footer.x + footer.width - menu.x - menu.width - 8) <= 1);
+    const rule = page.getByRole('dialog', { name: 'Rule', exact: true });
+    if (await rule.isVisible()) {
+      const left = await rule.boundingBox();
+      assert.ok(
+        Math.abs(left.x - footer.x - (footer.x + footer.width - menu.x - menu.width)) <= 1,
+        JSON.stringify({ left, menu, footer }),
+      );
+      assert.ok(Math.abs(left.y + left.height - menu.y - menu.height) <= 1);
+    }
+    await grid.press('Escape');
+    await list.waitFor({ state: 'detached' });
+    assert.equal(await grid.evaluate((element) => document.activeElement === element), true);
+  };
+  if (process.argv.includes('--grid-popup')) {
+    const grid = page.getByRole('combobox', { name: 'Grid density', exact: true });
+    const rule = page.getByRole('dialog', { name: 'Rule', exact: true });
+    const assertStatusItems = async () => {
+      await waitForAsync(page, () => {
+        const footer = [...document.querySelectorAll('.status-bar')].find(
+          (element) => element.getClientRects().length && element.querySelector('.grid-density'),
+        );
+        if (!footer) return false;
+        const trigger = footer.querySelector('.grid-density .select-trigger');
+        const counts = footer.querySelector('.rule-status');
+        const coordinate = footer.querySelector('.status-center .status-coordinate');
+        const gridStyle = getComputedStyle(trigger);
+        const countStyle = getComputedStyle(counts);
+        const coordinateStyle = coordinate && getComputedStyle(coordinate);
+        return (
+          gridStyle.backgroundColor !== getComputedStyle(footer).backgroundColor &&
+          countStyle.backgroundColor === gridStyle.backgroundColor &&
+          countStyle.borderRadius === gridStyle.borderRadius &&
+          countStyle.minHeight === gridStyle.minHeight &&
+          (!coordinateStyle ||
+            (coordinateStyle.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+              coordinateStyle.borderTopWidth === '0px'))
+        );
+      });
+      const counts = button('Rule');
+      const [left, right] = await Promise.all([counts.boundingBox(), grid.boundingBox()]);
+      assert.ok(Math.abs(left.y + left.height / 2 - right.y - right.height / 2) <= 1);
+    };
+    releaseFirstModel();
+    for (const view of ['Schematic', 'Layout', 'Model']) {
+      await button(view).click();
+      if (view === 'Model') await ready();
+      await assertStatusItems();
+      await button('Rule').click();
+      await rule.waitFor();
+      await assertGridPopup(grid);
+      await button('Close Rule').click();
+      if (view !== 'Model') {
+        const coordinate = page.locator('.status-bar:visible .status-center .status-coordinate');
+        assert.equal(
+          await coordinate.evaluate((element) => {
+            const coordinateStyle = getComputedStyle(element);
+            const footerStyle = getComputedStyle(element.closest('footer'));
+            const first = element.firstElementChild.getBoundingClientRect();
+            const second = element
+              .querySelector('.status-coordinate-next-axis')
+              .getBoundingClientRect();
+            return (
+              coordinateStyle.fontFamily === footerStyle.fontFamily &&
+              coordinateStyle.fontSize === footerStyle.fontSize &&
+              coordinateStyle.fontWeight === '500' &&
+              coordinateStyle.fontVariantNumeric === 'tabular-nums' &&
+              second.left - first.right >= 8
+            );
+          }),
+          true,
+        );
+      }
+    }
+    await button('Schematic').click();
+    await page.setViewportSize({ width: 1120, height: 740 });
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => {
+      document.activeElement?.blur();
+      document.documentElement.dataset.theme = 'dark';
+    });
+    await assertStatusItems();
+    await assertGridPopup(grid);
+    assert.deepEqual(errors, []);
+    console.log(
+      'PASS: shared footer styling and compact Grid popup placement in Schematic, Layout and Model.',
+    );
+    throw focusedLayoutComplete;
+  }
   if (process.argv.includes('--status-layout')) {
     await button('Source').click();
     const originalNative = await readNativeFiles(page);
@@ -475,16 +594,8 @@ try {
         );
         await page.setViewportSize(originalViewport);
       }
-      const spacing = await grid.evaluate((element) => {
-        const label = element.querySelector(':scope > span[aria-hidden="true"]');
-        const value = element.querySelector('.select-value');
-        return {
-          gap: value.getBoundingClientRect().left - label.getBoundingClientRect().right,
-          align: getComputedStyle(value).textAlign,
-        };
-      });
-      assert.ok(Math.abs(spacing.gap - 4) < 1, `${view} Grid label and value use a compact gap.`);
-      assert.equal(spacing.align, 'left');
+      assert.equal((await grid.textContent()).trim(), await grid.getAttribute('aria-description'));
+      assert.equal(await grid.locator('svg.lucide-grid3x3').count(), 1);
       for (const event of [{ isComposing: true }, { keyCode: 229 }]) {
         await rules.dispatchEvent('keydown', { key: 'Enter', ...event });
         assert.equal(await rules.getAttribute('aria-expanded'), 'false');
@@ -850,7 +961,7 @@ try {
     console.log(
       'PASS: Model drawing-only footer beside independent Properties, control insets, Grid/IME/focus, resize, hidden sidebar and retained view switching.',
     );
-    throw statusLayoutComplete;
+    throw focusedLayoutComplete;
   }
   await openVisualization();
   const schematicVisibilityStyle = await visibilityStyle(visualization);
@@ -1797,7 +1908,7 @@ try {
     'Selection and Visualization: four-mode List/Git toolbar order, retained drawing-mode display drawers, current-mode filter categories, window/drawer bounds at 1120/1480 px in light/dark themes, Escape/focus restoration, Source without display drawers and retained editor/text/selection/undo/dirty invariants passed. Model: orthographic/perspective projection, preserved camera/scale, context-menu/wheel zoom without floating controls, retained scenes/camera/display/selection filters, paused hidden rendering, project/Home/Layout/Source round trips, shared model cache, deferred edits, undo, retry and renderer disposal passed.',
   );
 } catch (cause) {
-  if (cause !== statusLayoutComplete) {
+  if (cause !== focusedLayoutComplete) {
     if (process.argv.includes('--status-layout')) {
       const failedPage = browser.contexts()[0]?.pages()[0];
       await mkdir('test-results', { recursive: true });

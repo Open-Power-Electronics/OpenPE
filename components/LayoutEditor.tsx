@@ -283,6 +283,7 @@ type Props = {
   leftButtonDrag?: LeftButtonDrag;
   gridControl?: ReactNode;
   ruleStatus?: ReactNode;
+  rulePanel?: ReactNode;
   draftStatus?: string;
   agentContextRef?: RefObject<Record<string, unknown> | null>;
 };
@@ -347,6 +348,7 @@ function LayoutEditor({
   leftButtonDrag = defaultLeftButtonDrag,
   gridControl,
   ruleStatus,
+  rulePanel,
   draftStatus,
   agentContextRef,
   capabilityHost,
@@ -5268,6 +5270,7 @@ function LayoutEditor({
               ]}
             />
           </div>
+          {rulePanel}
           <EditorStatusBar
             className="layout-status"
             active={active && visible}

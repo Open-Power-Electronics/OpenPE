@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { uid, type Point } from '../lib/circuit';
 import { invalidatePCBFill, type BoardZone, type Footprint, type PCB } from '../lib/pcb';
-import { createEmptyPCB, padDrillPosition } from '../lib/pcb-layout';
+import { createEmptyPCB, flipPCBFootprint, padDrillPosition } from '../lib/pcb-layout';
 import { copperFillContour, fillCopperZones } from '../lib/pcb-polygons';
 import { defaultPCBDesignRules, runPCBDesignRules } from '../lib/pcb-drc';
 import { projectFromNativeFiles } from '../lib/kicad-project';
@@ -487,16 +487,104 @@ test('pour keepouts tolerate coordinate rounding along a shared sloped boundary'
   assert.equal(issues(board, 'pcb.keepout').length, 1);
 });
 
-test('the actual native EMC Flyback board passes DRC without changing saved copper or files', async () => {
+test('courtyard DRC checks rotated closed contours on their own layer and allows shared edges', () => {
+  const board = fixture();
+  const a = pad(board, 10, 10);
+  const b = pad(board, 10, 13);
+  a.reference = 'U1';
+  b.reference = 'U2';
+  a.rotation = 90;
+  const courtyard = (points: Point[]): Footprint['graphics'] =>
+    points.map((start, index) => ({
+      id: uid(),
+      layer: 'F.CrtYd',
+      width: 0.05,
+      start,
+      end: points[(index + 1) % points.length],
+    }));
+  a.graphics = courtyard(rect(-2, -1, 2, 1));
+  b.graphics = courtyard(rect(-1, -1, 1, 1));
+  assert.deepEqual(issues(board, 'pcb.courtyard-overlap'), []);
+  b.y = 12.5;
+  b.locked = true;
+  const overlap = issues(board, 'pcb.courtyard-overlap');
+  assert.equal(overlap.length, 1);
+  assert.equal(overlap[0].severity, 'error');
+  assert.deepEqual(new Set(overlap[0].objectIds), new Set([a.id, b.id]));
+  assert.match(overlap[0].message, /U1 and U2.*F\.CrtYd/);
+  assert.ok(overlap[0].location!.y >= 11.5 && overlap[0].location!.y <= 12);
+  delete b.locked;
+  board.footprints[1] = flipPCBFootprint(b);
+  assert.deepEqual(issues(board, 'pcb.courtyard-overlap'), []);
+  board.footprints[0] = flipPCBFootprint(a);
+  assert.match(issues(board, 'pcb.courtyard-overlap')[0].message, /B\.CrtYd/);
+
+  a.graphics.pop();
+  board.footprints[0] = a;
+  const malformed = runPCBDesignRules(board);
+  assert.equal(malformed.complete, false);
+  assert.deepEqual(
+    malformed.issues
+      .filter((issue) => issue.ruleId === 'pcb.courtyard-malformed')
+      .map((issue) => [issue.severity, issue.objectIds]),
+    [['error', [a.id]]],
+  );
+});
+
+test('courtyards preserve independent contours and cutouts and reject crossing outlines', () => {
+  const board = fixture();
+  const a = pad(board, 10, 10);
+  const b = pad(board, 10, 10);
+  const shape = (points: Point[]): Footprint['graphics'][number] => ({
+    id: uid(),
+    layer: 'F.CrtYd',
+    kind: 'polygon',
+    start: points[0],
+    end: points.at(-1)!,
+    points: points.slice(1, -1),
+    width: 0.05,
+  });
+  a.graphics = [shape(rect(-4, -4, 4, 4)), shape(rect(-2, -2, 2, 2)), shape(rect(6, 6, 8, 8))];
+  b.graphics = [shape(rect(-1, -1, 1, 1))];
+  assert.deepEqual(issues(board, 'pcb.courtyard-overlap'), []);
+  b.x += 7;
+  b.y += 7;
+  assert.equal(issues(board, 'pcb.courtyard-overlap').length, 1);
+  const [p, q, r, s] = rect(-4, -4, 4, 4);
+  a.graphics[0] = shape([p, r, q, s]);
+  assert.equal(issues(board, 'pcb.courtyard-malformed').length, 1);
+});
+
+test('native EMC Flyback reports the nine KiCad 10.0.1 courtyard pairs without changing files', async () => {
   const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
   const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const native = await readNativeProject(filename);
-  const board = projectFromNativeFiles(native).pcb!;
+  const project = projectFromNativeFiles(native);
+  const board = project.pcb!;
   const before = structuredClone(board);
-  const report = runPCBDesignRules(board);
+  const report = runPCBDesignRules(board, {}, project.schematic);
   assert.equal(report.complete, true);
   assert.equal(report.truncated, false);
-  assert.deepEqual(report.issues, []);
+  const references = new Map(project.schematic.parts.map((part) => [part.id, part.ref]));
+  const byId = new Map(
+    board.footprints.map((f) => [f.id, references.get(f.symbolId ?? '') ?? f.reference]),
+  );
+  assert.ok(
+    report.issues.every(
+      (issue) => issue.ruleId === 'pcb.courtyard-overlap' && issue.severity === 'error',
+    ),
+  );
+  assert.deepEqual(
+    report.issues
+      .map((issue) =>
+        issue.objectIds
+          .map((id) => byId.get(id))
+          .sort()
+          .join('/'),
+      )
+      .sort(),
+    ['C15/D2', 'C15/T1', 'C16/R11', 'C16/SNUB', 'C5/R4', 'D2/R4', 'J1/MH1', 'J3/MH2', 'R4/SNUB'],
+  );
   assert.deepEqual(board, before);
   assert.deepEqual(await readNativeProject(filename), native);
 });

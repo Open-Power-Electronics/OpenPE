@@ -21,6 +21,7 @@ const licensePaths = new Set([
     'thermal',
     'ai-pcb-layout',
     'occt-import-js',
+    'pdf-reader',
     'opencascade',
     'three',
     'three-gpu-pathtracer',
@@ -349,6 +350,7 @@ async function checkAbout(page, errors) {
   const checkBounds = async () => {
     const box = await dialog.boundingBox();
     const viewport = page.viewportSize();
+    assert.ok(Math.abs(box.width - Math.min(560, viewport.width - 48)) <= 1);
     assert.ok(box.x >= 23 && box.y >= 23);
     assert.ok(box.x + box.width <= viewport.width - 23);
     assert.ok(box.y + box.height <= viewport.height - 23);
