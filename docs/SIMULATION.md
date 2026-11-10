@@ -235,6 +235,11 @@ Ideal values accept SI prefixes (`m` milli, `M`/`meg` mega), optional units and 
 
 ## Execution, streaming and completed results
 
+In browser development, Run streams through the authenticated development
+host and accepts supported built-in and prepared allowlisted models. Results
+remain in the current renderer session. Browser runs do not publish native
+artifacts or add portable model references to the design.
+
 The authenticated Run request contains canonical source, validated settings and an optional opaque file ID. The load-only result request can omit settings to discover the latest saved configuration. Neither accepts a renderer deck, executable, native path or adapter flag. The service parses through shared `server/project-format.mjs`, compiles current source through generated `server/spice-format.mjs`, resolves/verifies models and applies allowlisted service-only derivatives before execution/cache identity validation.
 
 One solver runs at a time. Compiler structural bounds are 200 components, 1,000 wires and 1,000 combined labels/junctions. The ideal path also bounds input voltage to 0.01–1,000 V, frequency to 100 Hz–1 MHz and duty to 1–99%; curated models retain their specific electrical limits. Duration and maximum step accept **any finite positive value**. There are no fixed timing ranges, minimum/maximum interval counts, PWM-period checks, estimated-output limits or solver runtime timeout.

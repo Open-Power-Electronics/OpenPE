@@ -60,6 +60,10 @@ function publish(next: typeof snapshot) {
   snapshot = next;
   for (const listener of listeners) listener();
 }
+export function usesBrowserWorkbenchPlugins() {
+  return process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && !window.openpe;
+}
+
 export function loadWorkbenchPlugins(force = false): Promise<WorkbenchPluginCatalog> {
   if (pending) return pending;
   if (!force && snapshot.catalog && Date.now() - snapshot.catalog.updatedAt < 300000)
@@ -231,7 +235,7 @@ export function registerLayoutParasiticsCapability(
     id: 'parasitics.measure',
     kind: 'query',
     description:
-      'Estimate two-terminal DC resistance and shortest modeled path length between same-net pad or via IDs on the current PCB. Copper thickness and via plating are in mm. Inspect Layout for board and endpoint IDs.',
+      'Estimate two-terminal DC resistance, shortest-route length and shortest-route partial inductance (nH, excludes the return path) between same-net pad or via IDs. Copper thickness and via plating are in mm. Inspect Layout for board and endpoint IDs.',
     inputSchema: {
       type: 'object',
       required: ['boardId', 'startId', 'endId'],

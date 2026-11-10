@@ -4,11 +4,12 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Select from './Select';
 
 export function PropertySelect({
+  className,
   displayLabel,
   ...props
-}: React.ComponentProps<typeof Select> & { displayLabel?: string }) {
+}: React.ComponentProps<typeof Select> & { className?: string; displayLabel?: string }) {
   return (
-    <div className="layout-property-select">
+    <div className={className ? `layout-property-select ${className}` : 'layout-property-select'}>
       <span>{displayLabel ?? props.label}</span>
       <Select {...props} />
     </div>

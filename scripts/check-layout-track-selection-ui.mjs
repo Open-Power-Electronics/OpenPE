@@ -310,9 +310,8 @@ try {
     'menu expansion uses the same stages and returns keyboard focus to the canvas',
     async ({ page, canvas, point, clean, expectSelected, allConnected }) => {
       await point({ x: 22.5, y: 20 }, true);
-      await page.getByRole('combobox', { name: 'Edit layout', exact: true }).click();
-      const action = page.getByRole('option', { name: 'Expand track selection', exact: true });
-      assert.equal(await action.innerText(), 'Expand track selection');
+      await canvas.press('Shift+F10');
+      const action = page.getByRole('menuitem', { name: 'Select connected', exact: true });
       await action.click();
       await expectSelected(['a', 'b']);
       assert.equal(await canvas.evaluate((svg) => document.activeElement === svg), true);

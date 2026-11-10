@@ -1525,9 +1525,8 @@ try {
     async ({ board, page, canvas, button, point, state, clean, marker }) => {
       await point({ x: 30, y: 20 }, true);
       const menu = async () => {
-        await page.getByRole('combobox', { name: 'Edit layout', exact: true }).click();
-        const action = page.getByRole('option', { name: 'Drag connected tracks', exact: true });
-        assert.equal(await action.innerText(), 'Drag connected tracks');
+        await canvas.press('Shift+F10');
+        const action = page.getByRole('menuitem', { name: 'Drag tracks', exact: true });
         await action.click();
         assert.equal(await canvas.evaluate((svg) => document.activeElement === svg), true);
       };

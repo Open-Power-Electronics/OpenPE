@@ -66,6 +66,10 @@ try {
   await page.route('http://localhost/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname === '/api/pcb-design/guide') {
+      assert.equal(url.searchParams.get('document'), 'workflow');
+      return route.fulfill({ json: { text: '# Verified workflow fixture' } });
+    }
     if (url.pathname === '/api/workbench-plugins') {
       if (request.method() === 'POST') {
         const operation = request.postDataJSON();
@@ -144,9 +148,15 @@ try {
   await pcbCard.getByRole('button', { name: 'View PE Layout Skill' }).click();
   await page.getByText('Bundled workflow and references', { exact: true }).waitFor();
   assert.match(await page.locator('.plugin-detail').innerText(), /CC BY 4.0/);
+  await page.getByRole('button', { name: 'Read workflow', exact: true }).click();
+  const workflow = page.getByRole('dialog', { name: 'PE Layout Skill workflow', exact: true });
+  await workflow.getByRole('heading', { name: 'Verified workflow fixture' }).waitFor();
+  await page.keyboard.press('Escape');
+  await workflow.waitFor({ state: 'detached' });
   await page.screenshot({ path: 'test-results/plugins-pcb-design.png', animations: 'disabled' });
   await page.getByRole('button', { name: 'Disable', exact: true }).click();
   await page.getByRole('button', { name: 'Enable', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Read workflow', exact: true }).count(), 0);
   assert.equal(await page.getByRole('dialog').count(), 0);
   await page.getByRole('button', { name: 'Enable', exact: true }).click();
   await page.getByRole('button', { name: 'Disable', exact: true }).waitFor();

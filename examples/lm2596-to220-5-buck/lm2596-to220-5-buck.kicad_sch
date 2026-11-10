@@ -1212,13 +1212,13 @@
     (uuid "f824b5fa-6f1b-47e9-be03-35aeda349003"))
   (wire
     (pts
-      (xy 104.14 17.78)
-      (xy 104.14 15.24))
+      (xy 88.9 17.78)
+      (xy 88.9 15.24))
     (uuid "aa7c2d95-18b9-5129-a9b1-150bf9787c0d"))
   (wire
     (pts
-      (xy 104.14 27.94)
-      (xy 104.14 30.48))
+      (xy 88.9 27.94)
+      (xy 88.9 30.48))
     (uuid "6295459f-3668-5b77-a810-75d8e5fb7b21"))
   (wire
     (pts
@@ -1230,11 +1230,6 @@
       (xy 133.35 26.67)
       (xy 133.35 30.48))
     (uuid "76d64824-a311-5a79-a986-7c13069ff1e9"))
-  (wire
-    (pts
-      (xy 96.52 30.48)
-      (xy 104.14 30.48))
-    (uuid "71570b2a-43e7-5b84-add8-e3a026f0fa88"))
   (junction
     (at 105.41 64.77)
     (uuid "29e0a4d4-f776-4624-a580-0480537e02e0"))
@@ -1279,7 +1274,7 @@
         (size 1.27 1.27))
       (justify left bottom)))
   (label "VIN"
-    (at 104.14 15.24 0)
+    (at 88.9 15.24 0)
     (uuid "e150932b-82ab-5859-a5b8-61fb21ac1dcb")
     (effects
       (font
@@ -1288,6 +1283,27 @@
   (label "VOUT"
     (at 133.35 15.24 0)
     (uuid "443c37ed-2f9d-533e-a983-f833a453b1c1")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 88.9 30.48 0)
+    (uuid "911c9e47-5d93-501a-a14e-b90903ce0a34")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VIN"
+    (at 104.14 22.86 0)
+    (uuid "19d96f7c-a03c-50a5-a39a-cf094641b860")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 118.11 22.86 0)
+    (uuid "66573a34-bc8e-52d1-ae14-e6f8fdbbcd81")
     (effects
       (font
         (size 1.27 1.27))
@@ -2092,7 +2108,7 @@
       (hide yes)))
   (symbol
     (lib_id "Simulation_SPICE:VDC")
-    (at 104.14 22.86 0)
+    (at 88.9 22.86 0)
     (unit 1)
     (uuid "f2289c0e-e097-581a-a24d-610075c5da84")
     (instances
@@ -2101,37 +2117,37 @@
           (reference "V1")
           (unit 1))))
     (property "Reference" "V1"
-      (at 107.95 21.66 0)
+      (at 92.71 21.66 0)
       (effects
         (font
           (size 1.27 1.27))
         (justify left)))
     (property "Value" "${SIM.PARAMS}"
-      (at 107.95 24.26 0)
+      (at 92.71 24.26 0)
       (effects
         (font
           (size 1.27 1.27))
         (justify left)))
     (property "Sim.Device" "V"
-      (at 104.14 22.86 0)
+      (at 88.9 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Sim.Type" "DC"
-      (at 104.14 22.86 0)
+      (at 88.9 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Sim.Pins" "1=+ 2=-"
-      (at 104.14 22.86 0)
+      (at 88.9 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Sim.Params" "dc=12"
-      (at 104.14 22.86 0)
+      (at 88.9 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
@@ -2172,7 +2188,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:GND")
-    (at 104.14 30.48 0)
+    (at 88.9 30.48 0)
     (unit 1)
     (uuid "98bd06e8-a874-58b5-a0f6-21b7ac57e8be")
     (in_bom no)
@@ -2182,18 +2198,18 @@
           (reference "#PWR1")
           (unit 1))))
     (property "Reference" "#PWR1"
-      (at 104.14 35.56 0)
+      (at 88.9 35.56 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "GND"
-      (at 104.14 35.56 0)
+      (at 88.9 35.56 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-      (at 104.14 30.48 0)
+      (at 88.9 30.48 0)
       (effects
         (font
           (size 1.27 1.27)))
@@ -2228,7 +2244,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 104.14 15.24 0)
+    (at 104.14 22.86 0)
     (unit 1)
     (uuid "5afe3df9-a443-50b0-af09-c4107771f4a5")
     (in_bom no)
@@ -2238,25 +2254,25 @@
           (reference "#FLG1")
           (unit 1))))
     (property "Reference" "#FLG1"
-      (at 104.14 17.78 0)
+      (at 104.14 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 104.14 17.78 0)
+      (at 104.14 25.4 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 104.14 15.24 0)
+      (at 104.14 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 96.52 30.48 0)
+    (at 118.11 22.86 0)
     (unit 1)
     (uuid "724f1afc-8d02-5c7a-a44c-a29de987aaa6")
     (in_bom no)
@@ -2266,18 +2282,18 @@
           (reference "#FLG2")
           (unit 1))))
     (property "Reference" "#FLG2"
-      (at 96.52 33.02 0)
+      (at 118.11 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 96.52 33.02 0)
+      (at 118.11 25.4 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 96.52 30.48 0)
+      (at 118.11 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))

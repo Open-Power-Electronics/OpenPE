@@ -383,12 +383,16 @@ try {
           await panel.getByRole('button', { name: 'Fill zone', exact: true }).count(),
           kind === 'zone' ? 1 : 0,
         );
+        assert.equal(
+          await panel.getByRole('tab', { name: 'Fill', exact: true }).count(),
+          kind === 'zone' ? 1 : 0,
+        );
         if (kind === 'zone') {
           const tabs = panel.getByRole('tablist', { name: 'Property sections' });
           const general = tabs.getByRole('tab', { name: 'General', exact: true });
           assert.deepEqual(
             await tabs.getByRole('tab').evaluateAll((nodes) => nodes.map((node) => node.title)),
-            ['General'],
+            ['General', 'Fill'],
           );
           assert.equal(await general.locator('svg').count(), 1);
           assert.equal(await general.getAttribute('aria-selected'), 'true');
@@ -400,6 +404,9 @@ try {
           });
           assert.equal(await general.getAttribute('aria-selected'), 'true');
           await general.press('ArrowRight');
+          const fillTab = tabs.getByRole('tab', { name: 'Fill', exact: true });
+          assert.equal(await fillTab.getAttribute('aria-selected'), 'true');
+          await fillTab.press('ArrowLeft');
           assert.equal(await general.getAttribute('aria-selected'), 'true');
           const width = panel
             .getByRole('tabpanel', { name: 'General', exact: true })
@@ -1909,8 +1916,8 @@ try {
     async ({ page, canvas, point, snapshot }) => {
       await point({ x: 20, y: 20 }, true);
       const menuMove = async () => {
-        await page.getByRole('combobox', { name: 'Edit layout', exact: true }).click();
-        await page.getByRole('option', { name: 'Move selection', exact: true }).click();
+        await canvas.press('Shift+F10');
+        await page.getByRole('menuitem', { name: 'Move', exact: true }).click();
         await page.waitForFunction(
           () => document.activeElement === document.querySelector('[data-testid="layout-canvas"]'),
         );

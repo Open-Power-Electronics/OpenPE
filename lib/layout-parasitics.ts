@@ -9,6 +9,7 @@ import {
   trackTouchesPolygon,
 } from './pcb-collision';
 import { preparePCBTrackAnchors, type CenteredPCBTrackAnchor } from './pcb-track-anchors';
+import { routePartialInductanceNh, type InductanceSegment } from './pcb-partial-inductance';
 
 export const PARASITICS_DEFAULTS = { copperThicknessMm: 0.035, viaPlatingMm: 0.025 } as const;
 export const PARASITICS_THICKNESS_RANGE = { min: 0.001, max: 1 } as const;
@@ -28,6 +29,7 @@ export type LayoutParasiticsResult = {
   endLayer: string;
   shortestLengthMm: number;
   shortestResistanceOhm: number;
+  shortestPartialInductanceNh: number | null;
   equivalentResistanceOhm: number;
   copperThicknessMm: number;
   viaPlatingMm: number;
@@ -35,13 +37,17 @@ export type LayoutParasiticsResult = {
 };
 
 type Track = PCB['tracks'][number];
-type Edge = PathItem & { to: number; length: number; resistance: number };
+type Edge = PathItem & { to: number; length: number; resistance: number; conductor: InductanceSegment };
 type Graph = Edge[][];
 const copperResistivityOhmMm = 1.724e-5; // Copper at 20 °C, in Ω·mm.
 const coordinateTolerance = 0.000001; // Millimetres.
 const maxNodes = 256;
 const limitMessage = 'The selected net exceeds the Layout Parasitics analysis limit.';
-const pointsMatch = (a: Point, b: Point) => squaredDistance(a, b) <= coordinateTolerance ** 2;
+function pointsMatch(a: Point, b: Point) {
+  const rounding =
+    Number.EPSILON * Math.max(Math.abs(a.x), Math.abs(a.y), Math.abs(b.x), Math.abs(b.y));
+  return squaredDistance(a, b) <= (coordinateTolerance + rounding) ** 2;
+}
 
 function bounds(points: readonly Point[], radius = 0) {
   return {
@@ -68,18 +74,76 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
   };
   const trackBounds = tracks.map(({ start, end, width }) => bounds([start, end], width / 2));
   const anchorBounds = anchors.map(({ polygon }) => bounds(polygon.outer));
+  const contours = anchors.map(({ polygon }) => polygonEdges(polygon));
+  const contacts = new Map<string, Partial<Record<'start' | 'end', CenteredPCBTrackAnchor>>>();
+  for (const [index, track] of tracks.entries()) {
+    for (const [anchorIndex, anchor] of anchors.entries()) {
+      spend();
+      if (!anchor.layers.includes(track.layer)) continue;
+      const joinsCenter =
+        pointsMatch(track.start, anchor.center) || pointsMatch(track.end, anchor.center);
+      if (!joinsCenter && !mayTouch(trackBounds[index], anchorBounds[anchorIndex])) continue;
+      const capRadius = Math.max(0, track.width / 2 - coordinateTolerance);
+      const ends = (['start', 'end'] as const).filter(
+        (end) =>
+          pointsMatch(track[end], anchor.center) ||
+          insidePolygon(track[end], anchor.polygon, spend) ||
+          contours[anchorIndex].some(([a, b]) => {
+            spend();
+            return pointSegmentDistance(track[end], a, b) < capRadius ** 2;
+          }),
+      );
+      if (!trackTouchesPolygon(track, anchor.polygon, spend)) {
+        if (ends.length) throw new Error('A track endpoint has no copper contact at its pad or via.');
+        continue;
+      }
+      if (!ends.length)
+        throw new Error('Track copper must connect to a pad or via through a track endpoint.');
+      const contact = contacts.get(track.id) ?? {};
+      for (const end of ends) {
+        if (contact[end]) throw new Error('A track endpoint contacts multiple pads or vias.');
+        contact[end] = anchor;
+      }
+      contacts.set(track.id, contact);
+    }
+  }
   const trackContactMessage =
     'Track copper must join at a shared endpoint without overlapping segments.';
   for (const [index, track] of tracks.entries()) {
     for (let next = index + 1; next < tracks.length; next++) {
       spend();
       const other = tracks[next];
-      if (track.layer !== other.layer || !mayTouch(trackBounds[index], trackBounds[next])) continue;
+      const a = trackBounds[index];
+      const b = trackBounds[next];
+      if (track.layer !== other.layer || !mayTouch(a, b)) continue;
       const distance = segmentDistance(track.start, track.end, other.start, other.end);
       if (distance > ((track.width + other.width) / 2 + coordinateTolerance) ** 2) continue;
       const sharedStart =
         pointsMatch(track.start, other.start) || pointsMatch(track.start, other.end);
       const sharedEnd = pointsMatch(track.end, other.start) || pointsMatch(track.end, other.end);
+      if (!sharedStart && !sharedEnd && distance > coordinateTolerance ** 2) {
+        const first = contacts.get(track.id);
+        const second = contacts.get(other.id);
+        const left = Math.max(a.left, b.left) - coordinateTolerance;
+        const right = Math.min(a.right, b.right) + coordinateTolerance;
+        const top = Math.max(a.top, b.top) - coordinateTolerance;
+        const bottom = Math.min(a.bottom, b.bottom) + coordinateTolerance;
+        // The convex land contains the entire overlap bound if it contains its
+        // four corners. The accepted endpoint contacts already share its node.
+        if (
+          [first?.start, first?.end].some((anchor) => {
+            if (!anchor || (anchor !== second?.start && anchor !== second?.end)) return false;
+            const land = { outer: anchor.polygon.outer, holes: [] };
+            return [
+              { x: left, y: top },
+              { x: right, y: top },
+              { x: right, y: bottom },
+              { x: left, y: bottom },
+            ].every((point) => insidePolygon(point, land, spend));
+          })
+        )
+          continue;
+      }
       if (sharedStart === sharedEnd) throw new Error(trackContactMessage);
       const freeEnd = sharedStart ? track.end : track.start;
       const joint = sharedStart ? track.start : track.end;
@@ -93,19 +157,7 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
       )
         throw new Error(trackContactMessage);
     }
-    for (const [anchorIndex, anchor] of anchors.entries()) {
-      spend();
-      if (!anchor.layers.includes(track.layer)) continue;
-      const joinsCenter =
-        pointsMatch(track.start, anchor.center) || pointsMatch(track.end, anchor.center);
-      const touchesCopper =
-        mayTouch(trackBounds[index], anchorBounds[anchorIndex]) &&
-        trackTouchesPolygon(track, anchor.polygon, spend);
-      if (touchesCopper !== joinsCenter)
-        throw new Error('Track copper must connect to a pad or via at its center.');
-    }
   }
-  const contours = anchors.map(({ polygon }) => polygonEdges(polygon));
   for (const [index, anchor] of anchors.entries()) {
     for (let next = index + 1; next < anchors.length; next++) {
       spend();
@@ -127,6 +179,7 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
         throw new Error('Overlapping pads or vias are outside the Layout Parasitics model.');
     }
   }
+  return contacts;
 }
 
 function shortestPath(graph: Graph, start: number, end: number) {
@@ -150,14 +203,21 @@ function shortestPath(graph: Graph, start: number, end: number) {
   if (!Number.isFinite(distances[end]))
     throw new Error('The selected terminals are disconnected in the modeled copper.');
   const reversed: PathItem[] = [];
+  const conductors: InductanceSegment[] = [];
   let resistance = 0;
   for (let node = end; node !== start;) {
     const { from, edge } = predecessors[node]!;
     resistance += edge.resistance;
+    conductors.push(edge.conductor);
     if (reversed.at(-1)?.id !== edge.id) reversed.push({ id: edge.id, kind: edge.kind });
     node = from;
   }
-  return { length: distances[end], resistance, path: reversed.reverse() };
+  return {
+    length: distances[end],
+    resistance,
+    partialInductanceNh: routePartialInductanceNh(conductors.reverse()),
+    path: reversed.reverse(),
+  };
 }
 
 /** Eliminate internal nodes using conductance so branches and parallel edges combine. */
@@ -232,7 +292,7 @@ export function analyzeLayoutParasitics(
   if (anchors.length > maxNodes) throw new Error(limitMessage);
   if (!anchors.some(({ id }) => id === startId) || !anchors.some(({ id }) => id === endId))
     throw new Error('Choose two pads or vias with enabled copper layers.');
-  checkContacts(tracks, anchors);
+  const contacts = checkContacts(tracks, anchors);
 
   const graph: Graph = [];
   const nodesByLayer = new Map<string, { point: Point; node: number }[]>(
@@ -242,35 +302,57 @@ export function analyzeLayoutParasitics(
     if (graph.length === maxNodes) throw new Error(limitMessage);
     return graph.push([]) - 1;
   };
-  const nodeAt = (layer: string, point: Point) => {
+  const nodeAt = (layer: string, point: Point, anchorNode?: number) => {
     const locations = nodesByLayer.get(layer)!;
     const matches = locations.filter((entry) => pointsMatch(entry.point, point));
-    if (matches.length > 1) throw new Error('Copper junction coordinates are ambiguous.');
+    if (
+      matches.length > 1 ||
+      (matches.length && anchorNode !== undefined && matches[0].node !== anchorNode)
+    )
+      throw new Error('Copper junction coordinates are ambiguous.');
     if (matches.length) return matches[0].node;
-    const node = addNode();
+    const node = anchorNode ?? addNode();
     locations.push({ point, node });
     return node;
   };
-  const addEdge = (from: number, to: number, length: number, area: number, item: PathItem) => {
+  const addEdge = (
+    from: number,
+    to: number,
+    length: number,
+    area: number,
+    item: PathItem,
+    conductor: InductanceSegment,
+  ) => {
     const resistance = (copperResistivityOhmMm * length) / area;
     if (from === to || !Number.isFinite(resistance) || resistance <= 0)
       throw new Error('A copper segment has unusable dimensions.');
-    graph[from].push({ ...item, to, length, resistance });
-    graph[to].push({ ...item, to: from, length, resistance });
+    graph[from].push({ ...item, to, length, resistance, conductor });
+    graph[to].push({
+      ...item,
+      to: from,
+      length,
+      resistance,
+      conductor: { ...conductor, start: conductor.end, end: conductor.start },
+    });
   };
   const terminals = new Map<string, { node: number; layer: string }>();
   const viaById = new Map(vias.map((via) => [via.id, via]));
+  const layerGap = board.thickness / (board.layers.length - 1);
+  const layerZ = (layer: string) => board.layers.findIndex((id) => id === layer) * layerGap;
   for (const { id, center, layers } of anchors) {
     const via = viaById.get(id);
     if (via) {
       if (viaPlatingMm > (via.diameter - via.drill) / 2)
         throw new Error('Via plating thickness must fit the selected net’s via annuli.');
-      const gap = board.thickness / (board.layers.length - 1);
       const area = Math.PI * viaPlatingMm * (via.drill + viaPlatingMm);
       const nodes = layers.map((layer) => nodeAt(layer, center));
       terminals.set(id, { node: nodes[0], layer: layers[0] });
       for (let index = 1; index < nodes.length; index++)
-        addEdge(nodes[index - 1], nodes[index], gap, area, { id, kind: 'via' });
+        addEdge(nodes[index - 1], nodes[index], layerGap, area, { id, kind: 'via' }, {
+          start: { ...center, z: layerZ(layers[index - 1]) },
+          end: { ...center, z: layerZ(layers[index]) },
+          radius: (via.drill + viaPlatingMm) / 2,
+        });
     } else {
       const node = addNode();
       for (const layer of layers) nodesByLayer.get(layer)!.push({ point: center, node });
@@ -280,14 +362,31 @@ export function analyzeLayoutParasitics(
       });
     }
   }
-  for (const { id, start, end, width, layer } of tracks)
+  // Every track at the same physical junction shares an accepted pad contact,
+  // including a narrower track whose own cap stops short of the pad copper.
+  for (const { id, start, end, layer } of tracks) {
+    const contact = contacts.get(id);
+    if (contact?.start) nodeAt(layer, start, nodeAt(layer, contact.start.center));
+    if (contact?.end) nodeAt(layer, end, nodeAt(layer, contact.end.center));
+  }
+  for (const { id, start, end, width, layer } of tracks) {
+    const from = nodeAt(layer, start);
+    const to = nodeAt(layer, end);
+    // An ideal pad or annulus already connects both ends of this track.
+    if (from === to && !pointsMatch(start, end)) continue;
     addEdge(
-      nodeAt(layer, start),
-      nodeAt(layer, end),
+      from,
+      to,
       Math.sqrt(squaredDistance(start, end)),
       width * copperThicknessMm,
       { id, kind: 'track' },
+      {
+        start: { ...start, z: layerZ(layer) },
+        end: { ...end, z: layerZ(layer) },
+        radius: Math.exp(-1.5) * (width + copperThicknessMm),
+      },
     );
+  }
   const start = terminals.get(startId)!;
   const end = terminals.get(endId)!;
   const shortest = shortestPath(graph, start.node, end.node);
@@ -298,6 +397,7 @@ export function analyzeLayoutParasitics(
     endLayer: end.layer,
     shortestLengthMm: shortest.length,
     shortestResistanceOhm: shortest.resistance,
+    shortestPartialInductanceNh: shortest.partialInductanceNh,
     equivalentResistanceOhm: equivalentResistance(graph, start.node, end.node),
     copperThicknessMm,
     viaPlatingMm,

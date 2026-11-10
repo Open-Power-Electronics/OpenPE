@@ -110,8 +110,15 @@ try {
   assert.equal(await panel.getByRole('checkbox', { name: 'Filled', exact: true }).count(), 0);
   await panel.getByRole('button', { name: 'Fill zone', exact: true }).waitFor();
   const general = panel.getByRole('tabpanel', { name: 'General', exact: true });
-  const clearance = general.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
-  const minimumWidth = general.getByRole('spinbutton', { name: 'Minimum width (mm)', exact: true });
+  assert.equal(
+    await general.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).count(),
+    0,
+  );
+  const fillTab = panel.getByRole('tab', { name: 'Fill', exact: true });
+  await fillTab.click();
+  const fillSettings = panel.getByRole('tabpanel', { name: 'Fill', exact: true });
+  const clearance = fillSettings.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
+  const minimumWidth = fillSettings.getByRole('spinbutton', { name: 'Minimum width (mm)', exact: true });
   assert.equal(await minimumWidth.isVisible(), true);
   const initialClearance = await clearance.inputValue();
   await clearance.fill('0.4');
@@ -216,6 +223,7 @@ try {
     assert.deepEqual((await state()).board, filled.board);
   }
   await page.mouse.click(screen.x, screen.y);
+  await fillTab.click();
   await clearance.fill('0.5');
   await clearance.press('Enter');
   assert.equal((await state()).undoDepth, 3);

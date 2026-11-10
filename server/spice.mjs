@@ -323,9 +323,10 @@ export function registerSpice(
   resultFiles,
   resultLoader = findSimulationResult,
   projectRoot,
+  preparedModelRoot,
 ) {
   const modelStore = dataDir
-    ? createSimulationModelStore(dataDir, modelFetcher, projectRoot)
+    ? createSimulationModelStore(dataDir, modelFetcher, projectRoot, preparedModelRoot)
     : undefined;
   const offlineModelStore = dataDir
     ? createSimulationModelStore(
@@ -338,6 +339,7 @@ export function registerSpice(
           throw error;
         },
         projectRoot,
+        preparedModelRoot,
       )
     : undefined;
   let active = null;

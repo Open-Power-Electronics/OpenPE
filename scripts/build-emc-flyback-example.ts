@@ -13,13 +13,13 @@ import {
 import { parseKiCadPCB } from '../lib/kicad-pcb';
 import { runPCBDesignRules } from '../lib/pcb-drc';
 import { runSchematicERC } from '../lib/schematic-erc';
-import { libraries, type Circuit } from '../lib/circuit';
-import { createLibraryPart } from '../lib/library';
+import { snap, type Circuit } from '../lib/circuit';
 import { offsetPolygons } from '../lib/pcb-polygons';
 import { parseSExpr, child, children, val, quote, writeSExpr, type SExpr } from '../lib/sexpr';
 import { KICAD_SCHEMATIC_VERSION } from '../lib/kicad-version';
 import { MODEL_CAD_EXTENSION } from '../lib/model-cad';
 import { arrangeExampleText } from '../lib/example-layout';
+import { addLabeledPowerFlag } from './example-power-flags';
 import { emcFlybackModelCad } from './emc-flyback-model-cad';
 import { emcFlybackPassiveValue, prepareEmcFlybackValues } from './emc-flyback-values';
 import { homeExampleNativePath } from '../lib/home-examples';
@@ -67,30 +67,32 @@ function stableUpgrade(source: string) {
 }
 
 function prepareSchematicERC(circuit: Circuit) {
-  const flagLibrary = 'power:PWR_FLAG';
-  circuit.libraries[flagLibrary] = structuredClone(libraries[flagLibrary]);
-  // Declare the rails at the existing test points, with room for the flags
-  // beside the labels and ground symbols inside the test-point panel.
-  for (const [ref, rail, x, y, rotation] of [
-    ['VBUS', 'VBUS', 106.68, 114.3, 90],
-    ['VOUT', 'VOUT', 119.38, 114.3, 90],
-    ['PGND1', 'PGND', 137.16, 111.76, 0],
-    ['SGND', 'SGND', 162.56, 111.76, 0],
-    ['CHAS', 'CHASSIS', 175.26, 111.76, 0],
-  ] as const) {
+  // The voltage test points already carry rail labels. Add the three return
+  // labels at their test points and stagger the flags between the bench columns.
+  for (const [ref, rail] of [
+    ['PGND1', 'PGND'],
+    ['SGND', 'SGND'],
+    ['CHAS', 'CHASSIS'],
+  ]) {
     const point = circuit.parts.find((part) => part.ref === ref && part.value === rail);
     if (!point) throw new Error(`Missing the EMC Flyback ${rail} test point.`);
-    const flag = createLibraryPart(circuit, circuit.libraries[flagLibrary], x, y);
-    flag.id = stable(`power-flag:${rail}`);
-    flag.rotation = rotation;
-    flag.excludeFromSimulation = true;
-    circuit.parts.push(flag);
-    if (rotation === 0)
-      circuit.wires.push({
-        id: stable(`power-flag:${rail}:lead`),
-        a: { x: point.x, y: point.y },
-        b: { x, y },
-      });
+    circuit.labels.push({
+      id: stable(`power-flag:${rail}:rail-label`),
+      x: point.x,
+      y: point.y,
+      text: rail,
+    });
+  }
+  for (const [rail, benchRef] of [
+    ['VBUS', 'V1'],
+    ['VOUT', 'R22'],
+    ['PGND', 'R21'],
+    ['SGND', 'I1'],
+    ['CHASSIS', 'V2'],
+  ]) {
+    const device = circuit.parts.find((part) => part.ref === benchRef)!;
+    const position = { x: snap(device.x + 38.1), y: device.y };
+    addLabeledPowerFlag(circuit, rail, position, stable).excludeFromSimulation = true;
   }
 
   // Publish the older embedded drawings in the project library. Keep the
@@ -395,8 +397,8 @@ project.schematic.title = 'EMC Flyback';
 child(project.schematic.original!, 'version')![1] = KICAD_SCHEMATIC_VERSION;
 prepareEmcFlybackValues(project.schematic);
 prepareEmcFlybackModelBindings(project.schematic);
-arrangeExampleText(project.schematic, 'emc-flyback-demo');
 prepareEmcFlybackTestbench(project.schematic);
+arrangeExampleText(project.schematic, 'emc-flyback-demo');
 const localSymbols = prepareSchematicERC(project.schematic);
 const erc = runSchematicERC(project.schematic);
 if (!erc.complete || erc.issues.length)

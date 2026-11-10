@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
-import { X } from 'lucide-react';
+import { LoaderCircle, RotateCcw, Ruler, X } from 'lucide-react';
 import type { CapabilityHost } from '@/api/capabilities';
+import type { Circuit } from '@/lib/circuit';
 import {
   PARASITICS_DEFAULTS,
   PARASITICS_THICKNESS_RANGE,
@@ -11,7 +12,10 @@ import QuantityInput from './QuantityInput';
 import { readQuantity } from './quantity-units';
 
 const { min, max } = PARASITICS_THICKNESS_RANGE;
-const numberFormat = new Intl.NumberFormat('en', { maximumSignificantDigits: 6 });
+const numberFormat = new Intl.NumberFormat('en', {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+});
 
 type Measurement = { board: PCB; revision: number } & (
   | { status: 'pending' }
@@ -19,8 +23,28 @@ type Measurement = { board: PCB; revision: number } & (
   | { status: 'complete'; result: LayoutParasiticsResult }
 );
 
+function describeTerminal(board: PCB, schematic: Circuit, id?: string) {
+  if (!id) return;
+  const via = board.vias.find((item) => item.id === id);
+  if (via)
+    return {
+      label: `Via · X ${numberFormat.format(via.x)}, Y ${numberFormat.format(via.y)} mm`,
+      netId: via.netId,
+    };
+  for (const footprint of board.footprints) {
+    const pad = footprint.pads.find((item) => item.id === id);
+    if (!pad) continue;
+    const reference =
+      schematic.parts.find((part) => part.id === footprint.symbolId)?.ref ??
+      footprint.reference ??
+      footprint.libraryId;
+    return { label: `${reference} · Pad ${pad.number || '—'}`, netId: pad.netId };
+  }
+}
+
 export default function LayoutParasiticsPanel({
   board,
+  schematic,
   host,
   revision,
   startId,
@@ -30,6 +54,7 @@ export default function LayoutParasiticsPanel({
   onClose,
 }: {
   board: PCB;
+  schematic: Circuit;
   host: CapabilityHost;
   revision: number;
   startId?: string;
@@ -62,6 +87,9 @@ export default function LayoutParasiticsPanel({
   const current =
     measurement?.board === board && measurement.revision === revision ? measurement : null;
   const pending = current?.status === 'pending';
+  const start = describeTerminal(board, schematic, startId);
+  const end = describeTerminal(board, schematic, endId);
+  const netName = start && board.nets.find((net) => net.id === start.netId)?.name;
   const ready = !!startId && !!endId && startId !== endId && copperValid && platingValid;
 
   function invalidate() {
@@ -111,7 +139,11 @@ export default function LayoutParasiticsPanel({
       onPointerDownCapture={guardComposingButton}
       onClickCapture={guardComposingButton}
       onKeyDownCapture={(event) => {
-        if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+        if (
+          composing.current ||
+          event.nativeEvent.isComposing ||
+          event.nativeEvent.keyCode === 229
+        ) {
           if (event.target instanceof HTMLButtonElement) event.preventDefault();
           event.stopPropagation();
         }
@@ -130,88 +162,130 @@ export default function LayoutParasiticsPanel({
         </button>
       </header>
       <div className="layout-parasitics-body">
-        <p className="layout-parasitics-status" role="status">
-          {endId
-            ? 'Two terminals selected'
-            : startId
-              ? 'Click a second terminal on the same net'
-              : 'Click a pad or via on the board'}
-        </p>
-        <label className="layout-field">
-          <span>Copper thickness</span>
-          <QuantityInput
-            unit="mm"
-            aria-label="Copper thickness"
-            aria-invalid={!copperValid}
-            value={copper}
-            onValueChange={(value) => {
-              invalidate();
-              setCopper(value);
-            }}
-          />
-        </label>
-        <label className="layout-field">
-          <span>Via plating thickness</span>
-          <QuantityInput
-            unit="mm"
-            aria-label="Via plating thickness"
-            aria-invalid={!platingValid}
-            value={plating}
-            onValueChange={(value) => {
-              invalidate();
-              setPlating(value);
-            }}
-          />
-        </label>
-        {(!copperValid || !platingValid) && (
-          <p className="dialog-error" role="alert">
-            Enter thicknesses from {min} to {max} mm.
-          </p>
-        )}
+        <div className="layout-property-section">
+          <h3>Geometry</h3>
+          <div className="layout-property-grid layout-parasitics-settings">
+            <label className="layout-field">
+              <span>Copper thickness</span>
+              <QuantityInput
+                unit="mm"
+                aria-label="Copper thickness"
+                aria-invalid={!copperValid}
+                value={copper}
+                onValueChange={(value) => {
+                  invalidate();
+                  setCopper(value);
+                }}
+              />
+            </label>
+            <label className="layout-field">
+              <span>Via plating thickness</span>
+              <QuantityInput
+                unit="mm"
+                aria-label="Via plating thickness"
+                aria-invalid={!platingValid}
+                value={plating}
+                onValueChange={(value) => {
+                  invalidate();
+                  setPlating(value);
+                }}
+              />
+            </label>
+          </div>
+          {(!copperValid || !platingValid) && (
+            <p className="dialog-error" role="alert">
+              Enter thicknesses from {min} to {max} mm.
+            </p>
+          )}
+        </div>
+        <div className="layout-property-section">
+          <h3>Terminals</h3>
+          <dl className="layout-parasitics-readout layout-parasitics-terminals">
+            <div>
+              <dt>
+                Terminal{' '}
+                <span className="layout-parasitics-badge" data-picked={!!start}>
+                  1
+                </span>
+              </dt>
+              <dd>{start?.label ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>
+                Terminal{' '}
+                <span className="layout-parasitics-badge" data-picked={!!end}>
+                  2
+                </span>
+              </dt>
+              <dd>{end?.label ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Net</dt>
+              <dd>{netName ?? '—'}</dd>
+            </div>
+          </dl>
+        </div>
+        <ParasiticsResult result={current?.status === 'complete' ? current.result : undefined} />
         {current?.status === 'error' && (
           <p className="dialog-error" role="alert">
             {current.message}
           </p>
         )}
-        {current?.status === 'complete' && <ParasiticsResult result={current.result} />}
       </div>
       <footer className="layout-parasitics-actions">
-        <button type="button" className="dialog-button" disabled={!startId} onClick={onReset}>
-          Reset
+        <button
+          type="button"
+          className="dialog-button quiet analysis-footer-button"
+          aria-label="Reset"
+          title="Reset"
+          disabled={!startId}
+          onClick={onReset}
+        >
+          <RotateCcw aria-hidden="true" />
         </button>
         <button
           type="button"
-          className="dialog-button primary analysis-run-button"
+          className="dialog-button quiet analysis-footer-button"
+          aria-label={pending ? 'Measuring…' : 'Measure'}
+          title={pending ? 'Measuring…' : 'Measure'}
           disabled={!ready || pending}
           onClick={() => void measure()}
         >
-          {pending ? 'Measuring…' : 'Measure'}
+          {pending ? (
+            <LoaderCircle className="spin" aria-hidden="true" />
+          ) : (
+            <Ruler aria-hidden="true" />
+          )}
         </button>
       </footer>
     </section>
   );
 }
 
-function ParasiticsResult({ result }: { result: LayoutParasiticsResult }) {
+function ParasiticsResult({ result }: { result?: LayoutParasiticsResult }) {
+  const inductance = result?.shortestPartialInductanceNh;
   return (
-    <div role="status">
-      <dl className="layout-parasitics-results">
+    <div className="layout-property-section" role="status">
+      <h3>Results</h3>
+      <dl className="layout-parasitics-readout layout-parasitics-results">
         <div>
-          <dt>Equivalent DC resistance</dt>
-          <dd>{numberFormat.format(result.equivalentResistanceOhm * 1000)} mΩ</dd>
+          <dt title="Shortest route length">Distance</dt>
+          <dd>{result ? `${numberFormat.format(result.shortestLengthMm)} mm` : '—'}</dd>
         </div>
         <div>
-          <dt>Shortest route length</dt>
-          <dd>{numberFormat.format(result.shortestLengthMm)} mm</dd>
-        </div>
-        <div>
-          <dt>Resistance on shortest route</dt>
-          <dd>{numberFormat.format(result.shortestResistanceOhm * 1000)} mΩ</dd>
-        </div>
-        <div>
-          <dt>Start and end layers</dt>
+          <dt title="Equivalent DC resistance">Resistance</dt>
           <dd>
-            {result.startLayer} → {result.endLayer}
+            {result ? `${numberFormat.format(result.equivalentResistanceOhm * 1000)} mΩ` : '—'}
+          </dd>
+        </div>
+        <div>
+          <dt title="Shortest-route estimate excluding the return path">Partial inductance</dt>
+          <dd>
+            {inductance === undefined
+              ? '—'
+              : inductance === null
+                ? 'Outside model'
+                : `${numberFormat.format(inductance)} nH`}
           </dd>
         </div>
       </dl>

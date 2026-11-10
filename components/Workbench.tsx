@@ -4718,6 +4718,7 @@ export default function Workbench({
                             <Suspense fallback={null}>
                               <LayoutParasiticsPanel
                                 board={project.pcb}
+                                schematic={project.schematic}
                                 host={capabilityHost}
                                 revision={coreSnapshot.revision}
                                 startId={parasiticsTerminals[0]?.id}
@@ -5112,6 +5113,7 @@ export default function Workbench({
               waveformHost={waveformHost}
               onWaveformVisibilityChange={setWaveformRequested}
               onStoreModels={(models, expectedSource) => {
+                if (!window.openpe) return true;
                 const latest = projectRef.current;
                 if (
                   !latest ||

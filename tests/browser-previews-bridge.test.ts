@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { api } from '../lib/bridge';
 
-test('browser bridge bootstraps only geometry previews, shares a session and reacquires expired tokens on explicit retry', async (t) => {
+test('browser bridge routes bounded previews and plugins through one retryable session', async (t) => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
   const calls: { path: string; options: RequestInit }[] = [];
@@ -42,6 +42,24 @@ test('browser bridge bootstraps only geometry previews, shares a session and rea
         { path: '/api/browser-preview/model', method: 'POST', body: { id, index: 0 } },
       ],
     );
+    await api('workbench-plugins');
+    await api('pcb-design/guide?document=workflow');
+    await api('simulation/transient', {
+      method: 'POST',
+      body: '{"source":"fixture","config":{}}',
+      headers: { Accept: 'text/event-stream' },
+    });
+    assert.deepEqual(
+      calls.slice(-3).map(({ path }) => path),
+      [
+        '/api/browser-preview/plugin/catalog',
+        '/api/browser-preview/plugin/guide?document=workflow',
+        '/api/browser-preview/plugin/spice-run',
+      ],
+    );
+    assert.equal(new Headers(calls.at(-1)!.options.headers).get('Accept'), 'text/event-stream');
+    await api('plugins?provider=codex&refresh=true');
+    assert.equal(calls.at(-1)!.path, '/api/browser-preview/plugin/provider-list?provider=codex&refresh=true');
     const beforeDenied = calls.length;
     for (const route of [
       `library-model?id=${encodeURIComponent(id)}&index=0&path=C:/secret.step`,
@@ -50,6 +68,9 @@ test('browser bridge bootstraps only geometry previews, shares a session and rea
       'libraries/footprints?q=anything',
       'component-model',
       'component-model/library',
+      'plugins?provider=codex&path=arbitrary',
+      'simulation/result',
+      'thermal/spice-sources',
     ])
       await assert.rejects(api(route), /Electron/);
     assert.equal(calls.length, beforeDenied);

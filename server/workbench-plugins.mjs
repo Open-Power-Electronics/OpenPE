@@ -33,7 +33,7 @@ export function bundledWorkbenchCatalog() {
 // Bundled, allowlisted application features only. Installing activates packaged
 // resources; no provider command, renderer path or downloaded code is executed.
 export function createWorkbenchPlugins(dataDir, options = {}) {
-  const file = path.join(dataDir, 'workbench-plugins-v1.json');
+  const file = dataDir === null ? null : path.join(dataDir, 'workbench-plugins-v1.json');
   let tail = Promise.resolve();
   let state;
   let reading;
@@ -47,6 +47,7 @@ export function createWorkbenchPlugins(dataDir, options = {}) {
   }
   async function readState() {
     if (state) return state;
+    if (!file) return (state = catalog.map(({ id }) => ({ id, installed: true, enabled: true })));
     let handle;
     try {
       handle = await open(file, 'r');
@@ -141,25 +142,26 @@ export function createWorkbenchPlugins(dataDir, options = {}) {
                 enabled: action === 'install' || action === 'enable',
               },
         );
-        const temp = `${file}.${randomUUID()}.tmp`;
-        try {
-          await (options.write || writeFile)(temp, JSON.stringify({ version: 1, plugins: next }), {
-            flag: 'wx',
-          });
-          if (signal?.aborted)
-            throw new Error('Plugin operation cancelled. Refresh to check its state.');
-          await rename(temp, file);
-          state = next;
-          const changed = next.find((row) => row.id === id);
-          for (const listener of listeners) {
-            try {
-              // Observers cannot alter the confirmed lifecycle state or prevent
-              // other features from cancelling work after this write commits.
-              listener(id, { ...changed });
-            } catch {}
+        if (file) {
+          const temp = `${file}.${randomUUID()}.tmp`;
+          try {
+            await (options.write || writeFile)(temp, JSON.stringify({ version: 1, plugins: next }), {
+              flag: 'wx',
+            });
+            if (signal?.aborted)
+              throw new Error('Plugin operation cancelled. Refresh to check its state.');
+            await rename(temp, file);
+          } finally {
+            await unlink(temp).catch(() => {});
           }
-        } finally {
-          await unlink(temp).catch(() => {});
+        }
+        state = next;
+        const changed = next.find((row) => row.id === id);
+        for (const listener of listeners) {
+          try {
+            // Observers cannot alter confirmed lifecycle state or prevent cancellation.
+            listener(id, { ...changed });
+          } catch {}
         }
         return { ok: true };
       });

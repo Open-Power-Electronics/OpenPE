@@ -640,8 +640,9 @@ contours and rules, including when an intermediate candidate cleared its fills.
 Unrelated captions, models, locks, viewing, opening and saving retain native fills;
 Source applies the entered native contours without automatic refill.
 Bounded Clipper geometry clips closed
-edges/cutouts, subtracts foreign copper and holes, resolves priority and
-creates solid/thermal contacts. Each rule area's **Pour clearance (mm)** in
+edges/cutouts, subtracts foreign copper and drill exclusions, resolves priority
+and creates solid/thermal contacts. Same-net plated drills remain separate
+from the stored zone contours. Each rule area's **Pour clearance (mm)** in
 **Fill** extends its copper-pour exclusion on the same layer by 0–1,000 mm.
 At 0 mm the exclusion follows the rule area outline. The setting applies when
 **Keep out copper pours** is enabled and is independent of zone-to-copper
@@ -651,10 +652,11 @@ Curves use nominal 0.01 mm tessellation within caps. Copper avoidance uses
 finer round offsets and expands the exclusion polygons to cover chord and
 coordinate rounding. Circular pads and vias use enclosing polygons. Minimum-width
 pruning also removes short remnants before the surviving copper expands. For
-zones with an explicit Always or Never island rule, a bounded same-net copper
+zones with an Always or Never island rule, a bounded same-net copper
 partition finds pieces connected to pads through tracks, plated pads, vias and
 other pours. When a zone has a connected piece, Always drops its disconnected
-pieces and Never keeps them with native island markers. A wholly disconnected
+pieces and Never keeps them with native island markers. An omitted native
+island rule defaults to Always. A wholly disconnected
 zone retains its pieces. Area-based island pruning and exact KiCad contour
 generation are outside the editor's fill operation. Invalid, open or excessive
 geometry fails.
@@ -1254,12 +1256,18 @@ not generic automation commands. Native writes still require grants/pickers.
 
 The bundled Layout Parasitics plugin estimates two-terminal DC resistance on the
 current accepted PCB. Select two distinct copper pads or through vias on the same
-assigned net. The measurement uses a pad's center and the front copper layer of
-a selected via. It treats pads as ideal conductors, including the layer connections
-within a plated through-hole pad, on their enabled copper layers.
+assigned net. The measurement treats pads as ideal conductors, including the
+layer connections within a plated through-hole pad, on their enabled copper
+layers. A selected via uses its front copper layer as the terminal.
 
-The bounded network uses straight track centerlines with shared endpoints or
-endpoints coincident with pad/via centers within 1 nm. Each track contributes
+The bounded network uses straight track centerlines with shared endpoints within
+1 nm. A track endpoint inside pad copper or a via annulus connects to that
+conductor on the track's layer. A rounded endpoint cap with positive overlap
+beyond the 1 nm tolerance also connects. Tracks sharing that junction share
+its contact. Two tracks with disjoint centerlines may contact the same terminal
+at different endpoints when the bounds of their copper overlap lie entirely
+within its land. A centered track also connects if its copper reaches the pad
+or annulus. Each track uses its native centerline length and contributes
 `R = ρL/(wt)` for length `L`, width `w` and uniform copper thickness `t`. Each
 via interval contributes `R = ρL/[πp(d+p)]` for drill diameter `d` and barrel
 plating `p`. Use `ρ = 1.724 × 10⁻⁸ Ω·m` at 20 °C with formula dimensions in
@@ -1269,12 +1277,22 @@ annulus. These are explicit material and stackup assumptions.
 
 Equivalent resistance includes the parallel routes in the network. The shortest
 route is measured by total track length and vertical via distance. Its series
-resistance is reported separately. The estimate covers DC conduction in the
-supported copper network. Inductance, capacitance, return-plane effects, shorts to
-other nets, frequency-dependent losses and fabrication tolerances are outside its
-scope.
+resistance is reported separately. The same shortest route has a quasi-static
+partial-inductance estimate in nH. It sums self and signed mutual contributions
+from the directed track centerlines and traversed via spans using a regularized
+Neumann integral. The effective radii are `exp(-1.5) × (width + thickness)` for
+tracks and half the sum of drill diameter and plating thickness for via barrels.
+For a segment pair, the squared softening distance is the mean of the squared
+radii. The mutual term integrates one segment analytically and uses bounded
+adaptive quadrature along the other. The calculation omits pad inductance,
+parallel current sharing, the return path and other conductors. A nonpositive or
+unresolved estimate is reported as outside the model while preserving DC and
+distance results. The model excludes capacitance, shorts to other nets,
+frequency-dependent losses and fabrication tolerances.
+[Ruehli, 1972](https://doi.org/10.1147/rd.165.0470) describes partial inductance.
 
-Unsupported contacts, including off-center contacts, track-body joins, overlapping
+Unsupported contacts, including pad or via contact without an eligible endpoint,
+track-body joins, overlapping
 same-net pads/vias, nonempty same-net saved fills and copper artwork anywhere on
 the board, reject the measurement. Unfilled zones, empty fills and keepouts
 contribute no copper. The graph is limited to 256 nodes and 512 tracks on the
@@ -1289,6 +1307,16 @@ geometry, source attribution and model identities remain pinned; support does
 not establish hardware qualification. [Examples](EXAMPLES.md) owns
 regeneration/assets and [EMC verification](EMC-FLYBACK.md) owns recorded numerical
 comparisons.
+
+To compare OpenPE's all-zone refill with KiCad 10 on LM25017, copy the bundled
+`.kicad_pcb` and matching `.kicad_pro` into a scratch directory. Run
+`kicad-cli pcb drc --refill-zones --save-board -o <report> <scratch-board>`
+with KiCad 10.0.1, then run
+`node --import tsx scripts/check-lm25017-fill-parity.ts <scratch-board>`.
+The read-only check compares each enabled copper zone by UUID and layer. It
+requires exact contour segments and island flags, ignoring polygon order,
+starting vertices and winding. It exits unsuccessfully on any difference.
+Passing the bundled PCB directly compares against its saved contours.
 
 | Check                                                                                                                                                                                                                      | Scope                                                                                                                                                                                                        |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

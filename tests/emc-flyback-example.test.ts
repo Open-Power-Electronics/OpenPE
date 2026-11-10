@@ -29,7 +29,7 @@ import { schematicPolylines, schematicTexts } from '../lib/schematic-text';
 import { defaultTransient, simulationSupportError } from '../lib/spice';
 import { modelCadFromProject, MODEL_CAD_NATIVE_VARIABLE } from '../lib/model-cad';
 import { arrangeExampleText } from '../lib/example-layout';
-import { parseCircuit } from '../lib/circuit';
+import { parseCircuit, serializeCircuit } from '../lib/circuit';
 import { buildSpiceDeck } from '../lib/spice';
 import { prepareEmcFlybackValues } from '../scripts/emc-flyback-values';
 import { prepareEmcFlybackModelBindings } from '../scripts/emc-flyback-model-bindings';
@@ -83,13 +83,7 @@ test('EMC annotation layout changes only instance field placement and preserves 
   const deck = buildSpiceDeck(circuit, defaultTransient(circuit));
   arrangeExampleText(circuit, 'emc-flyback-demo');
   const withoutPlacement = (value: unknown): unknown => {
-    if (!Array.isArray(value)) {
-      if (value && typeof value === 'object')
-        return Object.fromEntries(
-          Object.entries(value).map(([key, item]) => [key, withoutPlacement(item)]),
-        );
-      return value;
-    }
+    if (!Array.isArray(value)) return value;
     if (value[0] === 'property' && ['Reference', 'Value'].includes(val(value))) {
       return value
         .filter((item) => !Array.isArray(item) || item[0] !== 'at')
@@ -102,7 +96,10 @@ test('EMC annotation layout changes only instance field placement and preserves 
     return value.map(withoutPlacement);
   };
   assert.deepEqual(circuit.libraries, before.libraries);
-  assert.deepEqual(withoutPlacement(circuit), withoutPlacement(before));
+  assert.deepEqual(
+    withoutPlacement(parseSExpr(serializeCircuit(circuit))),
+    withoutPlacement(parseSExpr(serializeCircuit(before))),
+  );
   assert.deepEqual(buildSpiceDeck(circuit, defaultTransient(circuit)), deck);
 });
 

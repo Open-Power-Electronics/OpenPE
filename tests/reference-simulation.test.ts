@@ -8,7 +8,7 @@ import { symbolRole } from '../lib/symbol-role';
 import { buildSpiceDeck, defaultTransient, simulationSupportError, spiceNets } from '../lib/spice';
 import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
 import { createPart, pinPositions, libraries, type Circuit, type Point } from '../lib/circuit';
-import { samePoint } from '../lib/wiring';
+import { onWire, samePoint } from '../lib/wiring';
 import { partFields, partFootprint, unitGraphics } from '../lib/library';
 import lock from '../resources/reference-models-lock.json';
 import { lm2596AdjustableDerivedModel, tiModels } from '../lib/ti-dcdc';
@@ -141,17 +141,6 @@ for (const entry of referenceExamples)
           !project.pcb!.footprints.some((footprint) => footprint.symbolId === part.id)),
     );
     assert.ok(bench.length >= 2);
-    assert.equal(
-      project.schematic.labels.filter((label) => !originalLabels.has(label.id)).length,
-      bench.length,
-      'Each added component needs one positive rail label and a ground symbol.',
-    );
-    assert.ok(
-      project.schematic.labels
-        .filter((label) => !originalLabels.has(label.id))
-        .every((label) => /^(?:VIN|VOUT\d*)$/.test(label.text)),
-      'Added grounds use symbols rather than GND text aliases.',
-    );
     const benchPins = bench.flatMap((part) =>
       pinPositions(part, project.schematic.libraries[part.libId]),
     );
@@ -199,6 +188,27 @@ for (const entry of referenceExamples)
     const verifyConnections = (circuit: Circuit) => {
       const nets = spiceNets(circuit);
       const source = circuit.parts.find((part) => part.ref === 'V1')!;
+      const firstLoadX = Math.min(
+        ...bench.filter((part) => part.ref !== 'V1').map((part) => part.x),
+      );
+      const flagRails = circuit.parts
+        .filter((part) => part.libId === 'power:PWR_FLAG')
+        .map((flag) => {
+          const [pin] = pinPositions(flag, circuit.libraries[flag.libId]);
+          assert.equal(pin.y, source.y, `${flag.ref} shares the simulation bench row.`);
+          assert.ok(pin.x > source.x && pin.x < firstLoadX, `${flag.ref} fits inside the bench.`);
+          assert.ok(!circuit.wires.some((wire) => onWire(pin, wire)));
+          const labels = circuit.labels.filter((label) => same(label, pin));
+          assert.equal(labels.length, 1, `${flag.ref} has one rail label at its pin.`);
+          assert.ok(
+            circuit.labels.some((label) => label !== labels[0] && label.text === labels[0].text),
+          );
+          return labels[0].text;
+        });
+      assert.deepEqual(
+        flagRails.sort(),
+        entry.id === 'reference-lm25017-wson8-flybuck' ? ['GND', 'GND2', 'VIN'] : ['GND', 'VIN'],
+      );
       const [sourcePositive, sourceNegative] = pinPositions(
         source,
         circuit.libraries[source.libId],

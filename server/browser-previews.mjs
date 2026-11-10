@@ -1,10 +1,105 @@
 import express from 'express';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
 import { createModelCadPreviewService } from './model-cad-kernel.mjs';
 import { createLibraryService, createStepParserPool } from './libraries.mjs';
+import { createWorkbenchPlugins, registerWorkbenchPlugins } from './workbench-plugins.mjs';
+import { createPcbDesignGuidance, registerPcbDesignGuidance } from './pcb-design.mjs';
+import { registerSpice } from './spice.mjs';
+import { registerThermal } from './thermal.mjs';
+import { createPluginService, registerPlugins } from './plugins.mjs';
 
-/** Development-only geometry previews. No project grants or model imports.
+function browserProviderPlugins() {
+  const appData =
+    process.platform === 'win32'
+      ? process.env.APPDATA || path.join(homedir(), 'AppData', 'Roaming')
+      : process.platform === 'darwin'
+        ? path.join(homedir(), 'Library', 'Application Support')
+        : process.env.XDG_CONFIG_HOME || path.join(homedir(), '.config');
+  const dataDir = process.env.OPENPE_DATA_DIR || path.join(appData, 'OpenPE');
+  const cwd = path.join(dataDir, 'agent-workspace');
+  const service = createPluginService(cwd, { dataDir });
+  return {
+    async list(...args) {
+      await mkdir(cwd, { recursive: true });
+      return service.list(...args);
+    },
+    async change(...args) {
+      await mkdir(cwd, { recursive: true });
+      return service.change(...args);
+    },
+  };
+}
+
+function mountBrowserPlugins(app, providerService) {
+  const router = express.Router();
+  const plugins = createWorkbenchPlugins(null);
+  const guidance = createPcbDesignGuidance(plugins);
+  const simulations = registerSpice(
+    router,
+    undefined,
+    undefined,
+    fileURLToPath(new URL('../.openpe/example-model-preparation/', import.meta.url)),
+    async () => {
+      throw new Error('Prepare the required SPICE model before running in the browser.');
+    },
+    undefined,
+    plugins,
+    undefined,
+    undefined,
+    undefined,
+    fileURLToPath(new URL('../resources/example-catalog/simulation/models/', import.meta.url)),
+  );
+  const thermal = registerThermal(router, { plugins });
+  registerWorkbenchPlugins(router, plugins);
+  registerPcbDesignGuidance(router, guidance, plugins);
+  const providerPlugins = registerPlugins(router, undefined, { service: providerService });
+  const endpoints = new Map([
+    ['catalog', ['GET', '/api/workbench-plugins']],
+    ['change', ['POST', '/api/workbench-plugins']],
+    ['guide', ['GET', '/api/pcb-design/guide']],
+    ['spice-status', ['GET', '/api/simulation/status']],
+    ['spice-run', ['POST', '/api/simulation/transient']],
+    ['thermal-status', ['GET', '/api/thermal/status']],
+    ['thermal-run', ['POST', '/api/thermal/run']],
+    ['provider-list', ['GET', '/api/plugins']],
+    ['provider-change', ['POST', '/api/plugins']],
+  ]);
+  app.post('/api/browser-preview/plugin/:action', (req, res, next) => {
+    const endpoint = endpoints.get(req.params.action);
+    if (!endpoint) return next();
+    const [method, route] = endpoint;
+    const search = new URL(req.originalUrl, 'http://127.0.0.1').search;
+    if (search && req.params.action !== 'guide' && req.params.action !== 'provider-list')
+      return res.status(400).json({ error: 'Plugin endpoint does not accept query parameters.' });
+    const running = req.params.action === 'spice-run' || req.params.action === 'thermal-run';
+    express.json({ limit: running ? '24mb' : '1kb' })(req, res, (error) => {
+      if (error) return next(error);
+      if (
+        (method === 'GET' &&
+          (!req.body || Array.isArray(req.body) || Object.keys(req.body).length)) ||
+        (running && Object.hasOwn(req.body ?? {}, 'fileId'))
+      )
+        return res.status(400).json({ error: 'Browser plugins do not accept this request data.' });
+      req.method = method;
+      req.url = route + search;
+      router(req, res, next);
+    });
+  });
+  return () => {
+    thermal.close();
+    simulations.close();
+    guidance.close();
+    providerPlugins.close();
+  };
+}
+
+/** Development-only geometry previews and bundled plugins.
  * @param {{origin?: string, previewFactory?: typeof createModelCadPreviewService,
+ * providerPluginService?: ReturnType<typeof createPluginService>,
  * libraryFactory?: (options: Parameters<typeof createLibraryService>[0]) =>
  * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'close'>}} [options]
  */
@@ -12,6 +107,7 @@ export async function startBrowserPreviewServer({
   origin = 'http://127.0.0.1:3000',
   previewFactory = createModelCadPreviewService,
   libraryFactory = createLibraryService,
+  providerPluginService = browserProviderPlugins(),
 } = {}) {
   const renderer = new URL(origin);
   if (
@@ -128,6 +224,7 @@ export async function startBrowserPreviewServer({
       }
     });
   }
+  const closePlugins = mountBrowserPlugins(app, providerPluginService);
   app.use((_req, res) => res.status(404).json({ error: 'Unknown browser preview route.' }));
   app.use((error, _req, res, _next) => {
     const status = error.type === 'entity.too.large' ? 413 : 400;
@@ -142,6 +239,7 @@ export async function startBrowserPreviewServer({
     previews.close();
     libraries.close();
     parsers.close();
+    closePlugins();
     throw error;
   });
   host = `127.0.0.1:${server.address().port}`;
@@ -153,6 +251,7 @@ export async function startBrowserPreviewServer({
       previews.close();
       libraries.close();
       parsers.close();
+      closePlugins();
       server.closeAllConnections();
       return new Promise((resolve) => server.close(resolve));
     },

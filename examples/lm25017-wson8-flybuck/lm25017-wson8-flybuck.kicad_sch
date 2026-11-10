@@ -1940,16 +1940,6 @@
       (xy 171.45 24.13)
       (xy 171.45 27.94))
     (uuid "ac240e6b-113b-5155-ac7d-881e7e5beccf"))
-  (wire
-    (pts
-      (xy 96.52 27.94)
-      (xy 104.14 27.94))
-    (uuid "f6cb0429-3882-5fbc-a806-e8cf1f707609"))
-  (wire
-    (pts
-      (xy 72.39 21.59)
-      (xy 80.01 21.59))
-    (uuid "3e0f8354-899a-5d7e-a8e8-57ef94b15b1d"))
   (junction
     (at 45.72 80.01)
     (uuid "07e31840-e682-4237-bbb5-4d1a759c812f"))
@@ -2066,6 +2056,41 @@
   (label "VOUT1"
     (at 171.45 12.7 0)
     (uuid "e6fdce8b-b9f7-5734-a033-28f6ed36769a")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 104.14 27.94 0)
+    (uuid "c4e29971-b3db-5511-ad89-b94dbdf3fa46")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND2"
+    (at 80.01 21.59 0)
+    (uuid "53d59df3-4039-520b-ad94-4eb2c0c9933f")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VIN"
+    (at 118.11 20.32 0)
+    (uuid "53f41f36-0ed4-5eeb-a317-ab49faf0c55e")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 130.81 20.32 0)
+    (uuid "e584a47e-c158-54b0-aeb9-951fd7980ceb")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND2"
+    (at 143.51 20.32 0)
+    (uuid "5451c27f-75d7-55d0-a710-252912a63a19")
     (effects
       (font
         (size 1.27 1.27))
@@ -3673,7 +3698,7 @@
           (size 1.27 1.27))
         (justify left)))
     (property "Value" "${SIM.PARAMS}"
-      (at 107.95 21.72 0)
+      (at 110.49 11.43 0)
       (effects
         (font
           (size 1.27 1.27))
@@ -3856,7 +3881,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 104.14 12.7 0)
+    (at 118.11 20.32 0)
     (unit 1)
     (uuid "b90cec3c-9fb9-5faa-aa5e-0591a8754024")
     (in_bom no)
@@ -3866,25 +3891,25 @@
           (reference "#FLG1")
           (unit 1))))
     (property "Reference" "#FLG1"
-      (at 104.14 15.24 0)
+      (at 118.11 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 104.14 15.24 0)
+      (at 118.11 22.86 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 104.14 12.7 0)
+      (at 118.11 20.32 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 96.52 27.94 0)
+    (at 130.81 20.32 0)
     (unit 1)
     (uuid "09fbca74-df3c-5eb9-ab08-2770094d34f9")
     (in_bom no)
@@ -3894,25 +3919,25 @@
           (reference "#FLG2")
           (unit 1))))
     (property "Reference" "#FLG2"
-      (at 96.52 30.48 0)
+      (at 130.81 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 96.52 30.48 0)
+      (at 130.81 22.86 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 96.52 27.94 0)
+      (at 130.81 20.32 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 72.39 21.59 0)
+    (at 143.51 20.32 0)
     (unit 1)
     (uuid "dc433c8f-ecc9-599d-adec-609744c0c29a")
     (in_bom no)
@@ -3922,18 +3947,18 @@
           (reference "#FLG3")
           (unit 1))))
     (property "Reference" "#FLG3"
-      (at 72.39 24.13 0)
+      (at 143.51 22.86 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 72.39 24.13 0)
+      (at 143.51 22.86 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 72.39 21.59 0)
+      (at 143.51 20.32 0)
       (effects
         (font
           (size 1.27 1.27)))

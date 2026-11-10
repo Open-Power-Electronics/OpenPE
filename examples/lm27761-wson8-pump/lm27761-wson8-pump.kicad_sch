@@ -867,8 +867,8 @@
       (embedded_fonts no)))
   (wire
     (pts
-      (xy 76.2 24.13)
-      (xy 76.2 26.67))
+      (xy 67.31 24.13)
+      (xy 67.31 26.67))
     (uuid "003c5e76-6e57-4c6c-8d77-251a13151a10"))
   (wire
     (pts
@@ -882,13 +882,13 @@
     (uuid "07b34a18-4554-4fd8-8ad0-07c7f5ad6664"))
   (wire
     (pts
-      (xy 57.15 24.13)
-      (xy 60.96 24.13))
+      (xy 48.26 24.13)
+      (xy 52.07 24.13))
     (uuid "0ae4e4d7-2bce-41b9-84b2-0345057e2a7f"))
   (wire
     (pts
-      (xy 60.96 26.67)
-      (xy 60.96 24.13))
+      (xy 52.07 26.67)
+      (xy 52.07 24.13))
     (uuid "10f7d334-e36f-408e-ab82-b30b180da1d2"))
   (wire
     (pts
@@ -897,8 +897,8 @@
     (uuid "12575911-a9d4-4335-9544-b15f7a2060f9"))
   (wire
     (pts
-      (xy 76.2 26.67)
-      (xy 74.93 26.67))
+      (xy 67.31 26.67)
+      (xy 66.04 26.67))
     (uuid "23f1d5f2-213b-4e5f-9163-05ff1dbeb8b2"))
   (wire
     (pts
@@ -997,8 +997,8 @@
     (uuid "b2d5fde3-7bae-4479-bcb9-2c3729712835"))
   (wire
     (pts
-      (xy 62.23 26.67)
-      (xy 60.96 26.67))
+      (xy 53.34 26.67)
+      (xy 52.07 26.67))
     (uuid "b6b97722-8ffa-4631-aa3a-bd5feab0c45b"))
   (wire
     (pts
@@ -1017,8 +1017,8 @@
     (uuid "d4b6ca92-963f-4306-8519-0a55be1bf4f4"))
   (wire
     (pts
-      (xy 60.96 24.13)
-      (xy 62.23 24.13))
+      (xy 52.07 24.13)
+      (xy 53.34 24.13))
     (uuid "d579e5b4-c6cb-411d-9f28-4047c7a94608"))
   (wire
     (pts
@@ -1032,8 +1032,8 @@
     (uuid "d89615ee-408a-4adc-ba00-5f7b09d32e74"))
   (wire
     (pts
-      (xy 74.93 24.13)
-      (xy 76.2 24.13))
+      (xy 66.04 24.13)
+      (xy 67.31 24.13))
     (uuid "da77b37c-9f49-48e8-b9dd-7420008d25ba"))
   (wire
     (pts
@@ -1067,8 +1067,8 @@
     (uuid "fc860840-aad9-4719-9555-b89e8768f9c5"))
   (wire
     (pts
-      (xy 78.74 26.67)
-      (xy 76.2 26.67))
+      (xy 69.85 26.67)
+      (xy 67.31 26.67))
     (uuid "fe3974cc-1c8d-456c-b811-9f56122c6d44"))
   (wire
     (pts
@@ -1077,13 +1077,13 @@
     (uuid "ffabcafb-8699-449e-bc38-11f525477980"))
   (wire
     (pts
-      (xy 97.79 20.32)
-      (xy 97.79 17.78))
+      (xy 80.01 20.32)
+      (xy 80.01 17.78))
     (uuid "dbb7f685-9aac-5c48-aba4-587c8f1cfe3b"))
   (wire
     (pts
-      (xy 97.79 30.48)
-      (xy 97.79 33.02))
+      (xy 80.01 30.48)
+      (xy 80.01 33.02))
     (uuid "99cde5c1-d56d-5277-ae73-4b7e911ec729"))
   (wire
     (pts
@@ -1095,16 +1095,11 @@
       (xy 115.57 29.21)
       (xy 115.57 33.02))
     (uuid "6983a9af-8a82-5cf9-a8fc-58fbe2c372d0"))
-  (wire
-    (pts
-      (xy 90.17 33.02)
-      (xy 97.79 33.02))
-    (uuid "ad51166c-4823-51f7-aad3-b45907f944e4"))
   (junction
     (at 22.86 24.13)
     (uuid "01d752c5-cfd3-47d1-bb60-4896736c5233"))
   (junction
-    (at 76.2 26.67)
+    (at 67.31 26.67)
     (uuid "25ee8f28-d0b9-4793-9bdc-25a7af2250e7"))
   (junction
     (at 96.52 63.5)
@@ -1122,7 +1117,7 @@
     (at 38.1 26.67)
     (uuid "9afb3ce8-66f1-4a6a-a3c4-ee49850c432f"))
   (junction
-    (at 60.96 24.13)
+    (at 52.07 24.13)
     (uuid "bb3be55c-b7fc-4593-bfa4-5f4f31f6ea1f"))
   (junction
     (at 24.13 53.34)
@@ -1145,7 +1140,7 @@
         (size 1.27 1.27))
       (justify left bottom)))
   (label "VOUT"
-    (at 57.15 24.13 0)
+    (at 48.26 24.13 0)
     (uuid "aeb496d0-471a-4893-b37b-326cefa06211")
     (effects
       (font
@@ -1159,7 +1154,7 @@
         (size 1.27 1.27))
       (justify left bottom)))
   (label "VIN"
-    (at 97.79 17.78 0)
+    (at 80.01 17.78 0)
     (uuid "7e3f1c70-b1e0-580d-aae0-e448f7af51d7")
     (effects
       (font
@@ -1168,6 +1163,27 @@
   (label "VOUT"
     (at 115.57 17.78 0)
     (uuid "98c1a9ed-2e7a-5afd-a0e9-04379fd275fb")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 80.01 33.02 0)
+    (uuid "14f8dfca-df00-5f02-a64a-7b0cf2faa381")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VIN"
+    (at 92.71 25.4 0)
+    (uuid "3d9382a4-c1bb-51fb-a762-4eee9f45bd27")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 104.14 25.4 0)
+    (uuid "27c1dd34-0c6a-5634-a126-c9fb251b21fa")
     (effects
       (font
         (size 1.27 1.27))
@@ -1363,7 +1379,7 @@
       (hide yes)))
   (symbol
     (lib_id "Connector_Generic:Conn_02x02_Top_Bottom")
-    (at 69.85 26.67 180)
+    (at 60.96 26.67 180)
     (unit 1)
     (uuid "2874d2e7-6154-470a-9f4e-1baee625dabb")
     (exclude_from_sim yes)
@@ -1382,29 +1398,29 @@
           (reference "J2")
           (unit 1))))
     (property "Reference" "J2"
-      (at 68.58 17.78 0)
+      (at 59.69 17.78 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Value" "Conn_02x02_Top_Bottom"
-      (at 68.58 20.32 0)
+      (at 59.69 20.32 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Footprint" "Connector_Wuerth:Wuerth_WR-PHD_613004216921_Large_2x02_P2.54mm_Vertical"
-      (at 69.85 26.67 0)
+      (at 60.96 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Datasheet" ""
-      (at 69.85 26.67 0)
+      (at 60.96 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Description" "Generic connector, double row, 02x02, top/bottom pin numbering scheme (row 1: 1...pins_per_row, row2: pins_per_row+1 ... num_pins), script generated (kicad-library-utils/schlib/autogen/connector/)"
-      (at 69.85 26.67 0)
+      (at 60.96 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
@@ -1642,7 +1658,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:GND")
-    (at 78.74 26.67 90)
+    (at 69.85 26.67 90)
     (unit 1)
     (uuid "9eb207bd-ab08-49fc-ab71-947100471248")
     (pin "1"
@@ -1653,30 +1669,30 @@
           (reference "#PWR05")
           (unit 1))))
     (property "Reference" "#PWR05"
-      (at 85.09 26.67 0)
+      (at 76.2 26.67 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Value" "GND"
-      (at 83.82 26.67 90)
+      (at 74.93 26.67 90)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Footprint" ""
-      (at 78.74 26.67 0)
+      (at 69.85 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Datasheet" ""
-      (at 78.74 26.67 0)
+      (at 69.85 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-      (at 78.74 26.67 0)
+      (at 69.85 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
@@ -1963,7 +1979,7 @@
       (hide yes)))
   (symbol
     (lib_id "Simulation_SPICE:VDC")
-    (at 97.79 25.4 0)
+    (at 80.01 25.4 0)
     (unit 1)
     (uuid "44c37dbc-8d39-5505-a1c0-fe3509f0b9e8")
     (instances
@@ -1972,37 +1988,37 @@
           (reference "V1")
           (unit 1))))
     (property "Reference" "V1"
-      (at 101.6 24.2 0)
+      (at 83.82 24.2 0)
       (effects
         (font
           (size 1.27 1.27))
         (justify left)))
     (property "Value" "${SIM.PARAMS}"
-      (at 101.6 26.8 0)
+      (at 83.82 26.8 0)
       (effects
         (font
           (size 1.27 1.27))
         (justify left)))
     (property "Sim.Device" "V"
-      (at 97.79 25.4 0)
+      (at 80.01 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Sim.Type" "DC"
-      (at 97.79 25.4 0)
+      (at 80.01 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Sim.Pins" "1=+ 2=-"
-      (at 97.79 25.4 0)
+      (at 80.01 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Sim.Params" "dc=5"
-      (at 97.79 25.4 0)
+      (at 80.01 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
@@ -2043,7 +2059,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:GND")
-    (at 97.79 33.02 0)
+    (at 80.01 33.02 0)
     (unit 1)
     (uuid "970efe24-5765-5afc-a4ef-abc8fe1c8bfd")
     (in_bom no)
@@ -2053,18 +2069,18 @@
           (reference "#PWR1")
           (unit 1))))
     (property "Reference" "#PWR1"
-      (at 97.79 38.1 0)
+      (at 80.01 38.1 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "GND"
-      (at 97.79 38.1 0)
+      (at 80.01 38.1 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-      (at 97.79 33.02 0)
+      (at 80.01 33.02 0)
       (effects
         (font
           (size 1.27 1.27)))
@@ -2099,7 +2115,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 97.79 17.78 0)
+    (at 92.71 25.4 0)
     (unit 1)
     (uuid "8122db03-927d-54ef-a5de-8054d087427b")
     (in_bom no)
@@ -2109,25 +2125,25 @@
           (reference "#FLG1")
           (unit 1))))
     (property "Reference" "#FLG1"
-      (at 97.79 20.32 0)
+      (at 92.71 27.94 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 97.79 20.32 0)
+      (at 92.71 27.94 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 97.79 17.78 0)
+      (at 92.71 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 90.17 33.02 0)
+    (at 104.14 25.4 0)
     (unit 1)
     (uuid "1909b850-7a50-50c2-a1dc-509843f60075")
     (in_bom no)
@@ -2137,18 +2153,18 @@
           (reference "#FLG2")
           (unit 1))))
     (property "Reference" "#FLG2"
-      (at 90.17 35.56 0)
+      (at 104.14 27.94 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 90.17 35.56 0)
+      (at 104.14 27.94 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 90.17 33.02 0)
+      (at 104.14 25.4 0)
       (effects
         (font
           (size 1.27 1.27)))

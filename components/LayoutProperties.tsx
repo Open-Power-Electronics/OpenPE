@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CircuitBoard, SlidersHorizontal, SquareDashed } from 'lucide-react';
+import { CircuitBoard, PaintBucket, SlidersHorizontal, SquareDashed } from 'lucide-react';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import type { ReactNode } from 'react';
 import type { Circuit } from '@/lib/circuit';
@@ -612,7 +612,7 @@ export default function LayoutProperties({
                         ),
                       )}
                   </PropertySection>
-                  {zone.keepout ? (
+                  {zone.keepout && (
                     <NumberField
                       {...field}
                       label="Pour clearance (mm)"
@@ -621,7 +621,11 @@ export default function LayoutProperties({
                       max={1000}
                       onCommit={(clearance) => onZone({ ...zone, clearance })}
                     />
-                  ) : (
+                  )}
+                  {Boolean(rectangle?.zoneId) && rectangleFields}
+                </PropertyTab>
+                {!zone.keepout && (
+                  <PropertyTab label="Fill" icon={PaintBucket}>
                     <PropertyGrid>
                       <NumberField
                         {...field}
@@ -692,6 +696,7 @@ export default function LayoutProperties({
                       <Select
                         active={active}
                         label="Island removal"
+                        className="layout-island-removal"
                         value={String(zone.islandRemovalMode ?? 0)}
                         options={[
                           { value: '0', label: 'Always' },
@@ -701,9 +706,8 @@ export default function LayoutProperties({
                         onChange={(value) => onZone({ ...zone, islandRemovalMode: Number(value) })}
                       />
                     </PropertyGrid>
-                  )}
-                  {Boolean(rectangle?.zoneId) && rectangleFields}
-                </PropertyTab>
+                  </PropertyTab>
+                )}
               </PropertyTabs>
             )}
             {graphic && (

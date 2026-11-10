@@ -78,47 +78,59 @@ const settings: Record<
 };
 
 // Curated against rendered symbol/annotation bounds. Columns include the complete
-// terminal assembly, followed by the source and loads; stacked single-pin pairs
-// remain together. The row spans the lower circuit with equal visible gaps.
-const benchLayouts: Record<string, { connectors: number[]; simulation: number[]; dy?: number }> = {
+// terminal assembly, the source, power flags and loads. Stacked single-pin pairs
+// remain together. The outer columns follow the lower circuit's width.
+const benchLayouts: Record<
+  string,
+  { connectors: number[]; simulation: number[]; flags: number[]; dy?: number }
+> = {
   'reference-lm2596-to220-5-buck': {
     connectors: [34.29, 73.66],
-    simulation: [104.14, 133.35],
+    simulation: [88.9, 133.35],
+    flags: [104.14, 118.11],
   },
   'reference-tps61046-bga6-boost': {
-    connectors: [35.56, 66.04],
-    simulation: [86.36, 106.68],
+    connectors: [35.56, 57.15],
+    simulation: [69.85, 106.68],
+    flags: [82.55, 95.25],
     dy: -6.35,
   },
   'reference-lm2735-msop8-sepic': {
     connectors: [33.02, 59.69, 86.36],
     simulation: [102.87, 154.94],
+    flags: [120.65, 137.16],
     dy: -1.27,
   },
   'reference-lm25017-wson8-flybuck': {
     connectors: [38.1, 63.5, 88.9],
     simulation: [104.14, 157.48, 171.45],
+    flags: [118.11, 130.81, 143.51],
     dy: -2.54,
   },
   'reference-lm5001-soic8-boost': {
     connectors: [36.83, 72.39],
     simulation: [97.79, 160.02],
+    flags: [118.11, 138.43],
   },
   'reference-lm27761-wson8-pump': {
-    connectors: [29.21, 69.85],
-    simulation: [97.79, 115.57],
+    connectors: [29.21, 60.96],
+    simulation: [80.01, 115.57],
+    flags: [92.71, 104.14],
   },
   'reference-lmr12010-sot236-buck': {
     connectors: [34.29, 66.04, 97.79],
     simulation: [113.03, 165.1],
+    flags: [130.81, 147.32],
   },
   'reference-lmr70503-bga8-buckboost': {
-    connectors: [34.29, 68.58],
-    simulation: [93.98, 118.11],
+    connectors: [34.29, 62.23],
+    simulation: [76.2, 118.11],
+    flags: [90.17, 104.14],
   },
   'reference-lm2598-to220-7-buck': {
     connectors: [39.37, 77.47, 115.57],
-    simulation: [144.78, 172.72],
+    simulation: [129.54, 172.72],
+    flags: [144.78, 158.75],
     dy: -1.27,
   },
 };
@@ -180,6 +192,7 @@ function simulationBenchPosition(d: Circuit, id: string) {
   }
   return {
     x: layout.simulation,
+    flags: layout.flags,
     y: snap(
       (Math.min(...pins.map((pin) => pin.y)) + Math.max(...pins.map((pin) => pin.y))) / 2 +
         (layout.dy ?? 0),
@@ -324,6 +337,7 @@ export function prepareReferenceSimulation(d: Circuit, id: string, modelId: stri
   for (const part of d.parts) part.raw = instances.get(part.id);
   return {
     modelId,
+    flagColumns: bench.flags,
     ...(modelId === 'lm2596-5' ? { derivedModel: lm2596AdjustableDerivedModel } : {}),
     originalIdentity,
     symbolIdentity: localId,

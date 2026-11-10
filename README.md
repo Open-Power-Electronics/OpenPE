@@ -10,7 +10,7 @@
 - Draw custom single-unit component symbols and embedded footprints through shared GUI/Agent commands.
 - Inspect boards in 3D and create Model CAD solids with sketch contour Booleans, extrusion, fillets, chamfers and solid Boolean operations.
 - Run supported SPICE transients and steady PCB thermal analysis.
-- Estimate two-terminal PCB DC resistance from routed copper. [Layout Parasitics](docs/LAYOUT.md#layout-parasitics)
+- Estimate two-terminal PCB DC resistance and shortest-route partial inductance from routed copper. [Layout Parasitics](docs/LAYOUT.md#layout-parasitics)
 - Keep independent projects and conversations, recover drafts and compare local Git history.
 - Work with Codex or Claude Code through scoped project tools, or review proposals from DeepSeek Harness and Pi. Cursor supports CLI detection only.
 
@@ -45,7 +45,7 @@ npm run examples:prepare
 npm run dev:web
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. The browser development server includes authenticated CAD previews using the same bundled Gmsh/OpenCASCADE and STEP parser as Electron; prepare those resources with `npm run thermal:prepare` if they are missing. CAD solids with Boolean holes, including the EMC Flyback base and cover, use their original geometry. The browser also previews bundled example and prepared official KiCad component models through library IDs; run `npm run libraries:download-models` to prepare missing official models. Browser previews do not download models or access custom project files. Other local services and native file dialogs require Electron. Desktop development uses the same port; run one development server at a time. Restart the app after Electron or service changes, preserving unsaved work first.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. The browser development server includes authenticated CAD previews using the same bundled Gmsh/OpenCASCADE and STEP parser as Electron; prepare those resources with `npm run thermal:prepare` if they are missing. CAD solids with Boolean holes, including the EMC Flyback base and cover, use their original geometry. The browser also previews bundled example and prepared official KiCad component models through library IDs; run `npm run libraries:download-models` to prepare missing official models. Browser previews do not download models or access custom project files. All four bundled plugins are available in the browser. SPICE Simulation and manual Layout Thermal run with prepared local solvers and keep results in the current browser session. Prepare missing supported SPICE example models with `npm run simulation:download-examples`. PE Layout Skill serves bundled guidance and Layout Parasitics runs in the renderer. The Plugins page also manages Codex and Claude Code plugins through their local CLI adapters. Native file dialogs and Agent chat require Electron. Desktop development uses the same port; run one development server at a time. Restart the app after Electron or service changes, preserving unsaved work first.
 
 | Command                    | Purpose                                               |
 | -------------------------- | ----------------------------------------------------- |
@@ -75,7 +75,7 @@ Simulation support depends on the documented circuits and models. Thermal analys
 | Files and history   | [Native format](docs/FORMAT.md) · [Version history](docs/VERSION-HISTORY.md)                                                                          |
 | Simulation          | [SPICE](docs/SIMULATION.md) · [Layout Thermal](docs/THERMAL.md) · [EMC Flyback](docs/EMC-FLYBACK.md)                                                  |
 | Examples and assets | [Examples](docs/EXAMPLES.md) · [Datasheets](docs/DATASHEETS.md) · [Libraries and licenses](docs/LIBRARIES.md)                                         |
-| Internals           | [Architecture](docs/ARCHITECTURE.md) · [Diagram](assets/architecture.drawio) · [Core](docs/CORE.md) · [API](docs/API.md) · [Plugins](docs/PLUGINS.md) |
+| Internals           | [Architecture](docs/ARCHITECTURE.md) · [Diagram](assets/architecture.drawio) · [Core](docs/CORE.md) · [API](docs/API.md) · [Plugin design specification](docs/PLUGINS.md) |
 | Contributing        | [Engineering contract](AGENTS.md)                                                                                                                     |
 
 ## License

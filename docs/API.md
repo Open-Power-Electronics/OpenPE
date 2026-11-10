@@ -1005,6 +1005,10 @@ Seven resident capabilities belong to `plugin: 'pcb-thermal@openpe'`. All measur
 
 ## Layout Parasitics capability
 
+Browser development uses the same bundled catalog and change schema with
+process-local state. Provider plugin capabilities use the same provider
+adapters and request schemas as desktop.
+
 `parasitics.measure` is a read-only query owned by plugin `layout-parasitics@openpe`.
 It has no Core level. Input is
 `{boardId:string,startId:string,endId:string,copperThicknessMm?:number,viaPlatingMm?:number}`
@@ -1015,7 +1019,9 @@ inclusive. See [Layout Parasitics](LAYOUT.md#layout-parasitics) for defaults and
 geometry constraints.
 
 The result is
-`{boardId,revision,netId,netName,startLayer,endLayer,copperThicknessMm,viaPlatingMm,shortestLengthMm,shortestResistanceOhm,equivalentResistanceOhm,path}`.
+`{boardId,revision,netId,netName,startLayer,endLayer,copperThicknessMm,viaPlatingMm,shortestLengthMm,shortestResistanceOhm,equivalentResistanceOhm,shortestPartialInductanceNh,path}`.
+`shortestPartialInductanceNh` is the estimated open-route partial inductance in
+nH, or `null` when the bounded calculation cannot resolve a positive value.
 `revision` is the numeric Core revision. `startLayer` and `endLayer` are strings
 describing the copper layer or layers at each terminal. `path` is the ordered
 shortest-route list of `{id,kind:'track'/'via'}` objects, with consecutive spans
@@ -1053,14 +1059,26 @@ Bridge input/result budgets are 32 MiB minus 4,096 bytes of envelope headroom, w
 
 ## Browser development preview transport
 
-Next.js development serves a same-origin geometry-preview proxy at `/api/browser-preview/*`. Its private host binds an ephemeral `127.0.0.1` port and accepts only the exact `http://127.0.0.1:3000` renderer Origin, `Sec-Fetch-Site: same-origin` and `X-OpenPE-Browser: preview`. Foreign/missing origins, foreign hosts and preflights fail without CORS headers. All responses use `Cache-Control: no-store`.
+Next.js development serves a same-origin geometry and bundled-plugin proxy at `/api/browser-preview/*`. Its private host binds an ephemeral `127.0.0.1` port and accepts only the exact `http://127.0.0.1:3000` renderer Origin, `Sec-Fetch-Site: same-origin` and `X-OpenPE-Browser: preview`. Foreign/missing origins, foreign hosts and preflights fail without CORS headers. Bootstrap, catalog and preview responses use `Cache-Control: no-store`; SPICE streams use the transient endpoint's no-cache policy.
 
 | Route                               | Request                                                           | Result                                                                                                                             |
 | ----------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/browser-preview/session` | Empty JSON object, at most 1 KiB                                  | `{token:string}`; a 64-hex process-local preview token, retained only in page memory.                                              |
 | `POST /api/browser-preview/cad`     | `{object:ModelCadObject}`, at most 512 KiB, plus `X-OpenPE-Token` | The existing `{shapeKey,meshes}` CAD result, using the same canonical validation, fixed kernel, cache and cancellation as desktop. |
 
-Authenticated `POST /api/browser-preview/footprint` accepts exactly `{id:string}` and returns the existing bounded footprint detail. `POST /api/browser-preview/model` accepts exactly `{id:string,index:number}` and returns the existing `{meshes,model}` library preview. IDs are nonempty and at most 256 characters; model indices are integers 0–99, matching the desktop preview range. Both request bodies are limited to 1 KiB. Only fixed bundled example identities and official KiCad library IDs/model indices resolve resources. The browser library service reads prepared resources without downloads or cache writes; project paths, native grants, model imports and model-copy routes are unavailable. CAD and component previews share a serial STEP parse queue and one bounded parser pool. There is no general service token or file/provider/solver authority. Disconnect aborts preparation. Expired tokens fail visibly and are reacquired on the next explicit retry; failed bootstrap remains retryable. The endpoints exist only in development; packaged static builds retain Electron IPC/service startup.
+Authenticated `POST /api/browser-preview/footprint` accepts exactly `{id:string}` and returns the existing bounded footprint detail. `POST /api/browser-preview/model` accepts exactly `{id:string,index:number}` and returns the existing `{meshes,model}` library preview. IDs are nonempty and at most 256 characters; model indices are integers 0–99, matching the desktop preview range. Both request bodies are limited to 1 KiB. Only fixed bundled example identities and official KiCad library IDs/model indices resolve resources. The browser library service reads prepared resources without downloads or cache writes; project paths, native grants, model imports and model-copy routes are unavailable. CAD and component previews share a serial STEP parse queue and one bounded parser pool. The token grants only the listed development endpoints. Disconnect aborts preparation. Expired tokens fail visibly and are reacquired on the next explicit retry; failed bootstrap remains retryable. The endpoints exist only in development; packaged static builds retain Electron IPC/service startup.
+
+Authenticated `POST /api/browser-preview/plugin/<action>` exposes nine fixed
+actions. `catalog`, `guide`, `spice-status`, `thermal-status` and
+`provider-list` require an empty JSON object. `guide` accepts the optional
+`document` query. `provider-list` accepts the existing provider and refresh
+query. `change` and `provider-change` use the existing bundled and provider
+lifecycle schemas. These bodies are capped at 1 KiB. `spice-run` and
+`thermal-run` accept the corresponding
+desktop run schemas with `fileId` excluded and a 24 MiB body limit. They share
+existing validation, cancellation, lifecycle gates and output formats. Solver
+result publication, restoration, SPICE heat import, Agent chat and native file
+grants are unavailable through this proxy.
 
 ## Local HTTP service
 

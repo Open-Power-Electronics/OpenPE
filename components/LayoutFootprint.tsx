@@ -66,6 +66,7 @@ type GraphicProps = CaptionProps & {
   deferDrills?: boolean;
   layer: CopperLayer;
   inspectedPadId: string;
+  terminalPads?: ReadonlySet<string>;
   netNames: ReadonlyMap<string, string>;
   highlightNets: ReadonlySet<string>;
 };
@@ -81,6 +82,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
   placement,
   layer,
   inspectedPadId,
+  terminalPads,
   netNames,
   highlightNets,
   onlyLayer,
@@ -159,7 +161,7 @@ export const LayoutFootprintGraphic = memo(function LayoutFootprintGraphic({
         const displayedLayer =
           padLayers.find((name) => name === layer && visibleLayer(name)) ??
           padLayers.find(visibleLayer);
-        const padSelected = selected || inspectedPadId === pad.id;
+        const padSelected = selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
         const fill =
           pad.type === 'np_thru_hole'
             ? 'var(--canvas)'
@@ -251,6 +253,7 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
   selection,
   placement,
   inspectedPadId,
+  terminalPads,
   highlightNets,
 }: Pick<
   GraphicProps,
@@ -260,6 +263,7 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
   | 'selection'
   | 'placement'
   | 'inspectedPadId'
+  | 'terminalPads'
   | 'highlightNets'
 >) {
   const selected = useLayoutSelection(selection, f.id);
@@ -278,7 +282,7 @@ export const LayoutFootprintDrills = memo(function LayoutFootprintDrills({
     <g data-footprint-drills={f.id} pointerEvents="none" opacity={placement ? 0.65 : undefined}>
       {pads.map((pad) => {
         const at = padPosition(f, pad);
-        const padSelected = selected || inspectedPadId === pad.id;
+        const padSelected = selected || inspectedPadId === pad.id || terminalPads?.has(pad.id) === true;
         return (
           <g
             key={pad.id}

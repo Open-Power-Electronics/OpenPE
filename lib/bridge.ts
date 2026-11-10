@@ -98,11 +98,31 @@ declare global {
 }
 let connection: Promise<{ base: string; token: string }> | undefined;
 let browserPreviewToken: Promise<string> | undefined;
+const browserPluginEndpoints = new Map([
+  ['GET workbench-plugins', 'catalog'],
+  ['POST workbench-plugins', 'change'],
+  ['POST plugins', 'provider-change'],
+  ['GET simulation/status', 'spice-status'],
+  ['POST simulation/transient', 'spice-run'],
+  ['GET thermal/status', 'thermal-status'],
+  ['POST thermal/run', 'thermal-run'],
+]);
 async function browserPreviewRequest(route: string, options: RequestInit) {
   const unavailable = () => new Error('Use the Electron desktop app to connect to local services.');
   let endpoint: string;
   let body: BodyInit | null | undefined;
-  if (route === 'model-cad/preview' && options.method === 'POST') {
+  const method = options.method ?? 'GET';
+  const plugin = browserPluginEndpoints.get(`${method} ${route}`);
+  if (plugin) {
+    endpoint = `plugin/${plugin}`;
+    body = options.body ?? '{}';
+  } else if (method === 'GET' && /^pcb-design\/guide\?document=[a-z][a-z-]{0,50}$/.test(route)) {
+    endpoint = `plugin/guide?${route.split('?')[1]}`;
+    body = '{}';
+  } else if (method === 'GET' && /^plugins\?provider=(codex|claude)(&refresh=true)?$/.test(route)) {
+    endpoint = `plugin/provider-list?${route.split('?')[1]}`;
+    body = '{}';
+  } else if (route === 'model-cad/preview' && options.method === 'POST') {
     endpoint = 'cad';
     body = options.body;
   } else {
@@ -152,6 +172,7 @@ async function browserPreviewRequest(route: string, options: RequestInit) {
     method: 'POST',
     body,
     headers: {
+      ...options.headers,
       'Content-Type': 'application/json',
       'X-OpenPE-Browser': 'preview',
       'X-OpenPE-Token': token,

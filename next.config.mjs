@@ -1,6 +1,8 @@
-import type { NextConfig } from 'next';
-import { PHASE_DEVELOPMENT_SERVER } from 'next/constants';
-const config: NextConfig = {
+// @ts-check
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants.js';
+
+/** @type {import('next').NextConfig} */
+const config = {
   output: 'export',
   images: { unoptimized: true },
   devIndicators: false,
@@ -9,7 +11,8 @@ const config: NextConfig = {
     browserToTerminal: 'warn',
   },
 };
-export default async function nextConfig(phase: string): Promise<NextConfig> {
+/** @param {string} phase @returns {Promise<import('next').NextConfig>} */
+export default async function nextConfig(phase) {
   if (phase !== PHASE_DEVELOPMENT_SERVER) return config;
   const { browserPreviewServer } = await import('./server/browser-previews.mjs');
   const previews = await browserPreviewServer();

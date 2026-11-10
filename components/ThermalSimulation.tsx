@@ -38,7 +38,11 @@ import {
   type ThermalProbe,
   type ThermalSurface,
 } from '@/lib/thermal-view';
-import { THERMAL_PLUGIN_ID, workbenchPluginAvailability } from '@/lib/workbench-plugins';
+import {
+  THERMAL_PLUGIN_ID,
+  usesBrowserWorkbenchPlugins,
+  workbenchPluginAvailability,
+} from '@/lib/workbench-plugins';
 import {
   agentThermalContext,
   type AgentThermalContext,
@@ -160,8 +164,9 @@ export default function ThermalSimulation({
   }));
   const current = useRef(session);
   const [drafts, setDrafts] = useState(() => draftsFor(initial));
+  const browserPlugins = usesBrowserWorkbenchPlugins();
   const [heatInput, setHeatInput] = useState<'manual' | 'spice'>(() =>
-    spiceAvailable ? 'spice' : 'manual',
+    spiceAvailable && !browserPlugins ? 'spice' : 'manual',
   );
   const [layoutShown, setLayoutShown] = useState(true);
   const [outlinesShown, setOutlinesShown] = useState(true);
@@ -1174,11 +1179,12 @@ export default function ThermalSimulation({
           <Select
             label="Thermal heat input"
             compact
+            popupMatchWidth="trigger"
             value={heatInput}
             disabled={session.status === 'running'}
             options={[
               { value: 'manual', label: 'Manual' },
-              { value: 'spice', label: 'SPICE' },
+              ...(browserPlugins ? [] : [{ value: 'spice', label: 'SPICE' }]),
             ]}
             onChange={changeHeatInput}
           />
@@ -1221,15 +1227,18 @@ export default function ThermalSimulation({
         {loadingSaved && <SavedResultLoading analysis="thermal" stage={savedResultStage} />}
         {session.status === 'running' || importingSpice ? (
           <button
-            className="dialog-button secondary analysis-run-button"
+            className="dialog-button quiet analysis-footer-button"
+            aria-label="Stop"
+            title="Stop"
             onClick={() => execute('thermal.cancel')}
           >
-            <Square size={15} />
-            Stop
+            <Square aria-hidden="true" />
           </button>
         ) : (
           <button
-            className="dialog-button primary analysis-run-button"
+            className="dialog-button quiet analysis-footer-button"
+            aria-label="Run"
+            title="Run"
             disabled={
               sourcePending ||
               !project.pcb ||
@@ -1240,8 +1249,7 @@ export default function ThermalSimulation({
             }
             onClick={() => execute('thermal.run')}
           >
-            <Play size={15} />
-            Run
+            <Play aria-hidden="true" />
           </button>
         )}
       </footer>

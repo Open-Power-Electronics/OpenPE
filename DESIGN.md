@@ -155,6 +155,9 @@ Component/footprint selection retains its independent centered modal chooser. Ot
 
 Layout and Model place Measure distance in a separate Measurement group before Edit/history. It follows Place/connect in Layout and Solid modifications in Model. Two stationary left clicks set the endpoints; pointer movement previews the second point and Enter fixes the current valid preview. A third click starts a new measurement. The drawing shows endpoint circles and an unnumbered graduated line. Each tick interval matches the current lower-left scale-bar length without minor subdivisions; zoom changes both together. Model uses the same scale selection at the camera target. Very long offscreen rulers thin intervals by powers of ten. The status bar directly displays distance, signed ΔX/ΔY and angle from native +X toward +Y; Model also displays ΔZ, XY angle and elevation from the XY plane. Undefined angles show an em dash; estimated bodies carry a compact Estimated suffix. The readout wraps on narrow editors to keep all measurements visible. Escape clears the current measurement, then exits on a second press; toggling the ruler also exits. IME Enter/Escape cannot confirm or dismiss it. Layout attracts points within eight screen pixels to visible component placement centers, pad/via centers, tracks and native drawing anchors, otherwise using the selected grid. Model attracts visible surface picks to the rendered component body bounds center or nearby visible triangle vertices within eight pixels. Body centers take precedence within range and require their projection to hit that same visible component first; covered components cannot attract. A dashed ring marks each snap candidate, including before the first pick. Alt bypasses attraction and grid snapping. Model retains ordinary orbit, pan, zoom and view presets; Layout retains middle/right dragging and wheel navigation. Hidden geometry, transparent text backgrounds and transient CAD previews cannot be measured. Readouts describe displayed geometry, including tessellated models. Camera changes keep fixed endpoints in world space. Tool changes, document/display changes and editor deactivation clear the measurement. Measurements stay outside native files, undo, recovery, saved annotations, Fit bounds and image exports. Unapplied Model solid drafts block entering measurement.
 
+Layout’s Edit/history toolbar group contains Undo and Redo. Object commands use
+the canvas menu and keyboard shortcuts.
+
 ### Properties, Visualization and Selection
 
 These sections always appear in that order, initially open, with headers above independently scrolling content. Unselected Properties in Schematic, Layout and Model use the shared icon/text empty state, centred horizontally and vertically in the available Properties body. Headers have 36 px minimum height, control-size semibold text, subtle panel surfaces, 12 px horizontal insets and soft top/bottom rules. Hover uses the shared neutral surface-hover fill without darkening the separator.
@@ -407,7 +410,7 @@ X starts routing at hovered visible assigned copper's exact anchor/net/layer; em
 
 Successful zone completion selects it/restores canvas focus; rejection retains draft/focus. Fill enables and saves supported contours explicitly; subsequent accepted geometry edits dynamically update those fills, while viewing never refills. During gestures, a renderer Worker calculates real fills and their SVG paths while pointer geometry stays immediate. Keep one calculation active and replace queued positions with the latest pose; current-generation completed frames advance copper even during continuous movement. Temporary conservative masks cover only the displacement since the latest solved frame, so old gaps and new expansions update during motion. Worker frames and masks remain presentation only; Core independently prepares the final current pose. Cancellation, hiding, pending Source and revision changes discard background results. Fills retain 80% opacity/actual holes/clearances. Airwires estimate pad/track/via/saved-fill contacts; unfilled boundaries create none.
 
-Closed-region interiors are fallback click targets behind precise pads, tracks and strokes, respecting layer visibility, selection filters and cutouts. Copper zone Properties puts net, layer, fill rules and available bounds in General. Clearance and minimum width share a row above thermals, priority, pad connections and island settings. Bounds follow with paired X/Y and Width/Height rows. Rule area exclusions, pour clearance and available bounds also appear in General. Omit zone-corner and cutout coordinate lists while preserving their native geometry.
+Closed-region interiors are fallback click targets behind precise pads, tracks and strokes, respecting layer visibility, selection filters and cutouts. Copper zone Properties opens General with net, layer and available bounds in paired X/Y and Width/Height rows. The Fill tab groups clearance and minimum width above thermals, priority, pad connections and island settings. Rule area exclusions, pour clearance and available bounds also appear in General. Omit zone-corner and cutout coordinate lists while preserving their native geometry.
 
 Fillet corners opens a shared dialog for one selected polygon graphic, copper zone or rule area. Radius uses the engineering quantity field and updates an isolated preview. Apply commits that exact valid candidate in one whole-project undo edit; Cancel leaves the region unchanged. Invalid inputs remain retryable, stale project revisions block Apply and composition cannot apply or discard the draft. Only simple convex outer rings are supported; excessive radii and cutout intersections reject unchanged. Rounded regions remain native polygons within 0.01 mm of circular arcs; IDs, cutouts and other region metadata are retained. Existing enabled saved fills refresh through the ordinary Core transaction.
 
@@ -436,17 +439,30 @@ closes the analysis panel and reveals the ordinary sidebar.
 
 ### Layout Parasitics
 
-Opening Layout Parasitics starts canvas picking. Click a visible copper pad or
-through via on an assigned net, then click a different terminal on the same net.
-The board marks the two picks with 1 and 2. A click on another eligible terminal
+Opening Layout Parasitics starts terminal selection with the ordinary Layout
+cursor, hit tolerance, layer priority and selection filters. Click a visible
+copper pad or through via on an assigned net, then click a different terminal on
+the same net. Overlapping terminals use the standard object chooser. Clicks
+without an eligible terminal leave the picks unchanged.
+The board highlights the selected pad and via copper and marks the picks with
+offset 1 and 2 badges. A click on another eligible terminal
 after the pair is complete starts a new pair. Reset or canvas Escape clears both
 marks. Zoom, pan, Fit and layer keys remain available while picking. Starting
 another canvas tool closes the dock.
 
-The dock shows the current picking step and editable copper and via plating
-thicknesses in mm. Measure displays equivalent DC resistance and shortest-route
-resistance in mΩ, shortest route length in mm, and the terminal layers. A changed
-input clears the result, and a new project revision also clears the picks.
+The dock shows Geometry, Terminals and Results in that order, separated by
+spacing. Geometry places the editable copper and via plating
+thicknesses in two columns. Terminals shows both numbered slots and their shared
+net. Pad labels use the footprint reference and pad number. Via labels show
+board coordinates in mm. Terminals and Results use softly outlined readouts.
+Terminal badges match the numbered canvas markers and fill when picked. Empty
+terminal and result values use an em dash. Measure fills
+three label/value rows for distance (shortest route length in mm), resistance
+(equivalent DC resistance in mΩ), and partial inductance (shortest-route
+estimate in nH). A result beyond the inductance model shows Outside model.
+Numeric results display three decimal places with technical typography. Reset
+and Measure occupy the right side of the footer.
+A changed input clears the result, and a new project revision also clears the picks.
 Closing the panel, leaving Layout, deactivating the project, pending Source,
 project close or plugin disable clears the panel session and cancels any pending
 measurement. See the
@@ -531,7 +547,7 @@ Hidden clean Source defers presentation until reveal; drafts/explicit observatio
 
 ## Simulation and Layout Thermal
 
-SPICE and Layout Thermal analysis docks share ordinary Properties surfaces, 10 px corners, 8/12 px body insets, 4 px field-row gaps and 64% value columns (112 px minimum). Headers use control-size titles; fixed action footers use surface backgrounds, soft top rules and 2/12 px insets with vertically centered controls. Action footers and drawing status bars share a 35 px minimum height that grows with interface typography, aligning their top separators and bottom edges when no footer error is shown. Run and Stop share compact content-width buttons with a 26 px minimum height, 2/6 px padding, small interface text and 14 px icons. Their labels stay on one line and the buttons grow with typography. Errors may expand the action footer above its controls. Two-column component-power cells retain their compact reference/value arrangement.
+The [plugin design specification](docs/PLUGINS.md#analysis-docks-and-footers) defines the shared dock and footer treatment. Two-column component-power cells retain their compact reference/value arrangement.
 
 ### SPICE settings and probes
 
@@ -611,13 +627,7 @@ Colour/number Escape discards local draft and keeps Settings open; elsewhere nor
 
 ## Plugins page
 
-Rail Blocks follows Open project. Sidebar 228 px/200 compact: All, Marketplace, OpenPE, Codex, Claude Code with installed counts. Load providers independently; failure cannot blank other counts/totals. No extra provider selector/repeated individual entries.
-
-Main heading/search/refresh groups OpenPE/Codex/Claude; OpenPE combines bundled and receipt-backed Agent entries, with Unknown origin when needed. Softly bordered rows have 44 px marks/name/short description/detail action/separate immediate enabled switch. Category headings use quiet rules, search shares the standard field treatment and detail facts align within a bounded secondary surface. Keep disabled/empty content through mutations. Details report actual publisher/version/source/origin/scope/actions; Uninstall is confirmed, successful actions update silently.
-
-Marketplace shows the allowlisted workbench catalog, including uninstalled entries. Shared PluginLogo is 64 px detail/17 px toolbar, using a 4-unit outline on its 64-unit viewBox for readable small icons. Layout Parasitics uses two plated pad rings connected by parallel PCB traces, one in the theme's signal green. Preserve attribution/license; PE Layout Skill supplies guidance/review gates without panel/autorouter. Disable/uninstall cancels affected turns.
-
-Cache provider lists five minutes/refresh on request or mutation; transient status belongs to its category. Navigation preserves projects/drafts/conversations/Home brief. No extra plugin-settings dialog. Verify effective state/managed policies; provider management grants no workbench tools.
+See the [plugin design specification](docs/PLUGINS.md#page-and-categories) for the Marketplace, list, detail and lifecycle controls.
 
 ## Maintenance and verification
 

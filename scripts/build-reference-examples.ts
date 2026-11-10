@@ -10,12 +10,13 @@ import { parseSExpr, child, children, quote, val, writeSExpr, type SExpr } from 
 import { convertExamplePCB } from './example-pcb';
 import { prepareReferenceSimulation, referenceProfile } from './reference-simulation';
 import { simulationModelDefinitions } from '../lib/simulation-models';
-import { createLibraryPart, partFields, unitGraphics } from '../lib/library';
-import { libraries, pinPositions, snap, type Circuit, type Point } from '../lib/circuit';
+import { partFields, unitGraphics } from '../lib/library';
+import { pinPositions, type Circuit } from '../lib/circuit';
 import { samePoint } from '../lib/wiring';
 import { runSchematicERC } from '../lib/schematic-erc';
 import footprintAssets from '../resources/example-catalog/footprints/manifest.json';
 import { arrangeExampleText } from '../lib/example-layout';
+import { addLabeledPowerFlag } from './example-power-flags';
 import { referenceZoneInset, insetReferenceZoneBoundaries } from './reference-zone-boundaries';
 import { parseKiCadPCB } from '../lib/kicad-pcb';
 import {
@@ -127,7 +128,7 @@ const controllerPinTypes: Record<string, Record<string, string>> = {
   'reference-tps61046-bga6-boost': { B1: 'input', C2: 'power_out' }, // FB, VOUT
 };
 
-function prepareReferenceERC(d: Circuit, id: string) {
+function prepareReferenceERC(d: Circuit, id: string, flagColumns: readonly number[]) {
   const controller = d.parts.find((part) => part.ref === 'U1')!;
   const pins = unitGraphics(d.libraries[controller.libId], controller.unit).flatMap((unit) =>
     children(unit, 'pin'),
@@ -148,31 +149,30 @@ function prepareReferenceERC(d: Circuit, id: string) {
     child(pad, 'name')![1] = quote('GND');
   }
 
-  const flagLibrary = 'power:PWR_FLAG';
-  d.libraries[flagLibrary] = structuredClone(libraries[flagLibrary]);
-  const flag = (rail: string, anchor: Point, lead = 0) => {
-    const position = { x: snap(anchor.x - lead), y: anchor.y };
-    const part = createLibraryPart(d, d.libraries[flagLibrary], position.x, position.y);
-    part.id = stable(`${id}:power-flag:${rail}`);
-    d.parts.push(part);
-    if (lead) d.wires.push({ id: stable(`${id}:power-flag:${rail}:lead`), a: position, b: anchor });
-  };
   const source = d.parts.find((part) => part.ref === 'V1')!;
-  const [positive, negative] = pinPositions(source, d.libraries[source.libId]).map((pin) => {
-    const lead = d.wires.find((wire) => samePoint(wire.a, pin));
-    if (!lead) throw new Error(`${id}: missing supply lead.`);
-    return lead.b;
-  });
-  flag('VIN', positive);
-  flag('GND', negative, 7.62);
+  const [, negative] = pinPositions(source, d.libraries[source.libId]);
+  const returnLead = d.wires.find((wire) => samePoint(wire.a, negative));
+  if (!returnLead) throw new Error(`${id}: missing supply return lead.`);
+  const rails = ['VIN', 'GND'];
+  const labelReturn = (rail: string, anchor: { x: number; y: number }) => {
+    d.labels.push({ ...anchor, id: stable(`${id}:power-flag:${rail}:rail-label`), text: rail });
+  };
+  labelReturn('GND', returnLead.b);
   if (id === 'reference-lm25017-wson8-flybuck') {
     // The isolated secondary gets its own return declaration.
     const secondaryGround = d.parts.find(
       (part) => part.ref === '#PWR010' && part.value === 'GND2',
     )!;
     const [anchor] = pinPositions(secondaryGround, d.libraries[secondaryGround.libId]);
-    flag('GND2', anchor, 7.62);
+    labelReturn('GND2', anchor);
+    rails.push('GND2');
   }
+  if (flagColumns.length !== rails.length) throw new Error(`${id}: missing power flag columns.`);
+  rails.forEach((rail, index) =>
+    addLabeledPowerFlag(d, rail, { x: flagColumns[index], y: source.y }, (key) =>
+      stable(`${id}:${key}`),
+    ),
+  );
 }
 
 // This build-only adapter omits ancillary source metadata and retains native
@@ -267,8 +267,12 @@ for (const entry of manifest.examples) {
   project.id = stable(`${entry.id}:project`);
   project.name = entry.title;
   project.schematic.title = entry.title;
-  const simulation = prepareReferenceSimulation(project.schematic, entry.id, entry.modelId);
-  prepareReferenceERC(project.schematic, entry.id);
+  const { flagColumns, ...simulation } = prepareReferenceSimulation(
+    project.schematic,
+    entry.id,
+    entry.modelId,
+  );
+  prepareReferenceERC(project.schematic, entry.id, flagColumns);
   project.simulationModels = simulationModelDefinitions
     .filter((model) => model.id === entry.modelId)
     .map((model) => ({ ...model }));
@@ -319,7 +323,7 @@ for (const entry of manifest.examples) {
     source: entry.source,
     topology: entry.topology,
     package: entry.package,
-    changes: `Input schematic imported with embedded source symbols and explicit ${simulation.derivedModel ? 'OpenPE-derived adjustable' : 'TI'} model pin assignments. Terminal assemblies and virtual sources/output loads form evenly spaced columns spanning the lower circuit. All virtual output loads are ${project.schematic.parts.find((part) => part.ref === simulation.testbench.loads[0])!.value} ohms. Virtual components have no Footprint and use 2.54 mm source leads with load leads extended to matching rail-label and official triangular-GND levels; completed electrical values and series resistance are recorded in simulation provenance. Reference and Value instance text is arranged clear of symbols and wiring. Supply and return power flags and reviewed pin declarations support bounded ERC. Board-edge copper-zone boundaries are clipped to a ${referenceZoneInset} mm board inset; internal partitions, local zones, expert PCB placement and routed copper are retained. ${regeneratedCopper ? 'TPS61046 enabled copper zones are refilled by KiCad 10.0.1 with a 0.25 mm minimum clearance. Native island removal and saved contours are preserved.' : 'Native filled polygons are retained.'} Printing settings omitted.`,
+    changes: `Input schematic imported with embedded source symbols and explicit ${simulation.derivedModel ? 'OpenPE-derived adjustable' : 'TI'} model pin assignments. Terminal assemblies, virtual sources, power flags and output loads share a row spanning the lower circuit. All virtual output loads are ${project.schematic.parts.find((part) => part.ref === simulation.testbench.loads[0])!.value} ohms. Virtual components have no Footprint and use 2.54 mm source leads with load leads extended to matching rail-label and official triangular-GND levels; completed electrical values and series resistance are recorded in simulation provenance. Reference and Value instance text is arranged clear of symbols and wiring. Supply and return power flags and reviewed pin declarations support bounded ERC. Board-edge copper-zone boundaries are clipped to a ${referenceZoneInset} mm board inset; internal partitions, local zones, expert PCB placement and routed copper are retained. ${regeneratedCopper ? 'TPS61046 enabled copper zones are refilled by KiCad 10.0.1 with a 0.25 mm minimum clearance. Native island removal and saved contours are preserved.' : 'Native filled polygons are retained.'} Printing settings omitted.`,
     simulation,
   };
   const preparedNativeProject = await prepareHomeExampleCustomFootprints(project, entry.id);

@@ -1,10 +1,26 @@
-# Plugins and Marketplace
+# Plugin design specification
 
 OpenPE manages bundled workbench features and installed Codex/Claude Code
 plugins through separate bounded adapters. The capability registry is not a
 runtime extension loader or online catalog. [API.md](API.md) defines schemas,
 [CORE.md](CORE.md) defines shared execution/review, and
-[DESIGN.md](../DESIGN.md) defines presentation.
+[DESIGN.md](../DESIGN.md) defines the shared editor and control system. This
+specification owns plugin presentation, lifecycle and provider integration.
+
+## Bundled plugin surfaces
+
+| Plugin | Catalog ID | Workbench entry | Output |
+| --- | --- | --- | --- |
+| [SPICE Simulation](SIMULATION.md) | `spice-simulation@openpe` | Schematic Plugins toolbar group and component SPICE Properties | Transient waveforms and probe readouts |
+| [Layout Thermal](THERMAL.md) | `pcb-thermal@openpe` | Layout Plugins toolbar group | Board temperature map, probes and image export |
+| [PE Layout Skill](#pe-layout-skill) | `ai-pcb-layout@openpe` | Plugin details and scoped Agent guidance | Verified bundled workflow and references |
+| [Layout Parasitics](LAYOUT.md#layout-parasitics) | `layout-parasitics@openpe` | Layout Plugins toolbar group | Estimated two-terminal DC resistance, shortest modeled path and partial inductance |
+
+Toolbar groups appear when an installed and enabled plugin contributes an
+action. Use the shared [toolbar order and spacing](../DESIGN.md#toolbars-and-tool-settings).
+The shared PluginLogo uses 17 px in toolbars and 64 px in details, with a
+4-unit outline on its 64-unit viewBox. Layout Parasitics depicts two plated
+pad rings joined by parallel traces, with one trace in signal green.
 
 ## Page and categories
 
@@ -19,11 +35,48 @@ categories without changing the conversation Agent or mounted project state:
 | Unknown origin      | Entries whose installation records could not be read                                            |
 
 All plugins combines installed entries. Provider lists load independently;
-failures retain successful categories and native controls. Identity includes
-kind/provider, preventing colliding package IDs from targeting another install.
+failures retain successful categories and native controls. Rows are keyed by
+provider, qualified plugin ID and scope.
 Enable/disable acts immediately; Uninstall requires confirmation. Keep confirmed
 rows and empty states during refresh/mutations, with per-provider loading and
 actionable errors. Catalog warnings use Refresh's accessible description.
+
+Use the Blocks icon after Open project in the rail. The Plugins sidebar is
+228 px wide and narrows to 200 px in compact windows. Show counts beside
+category names. Preserve projects, drafts, conversations and the Home brief
+through navigation. Keep provider choice in the category list.
+
+Group the main list by origin, with a shared search field, quiet category
+dividers and softly bordered rows. Each row shows a 44 px mark, name and
+short description. Installed rows expose a detail action and a separate
+enabled switch where the provider confirms the state. Details show
+publisher, version, source, origin, scope and available actions. Marketplace
+actions use transparent resting surfaces. Detail and uninstall confirmation
+footers use icon-only actions with accessible names and hover titles.
+Successful changes update silently. Use the relevant category or action for
+loading, warnings and recoverable errors.
+
+## Analysis docks and footers
+
+SPICE settings, Layout Thermal and Layout Parasitics keep their headers and
+footers fixed around a scrolling settings body. Layout dock replacement,
+resizing and sidebar restoration follow the
+[editor dock contract](../DESIGN.md#analysis-dock).
+
+Use Properties surfaces, 10 px exposed corners and 8/12 px body insets for
+SPICE and Thermal. Settings rows have 4 px gaps and 64% value columns with a
+112 px minimum. Action footers have a surface background, soft top divider,
+2/12 px insets and a shared 35 px minimum height that grows with interface
+text. Align their resting top and bottom edges with the drawing status bar.
+Wrapping feedback can expand the footer.
+
+Footer actions use 14 px icons in square targets matching the adjacent Grid
+button's height at each text size. Keep resting backgrounds transparent and
+retain hover and keyboard-focus feedback, accessible action names and hover
+titles. Use Play for Run, Square for Stop, a circular arrow for Reset and a
+ruler for Measure. Measure shows a spinner while pending. The Parasitics
+footer keeps its live picking status to the left of Reset and Measure. Its
+canvas interaction follows [Layout Parasitics](../DESIGN.md#layout-parasitics).
 
 ## Shared capability interface
 
@@ -35,35 +88,39 @@ DeepSeek/Pi use context/proposals; Cursor supports detection only.
 | `workbench.plugins.list` / `.change` | Read confirmed bundled catalog; change a fixed allowlisted ID using install/uninstall/enable/disable     |
 | `provider.plugins.list` / `.change`  | Read one provider's installed entries; mutate an explicit qualified ID after service policy/scope checks |
 | `pcbDesign.guide`                    | Read a fixed, verified workflow/reference when enabled                                                   |
-| `parasitics.measure`                | [Two-terminal PCB DC resistance and route length](LAYOUT.md#layout-parasitics)                         |
+| `parasitics.measure`                | [Two-terminal PCB DC resistance, route length and partial inductance](LAYOUT.md#layout-parasitics)     |
 | `simulation.*`                       | [SPICE settings, runs, probes and waveforms](SIMULATION.md#shared-simulation-capabilities)               |
 | `thermal.*`                          | [Layout Thermal settings, runs, probes and images](THERMAL.md#interface)                                 |
 
 Discover exact schemas and live availability with `capabilities.list`. Review
-queues immutable commands; Apply/Auto use the same validation and captured
-revision. Project revision checks do not replace service-owned CLI/lifecycle
-checks. Confirmed changes publish `workbench.plugins.changed` or
+queues immutable arguments. Apply/Auto use the same validation and recheck
+the current targets and gates. Service-owned CLI and lifecycle checks apply
+to every request. Confirmed changes publish `workbench.plugins.changed` or
 `provider.plugins.changed`; refresh reconciles uncertain outcomes. Closing a
 project aborts its owned work but cannot undo completed external writes. See
 [Core](CORE.md) for review, event budgets and cancellation.
 
 ## Bundled workbench lifecycle
 
-SPICE Simulation (`spice-simulation@openpe`), Layout Thermal (`pcb-thermal@openpe`),
-PE Layout Skill (`ai-pcb-layout@openpe`) and Layout Parasitics
-(`layout-parasitics@openpe`) are preinstalled and enabled. Install activates
-packaged resources without downloading code or running provider CLIs.
-Uninstalled entries remain in Marketplace.
+Bundled plugins start installed and enabled. Install activates packaged
+resources without downloading code or running provider CLIs. Uninstalled
+entries remain in Marketplace.
 
 `server/workbench-plugin-catalog.json` fixes the catalog.
+In `dev:web`, all four bundled plugins start installed and enabled. The
+development host keeps Marketplace changes in process memory and resets them
+on restart. Layout Parasitics uses the renderer, PE Layout Skill serves bundled
+guidance, and the solver plugins use the bundled runtimes. SPICE and manual
+thermal runs keep results in the current renderer session. Codex and Claude
+Code plugin management uses the same provider adapters and OpenPE receipts as
+desktop. Native project result operations require the desktop host.
+
 `server/workbench-plugins.mjs` atomically persists flags in
 `workbench-plugins-v1.json`, separate from projects, recovery and provider
 receipts. Saved state must include each of the four current catalog entries
 exactly once with explicit installation and enabled flags. Missing files
 initialize the bundled defaults. Partial, obsolete or malformed files are
-preserved and fail closed. If an existing file has only the other three entries,
-add an explicit `layout-parasitics@openpe` row with `installed` and `enabled`
-boolean flags in application data and restart OpenPE.
+preserved and fail closed.
 
 | Action              | Effect                                                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -91,6 +148,9 @@ Chengmin Li and Xiao Yang, is bundled unchanged at
 `server/pcb-design/manifest.json` pins it and ten references with SHA-256 hashes.
 Packaged notices appear in About OpenPE; runtime performs no download or global
 Agent configuration change.
+
+The enabled plugin's details offer an icon-only Read workflow action. It opens
+the verified workflow in a read-only dialog through the shared guidance path.
 
 Enabled Codex/Claude turns receive service-owned instructions to read
 `pcbDesign.guide` and relevant references. DeepSeek/Pi receive the workflow as
@@ -175,6 +235,8 @@ render as images.
 | `tests/workbench-plugins.test.ts`, `tests/workbench-plugin-capabilities.test.ts` | Persistence, shared lifecycle, service cancellation and Layout Parasitics query gates |
 | `tests/pcb-design-plugin.test.ts`                                                | Bundled hashes, trusted instructions, incomplete catalogs and turn cancellation    |
 | `tests/plugins.test.ts`                                                          | Installed lists, receipts, provider/scope/policy isolation, bounds and concurrency |
+| `tests/browser-previews.test.ts`, `tests/browser-previews-bridge.test.ts`           | Browser authentication, fixed plugin endpoints and desktop-only project grants     |
+| `node scripts/check-thermal-workbench-ui.mjs --parasitics-dock`                  | Endpoints, measurement, fixed footer status, reset and dock switching             |
 | `tests/chat.test.ts`                                                             | Model discovery, cancellation and owned child cleanup, including Windows fallback  |
 | `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                 | Schemas, review/revisions, cancellation and synthetic scoped transports            |
 | `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands and model-specific effort selection |

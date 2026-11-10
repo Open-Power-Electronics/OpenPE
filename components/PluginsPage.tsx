@@ -1,6 +1,19 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Blocks, CircleHelp, RefreshCw, Search, Store } from 'lucide-react';
+import {
+  ArrowLeft,
+  Blocks,
+  BookOpen,
+  CircleHelp,
+  Download,
+  Power,
+  PowerOff,
+  RefreshCw,
+  Search,
+  Store,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { api } from '@/lib/bridge';
 import type { CapabilityHost } from '@/api/capabilities';
 import {
@@ -15,6 +28,7 @@ import {
   type WorkbenchPluginCatalog as Catalog,
 } from '@/lib/workbench-plugins';
 import Dialog from './Dialog';
+import AgentMarkdown from './AgentMarkdown';
 import AgentLogo from './AgentLogo';
 import PluginLogo, { hasPluginLogo } from './PluginLogo';
 
@@ -60,6 +74,12 @@ const labels: Record<Action, string> = {
   enable: 'Enable',
   disable: 'Disable',
 };
+const actionIcons = {
+  install: Download,
+  uninstall: Trash2,
+  enable: Power,
+  disable: PowerOff,
+} satisfies Record<Action, typeof Download>;
 function PluginIcon({ plugin }: { plugin: Plugin }) {
   const bundled =
     plugin.scope === 'application' && plugin.origin === 'openpe' && hasPluginLogo(plugin.id);
@@ -79,6 +99,45 @@ function PluginIcon({ plugin }: { plugin: Plugin }) {
         <span>{plugin.name.slice(0, 2).toUpperCase()}</span>
       )}
     </span>
+  );
+}
+
+function PluginWorkflow({
+  capabilityHost,
+  onClose,
+}: {
+  capabilityHost?: CapabilityHost;
+  onClose: () => void;
+}) {
+  const [result, setResult] = useState<{ text: string } | { error: string } | null>(null);
+  useEffect(() => {
+    const control = new AbortController();
+    const { signal } = control;
+    const load = async () => {
+      try {
+        const guide = (capabilityHost
+          ? await capabilityHost.query('pcbDesign.guide', {}, { signal })
+          : await (await api('pcb-design/guide?document=workflow', { signal })).json()) as {
+          text: string;
+        };
+        if (!signal.aborted) setResult({ text: guide.text });
+      } catch (error) {
+        if (!signal.aborted) setResult({ error: (error as Error).message });
+      }
+    };
+    void load();
+    return () => control.abort();
+  }, [capabilityHost]);
+  return (
+    <Dialog title="PE Layout Skill workflow" wide onClose={onClose}>
+      {!result ? (
+        <p role="status">Loading workflow…</p>
+      ) : 'error' in result ? (
+        <p className="plugins-error" role="alert">{result.error}</p>
+      ) : (
+        <AgentMarkdown text={result.text} />
+      )}
+    </Dialog>
   );
 }
 
@@ -106,6 +165,7 @@ export default function PluginsPage({
   const [working, setWorking] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<Provider, string>>>({});
   const [confirmation, setConfirmation] = useState<Operation | null>(null);
+  const [workflowOpen, setWorkflowOpen] = useState(false);
   const control = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const load = useCallback(
@@ -450,27 +510,46 @@ export default function PluginsPage({
               </div>
             )}
             <div className="plugin-actions">
+              {selectedPlugin.provider === 'openpe' &&
+                selectedPlugin.id === PCB_DESIGN_PLUGIN_ID &&
+                selectedPlugin.installed &&
+                selectedPlugin.enabled === true && (
+                  <button
+                    type="button"
+                    className="dialog-button quiet"
+                    aria-label="Read workflow"
+                    title="Read workflow"
+                    onClick={() => setWorkflowOpen(true)}
+                  >
+                    <BookOpen size={16} aria-hidden="true" />
+                  </button>
+                )}
               {selectedPlugin.managed ? (
                 <p>Managed by provider · {selectedPlugin.scope}</p>
               ) : (
-                actions(selectedPlugin).map((action) => (
-                  <button
-                    key={action}
-                    className={`dialog-button ${action === 'install' ? 'primary' : ''}`}
-                    disabled={working || loading[selectedPlugin.provider]}
-                    onClick={() => {
-                      const operation = {
-                        provider: selectedPlugin.provider,
-                        id: selectedPlugin.id,
-                        action,
-                      };
-                      if (action !== 'uninstall') void change(operation);
-                      else setConfirmation(operation);
-                    }}
-                  >
-                    {labels[action]}
-                  </button>
-                ))
+                actions(selectedPlugin).map((action) => {
+                  const Icon = actionIcons[action];
+                  return (
+                    <button
+                      key={action}
+                      className="dialog-button quiet"
+                      aria-label={labels[action]}
+                      title={labels[action]}
+                      disabled={working || loading[selectedPlugin.provider]}
+                      onClick={() => {
+                        const operation = {
+                          provider: selectedPlugin.provider,
+                          id: selectedPlugin.id,
+                          action,
+                        };
+                        if (action !== 'uninstall') void change(operation);
+                        else setConfirmation(operation);
+                      }}
+                    >
+                      <Icon size={16} aria-hidden="true" />
+                    </button>
+                  );
+                })
               )}
             </div>
           </article>
@@ -536,7 +615,7 @@ export default function PluginsPage({
                           </button>
                           {!plugin.installed ? (
                             <button
-                              className="dialog-button primary"
+                              className="dialog-button quiet"
                               disabled={working || loading[plugin.provider]}
                               onClick={() =>
                                 void change({
@@ -604,6 +683,9 @@ export default function PluginsPage({
           </>
         )}
       </div>
+      {workflowOpen && (
+        <PluginWorkflow capabilityHost={capabilityHost} onClose={() => setWorkflowOpen(false)} />
+      )}
       {confirmation && (
         <Dialog
           compact
@@ -611,11 +693,21 @@ export default function PluginsPage({
           onClose={() => setConfirmation(null)}
           footer={
             <>
-              <button className="dialog-button" onClick={() => setConfirmation(null)}>
-                Cancel
+              <button
+                className="dialog-button quiet"
+                aria-label="Cancel"
+                title="Cancel"
+                onClick={() => setConfirmation(null)}
+              >
+                <X size={16} aria-hidden="true" />
               </button>
-              <button className="dialog-button primary" onClick={() => void change()}>
-                {labels[confirmation.action]}
+              <button
+                className="dialog-button quiet"
+                aria-label={labels[confirmation.action]}
+                title={labels[confirmation.action]}
+                onClick={() => void change()}
+              >
+                <Trash2 size={16} aria-hidden="true" />
               </button>
             </>
           }

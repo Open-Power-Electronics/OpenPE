@@ -243,6 +243,9 @@ test('native island policies remove or mark a disconnected fragment of a connect
     removed,
     kept.filter((polygon) => !polygon.island),
   );
+  delete zone.islandRemovalMode;
+  assert.deepEqual(fillCopperZone(board, zone.id).zones[0].filledPolygons, removed);
+  assert.deepEqual(fillCopperZones(board).zones[0].filledPolygons, removed);
   board.footprints = [];
   const floating = fillCopperZones(board).zones[0].filledPolygons!;
   assert.equal(floating.length, 2);
@@ -261,7 +264,7 @@ test('TPS61046 runtime refill matches KiCad empty-zone and island outcomes', () 
   }
 });
 
-test('LM25017 native GND2 refill matches the saved copper along all three exposed L1 keepout edges', () => {
+test('LM25017 GND2 refill preserves native copper at L1 keepout edges and plated drills', () => {
   const source = readFileSync(
     'examples/lm25017-wson8-flybuck/lm25017-wson8-flybuck.kicad_pcb',
     'utf8',
@@ -277,14 +280,17 @@ test('LM25017 native GND2 refill matches the saved copper along all three expose
         [48, 48.05],
         [43.6, 49.2],
         [52.1, 49.2],
+        [50.1, 47.575],
+        [56.24, 46.345],
       ])
-        assert.equal(contains(copper, x, y), true, `${layer} outside the keepout at ${x}, ${y}`);
+        assert.equal(contains(copper, x, y), true, `${layer} copper at ${x}, ${y}`);
       for (const [x, y] of [
         [48, 48.4],
         [43.95, 49.2],
         [51.75, 49.2],
+        [53.7, 46.345],
       ])
-        assert.equal(contains(copper, x, y), false, `${layer} inside the keepout at ${x}, ${y}`);
+        assert.equal(contains(copper, x, y), false, `${layer} exclusion at ${x}, ${y}`);
     }
   }
 });

@@ -231,7 +231,7 @@ type SelectionCandidate = { id: string; directFootprintText?: boolean } & (
 );
 type LayoutSelectionChoice = {
   candidates: SelectionCandidate[];
-  mode: PCBSelectionMode;
+  mode: PCBSelectionMode | 'parasitics';
   basis: PCB;
 };
 function mergeSelectionMode(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
@@ -1199,8 +1199,12 @@ function LayoutEditor({
   // Publish only committed selection state. Abandoned/concurrent renders cannot
   // change the retained drawing, and layout effects update paint before display.
   useLayoutEffect(() => {
-    selectionPaint.update(selectedIds, trackDragChangedIds);
-  }, [selectionPaint, selectedIds, trackDragChangedIds]);
+    const terminals = parasiticsProbe?.terminals;
+    selectionPaint.update(
+      terminals?.length ? new Set([...selectedIds, ...terminals.map(({ id }) => id)]) : selectedIds,
+      trackDragChangedIds,
+    );
+  }, [selectionPaint, selectedIds, trackDragChangedIds, parasiticsProbe?.terminals]);
   useLayoutEffect(() => {
     if (!agentContextRef) return;
     if (!visible) {
@@ -1440,6 +1444,7 @@ function LayoutEditor({
     );
   }, [active]);
   useLayoutEffect(() => {
+    setSelectionChoice(null);
     if (analysisProbing) activate('select', true);
   }, [Boolean(onAnalysisProbe), Boolean(parasiticsProbe)]);
   useEffect(() => {
@@ -2062,7 +2067,7 @@ function LayoutEditor({
   }
   function selectionChoiceAction(
     candidate: SelectionCandidate,
-    mode: PCBSelectionMode,
+    mode: LayoutSelectionChoice['mode'],
   ): CanvasMenuAction {
     let label = 'Via';
     let icon = CircleDot;
@@ -2100,7 +2105,26 @@ function LayoutEditor({
       label = [zone?.keepout ? 'Rule area' : 'Zone', zone?.layer].filter(Boolean).join(' · ');
       icon = Pentagon;
     }
-    return { id: candidate.id, label, icon, run: () => selectCandidate(candidate, mode) };
+    return {
+      id: candidate.id,
+      label,
+      icon,
+      run: () => {
+        if (mode !== 'parasitics') {
+          selectCandidate(candidate, mode);
+          return;
+        }
+        const terminal = parasiticsTerminal(candidate);
+        if (
+          terminal &&
+          parasiticsProbe &&
+          !parasiticsProbe.composing.current &&
+          !annotationDisabled &&
+          latestBoard.current === pcb
+        )
+          parasiticsProbe.onPick(terminal);
+      },
+    };
   }
   function selectionCandidates(
     e: { clientX: number; clientY: number },
@@ -3191,20 +3215,45 @@ function LayoutEditor({
     setInspectedPadId('');
     setInspector(false);
   }
+  function parasiticsTerminal(candidate: SelectionCandidate) {
+    if (candidate.padId) {
+      for (const footprint of pcb.footprints) {
+        const pad = footprint.pads.find(({ id }) => id === candidate.padId);
+        if (pad?.netId && pad.type !== 'np_thru_hole') return { id: pad.id, netId: pad.netId };
+      }
+    } else if (candidate.selection?.kind === 'via') {
+      const { id } = candidate.selection;
+      const via = pcb.vias.find((item) => item.id === id);
+      if (via?.netId) return { id: via.id, netId: via.netId };
+    }
+  }
   function pickParasiticsTerminal(e: React.PointerEvent<SVGSVGElement>) {
-    if (!parasiticsProbe || annotationDisabled || latestBoard.current !== pcb) return;
-    flushLayoutCamera(svg.current);
-    // Use the painted pad/via targets so the active layer and paint order
-    // resolve overlapping terminals the same way they appear on the board.
-    for (const element of document.elementsFromPoint(e.clientX, e.clientY)) {
-      if (!svg.current?.contains(element)) continue;
-      const terminal = element.closest<SVGElement>('[data-pad-id], [data-via-type]');
-      if (!terminal) continue;
-      const { padId, selectionId, netId } = terminal.dataset;
-      const id = padId ?? selectionId;
-      if (id && netId && terminal.dataset.padType !== 'np_thru_hole')
-        parasiticsProbe.onPick({ id, netId });
+    if (
+      !parasiticsProbe ||
+      parasiticsProbe.composing.current ||
+      annotationDisabled ||
+      latestBoard.current !== pcb
+    )
       return;
+    try {
+      const candidates = selectionCandidates(e).filter((candidate) => parasiticsTerminal(candidate));
+      let choices: SelectionCandidate[] | undefined;
+      const candidate = pointCandidate(e, candidates, false, (items) => {
+        choices = items;
+      });
+      if (choices) {
+        setSelectionChoice({
+          candidates: choices,
+          mode: 'parasitics',
+          basis: pcb,
+          position: { x: e.clientX, y: e.clientY },
+        });
+      } else {
+        const terminal = candidate && parasiticsTerminal(candidate);
+        if (terminal) parasiticsProbe.onPick(terminal);
+      }
+    } catch (error) {
+      setError((error as Error).message);
     }
   }
   function end(e: React.PointerEvent<SVGSVGElement>) {
@@ -3825,6 +3874,17 @@ function LayoutEditor({
     () => layoutFootprintLayerPasses(displayBoard, layers, paintLayerOrder),
     [displayBoard.footprints, pcb.layers, layers, paintLayerOrder],
   );
+  const terminalPads = useMemo(() => {
+    const byOwner = new Map<string, Set<string>>();
+    for (const { id } of parasiticsProbe?.terminals ?? []) {
+      const owner = pcb.footprints.find((footprint) => footprint.pads.some((pad) => pad.id === id));
+      if (!owner) continue;
+      const pads = byOwner.get(owner.id) ?? new Set<string>();
+      pads.add(id);
+      byOwner.set(owner.id, pads);
+    }
+    return byOwner;
+  }, [pcb.footprints, parasiticsProbe?.terminals]);
   const footprintInputs = [
     copperLayers,
     footprintPasses.graphics,
@@ -3835,6 +3895,7 @@ function LayoutEditor({
     layer,
     paintLayerOrder,
     inspectedPadId,
+    terminalPads,
     netNames,
     highlightNets,
   ];
@@ -3858,6 +3919,7 @@ function LayoutEditor({
     selectionPaint,
     placement?.id,
     inspectedPadId,
+    terminalPads,
     highlightNets,
   ];
   const retainTrack = useRetainedElements(placed.tracks, copperInputs);
@@ -3985,6 +4047,7 @@ function LayoutEditor({
             inspectedPadId && footprint.pads.some((pad) => pad.id === inspectedPadId)
               ? inspectedPadId
               : '',
+          terminalPads: terminalPads.get(footprint.id),
           netNames,
           highlightNets,
         },
@@ -4032,6 +4095,7 @@ function LayoutEditor({
               inspectedPadId && footprint.pads.some((pad) => pad.id === inspectedPadId)
                 ? inspectedPadId
                 : '',
+            terminalPads: terminalPads.get(footprint.id),
             highlightNets,
           },
           ({ key, ...props }) => <LayoutFootprintDrills key={key} {...props} />,
@@ -4595,63 +4659,6 @@ function LayoutEditor({
               </button>
             </div>
             <div className="editor-tool-group" role="group" aria-label="Edit and history">
-              <div className={`tool-menu${tool === 'hand' ? ' active' : ''}`}>
-                <Select
-                  label="Edit layout"
-                  value=""
-                  icon={<RotateCw size={17} />}
-                  compact
-                  iconOnly
-                  showChevron={false}
-                  disabled={Boolean(parasiticsProbe)}
-                  options={[
-                    ...(tool === 'select' && selection.length && !drag && !trackDrag
-                      ? [{ value: 'move', label: 'Move selection' }]
-                      : []),
-                    ...(tool === 'select' &&
-                    !drag &&
-                    !trackDrag &&
-                    selection.some((s) => s.kind === 'track' || s.kind === 'via')
-                      ? [
-                          { value: 'expand', label: 'Expand track selection' },
-                          { value: 'highlight', label: 'Highlight selected nets' },
-                        ]
-                      : []),
-                    ...(tool === 'select' && !drag && !trackDrag && connectedPCBDragKind(selection)
-                      ? selection[0].kind === 'footprint'
-                        ? [{ value: 'track-drag', label: 'Drag footprints with tracks' }]
-                        : [
-                            { value: 'track-drag', label: 'Drag connected tracks' },
-                            { value: 'corner-drag', label: 'Drag track corner' },
-                          ]
-                      : []),
-                    ...((tool === 'select' && selection.length && !trackDrag) || placement
-                      ? [{ value: 'rotate', label: 'Rotate selection' }]
-                      : []),
-                    ...(placement ||
-                    (tool === 'select' &&
-                      !trackDrag &&
-                      selection.some((s) => s.kind === 'footprint'))
-                      ? [{ value: 'flip', label: 'Flip footprint' }]
-                      : []),
-                    ...(tool === 'select' && selection.length && !drag && !trackDrag
-                      ? [{ value: 'delete', label: 'Delete selection' }]
-                      : []),
-                    { value: 'hand', label: 'Pan' },
-                  ]}
-                  onChange={(value) => {
-                    if (value === 'move') beginMove();
-                    else if (value === 'track-drag') beginTrackDrag();
-                    else if (value === 'corner-drag') beginTrackDrag('corner');
-                    else if (value === 'expand') expandTracks();
-                    else if (value === 'highlight') highlightSelectionNet();
-                    else if (value === 'rotate') rotate();
-                    else if (value === 'flip') flip();
-                    else if (value === 'delete') remove();
-                    else activate('hand');
-                  }}
-                />
-              </div>
               {undoAction}
             </div>
             {analysisAction && (
@@ -4686,7 +4693,7 @@ function LayoutEditor({
           )}
           <div
             ref={host}
-            className={`canvas-wrap layout-canvas tool-${tool}${analysisProbing ? ' is-analysis-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
+            className={`canvas-wrap layout-canvas tool-${tool}${analysisProbing ? ' is-analysis-probing' : ''}${onAnalysisProbe ? ' is-point-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
           >
             <svg
               ref={svg}
@@ -4841,7 +4848,7 @@ function LayoutEditor({
                             data-annotation-overlay
                             pointerEvents="none"
                             aria-hidden="true"
-                            transform={`translate(${point.x} ${point.y}) scale(${view.width / size.width})`}
+                            transform={`translate(${point.x} ${point.y}) scale(${view.width / size.width}) translate(12 -12)`}
                           >
                             <circle
                               r={9}

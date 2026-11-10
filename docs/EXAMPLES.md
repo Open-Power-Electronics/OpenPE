@@ -100,7 +100,10 @@ in `tests/fixtures/reference/*.json`; these are not user project files. The
 reference projects ship their curated controller definitions in a local
 `Reference` symbol library matching the embedded definitions. Conversion uses
 official `PWR_FLAG` symbols to declare the input supply and return, including
-the separate LM25017 secondary return. It corrects controller pin types and
+the separate LM25017 secondary return. The nine reference schematics and EMC
+Flyback align the flags with the virtual sources and loads within the width of
+the circuit below. Each flag connects to its rail through a matching net label
+at the flag pin. Conversion corrects controller pin types and
 keeps the two LM2735 NC pin tips clear of the EN wire. Physical pin numbers,
 simulation mappings, package placement, pads, nets, tracks, vias and zone
 ownership are retained.

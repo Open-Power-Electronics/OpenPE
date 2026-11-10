@@ -6135,30 +6135,6 @@
     (pts
       (xy 345.44 5.08)
       (xy 345.44 10.16)))
-  (wire
-    (stroke
-      (width 0)
-      (type default))
-    (uuid "070a0626-50af-5e5a-a85e-609660c5539e")
-    (pts
-      (xy 132.08 111.76)
-      (xy 137.16 111.76)))
-  (wire
-    (stroke
-      (width 0)
-      (type default))
-    (uuid "5c82dfcc-d76f-5549-a425-d5d592b88767")
-    (pts
-      (xy 157.48 111.76)
-      (xy 162.56 111.76)))
-  (wire
-    (stroke
-      (width 0)
-      (type default))
-    (uuid "555c6952-1581-5066-a70d-bc77cf8f543d")
-    (pts
-      (xy 170.18 111.76)
-      (xy 175.26 111.76)))
   (junction
     (at 228.6 185.42)
     (diameter 0)
@@ -6809,6 +6785,62 @@
       (justify left bottom))
     (uuid "8d0cb438-37c2-5f67-a273-7123dc2c98ba")
     (at 345.44 10.16 0))
+  (label "PGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "69e44903-23fe-529e-a919-35886aa7085b")
+    (at 132.08 111.76 0))
+  (label "SGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "6add2011-c0e8-5ba5-a174-11c2a1e0b7dd")
+    (at 157.48 111.76 0))
+  (label "CHASSIS"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "0363b5fb-20f7-589a-adde-cfcb65f2ceab")
+    (at 170.18 111.76 0))
+  (label "VBUS"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "d10377af-9580-5b0a-a23e-4eb0289b2723")
+    (at 78.74 0 0))
+  (label "VOUT"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "6b819e03-ba25-55c2-a88e-c55c8898f717")
+    (at 307.34 0 0))
+  (label "PGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "b887cf4a-8789-575d-ab66-a4ffc146f2a8")
+    (at 154.94 0 0))
+  (label "SGND"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "40c24afb-416f-5f47-a720-5002e8199cdf")
+    (at 383.54 0 0))
+  (label "CHASSIS"
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "f10e7c90-2955-558a-a626-a26dc4b15bc6")
+    (at 231.14 0 0))
   (symbol
     (lib_id "Device:C_Polarized")
     (at 134.62 54.61 0)
@@ -18206,11 +18238,11 @@
           (size 1.27 1.27))
         (justify left)))
     (property "Value" "${SIM.PARAMS}"
-      (at 349.25 1.4 0)
+      (at 383.54 -19.05 0)
       (effects
         (font
           (size 1.27 1.27))
-        (justify left)))
+        (justify right)))
     (instances
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
@@ -18254,7 +18286,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 106.68 114.3 90)
+    (at 78.74 0 0)
     (unit 1)
     (exclude_from_sim yes)
     (in_bom no)
@@ -18262,13 +18294,13 @@
     (dnp no)
     (uuid "82f15ab9-d892-5c32-a73d-00a87f2fb520")
     (property "Reference" "#FLG1"
-      (at 106.68 117.856 0)
+      (at 78.74 2.54 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 106.68 117.856 0)
+      (at 78.74 2.54 0)
       (effects
         (font
           (size 1.27 1.27))))
@@ -18278,14 +18310,14 @@
           (reference "#FLG1")
           (unit 1))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 106.68 114.3 0)
+      (at 78.74 0 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 119.38 114.3 90)
+    (at 307.34 0 0)
     (unit 1)
     (exclude_from_sim yes)
     (in_bom no)
@@ -18293,13 +18325,13 @@
     (dnp no)
     (uuid "14c687fa-3fd4-5b97-a1a4-312e429797fc")
     (property "Reference" "#FLG2"
-      (at 119.38 117.856 0)
+      (at 307.34 2.54 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 119.38 117.856 0)
+      (at 307.34 2.54 0)
       (effects
         (font
           (size 1.27 1.27))))
@@ -18309,14 +18341,14 @@
           (reference "#FLG2")
           (unit 1))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 119.38 114.3 0)
+      (at 307.34 0 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 137.16 111.76 0)
+    (at 154.94 0 0)
     (unit 1)
     (exclude_from_sim yes)
     (in_bom no)
@@ -18324,13 +18356,13 @@
     (dnp no)
     (uuid "08a82aba-0858-57c9-a567-ef6426541452")
     (property "Reference" "#FLG3"
-      (at 137.16 114.3 0)
+      (at 154.94 2.54 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 137.16 114.3 0)
+      (at 154.94 2.54 0)
       (effects
         (font
           (size 1.27 1.27))))
@@ -18340,14 +18372,14 @@
           (reference "#FLG3")
           (unit 1))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 137.16 111.76 0)
+      (at 154.94 0 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 162.56 111.76 0)
+    (at 383.54 0 0)
     (unit 1)
     (exclude_from_sim yes)
     (in_bom no)
@@ -18355,13 +18387,13 @@
     (dnp no)
     (uuid "ef46c3df-4597-5828-a648-7d2e6738a618")
     (property "Reference" "#FLG4"
-      (at 162.56 114.3 0)
+      (at 383.54 2.54 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 162.56 114.3 0)
+      (at 383.54 2.54 0)
       (effects
         (font
           (size 1.27 1.27))))
@@ -18371,14 +18403,14 @@
           (reference "#FLG4")
           (unit 1))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 162.56 111.76 0)
+      (at 383.54 0 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 175.26 111.76 0)
+    (at 231.14 0 0)
     (unit 1)
     (exclude_from_sim yes)
     (in_bom no)
@@ -18386,13 +18418,13 @@
     (dnp no)
     (uuid "a5bdb7c6-5b42-5b09-a93a-c2decf6dae2d")
     (property "Reference" "#FLG5"
-      (at 175.26 114.3 0)
+      (at 231.14 2.54 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 175.26 114.3 0)
+      (at 231.14 2.54 0)
       (effects
         (font
           (size 1.27 1.27))))
@@ -18402,7 +18434,7 @@
           (reference "#FLG5")
           (unit 1))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 175.26 111.76 0)
+      (at 231.14 0 0)
       (effects
         (font
           (size 1.27 1.27)))

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { ProjectCore } from '../core/project-core';
-import { parseCircuit } from '../lib/circuit';
+import { parseCircuit, pinPositions } from '../lib/circuit';
 import { projectFromNativeFiles, projectNativeFiles } from '../lib/project';
 import { displayPartValue, partFields } from '../lib/library';
 import { preparePartProperties, simulationSourceProperties } from '../lib/part-properties';
@@ -11,6 +11,7 @@ import { prepareSourceConversion } from '../lib/simulation-source-conversion';
 import { buildSpiceDeck, defaultTransient, spiceNets } from '../lib/spice';
 import { schematicPCBNets, pcbPinKey } from '../lib/pcb-sync';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
+import { onWire, samePoint } from '../lib/wiring';
 import {
   prepareEmcFlybackNativeTestbench,
   isEmcDatasheetSection,
@@ -33,6 +34,17 @@ test('the actual native EMC testbench has explicit virtual supplies/loads and pr
   const x = bench.map((part) => part.x).sort((a, b) => a - b);
   for (let i = 2; i < x.length; i++) assert.ok(Math.abs(x[i] - x[i - 1] - (x[1] - x[0])) < 1e-8);
   assert.ok(bench.every((part) => part.y === bench[0].y && part.y < 22.86));
+  const flagRails = d.parts
+    .filter((part) => part.libId === 'power:PWR_FLAG')
+    .map((flag) => {
+      const [pin] = pinPositions(flag, d.libraries[flag.libId]);
+      assert.equal(pin.y, bench[0].y);
+      assert.ok(!d.wires.some((wire) => onWire(pin, wire)));
+      const labels = d.labels.filter((label) => samePoint(label, pin));
+      assert.equal(labels.length, 1);
+      return labels[0].text;
+    });
+  assert.deepEqual(flagRails.sort(), ['CHASSIS', 'PGND', 'SGND', 'VBUS', 'VOUT']);
   const frames = children(d.original!, 'polyline').map((line) => {
     const points = children(child(line, 'pts')!, 'xy');
     return {

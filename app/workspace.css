@@ -3,6 +3,7 @@
 :root {
   --editor-sidebar-default-width: 280px;
   --editor-footer-height: max(35px, calc(var(--font-control) * 1.4 + 15px));
+  --editor-footer-control-height: max(26px, calc(var(--font-caption) * 1.35 + 8px));
   --status-control-inset: 4px;
   --properties-inset: 8px 12px;
   --properties-row-gap: 4px;
@@ -3898,7 +3899,6 @@ body[data-workspace-resizing='true'] * {
 }
 
 .status-bar {
-  --status-item-height: 26px;
   --status-item-fill: color-mix(in srgb, var(--surface) 70%, var(--tint));
   container: editor-status / inline-size;
   display: flex;
@@ -4072,7 +4072,7 @@ body[data-workspace-resizing='true'] * {
 }
 :is(.grid-density, .layout-status-selects) .select-trigger {
   width: auto;
-  min-height: var(--status-item-height);
+  min-height: var(--editor-footer-control-height);
   gap: 5px;
   padding: 3px 7px;
   border-color: var(--line-soft);
@@ -4103,7 +4103,7 @@ body[data-workspace-resizing='true'] * {
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
-  min-height: var(--status-item-height, 26px);
+  min-height: 26px;
   gap: 6px;
   padding: 3px 7px;
   border: 1px solid var(--line-soft);
@@ -7679,15 +7679,13 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   line-height: 1.5;
   scrollbar-width: thin;
 }
-.analysis-run-button {
+.analysis-footer-button {
   flex: 0 0 auto;
-  min-height: 26px;
-  padding: 2px 6px;
-  font-size: var(--font-small);
-  line-height: 1.4;
-  white-space: nowrap;
+  min-width: var(--editor-footer-control-height);
+  min-height: var(--editor-footer-control-height);
+  padding: 2px;
 }
-.analysis-run-button > svg {
+.analysis-footer-button > svg {
   flex: 0 0 14px;
   width: 14px;
   height: 14px;

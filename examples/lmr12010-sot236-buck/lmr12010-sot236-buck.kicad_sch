@@ -1567,11 +1567,6 @@
       (xy 165.1 27.94)
       (xy 165.1 31.75))
     (uuid "3600515d-9be1-53b5-a3f7-4423d62eb053"))
-  (wire
-    (pts
-      (xy 105.41 31.75)
-      (xy 113.03 31.75))
-    (uuid "03e25255-3e7d-50d5-aab4-99f615050b18"))
   (junction
     (at 29.21 68.58)
     (uuid "05fd10d5-68b8-44b8-b5a5-f70a6c1f9adb"))
@@ -1660,6 +1655,27 @@
   (label "VOUT"
     (at 165.1 16.51 0)
     (uuid "c54f7651-91ba-51f2-a9a1-358a13ca092e")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 113.03 31.75 0)
+    (uuid "bf8eb143-3de4-5324-a4e2-fa61b4c09d79")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "VIN"
+    (at 130.81 24.13 0)
+    (uuid "81c12303-6768-5da9-abbb-006a54815cf5")
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom)))
+  (label "GND"
+    (at 147.32 24.13 0)
+    (uuid "e10a0b37-3893-5844-afe9-cf2fabb47900")
     (effects
       (font
         (size 1.27 1.27))
@@ -2860,7 +2876,7 @@
           (size 1.27 1.27))
         (justify left)))
     (property "Value" "${SIM.PARAMS}"
-      (at 116.84 25.53 0)
+      (at 119.38 15.24 0)
       (effects
         (font
           (size 1.27 1.27))
@@ -2981,7 +2997,7 @@
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 113.03 16.51 0)
+    (at 130.81 24.13 0)
     (unit 1)
     (uuid "e4ed68a9-8c8e-5ca1-a5de-6f11d3658113")
     (in_bom no)
@@ -2991,25 +3007,25 @@
           (reference "#FLG1")
           (unit 1))))
     (property "Reference" "#FLG1"
-      (at 113.03 19.05 0)
+      (at 130.81 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 113.03 19.05 0)
+      (at 130.81 26.67 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 113.03 16.51 0)
+      (at 130.81 24.13 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
     (lib_id "power:PWR_FLAG")
-    (at 105.41 31.75 0)
+    (at 147.32 24.13 0)
     (unit 1)
     (uuid "fdbb17de-83ea-575b-a220-15d71c417f1d")
     (in_bom no)
@@ -3019,18 +3035,18 @@
           (reference "#FLG2")
           (unit 1))))
     (property "Reference" "#FLG2"
-      (at 105.41 34.29 0)
+      (at 147.32 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))
       (hide yes))
     (property "Value" "PWR_FLAG"
-      (at 105.41 34.29 0)
+      (at 147.32 26.67 0)
       (effects
         (font
           (size 1.27 1.27))))
     (property "Description" "Special symbol for telling ERC where power comes from"
-      (at 105.41 31.75 0)
+      (at 147.32 24.13 0)
       (effects
         (font
           (size 1.27 1.27)))

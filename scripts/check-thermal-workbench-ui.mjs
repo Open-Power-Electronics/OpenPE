@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { tsImport } from 'tsx/esm/api';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
+import { toggleLayoutVisualization } from './visualization-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
 const { parseProject } = await tsImport('../lib/project.ts', import.meta.url);
@@ -277,7 +278,16 @@ async function runChecks() {
     );
     assert.ok(Math.abs((await parasitics.boundingBox()).width - nativeWidth) <= 1);
     assert.ok(Math.abs((await drawing.boundingBox()).width - nativeDrawingWidth) <= 1);
+    const copperInput = await parasitics
+      .getByRole('textbox', { name: 'Copper thickness', exact: true })
+      .boundingBox();
+    const platingInput = await parasitics
+      .getByRole('textbox', { name: 'Via plating thickness', exact: true })
+      .boundingBox();
+    assert.ok(copperInput.x + copperInput.width <= platingInput.x);
+    assert.ok(Math.abs(copperInput.y - platingInput.y) <= 1);
     const layout = page.getByTestId('layout-canvas');
+    assert.equal(await layout.evaluate((svg) => getComputedStyle(svg).cursor), 'default');
     const initialView = await layout.getAttribute('viewBox');
     const canvas = await layout.boundingBox();
     await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
@@ -295,6 +305,12 @@ async function runChecks() {
     const pads = project.pcb.footprints.flatMap((footprint) => footprint.pads);
     const net = project.pcb.nets.find(({ name }) => name === 'Net-(D1-K)');
     const [start, end] = pads.filter((pad) => pad.netId === net.id);
+    const padLabel = (pad) => {
+      const owner = project.pcb.footprints.find(({ pads }) => pads.includes(pad));
+      const reference = project.schematic.parts.find(({ id }) => id === owner.symbolId)?.ref;
+      return `${reference ?? owner.reference ?? owner.libraryId} · Pad ${pad.number || '—'}`;
+    };
+    const terminals = parasitics.locator('.layout-parasitics-terminals');
     const [via] = project.pcb.vias;
     const viaPad = pads.find((pad) => pad.netId === via.netId);
     async function clickTerminal(selector) {
@@ -311,6 +327,16 @@ async function runChecks() {
     const first = layout.locator('[data-parasitics-terminal="1"]');
     const second = layout.locator('[data-parasitics-terminal="2"]');
     const measure = parasitics.getByRole('button', { name: 'Measure', exact: true });
+    assert.equal(await parasitics.locator('footer').getByRole('status').count(), 0);
+    const results = parasitics.locator('.layout-parasitics-results');
+    const measuredResistance = results.getByText(/^\d+\.\d{3} mΩ$/);
+    assert.deepEqual(await parasitics.getByRole('heading', { level: 3 }).allTextContents(), [
+      'Geometry',
+      'Terminals',
+      'Results',
+    ]);
+    assert.deepEqual(await terminals.locator('dd').allTextContents(), ['—', '—', '—']);
+    assert.deepEqual(await results.locator('dd').allTextContents(), ['—', '—', '—']);
     assert.equal(await measure.isDisabled(), true);
     const thickness = parasitics.getByRole('textbox', { name: 'Copper thickness', exact: true });
     await thickness.focus();
@@ -320,12 +346,33 @@ async function runChecks() {
     await thickness.dispatchEvent('compositionend');
     await clickPad(start);
     await first.waitFor();
+    assert.deepEqual(await terminals.locator('dd').allTextContents(), [
+      padLabel(start),
+      '—',
+      net.name,
+    ]);
+    assert.deepEqual(
+      await terminals.locator('.layout-parasitics-badge[data-picked="true"]').allTextContents(),
+      ['1'],
+    );
+    const startHighlight = layout.locator(`[data-pad-id="${start.id}"] [data-selection-only]`);
+    await startHighlight.waitFor();
     await clickPad(start);
     await clickVia();
     assert.equal(await second.count(), 0, 'Duplicate and different-net picks are ignored.');
     assert.equal(await measure.isDisabled(), true);
     await clickPad(end);
     await second.waitFor();
+    assert.deepEqual(await terminals.locator('dd').allTextContents(), [
+      padLabel(start),
+      padLabel(end),
+      net.name,
+    ]);
+    assert.deepEqual(
+      await terminals.locator('.layout-parasitics-badge[data-picked="true"]').allTextContents(),
+      ['1', '2'],
+    );
+    await layout.locator(`[data-pad-id="${end.id}"] [data-selection-only]`).waitFor();
     assert.equal(await measure.isEnabled(), true);
     assert.equal(
       await measure.evaluate((button) => {
@@ -342,23 +389,57 @@ async function runChecks() {
       'IME Enter cannot activate Measure inside the dock.',
     );
     await measure.click();
-    const resistance = parasitics.getByText('Equivalent DC resistance', { exact: true });
-    await resistance.waitFor();
+    await measuredResistance.waitFor();
+    assert.deepEqual(await results.locator('dt').allTextContents(), [
+      'Distance',
+      'Resistance',
+      'Partial inductance',
+    ]);
+    const rowTops = await results
+      .locator('dt')
+      .evaluateAll((labels) => labels.map((label) => label.getBoundingClientRect().top));
+    assert.ok(rowTops[0] < rowTops[1] && rowTops[1] < rowTops[2]);
+    assert.match(await results.locator('dd').nth(2).textContent(), /^\d+\.\d{3} nH$/);
     await clickVia();
     await second.waitFor({ state: 'detached' });
-    await resistance.waitFor({ state: 'detached' });
+    await startHighlight.waitFor({ state: 'detached' });
+    const viaHighlight = layout.locator(
+      `[data-via-type][data-selection-id="${via.id}"] [data-selection-only]`,
+    );
+    await viaHighlight.waitFor();
+    await measuredResistance.waitFor({ state: 'detached' });
+    assert.deepEqual(await results.locator('dd').allTextContents(), ['—', '—', '—']);
     await clickPad(viaPad);
     await second.waitFor();
     assert.equal(await measure.isEnabled(), true, 'A through via can be a terminal.');
     await parasitics.getByRole('button', { name: 'Reset', exact: true }).click();
     await first.waitFor({ state: 'detached' });
+    await viaHighlight.waitFor({ state: 'detached' });
+    assert.deepEqual(await terminals.locator('dd').allTextContents(), ['—', '—', '—']);
     assert.equal(await measure.isDisabled(), true);
     await clickPad(start);
     await first.waitFor();
     await layout.press('Escape');
     await first.waitFor({ state: 'detached' });
-    await clickPad(start);
-    await first.waitFor();
+    for (const ref of ['C2', 'J2']) {
+      const part = project.schematic.parts.find((item) => item.ref === ref);
+      const footprint = project.pcb.footprints.find((item) => item.symbolId === part.id);
+      await clickPad(footprint.pads.find((pad) => pad.number === '1'));
+    }
+    await second.waitFor();
+    await measure.click();
+    await measuredResistance.waitFor();
+    const outputLength = 2.95 + Math.hypot(2.31, 2.31) + 2.94;
+    assert.equal(
+      await results.locator('dd').first().textContent(),
+      `${outputLength.toFixed(3)} mm`,
+    );
+    const expected = ((1.724e-5 * outputLength * 1000) / (0.8 * 0.035)).toFixed(3);
+    assert.equal(
+      await results.locator('dd').nth(1).textContent(),
+      `${expected} mΩ`,
+      'The LM2596 C2 to J2 output measurement includes rounded track-end contacts.',
+    );
 
     assert.deepEqual(
       await page.evaluate(() => window.thermalWorkbenchHost().execute('thermal.show')),
@@ -385,8 +466,13 @@ async function runChecks() {
     assert.ok(Math.abs((await nativeSidebar.boundingBox()).width - nativeWidth) <= 1);
     assert.ok(Math.abs((await drawing.boundingBox()).width - nativeDrawingWidth) <= 1);
 
+    await toggleLayoutVisualization(page, 'Selection');
+    await page.getByRole('checkbox', { name: 'Pads', exact: true }).uncheck();
+    await toggleLayoutVisualization(page, 'Selection');
     await parasiticsButton.click();
     await parasitics.waitFor();
+    await clickPad(start);
+    assert.equal(await first.count(), 0, 'Parasitics respects the ordinary Pads selection filter.');
     await page.evaluate(() =>
       window.thermalWorkbenchHost().execute('workbench.plugins.change', {
         action: 'disable',
@@ -408,6 +494,11 @@ async function runChecks() {
   const panel = page.getByRole('region', { name: 'Layout Thermal', exact: true });
   const heatInput = page.getByRole('combobox', { name: 'Thermal heat input', exact: true });
   await heatInput.press('ArrowDown');
+  const heatInputMenu = page.getByRole('listbox', { name: 'Thermal heat input', exact: true });
+  await heatInputMenu.waitFor();
+  const popupWidth = (await heatInputMenu.boundingBox()).width;
+  const triggerWidth = (await heatInput.boundingBox()).width;
+  assert.ok(Math.abs(popupWidth - triggerWidth) <= 1);
   await heatInput.press('Home');
   await heatInput.press('Enter');
   await panel.waitFor();

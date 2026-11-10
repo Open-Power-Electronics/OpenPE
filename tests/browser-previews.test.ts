@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { request as httpRequest } from 'node:http';
 import { startBrowserPreviewServer } from '../server/browser-previews.mjs';
+import type { WorkbenchPluginCatalog } from '../lib/workbench-plugins';
 
 const origin = 'http://127.0.0.1:3000';
 const headers = {
@@ -97,6 +98,77 @@ test('browser preview bootstrap and preview require exact same-origin metadata a
   } finally {
     await host.close();
     assert.equal(closed, true);
+  }
+});
+
+test('browser plugin routes share bundled lifecycle and delegate provider operations', async () => {
+  const providerCalls: string[][] = [];
+  const host = await startBrowserPreviewServer({
+    providerPluginService: {
+      async list(provider, _signal, refresh) {
+        providerCalls.push([provider, String(refresh)]);
+        return {
+          plugins: [],
+          controlsVersion: 1,
+          browse: true,
+          actions: ['disable'],
+          marketplaces: false,
+          warning: '',
+          updatedAt: 1,
+        };
+      },
+      async change(provider, action, id) {
+        providerCalls.push([provider, action, id]);
+        return { ok: true };
+      },
+    },
+  });
+  const post = (path: string, body: object = {}, token?: string) =>
+    fetch(`${host.base}/api/browser-preview/${path}`, {
+      method: 'POST',
+      headers: { ...headers, ...(token ? { 'X-OpenPE-Token': token } : {}) },
+      body: JSON.stringify(body),
+    });
+  try {
+    assert.equal((await post('plugin/catalog')).status, 401);
+    const { token } = await (await post('session')).json();
+    const plugin = (action: string, body = {}) => post(`plugin/${action}`, body, token);
+    const catalog: WorkbenchPluginCatalog = await (await plugin('catalog')).json();
+    assert.equal(catalog.plugins.length, 4);
+    assert.ok(catalog.plugins.every(({ installed, enabled }) => installed && enabled));
+    assert.equal((await plugin('guide?document=workflow')).status, 200);
+    assert.equal((await plugin('guide?document=missing')).status, 400);
+    for (const kind of ['spice', 'thermal']) {
+      assert.equal((await plugin(`${kind}-run`, { fileId: 'forged' })).status, 400);
+      assert.equal(
+        (await plugin(`${kind}-run`, { source: '/arbitrary/path', executable: 'fake' })).status,
+        400,
+      );
+      assert.equal((await plugin(`${kind}-result`)).status, 404);
+    }
+    assert.equal((await plugin('providers')).status, 404);
+    assert.equal((await plugin('provider-list?provider=codex&refresh=true')).status, 200);
+    assert.equal((await plugin('provider-list?provider=unknown')).status, 400);
+    assert.equal(
+      (await plugin('provider-change', {
+        provider: 'claude', action: 'disable', id: 'fixture@local',
+      })).status,
+      200,
+    );
+    assert.equal(
+      (await plugin('provider-change', { provider: 'claude', action: 'disable', id: '--unknown' })).status,
+      400,
+    );
+    assert.deepEqual(providerCalls, [['codex', 'true'], ['claude', 'disable', 'fixture@local']]);
+    for (const [action, id] of [
+      ['spice-status', 'spice-simulation@openpe'],
+      ['thermal-status', 'pcb-thermal@openpe'],
+    ]) {
+      assert.equal((await plugin('change', { action: 'disable', id })).status, 200);
+      assert.equal((await plugin(action)).status, 403);
+    }
+  } finally {
+    await host.close();
   }
 });
 

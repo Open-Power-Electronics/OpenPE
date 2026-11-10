@@ -134,6 +134,9 @@ test('shape edits keep circles valid and reconcile rounded-corner data while rej
 test('pad edits refresh native fills in one board revision and undo restores exact source', () => {
   const { board, pad } = fixture();
   board.footprints[0] = flipPCBFootprint(board.footprints[0]);
+  // A thermal relief follows the pad geometry. A solid same-net plated drill
+  // is stored separately and does not cut the zone contour.
+  board.footprints[0].pads[0].zoneConnect = 1;
   const outline = board.zones[0].outline;
   board.graphics = outline.map((start, index) => ({
     id: uid(),
@@ -174,6 +177,10 @@ test('pad edits refresh native fills in one board revision and undo restores exa
   assert.equal(reopened.pcb!.nets.find((net) => net.id === restoredPad.netId)?.name, 'SIGNAL');
   assert.ok(accepted.zones[0].filledPolygons!.length > 0);
   assert.notDeepEqual(accepted.zones[0].filledPolygons, owned.zones[0].filledPolygons);
+  assert.deepEqual(
+    accepted.zones[0].filledPolygons,
+    fillCopperZones(edited).zones[0].filledPolygons,
+  );
   assert.deepEqual(reopened.pcb!.zones[0].filledPolygons, accepted.zones[0].filledPolygons);
   assert.ok(
     children(children(parseSExpr(nativeFile.source), 'zone')[0], 'filled_polygon').length > 0,

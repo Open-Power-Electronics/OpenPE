@@ -1,4 +1,5 @@
-import { serializeCircuit, type Circuit } from './circuit';
+import { serializeCircuit, snap, type Circuit } from './circuit';
+import { partFields } from './library';
 import { child, children, parseSExpr, quote, val, type SExpr } from './sexpr';
 
 type Placement = [x: number, y: number, align?: 'left' | 'right'];
@@ -78,6 +79,7 @@ const homeLayouts: Record<
   Record<string, Partial<Record<'Reference' | 'Value', Placement>>>
 > = {
   'emc-flyback-demo': {
+    I1: { Value: [383.54, -19.05, 'right'] },
     '#PWR088': { Value: [78.74, 63.5] },
     '#PWR089': { Value: [86.36, 63.5] },
     '#PWR090': { Value: [99.06, 73.66] },
@@ -329,12 +331,18 @@ export function arrangeExampleText(d: Circuit, id: string) {
     for (const part of d.parts) {
       const pairedTerminal = id === 'reference-lmr12010-sot236-buck' && /^J[1-4]$/.test(part.ref);
       const upperTerminal = part.ref === 'J1' || part.ref === 'J3';
-      const positions = pairedTerminal
-        ? {
-            Reference: [part.x + 2.54, part.y + (upperTerminal ? -7.62 : 5.08)] as Placement,
-            Value: [part.x + 2.54, part.y + (upperTerminal ? -5.08 : 7.62)] as Placement,
-          }
-        : layout[part.ref];
+      const referencePulseSource =
+        id.startsWith('reference-') &&
+        part.ref === 'V1' &&
+        partFields(part)['Sim.Type'] === 'PULSE';
+      const positions = referencePulseSource
+        ? { Value: [snap(part.x + 6.35), snap(part.y - 8.89), 'left'] as Placement }
+        : pairedTerminal
+          ? {
+              Reference: [part.x + 2.54, part.y + (upperTerminal ? -7.62 : 5.08)] as Placement,
+              Value: [part.x + 2.54, part.y + (upperTerminal ? -5.08 : 7.62)] as Placement,
+            }
+          : layout[part.ref];
       if (!positions) continue;
       part.raw ??= instances.get(part.id);
       for (const name of ['Reference', 'Value'] as const) {

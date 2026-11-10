@@ -304,7 +304,7 @@ function circularClearance(at: Point, radius: number): Polygon {
 }
 
 const hasIslandPolicy = (zone: BoardZone) =>
-  zone.islandRemovalMode === 0 || zone.islandRemovalMode === 1;
+  (zone.islandRemovalMode ?? 0) === 0 || zone.islandRemovalMode === 1;
 
 function applyCopperIslandPolicy(
   board: PCB,
@@ -421,13 +421,16 @@ function calculateCopperPolygons(
   const pads = board.footprints.flatMap((f) =>
     f.pads.map((p) => ({ f, p, shape: padPolygon(f, p) })),
   );
-  const holes: Polygon[] = [
-    ...board.vias.map((v) => ({ outer: circlePolygon(v, v.drill / 2), holes: [] })),
+  const drills = [
+    ...board.vias.map((v) => ({
+      netId: v.netId,
+      polygon: { outer: circlePolygon(v, v.drill / 2), holes: [] },
+    })),
     ...pads
       .filter(({ p }) => p.drill)
       .map(({ f, p }) => ({
-        outer: circlePolygon(padDrillPosition(f, p), p.drill! / 2),
-        holes: [],
+        netId: p.type === 'thru_hole' ? p.netId : null,
+        polygon: { outer: circlePolygon(padDrillPosition(f, p), p.drill! / 2), holes: [] },
       })),
   ];
   const ordered = [...fills].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
@@ -511,6 +514,10 @@ function calculateCopperPolygons(
         thermal.push(...subtractPolygons(gap, spokes));
       }
     }
+    // KiCad stores connected plated drills separately from zone contours.
+    const holes = drills
+      .filter(({ netId }) => !netId || netId !== z.netId)
+      .map(({ polygon }) => polygon);
     region = subtractPolygons(region, [...blocked, ...thermal, ...holes]);
     // Remove narrow webs and undersized remnants before expanding the surviving cores.
     const radius = z.minThickness / 2;

@@ -948,16 +948,20 @@ export default function SimulationDialog({
               )}
               {running ? (
                 <button
-                  className="dialog-button secondary analysis-run-button"
+                  className="dialog-button quiet analysis-footer-button"
+                  aria-label="Stop"
+                  title="Stop"
                   onClick={() => {
                     executeSimulation('simulation.cancel');
                   }}
                 >
-                  <Square size={15} /> Stop
+                  <Square aria-hidden="true" />
                 </button>
               ) : (
                 <button
-                  className="dialog-button primary analysis-run-button"
+                  className="dialog-button quiet analysis-footer-button"
+                  aria-label="Run"
+                  title="Run"
                   disabled={
                     !preview.deck ||
                     !status?.available ||
@@ -967,7 +971,7 @@ export default function SimulationDialog({
                   }
                   onClick={() => executeSimulation('simulation.run')}
                 >
-                  <Play size={15} /> Run
+                  <Play aria-hidden="true" />
                 </button>
               )}
             </footer>
