@@ -131,12 +131,10 @@ EMC Flyback also includes the three remaining IC PDFs, pinned in
 | U3        | TL431AIDBZR | `tl431.pdf`   | TI                                        |
 | U4        | LTV-817S    | `ltv817s.pdf` | Lite-On document, Hitech distributor copy |
 
-The U4 copy is the original Lite-On DS-70-96-0016 revision O document;
-the manufacturer server could not provide a valid certificate chain and the
-LCSC schematic link returned HTML. This distributor URL is explicit pinned
-evidence, not a runtime fallback. These three PDFs have file identity/hash
-metadata only; they do not add reviewed Agent parameter records. Together
-with U1 and the nine reference controllers, all 13 fitted ICs have local PDFs.
+The pinned distributor copy for U4 is the original Lite-On DS-70-96-0016
+revision O document. The three supplemental PDFs carry file identity and hash
+metadata. Reviewed Agent parameters cover U1. The download command covers all
+13 fitted ICs across the examples.
 
 The download command uses the official TI/ST URLs and the explicit pinned
 Hitech PDF URL recorded in the catalogs,
@@ -149,10 +147,10 @@ The check command is offline and read-only; it requires all 13 local PDFs.
 
 PDFs are named `<ic-family-in-lowercase>.pdf` under the matching circuit's
 `datasheets/` directory: `examples/<stem>/datasheets/` for the nine Example projects
-and `project/emc-flyback/datasheets/` for EMC Flyback. Original PDF bytes are ignored by Git; the internal reviewed catalog, schema
+and `examples/project/emc-flyback/datasheets/` for EMC Flyback. Original PDF bytes are ignored by Git; the internal reviewed catalog, schema
 and [rights notice](../public/licenses/example-datasheets.txt) are retained. A fresh checkout must run the
 download command for local PDFs. Normal builds and startup do not download
-PDFs; full-page queries and submitted Agent turns may download their pinned document on demand.
+PDFs. An explicit full-page query may download its pinned document on demand.
 Builds validate and bundle the internal Agent reference catalog; packaging
 also includes the actual example directory and any existing PDFs. The unit regressions validate metadata and exercise the
 downloader using synthetic responses without requiring vendor files or network.

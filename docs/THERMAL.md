@@ -63,11 +63,29 @@ On the first panel opening for a saved project, the renderer looks up the latest
 
 Layout's thermometer opens the retained panel. The header omits the Completed label; completed values remain in the main-view result card. Human and Agent operations share `thermal.status`, `thermal.configure`, `thermal.importSpice`, `thermal.run`, `thermal.cancel`, `thermal.probe` and `thermal.exportImage`; host `thermal.show`/`thermal.hide` control visibility. Runtime discovery remains authoritative for registration and availability. Run requires active visible Layout, applied Source and a saved desktop destination. `thermal.run` declares an external mutation because it publishes completed analysis records; it does not save or edit native design data.
 
-The panel docks beside the Layout drawing in place of Appearance/Properties, using the ordinary sidebar's current width: 280 px by default, with shared 224–480 px bounds that reserve 160 px for the drawing. Layout publishes its retained sidebar size through a shared CSS property, so changing panels preserves the drawing width and closing Layout Thermal restores the same sidebar size. Its settings fill the flexible scrolling body between a fixed header and a Run/Stop footer pinned to the panel bottom, including when component categories are collapsed. Layout Thermal retains ownership of the completed field and publishes a renderer-only presentation to Layout; Layout does not own solver state or copy temperatures into the board.
+Layout Thermal owns the completed field and publishes a renderer-only view to
+Layout. The board retains its native geometry and no solver state.
+[Layout Thermal controls](../DESIGN.md#layout-thermal)
 
-All editable Layout Thermal parameters use one value-and-unit field with the muted unit suffix inside its right edge: °C, W/m²·K, W/m·K, mm or W. Visible labels contain only the parameter name; accessible input labels retain the name and unit. Editing changes the numeric draft only, and hovering exposes its full unchanged value. Category headings show only names; neutral outlined cells share SPICE's spacing and alignment, with compact value-and-W fields for component powers. The Components list uses the same compact two-column layout, reference-only names, reference-prefix categories, alphabetical groups, natural reference order and initially expanded disclosures as SPICE. Folding survives hiding/reopening and preserves manual/SPICE powers. Each cell retains its footprint ID and a separate compact power input in W, with the full unchanged draft available on hover, including board-only footprints; it never groups electrical units into one heat source. Clicking a component name (or Enter/Space) selects/highlights and centers that visible, selection-eligible footprint through Layout's renderer adapter while keeping Layout Thermal open. Selection, folding and camera changes neither solve nor modify native data, undo or dirty state. Pending Source/close, inactive views, hidden/filtered targets, overlays and IME composition block locating.
+Each Components entry keeps its footprint ID and an independent power input,
+including board-only footprints. The solver uses canonical watts, and the
+shared quantity control can display compatible SI units. The full unchanged
+draft is available on hover. Activating the reference selects and centers an
+eligible footprint through the Layout renderer adapter while keeping Layout
+Thermal open. Selection, folding and camera changes leave the solver, native
+data, undo and dirty state untouched. Pending Source or close, inactive views,
+hidden or filtered targets, overlays and IME composition block locating.
+[Power controls and layout](../DESIGN.md#layout-thermal)
 
-Completed result controls and four statistics (Minimum, Maximum, Mean and Power into board) appear in a compact 252 px card at the upper left of the Layout main view, alongside the temperature scale. Statistics use flat vertical label/value rows. Removed heat and Energy imbalance are omitted from the visible card; solver results retain both values. The card scrolls within shorter views. A list without a visible heading or disclosure shows up to five resolved, modeled heat sources ranked by maximum PCB-pad temperature. Each compact interactive row shows only the reference and maximum temperature. Mean pad temperature and PCB heat power remain in the row tooltip. Pad statistics integrate actual conforming surface triangles over the source-pad polygons on each footprint side; unresolved sources cannot enter the ranking, and a field without resolved sources displays Pad temperatures unavailable. Values are tied to the completed configuration while settings are edited. Clicking a reference, or pressing Enter/Space, locates the footprint through the same guarded Layout adapter as the settings list and reveals its board side. The card remains available when the temperature field is hidden, so the field can be shown again. The settings dock contains no duplicate result card. There is no temperature-map export button; the existing `thermal.exportImage` capability remains available.
+The result card ranks up to five resolved heat sources by maximum PCB-pad
+temperature. Pad statistics integrate conforming surface triangles over the
+source-pad polygons on each footprint side. The tooltip includes mean pad
+temperature and PCB heat power. The result shows **Pad temperatures unavailable**
+when no source resolves. Values remain tied to the completed configuration
+while settings are edited. Activating a reference uses the same guarded Layout
+adapter as the settings list and reveals its board side. Removed heat and energy
+imbalance remain in the solver results. `thermal.exportImage` exports the
+temperature map.
 
 A completed field appears in the existing Layout camera at its actual PCB coordinates in millimetres. The Front/Back selector changes the displayed surface while retaining the camera. Both surfaces use the same complete-result temperature range, with a colour scale and a marker for the hottest real node on the selected surface. The surface raster is reused while that result and surface remain unchanged; pan, zoom and probe markers do not rebuild the temperature field. Board holes and areas outside the surface triangles remain transparent.
 

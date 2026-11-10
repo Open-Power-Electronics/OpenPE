@@ -35,7 +35,9 @@ test('all ten original examples retain their actual native filenames and parse a
       ),
     );
   }
-  await assert.rejects(readFile('emc-flyback/emc-flyback.scad'), { code: 'ENOENT' });
+  await assert.rejects(readFile('examples/project/emc-flyback/emc-flyback.scad'), {
+    code: 'ENOENT',
+  });
   const reference = homeExampleCatalog.find((entry) => entry.id !== 'emc-flyback-demo')!;
   await assert.rejects(readFile(`examples/${reference.file}/datasheets/parameters.json`), {
     code: 'ENOENT',
@@ -54,17 +56,18 @@ test('packaging retains the original examples tree including documents and optio
   );
   const projectResources = configuration.build.extraResources.find(
     (entry: { from: string; to: string }) =>
-      entry.from === 'project' && entry.to === 'project-native',
+      entry.from === 'examples/project' && entry.to === 'project-native',
   );
   assert.ok(projectResources);
-  assert.deepEqual(projectResources.filter, examples.filter);
-  const includes = (file: string) =>
-    examples.filter
+  const includes = (filter: string[], file: string) =>
+    filter
       .filter((pattern: string) => !pattern.startsWith('!'))
       .some((pattern: string) => path.matchesGlob(file, pattern)) &&
-    !examples.filter
+    !filter
       .filter((pattern: string) => pattern.startsWith('!'))
       .some((pattern: string) => path.matchesGlob(file, pattern.slice(1)));
+  assert.ok(includes(examples.filter, 'lm2596-to220-5-buck/datasheets/controller.pdf'));
+  assert.equal(includes(examples.filter, 'project'), false);
   for (const file of [
     'emc-flyback/emc-flyback.kicad_pro',
     'emc-flyback/emc-flyback.kicad_sch',
@@ -72,17 +75,21 @@ test('packaging retains the original examples tree including documents and optio
     'emc-flyback/emc-flyback.kicad_dru',
     'emc-flyback/footprints/EMC_Demo.pretty/device.kicad_mod',
     'emc-flyback/models/device.step',
-    'lm2596-to220-5-buck/datasheets/controller.pdf',
-  ])
-    assert.ok(includes(file), file);
+    'emc-flyback/datasheets/controller.pdf',
+  ]) {
+    assert.ok(includes(projectResources.filter, file), file);
+    assert.equal(includes(examples.filter, 'project/' + file), false, file);
+  }
   for (const file of [
-    'emc-flyback/spice/emc-flyback.raw',
-    'emc-flyback/thermal/emc-flyback.vtu',
-    'emc-flyback/.git/config',
-    'emc-flyback/history.git/config',
-    'emc-flyback/emc-flyback.kicad_prl',
-  ])
-    assert.equal(includes(file), false, file);
+    'spice/circuit.raw',
+    'thermal/circuit.vtu',
+    '.git/config',
+    'history.git/config',
+    'circuit.kicad_prl',
+  ]) {
+    assert.equal(includes(projectResources.filter, `emc-flyback/${file}`), false, file);
+    assert.equal(includes(examples.filter, `lm2596-to220-5-buck/${file}`), false, file);
+  }
   assert.equal(
     configuration.build.extraResources.some(
       (entry: { from: string }) => entry.from === 'resources/examples/1',

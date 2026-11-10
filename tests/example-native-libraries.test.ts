@@ -18,11 +18,12 @@ test('Home libraries are native Source files with project-bound names and stable
   let customProjects = 0;
   for (const entry of homeExampleCatalog) {
     const project = ownProject(createHomeExample(entry.id, (id) => id));
-    const original = projectNativeFiles(project, path.basename(homeExampleNativePath(entry.id)));
+    const nativePath = homeExampleNativePath(entry.id);
+    const original = projectNativeFiles(project, path.basename(nativePath));
     if (!original.files.some((file) => file.name.includes('.pretty/'))) continue;
     for (const file of original.files)
       assert.equal(
-        await readFile(path.join(entry.root, entry.directory, file.name), file.encoding ?? 'utf8'),
+        await readFile(path.join(path.dirname(nativePath), file.name), file.encoding ?? 'utf8'),
         file.source,
       );
     customProjects++;

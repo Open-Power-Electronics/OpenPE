@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homeExampleNativePath } from '../lib/home-examples';
 import {
   parseProject,
   projectNativeFiles,
@@ -19,12 +20,11 @@ import {
   prepareEmcFlybackNativeTestbench,
 } from './emc-flyback-testbench';
 
+const filename = path.resolve(homeExampleNativePath('emc-flyback-demo'));
+
 export async function verifyEmcFlybackModels() {
-  const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
-  const signal = new AbortController().signal;
   for (const model of models.models) {
-    signal.throwIfAborted();
-    if (!(await readProjectModelFile(path.resolve(filename), model)))
+    if (!(await readProjectModelFile(filename, model)))
       throw new Error(`Missing EMC Flyback library ${model.file}. Restore the checked-in file.`);
   }
 }
@@ -32,7 +32,6 @@ export async function verifyEmcFlybackModels() {
 /** Publish model references without re-running the native KiCad geometry converter. */
 export async function prepareEmcFlybackModels() {
   await verifyEmcFlybackModels();
-  const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const snapshot = 'lib/emc-flyback-example.json';
   const template = JSON.parse(await readFile(snapshot, 'utf8'));
   template.simulationModels = models.models.map((model) => ({ ...model }));
@@ -48,7 +47,9 @@ export async function prepareEmcFlybackModels() {
   prepareEmcFlybackModelBindings(project.schematic);
   prepareEmcFlybackTestbench(project.schematic);
   const native = projectNativeFiles(project, path.basename(filename));
-  const schematic = native.files.find((file) => file.name === 'emc-flyback.kicad_sch')!;
+  const schematic = native.files.find(
+    (file) => file.name === `${path.parse(filename).name}.kicad_sch`,
+  )!;
   schematic.source = prepareEmcFlybackNativeTestbench(
     prepareEmcFlybackNativeModelBindings(
       await readFile(path.join(path.dirname(filename), schematic.name), 'utf8'),

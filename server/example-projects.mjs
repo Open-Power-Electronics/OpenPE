@@ -7,6 +7,10 @@ import { discoverExamples } from './example-discovery.mjs';
 
 const { readNativeProject } = nativeProject;
 const catalog = [...homeManifest.recent, ...homeManifest.examples];
+const nestedProjectDirectory = path.posix.relative(
+  homeManifest.sourceRoots.examples,
+  homeManifest.sourceRoots.project,
+);
 const defaultExampleId = (key) => {
   const hash = createHash('sha256').update(`openpe-example-v1:${key}`).digest('hex');
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
@@ -19,7 +23,7 @@ export class ExampleProjects {
     examplesRoot,
     grants,
     history,
-    projectRoot = path.resolve(examplesRoot, '..', 'project'),
+    projectRoot = path.resolve(examplesRoot, nestedProjectDirectory),
   ) {
     if (typeof examplesRoot !== 'string' || !path.isAbsolute(examplesRoot))
       throw new Error('The original example root must be an absolute host directory.');
@@ -54,20 +58,29 @@ export class ExampleProjects {
   async #discover() {
     const projects = [],
       warnings = [];
+    const nestedProjectRoot = path.relative(this.roots.examples, this.roots.project);
+    // The reserved group also keeps the project/ identity prefix unambiguous
+    // when the two resource roots are siblings in a packaged build.
+    const excludedDirectories = [nestedProjectDirectory];
+    if (nestedProjectRoot === path.basename(this.roots.project))
+      excludedDirectories.push(nestedProjectRoot);
+    let scannedRoots = 0;
     for (const [root, directory] of Object.entries(this.roots)) {
       try {
         const found = await discoverExamples(
           directory,
           nativeProject.nativeName,
           root === 'project' ? 'project/' : '',
+          root === 'examples' ? excludedDirectories : undefined,
         );
+        scannedRoots++;
         projects.push(...found.projects.map((project) => ({ ...project, root })));
         warnings.push(...found.warnings);
       } catch (error) {
-        if (root === 'examples') throw error;
-        warnings.push(`Could not inspect project resources: ${error.message}`);
+        warnings.push(`Could not inspect ${root} resources: ${error.message}`);
       }
     }
+    if (scannedRoots === 0) throw new Error(warnings.join('\n'));
     if (projects.length > 256) throw new Error('Example discovery exceeds 256 projects.');
     const next = new Map(this.fixedCatalog);
     const entries = projects.map((project) => {
@@ -104,7 +117,7 @@ export class ExampleProjects {
             path.join(this.roots[entry.root], entry.directory, entry.filename),
           );
           try {
-            const result = await this.openDefault(key);
+            const result = await this.#open(key, entry);
             if (!existing) this.grants.release(result.fileId);
             if (result.warning) warnings[index] = result.warning;
           } catch (error) {
@@ -122,11 +135,17 @@ export class ExampleProjects {
       (!this.fixedCatalog.has(key) && !/^example:local-[a-f0-9]{64}$/.test(key))
     )
       throw new Error('Unknown default example.');
+    return this.#open(key);
+  }
+
+  #open(key, entry) {
     const pending = this.busy.get(key);
     if (pending) return pending;
     const opening = (async () => {
-      if (!this.fixedCatalog.has(key)) await this.list();
-      const entry = this.catalog.get(key);
+      if (!entry) {
+        if (!this.fixedCatalog.has(key)) await this.list();
+        entry = this.catalog.get(key);
+      }
       if (!entry) throw new Error('The example is unavailable. Refresh the examples directory.');
       return this.#openProject(entry);
     })().finally(() => this.busy.delete(key));
@@ -151,7 +170,7 @@ export class ExampleProjects {
       this.grants.markLocalExample(fileId);
       let warning;
       try {
-        await this.history.ensureExampleInitial(fileId, source, false);
+        await this.history.ensureExampleInitial(fileId, source);
       } catch (error) {
         warning = `The example is open, but Git history is unavailable. ${error.message}`;
       }

@@ -11,6 +11,7 @@ import * as projectFormat from '../server/project-format.mjs';
 import { atomicWrite } from '../server/atomic-write.mjs';
 import { createBlankProject } from '../lib/create-blank-project';
 import { projectNativeFiles } from '../lib/project';
+import homeManifest from '../resources/example-catalog/home-manifest.json';
 
 const require = createRequire(import.meta.url);
 
@@ -62,6 +63,7 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
     },
     'node:path': path,
     'node:fs/promises': {},
+    '../resources/example-catalog/home-manifest.json': homeManifest,
     './file-grants.cjs': require('../electron/file-grants.cjs'),
     './recent-projects.cjs': require('../electron/recent-projects.cjs'),
     './native-project.cjs': require('../electron/native-project.cjs'),

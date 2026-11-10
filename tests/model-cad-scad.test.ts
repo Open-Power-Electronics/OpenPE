@@ -186,7 +186,9 @@ test('OpenSCAD export writes every solid kind with intrinsic XYZ poses and neste
 });
 
 test('OpenSCAD export reproduces the EMC Flyback enclosure from its native Model CAD', async () => {
-  const native = JSON.parse(await readFile('project/emc-flyback/emc-flyback.kicad_pro', 'utf8')) as {
+  const native = JSON.parse(
+    await readFile('examples/project/emc-flyback/emc-flyback.kicad_pro', 'utf8'),
+  ) as {
     text_variables: Record<string, string>;
   };
   const model = JSON.parse(native.text_variables.OPENPE_MODEL_CAD) as ModelCAD;

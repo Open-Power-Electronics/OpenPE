@@ -381,16 +381,6 @@ button:disabled {
   background: color-mix(in srgb, var(--error-ink) 16%, var(--surface));
 }
 
-.status-dot {
-  width: 6px;
-  height: 6px;
-  background: var(--brand-ink);
-}
-
-.status-dot.off {
-  background: var(--soft);
-}
-
 .nav-rail,
 .home-sidebar {
   width: var(--dock-width);
@@ -3396,50 +3386,6 @@ body[data-workspace-resizing='true'] * {
   cursor: pointer;
 }
 
-.visualization-option {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 30px;
-  gap: 8px;
-  padding: 6px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--font-control);
-  text-align: left;
-  cursor: pointer;
-}
-
-.visualization-option:hover {
-  background: var(--surface-hover);
-}
-
-.visualization-option > .visualization-label {
-  flex: 1;
-  min-width: 0;
-}
-
-.visualization-option > svg,
-.visualization-option > input {
-  flex-shrink: 0;
-}
-
-.visualization-option > input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.visualization-option > small {
-  color: var(--muted);
-  font-size: var(--font-small);
-  font-variant-numeric: tabular-nums;
-}
-
 .reveal-button > svg {
   flex-shrink: 0;
 }
@@ -5927,12 +5873,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   font-size: var(--font-control);
   line-height: 1.6;
   margin-top: 10px;
-}
-
-.modal-description {
-  color: var(--muted);
-  font-size: var(--font-body);
-  line-height: 1.7;
 }
 
 .library-search {

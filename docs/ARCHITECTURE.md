@@ -79,7 +79,7 @@ Sketch corner fillet/chamfer and Boolean extrusion use pure `lib/model-cad-sketc
 | `app/`, `components/`, `public/`  | Renderer, shared controls and product assets              | [Design](../DESIGN.md)                                |
 | `lib/`                            | Domain/geometry/format and explicitly named host adapters | [Format](FORMAT.md), [Layout](LAYOUT.md)              |
 | `server/`, `electron/`            | Service/native/providers/plugins/solvers/persistence      | [API](API.md) and feature contracts                   |
-| `examples/`, `project/`           | Nine Example projects and the EMC Flyback Recent project  | [Examples](EXAMPLES.md), [Format](FORMAT.md)          |
+| `examples/`, `examples/project/`  | Nine Example projects and the EMC Flyback Recent project  | [Examples](EXAMPLES.md), [Format](FORMAT.md)          |
 | `resources/`                      | Shared catalog, pinned sources/assets and host resources  | [Examples](EXAMPLES.md), [Libraries](LIBRARIES.md)    |
 | `tests/`, `scripts/`              | Regressions, generators and opt-in integrations           | [Engineering](../AGENTS.md#verification-and-delivery) |
 | `assets/`, `docs/`, root Markdown | Architecture source, subsystem/design/setup contracts     | This map                                              |
@@ -125,18 +125,17 @@ STEP conversion uses bounded reusable OCCT worker threads with fixed tessellatio
 
 ### Browser development previews
 
-In development, `next.config.mjs` forwards the fixed `/api/browser-preview/*`
-routes to the loopback service in `server/browser-previews.mjs`. Session
-admission checks the exact renderer origin and same-origin headers. Preview
-requests also require the service's session token. Packaged builds use the
-Electron bridge.
-
-The browser host previews supported Model CAD recipes, including Boolean holes,
-with the bundled Gmsh/OpenCASCADE kernel and STEP parser. Library previews
-resolve footprint IDs and model indices against prepared resources. The browser
-host has no project file grants and model downloads are disabled. See the
-[plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle) for browser analysis
-and provider plugin management.
+In development, `next.config.mjs` rewrites the fixed `/api/browser-preview/*`
+routes to one process-local loopback host in `server/browser-previews.mjs`.
+The host checks the exact renderer origin and same-origin headers before
+issuing a preview token. Token-gated routes provide CAD previews, read-only
+library previews and fixed plugin operations. CAD and library previews share
+the desktop geometry and STEP parser code through one serial parse queue and
+one bounded parser pool. Library IDs and model indices resolve prepared
+resources without downloads or cache/project writes. Native project grants,
+Agent chat and workspace recovery are desktop-only. Packaged builds use the
+Electron bridge. [Preview transport](API.md#browser-development-preview-transport)
+· [Plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle)
 
 ## Ownership
 
@@ -157,11 +156,9 @@ Simulation participation, model mappings and portable model references remain na
 
 Model CAD parameters belong to Core and native `.kicad_pro` settings. Sketches on the shared Model canvas and local tool/property previews belong to presentation. `lib/model-cad.ts` owns bounded profiles, semantic base-edge catalogues, extrusion/edge-treatment/Boolean recipes, conservative envelopes and canonical geometry keys. `lib/model-cad-selection.ts` owns pure typed selection, geometry eligibility filters and stale-entity pruning; `components/model-cad-edges.ts` and `components/model-cad-faces.ts` own visible analytic topology picking and disposable highlights. These adapters store no document mutations. Boolean operand roles remain presentation until the existing two-body Core command commits. `core/register-project.ts` wraps human/Agent commands with asynchronous host preflight; `ProjectCore` remains pure and rejects changed advanced geometry without an exact privately retained prepared key. Unchanged geometry permits pose/material edits; Source apply and whole-project replacement use the same gate. Native admission remains structural so imported data is preserved before lazy preview.
 
-File Export selects an exchange or manufacturing format independently of native Save. `lib/manufacturing-export.ts` dispatches pure exporters for the primary schematic (`lib/schematic-netlist-export.ts`), native PCB outline (`lib/pcb-dxf.ts`), PCB fabrication and assembly, and OpenSCAD. Full fabrication and standalone stencil/drill archives share layer and drill generation. `server/manufacturing-format.mjs` is the generated host facade and shares the project validator. `electron/native-export.cjs` validates requests, protects open sources and linked destinations, and writes one compiled file after a format-specific picker. The browser download uses the same pure compiler. Pinned Newstroke glyphs and their source and license travel with the application. Export needs no runtime KiCad CLI, network lookup or supplier mapping. Source application remains a Core transaction. [Format](FORMAT.md#design-exchange) owns output coverage and bounds.
+File Export selects an exchange or manufacturing format independently of native Save. `lib/manufacturing-export.ts` dispatches pure exporters for the primary schematic (`lib/schematic-netlist-export.ts`), native PCB outline (`lib/pcb-dxf.ts`), PCB fabrication and assembly, and OpenSCAD (`lib/model-cad-scad.ts`). Full fabrication and standalone stencil/drill archives share layer and drill generation. `server/manufacturing-format.mjs` is the generated host facade and shares the project validator. `electron/native-export.cjs` validates requests, protects open sources and linked destinations, and writes one compiled file after a format-specific picker. Browser downloads use the same compiler. Source application remains a Core transaction. [Design exchange](FORMAT.md#design-exchange) · [Manufacturing export](FORMAT.md#manufacturing-export)
 
-During Next.js development, `next.config.mjs` starts one process-local geometry-preview loopback host in `server/browser-previews.mjs` and rewrites `/api/browser-preview/*` to it. Preview bootstrap requires the exact renderer Origin, same-origin Fetch Metadata and `X-OpenPE-Browser: preview`; it issues an in-memory process token scoped to CAD, footprint detail and component mesh previews. Preview requests additionally require `X-OpenPE-Token`, reject foreign hosts/origins and accept at most 512 KiB for CAD or 1 KiB for library identities. CAD and the read-only library service share a serial STEP parse queue and one parser pool; fixed example models and prepared official models use the desktop resolution and tessellation code. Browser library reads perform no downloads or cache/project writes. No CORS permission is issued. The authenticated development host also mounts fixed bundled catalog, guidance and transient solver actions with in-memory plugin state. It also mounts provider plugin management through the existing bounded CLI adapters. Project, chat, native file and recovery routes remain desktop-only. Production remains a static export and starts no browser preview host. Electron retains its existing authenticated service connection.
-
-Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable; meshes and preparation receipts never enter native design or recovery. This host geometry service is independent of simulation plugins and runs no solve. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve; ambiguous or missing edges fail. No arbitrary programs, executables, paths, imported/Boolean topology editing or new simulation authority are exposed. File Export's OpenSCAD type runs pure `lib/model-cad-scad.ts` in the Electron export adapter over the host-parsed snapshot: boxes, cylinders, extrusions and Boolean cutout recipes keep their XYZ poses, edge treatments are rejected and circles are faceted. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it.
+Authenticated `/api/model-cad/preview` passes one validated object to `server/model-cad-kernel.mjs`. Fixed bundled Gmsh/OpenCASCADE construction produces analytical STEP, then the bundled STEP parser returns bounded local meshes. `server/enclosure-step.mjs` reuses the same construction for native STEP export, preserving independent bodies. Retired enclosure extensions are rejected. Preview cancellation/failure stays retryable. Meshes and preparation receipts stay outside native design and recovery. This host geometry service runs independently of simulation plugins. Explicit treatments resolve semantic base-edge bounds to exactly one current OCC curve. Ambiguous or missing edges fail. [Model CAD limits](LAYOUT.md#model-cad)
 
 ERC/DRC are pure, lazy Core queries. Workbench owns severity overrides, threshold drafts, quick-field selection, reports and locate markers. The Core settings command updates the project’s native board minima for both Workbench and Agent edits. The checks read accepted project rules through the same read-only capabilities. This path is independent of simulation lifecycle. [Design rules](DESIGN-RULES.md) defines supported coverage and partial-report semantics.
 
@@ -202,7 +199,7 @@ stays in the requesting panel or Agent response. This path has no additional
 HTTP route, solver process or store.
 Browser development uses the same renderer capability and bundled catalog.
 
-EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `project/emc-flyback/circuits/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
+EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `examples/project/emc-flyback/circuits/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
 
 EMC Flyback’s external electrical testbench is native Core-owned schematic content: V1/R21 feed VBUS, V2 supplies VCC, and R22/I1 load VOUT. The pure compiler stamps those accepted values and source waveforms instead of injecting supplies or loads. Footprint-free bench components have no PCB packages and contribute no PCB heat.
 
@@ -271,7 +268,7 @@ geometry, native bytes and undo remain in Core.
 
 ### Startup and plugin lifecycle
 
-Electron establishes application data and its name, then loads the service modules while Electron initializes; readiness awaits those modules, starts the service and window, and loads the renderer without runtime example preflight. A module load failure still fails startup. The first example-opening IPC, including clean recovery, starts a shared promise that attempts validation and private destination-bound history initialization for the bundled and host-discovered projects across both Home roots. Home does not request preparation or display aggregate asset warnings; Home/new/ordinary recovery stay independent. Plugin installed/enabled state is separately persisted; disable/uninstall cancels feature work across projects without editing documents. [Plugins](PLUGINS.md) owns lifecycle and provider controls.
+Electron loads service modules while initializing. Readiness awaits them, starts the service and window, and loads the renderer. Home, new projects and ordinary recovery run independently of the [example opening barrier](VERSION-HISTORY.md#opening-barrier-and-concurrency). Bundled plugin state is persisted separately, and disable or uninstall cancels feature work across projects. [Plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle)
 
 ### A live Agent command
 
@@ -306,7 +303,7 @@ Save validates the complete project, resolves a grant/native picker, prepares ve
 
 `scripts/prepare-default-examples.ts` reads and validates the original native sets and verifies pinned models, packages and notices. LM25017 and EMC custom package libraries and EMC symbols/rules are native project files, owned by Core with Source/undo/recovery/history. The native adapter renames project-bound libraries/rules and their library-table URIs together on Save as. Build asset preparation supplies pinned models without overwriting native library edits or generating project notices.
 
-`server/example-discovery.mjs` scans bounded native entries under the sibling `examples/` and `project/` roots in development, packaged independently as `examples-native/` and `project-native/`, using native filename validation supplied by the existing adapter. `server/example-projects.mjs` resolves bundled and opaque discovered keys to those original files. Home listings never prepare models, create history or grant file access. Opening reads the actual native files and grants their directory without renaming, copying or refreshing their content. Packaging includes supporting text and existing PDFs from those directories, excluding private/generated results and `.kicad_prl`. The first-open barrier attempts the bundled and discovered projects with at most three concurrent operations and rechecks its frame. Failures remain per-example warnings; another failed example or missing Git cannot block a usable selected project. Concurrent opens share work and later opens reread disk. Save writes that original destination; Save as uses a personal destination. Clean recovery reconnects the original files; dirty example recovery detaches destinations. [Examples](EXAMPLES.md) and [Version history](VERSION-HISTORY.md) own provenance/history details.
+`server/example-discovery.mjs` scans bounded native entries in each logical example root using the native filename validator. `server/example-projects.mjs` resolves bundled and opaque discovered keys to original files. Listing reads directory entries without preparing models, creating history or granting file access. Opening reads native files and grants the selected destination. Clean recovery rereads the original files, while dirty example recovery detaches its destination. [Root mapping and packaging](EXAMPLES.md#original-project-directories-and-portable-assets) · [Opening barrier and concurrency](VERSION-HISTORY.md#opening-barrier-and-concurrency)
 
 ## Storage and build boundaries
 
@@ -336,7 +333,7 @@ replacement, refresh and failure isolation in an isolated browser without Electr
 | Appearance/layer preferences          | App data `appearance-v1.json`; independent settings                                                                             |
 | Workbench lifecycle                   | App data `workbench-plugins-v1.json`                                                                                            |
 | Provider origin receipts              | App data `plugin-installations-v1.json`                                                                                         |
-| Original Home projects                | Sibling `examples/<stem>/` and `project/<stem>/`; packaged as `examples-native/` and `project-native/`, including existing PDFs |
+| Original Home projects                | `examples/<stem>/` and `examples/project/<stem>/`, packaged as `examples-native/` and `project-native/`, with any existing PDFs |
 | Destination-bound project history     | App data `project-history-v1/<normalized-destination-sha256>.git`; outside every project directory                              |
 | Solver/tools and corresponding source | Versioned `resources/ngspice/`, `resources/thermal/`, `resources/third-party-source/`                                           |
 | Official libraries/models and locks   | `resources/kicad/`, private verified caches and source-controlled locks/notices                                                 |
@@ -365,7 +362,25 @@ owns generation, required KiCad versions and portable assets. The separate
 [fixture workflow](../tests/fixtures/README.md#regeneration) publishes internal
 regression inputs.
 
-`scripts/dev.mjs` exports the format, Home and solver step lists that `scripts/build.mjs` reuses. `npm run examples:prepare` (`scripts/build.mjs --examples`) builds formats, prepares models and verifies original native files and pinned assets. `npm run build` runs the same format/Home steps, then the architecture check beside Home preparation once generated formats are current; bundled solver verification runs concurrently with buffered output. Any failure stops before `next build`. Packaging prepares libraries and delegates solver preparation to its build. `scripts/dev.mjs` runs preparation in order before its renderer/desktop children, with concise staged diagnostics and optional `--verbose` output. Its host-only `scripts/dev-preparation-cache.mjs` reuses the ordered format/model/Home sequence when content hashes of conservative source roots, dependency manifests, pinned model/footprint/EMC assets and generated outputs match `.openpe/dev-preparation-v1.json`. Generated flat `models/` STEP copies are outputs; native `.pretty` content remains input. Input/output hashes use at most four concurrent streams with 256 KiB chunks and file-identity checks; no full-file buffer is allocated. Fingerprints retain sorted traversal order regardless of completion order, and failures drain active reads before returning. Curated project `spice/` and `thermal/` result trees are excluded before traversal and cannot invalidate preparation. Pinned upstream model sources and native libraries remain inputs. Changed, missing or corrupt inputs/outputs rerun that sequence. Only successful preparation with unchanged inputs publishes an atomic cache record; failure and cancellation remain retryable. Solver runtime/source/version checks still run on every development start. Build and package preparation do not use this cache. Missing resources can require network access. None of these commands proves that an older running desktop instance loaded the rebuilt modules.
+`scripts/dev.mjs` supplies the preparation steps shared by development and
+production builds. `npm run examples:prepare` generates formats and prepares
+Home assets. `npm run build` generates formats before checking architecture
+alongside Home preparation, while bundled solver preparation runs in parallel.
+All stages must succeed before `next build`. Packaging prepares libraries
+before running the production build. Development prepares resources in order
+before starting its renderer and desktop children. Use `--verbose` for full
+stage diagnostics. Missing resources can require network access. A disk build
+does not reload Electron or service modules in a running instance.
+
+The development-only cache in `scripts/dev-preparation-cache.mjs` reuses the
+format, model and Home stages when inputs and outputs match
+`.openpe/dev-preparation-v1.json`. Inputs cover code, dependency manifests,
+pinned resources and the curated native projects, including their libraries.
+Generated format bundles, portable STEP copies and downloaded reference
+circuits are outputs. Solver result trees are excluded. Fingerprints verify
+file identity and use at most four concurrent streams with 256 KiB chunks.
+Only successful preparation with unchanged inputs updates the record. Solver
+resource checks run on every development start.
 
 Checks can write logs, screenshots, temporary profiles and reports to
 `test-results/`. Some scripts also read prepared inputs there. For example,
@@ -378,48 +393,21 @@ corresponding sources/notices and current builds separate from test outputs.
 
 ## Verification
 
-`components/AgentDiagnostic.tsx` is the shared GUI reader/copy control for already-visible response, tool and result-delivery diagnostics; it adds no log query or host authority. The reading browser check verifies long identifiers cannot widen Chat, literal multiline/HTML/electrical text, bounded native keyboard scrolling, IME copying, exact separate response/diagnostic copies and narrow themes. The tool UI check copies a Source-gated tool error without sending requests or changing its failed outcome; the history check verifies delivery-error copying retains the completed host outcome.
+[AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
 
-`tests/agent-questions.test.ts` exercises explicit answers and cancellation through
-synthetic Codex, Claude, DeepSeek and Pi protocols. Run
-`node scripts/check-agent-questions-ui.mjs` for isolated browser checks of long numbered titles, literal multiline prompts and receipts at narrow widths/larger typography, choices, Ctrl+Enter / Command+Enter through Continue,
-custom/multiple answers, growing drafts and bounded receipts, single pending submissions, IME pointer focus/selection, touch-press cancellation, flagless Enter/Space and late 229 confirmation, retry, cancellation, delivery focus (including newer
-focus choices and hidden cards), read-only closed answer focus/selection/scrolling with blocked edits/delivery, and automatic process collapse.
-Neither check calls a real provider or starts Electron.
+| Agent or renderer concern                                                     | Focused checks                                                                                                                                 |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Questions and answer delivery                                                 | `tests/agent-questions.test.ts`, `check-agent-questions-ui.mjs`, `check-agent-reading-ui.mjs`                                                  |
+| Transcript reading, search, outline, quoting, reuse, prompt history and focus | `check-agent-reading-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-stop-ui.mjs`                                                       |
+| Markdown, user messages, code, tables and formulas                            | `tests/agent-markdown.test.ts`, `check-agent-message-ui.mjs`, `check-agent-code-ui.mjs`, `check-agent-table-ui.mjs`, `check-agent-math-ui.mjs` |
+| Tool reviews, history and diagnostics                                         | `check-agent-tools-ui.mjs`, `check-agent-history-ui.mjs`, `check-agent-review-navigation-ui.mjs`                                               |
+| Queued messages and attachments                                               | `check-agent-queue-preview-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-attachments-ui.mjs`, `check-annotations.mjs`                 |
+| Embedded symbol and footprint drawing                                         | `tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts`, `tests/footprint-drawing.test.ts`, `check-component-drawing-ui.mjs`  |
 
-`components/AgentQueuedMessagePreview.tsx` presents a snapshot owned by the mounted queue UI. `node scripts/check-agent-queue-preview-ui.mjs` checks literal copying, independent captured annotations, nested attachment viewing, focus restoration after background consumption, hidden cancellation and narrow themes. The follow-up browser check exercises the real Chat queue entry, composition protection, retained whitespace and Escape dismissal during a running turn.
-
-`components/AgentConversationSearch.tsx` filters user messages and the displayable Markdown of settled replies from the mounted conversation. Chat owns the panel-scoped Find and repeat-search shortcuts, positioning after selection and the transient highlight for a visible text match. `components/agent-search-match.ts` locates individual rendered occurrences in either direction, including across inline formatting and within readers. Chat retains only the current occurrence for repeat search. The reading browser check covers literal excerpts, matching-message counts, visible prose and code/table hits, message-top fallback for folded or source-only hits, hidden metadata, exclusion of in-progress output, keyboard result navigation and wrapping, composition, hidden dismissal, and retained draft and independent reading positions.
-
-`components/AgentToolIssues.tsx` summarizes retained tool activity for the work header and batch disclosures. The tool UI timeline check exercises a host error and a failed result delivery in separate batches. It verifies collapsed counts, first-expansion reveal within both overflowing readers, stable keyboard focus and manual scroll positions on reopening, and access to the distinct diagnostics and execution states.
-
-The reading browser check exercises live response snapshots through `components/AgentMessageActions.tsx` and the shared browser clipboard control. It verifies reserved metadata filtering, a rejected write as text grows, a successful retry that settles after the turn, retained focus and draft selection, and a separate copy of the final response.
-
-Edit original prompt in `components/AgentMessageActions.tsx` calls the same Chat draft restoration as Reuse. Chat takes the preceding user message of a failed or stopped reply from the prompt and reply pair appended by Send. Accepted steering is recorded after the reply. The reading, Stop and follow-up browser checks cover failure, empty and partial stopped replies, exact attachment restoration, composer protection and opening prompt selection after steering.
-
-Chat owns the local prompt history cursor and restores the same draft snapshots as message Reuse. The reading browser check covers traversal in both directions, return to an empty draft, annotation-only snapshots, edits and hidden-session retirement, ordinary multiline caret motion, and composition and modifier guards. The follow-up check verifies recall during a run and blocked recall while native input delivery is uncertain.
-
-Code, table and formula readers share CSS edge cues in `app/workspace.css`. Each cue uses the inline scroll timeline of its own reader. The focused browser checks verify both horizontal limits, adjacent fitting content, code wrapping and formula overflow.
-
-`components/AgentAnswerOutline.tsx` indexes rendered headings when Contents opens. Chat owns focus and transcript positioning. The reading browser check covers literal heading order, code-fence exclusion, keyboard focus, composition and hidden dismissal.
-
-Chat also owns Quote selected reply. The selection observer records eligibility and viewport placement, and explicit activation reads the current visible selection into the local draft. The reading browser check exercises the floating and header positions, the Latest control avoiding a selection and retaining native wheel handling, selection and focus across scrolling, literal multiline quoting, the draft limit, composition, keyboard activation and independent editor, clipboard and request state.
-
-The Stop, reading and tool UI checks exercise recorded response outcomes in Agent headers. They cover Stop before text and after partial output, failure with a retained diagnostic, standard successful headers, and accessible descriptions that distinguish a failed reply from errors within its retained tool batches.
-
-`components/AgentAttentionNavigation.tsx` presents the current conversation question and command-review counts with focus-only routes to the existing question headings, Continue and Apply controls. Chat owns target selection and bounded transcript positioning. The reading browser check exercises offscreen pending-question navigation, keyboard focus, answered-but-unsent input and composition protection. Tool preview copying uses `components/CopyButton.tsx` on the already bounded visible preview; the full-command control appears only with its captured review disclosure. `node scripts/check-agent-tools-ui.mjs` distinguishes truncated preview copies from complete captured name/input JSON, checks its immediate Enter/Tab and composition gates, and verifies copying neither sends a request nor resolves the review. `node scripts/check-agent-review-navigation-ui.mjs` checks multiple/retained reviews, session-local targets, no execution before explicit Apply, tall cards, unobstructed controls in narrow/short windows, wide alignment, IME and draft/caret/editor/page focus. `components/useRetiringConversationControl.ts` shares the focused-control retirement rule with Latest; hidden conversations and newer focus choices cancel restoration. The reading regression checks Latest focus after both activation and deliberate scrolling to the bottom. Its native wheel checks cover the sticky return layer, both scroll boundaries and continued input after removal, unchanged viewport/range, resumed stream following, independent editor/page focus/selection and composition-claimed pointer events. The fitting-conversation regression covers the return position after message collapse and native overscroll without adding an artificial scroll range. Question and review clearance uses the same measured tail spacer before that layer.
-
-`node scripts/check-agent-attachments-ui.mjs` checks focused attachment removal, next/previous controls and final composer focus, literal draft/caret retention, independent viewports, newer choices and hiding during removal, keyboard/IME preview/cancel, and narrow large-type trays in an isolated Chat. `node scripts/check-annotations.mjs` covers the broader renderer capture/edit/remove, drawing, session and recovery workflows; its host fixture supplies the current example/recent/directory read contracts. These checks start no Electron app or real provider.
-
-`tests/agent-markdown.test.ts` covers literal code, safe Markdown/KaTeX, isolated generated footnote targets and hidden metadata. `node scripts/check-agent-reading-ui.mjs` checks that manual transcript reading pauses following before layout changes, inner keyboard/wheel scrolling retains position, explicit return resumes, and copy/completion preserve following and independent editor focus. Its completed-work keyboard checks cover Tab access to the overall work viewport and nested notes containing links, native arrow/Home/End/Page scrolling and inner boundaries, plus retained note focus/scroll while another response streams. Its citation checks cover keyboard/IME round trips, repeated-reference targets, cross-reply identifier isolation, nested readers, hidden updates, responsive themes, stream reading position and independent editor/page scrolling. `components/agent-footnotes.ts` scopes parser-generated fragments and reveals their targets only within the originating conversation; authored local links retain the Markdown URL restriction. Its older-message collapse checks cover keyboard/pointer reveal within the originating conversation, a shorter viewport with larger type, IME, a newer editor focus choice and cancellation without replay after hiding. Its reuse checks cover literal multiline drafts, independent captured annotations and annotation-only messages, whitespace/attachment guards, active IME pointer focus, failure retention, hidden views and no implicit request/history mutation. Its controlled service also checks the renderer answer route, process-authentication header, originating run/session/request/token fields, complete answer payload and submitted-answer scrolling. Its active-answer composition case also checks that pointer Continue makes no answer request and retains field focus/selection, inner answer scrolling and conversation/editor/page viewports while background text streams, then submits normally after compositionend. Closed-answer checks cover native question cancellation, successful turn completion and Stop, retaining draft text and read-only keyboard scrolling without outer viewport motion or extra answer requests. Pending input takes precedence over background text/tool activity; concurrent submissions, delayed delivery, retry, native cancellation and completion retain current progress. `node scripts/check-agent-math-ui.mjs` checks formula-source copying, MathML preservation, inline/code isolation, keyboard/IME, streaming/hidden viewports and bounded scrolling with the bundled KaTeX styles/fonts. `node scripts/check-agent-history-ui.mjs` checks native and rapid disclosure changes, lazy first expansion, nested disclosure/code-wrap/scroll retention, hidden keyboard exclusion and new-call folding/focus/latest behavior, including queued native-toggle races. Its controlled clipboard checks cover exact argument/result previews, composition, failure/retry and a preview update during a pending write, plus readable headings and fixed Copy positions in narrow large type. It also verifies immediate Enter/Tab into fresh tool/work reading regions and the named tool-history keyboard target, native Home/End/Page scrolling and boundary containment, stable viewport/arguments while a result grows from the former bottom, focus retirement from the region on a new call, and live-history IME guards. `node scripts/check-agent-table-ui.mjs` checks per-table Markdown copying, formula source and column alignment, streaming/hidden viewport retention, sticky headings and independent frozen columns, keyboard/IME and bounded responsive scrolling. `node scripts/check-agent-code-ui.mjs` checks retained code folding, logical line numbers, sticky gutters, Go to line validation and focus, native text selection, code-block copying and per-block wrapping with a controlled browser clipboard, including pending feedback and retained focus, repeated-key rejection, keyboard retry and newer focus choices, streaming identity, hidden Markdown/code-scroll/wrap retention, independent wrapped/unwrapped viewport restoration, hidden activation rejection and clamping after source shrink, unmount, keyboard/IME and bounded responsive scrolling. `node scripts/check-agent-message-ui.mjs` checks measured user-message folding, literal full-message copying, independent presentation identities, keyboard/IME, reflow focus and hidden-state retention. `check-agent-stop-ui.mjs` additionally verifies completion focus returns from disappearing work to its header without taking drafts or other/hidden conversations, and hidden streams complete into current session state while their display clocks pause and retained reply presentation catches up on reveal. These clipboard browser checks also measure fixed horizontal action targets through feedback: Copy/Reuse in narrow large-type user messages, Copy in tables/formulas, and Wrap/Copy through pending, failed and successful code copying at 328 px with larger type. It starts no provider or Electron app and establishes no native clipboard permission evidence.
-
-`tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts` and
-`tests/footprint-drawing.test.ts` cover embedded component authoring, native
-reopening, shared human/Agent commands and atomic rejection.
-`node scripts/check-component-drawing-ui.mjs` exercises the actual drawing dialog
-in an isolated browser against Core, including invalid/stale/IME drafts.
-It starts no Electron app,
-provider or native CAD kernel. Desktop/native kernel evidence remains opt-in.
+Run the browser scripts with `node scripts/<script>.mjs`. They use isolated
+renderer fixtures and controlled services. Native dialogs, clipboard
+permissions, CAD kernel execution and provider authentication require their own
+checks.
 
 GUI/Agent design parity is exercised by `tests/gui-agent-parity.test.ts`: shared
 preparations produce matching native KiCad files and undo results behind the
@@ -440,8 +428,6 @@ opening another project never transfers its authority. Focused regressions are
 `tests/model-resource-capabilities.test.ts`, `tests/project-file-capabilities.test.ts`
 and `tests/workbench-project-actions.test.ts`, alongside existing Source, history
 and native-file lifecycle tests. The API contract records the scoped parity matrix.
-
-Use the feature contracts for focused tests and [AGENTS](../AGENTS.md#verification-and-delivery) for required checks/authorization. Documentation-only changes need content, links, commands and formatting review without app/provider/solver runs.
 
 `scripts/test.mjs` discovers the complete `tests/*.test.ts` set and uses Node's
 process-isolated runner with bounded file concurrency. Successful complete runs

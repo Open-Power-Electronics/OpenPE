@@ -64,17 +64,14 @@ export async function prepareHomeExampleCustomFootprints(project: Project, id: H
 
 // Build-only publication; both converters use the catalog's directory and stem.
 export async function writeHomeExampleNativeFiles(project: Project, id: HomeExampleId) {
-  const destination = homeExampleNativePath(id);
+  const destination = path.resolve(homeExampleNativePath(id));
   const directory = path.dirname(destination);
-  for (const file of projectNativeFiles(project, path.basename(destination)).files) {
+  const native = projectNativeFiles(project, path.basename(destination));
+  for (const file of native.files) {
     const target = path.join(directory, file.name);
     await mkdir(path.dirname(target), { recursive: true });
     await writeExampleFile(target, Buffer.from(file.source, file.encoding ?? 'utf8'));
   }
-  await prepareExampleFootprints(project, path.resolve(destination));
-  await cleanupExampleLayout(
-    project,
-    path.resolve(destination),
-    projectNativeFiles(project, path.basename(destination)),
-  );
+  await prepareExampleFootprints(project, destination);
+  await cleanupExampleLayout(project, destination, native);
 }

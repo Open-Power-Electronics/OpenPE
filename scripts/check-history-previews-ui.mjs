@@ -86,7 +86,6 @@ const bundle = await build({
           flushSync(()=>root.render(<History visible={state.visible} source={state.source}
             sourcePending={false} fileId="fixture" capabilityHost={host}
             onSave={async()=>{writes.push('save');return 'cancelled'}}
-            onRestore={()=>writes.push('restore')}
             onClose={()=>window.historyPreview.render({visible:false})}/>));
         }
       };

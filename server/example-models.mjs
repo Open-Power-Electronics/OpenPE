@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, writeFile, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import homeManifest from '../resources/example-catalog/home-manifest.json' with { type: 'json' };
 import { exampleModelLock, emcFlybackModelLock } from './example-models-lock.mjs';
 import { readProjectModelFile, verifyProjectModelBytes } from './project-model-files.mjs';
 import { simulationModelDefinitions } from './simulation-model-format.mjs';
@@ -68,7 +69,7 @@ export function createExampleModelStore(dataDir, fetcher = fetch) {
 export function createSimulationModelStore(
   dataDir,
   fetcher = fetch,
-  projectRoot = fileURLToPath(new URL('../project/', import.meta.url)),
+  projectRoot = fileURLToPath(new URL(`../${homeManifest.sourceRoots.project}/`, import.meta.url)),
   preparedRoot,
 ) {
   const examples = createExampleModelStore(dataDir, fetcher),

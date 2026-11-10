@@ -636,9 +636,6 @@
 .layout-tool-settings[data-tool='route'] .layout-field:first-child > span:first-child {
   display: none;
 }
-.layout-tool-settings-fill .layout-tool-settings-content .layout-field > span:first-child {
-  display: none;
-}
 .layout-tool-settings-content .layout-field > span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -685,18 +682,6 @@
   vector-effect: non-scaling-stroke;
   stroke-width: 1px;
 }
-.layout-property-value {
-  display: flex;
-  align-items: center;
-  min-height: var(--control-height);
-  padding: 4px 8px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--text);
-  font-size: var(--font-control);
-  overflow-wrap: anywhere;
-}
 .layout-field {
   display: flex;
   flex-direction: column;
@@ -740,13 +725,6 @@
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.layout-property-heading {
-  margin-top: 3px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-soft);
-  font-weight: 600;
-  color: var(--text-strong);
 }
 .layout-property-section {
   display: flex;

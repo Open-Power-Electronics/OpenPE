@@ -82,10 +82,20 @@ export function assertDatasheetRecord(record) {
   return record;
 }
 
-export async function loadDatasheetCatalog(root = repositoryRoot) {
-  const catalog = JSON.parse(
+async function readHomeManifest(root) {
+  return JSON.parse(
     await readFile(path.join(root, 'resources/example-catalog/home-manifest.json'), 'utf8'),
   );
+}
+
+function datasheetDirectory(root, catalog, example) {
+  const sourceRoot = catalog.sourceRoots[example.root];
+  if (!sourceRoot) throw new Error('Unknown example source root.');
+  return path.join(root, sourceRoot, example.directory, 'datasheets');
+}
+
+export async function loadDatasheetCatalog(root = repositoryRoot) {
+  const catalog = await readHomeManifest(root);
   const examples = [...catalog.examples, ...catalog.recent];
   const reviewed = JSON.parse(
     await readFile(path.join(root, 'resources/example-catalog/ic-datasheets.json'), 'utf8'),
@@ -99,7 +109,7 @@ export async function loadDatasheetCatalog(root = repositoryRoot) {
   for (const example of examples) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(example.file))
       throw new Error('Invalid example file stem');
-    const directory = path.join(root, example.root, example.directory, 'datasheets');
+    const directory = datasheetDirectory(root, catalog, example);
     const record = assertDatasheetRecord(
       reviewed.find((record) => record.example.id === example.id),
     );
@@ -136,6 +146,10 @@ export async function loadDatasheetCatalog(root = repositoryRoot) {
 // Download-only references for the other fitted EMC ICs. These are not reviewed
 // parameter records and are never submitted as Agent context.
 export async function loadSupplementalDatasheets(root = repositoryRoot) {
+  const catalog = await readHomeManifest(root);
+  const example = catalog.recent.find((entry) => entry.id === 'emc-flyback-demo');
+  if (!example) throw new Error('The EMC Flyback Home entry is missing.');
+  const directory = datasheetDirectory(root, catalog, example);
   const assets = JSON.parse(
     await readFile(
       path.join(root, 'resources/example-catalog/emc-ic-datasheet-files.json'),
@@ -189,7 +203,7 @@ export async function loadSupplementalDatasheets(root = repositoryRoot) {
       throw new Error(
         'Supplemental EMC PDF metadata does not match the fitted IC or pinned source.',
       );
-    return { record, directory: path.join(root, 'project/emc-flyback/datasheets') };
+    return { record, directory };
   });
 }
 

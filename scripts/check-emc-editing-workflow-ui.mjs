@@ -117,7 +117,6 @@ const nativeSave = createNativeSave({
   parseProject,
   projectNativeFiles,
   fileGrants,
-  dataDir: nativeDirectory,
   atomicWrite,
   showSaveDialog: async () => ({ canceled: false, filePath: nativeFile }),
   prepareProjectFiles: async (project, file, sourceFile) => {

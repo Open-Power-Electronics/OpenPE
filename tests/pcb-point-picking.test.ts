@@ -888,7 +888,7 @@ test('overlapping silk, pads and tracks obey silk mode, coverage, visibility and
 
 test('native EMC C5 silkscreen is selectable, movable and hideable independently through Core', async () => {
   const project = parseProject(await readFile('lib/emc-flyback-example.json', 'utf8'));
-  const source = await readFile('project/emc-flyback/emc-flyback.kicad_pcb', 'utf8');
+  const source = await readFile('examples/project/emc-flyback/emc-flyback.kicad_pcb', 'utf8');
   const board = parseKiCadPCB(source, project.schematic, 'emc-flyback-demo').board;
   const target = { kind: 'graphic' as const, id: '7dedd6e0-f600-404c-a40c-2c8bcb42772c' };
   const hit = findPCBGraphic(board, target.id)!;

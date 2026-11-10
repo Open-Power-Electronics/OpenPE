@@ -87,6 +87,26 @@ test('unchanged example seeds verify in two Git processes while preserving priva
   );
 });
 
+test('example opening preserves a sole version with a retired automatic subject', async (t) => {
+  const { dir, id, history, grants } = await setup();
+  grants.markLocalExample(id);
+  t.after(async () => {
+    history.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const project = exampleProject();
+  const source = serializeProject(project);
+  const version = await history.create(id, source, 'Initial example');
+  project.schematic.parts[0].value = '4.7k';
+  await history.ensureExampleInitial(id, serializeProject(project));
+  const { commits } = await history.list(id);
+  assert.deepEqual(
+    commits.map((entry: { id: string }) => entry.id),
+    [version.id],
+  );
+  assert.equal(await history.read(id, version.id), source);
+});
+
 test('real Git snapshots preserve complete projects and restart history without writing design files', async () => {
   const { dir, file, id, history, grants } = await setup();
   const project = appendSchematic(exampleProject()).project;

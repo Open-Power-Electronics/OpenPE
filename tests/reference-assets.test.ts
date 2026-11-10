@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import manifest from '../resources/example-catalog/manifest.json';
-import { homeExampleCatalog } from '../lib/home-examples';
+import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
 import assets from '../resources/example-catalog/footprints/manifest.json';
 import { parseProject, projectNativeFiles } from '../lib/project';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
@@ -19,20 +19,21 @@ import {
 
 const root = 'resources/example-catalog/footprints';
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
-test('examples and sibling project contain the ten self-contained projects and pinned assets', async () => {
-  assert.equal(existsSync('examples/project'), false);
+test('examples and its project group contain ten self-contained projects and pinned assets', async () => {
+  assert.equal(existsSync('project'), false);
   assert.equal(existsSync('recent'), false);
-  assert.deepEqual(readdirSync('project'), ['emc-flyback']);
+  assert.deepEqual(readdirSync('examples/project'), ['emc-flyback']);
   const stems = manifest.examples.map((entry) => entry.file).sort();
   const rootEntries = readdirSync('examples', { withFileTypes: true });
   assert.deepEqual(
     rootEntries.map((entry) => entry.name).sort(),
     Array.from(
-      new Set(
-        homeExampleCatalog
+      new Set([
+        'project',
+        ...homeExampleCatalog
           .filter((entry) => entry.root === 'examples')
           .map((entry) => entry.directory.split('/')[0]),
-      ),
+      ]),
     ).sort(),
   );
   assert.ok(rootEntries.every((entry) => entry.isDirectory()));
@@ -47,14 +48,14 @@ test('examples and sibling project contain the ten self-contained projects and p
     );
   }
   for (const entry of homeExampleCatalog) {
-    assert.ok(existsSync(`${entry.root}/${entry.directory}`));
+    const directory = path.dirname(homeExampleNativePath(entry.id));
+    assert.ok(existsSync(directory));
     assert.deepEqual(
-      readdirSync(`${entry.root}/${entry.directory}`)
+      readdirSync(directory)
         .filter((file) => /\.kicad_(?:pro|sch|pcb)$/.test(file))
         .sort(),
       ['kicad_pcb', 'kicad_pro', 'kicad_sch'].map((extension) => `${entry.file}.${extension}`),
     );
-    const directory = `${entry.root}/${entry.directory}`;
     assert.ok(JSON.parse(readFileSync(`${directory}/${entry.file}.kicad_pro`, 'utf8')).meta);
     const board = parseSExpr(readFileSync(`${directory}/${entry.file}.kicad_pcb`, 'utf8'));
     let linkedModels = 0;

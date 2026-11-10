@@ -125,6 +125,8 @@
         "to": "examples-native",
         "filter": [
           "**/*",
+          "!project",
+          "!project/**",
           "!**/spice/**",
           "!**/thermal/**",
           "!**/.*",
@@ -142,7 +144,7 @@
         ]
       },
       {
-        "from": "project",
+        "from": "examples/project",
         "to": "project-native",
         "filter": [
           "**/*",

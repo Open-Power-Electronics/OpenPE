@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState, type InputHTMLAttributes } from 'react';
+import { useRef, useState, type InputHTMLAttributes, type MouseEvent } from 'react';
 import Select from './Select';
 import {
   convertQuantity,
@@ -30,6 +30,7 @@ export default function QuantityInput({
   onBlur,
   onCompositionStart,
   onCompositionEnd,
+  onKeyDown,
   min,
   max,
   step,
@@ -76,6 +77,15 @@ export default function QuantityInput({
       return value;
     return convertQuantity(Number(value), canonical, selected);
   };
+  function leaveField() {
+    if (!composing.current) onBlur?.();
+  }
+  function guardUnitPointer(event: MouseEvent<HTMLSpanElement>) {
+    if (composing.current && event.target instanceof Element && event.target.closest('button')) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
   const input = (
     <input
       {...props}
@@ -112,6 +122,23 @@ export default function QuantityInput({
         composing.current = false;
         onCompositionEnd?.(event);
       }}
+      onKeyDown={(event) => {
+        if (
+          composing.current ||
+          event.nativeEvent.isComposing ||
+          event.nativeEvent.keyCode === 229
+        ) {
+          if (
+            event.key === 'Enter' ||
+            event.key === 'Escape' ||
+            ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')
+          )
+            event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onKeyDown?.(event);
+      }}
       onChange={(event) => {
         const raw = event.target.value;
         const parsed = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw.trim())
@@ -126,7 +153,7 @@ export default function QuantityInput({
       }}
       onBlur={() => {
         if (autoScale || decimalPlaces !== undefined) setFocused(false);
-        if (!hasUnitPicker) onBlur?.();
+        if (!hasUnitPicker) leaveField();
       }}
     />
   );
@@ -136,36 +163,17 @@ export default function QuantityInput({
     <span
       className="quantity-input"
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) onBlur?.();
+        if (!event.currentTarget.contains(event.relatedTarget)) leaveField();
       }}
-      onPointerDownCapture={(event) => {
-        if (
-          composing.current &&
-          event.target instanceof Element &&
-          event.target.closest('button')
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      }}
-      onClickCapture={(event) => {
-        if (
-          composing.current &&
-          event.target instanceof Element &&
-          event.target.closest('button')
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      }}
+      onPointerDownCapture={guardUnitPointer}
+      onClickCapture={guardUnitPointer}
       onKeyDownCapture={(event) => {
         if (
-          composing.current ||
-          event.nativeEvent.isComposing ||
-          event.nativeEvent.keyCode === 229
+          event.target instanceof HTMLButtonElement &&
+          (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
         ) {
-          if (event.target instanceof HTMLButtonElement) event.preventDefault();
-          if (event.target instanceof HTMLButtonElement) event.stopPropagation();
+          event.preventDefault();
+          event.stopPropagation();
         }
       }}
     >
@@ -175,7 +183,7 @@ export default function QuantityInput({
         showChevron={false}
         label={`${label} unit`}
         value={selected.label}
-        disabled={props.disabled || props.readOnly || options.length === 1 || composing.current}
+        disabled={props.disabled || props.readOnly || options.length === 1}
         options={options.map((entry) => ({ value: entry.label, label: entry.label }))}
         onChange={(next) => {
           if (!composing.current) {

@@ -52,6 +52,7 @@ test('Gerber manufacturing archive has actual layers, analytic rounded pads, sep
   const files = await unzip(output.bytes);
   assert.equal(files.size, 12);
   assert.ok([...files.keys()].every((name) => !/kicad_/.test(name)));
+  assert.doesNotMatch(files.get('README.txt')!, /Assembly CSV/);
   assert.match(files.get('Power stage.gtl')!, /%TF.FileFunction,Copper,L1,Top\*%/);
   assert.match(files.get('Power stage.gts')!, /%TF.FilePolarity,Negative\*%/);
   assert.match(files.get('Power stage.gtp')!, /%TF.FilePolarity,Positive\*%/);
@@ -78,6 +79,19 @@ test('Excellon export matches fabrication drills and works before the outline is
   assert.match(drills.get('x-PTH.drl')!, /T1C0\.3[\s\S]*X-2\.000000Y-3\.000000/);
   assert.match(drills.get('x-NPTH.drl')!, /T1C2[\s\S]*X5\.000000Y-5\.000000/);
   assert.throws(() => exportProjectFile(project, 'stencil', 'x'), /outline is open/);
+});
+
+test('manufacturing exports retain a native PCB name with an uppercase extension', () => {
+  const original = manufacturingProject();
+  const files = projectNativeFiles(original);
+  files.files.find((file) => file.name.endsWith('.kicad_pcb'))!.name = 'Board.KICAD_PCB';
+  const reopened = projectFromNativeFiles(files);
+  assert.ok(projectNativeFiles(reopened).files.some((file) => file.name === 'Board.KICAD_PCB'));
+  for (const format of ['drill', 'dxf'] as const)
+    assert.deepEqual(
+      exportProjectFile(reopened, format, 'supply').bytes,
+      exportProjectFile(original, format, 'supply').bytes,
+    );
 });
 
 test('stencil export matches fabrication paste and outline without checking unrelated mask settings', async () => {
@@ -118,6 +132,7 @@ test('JLCPCB CSV uses matching designators, quoted values, native origins, top/b
   project.pcb!.footprints[0].value = '10k, "1%"';
   project.pcb!.footprints[0].side = 'back';
   const files = await unzip(exportProjectFile(project, 'jlcpcb', 'supply').bytes);
+  assert.match(files.get('README.txt')!, /Assembly CSV uses footprint origins/);
   assert.match(
     files.get('supply-bom.csv')!,
     /"Comment","Designator","Footprint","LCSC Part #"\r\n/,
@@ -248,6 +263,30 @@ test('native DNP, independent BOM/position exclusions and explicit supplier fiel
     text('bom', (s) => s.replace('(attr smd)', '(attr smd) (property "LCSC" "C12345")')),
     /"C12345"/,
   );
+});
+
+test('supplier metadata is validated only for exported BOM rows', async () => {
+  const withSupplier = (excluded: boolean) =>
+    nativeBoard((source) =>
+      source.replace(
+        '(attr smd)',
+        `(attr smd${excluded ? ' exclude_from_bom' : ''}) (property "LCSC" "invalid")`,
+      ),
+    );
+  const included = withSupplier(false);
+  assert.throws(() => exportProjectFile(included, 'bom', 'x'), /Invalid LCSC part number for R1/);
+  assert.throws(
+    () => exportProjectFile(included, 'jlcpcb', 'x'),
+    /Invalid LCSC part number for R1/,
+  );
+  const placement = new TextDecoder().decode(exportProjectFile(included, 'placement', 'x').bytes);
+  assert.match(placement, /"R1"/);
+  const excluded = withSupplier(true);
+  const bom = new TextDecoder().decode(exportProjectFile(excluded, 'bom', 'x').bytes);
+  assert.doesNotMatch(bom, /"R1"/);
+  const archive = await unzip(exportProjectFile(excluded, 'jlcpcb', 'x').bytes);
+  assert.equal(archive.get('x-bom.csv'), bom);
+  assert.equal(archive.get('x-positions.csv'), placement);
 });
 
 test('native board tenting masks vias by side and board mask clearance changes only mask pad apertures', async () => {

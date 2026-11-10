@@ -239,7 +239,9 @@ test('EMC enclosure exists only in Model CAD, outside PCB footprints and project
       'utf8',
     ),
   );
-  const generated = parseSExpr(readFileSync('project/emc-flyback/emc-flyback.kicad_pcb', 'utf8'));
+  const generated = parseSExpr(
+    readFileSync('examples/project/emc-flyback/emc-flyback.kicad_pcb', 'utf8'),
+  );
   const reference = (footprint: ReturnType<typeof parseSExpr>) => {
     const property = children(footprint, 'property').find((node) => val(node) === 'Reference');
     return property
@@ -269,7 +271,7 @@ test('EMC enclosure exists only in Model CAD, outside PCB footprints and project
   );
   for (const name of ['Case_UChannel_revD', 'Cover_PMMA_revD'])
     assert.equal(
-      existsSync(`project/emc-flyback/footprints/emc-flyback.pretty/${name}.kicad_mod`),
+      existsSync(`examples/project/emc-flyback/footprints/emc-flyback.pretty/${name}.kicad_mod`),
       false,
     );
   assert.equal(modelCadFromProject(project)!.objects.length, 4);
@@ -321,7 +323,9 @@ test('EMC enclosure exists only in Model CAD, outside PCB footprints and project
 });
 
 test('native schematic note outlines reject unsupported or malformed geometry', () => {
-  const source = parseSExpr(readFileSync('project/emc-flyback/emc-flyback.kicad_sch', 'utf8'));
+  const source = parseSExpr(
+    readFileSync('examples/project/emc-flyback/emc-flyback.kicad_sch', 'utf8'),
+  );
   const line = children(source, 'polyline')[0];
   child(child(line, 'pts')!, 'xy')![1] = 'NaN';
   assert.throws(() => schematicPolylines(source), /Unsupported schematic polyline/);

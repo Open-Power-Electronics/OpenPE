@@ -126,6 +126,14 @@ export function modelBoardPolygons(board: PCB): Polygon[] {
 
 /** Closed Edge.Cuts loops, including footprint cutouts. Never invent a board rectangle. */
 export function boardPolygons(board: PCB): Polygon[] {
+  return prepareBoardOutline(board).polygons;
+}
+
+/** Keep exact world-space primitives beside the validated polygon approximation. */
+export function prepareBoardOutline(board: PCB): {
+  edges: readonly Readonly<BoardLine>[];
+  polygons: Polygon[];
+} {
   const edges = [
     ...board.graphics.filter((g) => g.layer === 'Edge.Cuts'),
     ...board.footprints.flatMap((f) =>
@@ -135,9 +143,9 @@ export function boardPolygons(board: PCB): Polygon[] {
     ),
   ];
   if (!edges.length) throw new Error('Draw a closed board outline before previewing copper or 3D.');
-  const result = polygonsFromContours(closedGraphicContours(edges, 'board outline'));
-  if (!result.length) throw new Error('The board outline does not enclose a positive area.');
-  return result;
+  const polygons = polygonsFromContours(closedGraphicContours(edges, 'board outline'));
+  if (!polygons.length) throw new Error('The board outline does not enclose a positive area.');
+  return { edges, polygons };
 }
 
 /** Join line and arc endpoints; native circles and polygons are already closed. */

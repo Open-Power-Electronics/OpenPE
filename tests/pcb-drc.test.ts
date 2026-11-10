@@ -801,7 +801,7 @@ test('courtyards preserve independent contours and cutouts and reject crossing o
 
 test('native EMC Flyback uses conditional clearance precedence and accepts session overrides', async () => {
   const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-  const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
+  const filename = 'examples/project/emc-flyback/emc-flyback.kicad_pro';
   const native = await readNativeProject(filename);
   const project = projectFromNativeFiles(native);
   const board = project.pcb!;
@@ -875,7 +875,7 @@ test('native EMC Flyback uses conditional clearance precedence and accepts sessi
 
 test('EMC Flyback DRC completes after moving a track and refreshing saved fills', async () => {
   const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-  const native = await readNativeProject('project/emc-flyback/emc-flyback.kicad_pro');
+  const native = await readNativeProject('examples/project/emc-flyback/emc-flyback.kicad_pro');
   const project = projectFromNativeFiles(native);
   const board = project.pcb!;
   const core = new ProjectCore(project);

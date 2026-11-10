@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import homeManifest from '../resources/example-catalog/home-manifest.json';
 import vm from 'node:vm';
 
 const mainSource = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
@@ -189,6 +190,7 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
           };
         if (specifier === 'node:path') return path;
         if (specifier === 'node:fs/promises') return {};
+        if (specifier === '../resources/example-catalog/home-manifest.json') return homeManifest;
         if (specifier === './file-grants.cjs') return { FileGrants: class {} };
         assert.ok(
           [

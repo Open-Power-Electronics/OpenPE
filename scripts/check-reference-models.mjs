@@ -171,7 +171,11 @@ try {
       for (const entry of catalog) {
         const project = projectFromNativeFiles(
           await nativeProject.readNativeProject(
-            path.resolve(entry.root, entry.directory, `${entry.file}.kicad_pro`),
+            path.resolve(
+              projects.sourceRoots[entry.root],
+              entry.directory,
+              `${entry.file}.kicad_pro`,
+            ),
           ),
         );
         const source = serializeProject(project);

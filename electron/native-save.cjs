@@ -1,13 +1,13 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
-const { writeNativeProject } = require('./native-project.cjs');
+const { preflightNativeProject, writeNativeProject } = require('./native-project.cjs');
 
 function createNativeSave({
   parseProject,
   projectNativeFiles,
   fileGrants,
-  dataDir,
+  exampleRoots = [],
   showSaveDialog,
   prepareProjectFiles,
   atomicWrite,
@@ -22,7 +22,7 @@ function createNativeSave({
         title: 'Save KiCad project',
         buttonLabel: 'Save project',
         defaultPath: `${String(name || savedProject.name || 'project')
-          .replace(/\.(?:openpe\.json|kicad_(?:pro|sch|pcb))$/i, '')
+          .replace(/\.kicad_(?:pro|sch|pcb)$/i, '')
           .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.kicad_pro`,
         filters: [{ name: 'KiCad Project', extensions: ['kicad_pro'] }],
       });
@@ -31,13 +31,13 @@ function createNativeSave({
       if (!file.toLowerCase().endsWith('.kicad_pro')) file += '.kicad_pro';
       // Existing grants may save their own example. Pickers cannot target any
       // application-owned example folder, including another example's assets.
-      const exampleRoot = path.resolve(dataDir, 'example-projects');
-      const exampleRelative = path.relative(exampleRoot, path.resolve(file));
       if (
-        !exampleRelative ||
-        (!exampleRelative.startsWith(`..${path.sep}`) &&
-          exampleRelative !== '..' &&
-          !path.isAbsolute(exampleRelative))
+        exampleRoots.some((root) => {
+          const relative = path.relative(root, file);
+          return (
+            relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+          );
+        })
       )
         throw new Error('Choose a save location outside the bundled example folders.');
     }
@@ -88,9 +88,10 @@ function createNativeSave({
       if (fileGrants.get(fileId) !== sourceFile)
         throw new Error('The project destination changed. Try saving again.');
     };
+    await preflightNativeProject(file, bundle);
     await checkOwners();
     await prepareProjectFiles(savedProject, file, sourceFile);
-    fileGrants.get(fileId);
+    await checkOwners();
     await writeNativeProject(file, bundle, atomicWrite, checkOwners);
     fileGrants.assign(fileId, file);
     fileGrants.setProjectFiles(fileId, nativeFiles);

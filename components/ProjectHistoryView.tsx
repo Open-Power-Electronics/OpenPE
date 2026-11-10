@@ -19,7 +19,7 @@ import { GitIcon, ModelIcon, SchematicIcon } from './EditorIcons';
 import ProjectFileComparison from './ProjectFileComparison';
 import { compareProjectFiles, type HistoryEntry, type HistoryPage } from '@/lib/project-history';
 import type { CapabilityHost } from '@/api/capabilities';
-import { parseProject, projectNativeFiles, serializeProject } from '@/lib/project';
+import { parseProject, projectNativeFiles } from '@/lib/project';
 
 const SchematicComparison = lazy(() => import('./SchematicComparison'));
 const LayoutComparison = lazy(() => import('./LayoutComparison'));
@@ -42,7 +42,6 @@ export default function ProjectHistoryView({
   source,
   sourcePending,
   onSave,
-  onRestore,
   capabilityHost,
 }: {
   visible: boolean;
@@ -51,7 +50,6 @@ export default function ProjectHistoryView({
   source: string;
   sourcePending: boolean;
   onSave: () => Promise<'saved' | 'cancelled' | Error>;
-  onRestore: (source: string) => void | Promise<void>;
   capabilityHost: CapabilityHost;
 }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
@@ -119,7 +117,7 @@ export default function ProjectHistoryView({
   }
   async function read(id: string): Promise<Version> {
     const result = (await capabilityHost.query('versions.read', { id })) as { source: string };
-    return { id, source: serializeProject(parseProject(result.source)) };
+    return { id, source: result.source };
   }
   async function load(append = false, reset = false) {
     const state = current.current;
@@ -441,7 +439,11 @@ export default function ProjectHistoryView({
                   onClick={() => {
                     if (selected)
                       void perform(async () => {
-                        await onRestore(selected.source);
+                        await capabilityHost.execute(
+                          'versions.restore',
+                          { id: selected.id },
+                          { actor: 'human' },
+                        );
                         setStatus('Version restored. Save to write it to disk.');
                       });
                   }}

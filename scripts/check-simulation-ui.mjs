@@ -595,7 +595,7 @@ try {
   await propertiesSidebar.waitFor();
   assert.equal(await settings.isVisible(), false, 'The sidebar action restores Properties.');
   assert.equal(await dock.count(), 0, 'Restoring Properties hides the waveform dock.');
-  await openSchematicPanel(page, 'Visible layers');
+  await openSchematicPanel(page, 'Visualization');
   await page.keyboard.press('Escape');
   await openSimulation();
   await dock.getByText('I(L1)', { exact: true }).waitFor();

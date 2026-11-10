@@ -105,6 +105,16 @@ export function parseKiCadPCB(
   source: string,
   schematic: Circuit,
   stableIdSeed: string,
+  referenceMapping?: Record<string, string>,
+) {
+  return parseKiCadPCBTree(parseSExpr(source), schematic, stableIdSeed, referenceMapping);
+}
+
+/** Project a parsed board without changing its native records. */
+export function parseKiCadPCBTree(
+  tree: SExpr,
+  schematic: Circuit,
+  stableIdSeed: string,
   referenceMapping: Record<string, string> = {},
 ): {
   board: PCB;
@@ -118,7 +128,7 @@ export function parseKiCadPCB(
     unlinkedReferences: string[];
   };
 } {
-  const root = expandNativeBoardZones(parseSExpr(source));
+  const root = expandNativeBoardZones(tree);
   if (root[0] !== 'kicad_pcb' || val(child(root, 'version')) !== '20260206')
     fail('Expected the pinned KiCad 10 board format.');
   allow(

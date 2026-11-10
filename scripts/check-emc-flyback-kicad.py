@@ -18,7 +18,7 @@ parser.add_argument('--cli', default=str(Path(sys.executable).with_name('kicad-c
 args = parser.parse_args()
 assert pcb.GetBuildVersion().startswith('10.'), 'Use KiCad 10 Python.'
 original = ROOT / 'resources/example-catalog/sources/emc-flyback/design/emc_flyback'
-converted = ROOT / 'project/emc-flyback/emc-flyback'
+converted = ROOT / 'examples/project/emc-flyback/emc-flyback'
 layout = json.loads(Path(__file__).with_name('emc-flyback-layout.json').read_text())
 env = dict(os.environ, KICAD_CONFIG_HOME=str(OUT / 'config'))
 

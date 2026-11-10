@@ -2,8 +2,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { homeExamples, homeExampleNativePath, homeRecent } from '../lib/home-examples';
 import { projectFromNativeFiles } from '../lib/project';
 import { buildSpiceDeck, defaultTransient } from '../lib/spice';
 import {
@@ -19,9 +20,8 @@ import { readProjectModelFile } from '../server/project-model-files.mjs';
 import { verifyHomeOutput } from './home-simulation-verification';
 
 const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
-const catalog = JSON.parse(await readFile('resources/example-catalog/home-manifest.json', 'utf8'));
 const filters = process.argv[2]?.split(',');
-const entries = [...catalog.examples, ...catalog.recent].filter(
+const entries = [...homeExamples, ...homeRecent].filter(
   (entry) => !filters || filters.some((filter) => entry.file.includes(filter)),
 );
 assert.ok(entries.length, 'No bundled native projects matched.');
@@ -80,7 +80,7 @@ for (const entry of entries) {
   };
   let stage = 'import';
   try {
-    const filename = path.resolve(entry.root, entry.directory, `${entry.file}.kicad_pro`);
+    const filename = path.resolve(homeExampleNativePath(entry.id));
     const native = await readNativeProject(filename),
       project = projectFromNativeFiles(native);
     report.nativeSha256 = createHash('sha256').update(JSON.stringify(native)).digest('hex');

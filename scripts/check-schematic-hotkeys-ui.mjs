@@ -2143,7 +2143,7 @@ try {
     assert.equal(await input.inputValue(), first.value);
     assert.equal(await t.draft().count(), 0);
     await t.expectClean();
-    const display = await openSchematicPanel(t.page, 'Visible layers');
+    const display = await openSchematicPanel(t.page, 'Visualization');
     for (const key of ['e', 'Delete', 'w'])
       await display.getByRole('checkbox').first().dispatchEvent('keydown', { key });
     assert.equal(await t.draft().count(), 0);
@@ -2169,7 +2169,7 @@ try {
           `schematic-text-${noteId}`,
         ].map((testId) => t.glyph(testId)),
       );
-      const dialog = await openSchematicPanel(t.page, 'Visible layers');
+      const dialog = await openSchematicPanel(t.page, 'Visualization');
       for (const label of ['References', 'Values', 'Notes'])
         await dialog.getByRole('checkbox', { name: label, exact: true }).uncheck();
       await closeDisplayDrawer(t.page, 'Visualization');
@@ -2638,7 +2638,7 @@ try {
   await run(
     'a component with hidden reference and value remains editable through its stable inspector',
     async (t) => {
-      const layers = await openSchematicPanel(t.page, 'Visible layers');
+      const layers = await openSchematicPanel(t.page, 'Visualization');
       for (const name of ['References', 'Values'])
         await layers.getByRole('checkbox', { name, exact: true }).uncheck();
       await closeDisplayDrawer(t.page, 'Visualization');

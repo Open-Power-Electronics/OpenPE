@@ -12,7 +12,7 @@ const server = await startServer({
   dataDir: path.join(root, 'profile'),
   componentModelFiles: {
     resolve: (id) =>
-      id === grant ? path.resolve('project/emc-flyback/emc-flyback.kicad_pro') : undefined,
+      id === grant ? path.resolve('examples/project/emc-flyback/emc-flyback.kicad_pro') : undefined,
   },
 });
 const source = await readFile('lib/emc-flyback-example.json', 'utf8');
@@ -21,7 +21,7 @@ const selectedFootprint = originalProject.pcb.footprints.find(
   (f) => f.symbolId && f.models?.length,
 );
 const modelFile = path.resolve(
-  'project/emc-flyback',
+  'examples/project/emc-flyback',
   selectedFootprint.models[0].path.slice('${KIPRJMOD}/'.length),
 );
 const imported = await server.componentModels.importFile(modelFile, new AbortController().signal);

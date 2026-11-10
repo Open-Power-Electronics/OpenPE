@@ -60,6 +60,8 @@ try {
           onCloseRequested: () => () => {},
           save: async (options) => {
             window.fileCalls.saves.push(options);
+            if (window.fileCalls.saves.length === 1)
+              await new Promise((resolve) => (window.fileCalls.finishSave = resolve));
             return { name: options.saveAs ? 'copy.kicad_pro' : 'saved.kicad_pro' };
           },
           exportProject: async (options) => {
@@ -133,7 +135,15 @@ try {
         0,
       );
     await fileMenuAction(page, 'Save');
-    await page.waitForFunction(() => window.fileCalls.saves.length === 1);
+    await page.waitForFunction(() => typeof window.fileCalls.finishSave === 'function');
+    await fileMenuAction(page, ['Export', 'BOM']);
+    await page
+      .getByRole('status')
+      .filter({ hasText: 'A project file operation is already in progress.' })
+      .waitFor();
+    assert.equal(await page.evaluate(() => window.fileCalls.exports.length), 0);
+    await page.evaluate(() => window.fileCalls.finishSave());
+    await page.getByRole('status').filter({ hasText: 'Save project' }).waitFor();
     await fileMenuAction(page, 'Save as');
     await page.waitForFunction(() => window.fileCalls.saves.length === 2);
     const saves = await page.evaluate(() => window.fileCalls.saves);

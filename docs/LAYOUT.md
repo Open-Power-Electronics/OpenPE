@@ -229,17 +229,10 @@ deactivation and unmount.
 
 Manual tools place/move/rotate footprints, route, place vias and draw closed
 rectangles or polygons on the selected layer. Properties assigns networks and
-fills selected regions. The right dock combines Properties and Appearance.
-Its full-height left edge resizes the complete sidebar from 224 px up to 480 px,
-retaining at least 160 px of drawing space. The default is 280 px; Arrow keys
-resize by 16 px, Home/double-click resets and Escape cancels a drag. Width remains
-view-local presentation through hiding and project navigation, preserving scale,
-drafts and native content.
-Properties retains the same object's drafts through sidebar hiding/deactivation,
-with inactive controls; closing it/changing subject resets drafts. Appearance's
-Visualization contains Layers, Objects and Nets tabs with retained display choices. Properties, Visualization and Selection share contrasting collapsible headers and default open above their independently scrolling content. Their order stays fixed through every expansion/collapse combination. Visualization and Selection each fit their own content without stretching, capped at 60% with internal scrolling when constrained. Their combined height is the sum of those sections, with Properties filling the remaining space above. Each collapsed section reserves only its header in place; the complete section stack stays at the bottom when Properties is collapsed. Collapsing Properties retains its mounted drafts. The shared mode row right-aligns Toggle right sidebar, List, Git and Close project as 30 px controls with 4 px gaps. Source and views without a dock omit the sidebar toggle. The right dock starts with Properties, without a separate action toolbar. Schematic ERC and Layout DRC remain at the right edge of the left drawing toolbar. Drawing toolbar padding remains 6 px vertically, 8 px left and 15 px right. There is no project tab; New file belongs to File. The four editor modes sit at the left above the drawing tools, with 44 px minimum widths, 6 px gaps and 36 px profiles in a mode row that grows from 44 px. Schematic file tabs appear separately for projects with multiple schematics. Mode and schematic-file controls use rounded top corners and square bottoms, joining the surface below. Selected modes retain their label, soft side borders and transparent top border; inactive modes reveal their labels on hover/focus, immediately under reduced motion. Neither display section has a toolbar button. Nets keeps search and
-independent search/highlight clearing accessible while scrolling; clearing search
-restores its focus. Layers/filters never edit design data.
+fills selected regions. Appearance's Visualization contains Layers, Objects and
+Nets. Display choices, layer visibility and selection filters remain presentation
+state. See [dock behavior](../DESIGN.md#properties-visualization-and-selection)
+and [Layout controls](../DESIGN.md#layout-editor) for the shared panels and controls.
 
 Layer rows, display modes and canvas picking follow the
 [active layer and selection rules](#layers-labels-and-selection).
@@ -980,18 +973,9 @@ drafts and busy commits disable filter changes so input remains retryable.
 Visibility and selection eligibility remain independent; filtering retains the
 same depth and transparent-cover occlusion rules.
 
-Schematic, Layout and Model use two bordered regions separated by 12 px. The left
-region owns its editing toolbar, drawing and status row; the right region owns
-its retained Properties/Visualization/Selection panels. The shared mode row
-orders project actions as List, Git and Toggle right sidebar; Close project
-belongs to the application header. Hiding or resizing the right dock
-expands or shrinks the left drawing and footer together while retaining camera
-scale and drafts. Grid remains the final status control after recovery text and
-preview errors, 4 px inside the drawing footer right edge. It has no chevron or
-resting border/fill and uses the regular interface font. Schematic, Layout and
-Model omit floating zoom controls and percentage readouts. Wheel zoom, canvas-menu
-zoom/Fit and each view's keyboard Fit bindings remain available without changing
-native data.
+See [conversation and right docks](../DESIGN.md#conversation-and-right-docks)
+and [independent windows and status](../DESIGN.md#independent-windows-and-status)
+for the shared editor layout and Model's footer controls.
 
 ### Retained scenes and requests
 
@@ -1176,11 +1160,11 @@ solids from active Model through a native picker. Applied Source is required;
 a saved destination is not. It uses fixed validated OpenCASCADE operations,
 retains rotated analytical profiles/holes/selected-edge treatments/Boolean results and
 keeps independent overlapping bodies separate unless explicitly combined.
-It accepts no renderer path. Appearance is not STEP material metadata. File Export's
-OpenSCAD model carries the same solids, poses, holes and Boolean recipes with faceted
-circles, material colours and opacity, and rejects fillets/chamfers without writing.
+It accepts no renderer path. STEP carries geometry only. See
+[design exchange](FORMAT.md#design-exchange) for OpenSCAD export.
 Arbitrary mesh imports, executable geometry programs, SCAD import/execution and
-whole-assembly simulation are unsupported. The Layout Thermal solver models the PCB geometry independently of CAD bodies.
+whole-assembly simulation are unsupported. The Layout Thermal solver models the
+PCB geometry independently of CAD bodies.
 
 ### Model resolution and alignment
 
@@ -1226,7 +1210,8 @@ opacity, without an extra blue bounds box. Their drag rectangles share the
 directional selection paint. Numbered pins and comments remain available;
 explicit rectangle/freehand annotations retain their blue region marks.
 
-Schematic, Layout and Model expose Export image through the canvas context menu, alongside view-specific zoom, Fit and selection commands. Wheel zoom and keyboard Fit remain available without floating camera controls. Right dragging never opens the menu; stale/deactivated menus cannot execute.
+The canvas context menu exposes Export image in Schematic, Layout and Model.
+See [visibility, grid and export](../DESIGN.md#visibility-grid-and-export) for menu and gesture rules.
 
 Native PNG export preserves live selection/camera/destination and omits controls,
 selection paint, annotations and gestures. Longest side is capped at 4096 px:

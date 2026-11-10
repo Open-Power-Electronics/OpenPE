@@ -22,7 +22,8 @@ const { writeNativeProject } = require('../electron/native-project.cjs');
 test('Save writes a managed example in place; Save as detaches only after a successful write', async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'openpe-native-save-'));
   try {
-    const file = path.join(dataDir, 'example-projects', 'circuit', 'project.kicad_pro');
+    const examplesRoot = path.join(dataDir, 'examples');
+    const file = path.join(examplesRoot, 'project', 'circuit', 'project.kicad_pro');
     const copy = path.join(dataDir, 'personal.kicad_pro');
     const source = serializeProject(exampleProject());
     await mkdir(path.dirname(file), { recursive: true });
@@ -42,7 +43,7 @@ test('Save writes a managed example in place; Save as detaches only after a succ
       parseProject,
       projectNativeFiles,
       fileGrants,
-      dataDir,
+      exampleRoots: [examplesRoot, path.join(examplesRoot, 'project')],
       showSaveDialog: async () => {
         dialogs++;
         return { canceled: cancelled, filePath: copy };
@@ -102,12 +103,16 @@ test('Save writes a managed example in place; Save as detaches only after a succ
   }
 });
 
-test('Save keeps picker destinations and live grants bounded before preparing or writing', async () => {
-  const dataDir = path.resolve('test-results', 'native-save-profile');
+test('Save keeps picker destinations and live grants bounded before preparing or writing', async (t) => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'openpe-native-save-preflight-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
   const fileGrants = new FileGrants();
   const fileId = fileGrants.create();
   const source = serializeProject(exampleProject());
-  let destination = path.join(dataDir, 'example-projects', 'other', 'project.kicad_pro');
+  const exampleRoots = ['examples-native', 'project-native'].map((name) =>
+    path.join(dataDir, name),
+  );
+  let destination = '';
   let dialogs = 0;
   let prepared = 0;
   let writes = 0;
@@ -116,7 +121,7 @@ test('Save keeps picker destinations and live grants bounded before preparing or
     parseProject,
     projectNativeFiles,
     fileGrants,
-    dataDir,
+    exampleRoots,
     showSaveDialog: async () => {
       dialogs++;
       return { canceled: false, filePath: destination };
@@ -129,7 +134,10 @@ test('Save keeps picker destinations and live grants bounded before preparing or
       writes++;
     },
   });
-  await assert.rejects(save({ fileId, source }), /outside the bundled example folders/);
+  for (const root of exampleRoots) {
+    destination = path.join(root, 'other', 'project.kicad_pro');
+    await assert.rejects(save({ fileId, source }), /outside the bundled example folders/);
+  }
   assert.equal(prepared, 0);
   assert.equal(writes, 0);
   destination = path.join(dataDir, 'personal.kicad_pro');
@@ -140,14 +148,18 @@ test('Save keeps picker destinations and live grants bounded before preparing or
   fileGrants.setProjectFiles(sibling, [path.join(dataDir, 'personal.kicad_sch')]);
   await assert.rejects(save({ fileId, source }), /project file is open in another project/);
   fileGrants.release(sibling);
+  await mkdir(path.join(dataDir, 'blocked.kicad_sch'));
+  destination = path.join(dataDir, 'blocked.kicad_pro');
+  await assert.rejects(save({ fileId, source }), /not a regular bounded file/);
   const invalid = JSON.parse(source);
   invalid.format = 'unsupported-format';
   await assert.rejects(
     save({ fileId, source: JSON.stringify(invalid) }),
     /unsupported internal snapshot format/i,
   );
-  assert.equal(dialogs, 3, 'Invalid source never opens a picker.');
+  assert.equal(dialogs, 5, 'Invalid source never opens a picker.');
   assert.equal(prepared, 0);
+  destination = path.join(dataDir, 'personal.kicad_pro');
   revoke = true;
   await assert.rejects(save({ fileId, source }), /no file access grant/);
   assert.equal(writes, 0);
@@ -180,7 +192,6 @@ test('shared auxiliary sources allow two open projects and unchanged saves while
       parseProject,
       projectNativeFiles,
       fileGrants,
-      dataDir,
       showSaveDialog: async () => {
         throw new Error('Existing project does not need a picker.');
       },
@@ -238,7 +249,6 @@ test('edited pinned model source is rejected before assets or destination files 
       parseProject,
       projectNativeFiles,
       fileGrants,
-      dataDir,
       showSaveDialog: async () => {
         throw new Error('Existing project does not need a picker.');
       },

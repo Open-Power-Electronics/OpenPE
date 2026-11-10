@@ -167,6 +167,10 @@ function restoreSessions(state) {
 
 // resources/example-catalog/home-manifest.json
 var home_manifest_default = {
+  sourceRoots: {
+    examples: "examples",
+    project: "examples/project"
+  },
   examples: [
     {
       id: "reference-lm2596-to220-5-buck",

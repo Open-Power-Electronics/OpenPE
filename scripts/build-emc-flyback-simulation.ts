@@ -1,6 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import { parseCircuit, pinPositions } from '../lib/circuit';
+import { homeExampleNativePath } from '../lib/home-examples';
 import { partFields, unitGraphics } from '../lib/library';
 import { child, children, val } from '../lib/sexpr';
 import { spiceNets } from '../lib/spice';
@@ -113,6 +115,7 @@ await writeFile(
 // Executable model bytes stay in project-local libraries, never TypeScript.
 // The control library must remain an exact copy of the pinned upstream source.
 const models = [];
+const directory = path.dirname(homeExampleNativePath('emc-flyback-demo'));
 for (const [id, name] of [
   ['emc-flyback-control', 'EMC_flyback_control'],
   ['emc-flyback-irf520n', 'EMC_IRF520N'],
@@ -120,7 +123,7 @@ for (const [id, name] of [
   ['emc-flyback-ss510c', 'EMC_SS510C'],
 ]) {
   const file = `circuits/${name}.lib`;
-  const bytes = await readFile(`project/emc-flyback/${file}`);
+  const bytes = await readFile(path.join(directory, file));
   if (id === 'emc-flyback-control' && !bytes.equals(Buffer.from(control)))
     throw new Error('EMC Flyback control library must retain the pinned upstream bytes.');
   models.push({ id, file, sha256: createHash('sha256').update(bytes).digest('hex') });

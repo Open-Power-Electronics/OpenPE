@@ -10,5 +10,7 @@ export type HomeExampleId = (typeof homeExampleCatalog)[number]['id'];
 export function homeExampleNativePath(id: HomeExampleId) {
   const entry = homeExampleCatalog.find((entry) => entry.id === id);
   if (!entry) throw new Error('Unknown example project.');
-  return `${entry.root}/${entry.directory}/${entry.file}.kicad_pro`;
+  const sourceRoot = manifest.sourceRoots[entry.root as keyof typeof manifest.sourceRoots];
+  if (!sourceRoot) throw new Error('Unknown example source root.');
+  return `${sourceRoot}/${entry.directory}/${entry.file}.kicad_pro`;
 }

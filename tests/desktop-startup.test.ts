@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import homeManifest from '../resources/example-catalog/home-manifest.json';
 
 test('desktop Home skips example preparation while explicit opens share its checked barrier', async () => {
   const source = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf8');
@@ -11,6 +12,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
   const opened: unknown[] = [];
   const modelPreparations: unknown[][] = [];
   const exampleRoots: string[] = [];
+  const saveRoots: string[] = [];
   const recent: string[] = [];
   const changed: string[] = [];
   let preparations = 0,
@@ -53,7 +55,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     '../server/example-projects.mjs': {
       ExampleProjects: class {
         constructor(...args: unknown[]) {
-          exampleRoots.push(args[0] as string);
+          exampleRoots.push(args[0] as string, args[3] as string);
         }
         async prepare() {
           preparations++;
@@ -91,6 +93,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     },
     'node:path': path,
     'node:fs/promises': {},
+    '../resources/example-catalog/home-manifest.json': homeManifest,
     './file-grants.cjs': {
       FileGrants: class {
         create() {
@@ -111,7 +114,11 @@ test('desktop Home skips example preparation while explicit opens share its chec
         }
       },
     },
-    './native-save.cjs': { createNativeSave: () => {} },
+    './native-save.cjs': {
+      createNativeSave: ({ exampleRoots }: { exampleRoots: string[] }) => {
+        saveRoots.push(...exampleRoots);
+      },
+    },
     './native-export.cjs': { createNativeExport: () => {} },
     './image-export.cjs': { createImageExport: () => {} },
     './enclosure-export.cjs': { createEnclosureExport: () => {} },
@@ -140,7 +147,8 @@ test('desktop Home skips example preparation while explicit opens share its chec
   });
   await bootstrap;
   assert.equal(modelPreparations.length, 0, 'Home does not read prepared model resources.');
-  assert.deepEqual(exampleRoots, [path.resolve('examples')]);
+  assert.deepEqual(exampleRoots, [path.resolve('examples'), path.resolve('examples/project')]);
+  assert.deepEqual(saveRoots, exampleRoots);
   assert.equal(preparations, 0, 'Loading Home does not prepare or check example assets.');
   assert.deepEqual(recent, [], 'Loading Home never records example preparation as recent use.');
   assert.equal(handlers.has('openpe:example-preparation'), false);

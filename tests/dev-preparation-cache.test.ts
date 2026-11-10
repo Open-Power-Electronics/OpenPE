@@ -210,8 +210,8 @@ test('a linked cache parent never redirects cache publication outside its regula
 
 test('Home solver results never enter development preparation fingerprints', async (t) => {
   const f = await fixture(t);
-  const paths = ['source.txt', 'generated.txt', 'examples', 'project'];
-  const project = path.join(f.root, 'project/emc-flyback');
+  const paths = ['source.txt', 'generated.txt', 'examples'];
+  const project = path.join(f.root, 'examples/project/emc-flyback');
   const put = async (relative: string, text: string) => {
     const target = path.join(project, relative);
     await mkdir(path.dirname(target), { recursive: true });
@@ -255,12 +255,12 @@ test('pinned original SPICE source directories remain preparation inputs', async
 
 test('first-time models and circuits outputs remain cacheable while native footprint inputs invalidate preparation', async (t) => {
   const f = await fixture(t);
-  const project = path.join(f.root, 'project/emc-flyback');
+  const project = path.join(f.root, 'examples/lm2596-to220-5-buck');
   const model = path.join(project, 'models/pinned.step');
   const circuit = path.join(project, 'circuits/pinned.lib');
   const footprint = path.join(project, 'footprints/custom.pretty/custom.kicad_mod');
   await mkdir(path.dirname(footprint), { recursive: true });
-  await writeFile(path.join(project, 'emc-flyback.kicad_pro'), 'native input');
+  await writeFile(path.join(project, 'lm2596-to220-5-buck.kicad_pro'), 'native input');
   await writeFile(footprint, 'package-v1');
   let preparations = 0;
   const run = () =>
@@ -290,6 +290,41 @@ test('first-time models and circuits outputs remain cacheable while native footp
   assert.equal(await run(), false);
   assert.equal(await run(), true);
   assert.equal(preparations, 4);
+});
+
+test('generated formats are cacheable while pinned inputs stay distinct from discovered projects', async (t) => {
+  const f = await fixture(t);
+  const put = async (relative: string, text: string) => {
+    const file = path.join(f.root, relative);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, text);
+  };
+  const font = 'resources/third-party-source/newstroke-10.0.0/newstroke_font.cpp';
+  const model = 'examples/project/emc-flyback/circuits/EMC_flyback_control.lib';
+  await put(font, 'pinned font');
+  await put(model, 'pinned EMC model');
+  await mkdir(path.join(f.root, 'lib'));
+  await mkdir(path.join(f.root, 'server'));
+  const run = () =>
+    withDevPreparationCache({
+      root: f.root,
+      logger: { status: () => {}, error: () => {} },
+      prepare: async () => {
+        await put('lib/manufacturing-font.json', 'generated font');
+        await put('server/manufacturing-format.mjs', 'generated format');
+        await put('server/datasheet-format.d.mts', 'generated declaration');
+      },
+    });
+  assert.equal(await run(), false);
+  assert.equal(await run(), true);
+  await put('examples/customer/notes.txt', 'ordinary project content');
+  assert.equal(await run(), true);
+  await put(font, 'edited font source');
+  assert.equal(await run(), false);
+  assert.equal(await run(), true);
+  await put(model, 'edited EMC model source');
+  assert.equal(await run(), false);
+  assert.equal(await run(), true);
 });
 
 test('relocated shared catalog and pinned footprints invalidate default preparation while shared models remain generated outputs', async (t) => {

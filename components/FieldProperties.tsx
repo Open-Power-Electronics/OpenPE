@@ -1,9 +1,9 @@
 'use client';
-import QuantityInput from './QuantityInput';
 
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { fmt, snap, type Point } from '@/lib/circuit';
 import type { SelectableField } from '@/lib/schematic-edit';
+import QuantityInput from './QuantityInput';
 
 export default function FieldProperties({
   field,
@@ -27,6 +27,7 @@ export default function FieldProperties({
   const [draft, setDraft] = useState(text);
   const [coordinates, setCoordinates] = useState({ x: fmt(position.x), y: fmt(position.y) });
   const [error, setError] = useState('');
+  const composingText = useRef(false);
   useLayoutEffect(() => {
     setBasis(snapshot);
     setDraft(text);
@@ -35,7 +36,7 @@ export default function FieldProperties({
   }, [snapshot]);
 
   function saveText(): boolean {
-    if (!active || basis !== snapshot) return false;
+    if (!active || basis !== snapshot || composingText.current) return false;
     if (draft === text) return true;
     if (!draft.trim()) {
       setError(`Enter a ${field.toLowerCase()}.`);
@@ -91,9 +92,22 @@ export default function FieldProperties({
           onChange={(event) => {
             if (active) setDraft(event.target.value);
           }}
+          onCompositionStart={() => {
+            composingText.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingText.current = false;
+          }}
           onBlur={saveText}
           onKeyDown={(event) => {
-            if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+            if (
+              !active ||
+              composingText.current ||
+              event.nativeEvent.isComposing ||
+              event.nativeEvent.keyCode === 229
+            ) {
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')
+                event.preventDefault();
               event.stopPropagation();
               return;
             }
@@ -136,7 +150,7 @@ export default function FieldProperties({
               }}
               onBlur={() => savePosition(axis)}
               onKeyDown={(event) => {
-                if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+                if (!active) {
                   event.stopPropagation();
                   return;
                 }

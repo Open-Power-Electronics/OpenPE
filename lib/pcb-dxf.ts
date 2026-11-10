@@ -1,8 +1,7 @@
 import type { Point } from './circuit';
 import type { PCB } from './pcb';
-import { pcbArc, transformPCBGraphic } from './pcb-geometry';
-import { footprintPoint } from './pcb-layout';
-import { boardPolygons } from './pcb-polygons';
+import { pcbArc } from './pcb-geometry';
+import { prepareBoardOutline } from './pcb-polygons';
 
 type DxfValue = string | number;
 const outlineLayer = 'Edge.Cuts';
@@ -131,15 +130,7 @@ function dxfAngle(nativeRadians: number): number {
 export function exportBoardOutlineDxf(board: PCB): string {
   // Reuse the outline owner's closure, area and geometry limits. Plot the
   // original primitives so the validation tessellation cannot enter the DXF.
-  boardPolygons(board);
-  const edges = [
-    ...board.graphics.filter(({ layer }) => layer === outlineLayer),
-    ...board.footprints.flatMap((footprint) =>
-      footprint.graphics
-        .filter(({ layer }) => layer === outlineLayer)
-        .map((graphic) => transformPCBGraphic(graphic, (p) => footprintPoint(footprint, p))),
-    ),
-  ];
+  const { edges } = prepareBoardOutline(board);
   const pairs: DxfValue[] = [];
   pairs.push(0, 'SECTION', 2, 'HEADER');
   pairs.push(9, '$ACADVER', 1, 'AC1015', 9, '$INSUNITS', 70, 4, 9, '$MEASUREMENT', 70, 1);

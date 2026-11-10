@@ -6209,6 +6209,9 @@ function graphicVertices(g) {
   return [g.start, ...g.points ?? [], g.end];
 }
 function boardPolygons(board) {
+  return prepareBoardOutline(board).polygons;
+}
+function prepareBoardOutline(board) {
   const edges = [
     ...board.graphics.filter((g) => g.layer === "Edge.Cuts"),
     ...board.footprints.flatMap(
@@ -6216,9 +6219,9 @@ function boardPolygons(board) {
     )
   ];
   if (!edges.length) throw new Error("Draw a closed board outline before previewing copper or 3D.");
-  const result = polygonsFromContours(closedGraphicContours(edges, "board outline"));
-  if (!result.length) throw new Error("The board outline does not enclose a positive area.");
-  return result;
+  const polygons = polygonsFromContours(closedGraphicContours(edges, "board outline"));
+  if (!polygons.length) throw new Error("The board outline does not enclose a positive area.");
+  return { edges, polygons };
 }
 function closedGraphicContours(edges, context) {
   if (edges.length > 5e3) throw new Error(`The ${context} exceeds the graphic limit.`);

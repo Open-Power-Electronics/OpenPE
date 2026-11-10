@@ -594,7 +594,7 @@ export default function Workbench({
   confirmationRef.current = confirmation;
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmError, setConfirmError] = useState('');
-  const exportBusy = useRef(false);
+  const nativeFileBusy = useRef(false);
   const confirmBusyRef = useRef(false);
   const [view, setView] = useState<EditorView>(sourceDraft !== null ? 'source' : 'canvas');
   const canShowParasitics =
@@ -1471,9 +1471,6 @@ export default function Workbench({
     documentId,
     onDocumentChange,
   ]);
-  const fileActionBusy = useRef(false);
-  const saveBusy = useRef(false);
-  const nativeVersionBusy = useRef(false);
   const fileActionRef = useRef(handleFileAction);
   fileActionRef.current = handleFileAction;
   const directoryEditorRef = useRef(directoryObservation);
@@ -1699,8 +1696,8 @@ export default function Workbench({
     setClosedSchematics((ids) => [...ids.filter((closed) => closed !== id), id]);
     return true;
   }
-  async function restoreProjectVersion(restored: string, signal?: AbortSignal) {
-    signal?.throwIfAborted();
+  async function restoreProjectVersion(restored: string, signal: AbortSignal) {
+    signal.throwIfAborted();
     const basis = core.getSnapshot();
     if (basis.sourceDraft !== null)
       throw new Error('Apply the source edits before restoring a version.');
@@ -1708,8 +1705,8 @@ export default function Workbench({
     const candidate = parseProject(restored);
     const intent = cancelPendingNavigation(),
       control = new AbortController();
-    const abort = () => control.abort();
-    signal?.addEventListener('abort', abort, { once: true });
+    const abort = () => control.abort(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
     sourcePreparation.current = control;
     try {
       const pending = core.pendingModelCadGeometry(candidate);
@@ -1730,7 +1727,7 @@ export default function Workbench({
       setTool('select');
       notify('Version restored. Save to write it to disk.');
     } finally {
-      signal?.removeEventListener('abort', abort);
+      signal.removeEventListener('abort', abort);
       if (sourcePreparation.current === control) sourcePreparation.current = null;
     }
   }
@@ -1740,7 +1737,7 @@ export default function Workbench({
       return;
     }
     if (!layers.notes) {
-      notify('Show Notes in Visible layers before adding annotations.');
+      notify('Show Notes in Visualization before adding annotations.');
       return;
     }
     setAnnotationTarget({ ...position, id });
@@ -1809,14 +1806,9 @@ export default function Workbench({
     signal?: AbortSignal,
   ): Promise<'saved' | 'cancelled' | Error> {
     if (!doc) return 'cancelled';
-    if (
-      saveBusy.current ||
-      exportBusy.current ||
-      nativeVersionBusy.current ||
-      closingDocument.current
-    )
+    if (nativeFileBusy.current || closingDocument.current)
       return new Error('A project file operation is already in progress.');
-    saveBusy.current = true;
+    nativeFileBusy.current = true;
     try {
       const applied = await applySource(signal);
       if (!applied) throw new Error('Fix the source errors before saving.');
@@ -1828,7 +1820,6 @@ export default function Workbench({
         ...snapshot,
         nativeFiles: projectNativeFiles(snapshot, projectFilename(filename)),
       };
-      let savedSource = serializeProject(saveProject);
       let savedName = saveProject.nativeFiles.entry;
       const checkSaveBasis = () => {
         signal?.throwIfAborted();
@@ -1843,7 +1834,7 @@ export default function Workbench({
       if (window.openpe) {
         const result = await window.openpe.save({
           fileId: fileId!,
-          source: savedSource,
+          source: serializeProject(saveProject),
           name: filename,
           saveAs,
         });
@@ -1867,7 +1858,7 @@ export default function Workbench({
           'The project changed while saving. Save again to include the latest edits.',
         );
       core.setNativeEntryName(savedName);
-      savedSource = core.getSnapshot().source;
+      const savedSource = core.getSnapshot().source;
       setCleanSource(savedSource);
       cleanSourceRef.current = savedSource;
       directoryObservation.refresh();
@@ -1877,16 +1868,20 @@ export default function Workbench({
       notify((e as Error).message);
       return e as Error;
     } finally {
-      saveBusy.current = false;
+      nativeFileBusy.current = false;
     }
   }
   async function exportFile(
     format: ProjectExportFormat,
     signal?: AbortSignal,
   ): Promise<'exported' | 'cancelled' | Error> {
-    if (!project || !doc || exportBusy.current)
-      return new Error('A project export is not available.');
-    exportBusy.current = true;
+    if (!project || !doc) return new Error('A project export is not available.');
+    if (nativeFileBusy.current || closingDocument.current) {
+      const error = new Error('A project file operation is already in progress.');
+      notify(error.message);
+      return error;
+    }
+    nativeFileBusy.current = true;
     try {
       signal?.throwIfAborted();
       const applied = await applySource(signal);
@@ -1918,11 +1913,11 @@ export default function Workbench({
       notify((e as Error).message);
       return e as Error;
     } finally {
-      exportBusy.current = false;
+      nativeFileBusy.current = false;
     }
   }
   async function handleFileAction(action: Exclude<ProjectFileAction, 'reveal'>): Promise<boolean> {
-    if (fileActionBusy.current || closingDocument.current || confirmationRef.current) return false;
+    if (nativeFileBusy.current || closingDocument.current || confirmationRef.current) return false;
     if (action === 'close') {
       requestProjectClose();
       return false;
@@ -1933,15 +1928,7 @@ export default function Workbench({
         setRenameTarget({ kind: 'project', name: current.name ?? current.schematic.title });
       return false;
     }
-    fileActionBusy.current = true;
-    try {
-      return (await save(action === 'save-as')) === 'saved';
-    } catch (error) {
-      notify((error as Error).message);
-      return false;
-    } finally {
-      fileActionBusy.current = false;
-    }
+    return (await save(action === 'save-as')) === 'saved';
   }
   function requestProjectClose() {
     if (confirmationRef.current || closingDocument.current) return;
@@ -1959,12 +1946,7 @@ export default function Workbench({
   }
   async function closeProject() {
     if (closingDocument.current) return;
-    if (
-      saveBusy.current ||
-      exportBusy.current ||
-      nativeVersionBusy.current ||
-      directoryObservation.saving
-    )
+    if (nativeFileBusy.current || directoryObservation.saving)
       throw new Error('Wait for the project file operation to finish before closing.');
     closingDocument.current = true;
     core.setEditingBlocked('This project is closing.');
@@ -2504,13 +2486,7 @@ export default function Workbench({
     if (!active) return 'Activate the originating project before using project file operations.';
     if (closingDocument.current || core.getSnapshot().editingBlocked)
       return core.getSnapshot().editingBlocked || 'This project is closing.';
-    if (
-      saveBusy.current ||
-      exportBusy.current ||
-      nativeVersionBusy.current ||
-      fileActionBusy.current
-    )
-      return 'Wait for the current project file operation to finish.';
+    if (nativeFileBusy.current) return 'Wait for the current project file operation to finish.';
     if (confirmationRef.current) return 'Finish the current project confirmation first.';
     return true;
   };
@@ -2646,17 +2622,17 @@ export default function Workbench({
         throw new Error(
           typeof availability === 'string' ? availability : 'Model STEP export is unavailable.',
         );
-      if (nativeVersionBusy.current || closingDocument.current)
+      if (nativeFileBusy.current || closingDocument.current)
         throw new Error('A project file operation is already in progress.');
       const current = core.getSnapshot().project!;
-      nativeVersionBusy.current = true;
+      nativeFileBusy.current = true;
       try {
         signal.throwIfAborted();
         const result = await window.openpe!.exportEnclosure({ source: serializeProject(current) });
         signal.throwIfAborted();
         return result;
       } finally {
-        nativeVersionBusy.current = false;
+        nativeFileBusy.current = false;
       }
     },
     historyList: async (offset) => {
@@ -2675,13 +2651,13 @@ export default function Workbench({
         throw new Error('Apply Source edits before creating a version.');
       if (!fileId || !window.openpe)
         throw new Error('Open the desktop project to access local version history.');
-      if (nativeVersionBusy.current || closingDocument.current)
+      if (nativeFileBusy.current || closingDocument.current)
         throw new Error('A project file operation is already in progress.');
-      nativeVersionBusy.current = true;
+      nativeFileBusy.current = true;
       try {
         return await window.openpe.historyCreate({ fileId, source: snapshot.source, message });
       } finally {
-        nativeVersionBusy.current = false;
+        nativeFileBusy.current = false;
       }
     },
     historyRestore: async (id, signal) => {
@@ -2693,7 +2669,7 @@ export default function Workbench({
       const basis = core.getSnapshot();
       if (basis.sourceDraft !== null)
         throw new Error('Apply Source edits before restoring a version.');
-      nativeVersionBusy.current = true;
+      nativeFileBusy.current = true;
       try {
         const restored = await window.openpe.historyRead({ fileId, id });
         signal.throwIfAborted();
@@ -2708,7 +2684,7 @@ export default function Workbench({
           throw new Error('The project changed while the version was read. Try again.');
         await restoreProjectVersion(restored, signal);
       } finally {
-        nativeVersionBusy.current = false;
+        nativeFileBusy.current = false;
       }
     },
     simulation: async (visible, signal) => {
@@ -3638,7 +3614,6 @@ export default function Workbench({
   const selectEditorView = useEditorAction(changeView);
   const closeHistory = useCallback(() => setModal(null), []);
   const saveHistoryProject = useEditorAction(() => save());
-  const restoreHistoryProject = useEditorAction(restoreProjectVersion);
   const runHeaderFileAction = useEditorAction((value: string) =>
     runTitlebarMenuAction(titlebarMenus[0].items, value),
   );
@@ -4860,7 +4835,6 @@ export default function Workbench({
                       source={source}
                       sourcePending={sourcePending || Boolean(coreSnapshot.editingBlocked)}
                       onSave={saveHistoryProject}
-                      onRestore={restoreHistoryProject}
                     />
                   </Suspense>
                 )}

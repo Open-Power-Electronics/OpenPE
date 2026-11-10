@@ -127,13 +127,14 @@ coalesced requests and atomic verified cache writes. A 404 retains usable 2D
 geometry; network failures remain retryable. Custom unsupported pad previews
 report limits rather than inventing geometry.
 
-The reference examples bundle 46 hash-verified STEP files and the source-extracted WE-DD
-footprint under `resources/example-catalog/footprints/`. EMC separately pins 31 files (29 current component models and two static enclosure source models outside the footprint catalog) in
+The reference examples bundle 46 hash-verified STEP files and the source-extracted WE-DD-7345straight
+footprint under `resources/example-catalog/footprints/`. The subset contains 42 official KiCad 10 models and four pinned source models absent from that release. The custom footprint retains the LM25017 expert board's local pad geometry. EMC separately pins 31 files (29 current component models and two static enclosure source models outside the footprint catalog) in
 `resources/example-catalog/emc-flyback-assets.json`: 28 upstream and three
 [manufacturer supplements](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md).
 T1/L2 retain original official bytes; L1 has a marked reproducible rigid
-assembly-frame alignment, retaining topology/colours. Preparation verifies
-fixed hashes/notices. Example previews never download. Build preparation, native
+assembly-frame alignment, retaining topology/colours. The 29 component models
+serve 83 EMC instances. Five mounting holes have no separate component model.
+Preparation verifies fixed hashes and notices. Example previews never download. Build preparation, native
 Save and PCB export copy required model files beside the destination using
 `${KIPRJMOD}/models/<model>.step`. LM25017 and EMC custom libraries/tables are
 native Source files under `footprints/<stem>.pretty/` and `symbols/<stem>.kicad_sym`,
@@ -147,10 +148,10 @@ sources and packaged notices. Portable SPICE files follow the
 packages, `symbols/` holds `.kicad_sym` libraries and `models/` holds STEP files.
 Flat STEP basename collisions use an eight-character content hash
 suffix. Stable registry IDs and model bytes are unchanged.
-Example generation (`npm run examples`) removes only verified duplicate copies
-after the complete native set is published; changed/unknown files and solver
-results remain. Reject links and
-preserve differing files. Missing manufacturer assets require repair without blocking unrelated usable examples. See [Examples](EXAMPLES.md).
+Example generation (`npm run examples`) checks for byte-matching retired asset
+copies and notices after publishing the complete native set. It removes only
+those verified copies and any resulting empty directories. Asset operations reject
+links and preserve differing or unknown files, including local solver results.
 
 `occt-import-js` 0.0.23 tessellates STEP in workers for Three.js. Conversion is
 cancellable with a 45-second timeout, two service jobs and one conversion per

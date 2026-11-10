@@ -59,22 +59,19 @@ Panel styling belongs in
 
 ## Shared history capabilities
 
-| Capability                        | Contract                                                                                    |
-| --------------------------------- | ------------------------------------------------------------------------------------------- |
-| `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination        |
-| `versions.create`                 | Snapshot current validated Core Source through the native bridge                            |
-| `versions.restore`                | Read a reachable version and share GUI restoration, exact CAD preparation and one undo edit |
-| `project.replace`                 | Replace complete canonical Source in one Core transaction                                   |
-| `history.undo` / `history.redo`   | Shared in-memory history                                                                    |
-| `project.save`                    | Native Save/Save as                                                                         |
+| Capability                        | Contract                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| `versions.list` / `versions.read` | Bounded listing or reachable validated snapshot at the project's granted destination |
+| `versions.create`                 | Snapshot current validated Core Source through the native bridge                     |
+| `versions.restore`                | Read a reachable version, prepare exact CAD geometry and commit one undo edit        |
+| `project.replace`                 | Replace complete canonical Source in one Core transaction                            |
+| `history.undo` / `history.redo`   | Shared in-memory history                                                             |
+| `project.save`                    | Native Save/Save as                                                                  |
 
-The Git window uses shared reads/creation and the validated restoration adapter.
-Agent `versions.restore` reads a reachable version and uses that same adapter,
-including exact CAD preparation, cancellation and origin/revision rechecks.
-It retains the save destination and commits one whole-project undo edit.
-Revision/review/Source/close gates follow
-[Core](CORE.md); transient capability events are not Git versions. Tools cannot
-choose repository paths or another project's grant.
+The Git window and Agent use the same version operations. Restore reads the
+selected ID again from the live destination and rechecks origin and revision
+before committing. Revision, review, Source and close gates follow
+[Core](CORE.md). Tools operate through the originating project's grant.
 
 ## Destinations, grants and storage
 
@@ -83,10 +80,8 @@ of the normalized native destination. `OPENPE_DATA_DIR` selects application data
 Reopening a destination reconnects history; Save as associates an independent
 repository. History does not travel in KiCad files.
 
-Home examples open their original native files under `examples/` or `project/`.
-They use the same destination-keyed private history as other projects; no Git
-repository is added to the example directory. Show in File Explorer reveals
-the actual project folder. Closing never deletes its private history.
+Home examples also use destination-keyed private history. Show in File Explorer
+reveals the actual project folder. Closing preserves its private history.
 
 Electron resolves opaque live grants. Main-frame replacement clears them;
 closing releases only the owning project's grant. Reopening an open destination
@@ -98,22 +93,17 @@ identities fail validation. Recovery replacement waits for cancellation
 to release grants, and malformed recovery is preserved; see
 [Architecture](ARCHITECTURE.md).
 
-Save/export/version creation blocks close. Accepted close suspends commands and
-Core edits before recovery/grant cleanup. Failure resumes the same drafts/undo;
-no persistent Git repository is removed.
+Save, File Export, Model STEP export and version creation/restoration share one
+operation lock per project. An in-flight operation blocks close. Accepted close
+suspends commands and Core edits before recovery and grant cleanup. Failure
+resumes the same drafts and undo history. The private Git repository persists.
 
 ## Original example opening
 
-`resources/example-catalog/home-manifest.json` defines nine curated projects
-under Example and EMC Flyback as the initial Recent entry. Stable catalog IDs reconnect the
-original `examples/<stem>/<stem>.kicad_pro` files and
-`project/emc-flyback/emc-flyback.kicad_pro`, packaged under `examples-native/` and
-`project-native/` respectively. Both roots also admit host-discovered native
-projects through opaque keys; clean recovery re-resolves those keys through the
-host. Opening and clean recovery read the current native bytes. Save writes that destination; Save as
-creates a personal copy with independent history. Ordinary Source disk files,
-including SCAD and local PDFs, remain outside native version snapshots. Reviewed
-Agent datasheet records belong to the internal resource catalog, not project files.
+The [example directory contract](EXAMPLES.md#original-project-directories-and-portable-assets)
+defines native roots, catalog identities and opening. The private initial version
+uses the current native files when opened or cleanly recovered. Save as starts
+independent history at the personal destination.
 
 ### Opening barrier and concurrency
 
@@ -134,17 +124,13 @@ errors remain visible independently of example preparation.
 
 ### Initial versions
 
-A pristine example has one private `init` with its validated snapshot. When
-reopening changed native files, only a pristine automatic seed may be replaced
-with a parentless current seed; superseded automatic objects are removed.
-Explicit versions survive. This updates private Git only. Resetting a
-multi-commit repository requires explicit user authorization; no renderer API
-exposes it.
-
-Unchanged seeds verify their sole ref, root commit and application author in one
-bounded Git query, then read the stored snapshot tree in a second. Changed or
-personal histories retain the full refresh checks; the shortcut never skips
-current snapshot validation or stored-tree verification.
+A pristine example has one private automatic `init` with its validated
+snapshot. After validating the current snapshot, opening checks that the
+repository has only the main ref and that it points to an application-authored
+root commit with the `init` subject. It then checks the stored tree. A changed
+snapshot replaces that seed with a parentless current seed and prunes the
+superseded automatic objects. Multi-commit histories, other refs and other
+subjects are preserved.
 
 ## Git execution boundary
 

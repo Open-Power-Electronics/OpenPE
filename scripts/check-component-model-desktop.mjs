@@ -6,7 +6,7 @@ import { _electron as electron } from 'playwright';
 import { parseProject, serializeProject } from '../server/project-format.mjs';
 await mkdir('test-results', { recursive: true });
 const root = await mkdtemp(path.resolve('test-results/component-model-desktop-'));
-const folder = path.resolve('project/emc-flyback/models');
+const folder = path.resolve('examples/project/emc-flyback/models');
 const model = path.join(
   folder,
   (await readdir(folder)).find((name) => name.endsWith('.step')),

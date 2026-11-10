@@ -7,6 +7,11 @@ import { parseProject, serializeProject } from './project-format.mjs';
 const ref = 'refs/heads/main';
 const objectId = /^[0-9a-f]{40}$/;
 const maxSource = 8_000_000;
+const snapshotFile = 'project.openpe.json';
+
+function snapshotTreeEntry(blob) {
+  return `100644 blob ${blob}\t${snapshotFile}`;
+}
 
 // Private bare repositories never discover or modify a user's working repository.
 // Only the Electron main process resolves native grants into paths.
@@ -143,6 +148,25 @@ export class ProjectHistory {
     return this.checkId(result.text.trim());
   }
 
+  async initialize(repo) {
+    await this.run(null, [
+      'init',
+      '--bare',
+      '--initial-branch=main',
+      '--object-format=sha1',
+      '--template=',
+      repo,
+    ]);
+  }
+
+  async writeSnapshotTree(repo, content) {
+    const blob = this.checkId(
+      (await this.run(repo, ['hash-object', '-w', '--stdin'], content)).text.trim(),
+    );
+    const tree = await this.run(repo, ['mktree'], snapshotTreeEntry(blob) + '\n');
+    return this.checkId(tree.text.trim());
+  }
+
   checkId(id) {
     if (typeof id !== 'string' || !objectId.test(id)) throw new Error('Invalid version ID.');
     return id;
@@ -200,7 +224,7 @@ export class ProjectHistory {
       if (reachable.code !== 0)
         throw new Error('This version does not belong to this project history.');
       const source = (
-        await this.run(repo, ['cat-file', 'blob', `${id}:project.openpe.json`], '', maxSource)
+        await this.run(repo, ['cat-file', 'blob', `${id}:${snapshotFile}`], '', maxSource)
       ).text;
       return this.canonical(source);
     });
@@ -216,25 +240,9 @@ export class ProjectHistory {
     )
       throw new Error('Enter a version name of 1–240 characters on one line.');
     return this.withProject(fileId, async (repo) => {
-      if (!(await this.exists(repo))) {
-        await this.run(null, [
-          'init',
-          '--bare',
-          '--initial-branch=main',
-          '--object-format=sha1',
-          '--template=',
-          repo,
-        ]);
-      }
+      if (!(await this.exists(repo))) await this.initialize(repo);
       const parent = await this.head(repo);
-      const blob = this.checkId(
-        (await this.run(repo, ['hash-object', '-w', '--stdin'], content)).text.trim(),
-      );
-      const tree = this.checkId(
-        (
-          await this.run(repo, ['mktree'], `100644 blob ${blob}\tproject.openpe.json\n`)
-        ).text.trim(),
-      );
+      const tree = await this.writeSnapshotTree(repo, content);
       if (parent) {
         const previous = (await this.run(repo, ['rev-parse', `${parent}^{tree}`])).text.trim();
         if (tree === previous) throw new Error('This project matches the latest version.');
@@ -254,28 +262,18 @@ export class ProjectHistory {
     });
   }
 
-  // Trusted example preparation only; this operation is never exposed over IPC.
-  // Ordinary preparation preserves additional versions. The reset flag is for
-  // explicitly authorized maintenance only and is never exposed over IPC.
-  async ensureExampleInitial(fileId, source, reset = false) {
+  // Trusted example preparation can refresh a sole automatic root commit.
+  async ensureExampleInitial(fileId, source) {
     const file = this.grants.get(fileId);
     if (!file || !this.grants.isLocalExample(fileId))
       throw new Error('Only an example may initialize its initial history.');
     const content = this.canonical(source);
     return this.withProject(fileId, async (repo) => {
+      let parent;
       if (!(await this.exists(repo))) {
-        await this.run(null, [
-          'init',
-          '--bare',
-          '--initial-branch=main',
-          '--object-format=sha1',
-          '--template=',
-          repo,
-        ]);
+        await this.initialize(repo);
       } else {
-        // The common startup case is one unchanged automatic root commit.
-        // Inspect refs, parent and author together, then read the actual tree.
-        // This avoids separate head/log processes without hiding damaged trees.
+        // Inspect refs, parent and author together before reading the tree.
         const references = (
           await this.run(
             repo,
@@ -287,83 +285,34 @@ export class ProjectHistory {
             4000,
           )
         ).text.trimEnd();
-        const fields = references.split('\0');
-        if (
-          fields.length === 7 &&
-          fields[0] === ref &&
-          objectId.test(fields[1]) &&
-          fields[2] === 'commit' &&
-          fields[3] === '' &&
-          fields[4] === 'OpenPE' &&
-          fields[5] === '<local@openpe.invalid>' &&
-          fields[6] === 'init'
-        ) {
+        if (references) {
+          const [name, id, type, previous, author, email, subject, ...extra] =
+            references.split('\0');
+          if (
+            extra.length ||
+            name !== ref ||
+            !objectId.test(id) ||
+            type !== 'commit' ||
+            previous !== '' ||
+            author !== 'OpenPE' ||
+            email !== '<local@openpe.invalid>' ||
+            subject !== 'init'
+          )
+            return;
+          parent = id;
           const blob = createHash('sha1')
             .update(`blob ${Buffer.byteLength(content)}\0`)
             .update(content)
             .digest('hex');
-          const tree = (await this.run(repo, ['ls-tree', fields[1]], '', 1000)).text.trim();
-          if (tree === `100644 blob ${blob}\tproject.openpe.json`) return;
+          const tree = (await this.run(repo, ['ls-tree', parent], '', 1000)).text.trim();
+          if (tree === snapshotTreeEntry(blob)) return;
         }
       }
-      const parent = await this.head(repo);
-      if (parent) {
-        const refs = (
-          await this.run(repo, ['for-each-ref', '--format=%(refname)'], '', 4000)
-        ).text.trim();
-        if (refs !== ref) return;
-        const log = (
-          await this.run(
-            repo,
-            ['log', ref, '--max-count=1001', '--format=%an%x00%ae%x00%s'],
-            '',
-            128000,
-          )
-        ).text
-          .trim()
-          .split('\n');
-        if (log.length > 1 && !reset) return;
-        const automatic = new Set([
-          'init',
-          'Initial example',
-          'Current bundled example',
-          'Previous bundled example',
-          'Updated bundled example',
-        ]);
-        if (
-          log.length > 1000 ||
-          log.some((line) => {
-            const [author, email, message] = line.split('\0');
-            return (
-              author !== 'OpenPE' || email !== 'local@openpe.invalid' || !automatic.has(message)
-            );
-          })
-        )
-          return;
-        const blob = createHash('sha1')
-          .update(`blob ${Buffer.byteLength(content)}\0`)
-          .update(content)
-          .digest('hex');
-        const tree = (await this.run(repo, ['ls-tree', parent], '', 1000)).text.trim();
-        if (
-          log.length === 1 &&
-          log[0].endsWith('\0init') &&
-          tree === `100644 blob ${blob}\tproject.openpe.json`
-        )
-          return;
-      }
-      const blob = this.checkId(
-        (await this.run(repo, ['hash-object', '-w', '--stdin'], content)).text.trim(),
-      );
-      const tree = this.checkId(
-        (
-          await this.run(repo, ['mktree'], `100644 blob ${blob}\tproject.openpe.json\n`)
-        ).text.trim(),
-      );
+      const tree = await this.writeSnapshotTree(repo, content);
       const id = this.checkId((await this.run(repo, ['commit-tree', tree], 'init\n')).text.trim());
       await this.run(repo, ['update-ref', ref, id, parent ?? '0'.repeat(40)]);
       if (parent) {
-        // Retired template snapshots are discarded, never archived or backed up.
+        // Prune the superseded automatic seed.
         await this.run(repo, ['reflog', 'expire', '--expire=now', '--all']);
         await this.run(repo, ['gc', '--prune=now']);
       }

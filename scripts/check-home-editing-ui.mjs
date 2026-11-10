@@ -18,12 +18,14 @@ import { readNativeFiles } from './source-editor-test-helpers.mjs';
 // The native picker only grants fresh test destinations. Save, pinned asset
 // preparation and fresh reopening use the real host ports; no Electron, user
 // destination, provider, solver, downloaded asset or mocked Save is involved.
-const home = JSON.parse(await readFile('resources/example-catalog/home-manifest.json', 'utf8'));
-const entries = home.examples;
+const { homeExamples: entries, homeExampleNativePath } = await tsImport(
+  '../lib/home-examples.ts',
+  import.meta.url,
+);
 assert.equal(
   entries.length,
   9,
-  'This matrix covers precisely the current nine Home Boost projects.',
+  'This matrix covers precisely the current nine Home Example projects.',
 );
 assert.equal(new Set(entries.map((entry) => entry.id)).size, 9);
 assert.ok(entries.every((entry) => entry.id.startsWith('reference-')));
@@ -58,9 +60,7 @@ const sources = Object.fromEntries(
       entry.id,
       serializeProject(
         projectFromNativeFiles(
-          await readNativeProjectFile(
-            path.resolve(entry.root, entry.directory, `${entry.file}.kicad_pro`),
-          ),
+          await readNativeProjectFile(path.resolve(homeExampleNativePath(entry.id))),
         ),
       ),
     ]),
@@ -185,13 +185,12 @@ try {
     const nativeFile = path.join(nativeDirectory, entry.file + '.kicad_pro');
     // This fixed manifest path is a read-only source of pinned model bytes. It
     // is never granted as the renderer's destination or passed to the picker.
-    const modelSource = path.resolve(entry.root, entry.directory, entry.file + '.kicad_pro');
+    const modelSource = path.resolve(homeExampleNativePath(entry.id));
     let saves = 0;
     const nativeSave = createNativeSave({
       parseProject,
       projectNativeFiles,
       fileGrants,
-      dataDir: nativeDirectory,
       atomicWrite,
       showSaveDialog: async () => ({ canceled: false, filePath: nativeFile }),
       prepareProjectFiles: async (project, destination, sourceFile) => {

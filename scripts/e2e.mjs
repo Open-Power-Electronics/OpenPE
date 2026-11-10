@@ -1192,7 +1192,7 @@ async function checkSchematicPanels(page) {
       .evaluate((input) => input === document.activeElement),
     true,
   );
-  const visualization = await openSchematicPanel(page, 'Visible layers');
+  const visualization = await openSchematicPanel(page, 'Visualization');
   await visualization.getByRole('checkbox', { name: 'References', exact: true }).waitFor();
   assert.equal(await properties.isVisible(), true, 'Visualization shares the right dock.');
   await page
@@ -1358,7 +1358,7 @@ async function checkPartsListEditing(page) {
     'Each committed property edit is independently undoable.',
   );
   await button('Schematic').click();
-  const layers = await openSchematicPanel(page, 'Visible layers');
+  const layers = await openSchematicPanel(page, 'Visualization');
   await layers.getByRole('checkbox', { name: 'References', exact: true }).uncheck();
   await closeDisplayDrawer(page, 'Visualization');
   await openSchematicPanel(page, 'List');
@@ -1369,7 +1369,7 @@ async function checkPartsListEditing(page) {
   );
   assert.equal(await page.getByTestId('part-' + part.reference).count(), 1);
   assert.equal(await page.getByTestId('annotation-ref-' + part.reference).count(), 0);
-  await openSchematicPanel(page, 'Visible layers');
+  await openSchematicPanel(page, 'Visualization');
   await layers.getByRole('checkbox', { name: 'References', exact: true }).check();
   await closeDisplayDrawer(page, 'Visualization');
 }
@@ -1385,7 +1385,7 @@ async function checkSchematicLayers(page) {
     await value.evaluate((el) => getComputedStyle(el).fill),
   );
   const dirty = await page.locator('.file-tab .dirty-dot').count();
-  const layers = await openSchematicPanel(page, 'Visible layers');
+  const layers = await openSchematicPanel(page, 'Visualization');
   for (const name of ['References', 'Values'])
     await layers.getByRole('checkbox', { name, exact: true }).uncheck();
   await closeDisplayDrawer(page, 'Visualization');
@@ -1396,7 +1396,7 @@ async function checkSchematicLayers(page) {
   await button('Source').click();
   assert.equal(await readSnapshotFromNative(page), original);
   await button('Schematic').click();
-  await openSchematicPanel(page, 'Visible layers');
+  await openSchematicPanel(page, 'Visualization');
   for (const name of ['References', 'Values'])
     await layers.getByRole('checkbox', { name, exact: true }).check();
   await closeDisplayDrawer(page, 'Visualization');

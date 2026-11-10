@@ -122,6 +122,7 @@ try {
         versions,
         creates: [],
         fail: false,
+        unavailableVersion: '',
         needsSave: false,
         saveCancelled: true,
       };
@@ -136,6 +137,9 @@ try {
         },
         connection: async () => ({ base: 'http://localhost', token: 'test' }),
         newFile: async () => crypto.randomUUID(),
+        listExamples: async () => ({ entries: [], warnings: [] }),
+        listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+        onRecentChanged: () => () => {},
         projectDirectory: async () => ({ entries: [], truncated: false }),
         releaseFile: async () => {},
         setDirty: async () => {},
@@ -159,7 +163,11 @@ try {
             more: offset + 2 < versions.length,
           };
         },
-        historyRead: async ({ id }) => versions.find((entry) => entry.id === id).source,
+        historyRead: async ({ id }) => {
+          if (id === window.testHistory.unavailableVersion)
+            throw new Error('The selected version is no longer reachable.');
+          return versions.find((entry) => entry.id === id).source;
+        },
         historyCreate: async ({ source, message }) => {
           window.testHistory.creates.push(source);
           const entry = { id: 'c'.repeat(40), date: '2026-10-13T13:00:00+08:00', message, source };
@@ -379,7 +387,19 @@ try {
   );
   const versions = history.getByRole('navigation', { name: 'Project versions' });
   await versions.getByRole('button').filter({ hasText: 'Tune resistor' }).click();
+  await versions
+    .locator('button[aria-current="true"]')
+    .filter({ hasText: 'Tune resistor' })
+    .waitFor();
   await history.getByLabel(changedNames.length + ' changed files', { exact: true }).waitFor();
+  await page.evaluate(() => (window.testHistory.unavailableVersion = 'b'.repeat(40)));
+  await button('Restore version').click();
+  await history
+    .getByRole('alert')
+    .filter({ hasText: 'The selected version is no longer reachable.' })
+    .waitFor();
+  assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
+  await page.evaluate(() => (window.testHistory.unavailableVersion = ''));
   await button('Restore version').click();
   await history.getByText('Version restored. Save to write it to disk.', { exact: true }).waitFor();
   assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 1);

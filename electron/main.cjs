@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeImage, net } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { sourceRoots } = require('../resources/example-catalog/home-manifest.json');
 const { FileGrants } = require('./file-grants.cjs');
 const { RecentProjects } = require('./recent-projects.cjs');
 const { createNativeSave } = require('./native-save.cjs');
@@ -62,10 +63,10 @@ app.whenReady().then(async () => {
     net.fetch(url, { ...options, credentials: 'omit', cache: 'no-store' });
   const examplesRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'examples-native')
-    : path.join(__dirname, '../examples');
+    : path.join(__dirname, '..', sourceRoots.examples);
   const projectRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'project-native')
-    : path.join(__dirname, '../project');
+    : path.join(__dirname, '..', sourceRoots.project);
   const modelStore = createSimulationModelStore(app.getPath('userData'), modelFetcher, projectRoot);
   history = new ProjectHistory(app.getPath('userData'), fileGrants);
   const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history, projectRoot);
@@ -349,7 +350,7 @@ app.whenReady().then(async () => {
     parseProject,
     projectNativeFiles,
     fileGrants,
-    dataDir: app.getPath('userData'),
+    exampleRoots: [examplesRoot, projectRoot],
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
     prepareProjectFiles: async (project, file, sourceFile) => {
       await prepareExampleFootprints(project, file);

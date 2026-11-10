@@ -190,46 +190,39 @@ owned file packet lends its encoder once, then releases it; public files remain
 ordinary independent string containers. Clean imports retain their original
 bytes. These derivations never replace project, native-file or size validation.
 
-Save validates the complete project and prepares verified model/footprint
-assets. Its private snapshot carries the current native texts; the host exports
-that same backing, retaining explicit simulation flags and native order.
+Save validates the complete project and preflights the native destinations before
+preparing verified model and footprint assets. Its private snapshot carries the
+current native texts. The host writes that same backing, retaining explicit
+simulation flags and native order.
 Equivalent supported hidden-field defaults do not rewrite custom positions,
 styles, unknown attributes or duplicate records.
 
-Save as chooses `.kicad_pro` and renames matching primary schematic/PCB,
+Save and Save as pickers choose a `.kicad_pro` destination outside the host's
+example roots. An opened example can still Save to its live granted destination
+without a picker. Save as renames the matching primary schematic/PCB,
 project-bound `.kicad_dru` files, `symbols/<stem>.kicad_sym` files and
 `footprints/<stem>.pretty/` directories, including supported native root library locations.
 Root library tables update only the corresponding `${KIPRJMOD}` URI values;
 logical symbol/footprint library IDs, package filenames, unrelated libraries and
 other table text remain unchanged. These auxiliary files belong to native Source,
-undo, recovery and history. Preflight every target and protect all other open
-projects' source files. Replace files atomically and attempt to restore written
-siblings on failure; this is not a filesystem-wide crash-atomic transaction.
+undo, recovery and history. Save protects all other open projects' source files
+and rechecks native destinations after preparing assets. It replaces individual
+native files atomically and attempts to restore written siblings on failure.
 Update baseline/grant only after success. Cancellation/failure preserves work.
 Valid Source may already have committed before a picker is cancelled; that edit
 remains undoable. Invalid Source blocks the picker/write.
 
-Export applies valid Source and writes independent manufacturing/exchange files without
-changing the save destination/baseline. Native KiCad project files use Save/Save as.
-The requested output is compiled before the picker and published as one atomic
-file replacement; archives contain generated files only and are never extracted
-into the project. Open project sources and linked destinations are protected.
-See [design exchange](#design-exchange) and [manufacturing export](#manufacturing-export)
-for the supported outputs.
-When the project has a PCB and Model CAD solids, Export also offers an OpenSCAD model. Its millimetre text uses native PCB
-X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, Boolean cutouts and
-recipes, per-body color overrides or material colors, and opacity; circles are faceted with `$fn = 96`.
-Fillets and chamfers have no OpenSCAD equivalent, so they reject the export without
-writing. Source can edit SCAD as ordinary text; OpenPE does not import it as Model CAD or execute it. Portable `.lib`, footprint and STEP
-sidecars travel beside native files. New example assets use `circuits/<component>.lib`,
-`models/*.step`, `footprints/<stem>.pretty/*.kicad_mod` and `symbols/*.kicad_sym`.
+Portable `.lib`, footprint and STEP sidecars travel beside native files.
 Simulation model filenames must match the current pinned component registry.
-Native STEP references retain their documented KiCad paths;
-Save does not reorganize unrelated user files; root `.scad` files are ordinary
-editable text outside the native design set.
-Home opens original native projects under `examples/` and `project/` directly,
-including host-discovered additions, retaining all disk filenames. History remains
-private outside the project; see [Version history](VERSION-HISTORY.md).
+Native STEP references retain their KiCad paths. Save leaves unrelated files in
+place. See [original project directories and portable assets](EXAMPLES.md#original-project-directories-and-portable-assets)
+and [version history](VERSION-HISTORY.md) for example opening and snapshots.
+
+Export applies valid Source and writes independent manufacturing and exchange
+files without changing the save destination or baseline. It compiles the output
+before opening the picker and publishes one atomic file replacement. The host
+rejects linked destinations and protects open project sources. Archives contain
+generated files only.
 
 ## Design exchange
 
@@ -248,6 +241,11 @@ private outside the project; see [Version history](VERSION-HISTORY.md).
   area and line and arc endpoints must meet exactly. Copper, drill hits and
   other layer artwork are outside the outline file.
   [AutoCAD DXF header reference](https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DXF/files/GUID-A85E8E67-27CD-4C59-BE61-4DC9FADBE74A.htm)
+- OpenSCAD exports Model CAD solids from a project with a PCB. Its millimetre
+  text uses native PCB X/Y with Z = 0 at the PCB mid-plane. It retains poses,
+  Boolean cutouts and recipes, per-body color overrides or material colors, and
+  opacity. Circles are faceted with `$fn = 96`. Fillets and chamfers reject the
+  export before writing. Source edits `.scad` files as ordinary text.
 
 ## Manufacturing export
 
@@ -280,15 +278,17 @@ zones, perform DRC, change geometry or acquire a project destination.
 - BOM groups identical value/package/explicit LCSC-number records; CSV fields
   retain quotes, commas and line breaks. DNP and board-only footprints are
   excluded; BOM and position exclusions remain independent. No supplier part
-  is guessed. Invalid nonblank LCSC numbers fail explicitly.
+  is guessed. BOM validates nonblank LCSC numbers on its included rows.
 - Placement CSV uses native footprint origins, native X and negated native Y
   in millimetres, Top/Bottom and counterclockwise degrees. Gerber/drill share
   that origin and orientation; back-side parts receive no extra reflection.
+  Standalone BOM and placement each validate the references of their own
+  included rows.
   Package-specific centroid offsets and supplier rotation corrections are not
   inferred. Review placement against the supplier preview before ordering.
 - JLCPCB ZIP includes Gerber/drill plus matching-format BOM/placement CSV and
-  coordinate/coverage notes. This is a manufacturing handoff, not an editable
-  Altium/EasyEDA project or manufacturing qualification.
+  coordinate/coverage notes. The included footprints share one unique
+  reference set across both CSVs. Output serves as a manufacturing handoff.
 
 The [Gerber specification](https://www.ucamco.com/en/guest/downloads/gerber-format),
 [JLCPCB BOM](https://jlcpcb.com/help/article/bill-of-materials-for-pcb-assembly)
@@ -313,7 +313,7 @@ S-expressions. Helpers retain encoding/selection and edit existing files only.
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/native-project-files.test.ts`, `tests/native-save.test.ts`, `tests/native-save-participation.test.ts` | File-set bounds, writes, exact backing and simulation flags                                                                       |
 | `tests/manufacturing-export.test.ts`, `tests/native-export.test.ts`                                          | Gerber/drill/CSV/ZIP geometry and syntax, standalone archive parity, output bounds, format pickers and source protection          |
-| `tests/pcb-dxf.test.ts`, `tests/schematic-netlist-export.test.ts`                                              | DXF outline entities and closure, XML metadata and connectivity                                                                   |
+| `tests/pcb-dxf.test.ts`, `tests/schematic-netlist-export.test.ts`                                            | DXF outline entities and closure, XML metadata and connectivity                                                                   |
 | `tests/example-native-libraries.test.ts`                                                                     | Home custom-library Source, project naming, Save as references and edited package preservation                                    |
 | `tests/project-directory.test.ts`, `node scripts/check-project-directory-ui.mjs`                             | Grant-bound directory observations, read limits, stale/linked files, empty folders, read-only previews and native draft retention |
 | `node scripts/check-native-source-ui.mjs`                                                                    | Isolated native file selection, per-file history, Apply/validation/undo                                                           |

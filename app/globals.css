@@ -348,11 +348,6 @@ p {
 .breadcrumb strong {
   font-weight: 500;
 }
-.status-dot {
-  border-radius: 50%;
-  display: inline-block;
-  flex: none;
-}
 .workspace {
   display: flex;
   flex: 1;
@@ -383,12 +378,6 @@ p {
   display: grid;
   place-items: center;
   padding: 0;
-}
-.agent-logo {
-  display: grid;
-  place-items: center;
-  width: 21px;
-  height: 21px;
 }
 .chat-scroll {
   flex: 1;
@@ -572,9 +561,6 @@ p {
   width: 100%;
   font-size: var(--font-control);
 }
-.modal-description {
-  margin-bottom: 22px;
-}
 .agent-connections {
   display: flex;
   flex-direction: column;
@@ -699,9 +685,6 @@ button:where(:hover:not(:disabled)) {
 .send-button:hover:not(:disabled) {
   background: var(--line);
 }
-.agent-logo {
-  color: var(--text-strong);
-}
 .suggestion {
   border-color: var(--line);
 }
@@ -743,11 +726,6 @@ button:where(:hover:not(:disabled)) {
 }
 .running {
   color: var(--muted);
-}
-.message-model {
-  display: block;
-  margin-top: 6px;
-  font-variant-numeric: tabular-nums;
 }
 .message-error {
   margin-top: 8px;

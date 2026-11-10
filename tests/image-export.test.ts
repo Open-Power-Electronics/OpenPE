@@ -5,7 +5,7 @@ import path from 'node:path';
 const { createImageExport } = createRequire(import.meta.url)('../electron/image-export.cjs');
 const dataUrl =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0ZkAAAAASUVORK5CYII=';
-const image = { dataUrl, width: 1, height: 1, name: 'supply.openpe.json' };
+const image = { dataUrl, width: 1, height: 1, name: 'supply.kicad_pcb' };
 const nativeImage = {
   createFromBuffer: () => ({ isEmpty: () => false, getSize: () => ({ width: 1, height: 1 }) }),
 };
@@ -47,7 +47,7 @@ test('image export preserves cancellation, rejects other file types and releases
   });
   assert.equal(await run(image), null);
   assert.equal(writes, 0);
-  answer = { canceled: false, filePath: path.resolve('project.openpe.json') };
+  answer = { canceled: false, filePath: path.resolve('project.jpg') };
   await assert.rejects(run(image), /\.png filename/);
   assert.equal(writes, 0);
   answer = { canceled: false, filePath: path.resolve('project.png') };

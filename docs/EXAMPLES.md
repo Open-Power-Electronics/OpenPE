@@ -1,103 +1,52 @@
 # OpenPE examples
 
-Home discovers native projects in two sibling roots: `examples/` (packaged: `examples-native/`) and `project/` (packaged: `project-native/`), including their immediate project subdirectories. EMC Flyback resides in `project/emc-flyback/`; the other nine bundled projects remain directly under `examples/`. Add a KiCad project directory, then
-return to Home or focus the window. No catalog
-registration or application rebuild is required. A directory with `.kicad_pro`
-files exposes those project entries; otherwise schematics, or PCB-only entries,
-use the ordinary native reader and its independent-sheet/primary-board rules.
+Add a native KiCad project directory under `examples/` or `examples/project/`,
+then return to Home or focus the window. Discovery exposes `.kicad_pro` entries
+first, then standalone schematics if there is no project file, then standalone
+boards if there is no schematic. Each opens through the same native reader as
+File Open, using its independent-sheet and primary-board rules.
 The [home manifest](../resources/example-catalog/home-manifest.json) supplies
 bundled display metadata and stable identities for the nine curated projects and
 the default EMC Flyback Recent entry. Desktop Recent replaces this default with
 actual opening/save history as defined in [Design](../DESIGN.md#home-projects-and-recovery).
 Other discovered projects appear under Example regardless of their source root.
 
-Discovery reads directory names only, creates no grants or Git history, excludes
-links and private/generated directories, and bounds each listing to 1024 entries,
-128 project directories per root and 256 projects across both roots. Opaque `local-<SHA-256>` identities are
-resolved again by the host on open/recovery. Missing, invalid or unsupported
-files fail explicitly; discovery never rewrites or prepares a user's circuit.
-Discovered projects enter the same `readNativeProject` / `projectFromNativeFiles`
-path as File Open, then use the same Core and simulation compiler. Model bindings,
-electrical excitation and thermal power must come from supported design content
-or explicit analysis inputs; names and directories do not infer them.
-[manifest.json](../resources/example-catalog/manifest.json) records the nine curated projects,
-including stable internal IDs, plain filenames, source author, pinned source revision and SHA-256 hashes.
-The original `input.kicad_sch` and `expert.kicad_pcb` files remain unchanged under
-`resources/example-catalog/sources/<circuit-name>/`.
-
-These resources follow [AGENTS.md](../AGENTS.md), [DESIGN.md](../DESIGN.md) and
-the main [README.md](../README.md). Format, simulation and asset contracts are in
-[CORE.md](CORE.md), [FORMAT.md](FORMAT.md), [SIMULATION.md](SIMULATION.md) and
-[LIBRARIES.md](LIBRARIES.md).
+Discovery inspects directory entries without reading project contents or
+creating grants or Git history. It skips links and private/generated
+directories and permits up to 1,024 entries per directory, 128 immediate
+project directories per root and 256 projects across both roots. A failed
+root reports a warning alongside entries from the usable root. A total above
+256 projects fails the listing. The host resolves opaque `local-<SHA-256>`
+identities through discovery again on open and recovery.
 
 ## Catalog
 
-| Home section | File stem                 | Circuit             | Controller package |
-| ------------ | ------------------------- | ------------------- | ------------------ |
+| Home section   | File stem                 | Circuit             | Controller package |
+| -------------- | ------------------------- | ------------------- | ------------------ |
 | Recent default | `emc-flyback`             | EMC Flyback         | SOIC-8             |
-| Example      | `lm2596-to220-5-buck`     | LM2596 Buck         | TO-220-5           |
-| Example      | `tps61046-bga6-boost`     | TPS61046 Boost      | BGA-6              |
-| Example      | `lm2735-msop8-sepic`      | LM2735 SEPIC        | MSOP-8             |
-| Example      | `lm25017-wson8-flybuck`   | LM25017 Fly-Buck    | WSON-8             |
-| Example      | `lm5001-soic8-boost`      | LM5001 Boost        | SOIC-8             |
-| Example      | `lm27761-wson8-pump`      | LM27761 Charge Pump | WSON-8             |
-| Example      | `lmr12010-sot236-buck`    | LMR12010 Buck       | SOT-23-6           |
-| Example      | `lmr70503-bga8-buckboost` | LMR70503 Buck-Boost | BGA-8              |
-| Example      | `lm2598-to220-7-buck`     | LM2598 Buck         | TO-220-7           |
+| Example        | `lm2596-to220-5-buck`     | LM2596 Buck         | TO-220-5           |
+| Example        | `tps61046-bga6-boost`     | TPS61046 Boost      | BGA-6              |
+| Example        | `lm2735-msop8-sepic`      | LM2735 SEPIC        | MSOP-8             |
+| Example        | `lm25017-wson8-flybuck`   | LM25017 Fly-Buck    | WSON-8             |
+| Example        | `lm5001-soic8-boost`      | LM5001 Boost        | SOIC-8             |
+| Example        | `lm27761-wson8-pump`      | LM27761 Charge Pump | WSON-8             |
+| Example        | `lmr12010-sot236-buck`    | LMR12010 Buck       | SOT-23-6           |
+| Example        | `lmr70503-bga8-buckboost` | LMR70503 Buck-Boost | BGA-8              |
+| Example        | `lm2598-to220-7-buck`     | LM2598 Buck         | TO-220-7           |
 
-The bundled `examples/` tree contains the nine Example project directories;
-`project/` contains EMC Flyback. Users may add native project directories to either root. Each keeps
-its complete native files and required portable assets; reviewed controller
-data lives in the internal reference catalog; optional PDFs live in its `datasheets/`.
-Shared catalogs, schema, conversion/verification records, pinned originals under
-`sources/<stem>/`, the reference footprint subset and EMC manufacturer sources,
-manifest and notices under `footprints/emc-flyback/` belong to
-`resources/example-catalog/`. Original source archives stay outside editable
-native Source, design snapshots and automatic Agent context;
-reviewed datasheet parameters remain separate host observations.
+See [Datasheets](DATASHEETS.md) for the reviewed controller records and optional
+local PDFs. [EMC Flyback](EMC-FLYBACK.md) owns that example's native conversion,
+testbench and enclosure verification.
 
-The nine Example projects use `examples/<stem>/<stem>.kicad_pro`; EMC Flyback uses
-`project/emc-flyback/emc-flyback.kicad_pro`. Each has matching
-`.kicad_sch` and `.kicad_pcb` files generated by the application serializers for
-KiCad 10. Stems use lowercase words separated by hyphens.
-`resources/example-catalog/home-manifest.json` defines the stems independently of stable example
-IDs and Home sections. Both converters publish through
-`scripts/example-native-files.ts`; `lib/home-examples.ts` owns the path rule.
-Project-local library tables, custom libraries, `circuits/` and `models/` assets stay
-beside their project. Custom library files use `symbols/<stem>.kicad_sym` and
-`footprints/<stem>.pretty/`; project rules use `<stem>.kicad_dru`. KiCad's fixed
-`fp-lib-table` / `sym-lib-table` filenames and internal library/package IDs stay
-unchanged. Home opens these exact filenames. Save as renames project-bound files
-together and updates library-table URIs.
-`footprints/` contains `.kicad_mod` packages in their required `.pretty` libraries;
-`symbols/` contains `.kicad_sym` libraries, `circuits/` contains SPICE `.lib` files
-named for their fixed component or variant
-and `models/` contains STEP files. STEP basenames are retained,
-with an eight-character content hash suffix only when different pinned files
-would collide. Projects have no generated `NOTICE.txt` or `licenses/` directory.
-Original terms, credits and provenance remain in the pinned shared sources and
-packaged license notices.
-Create only directories with actual content. `spice/` and `thermal/` retain generated
-results locally, outside Git and native design. Retained artifacts sit directly in
-those directories as `<native-stem>.*`, including the project-bound manifest.
-Output has no project/run/mesh subdirectories; solver working paths remain
-logical metadata. After publishing the complete current native set, generation
-removes only byte-matching obsolete asset/library copies and their empty parent
-directories. Opening never cleans or rewrites the example directory. Changed or unknown files remain.
-Simulation references use only pinned `circuits/<component>.lib` paths, as defined by [Simulation](SIMULATION.md#portable-models-and-bundled-solver). Native STEP references retain their supported KiCad paths.
-Shared pinned footprints remain in `resources/example-catalog/footprints/` and
-downloaded SPICE models in `resources/example-catalog/simulation/models/`;
-EMC original sources remain under `resources/example-catalog/sources/emc-flyback/`,
-and manufacturer supplements under `resources/example-catalog/footprints/emc-flyback/`.
-EMC Flyback's four SPICE libraries are checked-in source assets under
-`project/emc-flyback/circuits/`, with hashes in
-`resources/emc-flyback-models-lock.json`; preparation verifies them without
-regenerating or replacing their bytes.
-Generation/preparation verifies and copies required
-assets without changing model choices or transforms. Generated project asset copies are
-ignored in Git. Private regression snapshots live
-in `tests/fixtures/reference/*.json`; these are not user project files. The
-reference projects ship their curated controller definitions in a local
+## Reference circuit conversion
+
+The [reference manifest](../resources/example-catalog/manifest.json) pins the
+nine curated projects' source identities and SHA-256 hashes. The original
+`input.kicad_sch` and `expert.kicad_pcb` files live under
+`resources/example-catalog/sources/<stem>/`. Private regression snapshots live
+in `tests/fixtures/reference/*.json`.
+
+The reference projects ship their curated controller definitions in a local
 `Reference` symbol library matching the embedded definitions. Conversion uses
 official `PWR_FLAG` symbols to declare the input supply and return, including
 the separate LM25017 secondary return. The nine reference schematics and EMC
@@ -119,51 +68,6 @@ the disconnected VIN copper. The native board and regression snapshot retain the
 same fills. KiCad writes no fill record for the empty VIN zone. OpenPE reports
 that zone as missing saved copper and Layout Thermal requires a completed fill
 before Run.
-KiCad local UI caches (`.kicad_prl`) are excluded.
-
-Each Home controller, including EMC Flyback, also has an [official datasheet and reviewed parameter
-record](DATASHEETS.md), with a versioned JSON Schema, units, conditions,
-source pages and pinned PDF hashes. Use `npm run datasheets:download` to fetch
-all 13 local IC PDFs (including EMC U1–U4) and `npm run datasheets:check` for offline verification.
-These reference assets are separate from native project files and model assets.
-Source lists actual local PDFs in the project directory and opens them in the
-local viewer. Reviewed parameters belong to the internal resource catalog; no
-separate datasheet JSON is generated in a project. The Agent's separate reviewed record remains available through
-`project.datasheet`, with controller bindings, parameters, conditions, document
-identity and official sources.
-
-EMC Flyback comes from the [pinned AI-PCB-layout demonstration](https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo)
-under CC BY 4.0. Its originals and source hashes stay in `resources/example-catalog/sources/emc-flyback/`.
-The generated native project is in `project/emc-flyback/`; it uses KiCad 10 and retains
-the original electrical connectivity. The [EMC layout conversion](EMC-FLYBACK.md#pcb-design-rules)
-adjusts footprint placements and routing, then refills copper. The two model-only enclosure placeholders are omitted from the PCB.
-One custom pad is represented by an exact same-number rectangle union and
-multi-layer keepouts by per-layer zones. Native polylines, bold text, inert datasheet
-links and lock metadata survive import and save. The enclosure is four OpenPE Model CAD bodies: a 112 × 94 × 3 mm aluminium base, two 3 × 30 mm side walls
-and a 3 mm PMMA cover at 30% opacity. Their eight through holes retain the base's
-four PCB mounting positions and the cover's four fastener positions. The original MECH1/MECH2 enclosure placeholders are absent from native PCB data and project footprint libraries; their source records and static STEP assets remain pinned evidence outside the active footprint catalog. Model's general construction tools
-edit bodies, materials and opacity; sketch contour Difference creates the eight cutouts before extrusion, without dedicated enclosure or Hole modes.
-The example ships no SCAD file; File > Export writes the current panels, holes and
-opacity as OpenSCAD on request ([Format](FORMAT.md)).
-The 31 pinned STEP files include two archived static enclosure sources and 29 models linked to the 83 component instances. They comprise 28 unchanged upstream assets and three exact
-manufacturer models pinned in [the supplementary model manifest](../resources/example-catalog/footprints/emc-flyback/manifest.json).
-T1 and L2 retain official STEP bytes; L1 uses the exact Würth WE-CMB-S geometry
-with a reproducible rigid assembly-frame alignment. Generated native model paths
-use `models/`; source filenames and instance transforms are retained.
-[Model sources and terms](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md)
-describe the local manufacturer downloads, which remain outside Git. Preparation
-verifies every model and notice; runtime previews remain offline. The five mounting
-holes intentionally have no separate component model.
-
-Set `KICAD_CLI` to a KiCad 10 CLI and run `npm run examples:emc-flyback` to regenerate
-the conversion and assets. Regenerate behavioural signatures with
-`npm run simulation:build-emc-flyback`. Run `npm run simulation:check-emc-flyback`,
-then `npm run thermal:check-emc-flyback` for explicit offline real-solver checks.
-The latter imports supported full-resolution final-20% signed terminal power into
-PCB pads. The [SPICE](SIMULATION.md#emc-flyback-behavioural-model) and
-[thermal](THERMAL.md) contracts describe the approximate devices and omitted losses.
-The [native layout check](EMC-FLYBACK.md#pcb-design-rules) uses KiCad 10's Python and CLI to verify
-the generated connectivity, geometry and error-level DRC.
 
 The build-only PCB adapter represents rectangles as exact polygons, splits
 multi-layer zones per layer and preserves their filled polygons. Reference
@@ -187,61 +91,50 @@ presentation, conversations and simulation results stay outside native designs.
 
 ## Original project directories and portable assets
 
-Desktop Home resolves each manifest entry's explicit `root` and `directory` independently of its native `file` stem. The sibling source roots `examples/` and `project/` are packaged separately as `examples-native/` and `project-native/`; neither is nested inside the other.
+The home manifest's `sourceRoots` maps the logical `examples` and `project`
+roots to `examples/` and `examples/project/`. Each catalog entry selects a
+logical `root` and `directory` independently of its native `file` stem.
+The nine Example projects use `examples/<stem>/<stem>.kicad_pro` and EMC
+Flyback uses `examples/project/emc-flyback/emc-flyback.kicad_pro`. Each has
+matching KiCad 10 `.kicad_sch` and `.kicad_pcb` files. Both converters publish
+through `scripts/example-native-files.ts` using the path rule in
+`lib/home-examples.ts`.
+
+The outer `examples` scan reserves its immediate `project` directory for the
+dedicated root. Packaging copies the roots into sibling `examples-native/`
+and `project-native/` directories and excludes the nested group from
+`examples-native/`.
 Their matching schematics, PCB, rules, libraries and supporting files retain
 their actual filenames. Source displays that same directory, including empty
 folders, editable ordinary text and existing PDFs. Packaging includes the
 original directory contents while excluding private files, generated solver
 results and `.kicad_prl`.
-Home performs no runtime model/history preflight or aggregate asset-error display.
-The first example-opening request, including clean recovery, starts runtime
-validation. Example opening waits for native-file and private destination-bound
-history attempts across the bundled and host-discovered projects in both roots,
-then rereads the selected example.
-Failures in another example do not block a usable selected project;
-missing Git leaves native files usable. The [opening contract](ARCHITECTURE.md#native-saving-and-example-preparation)
-defines the shared barrier and grant checks.
 
-Opening and clean recovery read current disk bytes without copying or template
-refresh. Save writes to that original destination; Save as creates a personal
-destination with separate history. Initial versions live in the same private
-destination-keyed Git store as other projects, outside the example directory.
-Closing leaves the files and private versions intact. Dirty example recovery
-becomes an ordinary project without a destination.
-See [VERSION-HISTORY.md](VERSION-HISTORY.md).
+Opening and clean recovery read current disk bytes. Save writes to that
+destination and Save as creates a separate personal project. The [opening
+contract](VERSION-HISTORY.md#opening-barrier-and-concurrency) owns the
+preparation barrier and private Git behavior.
 
 The nine Example projects show simulation source/load components to the right of their connectors. EMC Flyback shows V1, R21, V2, R22 and I1 in a separate framed Simulation testbench area above the original circuit. All use named-rail connections with no Footprint assignment or PCB packages; source and load settings come from those native components.
 Unassigned components render as Virtual; physical/virtual classification is
 independent of model support and Include in SPICE simulation.
 
-Original TI simulation models live in separate ignored `circuits/` sidecars;
-their notices remain in shared source and packaged license records. Native project
-text variables retain allowlisted component/variant filenames, with model IDs and
-full hashes retained in the model registry rather than the portable filenames;
-referenced runs use verified local files or an existing private cache without
-downloading. Model sources are pinned in
+TI simulation models live in ignored `circuits/` sidecars. Their sources are pinned in
 [reference-models-lock.json](../resources/reference-models-lock.json) and, for
 LM2596, [lib/ti-dcdc.ts](../lib/ti-dcdc.ts). The prepared Home subset ships as
-separate application resources under `simulation-examples/models`.
+separate application resources under `simulation-examples/models`. EMC Flyback's
+four project-local SPICE libraries are tracked source assets. Preparation verifies
+their bytes against [the EMC model lock](../resources/emc-flyback-models-lock.json).
+[Simulation](SIMULATION.md#portable-models-and-bundled-solver) defines model
+references and resolution.
 
-The shared [footprints manifest](../resources/example-catalog/footprints/manifest.json) pins the collection's
-46 STEP models and the source-extracted WE-DD-7345straight package. Four models
-absent from the bundled KiCad 10 release retain pinned source bytes; the other 42
-retain pinned official KiCad bytes. The custom `.kicad_mod` comes from the
-LM25017 expert board without changing its local pad geometry. Its project-local
-`footprints/lm25017-wson8-flybuck.pretty/` and `fp-lib-table` are native project files,
-visible in Files/Source and retained by Save, recovery and history. EMC uses the
-same ownership for `footprints/emc-flyback.pretty/`, `symbols/emc-flyback.kicad_sym` and its library
-tables. Preparation copies models without adding project notices or replacing native custom
-library edits or creating a second package library. Canonical/native model
-links use `${KIPRJMOD}/models/<model>.step`. Build preparation, native Save/Save as and PCB
-export copy the required subset beside the destination, rejecting linked folders
-and preserving differing existing files. Example generation removes a project
-`NOTICE.txt` only when its bytes exactly match a retired application-generated
-notice; edited notices, licenses and model files remain protected. Model resolves verified bundled example
-assets offline. Keep the KiCad files, required `circuits/`, `models/`, `footprints/`,
-`symbols/` assets, available CAD source files and library tables together when
-moving a project. Preserve supported native asset references without application-version migration.
+Keep the KiCad files, library tables and required `circuits/`, `models/`,
+`footprints/` and `symbols/` assets together when moving a project. Custom
+libraries use `footprints/<stem>.pretty/` and `symbols/<stem>.kicad_sym`.
+Project rules use `<stem>.kicad_dru`. Save as renames these project-bound paths
+and updates library-table URIs while retaining `fp-lib-table`, `sym-lib-table`
+and internal library IDs. [Libraries](LIBRARIES.md#step-access-and-previews)
+owns pinned package/STEP delivery and asset cleanup.
 
 ## Regeneration and resource preparation
 
@@ -256,9 +149,9 @@ npm run build:format
 This regenerates the nine curated native project sets and EMC Flyback, their
 private regression snapshots, `lib/reference-simulation.json`, the shared
 conversion audit and notices, followed by the service formats. Set `KICAD_CLI`
-to KiCad 10.0.1 for the TPS61046 refill and EMC conversion. Change the generator
-or source definitions to change the output. The checks below verify the original
-desktop assets. Source saves edits to whichever actual files are open.
+to KiCad 10.0.1 for the TPS61046 refill and EMC conversion. Use KiCad 10 and
+`npm run examples:emc-flyback` to regenerate only EMC Flyback. Change the
+generator or source definitions to change the output.
 
 Prepare solver resources and original simulation sidecars separately; these
 commands may download pinned resources:
@@ -274,8 +167,8 @@ footprint/STEP assets and notices. Both build and development startup run this
 step before the renderer starts. Runtime opening reads those original files
 without generating, downloading or copying Home content. Missing or corrupt
 resources require preparation or installation repair. Packaging copies the
-actual `examples/` and `project/` directories, including existing PDFs, to
-`examples-native/` and `project-native/` respectively.
+original native projects and existing PDFs into their respective resource
+directories described under [Original project directories and portable assets](#original-project-directories-and-portable-assets).
 Private destination-bound Git history is initialized on example opening.
 
 Model preparation also updates canonical model references. Vendor model bytes
@@ -295,7 +188,7 @@ library; altered model identities and electrical pins remain rejected. These
 checks do not run solvers or establish support for arbitrary upstream files.
 
 The EMC electrical and thermal real-solver checks read
-`project/emc-flyback/emc-flyback.kicad_pro` through the ordinary native reader.
+`examples/project/emc-flyback/emc-flyback.kicad_pro` through the ordinary native reader.
 Electrical execution reads its colocated model files. Neither check substitutes
 the generated regression snapshot or a model download for those inputs.
 
@@ -303,12 +196,12 @@ Documentation-only edits require static content, link and format checks. The
 following commands provide distinct verification when design/runtime changes
 require it; none launches Electron or an Agent provider.
 
-| Command                                                            | Scope                                                                                                                                                                                                                                        |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node scripts/check-reference-ui.mjs`                              | All nine reference schematic/Layout views in an isolated headless renderer with mocked services                                                                                                                                              |
-| `npm run examples:check-models -- --render`                        | Real offline parsing of 46 reference and 31 EMC STEP files and all ten Home Model views across Recent and Example; all 83 visible EMC model instances must load, with two original case instances hidden and only five mounting-hole notices |
-| `python scripts/check-reference-kicad.py --cli /path/to/kicad-cli` | Actual KiCad 10 connectivity, native geometry and SVG checks; run under KiCad's Python with `pcbnew`                                                                                                                                         |
-| `npm run simulation:check-examples -- reference`                   | Offline real bundled-ngspice sweep of actual canonical Home files, canonical/renderer/service deck parity, completion and output checks                                                                                                      |
+| Command                                                            | Scope                                                                                                                                                                             |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node scripts/check-reference-ui.mjs`                              | All nine reference schematic/Layout views in an isolated headless renderer with mocked services                                                                                   |
+| `npm run examples:check-models -- --render`                        | Offline parsing of 46 reference and 31 EMC STEP files and rendering of all ten Home Model views. All 83 EMC component model instances must load, with five mounting-hole notices. |
+| `python scripts/check-reference-kicad.py --cli /path/to/kicad-cli` | Actual KiCad 10 connectivity, native geometry and SVG checks; run under KiCad's Python with `pcbnew`                                                                              |
+| `npm run simulation:check-examples -- reference`                   | Offline real bundled-ngspice sweep of actual canonical Home files, canonical/renderer/service deck parity, completion and output checks                                           |
 
 Prepare the bundled solver and sidecars before the real-solver sweep; it fails
 on missing resources instead of downloading them. Desktop integration/startup
@@ -317,7 +210,7 @@ records structural/connectivity checks under KiCad 10.0.1; it is not simulation,
 ERC or DRC evidence and does not validate subsequent changes.
 
 Example generation requires a complete OpenPE ERC report with zero issues
-for the nine schematics under `examples/` and EMC Flyback under `project/`. The native portability test
+for the nine schematics under `examples/` and EMC Flyback under `examples/project/`. The native portability test
 repeats the check through Core after a native Save as round trip. To check the
 same designs with KiCad 10, run `kicad-cli sch erc --exit-code-violations` on
 each `.kicad_sch` in its original project directory with the standard KiCad
@@ -325,10 +218,7 @@ symbol libraries configured.
 
 [Simulation](SIMULATION.md#home-profiles-and-verification-scope) owns
 profile timing, acceptance criteria, controller derivatives and electrical
-assumptions. LM2596 uses an OpenPE adjustable derivative, not a TI-issued ADJ
-model; LM25017 uses a scoped ideal-latch event-state approximation, and LMR70503
-uses a scoped near-reset approximation. Recorded runs apply only
-to matching inputs/models/solver and do not establish hardware qualification.
+assumptions. Recorded runs apply to their matching inputs, models and solver.
 Use the explicit [ERC/DRC reports](DESIGN-RULES.md) for supported rules.
 
 ## Provenance and fixture boundary
@@ -341,8 +231,6 @@ terms. See [the reference-circuit notice](../public/licenses/reference/NOTICE.tx
 [footprints/LICENSE.md](../resources/example-catalog/footprints/LICENSE.md) and About OpenPE > Third-party
 licenses. Preserve original model notices and all pinned source bytes/hashes.
 
-The nine curated projects belong in `examples/` and EMC Flyback in `project/`;
-their ten pinned source directories stay in `resources/example-catalog/sources/`.
 RC, KiCad and TI circuits are internal
 fixtures under `tests/fixtures/`, regenerated with `npm run fixtures:generate`. Other reference-circuit
 regression inputs and their originals live in `tests/fixtures/reference-retired`;

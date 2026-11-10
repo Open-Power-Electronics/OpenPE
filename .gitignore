@@ -18,13 +18,7 @@ resources/third-party-source/*
 !resources/third-party-source/newstroke-10.0.0/
 examples/**/models/
 examples/**/circuits/
-project/**/models/
-project/**/circuits/
-!project/emc-flyback/circuits/
-project/**/3D/*.step
-project/**/footprints/*.step
-project/**/licenses/
-project/**/datasheets/*.pdf
+!examples/project/emc-flyback/circuits/
 examples/**/3D/*.step
 examples/**/footprints/*.step
 examples/**/licenses/

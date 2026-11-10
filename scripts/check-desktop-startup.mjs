@@ -71,7 +71,7 @@ try {
   assert.equal((await readdir(path.join(profile, 'project-history-v1'))).length, catalog.length);
   await assert.rejects(readdir(path.join(profile, 'example-projects')), { code: 'ENOENT' });
   for (const entry of catalog) {
-    const directory = path.resolve(entry.root, entry.directory);
+    const directory = path.resolve(manifest.sourceRoots[entry.root], entry.directory);
     const nativePath = path.join(directory, `${entry.file}.kicad_pro`);
     const normalized = process.platform === 'win32' ? nativePath.toLowerCase() : nativePath;
     const repository = createHash('sha256').update(normalized).digest('hex') + '.git';

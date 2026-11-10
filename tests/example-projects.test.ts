@@ -26,7 +26,7 @@ import { switchingStageFixture } from './fixtures/switching-stage';
 import { buildSpiceDeck, defaultTransient } from '../lib/spice';
 import { validExampleKey } from '../lib/workspace-example';
 import { defaultExamples } from '../lib/default-examples';
-import { homeExampleCatalog } from '../lib/home-examples';
+import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
 const { FileGrants } = createRequire(import.meta.url)('../electron/file-grants.cjs');
 const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
 const { createProjectDirectoryReader } = createRequire(import.meta.url)(
@@ -35,15 +35,17 @@ const { createProjectDirectoryReader } = createRequire(import.meta.url)(
 
 const noHistory = () => ({ ensureExampleInitial: async () => {} });
 
-test('same-named projects in sibling roots have distinct keys and packaged roots resolve independently', async (t) => {
+test('same-named projects in nested roots retain distinct keys when packaged separately', async (t) => {
   const { root, temporary, grants } = await fixture(t, []);
-  const projectRoot = path.join(temporary, 'project');
+  const projectRoot = path.join(root, 'project');
   const bundle = projectNativeFiles(createProject(switchingStageFixture()), 'Twin.kicad_pro');
-  for (const parent of [root, projectRoot]) {
-    await mkdir(path.join(parent, 'Twin'));
+  const writeTwin = async (parent: string) => {
+    await mkdir(path.join(parent, 'Twin'), { recursive: true });
     for (const file of bundle.files)
       await writeFile(path.join(parent, 'Twin', file.name), file.source);
-  }
+  };
+  await writeTwin(root);
+  await writeTwin(projectRoot);
   const examples = new ExampleProjects(root, grants, noHistory(), projectRoot);
   const entries = (await examples.list()).entries;
   assert.equal(entries.length, 2);
@@ -52,14 +54,15 @@ test('same-named projects in sibling roots have distinct keys and packaged roots
     const opened = await examples.openDefault(`example:${entry.id}`);
     assert.equal(
       grants.get(opened.fileId),
-      path.join(temporary, entry.section, 'Twin', bundle.entry),
+      path.join(entry.section === 'project' ? projectRoot : root, 'Twin', bundle.entry),
     );
     grants.release(opened.fileId);
   }
-  const { rename } = await import('node:fs/promises');
-  await rename(root, root + '-native');
-  await rename(projectRoot, projectRoot + '-native');
-  const packaged = new ExampleProjects(root + '-native', grants, noHistory(), projectRoot + '-native');
+  const packagedProject = path.join(temporary, 'project-native');
+  const packagedExamples = path.join(temporary, 'examples-native');
+  await writeTwin(packagedProject);
+  await writeTwin(packagedExamples);
+  const packaged = new ExampleProjects(packagedExamples, grants, noHistory(), packagedProject);
   assert.deepEqual((await packaged.list()).entries, entries);
   for (const entry of entries) {
     const opened = await packaged.openDefault(`example:${entry.id}`);
@@ -68,6 +71,57 @@ test('same-named projects in sibling roots have distinct keys and packaged roots
       path.join(temporary, entry.section + '-native', 'Twin', bundle.entry),
     );
   }
+});
+
+test('the reserved project group cannot duplicate a native entry in either resource layout', async (t) => {
+  const { root, temporary, grants } = await fixture(t, []);
+  const projectRoot = path.join(root, 'project');
+  const bundle = projectNativeFiles(createProject(switchingStageFixture()), 'Direct.kicad_pro');
+  for (const file of bundle.files) await writeFile(path.join(projectRoot, file.name), file.source);
+  const examples = new ExampleProjects(root, grants, noHistory());
+  const { entries, warnings } = await examples.list();
+  assert.deepEqual(warnings, []);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].section, 'project');
+  assert.equal(entries[0].title, 'Direct');
+  const opened = await examples.openDefault(`example:${entries[0].id}`);
+  assert.equal(grants.get(opened.fileId), path.join(projectRoot, bundle.entry));
+  grants.release(opened.fileId);
+
+  const packagedRoot = path.join(temporary, 'project-native');
+  await mkdir(packagedRoot);
+  for (const file of bundle.files) await writeFile(path.join(packagedRoot, file.name), file.source);
+  const packaged = new ExampleProjects(root, grants, noHistory(), packagedRoot);
+  assert.deepEqual(await packaged.list(), { entries, warnings });
+  const packagedOpen = await packaged.openDefault(`example:${entries[0].id}`);
+  assert.equal(grants.get(packagedOpen.fileId), path.join(packagedRoot, bundle.entry));
+
+  const partial = new ExampleProjects(
+    path.join(temporary, 'missing-examples'),
+    grants,
+    noHistory(),
+    packagedRoot,
+  );
+  const listed = await partial.list();
+  assert.deepEqual(listed.entries, entries);
+  assert.match(listed.warnings.join('\n'), /Could not inspect examples resources/);
+  assert.equal((await partial.openDefault(`example:${entries[0].id}`)).fileId, packagedOpen.fileId);
+});
+
+test('an oversized root reports a limit warning without publishing a partial project list', async (t) => {
+  const { root, grants } = await fixture(t, []);
+  for (let index = 0; index < 256; index++)
+    await writeFile(path.join(root, `test-${index}.kicad_pro`), '');
+  const extra = path.join(root, 'Extra');
+  await mkdir(extra);
+  await writeFile(path.join(extra, 'extra.kicad_pro'), '');
+  await writeFile(path.join(root, 'project', 'available.kicad_pro'), '');
+  const { entries, warnings } = await new ExampleProjects(root, grants, noHistory()).list();
+  assert.deepEqual(
+    entries.map((entry: { title: string }) => entry.title),
+    ['available'],
+  );
+  assert.match(warnings.join('\n'), /Example discovery exceeds 256 projects/);
 });
 
 test('Default Recent projects retain their catalog identity inside the dedicated project directory', async (t) => {
@@ -80,7 +134,7 @@ test('Default Recent projects retain their catalog identity inside the dedicated
   const opened = await examples.openDefault('example:emc-flyback-demo');
   assert.equal(
     grants.get(opened.fileId),
-    path.join(path.dirname(root), 'project', 'emc-flyback', 'emc-flyback.kicad_pro'),
+    path.join(root, 'project', 'emc-flyback', 'emc-flyback.kicad_pro'),
   );
   assert.equal(grants.get(opened.fileId), files.get('example:emc-flyback-demo'));
 });
@@ -159,11 +213,11 @@ async function fixture(t: TestContext, entries = defaultExamples().slice(0, 1)) 
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const root = path.join(temporary, 'examples');
   await mkdir(root);
-  await mkdir(path.join(temporary, 'project'));
+  await mkdir(path.join(root, 'project'));
   const files = new Map<string, string>();
   for (const entry of entries) {
     const fixed = homeExampleCatalog.find((item) => `example:${item.id}` === entry.key)!;
-    const directory = path.join(temporary, fixed.root, fixed.directory);
+    const directory = path.dirname(path.join(temporary, homeExampleNativePath(fixed.id)));
     const bundle = projectNativeFiles(
       parseProject(entry.createSource()),
       `${fixed.file}.kicad_pro`,
@@ -298,6 +352,8 @@ test('invalid or missing original example files remain untouched and opening ret
 
 test('preparation bounds original-project work and unrelated missing examples do not block a usable selection', async (t) => {
   const { root, files, entries, grants } = await fixture(t, defaultExamples().slice(0, 5));
+  const added = projectNativeFiles(createProject(switchingStageFixture()), 'Added.kicad_pro');
+  for (const file of added.files) await writeFile(path.join(root, file.name), file.source);
   const existing = grants.create(files.get(entries[0].key));
   let active = 0,
     maximum = 0,
@@ -322,12 +378,19 @@ test('preparation bounds original-project work and unrelated missing examples do
       }
     },
   });
+  const discover = examples.list.bind(examples);
+  let discoveryCalls = 0;
+  examples.list = () => {
+    discoveryCalls++;
+    return discover();
+  };
   const preparation = examples.prepare();
   await firstWave;
   resume();
   const warnings = await preparation;
+  assert.equal(discoveryCalls, 1);
   assert.equal(maximum, 3);
-  assert.equal(histories, entries.length);
+  assert.equal(histories, entries.length + 1);
   assert.equal(warnings.length, 10 - entries.length);
   assert.equal(grants.find(files.get(entries[0].key)), existing);
   for (const entry of entries.slice(1)) assert.equal(grants.find(files.get(entry.key)), undefined);

@@ -1,4 +1,8 @@
 {
+  "sourceRoots": {
+    "examples": "examples",
+    "project": "examples/project"
+  },
   "examples": [
     {
       "id": "reference-lm2596-to220-5-buck",

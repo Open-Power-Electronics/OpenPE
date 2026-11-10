@@ -217,51 +217,79 @@ async function readNativeProject(file) {
   return validateNativeFiles({ entry, files });
 }
 
-// Check every target before any write. Existing linked/nonregular files fail
-// without replacing them. Each content write remains atomic; a later failure
-// restores already-written siblings so a failed Save retains its prior files.
-async function writeNativeProject(file, bundle, atomicWrite, checkGrant = () => {}) {
+async function nativeTargetInfo(target, name) {
+  const info = await fs.lstat(target).catch((error) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (info && (!info.isFile() || info.isSymbolicLink() || info.size > maxFileBytes))
+    throw new Error(`The KiCad destination ${name} is not a regular bounded file.`);
+  return info;
+}
+
+async function preflightNativeProject(file, bundle) {
   validateNativeFiles(bundle);
   if (path.basename(file) !== bundle.entry)
     throw new Error('The KiCad project entry does not match the selected filename.');
   const directory = path.dirname(file);
   await regularDirectory(directory);
+  const checked = new Set([directory]);
   const targets = [];
   for (const item of bundle.files) {
     const target = path.resolve(directory, ...item.name.split('/'));
-    if (
-      path.relative(directory, target).startsWith('..') ||
-      path.isAbsolute(path.relative(directory, target))
-    )
+    const relative = path.relative(directory, target);
+    if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative))
       throw new Error('Invalid KiCad project destination.');
     let parent = directory;
     for (const segment of item.name.split('/').slice(0, -1)) {
       parent = path.join(parent, segment);
-      await fs.mkdir(parent).catch((error) => {
-        if (error.code !== 'EEXIST') throw error;
-      });
-      await regularDirectory(parent);
+      if (checked.has(parent)) continue;
+      try {
+        await regularDirectory(parent);
+        checked.add(parent);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        break;
+      }
     }
-    let previous = null;
-    try {
-      const info = await fs.lstat(target);
-      if (!info.isFile() || info.isSymbolicLink() || info.size > maxFileBytes)
-        throw new Error(`The KiCad destination ${item.name} is not a regular bounded file.`);
-      previous = await fs.readFile(target);
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-    targets.push({ target, source: Buffer.from(item.source, item.encoding ?? 'utf8'), previous });
+    targets.push({ item, target, info: await nativeTargetInfo(target, item.name) });
+  }
+  return targets;
+}
+
+// Capture the previous native files before publishing, then roll back written
+// siblings if a later write fails.
+async function writeNativeProject(file, bundle, atomicWrite, checkGrant = () => {}) {
+  const targets = await preflightNativeProject(file, bundle);
+  const directory = path.dirname(file);
+  for (const target of targets) {
+    target.source = Buffer.from(target.item.source, target.item.encoding ?? 'utf8');
+    target.previous = target.info ? await fs.readFile(target.target) : null;
   }
   // Publish the entry last so a newly created project is not visible mid-save.
-  targets.sort((a, b) => Number(a.target === file) - Number(b.target === file));
+  targets.sort(
+    (a, b) => Number(a.item.name === bundle.entry) - Number(b.item.name === bundle.entry),
+  );
   const written = [];
   try {
     for (const target of targets) {
       if (target.previous?.equals(target.source)) continue;
-      await regularDirectory(path.dirname(target.target));
       await checkGrant(target);
-      await atomicWrite(target.target, target.source);
+      let parent = directory;
+      for (const segment of target.item.name.split('/').slice(0, -1)) {
+        await regularDirectory(parent);
+        parent = path.join(parent, segment);
+        await fs.mkdir(parent).catch((error) => {
+          if (error.code !== 'EEXIST') throw error;
+        });
+      }
+      const check = async () => {
+        await regularDirectory(parent);
+        await nativeTargetInfo(target.target, target.item.name);
+        await checkGrant(target);
+      };
+      await check();
+      await atomicWrite(target.target, target.source, check);
       written.push(target);
     }
     await checkGrant();
@@ -269,6 +297,7 @@ async function writeNativeProject(file, bundle, atomicWrite, checkGrant = () => 
     const failures = [];
     for (const target of written.reverse()) {
       try {
+        await regularDirectory(path.dirname(target.target));
         if (target.previous === null) await fs.unlink(target.target);
         else await atomicWrite(target.target, target.previous);
       } catch (rollbackError) {
@@ -283,4 +312,10 @@ async function writeNativeProject(file, bundle, atomicWrite, checkGrant = () => 
   }
 }
 
-module.exports = { readNativeProject, writeNativeProject, validateNativeFiles, nativeName };
+module.exports = {
+  readNativeProject,
+  writeNativeProject,
+  preflightNativeProject,
+  validateNativeFiles,
+  nativeName,
+};

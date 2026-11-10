@@ -35,7 +35,7 @@ function createImageExport({ showSaveDialog, atomicWrite, nativeImage }) {
       const name =
         (path
           .basename(options.name)
-          .replace(/(?:\.openpe\.json|\.kicad_pcb|\.png)$/i, '')
+          .replace(/(?:\.kicad_pcb|\.png)$/i, '')
           .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
           .slice(0, 180) || 'board') + '.png';
       const result = await showSaveDialog({

@@ -24758,8 +24758,11 @@ function textData(n, value) {
     ...val(child(f, "italic")) === "yes" ? { italic: true } : {}
   };
 }
-function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
-  const root = expandNativeBoardZones(parseSExpr(source));
+function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping) {
+  return parseKiCadPCBTree(parseSExpr(source), schematic, stableIdSeed, referenceMapping);
+}
+function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {}) {
+  const root = expandNativeBoardZones(tree);
   if (root[0] !== "kicad_pcb" || val(child(root, "version")) !== "20260206")
     fail("Expected the pinned KiCad 10 board format.");
   allow(
