@@ -9,10 +9,11 @@ import {
   readQuantity,
 } from './quantity-units';
 
-type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
+type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'> & {
   value: string | number;
   unit?: string;
   onValueChange: (value: string) => void;
+  onBlur?: () => void;
   autoScale?: boolean;
   precision?: number;
   decimalPlaces?: number;
@@ -40,7 +41,6 @@ export default function QuantityInput({
   const composing = useRef(false);
   const [focused, setFocused] = useState(false);
   const focusedUnit = useRef<string | undefined>(undefined);
-  const container = useRef<HTMLSpanElement>(null);
   const options = unit ? quantityUnits(unit) : [];
   const canonical = options.find((entry) => entry.label === unit);
   const number = unit ? readQuantity(source, unit) : Number(source);
@@ -55,6 +55,7 @@ export default function QuantityInput({
   const displayUnit =
     chosen ?? (unit && autoScale ? (retainedUnit ?? preferredQuantityUnit(source, unit)) : unit);
   const selected = options.find((entry) => entry.label === displayUnit) ?? canonical;
+  const hasUnitPicker = Boolean(unit && selected);
   function displayNumber(number: number) {
     return String(Number(number.toPrecision(precision ?? 8)));
   }
@@ -123,13 +124,9 @@ export default function QuantityInput({
         setEdit({ source: next, unit: selected?.label ?? '', display: raw });
         onValueChange(next);
       }}
-      onBlur={(event) => {
+      onBlur={() => {
         if (autoScale || decimalPlaces !== undefined) setFocused(false);
-        if (container.current?.contains(event.relatedTarget as Node | null)) {
-          event.stopPropagation();
-          return;
-        }
-        onBlur?.(event);
+        if (!hasUnitPicker) onBlur?.();
       }}
     />
   );
@@ -138,7 +135,9 @@ export default function QuantityInput({
   return (
     <span
       className="quantity-input"
-      ref={container}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onBlur?.();
+      }}
       onPointerDownCapture={(event) => {
         if (
           composing.current &&

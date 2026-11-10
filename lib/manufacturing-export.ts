@@ -10,6 +10,8 @@ import { GerberLayer } from './manufacturing-gerber';
 import { exportModelCadScad } from './model-cad-scad';
 import { modelCadFromProject } from './model-cad';
 import { exportZip } from './export-zip';
+import { exportBoardOutlineDxf } from './pcb-dxf';
+import { exportSchematicNetlist } from './schematic-netlist-export';
 import { projectExportFormats, type ProjectExportFormat } from './export-formats';
 export { projectExportFormats } from './export-formats';
 export type ManufacturingFile = { name: string; source: string };
@@ -161,30 +163,35 @@ function contours(points: { x: number; y: number }[]) {
   return result;
 }
 
-function gerberFiles(board: PCB, root: SExpr, stem: string): ManufacturingFile[] {
+function gerberFiles(board: PCB, root: SExpr, stem: string, stencil = false): ManufacturingFile[] {
   boardPolygons(board); // Reject open/ambiguous outlines before publishing any file.
   const setup = child(root, 'setup') ?? [];
   const setting = (key: string) => Number(val(child(setup, key)) || 0);
-  for (const key of ['covering', 'plugging'])
-    if (['front', 'back'].some((side) => val(child(child(setup, key) ?? [], side)) === 'yes'))
-      throw new Error(`Gerber export does not support enabled via ${key}.`);
-  if (['capping', 'filling'].some((key) => val(child(setup, key)) === 'yes'))
-    throw new Error('Gerber export does not support capped or filled vias.');
-  if (setting('solder_mask_min_width'))
-    throw new Error('Gerber export does not support a nonzero minimum solder-mask web.');
-  const zones = worldZones(board).filter((z) => !z.keepout && z.fillEnabled !== false);
-  if (zones.some((z) => z.filledPolygons === undefined))
-    throw new Error('Fill all enabled zones in Layout before exporting Gerber files.');
-  if (
-    board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) ||
-    children(root, 'via').some((v) => val(child(v, 'remove_unused_layers')) === 'yes')
-  )
-    throw new Error('Gerber export does not support removing unused pad or via copper layers.');
+  const zones = stencil
+    ? []
+    : worldZones(board).filter((z) => !z.keepout && z.fillEnabled !== false);
+  if (!stencil) {
+    for (const key of ['covering', 'plugging'])
+      if (['front', 'back'].some((side) => val(child(child(setup, key) ?? [], side)) === 'yes'))
+        throw new Error(`Gerber export does not support enabled via ${key}.`);
+    if (['capping', 'filling'].some((key) => val(child(setup, key)) === 'yes'))
+      throw new Error('Gerber export does not support capped or filled vias.');
+    if (setting('solder_mask_min_width'))
+      throw new Error('Gerber export does not support a nonzero minimum solder-mask web.');
+    if (zones.some((z) => z.filledPolygons === undefined))
+      throw new Error('Fill all enabled zones in Layout before exporting Gerber files.');
+    if (
+      board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) ||
+      children(root, 'via').some((v) => val(child(v, 'remove_unused_layers')) === 'yes')
+    )
+      throw new Error('Gerber export does not support removing unused pad or via copper layers.');
+  }
   // Font faces and text knockout need native glyph outlines not held by this exporter.
+  const textLayers = stencil ? /^[FB]\.Paste$/ : /\.(?:Cu|Mask|Paste|SilkS)$/;
   const checkText = (node: SExpr) => {
     if (
       (node[0] === 'gr_text' || node[0] === 'fp_text' || node[0] === 'property') &&
-      /\.(?:Cu|Mask|Paste|SilkS)$/.test(val(child(node, 'layer'))) &&
+      textLayers.test(val(child(node, 'layer'))) &&
       val(child(node, 'hide')) !== 'yes' &&
       val(child(child(node, 'effects') ?? [], 'hide')) !== 'yes' &&
       !child(node, 'effects')?.includes('hide') &&
@@ -215,6 +222,7 @@ function gerberFiles(board: PCB, root: SExpr, stem: string): ManufacturingFile[]
     ['Edge.Cuts', 'Profile,NP', 'gko'],
   ];
   for (const [layer, fileFunction, extension] of layers) {
+    if (stencil && layer !== 'Edge.Cuts' && !layer.endsWith('.Paste')) continue;
     const plot = new GerberLayer(fileFunction);
     for (const zone of zones.filter((z) => z.layer === layer))
       for (const polygon of zone.filledPolygons!) {
@@ -275,6 +283,11 @@ function gerberFiles(board: PCB, root: SExpr, stem: string): ManufacturingFile[]
     for (const g of board.graphics.filter((g) => g.layer === layer)) plot.graphic(g);
     files.push({ name: `${stem}.${extension}`, source: plot.finish() });
   }
+  return files;
+}
+
+function drillFiles(board: PCB, stem: string): ManufacturingFile[] {
+  const files: ManufacturingFile[] = [];
   for (const plated of [true, false]) {
     const holes = board.footprints.flatMap((f) =>
       f.pads
@@ -305,11 +318,6 @@ function gerberFiles(board: PCB, root: SExpr, stem: string): ManufacturingFile[]
       source: [...commands, 'M30', ''].join('\n'),
     });
   }
-  files.push({
-    name: 'README.txt',
-    source:
-      'OpenPE manufacturing export\n\nGerber X2 and metric Excellon through drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes, outline and assembly orientation before ordering.\n\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred.\n',
-  });
   return files;
 }
 
@@ -323,6 +331,12 @@ export function exportProjectFile(
   if (!definition) throw new Error('Unsupported export format.');
   const stem = exportStem(name),
     filename = stem + definition.suffix + '.' + definition.extension;
+  if (format === 'netlist')
+    return {
+      name: filename,
+      bytes: new TextEncoder().encode(exportSchematicNetlist(project)),
+      mime: 'application/xml;charset=utf-8',
+    };
   if (format === 'scad') {
     const model = project.pcb ? modelCadFromProject(project) : null;
     if (!model?.objects.length) throw new Error('Create a CAD solid before exporting OpenSCAD.');
@@ -333,6 +347,12 @@ export function exportProjectFile(
     };
   }
   const { board, root } = boardData(project);
+  if (format === 'dxf')
+    return {
+      name: filename,
+      bytes: new TextEncoder().encode(exportBoardOutlineDxf(board)),
+      mime: 'application/dxf',
+    };
   if (format === 'bom' || format === 'placement') {
     const file = assemblyFiles(project, board, root, stem)[format === 'bom' ? 0 : 1];
     return {
@@ -341,7 +361,22 @@ export function exportProjectFile(
       mime: 'text/csv;charset=utf-8',
     };
   }
-  const files = gerberFiles(board, root, stem);
-  if (format === 'jlcpcb') files.push(...assemblyFiles(project, board, root, stem));
+  let files: ManufacturingFile[];
+  if (format === 'drill') {
+    files = drillFiles(board, stem);
+  } else if (format === 'stencil') {
+    files = gerberFiles(board, root, stem, true);
+  } else {
+    files = [
+      ...gerberFiles(board, root, stem),
+      ...drillFiles(board, stem),
+      {
+        name: 'README.txt',
+        source:
+          'OpenPE manufacturing export\n\nGerber X2 and metric Excellon through drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes, outline and assembly orientation before ordering.\n\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred.\n',
+      },
+    ];
+    if (format === 'jlcpcb') files.push(...assemblyFiles(project, board, root, stem));
+  }
   return { name: filename, bytes: exportZip(files), mime: 'application/zip' };
 }

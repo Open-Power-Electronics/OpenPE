@@ -26,11 +26,16 @@ const nativeProject = (files, entry = names[0]) =>
     files: Object.entries(files).map(([name, source]) => ({ name, source })),
   });
 const initial = nativeProject(initialFiles);
+const noteName = 'notes.txt';
+const notePath = path.join(nativeDir, noteName);
+const initialNote = 'Original project note';
+const draftNote = 'Draft project note';
 await Promise.all(
   Object.entries(initialFiles).map(([name, source]) =>
     writeFile(path.join(nativeDir, name), source),
   ),
 );
+await writeFile(notePath, initialNote);
 const file = path.join(nativeDir, names[0]);
 const diskFiles = async (directory = nativeDir, stem = 'combined') =>
   Object.fromEntries(
@@ -81,7 +86,7 @@ try {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
   }, file);
   await button('Open project').click();
-  await toast('Project opened');
+  await page.getByTestId('part-R1').waitFor();
   await button('Source').click();
   assert.deepEqual(
     await sourceFiles(),
@@ -146,6 +151,10 @@ try {
   await projectHistory(page, 'Redo');
   assert.deepEqual(await sourceFiles(), applied);
   await projectHistory(page, 'Undo');
+  await selectFile(noteName);
+  await editor.getByText(initialNote, { exact: true }).waitFor();
+  await fillSource(page, draftNote);
+  assert.equal(await readSource(page), draftNote);
   for (const invalid of [
     '(kicad_sch (unfinished',
     beforeSource[names[1]].replace('(version 20260306)', '(version 99999999)'),
@@ -165,9 +174,25 @@ try {
     await fileMenuAction(page, 'Save');
     await toast('Fix the source errors before saving');
     assert.deepEqual(await diskFiles(), initialFiles, 'Invalid native drafts never reach disk.');
+    assert.equal(
+      await readFile(notePath, 'utf8'),
+      initialNote,
+      'Invalid native Source also blocks ordinary-file writes during project Save.',
+    );
   }
+  await selectFile(noteName);
+  assert.equal(await readSource(page), draftNote, 'The blocked save retains the ordinary draft.');
+  await selectFile(names[1]);
   await fillSource(page, beforeSource[names[1]]);
   await button('Schematic').click();
+  await application.evaluate(({ dialog }) => {
+    dialog.showSaveDialog = async () => {
+      throw new Error('Test export failure');
+    };
+  });
+  await fileMenuAction(page, ['Export', 'BOM']);
+  await toast('Test export failure');
+  assert.deepEqual(await diskFiles(), initialFiles, 'Failed export preserves the native files.');
   await application.evaluate(({ dialog }) => {
     dialog.showSaveDialog = async () => ({ canceled: true });
   });
@@ -179,10 +204,7 @@ try {
     ['BOM', 'Comment'],
     ['CPL', 'Designator'],
   ]) {
-    const destination = path.join(
-      exportDir,
-      label === 'BOM' ? 'bom.csv' : 'positions.csv',
-    );
+    const destination = path.join(exportDir, label === 'BOM' ? 'bom.csv' : 'positions.csv');
     await application.evaluate(({ dialog }, file) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: file });
     }, destination);
@@ -227,6 +249,7 @@ try {
   );
   await fileMenuAction(page, 'Save');
   await toast('Save project');
+  assert.equal(await readFile(notePath, 'utf8'), draftNote);
   const saved = await diskFiles();
   await writeFile(path.join(dir, 'actual-save-native.json'), JSON.stringify(saved, null, 2));
   assert.deepEqual(
@@ -393,7 +416,7 @@ try {
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   await page.reload();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
-  assert.equal(await page.locator('.project-navigation').getByRole('button').count(), 0);
+  assert.equal(await page.locator('.project-navigation .project-folder > button').count(), 0);
   assert.deepEqual(errors, []);
   console.log(
     'PASS: native KiCad file-set save/recovery, multi-file Source validation and undo, invalid drafts, cancelled/manufacturing exports, destination retention and save/discard close review.',

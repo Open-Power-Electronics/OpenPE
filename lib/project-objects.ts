@@ -4,7 +4,6 @@ import type { BoardZone, Footprint, FootprintModel, PCB } from './pcb';
 import { documentPhysicalPinKey, projectNetGroups } from './project-net-groups';
 import { simulationFieldNames } from './simulation-fields';
 import { isOwnedPCB, isOwnedProjectNode, ownProjectData } from './immutable-project';
-export { simulationFieldNames } from './simulation-fields';
 
 type Sheet = EditorDocument['schematic'];
 type Component = NonNullable<Sheet['components']>[number];

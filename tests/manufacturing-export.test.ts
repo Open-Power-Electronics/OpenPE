@@ -62,6 +62,57 @@ test('Gerber manufacturing archive has actual layers, analytic rounded pads, sep
   assert.equal(serializeProject(project), before);
 });
 
+test('Excellon export matches fabrication drills and works before the outline is closed', async () => {
+  const project = manufacturingProject(),
+    board = project.pcb!,
+    netId = uid();
+  board.nets.push({ id: netId, name: 'GND' });
+  board.vias.push({ id: uid(), x: -2, y: 3, diameter: 0.6, drill: 0.3, netId });
+  const gerbers = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  board.graphics.pop();
+  const output = exportProjectFile(project, 'drill', 'x.kicad_pro');
+  assert.equal(output.name, 'x-drill.zip');
+  const drills = await unzip(output.bytes);
+  assert.deepEqual([...drills.keys()], ['x-PTH.drl', 'x-NPTH.drl']);
+  for (const [name, source] of drills) assert.equal(source, gerbers.get(name));
+  assert.match(drills.get('x-PTH.drl')!, /T1C0\.3[\s\S]*X-2\.000000Y-3\.000000/);
+  assert.match(drills.get('x-NPTH.drl')!, /T1C2[\s\S]*X5\.000000Y-5\.000000/);
+  assert.throws(() => exportProjectFile(project, 'stencil', 'x'), /outline is open/);
+});
+
+test('stencil export matches fabrication paste and outline without checking unrelated mask settings', async () => {
+  const paste = (source: string) =>
+    source.replace(
+      '(pad_to_mask_clearance 0)',
+      '(pad_to_mask_clearance 0) (pad_to_paste_clearance 0.1)',
+    );
+  const project = nativeBoard(paste);
+  const gerbers = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  const maskSetting = nativeBoard((source) =>
+    paste(source).replace(
+      '(pad_to_mask_clearance 0)',
+      '(pad_to_mask_clearance 0) (solder_mask_min_width 0.1)',
+    ),
+  );
+  assert.throws(() => exportProjectFile(maskSetting, 'gerber', 'x'), /minimum solder-mask web/);
+  const output = exportProjectFile(maskSetting, 'stencil', 'x');
+  assert.equal(output.name, 'x-stencil.zip');
+  const stencil = await unzip(output.bytes);
+  assert.deepEqual([...stencil.keys()], ['x.gtp', 'x.gbp', 'x.gko']);
+  for (const [name, source] of stencil) assert.equal(source, gerbers.get(name));
+  const noMargin = await unzip(exportProjectFile(manufacturingProject(), 'stencil', 'x').bytes);
+  assert.notEqual(stencil.get('x.gtp'), noMargin.get('x.gtp'));
+  project.pcb!.graphics.push({
+    id: uid(),
+    layer: 'F.Paste',
+    width: 0.1,
+    stroke: 'dash',
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+  });
+  assert.throws(() => exportProjectFile(project, 'stencil', 'x'), /dashed artwork/);
+});
+
 test('JLCPCB CSV uses matching designators, quoted values, native origins, top/bottom and CCW rotations', async () => {
   const project = manufacturingProject();
   project.pcb!.footprints[0].value = '10k, "1%"';
@@ -108,6 +159,7 @@ test('manufacturing rejects open outlines and unfilled zones without mutating th
   assert.throws(() => exportProjectFile(filled, 'gerber', 'x'), /Fill all enabled zones/);
   assert.equal(serializeProject(filled), before);
   assert.doesNotThrow(() => exportProjectFile(filled, 'bom', 'x'));
+  assert.doesNotThrow(() => exportProjectFile(filled, 'stencil', 'x'));
 });
 
 test('four copper layers and through vias retain layer order and metric drill positions', async () => {

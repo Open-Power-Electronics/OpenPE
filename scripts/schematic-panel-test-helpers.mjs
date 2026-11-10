@@ -114,8 +114,11 @@ export async function checkFieldProperties(page, inspector) {
   );
   await x.fill('100001');
   await x.press('Enter');
-  await inspector.getByRole('alert').waitFor();
-  assert.equal(await x.inputValue(), '100001', 'Invalid drafts stay editable.');
+  await inspector
+    .getByRole('alert')
+    .filter({ hasText: 'Position must be between -100000 and 100000 mm.' })
+    .waitFor();
+  assert.equal(Number(await x.inputValue()), 100001, 'Invalid drafts retain their numeric value.');
   await x.press('Escape');
   assert.equal(await x.inputValue(), original);
   assert.equal(await inspector.getByRole('alert').count(), 0);

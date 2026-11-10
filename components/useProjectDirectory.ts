@@ -129,7 +129,7 @@ export function useProjectDirectory(
     [scope, current, previews, updateDrafts],
   );
   const save = useCallback(
-    async (name?: string, guard?: ProjectFileGuard) => {
+    async (name?: string, guard?: Pick<ProjectFileGuard, 'check'>) => {
       guard?.check();
       if (savingRef.current) throw new Error('A project file is already being saved.');
       const pending = [...draftsRef.current.entries()].filter(
@@ -203,8 +203,11 @@ export function useProjectDirectory(
     },
     [updateDrafts],
   );
-  const hasPending = useCallback(
-    () => [...draftsRef.current.values()].some((draft) => draft.source !== draft.expectedSource),
+  const pendingRevision = useCallback(
+    () =>
+      [...draftsRef.current.values()].some((draft) => draft.source !== draft.expectedSource)
+        ? draftRevision.current
+        : null,
     [],
   );
   const files = useMemo(() => {
@@ -325,6 +328,6 @@ export function useProjectDirectory(
     change,
     save,
     discard,
-    hasPending,
+    pendingRevision,
   };
 }

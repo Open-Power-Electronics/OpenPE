@@ -35,7 +35,7 @@ npm run simulation:download-examples -- --fixtures
 npm run simulation:check-examples
 ```
 
-Preparation may download hash-pinned official models. Model bytes stay in separate ignored `models/*.lib` files, never in JSON or Git. Canonical projects contain only official IDs, extracted-file hashes and fixed relative references. Keep projects and `models/` together; referenced runs read verified local files or an existing private cache and never download a missing referenced model. Fixture-only models are not packaged. The real-solver sweep requires prepared files and does not fetch or launch Electron/providers. Shared runtime, participation and portability rules are in [SIMULATION.md](../../../docs/SIMULATION.md).
+Keep the prepared [portable sidecars](../README.md#simulation-resources-and-verification) with the fixture JSON for the offline sweep. Shared runtime, participation and portability rules are in [Simulation](../../../docs/SIMULATION.md).
 
 ## Verification
 

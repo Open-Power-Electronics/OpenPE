@@ -69,7 +69,7 @@ function fixedTrackAnchors(
       add({
         id: via.id,
         netId: via.netId,
-        layers: board.layers,
+        layers: [...board.layers],
         polygon: {
           outer: circlePolygon(via, via.diameter / 2),
           holes: [circlePolygon(via, via.drill / 2)],

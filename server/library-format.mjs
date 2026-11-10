@@ -60,26 +60,6 @@ function parseSExprValue(source, maxLength, owned) {
   if (i !== tokens.length) throw new Error("Unexpected trailing file content.");
   return root;
 }
-var ownedSExprText = /* @__PURE__ */ new WeakMap();
-function writeSExpr(n, depth = 0) {
-  if (!n.some(Array.isArray)) return `(${n.join(" ")})`;
-  const owned = isOwnedProjectNode(n);
-  const cached = owned ? ownedSExprText.get(n)?.get(depth) : void 0;
-  if (cached !== void 0) return cached;
-  let s = "(";
-  n.forEach((v, i) => {
-    s += Array.isArray(v) ? `
-${"  ".repeat(depth + 1)}${writeSExpr(v, depth + 1)}` : `${i ? " " : ""}${v}`;
-  });
-  const source = s + ")";
-  if (owned) {
-    const variants = ownedSExprText.get(n) ?? /* @__PURE__ */ new Map();
-    variants.set(depth, source);
-    while (variants.size > 3) variants.delete(variants.keys().next().value);
-    ownedSExprText.set(n, variants);
-  }
-  return source;
-}
 
 // lib/circuit.ts
 var uid = () => crypto.randomUUID();
@@ -825,6 +805,5 @@ export {
   symbolUnits,
   unitGraphics,
   val,
-  validateProject,
-  writeSExpr
+  validateProject
 };

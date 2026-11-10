@@ -20,6 +20,7 @@ const homeManifest = JSON.parse(
   await readFile('resources/example-catalog/home-manifest.json', 'utf8'),
 );
 const homeExampleCount = homeManifest.recent.length + homeManifest.examples.length;
+const homeCircuitPreviews = '.home-example-preview svg:has(> defs)';
 const dir = path.resolve('test-results', `workspace-${Date.now()}`);
 await mkdir(dir, { recursive: true });
 const files = {};
@@ -152,19 +153,20 @@ try {
   await page.evaluate(() => window.releaseWorkspaceRecovery());
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   assert.equal(await page.locator('.home-example').count(), homeExampleCount);
-  assert.equal(await page.locator('.home-example-preview svg').count(), 0);
+  assert.equal(await page.locator(homeCircuitPreviews).count(), 0);
   const brief = page.locator('.home-layout textarea');
   await brief.fill('Startup remains interactive');
   assert.equal(await brief.inputValue(), 'Startup remains interactive');
   await page.evaluate(() => window.releaseStartupPreviews());
   await page.waitForFunction(
-    (count) => document.querySelectorAll('.home-example-preview svg').length === count,
-    homeExampleCount,
+    ({ selector, count }) => document.querySelectorAll(selector).length === count,
+    { selector: homeCircuitPreviews, count: homeExampleCount },
   );
   assert.equal(await brief.inputValue(), 'Startup remains interactive');
   await brief.fill('');
   const button = (name) => page.getByRole('button', { name, exact: true });
   const projects = () => page.getByRole('group', { name: 'Open projects', exact: true });
+  const projectFolders = () => projects().locator('.project-folder > button');
   const select = (name) =>
     projects()
       .getByRole('button', { name: new RegExp(`^Project ${name},`) })
@@ -182,8 +184,8 @@ try {
   const projectEntry = projects().getByRole('button', { name: /^Project A,/ });
   const railWidth = await projects().evaluate((element) => element.clientWidth);
   await projectEntry.hover();
-  assert.equal(await page.locator('.project-name-reveal').count(), 0);
-  assert.equal(await projectEntry.getAttribute('title'), 'Project A');
+  await page.getByRole('tooltip').getByText('Project A', { exact: true }).waitFor();
+  assert.equal(await projectEntry.getAttribute('aria-description'), 'Project A');
   assert.match(await projectEntry.getAttribute('aria-label'), /^Project A,/);
   assert.equal(await projects().evaluate((element) => element.clientWidth), railWidth);
   await projectEntry.click();
@@ -219,7 +221,7 @@ try {
   const canonicalA = await readSource(page);
   await fillSource(page, '{unfinished A');
   await open('B');
-  assert.equal(await projects().getByRole('button').count(), 2);
+  assert.equal(await projectFolders().count(), 2);
   assert.equal(await page.getByRole('dialog').count(), 0);
   await page.getByLabel('Message your agent', { exact: true }).fill('B composer draft');
   await page.evaluate(() => window.finishProjectResponse());
@@ -266,23 +268,22 @@ try {
     'B composer draft',
   );
   await open('A');
-  assert.equal(
-    await projects().getByRole('button').count(),
-    2,
-    'Opening the same granted file selects it.',
-  );
+  assert.equal(await projectFolders().count(), 2, 'Opening the same granted file selects it.');
   await page.locator('.nav-rail').getByRole('button', { name: 'New project', exact: true }).click();
-  await projects().getByRole('button').nth(2).waitFor();
-  assert.equal(await projects().getByRole('button').count(), 3);
+  await projectFolders().nth(2).waitFor();
+  assert.equal(await projectFolders().count(), 3);
   assert.equal(await page.locator('.file-tab .dirty-dot').count(), 0);
   const newProjectId = await page
     .locator('.project-navigation [aria-current="page"]')
     .evaluate((element) => element.closest('[data-project-id]').dataset.projectId);
+  const newProjectFolder = page.locator(
+    `[data-project-id="${newProjectId}"] .project-folder > button`,
+  );
   await select('A');
-  await page.locator(`[data-project-id="${newProjectId}"] button`).click({ button: 'right' });
+  await newProjectFolder.click({ button: 'right' });
   const fileMenu = page.getByRole('menu', { name: 'Project file actions', exact: true });
   await fileMenu.waitFor();
-  assert.equal(await projects().getByRole('button').count(), 3, 'Right-click only opens the menu.');
+  assert.equal(await projectFolders().count(), 3, 'Right-click only opens the menu.');
   const projectOrder = () =>
     page
       .locator('.project-session-group')
@@ -301,17 +302,16 @@ try {
     /^Project A,/,
     'Pinning another project preserves the active editor.',
   );
-  await page.locator(`[data-project-id="${newProjectId}"] button`).click({ button: 'right' });
+  await newProjectFolder.click({ button: 'right' });
   await fileMenu.getByRole('menuitem', { name: 'Unpin', exact: true }).click();
   await page
     .locator(`[data-project-id="${newProjectId}"] .project-folder:not([data-pinned])`)
     .waitFor();
   assert.deepEqual(await projectOrder(), originalOrder);
-  await page.locator(`[data-project-id="${newProjectId}"] button`).click({ button: 'right' });
+  await newProjectFolder.click({ button: 'right' });
   await fileMenu.getByRole('menuitem', { name: 'Close project', exact: true }).click();
-  await page.waitForFunction(
-    () => document.querySelectorAll('.project-navigation button').length === 2,
-  );
+  await newProjectFolder.waitFor({ state: 'detached' });
+  assert.equal(await projectFolders().count(), 2);
   assert.equal(await page.getByRole('dialog').count(), 0, 'Unedited new projects close directly.');
   assert.match(
     await page.locator('.project-navigation [aria-current="page"]').getAttribute('aria-label'),
@@ -377,7 +377,7 @@ try {
   await page.reload();
   await page.getByRole('textbox', { name: 'Project file source', exact: true }).waitFor();
   assert.equal(await readSource(page), recoveryDraft);
-  assert.equal(await projects().getByRole('button').count(), 2);
+  assert.equal(await projectFolders().count(), 2);
   await select('B');
   assert.equal(
     await page.locator('.file-tab .dirty-dot').count(),
@@ -411,8 +411,8 @@ try {
     .click({ button: 'right' });
   await fileMenu.getByRole('menuitem', { name: 'Close project', exact: true }).click();
   await confirmation.getByRole('button', { name: "Don't save", exact: true }).click();
-  await projects().getByRole('button').nth(1).waitFor({ state: 'detached' });
-  assert.equal(await projects().getByRole('button').count(), 1);
+  await projectFolders().nth(1).waitFor({ state: 'detached' });
+  assert.equal(await projectFolders().count(), 1);
   assert.equal(
     await page.getByLabel('Message your agent', { exact: true }).inputValue(),
     'B composer draft',
@@ -423,7 +423,7 @@ try {
     '3k',
   );
   await page.locator('.nav-rail').getByRole('button', { name: 'New project', exact: true }).click();
-  await projects().getByRole('button').nth(1).waitFor();
+  await projectFolders().nth(1).waitFor();
   await button('Source').click();
   const projectFile = page
     .getByRole('navigation', { name: 'Project files', exact: true })

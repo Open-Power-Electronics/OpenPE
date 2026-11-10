@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -21,7 +22,12 @@ import { importDocument, projectFilename, type Project } from '@/lib/project';
 import { createProjectAdmissions } from '@/lib/project-admission';
 import { createSession, sessionTitle, type SessionAction } from '@/lib/chat-sessions';
 import { validExampleKey } from '@/lib/workspace-example';
-import { WorkspaceCloseReview, type CloseChoice, type CloseSnapshot } from '@/lib/workspace-close';
+import {
+  isCloseSnapshotUnsaved,
+  WorkspaceCloseReview,
+  type CloseChoice,
+  type CloseSnapshot,
+} from '@/lib/workspace-close';
 import {
   defaultAgentPreferences,
   maxOpenProjects,
@@ -39,11 +45,7 @@ export type DocumentController = {
   activate: (sessionId?: string) => void;
   newConversation: () => void;
   sessionAction: (id: string, action: SessionAction) => void;
-  snapshot: () => CloseSnapshot & {
-    dirty: boolean;
-    activeSchematicId?: string;
-    closedSchematicIds?: string[];
-  };
+  snapshot: () => CloseSnapshot;
   fileAction: (action: Exclude<ProjectFileAction, 'reveal'>) => Promise<boolean>;
   notify: (message: string) => void;
   requestClose: (
@@ -95,7 +97,22 @@ function ProjectSurface({ active, children }: { active: boolean; children: React
 export default function DesktopWorkspace() {
   const appearanceSettings = useAppearance();
   const [documents, setDocuments] = useState<OpenDocument[]>([]);
-  const [projects, setProjects] = useState<ProjectNavigationItem[]>([]);
+  const projects = useMemo<ProjectNavigationItem[]>(
+    () =>
+      documents.map(({ state, title, unsaved }) => ({
+        id: state.id,
+        title,
+        unsaved,
+        ...(state.pinned ? { pinned: true as const } : {}),
+        sessions: state.sessions.map((session) => ({
+          id: session.id,
+          title: sessionTitle(session),
+          ...(session.pinned ? { pinned: true as const } : {}),
+          ...(session.archived ? { archived: true as const } : {}),
+        })),
+      })),
+    [documents],
+  );
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
   const getProjects = useCallback(() => projectsRef.current, []);
@@ -162,38 +179,6 @@ export default function DesktopWorkspace() {
       initialProjects.retain(new Set(next.map((item) => item.state.id)));
       documentsRef.current = next;
       setDocuments(next);
-      setProjects((current) =>
-        current.length === next.length &&
-        current.every(
-          (item, index) =>
-            item.id === next[index].state.id &&
-            item.title === next[index].title &&
-            item.unsaved === next[index].unsaved &&
-            item.pinned === next[index].state.pinned &&
-            JSON.stringify(item.sessions) ===
-              JSON.stringify(
-                next[index].state.sessions.map((session) => ({
-                  id: session.id,
-                  title: sessionTitle(session),
-                  ...(session.pinned ? { pinned: true as const } : {}),
-                  ...(session.archived ? { archived: true as const } : {}),
-                })),
-              ),
-        )
-          ? current
-          : next.map((item) => ({
-              id: item.state.id,
-              title: item.title,
-              unsaved: item.unsaved,
-              ...(item.state.pinned ? { pinned: true as const } : {}),
-              sessions: item.state.sessions.map((session) => ({
-                id: session.id,
-                title: sessionTitle(session),
-                ...(session.pinned ? { pinned: true as const } : {}),
-                ...(session.archived ? { archived: true as const } : {}),
-              })),
-            })),
-      );
     },
     [initialProjects],
   );
@@ -620,13 +605,7 @@ export default function DesktopWorkspace() {
       }
       const controller = controllers.current.get(id);
       if (!controller) return;
-      const snapshot = controller.snapshot();
-      if (
-        action !== 'close' ||
-        snapshot.dirty ||
-        (snapshot.sourceDraft !== null && snapshot.sourceDraft !== snapshot.source)
-      )
-        selectDocument(id);
+      if (action !== 'close' || isCloseSnapshotUnsaved(controller.snapshot())) selectDocument(id);
       controller.fileAction(action);
     },
     [selectDocument, updateDocuments],
@@ -645,19 +624,14 @@ export default function DesktopWorkspace() {
         if (timer.current) clearTimeout(timer.current);
         const review = new WorkspaceCloseReview();
         const snapshots = () =>
-          documentsRef.current.map((item) => {
-            const snapshot = controllers.current.get(item.state.id)?.snapshot() ?? item.state;
-            return {
-              id: item.state.id,
-              // A synchronous edit can precede the Workbench reporting effect.
-              unsaved:
-                item.unsaved ||
-                snapshot.source !== item.state.source ||
-                snapshot.sourceDraft !== item.state.sourceDraft,
-              source: snapshot.source,
-              sourceDraft: snapshot.sourceDraft,
-            };
-          });
+          documentsRef.current.map(({ state }) => ({
+            id: state.id,
+            // A synchronous edit can precede the Workbench reporting effect.
+            ...(controllers.current.get(state.id)?.snapshot() ?? {
+              native: state,
+              ordinaryDraftRevision: null,
+            }),
+          }));
         const cancel = () => {
           quit.current = false;
           setQuitting(false);
@@ -676,7 +650,10 @@ export default function DesktopWorkspace() {
                   .filter((item) => retainedIds.has(item.state.id))
                   .map((item) => ({
                     ...item,
-                    state: { ...item.state, ...controllers.current.get(item.state.id)?.snapshot() },
+                    state: {
+                      ...item.state,
+                      ...controllers.current.get(item.state.id)?.snapshot().native,
+                    },
                   }));
                 const selected = items.some((item) => item.state.id === activeRef.current)
                   ? activeRef.current

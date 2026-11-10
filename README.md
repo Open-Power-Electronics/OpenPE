@@ -45,7 +45,9 @@ npm run examples:prepare
 npm run dev:web
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. The browser development server includes authenticated CAD previews using the same bundled Gmsh/OpenCASCADE and STEP parser as Electron; prepare those resources with `npm run thermal:prepare` if they are missing. CAD solids with Boolean holes, including the EMC Flyback base and cover, use their original geometry. The browser also previews bundled example and prepared official KiCad component models through library IDs; run `npm run libraries:download-models` to prepare missing official models. Browser previews do not download models or access custom project files. All four bundled plugins are available in the browser. SPICE Simulation and manual Layout Thermal run with prepared local solvers and keep results in the current browser session. Prepare missing supported SPICE example models with `npm run simulation:download-examples`. PE Layout Skill serves bundled guidance and Layout Parasitics runs in the renderer. The Plugins page also manages Codex and Claude Code plugins through their local CLI adapters. Native file dialogs and Agent chat require Electron. Desktop development uses the same port; run one development server at a time. Restart the app after Electron or service changes, preserving unsaved work first.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running. Native file dialogs and Agent chat require Electron. Desktop development uses the same port, so run one development server at a time. Save your work and restart the app after changing Electron or service modules.
+
+Browser development supports authenticated CAD previews and the [bundled plugins](docs/PLUGINS.md#bundled-workbench-lifecycle). Prepare missing CAD and thermal resources with `npm run thermal:prepare`, ngspice with `npm run simulation:prepare` and official KiCad component models with `npm run libraries:download-models`. See [browser preview boundaries](docs/ARCHITECTURE.md#browser-development-previews) for supported inputs and access limits.
 
 | Command                    | Purpose                                               |
 | -------------------------- | ----------------------------------------------------- |
@@ -59,24 +61,24 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) while the server is running.
 
 See [verification](docs/ARCHITECTURE.md#verification) for focused tests and opt-in checks. [Engineering rules](AGENTS.md#verification-and-delivery) define required validation and authorization for desktop checks.
 
-`test-results/` holds verification artifacts; `tmp/` holds local experiments. Cleanup can remove superseded test profiles, duplicate reports and temporary compiler caches after checking their consumers. Retain current verification evidence and builds. Projects, recovery/history, offline resources and original solver results have separate [storage boundaries](docs/ARCHITECTURE.md#storage-and-build-boundaries); ignored directories are not blanket cleanup targets.
+See [storage and build boundaries](docs/ARCHITECTURE.md#storage-and-build-boundaries) for test outputs, generation inputs, native projects and private application data.
 
 ## Scope
 
-OpenPE supports a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Save/Save as retain native KiCad projects. Export provides bounded Gerber/drill ZIP, JLCPCB manufacturing ZIP, BOM and placement CSV, plus OpenSCAD for supported CAD solids. Gerber requires a closed board outline and saved zone fills; review CAM and assembly output before manufacturing. See [manufacturing export coverage](docs/FORMAT.md#manufacturing-export).
+OpenPE supports a bounded subset of KiCad 10 and Model CAD. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and manufacturing qualification are outside its scope. Save/Save as retain native KiCad projects. File Export provides a KiCad XML schematic netlist, PCB outline DXF, full Gerber/drill ZIP, standalone Excellon drill and stencil Gerber ZIPs, a JLCPCB manufacturing ZIP, BOM and placement CSV, and OpenSCAD for supported CAD solids. Review CAM and assembly output before manufacturing. See the [design exchange](docs/FORMAT.md#design-exchange) and [manufacturing export](docs/FORMAT.md#manufacturing-export) coverage.
 
 Simulation support depends on the documented circuits and models. Thermal analysis estimates PCB temperature under stated material and cooling assumptions, not package junction temperature or EMC emissions. See the feature documents below for coverage and limits.
 
 ## Documentation
 
-| Topic               | Documents                                                                                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product and UI      | [Design](DESIGN.md) · [Layout and Model](docs/LAYOUT.md) · [ERC/DRC](docs/DESIGN-RULES.md)                                                            |
-| Files and history   | [Native format](docs/FORMAT.md) · [Version history](docs/VERSION-HISTORY.md)                                                                          |
-| Simulation          | [SPICE](docs/SIMULATION.md) · [Layout Thermal](docs/THERMAL.md) · [EMC Flyback](docs/EMC-FLYBACK.md)                                                  |
-| Examples and assets | [Examples](docs/EXAMPLES.md) · [Datasheets](docs/DATASHEETS.md) · [Libraries and licenses](docs/LIBRARIES.md)                                         |
+| Topic               | Documents                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product and UI      | [Design](DESIGN.md) · [Layout and Model](docs/LAYOUT.md) · [ERC/DRC](docs/DESIGN-RULES.md)                                                                                |
+| Files and history   | [Native format](docs/FORMAT.md) · [Version history](docs/VERSION-HISTORY.md)                                                                                              |
+| Simulation          | [SPICE](docs/SIMULATION.md) · [Layout Thermal](docs/THERMAL.md) · [EMC Flyback](docs/EMC-FLYBACK.md)                                                                      |
+| Examples and assets | [Examples](docs/EXAMPLES.md) · [Datasheets](docs/DATASHEETS.md) · [Libraries and licenses](docs/LIBRARIES.md)                                                             |
 | Internals           | [Architecture](docs/ARCHITECTURE.md) · [Diagram](assets/architecture.drawio) · [Core](docs/CORE.md) · [API](docs/API.md) · [Plugin design specification](docs/PLUGINS.md) |
-| Contributing        | [Engineering contract](AGENTS.md)                                                                                                                     |
+| Contributing        | [Engineering contract](AGENTS.md)                                                                                                                                         |
 
 ## License
 

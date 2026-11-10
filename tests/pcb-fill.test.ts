@@ -477,6 +477,12 @@ test('saved fills are authoritative and survive display; edits invalidate them a
   assert.deepEqual(filled, before);
   const presentationIndependent = { ...filled, thickness: 2 };
   assert.equal(invalidatePCBFill(filled, presentationIndependent), presentationIndependent);
+  const [{ id, layer, netId, start, end, width }] = filled.tracks;
+  const reconstructed = {
+    ...filled,
+    tracks: [{ width, start: { y: start.y, x: start.x }, end, netId, layer, id }],
+  };
+  assert.equal(invalidatePCBFill(filled, reconstructed), reconstructed);
   const moved = movePCBSelection(
     filled,
     { kind: 'track', id: filled.tracks[0].id },

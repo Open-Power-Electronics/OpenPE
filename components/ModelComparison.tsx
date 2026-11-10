@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { modelCadFromProject, parseProject, type Project } from '@/lib/project';
+import { modelCadFromProject } from '@/lib/model-cad';
+import { parseProject, type Project } from '@/lib/project';
 import PCBModelPreview, { type PCB3DViewState } from './PCBModelPreview';
 
 function Preview({

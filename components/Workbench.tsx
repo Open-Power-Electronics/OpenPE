@@ -196,6 +196,7 @@ import { emptyWorkspaceProjects } from './WorkspacePresentation';
 import SchematicFileTabs from './SchematicFileTabs';
 import type { AgentPreferences, DocumentState } from '@/lib/workspace-state';
 import { useProjectDirectory } from './useProjectDirectory';
+import { isCloseSnapshotUnsaved, type CloseSnapshot } from '@/lib/workspace-close';
 import type { DocumentController, DocumentUpdate } from './DesktopWorkspace';
 import {
   pcbDesignRuleLimitKeys,
@@ -1477,24 +1478,25 @@ export default function Workbench({
   fileActionRef.current = handleFileAction;
   const directoryEditorRef = useRef(directoryObservation);
   directoryEditorRef.current = directoryObservation;
-  useEffect(() => {
-    const snapshot = () => {
-      const source = projectRef.current ? serializeProject(projectRef.current) : '';
-      return {
-        source,
-        sourceDraft: sourceDraftRef.current,
-        dirty:
-          nativeProjectDirty(projectRef.current, cleanSourceRef.current, filenameRef.current) ||
-          directoryEditorRef.current.hasPending(),
+  const readCloseSnapshot = useCallback((): CloseSnapshot => {
+    const current = core.getSnapshot();
+    return {
+      native: {
+        source: current.source,
+        sourceDraft: current.sourceDraft,
+        dirty: nativeProjectDirty(current.project, cleanSourceRef.current, filenameRef.current),
         closedSchematicIds: closedSchematicIdsRef.current,
-        activeSchematicId: projectRef.current
+        activeSchematicId: current.project
           ? (
-              findSchematic(projectRef.current, activeSchematicRef.current ?? '') ??
-              projectRef.current.schematic
+              findSchematic(current.project, activeSchematicRef.current ?? '') ??
+              current.project.schematic
             ).id
           : undefined,
-      };
+      },
+      ordinaryDraftRevision: directoryEditorRef.current.pendingRevision(),
     };
+  }, [core, nativeProjectDirty]);
+  useEffect(() => {
     registerController(documentId, {
       activate: (sessionId) => {
         setScreen('workspace');
@@ -1509,7 +1511,7 @@ export default function Workbench({
         setSidebarVisible(true);
         setScreen('workspace');
       },
-      snapshot,
+      snapshot: readCloseSnapshot,
       notify,
       fileAction: (action) => fileActionRef.current(action),
       requestClose: (done, cancel) => {
@@ -1524,12 +1526,12 @@ export default function Workbench({
         setConfirmError('');
         setConfirmation({
           kind: 'close',
-          action: (saveFirst) => done(saveFirst ? 'save' : 'discard', snapshot()),
+          action: (saveFirst) => done(saveFirst ? 'save' : 'discard', readCloseSnapshot()),
         });
       },
     });
     return () => registerController(documentId, null);
-  }, [documentId, registerController]);
+  }, [documentId, registerController, readCloseSnapshot]);
   useEffect(() => {
     if (initialNotice) notify(initialNotice);
     else if (recovered) notify('Recovered your previous project draft.', 'recovery');
@@ -1816,8 +1818,6 @@ export default function Workbench({
       return new Error('A project file operation is already in progress.');
     saveBusy.current = true;
     try {
-      await directoryObservation.save();
-      signal?.throwIfAborted();
       const applied = await applySource(signal);
       if (!applied) throw new Error('Fix the source errors before saving.');
       const snapshot = await completeLayout(applied);
@@ -1830,6 +1830,16 @@ export default function Workbench({
       };
       let savedSource = serializeProject(saveProject);
       let savedName = saveProject.nativeFiles.entry;
+      const checkSaveBasis = () => {
+        signal?.throwIfAborted();
+        const current = core.getSnapshot();
+        if (current.project !== snapshot || current.sourceDraft !== null || current.editingBlocked)
+          throw new Error(
+            'The project changed while saving. Save again to include the latest edits.',
+          );
+      };
+      await directoryObservation.save(undefined, { check: checkSaveBasis });
+      checkSaveBasis();
       if (window.openpe) {
         const result = await window.openpe.save({
           fileId: fileId!,
@@ -1881,19 +1891,24 @@ export default function Workbench({
       signal?.throwIfAborted();
       const applied = await applySource(signal);
       if (!applied) throw new Error('Fix the source errors before exporting.');
-      const snapshot = await completeLayout(applied);
-      signal?.throwIfAborted();
-      const exportSource = serializeProject(snapshot);
+      const snapshot = format === 'netlist' ? applied : await completeLayout(applied);
+      const checkExportBasis = () => {
+        signal?.throwIfAborted();
+        const current = core.getSnapshot();
+        if (current.project !== snapshot || current.sourceDraft !== null || current.editingBlocked)
+          throw new Error('The project changed while preparing the export. Try again.');
+      };
       if (window.openpe) {
+        checkExportBasis();
         const result = await window.openpe.exportProject({
-          source: exportSource,
+          source: serializeProject(snapshot),
           name: filename,
           format,
         });
         if (!result) return 'cancelled';
       } else {
         const { exportProjectFile } = await import('@/lib/manufacturing-export');
-        signal?.throwIfAborted();
+        checkExportBasis();
         const output = exportProjectFile(snapshot, format, filename);
         downloadBytes(output.bytes, output.name, output.mime);
       }
@@ -1929,15 +1944,13 @@ export default function Workbench({
     }
   }
   function requestProjectClose() {
-    if (confirmation || closingDocument.current) return;
+    if (confirmationRef.current || closingDocument.current) return;
     cancelPendingNavigation();
-    if (!doc || !unsaved) {
-      void Promise.resolve()
-        .then(closeProject)
-        .catch((e) => {
-          onSelectProject(documentId);
-          notify((e as Error).message);
-        });
+    if (!isCloseSnapshotUnsaved(readCloseSnapshot())) {
+      void closeProject().catch((e) => {
+        onSelectProject(documentId);
+        notify((e as Error).message);
+      });
       return;
     }
     setModal(null);
@@ -2832,21 +2845,20 @@ export default function Workbench({
                   void save(true);
                 },
               },
-              ...(canExportBoard
-                ? [
-                    {
-                      label: 'Export',
-                      items: projectExportFormats
-                        .filter((format) => format.id !== 'scad' || canExportModel)
-                        .map((format) => ({
-                          label: format.label,
-                          run: () => {
-                            void exportFile(format.id);
-                          },
-                        })),
+              {
+                label: 'Export',
+                items: projectExportFormats
+                  .filter(
+                    ({ id }) =>
+                      id === 'netlist' || (canExportBoard && (id !== 'scad' || canExportModel)),
+                  )
+                  .map(({ id, label }) => ({
+                    label,
+                    run: () => {
+                      void exportFile(id);
                     },
-                  ]
-                : []),
+                  })),
+              },
               { label: 'Close project', run: requestProjectClose, separatorBefore: true },
             ]
           : []),

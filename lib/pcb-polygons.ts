@@ -2,7 +2,7 @@ import Clipper from 'clipper-lib';
 import type { Point } from './circuit';
 import type { BoardLine, BoardZone, CopperLayer, Footprint, Pad, PCB } from './pcb';
 import { pcbArc, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
-import { invalidatePCBFill, pcbFillInputsChanged } from './pcb';
+import { invalidatePCBFill, pcbFillInputsChanged, samePCBTrackCopper } from './pcb';
 import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pcb-layout';
 import { isOwnedPCB, ownProjectData } from './immutable-project';
 import { padCopperLayers, partitionPCBRoutingCopper } from './pcb-connectivity';
@@ -699,17 +699,7 @@ function changedTrackLayers(previous: PCB, next: PCB): ReadonlySet<CopperLayer> 
   for (const track of next.tracks) {
     const prior = remaining.get(track.id);
     remaining.delete(track.id);
-    if (
-      prior &&
-      prior.netId === track.netId &&
-      prior.layer === track.layer &&
-      prior.width === track.width &&
-      prior.start.x === track.start.x &&
-      prior.start.y === track.start.y &&
-      prior.end.x === track.end.x &&
-      prior.end.y === track.end.y
-    )
-      continue;
+    if (prior && samePCBTrackCopper(prior, track)) continue;
     changed.add(track.layer);
     if (prior) changed.add(prior.layer);
   }

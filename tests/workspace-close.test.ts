@@ -1,17 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { WorkspaceCloseReview, type CloseDocument } from '../lib/workspace-close';
+import {
+  isCloseSnapshotUnsaved,
+  WorkspaceCloseReview,
+  type CloseDocument,
+} from '../lib/workspace-close';
 
 const document = (id: string): CloseDocument => ({
   id,
-  source: `project ${id}`,
-  sourceDraft: null,
-  unsaved: true,
+  native: { source: `project ${id}`, sourceDraft: null, dirty: true },
+  ordinaryDraftRevision: null,
 });
 
 test("Don't save removes discarded projects from recovery before approving native quit", async () => {
   const documents = [document('A'), document('B')];
-  documents[0].sourceDraft = '{invalid pending source';
+  documents[0].native.sourceDraft = '{invalid pending source';
   const review = new WorkspaceCloseReview();
   let approved = false;
   const writes: string[][] = [];
@@ -35,14 +38,15 @@ test("Don't save removes discarded projects from recovery before approving nativ
   assert.deepEqual(writes, [[]], 'An empty recovery list selects the DELETE operation.');
   assert.equal(approved, true);
   assert.equal(
-    documents[0].sourceDraft,
+    documents[0].native.sourceDraft,
     '{invalid pending source',
     'Review never edits live documents.',
   );
 });
 
 test('mixed save/discard decisions retain only saved and unchanged projects', async () => {
-  const documents = [document('A'), document('B'), { ...document('C'), unsaved: false }];
+  const documents = [document('A'), document('B'), document('C')];
+  documents[2].native.dirty = false;
   const review = new WorkspaceCloseReview();
   review.accept('A', documents[0], 'discard');
   review.accept('B', documents[1], 'save');
@@ -104,7 +108,7 @@ test('background edits during recovery require another review before native quit
     await review.finish(
       () => documents,
       async () => {
-        documents[0].source = 'Agent updated A';
+        documents[0].native.source = 'Agent updated A';
       },
       async () => {
         approved = true;
@@ -116,10 +120,61 @@ test('background edits during recovery require another review before native quit
   assert.equal(review.pending(documents)?.id, 'A');
   assert.deepEqual(review.retained(documents), documents, 'Old discard cannot discard a new edit.');
   review.accept('A', documents[0], 'save');
-  documents[0].sourceDraft = '{new pending draft';
+  documents[0].native.sourceDraft = '{new pending draft';
   assert.equal(
     review.pending(documents)?.id,
     'A',
     'Source drafts also invalidate an old decision.',
   );
+});
+
+test('ordinary-file drafts require close review without marking the native project dirty', async () => {
+  const item = document('A');
+  item.native.dirty = false;
+  assert.equal(isCloseSnapshotUnsaved(item), false);
+  item.ordinaryDraftRevision = 1;
+
+  const review = new WorkspaceCloseReview();
+  assert.equal(review.pending([item]), item);
+  review.accept(item.id, item, 'discard');
+  assert.equal(
+    await review.finish(
+      () => [item],
+      async () => {
+        item.ordinaryDraftRevision = 2;
+      },
+      async () => assert.fail('A newer ordinary-file draft needs its own close decision.'),
+    ),
+    false,
+  );
+  assert.deepEqual(review.retained([item]), [item]);
+  assert.equal(review.pending([item]), item);
+  assert.equal(item.native.dirty, false);
+});
+
+test('a project that becomes clean during the recovery write is retained before quit', async () => {
+  const item = document('A');
+  item.native.dirty = false;
+  item.ordinaryDraftRevision = 1;
+  const review = new WorkspaceCloseReview();
+  const persisted: string[][] = [];
+  let approved = false;
+  const finish = () =>
+    review.finish(
+      () => [item],
+      async (ids) => {
+        persisted.push([...ids]);
+        item.ordinaryDraftRevision = null;
+      },
+      async () => {
+        approved = true;
+      },
+    );
+  review.accept(item.id, item, 'discard');
+  assert.equal(await finish(), false);
+  assert.equal(approved, false);
+  assert.equal(review.pending([item]), undefined);
+  assert.equal(await finish(), true);
+  assert.deepEqual(persisted, [[], ['A']]);
+  assert.equal(approved, true);
 });

@@ -46,7 +46,7 @@ npm run simulation:download-examples -- --fixtures
 npm run simulation:check-examples
 ```
 
-Preparation may download the pinned solver and allowlisted model files. Fixture-only external models are pinned by immutable official repository URLs and hashes in `resources/example-models-lock.json`. Original `.lib` bytes and notices remain separate from JSON in ignored `models/` sidecars; canonical references contain only official IDs, hashes and fixed relative paths. Keep the JSON and `models/` together. Referenced runs and the offline sweep never download missing models. Fixture-only vendor models are not packaged; the Buck's allowlisted IRF540N VDMOS definition is bundled separately.
+Fixture-only external models are pinned by immutable official repository URLs and hashes in `resources/example-models-lock.json`. Keep the prepared [portable sidecars](../README.md#simulation-resources-and-verification) with the fixture JSON. The Buck's allowlisted IRF540N VDMOS definition is bundled separately.
 
 `npm run simulation:build-models` regenerates IRF540N pin/model metadata from pinned sources. `npm run simulation:build-examples` prepares external fixture-model inputs and regenerates profile metadata/service bundles; it may access the network. These metadata-generation commands are distinct from fixture export and offline verification.
 

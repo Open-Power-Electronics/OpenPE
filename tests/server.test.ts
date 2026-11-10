@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { startServer } from '../server/index.mjs';
@@ -25,7 +25,7 @@ function workspace(source: string, sourceDraft: string | null = null) {
     source,
     sourceDraft,
     dirty: false,
-    filename: 'project.openpe.json',
+    filename: 'project.kicad_pro',
     sessions: [session],
     activeSessionId: session.id,
   };
@@ -40,8 +40,9 @@ function changeDocument(payload: ReturnType<typeof workspace>, changes: Record<s
   return { ...payload, documents: [{ ...payload.documents[0], ...changes }] };
 }
 
-test('wiring official examples with free text survives native validation and draft persistence', async () => {
+test('wiring official examples with free text survives native validation and draft persistence', async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-text-wire-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
   const service = await startServer({ dataDir: dir });
   const headers = { 'X-OpenPE-Token': service.token, 'Content-Type': 'application/json' };
   try {
@@ -80,8 +81,9 @@ test('wiring official examples with free text survives native validation and dra
     service.close();
   }
 });
-test('closing a project clears recovery through the authenticated state queue', async () => {
+test('closing a project clears recovery through the authenticated state queue', async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-close-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
   const service = await startServer({ dataDir: dir });
   const headers = { 'X-OpenPE-Token': service.token, 'Content-Type': 'application/json' };
   const payload = workspace(serializeProject(exampleProject()), '{"version":');
@@ -143,8 +145,9 @@ test('prompt carries current schematic and bounded history', () => {
 test('unknown providers cannot become executable names', async () => {
   await assert.rejects(resolveAgent('powershell'), /Unknown/);
 });
-test('local API enforces token and origin, saves atomically and restores state', async () => {
+test('local API enforces token and origin, saves atomically and restores state', async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'openpe-test-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
   const s = await startServer({ dataDir: dir });
   try {
     assert.equal((await fetch(s.base + '/api/state')).status, 401);

@@ -8,7 +8,6 @@ import {
   isAgentProvider,
   isReasoningEffort,
 } from './agent-providers';
-export { validExampleKey, retiredExampleFolderNames } from './workspace-example';
 
 export const maxOpenProjects = 12;
 export type AgentPreferences = {
@@ -42,6 +41,29 @@ export type WorkspaceState = AgentPreferences & {
   documents: DocumentState[];
   activeDocumentId: string | null;
 };
+const workspaceFields = new Set<keyof WorkspaceState>([
+  'version',
+  'documents',
+  'activeDocumentId',
+  'provider',
+  'effort',
+  'approvalMode',
+  'models',
+]);
+const documentFields = new Set<keyof DocumentState>([
+  'id',
+  'pinned',
+  'source',
+  'sourceDraft',
+  'dirty',
+  'filename',
+  'sessions',
+  'activeSessionId',
+  'activeSchematicId',
+  'closedSchematicIds',
+  'exampleKey',
+  'localExample',
+]);
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('Invalid workspace state.');
@@ -89,6 +111,8 @@ function recoveryProjectSummary(source: string): RecoveryProjectSummary {
 export function restoreWorkspace(value: unknown): WorkspaceState {
   const state = object(value);
   if (state.version !== 2) throw new Error('Unsupported workspace version.');
+  if (Object.keys(state).some((key) => !workspaceFields.has(key as keyof WorkspaceState)))
+    throw new Error('Unsupported workspace recovery field.');
   const entries = state.documents;
   if (!Array.isArray(entries) || entries.length > maxOpenProjects)
     throw new Error('Invalid open project list.');
@@ -96,6 +120,8 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
     sessionIds = new Set<string>();
   const documents = entries.map((entry) => {
     const doc = object(entry);
+    if (Object.keys(doc).some((key) => !documentFields.has(key as keyof DocumentState)))
+      throw new Error('Unsupported project recovery field.');
     if (
       typeof doc.id !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id) ||
@@ -173,9 +199,11 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
     throw new Error('The active project is missing from the workspace.');
   if (!isAgentProvider(state.provider)) throw new Error('Invalid saved Agent provider.');
   if (!isReasoningEffort(state.effort)) throw new Error('Invalid saved Agent reasoning effort.');
-  if (!['review', 'auto'].includes(String(state.approvalMode)))
+  if (state.approvalMode !== 'review' && state.approvalMode !== 'auto')
     throw new Error('Invalid saved Agent approval mode.');
   const models = object(state.models);
+  if (Object.keys(models).length !== agentProviderIds.length)
+    throw new Error('Invalid saved Agent model list.');
   for (const id of agentProviderIds)
     if (
       typeof models[id] !== 'string' ||
@@ -188,7 +216,7 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
     activeDocumentId: state.activeDocumentId as string | null,
     provider: state.provider,
     effort: state.effort as ReasoningEffort,
-    approvalMode: state.approvalMode as AgentPreferences['approvalMode'],
+    approvalMode: state.approvalMode,
     models: Object.fromEntries(agentProviderIds.map((id) => [id, models[id] as string])),
   };
 }

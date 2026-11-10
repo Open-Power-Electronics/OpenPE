@@ -18,6 +18,7 @@ import {
   projectHistory,
 } from './source-editor-test-helpers.mjs';
 import { openSchematicPanel } from './schematic-visualization-test-helpers.mjs';
+import { closeDisplayDrawer } from './visualization-test-helpers.mjs';
 import { checkInspectorResize, checkFieldProperties } from './schematic-panel-test-helpers.mjs';
 import { watchCanvasResizeFrames } from './check-canvas-resize.mjs';
 import { _electron as electron } from 'playwright';
@@ -36,6 +37,9 @@ const homeManifest = JSON.parse(
 );
 const homeCatalog = [...homeManifest.recent, ...homeManifest.examples];
 const firstExampleButton = `Open ${homeManifest.examples[0].title} example`;
+const projectButtonSelector = '.project-navigation:not([hidden] *) .project-folder > button';
+const activeProjectButton = projectButtonSelector + '[aria-current="page"]';
+const projectDirtyDot = projectButtonSelector + ' .dirty-dot';
 const profile = path.join(root, 'test-results', `profile-${Date.now()}-${process.pid}`);
 const nativeFixtures = `${profile}-native-fixtures`;
 // Assertions use the internal model adapter only after reading every native file
@@ -108,40 +112,37 @@ async function capture(file) {
   await writeFile(file, Buffer.from(png, 'base64'));
 }
 async function closeCurrentProject(page) {
-  const count = await page.locator('.project-navigation button').count();
+  const count = await page.locator(projectButtonSelector).count();
   const unsaved = await page
-    .locator('.project-navigation [aria-current="page"]')
+    .locator(activeProjectButton)
     .getAttribute('aria-label')
     .then((label) => /Unsaved changes/.test(label ?? ''));
   await fileMenuAction(page, 'Close project');
   const dialog = page.getByRole('dialog', { name: 'Save changes?', exact: true });
   if (unsaved) await dialog.getByRole('button', { name: "Don't save", exact: true }).click();
   await page.waitForFunction(
-    (expected) => document.querySelectorAll('.project-navigation button').length === expected,
-    count - 1,
+    ({ selector, expected }) => document.querySelectorAll(selector).length === expected,
+    { selector: projectButtonSelector, expected: count - 1 },
   );
 }
 async function keepCurrentProject(page) {
   const id = await page
-    .locator('.project-navigation [aria-current="page"]')
+    .locator(activeProjectButton)
     .evaluate((button) => button.closest('[data-project-id]').dataset.projectId);
-  while ((await page.locator('.project-navigation button').count()) > 1) {
-    const index = await page
-      .locator('.project-navigation button')
-      .evaluateAll(
-        (buttons, id) =>
-          buttons.findIndex(
-            (button) => button.closest('[data-project-id]').dataset.projectId !== id,
-          ),
-        id,
-      );
+  const buttons = page.locator(projectButtonSelector);
+  while ((await buttons.count()) > 1) {
+    const index = await buttons.evaluateAll(
+      (buttons, id) =>
+        buttons.findIndex((button) => button.closest('[data-project-id]').dataset.projectId !== id),
+      id,
+    );
     if (index < 0) throw new Error('Expected a distinct fixture project.');
-    await page.locator('.project-navigation button').nth(index).click();
+    await buttons.nth(index).click();
     await closeCurrentProject(page);
   }
   assert.equal(
     await page
-      .locator('.project-navigation [aria-current="page"]')
+      .locator(activeProjectButton)
       .evaluate((button) => button.closest('[data-project-id]').dataset.projectId),
     id,
   );
@@ -250,18 +251,24 @@ async function checkHome(page) {
   await page.getByLabel('Message your agent', { exact: true }).fill('Keep this unsent draft');
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await home.waitFor();
-  assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
+  assert.equal(await page.locator(projectDirtyDot).count(), 0);
   assert.doesNotMatch(
-    await page.locator('.project-navigation').getByRole('button').getAttribute('aria-label'),
+    await page.locator(projectButtonSelector).getAttribute('aria-label'),
     /Unsaved changes/,
   );
-  await page.locator('.project-navigation').getByRole('button').click();
+  await page.locator(projectButtonSelector).click();
   assert.equal(await source(), blankSource);
   assert.equal(
     await page.getByLabel('Message your agent', { exact: true }).inputValue(),
     'Keep this unsent draft',
   );
   await page.getByRole('button', { name: 'Home', exact: true }).click();
+  // Promote the initial Recent card into real history before opening other files.
+  for (const { title } of homeManifest.recent) {
+    await page.getByRole('button', { name: `Open ${title} example`, exact: true }).click();
+    await canvas.waitFor();
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
+  }
   await page.getByRole('button', { name: firstExampleButton, exact: true }).click();
   await canvas.waitFor();
   assert.equal(
@@ -270,7 +277,7 @@ async function checkHome(page) {
     'Opening an example is not an edit.',
   );
   assert.equal(await page.getByRole('dialog').count(), 0);
-  assert.equal(await page.locator('.project-navigation button').count(), 2);
+  assert.equal(await page.locator(projectButtonSelector).count(), homeManifest.recent.length + 2);
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   // The brief is handed to the real Chat composer without inventing a response.
   const brief = 'Design a 48 V to 12 V converter.\nCompare switching topologies.';
@@ -284,7 +291,7 @@ async function checkHome(page) {
   };
   await chooseHome('Choose model', 'GPT-6 Astra');
   await chooseHome('Reasoning effort', 'Medium');
-  await chooseHome('Agent permissions', 'Auto');
+  await chooseHome('Agent permissions', 'Auto-approve');
   const homeModelLabel = await home
     .getByRole('combobox', { name: 'Choose model', exact: true })
     .innerText();
@@ -310,7 +317,7 @@ async function checkHome(page) {
   await page.getByRole('combobox', { name: 'Agent permissions', exact: true }).click();
   await page
     .getByRole('option')
-    .filter({ has: page.getByText('Review', { exact: true }) })
+    .filter({ has: page.getByText('Review changes', { exact: true }) })
     .click();
   assert.equal(await page.locator('[data-testid^="part-"]').count(), 0);
   // Real native open is usable from Home. Work from a copy to protect the example file.
@@ -346,16 +353,15 @@ async function checkHome(page) {
   await page.getByRole('button', { name: firstExampleButton, exact: true }).click();
   await canvas.waitFor();
   assert.equal(await source(), firstExample, 'Reopening keeps the existing example document.');
-  for (const { id, title } of homeCatalog) {
+  for (const { id, file, title } of homeCatalog) {
+    const name = homeManifest.recent.some((entry) => entry.id === id)
+      ? `Open ${file}`
+      : `Open ${title} example`;
     await page.getByRole('button', { name: 'Home', exact: true }).click();
-    await page.getByRole('button', { name: `Open ${title} example`, exact: true }).click();
+    await page.getByRole('button', { name, exact: true }).click();
     await canvas.waitFor();
     const first = JSON.parse(await source());
-    assert.ok(
-      (
-        await page.locator('.project-navigation [aria-current="page"]').getAttribute('aria-label')
-      ).includes(title),
-    );
+    assert.equal(first.nativeFiles.entry, `${file}.kicad_pro`);
     await runCanvasAction(page, 'Fit to canvas');
     await page.waitForFunction(() => {
       const canvas = document.querySelector('[data-testid="schematic-canvas"]');
@@ -385,7 +391,7 @@ async function checkHome(page) {
     await fileMenuAction(page, 'Save as');
     assert.equal(await application.evaluate(() => globalThis.__homeSaveDialogCalls), before + 1);
     await page.getByRole('button', { name: 'Home', exact: true }).click();
-    await page.getByRole('button', { name: `Open ${title} example`, exact: true }).click();
+    await page.getByRole('button', { name, exact: true }).click();
     await canvas.waitFor();
     assert.deepEqual(
       JSON.parse(await source()),
@@ -399,6 +405,8 @@ async function checkHome(page) {
     );
   }
   // Keep the original tight-body pointer regression independent of Home's catalog.
+  if (!(await home.isVisible()))
+    await page.getByRole('button', { name: 'Home', exact: true }).click();
   const rectifierPath = path.join(nativeFixtures, 'rectifier', 'rectifier.kicad_sch');
   await writeFile(
     rectifierPath,
@@ -552,8 +560,7 @@ async function checkAppearance(page) {
       return el.scrollWidth <= el.clientWidth && footer.bottom <= innerHeight;
     }),
   );
-  await dialog.getByRole('combobox', { name: 'Text size', exact: true }).focus();
-  await page.keyboard.press('Enter');
+  await dialog.getByRole('combobox', { name: 'Text size', exact: true }).press('ArrowDown');
   await page.getByRole('listbox').waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await dialog.isVisible(), true, 'Menu Escape keeps Settings open.');
@@ -769,7 +776,7 @@ async function checkAdvancedAppearance(page) {
 async function checkGrid(page) {
   const canvas = page.getByTestId('schematic-canvas');
   const density = page.getByRole('combobox', { name: 'Grid density', exact: true });
-  const dirtyBefore = await page.locator('.project-navigation .dirty-dot').count();
+  const dirtyBefore = await page.locator(projectDirtyDot).count();
   assert.equal(await density.getAttribute('aria-description'), '2 mm');
   for (const spacing of [0.5, 1, 2, 5, 10]) {
     await density.click();
@@ -786,7 +793,7 @@ async function checkGrid(page) {
   assert.equal(await density.getAttribute('aria-description'), '10 mm');
   await density.click();
   await page.getByRole('option', { name: '2 mm', exact: true }).click();
-  assert.equal(await page.locator('.project-navigation .dirty-dot').count(), dirtyBefore);
+  assert.equal(await page.locator(projectDirtyDot).count(), dirtyBefore);
   assert.equal(await page.getByRole('button', { name: 'Show grid', exact: true }).count(), 0);
   const box = await canvas.boundingBox();
   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
@@ -809,13 +816,17 @@ async function checkGrid(page) {
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
-    let visible = 0;
-    for (let i = 0; i < data.length; i += 3) if (data[i] < 230) visible++;
-    samples.push(visible);
+    samples.push(data);
   }
-  assert.equal(samples[1], 0, 'Disabling grid leaves a white canvas background');
-  assert.ok(samples[0] > 50 && samples[2] > 50, 'Enabled grid has visibly contrasting dots');
-  assert.equal(await page.locator('.project-navigation .dirty-dot').count(), dirtyBefore);
+  const [first, off, restored] = samples;
+  for (let i = 0; i < off.length; i += 3)
+    assert.ok(off[i] === off[0] && off[i + 1] === off[1] && off[i + 2] === off[2]);
+  for (const enabled of [first, restored]) {
+    let contrastingDots = 0;
+    for (let i = 0; i < off.length; i += 3) if (off[i] - enabled[i] >= 3) contrastingDots++;
+    assert.ok(contrastingDots > 50, 'Enabled grid has visibly contrasting dots');
+  }
+  assert.equal(await page.locator(projectDirtyDot).count(), dirtyBefore);
   console.log('PASS: grid follows its density control without changing project data.');
 }
 async function chooseEffort(page, label) {
@@ -832,8 +843,11 @@ async function checkComposerLayout(page) {
   const textSize = async (label) => {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
-    await settings.getByRole('combobox', { name: 'Text size', exact: true }).click();
-    await settings.getByRole('option', { name: label, exact: true }).click();
+    await chooseSelect(
+      page,
+      settings.getByRole('combobox', { name: 'Text size', exact: true }),
+      label,
+    );
     await settings.getByRole('button', { name: 'Done', exact: true }).click();
   };
   await model.click();
@@ -967,19 +981,30 @@ async function checkModelSelection(page) {
           cache: 'no-store',
         })
       ).json();
-      return state.models?.codex === 'gpt-6-astra' && state.models?.claude === 'sonnet';
+      return (
+        state.provider === 'codex' &&
+        state.models?.codex === 'gpt-6-astra' &&
+        state.models?.claude === 'sonnet'
+      );
     },
     undefined,
     { polling: 100 },
   );
   await page.reload();
-  await model.waitFor();
-  assert.ok(
-    (await model.getAttribute('aria-description')).includes('gpt-6-astra') ||
-      (await model.innerText()).includes('GPT-6 Astra'),
-  );
+  await page.waitForFunction(() => {
+    const trigger = document.querySelector('.workspace:not([hidden]) [aria-label="Choose model"]');
+    return (
+      trigger?.getAttribute('aria-description')?.includes('gpt-6-astra') ||
+      trigger?.textContent?.includes('GPT-6 Astra')
+    );
+  });
   await choose(agent, 'Claude Code');
-  assert.ok(/sonnet/i.test(await model.innerText()));
+  await page.waitForFunction(() =>
+    /sonnet/i.test(
+      document.querySelector('.workspace:not([hidden]) [aria-label="Choose model"]')?.textContent ??
+        '',
+    ),
+  );
   await choose(agent, 'Codex');
   await page.setViewportSize({ width: 1480, height: 920 });
   console.log(
@@ -990,6 +1015,7 @@ async function checkDialogs(page) {
   await page.getByTestId('part-C2').click();
   const inspector = page.getByRole('complementary', { name: 'Object properties' });
   const dialog = page.getByRole('dialog');
+  const addComponent = page.getByRole('button', { name: 'Add component', exact: true });
   const checkFit = async () => {
     const fits = await dialog.evaluate((el) => {
       const r = el.getBoundingClientRect();
@@ -1005,7 +1031,7 @@ async function checkDialogs(page) {
     });
     assert.equal(fits, true, 'Dialog and actions fit the viewport.');
   };
-  await page.getByRole('button', { name: 'Add component', exact: true }).click();
+  await addComponent.click();
   const search = page.getByLabel('Search components', { exact: true });
   await search.fill('no matching symbol');
   await page.getByText('No matching symbols.', { exact: true }).waitFor();
@@ -1016,18 +1042,14 @@ async function checkDialogs(page) {
       .evaluate((el) => el === document.activeElement),
     true,
   );
-  await page.keyboard.press('Shift+Tab');
+  // Native modal inertness must block focus on the background trigger.
+  await page
+    .locator('.workspace:not([hidden]) button[aria-label="Add component"]')
+    .evaluate((button) => button.focus());
   assert.equal(
-    await dialog.evaluate((el) => {
-      const controls = [
-        ...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]'),
-      ].filter(
-        (control) => !control.disabled && control.tabIndex >= 0 && control.getClientRects().length,
-      );
-      return document.activeElement === controls.at(-1);
-    }),
+    await dialog.evaluate((el) => el.contains(document.activeElement)),
     true,
-    'Focus wraps inside the modal.',
+    'The modal keeps focus when a background control attempts to take it.',
   );
   await page.keyboard.press('Tab');
   await search.fill('');
@@ -1037,9 +1059,7 @@ async function checkDialogs(page) {
   await dialog.waitFor({ state: 'detached' });
   assert.equal(await inspector.isVisible(), true, 'Modal Escape preserves selection.');
   assert.equal(
-    await page
-      .getByRole('button', { name: 'Add component', exact: true })
-      .evaluate((el) => el === document.activeElement),
+    await addComponent.evaluate((el) => el === document.activeElement),
     true,
     'Focus returns to the trigger.',
   );
@@ -1060,16 +1080,9 @@ async function checkDialogs(page) {
     await capture(`test-results/dialog-${name}-compact.png`);
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });
-    if (fromHome) await page.locator('.project-navigation').getByRole('button').click();
+    if (fromHome) await page.locator(projectButtonSelector).click();
   }
   await capture('test-results/dialog-properties-compact.png');
-  await application.evaluate(({ dialog }) => {
-    dialog.showSaveDialog = async () => {
-      throw new Error('Test export failure');
-    };
-  });
-  await fileMenuAction(page, 'Export');
-  await page.getByRole('status').filter({ hasText: 'Test export failure' }).waitFor();
   await application.evaluate(({ dialog }) => {
     dialog.showSaveDialog = async () => ({ canceled: true });
   });
@@ -1105,7 +1118,7 @@ async function checkDialogs(page) {
   const originalValue = await editedValue.inputValue();
   await editedValue.fill('150uF');
   await editedValue.press('Enter');
-  await page.locator('.file-tab .dirty-dot').waitFor();
+  await page.locator(projectDirtyDot).waitFor();
   await fileMenuAction(page, 'Close project');
   await page.getByRole('dialog', { name: 'Save changes?', exact: true }).waitFor();
   await capture('test-results/dialog-replace-compact.png');
@@ -1142,13 +1155,20 @@ async function checkSchematicPanels(page) {
     .getByRole('button', { name: /^Locate / })
     .first()
     .click();
-  assert.equal(await list.count(), 0);
+  await list.waitFor({ state: 'hidden' });
   await page.getByTestId('schematic-canvas').press('e');
   const properties = page.getByRole('complementary', { name: 'Object properties', exact: true });
+  await properties.waitFor();
   const bounds = await properties.boundingBox();
+  const dockBounds = await page.getByTestId('schematic-properties-panel').boundingBox();
   const canvasBounds = await page.getByTestId('schematic-canvas').boundingBox();
-  assert.ok(bounds.x + bounds.width <= canvasBounds.x + canvasBounds.width && bounds.width <= 342);
-  assert.ok(bounds.y >= canvasBounds.y);
+  assert.ok(
+    dockBounds.x >= canvasBounds.x + canvasBounds.width - 1 &&
+      dockBounds.width >= 280 &&
+      dockBounds.width <= 480,
+    'Properties dock sits beside the schematic drawing.',
+  );
+  assert.ok(bounds.x >= dockBounds.x && bounds.x + bounds.width <= dockBounds.x + dockBounds.width);
   assert.equal(await page.getByRole('dialog').count(), 0);
   await properties
     .getByRole('textbox', { name: 'Component value', exact: true })
@@ -1160,21 +1180,25 @@ async function checkSchematicPanels(page) {
       .inputValue()) !== 'Cancelled edit',
     true,
   );
-  for (const name of ['List', 'Visible layers']) {
-    await openSchematicPanel(page, name);
-    assert.equal(await properties.count(), 0, `${name} closes the properties inspector.`);
-    await page.keyboard.press('Escape');
-    assert.equal(await properties.count(), 0, 'Dismissed properties stay closed.');
-    assert.equal(await button('Component properties').count(), 0);
-    await page.getByTestId('schematic-canvas').press('e');
-    assert.equal(await properties.isVisible(), true, 'The selected component can be reopened.');
-    assert.equal(
-      await properties
-        .getByLabel('Component reference', { exact: true })
-        .evaluate((input) => input === document.activeElement),
-      true,
-    );
-  }
+  await openSchematicPanel(page, 'List');
+  assert.equal(await properties.isVisible(), false, 'List dismisses object properties.');
+  await page.keyboard.press('Escape');
+  assert.equal(await properties.isVisible(), false, 'Dismissed properties stay closed.');
+  await page.getByTestId('schematic-canvas').press('e');
+  await properties.waitFor();
+  assert.equal(
+    await properties
+      .getByLabel('Component reference', { exact: true })
+      .evaluate((input) => input === document.activeElement),
+    true,
+  );
+  const visualization = await openSchematicPanel(page, 'Visible layers');
+  await visualization.getByRole('checkbox', { name: 'References', exact: true }).waitFor();
+  assert.equal(await properties.isVisible(), true, 'Visualization shares the right dock.');
+  await page
+    .getByRole('group', { name: 'Visualization', exact: true })
+    .getByRole('button', { name: 'Visualization', exact: true })
+    .click();
   await button('Source').click();
   assert.equal(
     await readSnapshotFromNative(page),
@@ -1187,43 +1211,28 @@ async function checkSimulationProperties(page) {
   const button = (name) => page.getByRole('button', { name, exact: true });
   await button('Source').click();
   const original = await readSnapshotFromNative(page);
-  const project = JSON.parse(original);
-  const part = project.schematic.components.find((p) => !p.reference.startsWith('#'));
-  part.simulation = { ...part.simulation, library: 'test.mod', name: 'test_model' };
-  await fillSnapshotAsNative(page, JSON.stringify(project, null, 2));
-  await button('Apply').click();
-  const fixture = await readSnapshotFromNative(page);
+  const part = JSON.parse(original).schematic.components.find((p) => p.reference === 'C1');
+  assert.ok(part, 'The switching-stage fixture includes capacitor C1.');
   await button('Schematic').click();
   await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   const properties = page.getByRole('complementary', { name: 'Object properties', exact: true });
   const simulation = properties.getByRole('tab', { name: 'SPICE', exact: true });
-  const model = properties.getByLabel('Sim.Name', { exact: true });
-  assert.equal(await model.isVisible(), false);
-  await simulation.focus();
-  await page.keyboard.press('Enter');
-  assert.equal(await model.isVisible(), true);
-  await model.fill('changed_model');
-  await model.press('Enter');
+  const model = properties.getByRole('combobox', { name: 'Simulation model', exact: true });
+  const initialVoltage = properties.getByLabel('Initial voltage (V)', { exact: true });
+  assert.equal(await initialVoltage.isVisible(), false);
+  await simulation.press('Enter');
+  await model.waitFor();
+  assert.equal(await properties.getByLabel('Sim.Name', { exact: true }).count(), 0);
+  await initialVoltage.fill('1.2');
+  await initialVoltage.press('Enter');
   await properties.getByRole('tab', { name: 'General', exact: true }).click();
-  assert.equal(await model.isVisible(), false);
+  assert.equal(await initialVoltage.isVisible(), false);
   await button('Source').click();
   const changed = JSON.parse(await readSnapshotFromNative(page));
   assert.equal(
-    changed.schematic.components.find((p) => p.id === part.id).simulation.name,
-    'changed_model',
-  );
-  assert.equal(
-    changed.schematic.components.find((p) => p.id === part.id).simulation.library,
-    'test.mod',
-  );
-  await button('Schematic').click();
-  await button('Undo').click();
-  await button('Source').click();
-  assert.equal(
-    await readSnapshotFromNative(page),
-    fixture,
-    'Simulation field editing is one undoable transaction.',
+    changed.schematic.components.find((p) => p.id === part.id).simulation.initialVoltage,
+    '1.2',
   );
   await button('Schematic').click();
   await button('Undo').click();
@@ -1231,7 +1240,7 @@ async function checkSimulationProperties(page) {
   assert.equal(
     await readSnapshotFromNative(page),
     original,
-    'Disclosure toggles do not add project history.',
+    'The SPICE parameter is one undoable edit and tab switches add no history.',
   );
   await button('Schematic').click();
 }
@@ -1279,13 +1288,16 @@ async function checkPartsListEditing(page) {
   await properties.getByRole('textbox', { name: 'Footprint', exact: true }).fill(footprint);
   await properties.getByRole('textbox', { name: 'Footprint', exact: true }).press('Enter');
   const fieldLayout = await properties
-    .locator('.property-field')
-    .first()
+    .locator('.property-resource-field')
+    .filter({ has: page.getByRole('button', { name: 'Browse footprints', exact: true }) })
     .evaluate((row) => {
       const [name, value, action] = [...row.children].map((child) => child.getBoundingClientRect());
       return {
         aligned: Math.abs(name.y - value.y) < 2 && Math.abs(value.y - action.y) < 2,
-        columns: name.right <= value.left && value.right <= action.left,
+        columns:
+          name.right <= value.left &&
+          action.left > value.left &&
+          Math.abs(value.right - action.right) < 2,
         fits: row.scrollWidth <= row.clientWidth,
       };
     });
@@ -1318,7 +1330,9 @@ async function checkPartsListEditing(page) {
     'Long footprint names are truncated inside their column.',
   );
   assert.equal(
-    await button('Edit ' + editedRef).evaluate((el) => el === document.activeElement),
+    await list
+      .getByRole('textbox', { name: 'Search parts', exact: true })
+      .evaluate((el) => el === document.activeElement),
     true,
   );
   await page.keyboard.press('Escape');
@@ -1344,9 +1358,9 @@ async function checkPartsListEditing(page) {
     'Each committed property edit is independently undoable.',
   );
   await button('Schematic').click();
-  await openSchematicPanel(page, 'Visible layers');
-  await page.getByRole('checkbox', { name: 'References', exact: true }).uncheck();
-  await button('Close dialog').click();
+  const layers = await openSchematicPanel(page, 'Visible layers');
+  await layers.getByRole('checkbox', { name: 'References', exact: true }).uncheck();
+  await closeDisplayDrawer(page, 'Visualization');
   await openSchematicPanel(page, 'List');
   await button('Edit ' + part.reference).click();
   assert.equal(
@@ -1356,8 +1370,8 @@ async function checkPartsListEditing(page) {
   assert.equal(await page.getByTestId('part-' + part.reference).count(), 1);
   assert.equal(await page.getByTestId('annotation-ref-' + part.reference).count(), 0);
   await openSchematicPanel(page, 'Visible layers');
-  await page.getByRole('checkbox', { name: 'References', exact: true }).check();
-  await button('Close dialog').click();
+  await layers.getByRole('checkbox', { name: 'References', exact: true }).check();
+  await closeDisplayDrawer(page, 'Visualization');
 }
 async function checkSchematicLayers(page) {
   const button = (name) => page.getByRole('button', { name, exact: true });
@@ -1371,11 +1385,10 @@ async function checkSchematicLayers(page) {
     await value.evaluate((el) => getComputedStyle(el).fill),
   );
   const dirty = await page.locator('.file-tab .dirty-dot').count();
-  await openSchematicPanel(page, 'Visible layers');
-  const dialog = page.getByRole('dialog', { name: 'Visualization', exact: true });
+  const layers = await openSchematicPanel(page, 'Visible layers');
   for (const name of ['References', 'Values'])
-    await dialog.getByRole('checkbox', { name, exact: true }).uncheck();
-  await button('Close dialog').click();
+    await layers.getByRole('checkbox', { name, exact: true }).uncheck();
+  await closeDisplayDrawer(page, 'Visualization');
   assert.equal(await ref.count(), 0);
   assert.equal(await value.isVisible(), false);
   assert.equal(await page.getByTestId('part-C1').count(), 1);
@@ -1385,8 +1398,8 @@ async function checkSchematicLayers(page) {
   await button('Schematic').click();
   await openSchematicPanel(page, 'Visible layers');
   for (const name of ['References', 'Values'])
-    await dialog.getByRole('checkbox', { name, exact: true }).check();
-  await button('Close dialog').click();
+    await layers.getByRole('checkbox', { name, exact: true }).check();
+  await closeDisplayDrawer(page, 'Visualization');
   await ref.waitFor();
   const bounds = await ref.boundingBox();
   await ref.click();
@@ -1647,7 +1660,7 @@ async function checkCanvasNavigation(page) {
   const fittedView = async () => {
     await page.evaluate(() => document.fonts.ready);
     const before = await textGeometry();
-    await runCanvasAction(page, 'Fit to canvas');
+    await canvas.press('Space');
     // Canvas schedules a fit after its 60 ms layout delay; observe the resulting viewport.
     await page.waitForTimeout(100);
     fittedGeometry = { before, after: await textGeometry() };
@@ -1675,9 +1688,19 @@ async function checkCanvasNavigation(page) {
     await startPan(point);
     await page.mouse.move(point.x + 32, point.y + 18, { steps: 4 });
     await page.mouse.up({ button: 'right' });
+    await page.waitForFunction(
+      ({ x, y }) => {
+        const svg = document.querySelector('[data-testid="schematic-canvas"]');
+        const current = svg?.viewBox.baseVal;
+        return current && Math.abs(current.x - x) < 0.01 && Math.abs(current.y - y) < 0.01;
+      },
+      {
+        x: before.x - (32 * before.width) / gestureBounds.width,
+        y: before.y - (18 * before.width) / gestureBounds.width,
+      },
+      { timeout: 5000 },
+    );
     const after = await view();
-    assert.ok(Math.abs(after.x - (before.x - (32 * before.width) / gestureBounds.width)) < 0.01);
-    assert.ok(Math.abs(after.y - (before.y - (18 * before.width) / gestureBounds.width)) < 0.01);
     assert.equal(after.width, before.width, 'Panning preserves zoom');
     assert.equal(await canvas.evaluate((el) => el === document.activeElement), true);
   };
@@ -1709,6 +1732,7 @@ async function checkCanvasNavigation(page) {
   assert.equal(await chat.inputValue(), 'A ');
   assert.deepEqual(await view(), panned, 'Chat typing does not recenter');
   await chat.fill('');
+  await canvas.press('Escape');
   await openCanvasContextMenu(page);
   await page.getByRole('menuitem', { name: 'Zoom in', exact: true }).focus();
   await page.keyboard.press('Space');
@@ -1716,6 +1740,7 @@ async function checkCanvasNavigation(page) {
   await canvas.focus();
   await page.keyboard.press('Space');
   await expectFittedView(centered);
+  await page.getByTestId('part-C2').click();
   await panFrom(blank);
   const beforeDialog = await view();
   await page.keyboard.press('a');
@@ -1925,14 +1950,14 @@ try {
         .fill('Keep this draft while the conversation is collapsed.');
       const dockWidth = (await page.locator('.nav-rail').boundingBox()).width;
       await toggle.click();
-      assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+      const restore = page
+        .locator('.nav-rail')
+        .getByRole('button', { name: 'Toggle sidebar', exact: true });
+      assert.equal(await restore.getAttribute('aria-pressed'), 'false');
       assert.equal(await conversation.isVisible(), false);
       assert.equal(await separator.isVisible(), false);
       assert.ok(Math.abs((await page.locator('.nav-rail').boundingBox()).width - dockWidth) < 1);
-      await page
-        .locator('.nav-rail')
-        .getByRole('button', { name: 'Toggle sidebar', exact: true })
-        .click();
+      await restore.click();
       assert.equal(await conversation.isVisible(), true);
       assert.equal(await separator.isVisible(), true);
       assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
@@ -2000,15 +2025,22 @@ try {
     const rotation = page.getByLabel('Component rotation', { exact: true });
     const xPosition = page.getByLabel('Component X position', { exact: true });
     const yPosition = page.getByLabel('Component Y position', { exact: true });
-    assert.equal(await rotation.inputValue(), '90');
+    assert.equal(await rotation.inputValue(), '90.00');
     const originalX = await xPosition.inputValue();
     const originalY = await yPosition.inputValue();
     await xPosition.fill('101');
     await xPosition.press('Enter');
-    assert.equal(await xPosition.inputValue(), '101.6');
+    assert.equal(await xPosition.inputValue(), '101.60');
     await yPosition.fill('-25.4');
     await yPosition.press('Tab');
-    assert.equal(await yPosition.inputValue(), '-25.4');
+    assert.equal(
+      await page
+        .getByRole('combobox', { name: 'Component Y position unit', exact: true })
+        .evaluate((element) => element === document.activeElement),
+      true,
+    );
+    await page.keyboard.press('Tab');
+    assert.equal(await yPosition.inputValue(), '-25.40');
     await rotation.fill('45');
     await rotation.press('Enter');
     await page.getByRole('button', { name: 'Source', exact: true }).click();
@@ -2040,15 +2072,21 @@ try {
     for (const invalid of ['', '361']) {
       await rotation.fill(invalid);
       await rotation.press('Enter');
-      assert.equal(await rotation.inputValue(), '90');
+      const draft = await rotation.inputValue();
+      assert.equal(draft ? Number(draft) : draft, invalid ? Number(invalid) : invalid);
+      assert.equal(await rotation.getAttribute('aria-invalid'), 'true');
+      await rotation.press('Escape');
+      assert.equal(await rotation.inputValue(), '90.00');
+      assert.equal(await rotation.getAttribute('aria-invalid'), null);
     }
     await xPosition.fill('100001');
     await xPosition.press('Enter');
-    assert.equal(await xPosition.inputValue(), originalX);
+    assert.equal(Number(await xPosition.inputValue()), 100001);
+    assert.equal(await xPosition.getAttribute('aria-invalid'), 'true');
     await xPosition.fill('50.8');
     await xPosition.press('Escape');
     assert.equal(await xPosition.inputValue(), originalX);
-    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+    assert.equal(await xPosition.getAttribute('aria-invalid'), null);
     await capture('test-results/geometry-properties.png');
     console.log(
       'PASS: numeric position/rotation, snapping, source persistence, undo/redo and invalid drafts.',
@@ -2078,9 +2116,9 @@ try {
     assert.ok(
       (await readFile(destination.replace(/\.kicad_pro$/, '.kicad_sch'), 'utf8')).includes('220uF'),
     );
-    const openProjectCount = await page.locator('.project-navigation button').count();
+    const openProjectCount = await page.locator(projectButtonSelector).count();
     const savedProjectId = await page
-      .locator('.project-navigation [aria-current="page"]')
+      .locator(activeProjectButton)
       .evaluate((button) => button.closest('[data-project-id]').dataset.projectId);
     await page.getByRole('button', { name: 'Source', exact: true }).click();
     const savedNative = await readSnapshotFromNative(page);
@@ -2089,10 +2127,10 @@ try {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
     }, destination);
     await page.getByRole('button', { name: 'Open project', exact: true }).click();
-    assert.equal(await page.locator('.project-navigation button').count(), openProjectCount);
+    assert.equal(await page.locator(projectButtonSelector).count(), openProjectCount);
     assert.equal(
       await page
-        .locator('.project-navigation [aria-current="page"]')
+        .locator(activeProjectButton)
         .evaluate((button) => button.closest('[data-project-id]').dataset.projectId),
       savedProjectId,
     );
@@ -2117,8 +2155,8 @@ try {
       true,
     );
     await page.getByRole('button', { name: 'Done', exact: true }).click();
-    assert.equal(await page.locator('.project-navigation .dirty-dot').count(), 0);
-    await page.locator('.project-navigation').getByRole('button').click();
+    assert.equal(await page.locator(projectDirtyDot).count(), 0);
+    await page.locator(projectButtonSelector).click();
     if (await page.getByRole('button', { name: 'Dismiss notification', exact: true }).count())
       await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
     await capture('test-results/desktop.png');
@@ -2157,19 +2195,26 @@ try {
     assert.equal(await page.evaluate(() => window.__chatFixture.request.model), 'gpt-6-astra');
     await push({ type: 'status', stage: 'waiting', text: 'Waiting for the model…' });
     await page.getByRole('status').filter({ hasText: 'Waiting for the model' }).waitFor();
-    const initialElapsed = await page.locator('.chat-elapsed').innerText();
+    const liveTiming = '.agent-process[data-running] .message-timing';
+    const elapsedLabel = /^(?:<1s|\d+s|\d+m(?: \d+s)?)$/;
+    const initialElapsed = await page.locator(liveTiming).innerText();
     await page.waitForFunction(
-      (initial) => document.querySelector('.chat-elapsed')?.textContent !== initial,
-      initialElapsed,
+      ({ selector, initial }) => {
+        const timing = document.querySelector(selector);
+        return timing && timing.textContent !== initial;
+      },
+      { selector: liveTiming, initial: initialElapsed },
     );
-    assert.equal(await page.locator('.message-timing').count(), 0);
+    assert.equal(await page.locator('.agent-process:not([data-running]) .message-timing').count(), 0);
     await push({
       type: 'timing',
       timings: { resolvedMs: 80, spawnedMs: 100, readyMs: 250, submittedMs: 250, firstTextMs: 650 },
     });
     await push({ type: 'text-delta', delta: 'Test ' });
+    const answerSelector = '.message.assistant .agent-answer-part';
     await page.waitForFunction(
-      () => document.querySelector('.message.assistant .message-text').textContent === 'Test',
+      (selector) => document.querySelector(selector)?.textContent?.trim() === 'Test',
+      answerSelector,
     );
     assert.equal(
       await page.getByRole('button', { name: 'Stop generation', exact: true }).count(),
@@ -2183,8 +2228,8 @@ try {
       delta: 'proposal.\n```openpe\n[{"type":"setValue","ref":"C2",',
     });
     await page.waitForFunction(
-      () =>
-        document.querySelector('.message.assistant .message-text').textContent === 'Test proposal.',
+      (selector) => document.querySelector(selector)?.textContent?.trim() === 'Test proposal.',
+      answerSelector,
     );
     assert.equal(
       await page.getByRole('button', { name: 'Apply to schematic', exact: true }).count(),
@@ -2197,13 +2242,10 @@ try {
     await push({ type: 'done', outcome: 'completed' });
     await finishStream();
     await page.getByRole('button', { name: 'Apply to schematic', exact: true }).click();
-    assert.equal(
-      await page.locator('.message.assistant .message-text').innerText(),
-      'Test proposal.',
-    );
+    assert.equal(await page.locator(answerSelector).innerText(), 'Test proposal.');
     assert.equal(await page.locator('.chat-progress').count(), 0);
     const completedTiming = await page.locator('.message-timing').innerText();
-    assert.match(completedTiming, /^Worked for (?:<1s|\d+s|\d+m(?: \d+s)?)$/);
+    assert.match(completedTiming, elapsedLabel);
     await capture('test-results/chat-complete.png');
     await page.getByRole('button', { name: 'Source', exact: true }).click();
     assert.ok((await readSnapshotFromNative(page)).includes('330uF'));
@@ -2225,9 +2267,16 @@ try {
     assert.equal(await page.locator('.message-timing').first().innerText(), completedTiming);
     assert.match(
       await page.locator('.message.assistant').last().locator('.message-timing').innerText(),
-      /^Worked for /,
+      elapsedLabel,
     );
-    assert.equal(await page.locator('.message.assistant').last().getByRole('button').count(), 0);
+    assert.equal(
+      await page
+        .locator('.message.assistant')
+        .last()
+        .getByRole('button', { name: 'Apply to schematic', exact: true })
+        .count(),
+      0,
+    );
     await page
       .getByLabel('Message your agent', { exact: true })
       .fill('Disconnect during streaming');

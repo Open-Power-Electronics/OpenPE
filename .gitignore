@@ -36,6 +36,7 @@ resources/example-catalog/footprints/emc-flyback/models/
 !resources/spice/
 !resources/spice/**
 tests/fixtures/**/models/
+tests/fixtures/**/circuits/
 .env
 .env.*
 !.env.example

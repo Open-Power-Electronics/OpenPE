@@ -138,7 +138,8 @@ read-only prefix and other binary files show size metadata. PDFs up to 32 MiB
 are read through the same grant and displayed locally. Eight preview buffers/editor
 states are retained per Workbench. Ordinary text drafts retain their original text and
 encoding across file selection, views and refresh. Save file writes the selected
-draft; project Save writes pending text files before saving native content.
+draft. Project Save validates and applies pending native Source first. It then
+writes pending ordinary-file drafts before saving native content.
 Changed disk bytes reject the write and retain the draft. Pending text participates
 in project close review. These file edits never enter Core, native drafts, undo,
 recovery, native save/export sets or automatic Agent context.
@@ -213,8 +214,8 @@ changing the save destination/baseline. Native KiCad project files use Save/Save
 The requested output is compiled before the picker and published as one atomic
 file replacement; archives contain generated files only and are never extracted
 into the project. Open project sources and linked destinations are protected.
-Gerbers (including drill files) and JLCPCB are ZIP archives; BOM and
-CPL are separate CSV outputs. See [manufacturing export](#manufacturing-export).
+See [design exchange](#design-exchange) and [manufacturing export](#manufacturing-export)
+for the supported outputs.
 When the project has a PCB and Model CAD solids, Export also offers an OpenSCAD model. Its millimetre text uses native PCB
 X/Y with Z = 0 at the PCB mid-plane. It keeps solids, poses, Boolean cutouts and
 recipes, per-body color overrides or material colors, and opacity; circles are faceted with `$fn = 96`.
@@ -230,6 +231,24 @@ Home opens original native projects under `examples/` and `project/` directly,
 including host-discovered additions, retaining all disk filenames. History remains
 private outside the project; see [Version history](VERSION-HISTORY.md).
 
+## Design exchange
+
+- Schematic netlist exports the primary schematic as KiCad intermediate XML
+  (`-netlist.xml`, up to 32 MiB).
+  It includes component and library pin metadata and uses the same geometric
+  connectivity as PCB synchronization. Unconnected pins remain in component
+  definitions. Independent supplementary schematics remain separate. A
+  schematic-only project can export a netlist. Ambiguous references or nets,
+  alternate pin functions, jumper groups and pin maps fail before publication.
+  [KiCad netlist documentation](https://docs.kicad.org/10.0/en/eeschema/eeschema.html#_intermediate_netlist_file)
+- Board outline exports native `Edge.Cuts` centerlines, including footprint
+  cutouts, as ASCII AutoCAD 2000 DXF in millimetres. It retains native X and
+  negates native Y to align with Gerber and drill. Lines, circular arcs, circles
+  and closed polylines retain their geometry. The outline must enclose a positive
+  area and line and arc endpoints must meet exactly. Copper, drill hits and
+  other layer artwork are outside the outline file.
+  [AutoCAD DXF header reference](https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DXF/files/GUID-A85E8E67-27CD-4C59-BE61-4DC9FADBE74A.htm)
+
 ## Manufacturing export
 
 `lib/manufacturing-export.ts` compiles the current complete native PCB backing,
@@ -242,7 +261,7 @@ zones, perform DRC, change geometry or acquire a project destination.
   view visibility. Arc direction follows the upward-Y output plane. Separate
   metric Excellon files contain plated and non-plated round through drills,
   including via drills and rotated pad drill offsets.
-- Require a closed unambiguous board outline and saved fills for every enabled
+- Full Gerber requires a closed unambiguous board outline and saved fills for every enabled
   non-keepout zone. Keepouts and disabled fills contribute no plotted area.
   Native board-level via tenting and pad/footprint/board mask/paste margins apply.
 - Reject unused-layer removal, nonzero minimum mask web, enabled via covering/
@@ -251,6 +270,13 @@ zones, perform DRC, change geometry or acquire a project destination.
   and characters outside the pinned U+0020–U+03FF stroke glyph subset on
   manufacturing layers. Unsupported output never silently omits geometry.
   Empty mask/paste apertures from negative margins are omitted.
+- Excellon drill ZIP contains the same separate plated and non-plated drill
+  files as full Gerber. It can be exported before completing the outline or
+  filling copper zones. [KiCad drill documentation](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html#_drill_files)
+- Stencil Gerber ZIP contains front paste (`.gtp`), back paste (`.gbp`) and
+  the board profile (`.gko`), byte-identical to those files in the full Gerber
+  archive. It requires a closed outline and supported paste and profile geometry.
+  Copper fills and mask settings are independent of this output.
 - BOM groups identical value/package/explicit LCSC-number records; CSV fields
   retain quotes, commas and line breaks. DNP and board-only footprints are
   excluded; BOM and position exclusions remain independent. No supplier part
@@ -286,7 +312,8 @@ S-expressions. Helpers retain encoding/selection and edit existing files only.
 | Check                                                                                                        | Scope                                                                                                                             |
 | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/native-project-files.test.ts`, `tests/native-save.test.ts`, `tests/native-save-participation.test.ts` | File-set bounds, writes, exact backing and simulation flags                                                                       |
-| `tests/manufacturing-export.test.ts`, `tests/native-export.test.ts`                                          | Gerber/drill/CSV/ZIP geometry and syntax, output bounds, format pickers, source protection and cancellation                       |
+| `tests/manufacturing-export.test.ts`, `tests/native-export.test.ts`                                          | Gerber/drill/CSV/ZIP geometry and syntax, standalone archive parity, output bounds, format pickers and source protection          |
+| `tests/pcb-dxf.test.ts`, `tests/schematic-netlist-export.test.ts`                                              | DXF outline entities and closure, XML metadata and connectivity                                                                   |
 | `tests/example-native-libraries.test.ts`                                                                     | Home custom-library Source, project naming, Save as references and edited package preservation                                    |
 | `tests/project-directory.test.ts`, `node scripts/check-project-directory-ui.mjs`                             | Grant-bound directory observations, read limits, stale/linked files, empty folders, read-only previews and native draft retention |
 | `node scripts/check-native-source-ui.mjs`                                                                    | Isolated native file selection, per-file history, Apply/validation/undo                                                           |

@@ -7,13 +7,14 @@ import path from 'node:path';
 import { parseProject, serializeProject } from '../lib/project';
 import { exportProjectFile } from '../lib/manufacturing-export';
 import { projectExportFormats } from '../lib/export-formats';
+import { exportProjectFile as exportHostProjectFile } from '../server/manufacturing-format.mjs';
 import { manufacturingProject } from './manufacturing-fixture';
 import { atomicWrite } from '../server/atomic-write.mjs';
 import { newModelCadObject, withModelCad } from '../lib/model-cad';
 const { createNativeExport } = createRequire(import.meta.url)('../electron/native-export.cjs');
 const { FileGrants } = createRequire(import.meta.url)('../electron/file-grants.cjs');
 const source = () => serializeProject(manufacturingProject());
-const formats = { parseProject, exportProjectFile, projectExportFormats };
+const formats = { parseProject, exportProjectFile: exportHostProjectFile, projectExportFormats };
 const request = (format = 'bom') => ({ source: source(), name: 'Power stage.kicad_pro', format });
 
 function setup(result: { canceled: boolean; filePath?: string }) {
@@ -34,7 +35,7 @@ function setup(result: { canceled: boolean; filePath?: string }) {
   return { run, writes, dialogs, fileGrants };
 }
 
-test('Export picker offers the requested manufacturing format, writes real bytes and never offers native KiCad files', async () => {
+test('Export pickers use format-specific filters and the host writes the same bytes as the browser compiler', async () => {
   for (const format of projectExportFormats.filter((format) => format.id !== 'scad')) {
     const file = path.resolve('manufacturing.' + format.extension),
       state = setup({ canceled: false, filePath: file });
@@ -55,6 +56,30 @@ test('Export picker offers the requested manufacturing format, writes real bytes
     assert.deepEqual(result, { name: path.basename(file), format: format.id });
     assert.equal(state.fileGrants.find(file), undefined);
   }
+});
+
+test('Schematic XML exports without a PCB and invalid DXF fails before the picker', async () => {
+  const project = manufacturingProject();
+  project.pcb!.graphics.pop();
+  const dxf = setup({ canceled: true });
+  await assert.rejects(
+    dxf.run({ ...request('dxf'), source: serializeProject(project) }),
+    /outline is open/,
+  );
+  assert.equal(dxf.dialogs.length, 0);
+
+  const netlist = setup({ canceled: false, filePath: path.resolve('schematic') });
+  assert.deepEqual(
+    await netlist.run({
+      ...request('netlist'),
+      source: serializeProject({ ...project, pcb: null }),
+    }),
+    {
+      name: 'schematic.xml',
+      format: 'netlist',
+    },
+  );
+  assert.match(netlist.writes[0].content.toString(), /<export version="E">/);
 });
 
 test('Export cancellation, invalid formats/snapshots and wrong extensions preserve files', async () => {

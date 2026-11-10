@@ -727,7 +727,7 @@ Owner is `host`, level is absent. All commands have optional review. Mutation is
 | `workbench.selection`                                               | command / session                      | `{ids:string[]}`                                      | `{ids}`; selects visible schematic objects allowed by current selection filters. Unique IDs, at most 30,000.                                                                                                                                                      |
 | `workbench.panel`                                                   | command / session                      | `{panel:'parts'/'layers'/'history'/'settings'/null}`  | `{panel}`; `history` opens the Git window through Source validation without switching editor mode; `layers` enters Schematic and expands its right-side Visualization drawer, applying valid pending Source if needed.                                            |
 | `project.save`                                                      | command / external                     | `{saveAs?:boolean}`                                   | `{status:'saved'/'cancelled'}`; validates and uses the native dialog/live grant. Default `saveAs` is false.                                                                                                                                                       |
-| `project.export`                                                    | command / external                     | `{format:'gerber'/'jlcpcb'/'bom'/'placement'/'scad'}` | `{status:'exported'/'cancelled'}`; compiles the requested manufacturing ZIP, assembly CSV or OpenSCAD model, then opens its native picker; output never changes the native save destination.                                                                      |
+| `project.export`                                                    | command / external                     | `{format:ProjectExportFormat}`                        | `{status:'exported'/'cancelled'}`. Applies Source, compiles the requested output, then opens its native picker. Preserves the native save destination and baseline.                                                                                                 |
 | `enclosure.exportStep`                                              | command / external                     | `{}`                                                  | `{status:'exported',name:string}` or `{status:'cancelled'}`; requires the originating active Model view, applied Source, CAD bodies, and the native bridge. Exports the current validated CAD solids through the STEP destination picker; saving is not required. |
 | `versions.list`                                                     | query / false                          | `{offset?:integer}`                                   | `HistoryPage`; offset defaults to 0, range 0–100,000.                                                                                                                                                                                                             |
 | `versions.read`                                                     | query / false                          | `{id:string}`                                         | `{source:string}` for a validated reachable Git version. ID is 40–64 lowercase hexadecimal characters.                                                                                                                                                            |
@@ -740,6 +740,17 @@ Owner is `host`, level is absent. All commands have optional review. Mutation is
 | `simulation.hide`                                                   | command / session                      | `{}`                                                  | `{visible:false}`; cancels active work and retains completed/stopped state.                                                                                                                                                                                       |
 
 ```ts
+type ProjectExportFormat =
+  | 'netlist'   // Primary schematic, KiCad intermediate XML
+  | 'dxf'       // PCB outline, AutoCAD 2000 DXF
+  | 'gerber'    // Full Gerber X2 and Excellon ZIP
+  | 'drill'     // Excellon drill ZIP
+  | 'stencil'   // Gerber paste and profile ZIP
+  | 'jlcpcb'    // Gerber, drill, BOM and placement ZIP
+  | 'bom'       // BOM CSV
+  | 'placement' // Placement CSV
+  | 'scad';     // Model CAD, OpenSCAD
+
 type WorkspaceContext = {
   version: 1;
   capturedAt: string;
@@ -1134,7 +1145,20 @@ Model spacing defaults to 5 mm and controls ground and sketch workplane lines,
 independently of CAD snapping.
 Workspace UI observations include `modelGridSpacing` alongside the other grid settings.
 
-Workspace recovery accepts only the current envelope, bundled Home identities and syntactically valid opaque local example identities. It retains stable project IDs, complete project Source, required dirty state and native Source drafts, filenames, conversations, active project/conversation IDs and shared Agent preferences. Optional active-schematic and closed-tab IDs must refer to existing sheets; the active sheet cannot be closed. Each non-null Source draft is limited to 8,000,000 UTF-8 bytes, separately from the 96 MiB workspace envelope. Required fields must be present and valid. Recovery does not infer an example identity, restore retired examples, convert message-only conversations or fill missing required fields. Unsupported recovery is preserved and fails validation.
+Workspace recovery accepts the current workspace and per-project envelopes,
+bundled Home identities and syntactically valid opaque local example identities.
+It retains stable project IDs, complete project Source, required dirty state and
+native Source drafts, filenames, conversations, active project/conversation IDs
+and shared Agent preferences. Optional active-schematic and closed-tab IDs must
+refer to existing sheets, and the active sheet must be open. Each non-null Source
+draft is limited to 8,000,000 UTF-8 bytes, separately from the 96 MiB workspace
+envelope.
+
+Validation requires every mandatory field and rejects unknown workspace or
+per-project fields before writes. Grants, destinations, ordinary-file drafts,
+appearance and simulation results stay outside recovery. Example identities
+must be explicit and supported. Conversations must use the current record
+format. Existing malformed recovery remains on disk and fails validation.
 
 JSON request limits are 8 MiB by default, with route-specific limits: state 96 MiB, simulation result/transient and thermal run/result/spice-sources 24 MiB, chat 32 MiB, chat/tool-result 40 MiB, chat/steer and agent-settings 128 KiB, agent-tools 32 MiB, agent-questions 256 KiB and model-cad/preview 512 KiB. These parser limits do not replace the narrower domain/tool bounds.
 
@@ -1331,7 +1355,7 @@ Native output is read every 200 ms. Display reduction retains actual trace extre
 | `historyList(options)`                      | `{fileId,offset?:number}`                                                                | `HistoryPage`.                                                                                                                                                                                                                                                                                    |
 | `historyRead(options)`                      | `{fileId,id}`                                                                            | Validated complete private snapshot string.                                                                                                                                                                                                                                                       |
 | `historyCreate(options)`                    | `{fileId,source,message}`                                                                | `{id:string}`.                                                                                                                                                                                                                                                                                    |
-| `exportProject(options)`                    | `{source,name,format:'gerber'/'jlcpcb'/'bom'/'placement'/'scad'}`                        | `{name,format:'gerber'/'jlcpcb'/'bom'/'placement'/'scad'}` or cancellation `null`.                                                                                                                                                                                                                |
+| `exportProject(options)`                    | `{source,name,format:ProjectExportFormat}`                                             | `{name,format:ProjectExportFormat}` or cancellation `null`.                                                                                                                                                                                                                                     |
 | `exportImage(options)`                      | `{dataUrl,width,height,name}`                                                            | `{name}` or cancellation `null`.                                                                                                                                                                                                                                                                  |
 | `exportEnclosure(options)`                  | `{source}` validated complete private snapshot                                           | `{name}` or cancellation `null`; native STEP picker.                                                                                                                                                                                                                                              |
 

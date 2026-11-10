@@ -202,7 +202,7 @@ export function registerWorkbenchCapabilities(
   );
   command(
     'project.export',
-    'Export Gerber/drill, JLCPCB manufacturing files, BOM, pick and place or OpenSCAD through the native picker.',
+    'Export a schematic XML netlist, PCB outline DXF, Gerber, Excellon drill or stencil ZIP, JLCPCB package, BOM, pick and place, or OpenSCAD through the native picker.',
     object({ format: { enum: projectExportFormats.map((entry) => entry.id) } }),
     async ({ format }, signal) => {
       const status = await ports().export(format, signal);

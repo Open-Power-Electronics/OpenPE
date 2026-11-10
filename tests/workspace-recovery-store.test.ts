@@ -121,6 +121,21 @@ test('invalid encoded recovery never enters or corrupts an already accepted writ
     await entered.promise;
     for (const encoded of ['null', '{broken', JSON.stringify(workspace('{bad source'))])
       assert.throws(() => store.writeEncoded(encoded));
+    assert.throws(
+      () => store.writeParsed({ ...payload, appearance: {} }),
+      /Unsupported workspace recovery field/,
+    );
+    for (const field of ['fileId', 'destination', 'ordinaryFileDrafts', 'simulationResult'])
+      assert.throws(
+        () =>
+          store.writeEncoded(
+            JSON.stringify({
+              ...payload,
+              documents: [{ ...payload.documents[0], [field]: 'private' }],
+            }),
+          ),
+        /Unsupported project recovery field/,
+      );
     assert.throws(() => store.writeEncoded({}), /encoded JSON/);
     assert.equal(calls, 1);
     gate.resolve();
@@ -131,7 +146,8 @@ test('invalid encoded recovery never enters or corrupts an already accepted writ
 test('encoded recovery keeps both character and UTF-8 envelope bounds before parsing', () =>
   temporary(async (directory) => {
     const payload = workspace();
-    const encoded = JSON.stringify({ ...payload, extra: 'é'.repeat(32) });
+    payload.documents[0].sourceDraft = 'é'.repeat(32);
+    const encoded = JSON.stringify(payload);
     assert.ok(Buffer.byteLength(encoded, 'utf8') > encoded.length);
     let writes = 0;
     const store = createWorkspaceRecoveryStore(directory, {
@@ -153,8 +169,7 @@ test('encoded recovery keeps both character and UTF-8 envelope bounds before par
 test('canonical recovery output cannot exceed the limit after raw surrogate input expands', () =>
   temporary(async (directory) => {
     const payload = workspace();
-    const encoded =
-      JSON.stringify(payload).slice(0, -1) + ',"extra":"' + '\ud800'.repeat(16) + '"}';
+    const encoded = JSON.stringify(payload).replace('{unfinished', '\ud800'.repeat(16));
     const canonical = JSON.stringify(JSON.parse(encoded));
     const limit = Buffer.byteLength(encoded, 'utf8');
     assert.ok(Buffer.byteLength(canonical, 'utf8') > limit);

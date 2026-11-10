@@ -165,88 +165,6 @@ function restoreSessions(state) {
   };
 }
 
-// tests/fixtures/kicad/manifest.json
-var manifest_default = {
-  repository: "https://github.com/KiCad/kicad-source-mirror",
-  release: "10.0.0",
-  commit: "0feeca2a807f428ad2b3fa7c1e39625cb769f02c",
-  license: "CC-BY-SA-4.0",
-  examples: [
-    {
-      id: "kicad-rectifier",
-      title: "Rectifier",
-      description: "Half-wave rectification with a diode and capacitor-smoothed output.",
-      file: "rectifier.kicad_sch",
-      path: "demos/simulation/rectifier/rectifier.kicad_sch",
-      sha256: "68b5cc96418d67000de2efdabe5099754a4c30664d5559c0de11e70759acd828"
-    },
-    {
-      id: "kicad-buck",
-      title: "Buck converter",
-      description: "PWM-controlled MOSFET step-down stage with an LC output filter.",
-      file: "buck_conv.kicad_sch",
-      path: "demos/simulation/power_supplies/buck_conv/buck_conv.kicad_sch",
-      sha256: "e2ddd9d1a947b9ed06557b09fcf4f611cdafe36641396b5cbe3974938b608397"
-    },
-    {
-      id: "kicad-boost",
-      title: "Boost converter",
-      description: "Feedback-controlled boost stage with PWM switching and an output filter.",
-      file: "smps-com.kicad_sch",
-      path: "demos/simulation/power_supplies/boost/smps-com.kicad_sch",
-      sha256: "8008eeac568b6e6bfbfd30f40a17ca8bd0b84ba6cd100184b362bc381de1eff8"
-    },
-    {
-      id: "kicad-royer",
-      title: "Royer converter",
-      description: "Self-oscillating push-pull converter with coupled inductors and rectified output.",
-      file: "royer1.kicad_sch",
-      path: "demos/simulation/power_supplies/royer/royer1.kicad_sch",
-      sha256: "64f389208150b40fd3d41a883f37de9ba04a44b3793377acbc0b32ac926465f9"
-    },
-    {
-      id: "kicad-high-voltage",
-      title: "High-voltage converter",
-      description: "Hybrid switched-capacitor converter with a 28 V input and a 700 V target output.",
-      file: "hv_converter.kicad_sch",
-      path: "demos/simulation/power_supplies/hv_converter/hv_converter.kicad_sch",
-      sha256: "13bb6c67cfaa6a85cbd3d76f91a1f8719bd377e195e7595b980bc7474e1b8e7b"
-    },
-    {
-      id: "kicad-lm317",
-      title: "LM317 power supply",
-      description: "Bridge rectifier, smoothing capacitor and adjustable LM317 voltage regulator.",
-      file: "power_supply.kicad_sch",
-      path: "demos/simulation/power_supplies/LM317_power_supply/power_supply.kicad_sch",
-      sha256: "d7c5fc0489d54f648e5c95ffc8e5118b6011df19c6288b19a0b99fcbbaa5a2b0"
-    },
-    {
-      id: "kicad-class-d",
-      title: "Class-D amplifier",
-      description: "Switching audio amplifier with a MOSFET output stage and LC filter.",
-      file: "Class-D.kicad_sch",
-      path: "demos/simulation/class-d/Class-D.kicad_sch",
-      sha256: "e10edaf999e4c41e88fe7d27eb1eccf840a3136f484e9cf239806d906ea3156c"
-    },
-    {
-      id: "kicad-laser-driver",
-      title: "Laser diode driver",
-      description: "AD8009 amplifier and transistor output stage driving a laser diode.",
-      file: "laser_driver.kicad_sch",
-      path: "demos/simulation/laser_driver/laser_driver.kicad_sch",
-      sha256: "9d64ca78e9fdb76de1f63f027b20f454d29f6c66ea3e10cdf1919218d7541543"
-    },
-    {
-      id: "kicad-generic-opamp",
-      title: "Op-amp and transistor",
-      description: "Generic operational amplifier and bipolar transistor with dual supply rails.",
-      file: "generic_opamp_bip.kicad_sch",
-      path: "demos/simulation/generic_models/generic_opamp_bip.kicad_sch",
-      sha256: "7b3d7987bc06fc4b7b44e7f4d7b15ca01bb3ef827dae33a150abdbf1210fbe3a"
-    }
-  ]
-};
-
 // resources/example-catalog/home-manifest.json
 var home_manifest_default = {
   examples: [
@@ -360,228 +278,10 @@ var homeExamples = home_manifest_default.examples;
 var homeRecent = home_manifest_default.recent;
 var homeExampleCatalog = [...homeRecent, ...homeExamples];
 
-// lib/retired-example-identities.json
-var retired_example_identities_default = [
-  {
-    id: "pebench-sunny-buddy",
-    title: "Sunny Buddy"
-  },
-  {
-    id: "pebench-buck-boost",
-    title: "Buck-Boost TPS63070"
-  },
-  {
-    id: "pebench-buck-ap63357",
-    title: "Buck AP63357"
-  },
-  {
-    id: "pebench-big-easy-driver",
-    title: "Big Easy Driver"
-  },
-  {
-    id: "pebench-tb6612fng",
-    title: "Dual TB6612FNG"
-  },
-  {
-    id: "pebench-powerboost-1000c",
-    title: "PowerBoost 1000C"
-  },
-  {
-    id: "pebench-motor-shield-v2",
-    title: "Motor Shield V2"
-  },
-  {
-    id: "pebench-drv8871",
-    title: "DRV8871 Motor Driver"
-  },
-  {
-    id: "pebench-tps61023",
-    title: "MiniBoost TPS61023"
-  },
-  {
-    id: "pebench-autodriver-l6470",
-    title: "AutoDriver L6470"
-  },
-  {
-    id: "reference-tps62a01-q1-sot563-buck",
-    title: "TPS62A01-Q1 Buck"
-  },
-  {
-    id: "reference-lm25183-wson8-flyback",
-    title: "LM25183 Flyback"
-  },
-  {
-    id: "reference-lm2611-sot235-cuk",
-    title: "LM2611 Cuk"
-  },
-  {
-    id: "reference-tps6755-pdip8-buckboost",
-    title: "TPS6755 Buck-Boost"
-  },
-  {
-    id: "reference-lt1054-pdip8-pump",
-    title: "LT1054 Charge Pump"
-  },
-  {
-    id: "reference-tps61070-sot236-dualboost",
-    title: "TPS61070 Dual Boost"
-  }
-];
-
-// resources/reference-models-lock.json
-var reference_models_lock_default = {
-  version: 1,
-  models: [
-    {
-      id: "reference-lm2735y",
-      chip: "LM2735",
-      productUrl: "https://www.ti.com/product/LM2735",
-      archive: "snvm840",
-      file: "LM2735Y_PSPICE_TRANS/LM2735Y_trans.lib",
-      subcircuit: "LM2735Y_TRANS",
-      sha256: "b936996452a687f656940ad01f1d36a330fcd0d033a9731db5ddf96006edd150",
-      modelSha256: "dbb2681f47a37a5c5559028262af5d6701c3199440134f45b8ae45da10009cf1"
-    },
-    {
-      id: "reference-lm5001",
-      chip: "LM5001",
-      productUrl: "https://www.ti.com/product/LM5001",
-      archive: "snvm921",
-      file: "LM5001_PSPICE_TRANS/LM5001_TRANS.LIB",
-      subcircuit: "LM5001_TRANS",
-      sha256: "06a7ce94ce58312a5077c7e1d738858c61d4d3c97445da3025b8904621fc63db",
-      modelSha256: "a177e2183d1f94b3dce2f35cddb3fe96899dde5ad812eba45f7a143b9dca66be"
-    },
-    {
-      id: "reference-lm27761",
-      chip: "LM27761",
-      productUrl: "https://www.ti.com/product/LM27761",
-      archive: "snvmak0a",
-      file: "LM27761_PSPICE_TRANS/LM27761_TRANS.LIB",
-      subcircuit: "LM27761_TRANS",
-      sha256: "21a6ee5932c4a87aa9350d3274f48fe23d23d574b0f7e6c8b2f8bfbd1cd9d5a7",
-      modelSha256: "31aa4d227d83b8fc6da2e7303652bc1c2b8c26eaebd309573b11f2fb34768ec1"
-    },
-    {
-      id: "reference-lm25017",
-      chip: "LM25017",
-      productUrl: "https://www.ti.com/product/LM25017",
-      archive: "snvmam0",
-      file: "LM25017_PSPICE_TRANS/lm25017_trans.lib",
-      subcircuit: "LM25017",
-      sha256: "cb16219cfcb02a725942d347d828ce9231378b0043c58853e299469db352a528",
-      modelSha256: "0d72432077ca4d5049d1bc6ffa76b56abee9a054860cd5fc6ad0c919139b8351"
-    },
-    {
-      id: "reference-tps61046",
-      chip: "TPS61046",
-      productUrl: "https://www.ti.com/product/TPS61046",
-      archive: "slvmb38a",
-      file: "SLVMB38/TPS61046_PSPICE_TRANS/TPS61046_TRANS.lib",
-      subcircuit: "TPS61046_TRANS",
-      sha256: "e6527ecb0546b8e2be0a6682e11bcc98bd639c59ca4fd0f2a62f419646f44492",
-      modelSha256: "802dbf3123708b701ba9286c11cd9542d4d469ff51b138654e3c552af699f787"
-    },
-    {
-      id: "reference-lmr12010x",
-      chip: "LMR12010",
-      productUrl: "https://www.ti.com/product/LMR12010",
-      archive: "snvm970",
-      file: "LMR12010X_PSPICE_TRANS/LMR12010X_TRANS.LIB",
-      subcircuit: "LMR12010X_TRANS",
-      sha256: "5a2bf881896265a0a92b2a55d0c44deae7850ddbfbe99aa1bbdb49f61a536849",
-      modelSha256: "d9b77693957d93a8f727809f665204581937b493577c86ce1470f493fd01f97b"
-    },
-    {
-      id: "reference-lmr70503",
-      chip: "LMR70503",
-      productUrl: "https://www.ti.com/product/LMR70503",
-      archive: "snvm973",
-      file: "LMR70503_PSPICE_TRANS/LMR70503_TRANS.lib",
-      subcircuit: "LMR70503_TRANS",
-      sha256: "4c298112fe82f9991b11f87010b97653a75df109fb6e7209fc3b9268429ea4bc",
-      modelSha256: "1d661a243a8a44cab8f6e67448dfdafcc96249dea54f35927b25283e01e7aba9"
-    },
-    {
-      id: "reference-lm2598-adj",
-      chip: "LM2598-ADJ",
-      productUrl: "https://www.ti.com/product/LM2598",
-      archive: "snvmae2",
-      file: "LM2598_ADJ_TRANS.LIB",
-      subcircuit: "LM2598_ADJ_TRANS",
-      sha256: "6f1f62763a4495f5d7b5562e179308d3f1527c70cc94f6c7be88108f10298e10",
-      modelSha256: "b9c26b0f67ed3d7ad6e9f3375a1d7c55d068d5bc3c6298091a2a5e2699613e2f"
-    }
-  ]
-};
-
-// lib/ti-dcdc.ts
-var referenceModels = reference_models_lock_default.models;
-var tiModels = [
-  {
-    id: "lm2596-3.3",
-    voltage: 3.3,
-    archive: "snvma65",
-    file: "LM2596_3P3_TRANS.LIB",
-    subcircuit: "LM2596_3P3_TRANS",
-    sha256: "b387d7bdc153fc515d7f979b6d60634415b158957ce9b3682b3e3842f48bcc66",
-    modelSha256: "433ac0453d98beb58abf8f0bd60cd674e573846b08f3056118049b71ad8c66d3"
-  },
-  {
-    id: "lm2596-5",
-    voltage: 5,
-    archive: "snvma62",
-    file: "LM2596_5P0_TRANS.LIB",
-    subcircuit: "LM2596_5P0_TRANS",
-    sha256: "c8d6730cb669b577e013acd14653ef2be12035e778b3b4449e384c93bab8636f",
-    modelSha256: "bf883d939dbdce9c9146f9fd6d6c090e7cfb7afb5aaa01b6b8391ca06dbe8134"
-  },
-  {
-    id: "lm2596-12",
-    voltage: 12,
-    archive: "snvma63",
-    file: "LM2596_12P0_TRANS.LIB",
-    subcircuit: "LM2596_12P0_TRANS",
-    sha256: "8157546e5e9d715c0d891339cbcedc92424b9dc72e0fd63ee2fc88789940c091",
-    modelSha256: "4dea9cd7347281c5dce060fbdc4d58c887ffeba2d8d2213541a6507ad8d2d0a5"
-  }
-];
-var lm2596AdjustableDerivedModel = {
-  id: "openpe-lm2596-adj",
-  library: "OpenPE:lm2596-adj-derived",
-  subcircuit: "OPENPE_DERIVED_LM2596_ADJ_TRANS",
-  sourceModelId: tiModels[1].id,
-  sourceSha256: tiModels[1].modelSha256,
-  sourceSubcircuit: tiModels[1].subcircuit,
-  referenceVoltage: 1.235,
-  description: "OpenPE-derived adjustable model based on the official TI LM2596 5 V model; internal feedback divider removed. Not a TI-issued ADJ model."
-};
-var tiDcdcParts = tiModels.flatMap(
-  (model) => ["S", "T"].map((pkg) => ({
-    id: `Regulator_Switching:LM2596${pkg}-${model.voltage}`,
-    name: `LM2596${pkg}-${model.voltage}`,
-    library: "Regulator_Switching",
-    description: `Texas Instruments \xB7 ${model.voltage} V, 3 A Buck \xB7 150 kHz \xB7 ${pkg === "S" ? "TO-263-5" : "TO-220-5"}`,
-    keywords: "TI Texas Instruments DC/DC buck regulator power supply",
-    footprint: pkg === "S" ? "Package_TO_SOT_SMD:TO-263-5_TabPin3" : "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
-    model
-  }))
-);
-
 // lib/workspace-example.ts
 var exampleKeys = new Set(homeExampleCatalog.map((entry) => `example:${entry.id}`));
 function validExampleKey(value) {
   return typeof value === "string" && (exampleKeys.has(value) || /^example:local-[a-f0-9]{64}$/.test(value));
-}
-function retiredExampleFolderNames() {
-  const current = new Set(homeExampleCatalog.map((entry) => entry.title));
-  return [
-    .../* @__PURE__ */ new Set([
-      ...retired_example_identities_default.map((entry) => entry.title),
-      ...manifest_default.examples.map((entry) => entry.title),
-      ...tiDcdcParts.map((entry) => `${entry.name} Buck converter`)
-    ])
-  ].filter((name) => !current.has(name));
 }
 
 // lib/agent-providers.ts
@@ -640,6 +340,29 @@ var defaultAgentPreferences = {
   approvalMode: "review",
   models: Object.fromEntries(agentProviderIds.map((id) => [id, ""]))
 };
+var workspaceFields = /* @__PURE__ */ new Set([
+  "version",
+  "documents",
+  "activeDocumentId",
+  "provider",
+  "effort",
+  "approvalMode",
+  "models"
+]);
+var documentFields = /* @__PURE__ */ new Set([
+  "id",
+  "pinned",
+  "source",
+  "sourceDraft",
+  "dirty",
+  "filename",
+  "sessions",
+  "activeSessionId",
+  "activeSchematicId",
+  "closedSchematicIds",
+  "exampleKey",
+  "localExample"
+]);
 var object = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid workspace state.");
@@ -674,12 +397,16 @@ function recoveryProjectSummary(source) {
 function restoreWorkspace(value) {
   const state = object(value);
   if (state.version !== 2) throw new Error("Unsupported workspace version.");
+  if (Object.keys(state).some((key) => !workspaceFields.has(key)))
+    throw new Error("Unsupported workspace recovery field.");
   const entries = state.documents;
   if (!Array.isArray(entries) || entries.length > maxOpenProjects)
     throw new Error("Invalid open project list.");
   const ids = /* @__PURE__ */ new Set(), sessionIds = /* @__PURE__ */ new Set();
   const documents = entries.map((entry) => {
     const doc = object(entry);
+    if (Object.keys(doc).some((key) => !documentFields.has(key)))
+      throw new Error("Unsupported project recovery field.");
     if (typeof doc.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(doc.id) || ids.has(doc.id))
       throw new Error("Invalid or duplicate project ID.");
     ids.add(doc.id);
@@ -726,9 +453,11 @@ function restoreWorkspace(value) {
     throw new Error("The active project is missing from the workspace.");
   if (!isAgentProvider(state.provider)) throw new Error("Invalid saved Agent provider.");
   if (!isReasoningEffort(state.effort)) throw new Error("Invalid saved Agent reasoning effort.");
-  if (!["review", "auto"].includes(String(state.approvalMode)))
+  if (state.approvalMode !== "review" && state.approvalMode !== "auto")
     throw new Error("Invalid saved Agent approval mode.");
   const models = object(state.models);
+  if (Object.keys(models).length !== agentProviderIds.length)
+    throw new Error("Invalid saved Agent model list.");
   for (const id of agentProviderIds)
     if (typeof models[id] !== "string" || models[id] !== "" && !/^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(models[id]))
       throw new Error("Invalid saved Agent model.");
@@ -745,7 +474,5 @@ function restoreWorkspace(value) {
 export {
   defaultAgentPreferences,
   maxOpenProjects,
-  restoreWorkspace,
-  retiredExampleFolderNames,
-  validExampleKey
+  restoreWorkspace
 };

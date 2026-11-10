@@ -5,7 +5,7 @@ import {
   defaultSimulationParticipation,
   participatesInSimulation,
 } from './simulation-participation';
-export { child, children, num, val, quote, parseSExpr, writeSExpr } from './sexpr';
+export { child, children, num, val, quote, parseSExpr } from './sexpr';
 export { createProject, validateProject } from './project';
 
 export type LibraryEntry = {

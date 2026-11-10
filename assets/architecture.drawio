@@ -79,7 +79,7 @@
                 <mxCell id="private" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Private data&#xa;.openpe/ · Recovery · Git&#xa;spice/&lt;stem&gt;.* · thermal/&lt;stem&gt;.*" vertex="1">
                     <mxGeometry height="66" width="350" x="590" y="1020" as="geometry"/>
                 </mxCell>
-                <mxCell id="step" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="CAD export&#xa;.step · .scad" vertex="1">
+                <mxCell id="step" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Design / manufacturing export&#xa;XML · DXF · CAM ZIP · CSV&#xa;STEP · OpenSCAD" vertex="1">
                     <mxGeometry height="66" width="290" x="980" y="1020" as="geometry"/>
                 </mxCell>
                 <mxCell id="human-gui" edge="1" parent="1" source="human" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#848484;strokeWidth=1.5;endArrow=block;endFill=1;startArrow=none;startFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontFamily=Arial;fontSize=12;fontColor=#5c5c5c;labelBackgroundColor=#fafafa;" target="gui" value="">

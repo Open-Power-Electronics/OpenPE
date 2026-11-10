@@ -156,6 +156,20 @@ export type BoardZone = {
   };
 };
 
+/** Compare native track fields that affect copper, ignoring the editing lock. */
+export function samePCBTrackCopper(a: PCB['tracks'][number], b: PCB['tracks'][number]): boolean {
+  return (
+    a.id === b.id &&
+    a.netId === b.netId &&
+    a.layer === b.layer &&
+    a.width === b.width &&
+    a.start.x === b.start.x &&
+    a.start.y === b.start.y &&
+    a.end.x === b.end.x &&
+    a.end.y === b.end.y
+  );
+}
+
 /** Compare electrical pour inputs independently of their saved contours.
  * Captions, models, locks and mere viewing never change these inputs. */
 export function pcbFillInputsChanged(previous: PCB, next: PCB): boolean {
@@ -163,22 +177,12 @@ export function pcbFillInputsChanged(previous: PCB, next: PCB): boolean {
   // A changed copper span already proves that saved fills are stale. Avoid
   // serializing unrelated pads/artwork for every interactive track pose.
   // Lock-only and other presentation edits still use the complete comparison.
-  const trackCopperChanged =
-    previous.tracks.length !== next.tracks.length ||
-    (previous.tracks !== next.tracks &&
-      previous.tracks.some((track, index) => {
-        const candidate = next.tracks[index];
-        return (
-          track.id !== candidate.id ||
-          track.netId !== candidate.netId ||
-          track.layer !== candidate.layer ||
-          track.width !== candidate.width ||
-          track.start.x !== candidate.start.x ||
-          track.start.y !== candidate.start.y ||
-          track.end.x !== candidate.end.x ||
-          track.end.y !== candidate.end.y
-        );
-      }));
+  if (
+    previous.tracks !== next.tracks &&
+    (previous.tracks.length !== next.tracks.length ||
+      previous.tracks.some((track, index) => !samePCBTrackCopper(track, next.tracks[index])))
+  )
+    return true;
   const zoneInput = ({ filledPolygons: _filled, ...zone }: BoardZone) => zone;
   // Disabled zones are only editable outlines: adding, assigning or reshaping
   // one cannot change existing copper. Rule areas remain obstacles regardless
@@ -191,7 +195,6 @@ export function pcbFillInputsChanged(previous: PCB, next: PCB): boolean {
     JSON.stringify(
       [
         board.layers,
-        board.tracks.map(({ locked: _locked, ...track }) => track),
         board.vias,
         copperGraphics(board.graphics),
         zoneInputs(board.zones),
@@ -207,7 +210,7 @@ export function pcbFillInputsChanged(previous: PCB, next: PCB): boolean {
       ],
       (key, value) => (key === 'locked' ? undefined : value),
     );
-  return trackCopperChanged || inputs(previous) !== inputs(next);
+  return inputs(previous) !== inputs(next);
 }
 
 /** Remove stale saved contours from an uncommitted geometry candidate.

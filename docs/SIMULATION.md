@@ -92,15 +92,16 @@ Recorded results apply only to matching source, compiler, adapter, settings,
 models and solver identities. Reports under `test-results/` are ignored evidence,
 not application inputs or shipped results.
 
-The offline default-run check measures steady voltage over the final 20% of the
-requested duration, the same interval used for SPICE heat input. It checks peak-to-peak
-ripple against 5% and the mean difference between the two halves against 1%,
-in addition to each declared output-voltage range. Startup samples remain in
-the complete waveform; they are not a steady-state ripple measurement. LM27761's
-2 ms scenario retains its native capacitor initial voltages and checks the last
-0.4 ms after the modeled enable/soft-start sequence. It does not establish
-discharged-capacitor cold start or long-duration stability. Longer user-requested
-runs remain available and are never shortened by the service.
+`scripts/home-simulation-verification.ts` checks the final 20% of the requested
+duration, the same interval used for SPICE heat input. The time-weighted output
+mean must be in the declared range, peak-to-peak ripple at most 5% of its
+absolute mean and drift between the two equal halves at most 1%. Both Fly-Buck
+rails must pass. `npm run simulation:check-examples` records source, deck, model
+and solver identities and rejects incomplete startup ramps. LM27761's 2 ms
+scenario retains the native capacitor initial voltages and checks the last
+0.4 ms after modeled enable and soft-start. Its coverage ends with that
+preconditioned transient. Startup samples remain in the full waveform, and
+user-requested runs retain their requested duration.
 
 LM25017's original PSpice model has an instantaneous cross-coupled NOR latch.
 `server/spice-lm25017.mjs` verifies the pinned model ID and SHA-256 before deriving
@@ -112,12 +113,6 @@ selected by verified component model identity, independent of project names,
 directories and reference designators. Source model bytes remain unchanged and
 the executed derivative participates in the result identity. The opt-in native
 latch regression checks initialization, set/reset priority and held state.
-
-`scripts/home-simulation-verification.ts` requires completion and a final-20%
-time-weighted output mean within the expected range, ripple ≤5% of absolute mean
-and drift ≤1% between the two equal halves of that interval. Both Fly-Buck rails must pass.
-`npm run simulation:check-examples` records exact source/deck/model/solver
-identities and rejects incomplete startup ramps.
 
 `node --import tsx scripts/check-native-default-simulations.ts [comma-separated file filters]`
 checks the actual bundled native files through ordinary import, unchanged default
@@ -377,4 +372,4 @@ Compiler commands follow the [ngspice manual](https://ngspice.sourceforge.io/doc
 
 ### Native example result persistence check
 
-With explicit real-solver authorization, run `node --import tsx scripts/check-example-result-persistence.ts` (optional comma-separated project filters). It opens the actual native catalog projects, publishes complete solver artifacts through the production stores beside each project, imports verified SPICE heat provenance and checks both authenticated result routes through a fresh service instance whose solve callbacks reject execution. Reports under `test-results/example-result-persistence/` distinguish successful persistence/restoration from electrical operating-point qualification. Existing matching records are verified and reused. Add `--load-only` for a separate-process audit that fails on missing/mismatched records without running either solver; it writes `load-report.json` separately from publication reports. The check has no solver runtime deadline; elapsed solve times remain evidence and do not imply that an example meets the separate ten-minute release target.
+With explicit real-solver authorization, run `node --import tsx scripts/check-example-result-persistence.ts` (optional comma-separated project filters). It opens the actual native catalog projects, publishes complete solver artifacts through the production stores beside each project, imports verified SPICE heat provenance and checks both authenticated result routes through a fresh service instance whose solve callbacks reject execution. Reports under `test-results/example-result-persistence/` cover persistence and restoration. Existing matching records are verified and reused. Add `--load-only` for a separate-process audit that fails on missing or mismatched records without running either solver. It writes `load-report.json` separately from publication reports. The separate native default-run check above enforces its own elapsed-time criterion.

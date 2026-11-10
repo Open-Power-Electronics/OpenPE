@@ -52,6 +52,8 @@ try {
           connection: async () => ({ base: 'http://localhost', token: 'test' }),
           newFile: async () => 'fixture-grant',
           listExamples: async () => ({ entries: [], warnings: [] }),
+          listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+          onRecentChanged: () => () => {},
           projectDirectory: async () => ({ entries: [], truncated: false }),
           releaseFile: async () => {},
           setDirty: async () => {},
@@ -120,6 +122,10 @@ try {
         throw error;
       });
     const fileMenu = page.getByRole('combobox', { name: 'File', exact: true });
+    await fileMenu.waitFor().catch(async (error) => {
+      console.error({ titleBarOverlay, errors, screen: await page.locator('body').innerText() });
+      throw error;
+    });
     assert.equal(await fileMenu.count(), 1, 'File is available with or without a native caption.');
     for (const name of ['Save', 'Save as', 'Export'])
       assert.equal(
@@ -156,7 +162,11 @@ try {
     const formats = page.getByRole('listbox', { name: 'Export', exact: true });
     await formats.waitFor();
     assert.deepEqual(await formats.getByRole('option').allTextContents(), [
+      'Schematic netlist (XML)',
+      'Board outline (DXF)',
       'Gerbers',
+      'Excellon drill files',
+      'Stencil Gerbers',
       'JLCPCB',
       'BOM',
       'CPL',
@@ -171,6 +181,8 @@ try {
       path: `test-results/file-menu-formats-${titleBarOverlay ? 'caption' : 'fallback'}.png`,
     });
     await fileMenu.press('b');
+    await fileMenu.press('o');
+    await fileMenu.press('m');
     await fileMenu.press('Enter');
     const panel = page.getByRole('dialog', { name: 'Export', exact: true });
     await page.waitForFunction(() => window.fileCalls.exports.length === 1);
@@ -208,8 +220,9 @@ try {
     const changed = parseProject(source);
     changed.schematic.title = 'Edited before export';
     await fillNativeProject(page, changed);
-    await fileMenuAction(page, ['Export', 'BOM']);
+    await fileMenuAction(page, ['Export', 'Schematic netlist (XML)']);
     await page.waitForFunction(() => window.fileCalls.exports.length === 4);
+    assert.equal(await page.evaluate(() => window.fileCalls.exports[3].format), 'netlist');
     assert.equal(
       parseProject(await page.evaluate(() => window.fileCalls.exports[3].source)).schematic.title,
       changed.schematic.title,
@@ -225,7 +238,7 @@ try {
       .getByRole('status')
       .filter({ hasText: 'Fix the source errors before saving' })
       .waitFor();
-    await fileMenuAction(page, ['Export', 'BOM']);
+    await fileMenuAction(page, ['Export', 'Schematic netlist (XML)']);
     await page
       .getByRole('status')
       .filter({ hasText: 'Fix the source errors before exporting' })

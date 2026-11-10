@@ -14,9 +14,9 @@ var __commonJS = (cb, mod) => function __require() {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    for (let key2 of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key2) && key2 !== except)
+        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
   }
   return to;
 };
@@ -5584,12 +5584,12 @@ function ownProjectData(value, previous) {
     const result = array ? new Array(value2.length) : Object.create(prototype);
     if (array && prior && value2.length !== old.length) equal = false;
     for (let index = 0; index < entries.length; index++) {
-      const [key, nested] = entries[index];
-      if (["__proto__", "prototype", "constructor"].includes(key))
-        throw new Error(`Invalid OpenPE project: reserved key ${key}.`);
-      const child2 = copy(nested, prior?.[key], depth + 1);
-      result[key] = child2;
-      if (key !== oldKeys[index] || !Object.is(child2, prior?.[key])) equal = false;
+      const [key2, nested] = entries[index];
+      if (["__proto__", "prototype", "constructor"].includes(key2))
+        throw new Error(`Invalid OpenPE project: reserved key ${key2}.`);
+      const child2 = copy(nested, prior?.[key2], depth + 1);
+      result[key2] = child2;
+      if (key2 !== oldKeys[index] || !Object.is(child2, prior?.[key2])) equal = false;
     }
     if (equal && prior && Object.getPrototypeOf(prior) === prototype) return prior;
     Object.freeze(result);
@@ -5597,6 +5597,11 @@ function ownProjectData(value, previous) {
     return result;
   }
   return copy(value, previous, 0);
+}
+
+// lib/simulation-participation.ts
+function participatesInSimulation(part) {
+  return part.excludeFromSimulation === void 0 ? val(child(part.raw ?? [], "exclude_from_sim")) !== "yes" : !part.excludeFromSimulation;
 }
 
 // lib/library.ts
@@ -6034,6 +6039,10 @@ for (const [relative, entry] of records) {
 }
 
 // lib/library.ts
+var propertyValue = (node, name) => val(
+  children(node, "property").find((p) => val(p) === name),
+  2
+);
 function symbolUnits(library) {
   return Math.max(
     1,
@@ -6058,6 +6067,26 @@ function unitGraphics(library, unit = 1) {
     return [...graphics];
   }
   return graphics;
+}
+var ownedPartFields = /* @__PURE__ */ new WeakMap();
+function partFields(part) {
+  const owned = isOwnedProjectNode(part);
+  const cached = owned ? ownedPartFields.get(part) : void 0;
+  if (cached) return { ...cached };
+  const fields = {
+    ...Object.fromEntries(
+      children(part.raw || [], "property").filter((p) => !["Reference", "Value"].includes(val(p))).map((p) => [val(p), val(p, 2)])
+    ),
+    ...part.fields
+  };
+  if (owned) {
+    ownedPartFields.set(part, fields);
+    return { ...fields };
+  }
+  return fields;
+}
+function partFootprint(part) {
+  return (partFields(part).Footprint ?? "").trim();
 }
 function singleSimulationParameter(params) {
   const match = /^(\s*[a-zA-Z][\w.]*\s*=\s*)([^\s=]+)(\s*)$/.exec(params);
@@ -6236,8 +6265,8 @@ function serializeCircuitContent(d) {
     ["lib_symbols", ...Object.values(d.libraries)]
   ];
   const pt = (p) => ["xy", fmt(p.x), fmt(p.y)];
-  const replace = (n, key, value) => {
-    const i = n.findIndex((x) => Array.isArray(x) && x[0] === key);
+  const replace = (n, key2, value) => {
+    const i = n.findIndex((x) => Array.isArray(x) && x[0] === key2);
     if (i < 0) n.push(value);
     else n[i] = value;
   };
@@ -6763,8 +6792,8 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
     ],
     "board"
   );
-  const stable = (key) => nativeIdentity(stableIdSeed + ": " + key);
-  const id = (n, key) => val(child(n, "uuid")) || stable(key);
+  const stable = (key2) => nativeIdentity(stableIdSeed + ": " + key2);
+  const id = (n, key2) => val(child(n, "uuid")) || stable(key2);
   const nets = /* @__PURE__ */ new Map();
   const nativeNets = /* @__PURE__ */ new Map();
   for (const declaration of children(root, "net")) {
@@ -6781,11 +6810,11 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
     if (!nets.has(name)) nets.set(name, stable("net:" + name));
     return nets.get(name);
   };
-  const graph = (n, key, footprintRotation = 0) => {
+  const graph = (n, key2, footprintRotation = 0) => {
     const kind = String(n[0]).replace(/^(fp|gr)_/, "");
     const layer = val(child(n, "layer"));
     const common = {
-      id: id(n, key),
+      id: id(n, key2),
       layer,
       width: number(child(child(n, "stroke") ?? [], "width"), 1, 0),
       ...nativeLocked(n) ? { locked: true } : {}
@@ -6921,7 +6950,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
     if (kind !== "line") fail(`Unsupported graphic ${kind}.`);
     return { ...common, ...extra, start: point(child(n, "start")), end: point(child(n, "end")) };
   };
-  const zone = (n, key, local = (p) => p) => {
+  const zone = (n, key2, local = (p) => p) => {
     allow(
       n,
       [
@@ -6961,7 +6990,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
     if (placement && val(child(placement, "enabled")) !== "no")
       fail("Enabled placement rule is unsupported.");
     return {
-      id: id(n, key),
+      id: id(n, key2),
       ...nativeLocked(n) ? { locked: true } : {},
       netId: net(n),
       layer: val(child(n, "layer")),
@@ -7078,10 +7107,10 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
         ],
         "pad"
       );
-      for (const key of ["pinfunction", "pintype"]) {
-        const fields = children(p, key);
+      for (const key2 of ["pinfunction", "pintype"]) {
+        const fields = children(p, key2);
         if (fields.length > 1 || fields.some((field) => field.length !== 2 || typeof field[1] !== "string"))
-          fail(`Pad has invalid ${key} metadata.`);
+          fail(`Pad has invalid ${key2} metadata.`);
       }
       const drill = child(p, "drill");
       if (drill) allow(drill, ["offset"], "drill");
@@ -7103,7 +7132,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
         result.drill = number(drill);
         if (child(drill, "offset")) result.drillOffset = point(child(drill, "offset"));
       }
-      for (const [key, native] of [
+      for (const [key2, native] of [
         ["roundrectRatio", "roundrect_rratio"],
         ["chamferRatio", "chamfer_ratio"],
         ["solderMaskMargin", "solder_mask_margin"],
@@ -7112,7 +7141,7 @@ function parseKiCadPCB(source, schematic, stableIdSeed, referenceMapping = {}) {
         ["thermalBridgeAngle", "thermal_bridge_angle"],
         ["zoneConnect", "zone_connect"]
       ])
-        if (child(p, native)) result[key] = number(child(p, native));
+        if (child(p, native)) result[key2] = number(child(p, native));
       if (child(p, "chamfer"))
         result.chamfer = child(p, "chamfer").slice(1).map((_, i) => val(child(p, "chamfer"), i + 1));
       if (child(p, "remove_unused_layers"))
@@ -7296,7 +7325,7 @@ var pcbDesignRuleLimitKeys = Object.keys(pcbDesignRuleLimits);
 var pcbDesignRuleScopeKeys = Object.keys(pcbDesignRuleScopes);
 var defaultPCBDesignRules = {
   ...Object.fromEntries(
-    pcbDesignRuleLimitKeys.map((key) => [key, pcbDesignRuleLimits[key][0]])
+    pcbDesignRuleLimitKeys.map((key2) => [key2, pcbDesignRuleLimits[key2][0]])
   ),
   scopes: pcbDesignRuleScopeKeys,
   useZoneClearance: false,
@@ -7325,14 +7354,14 @@ function readKiCadPCBDesignRuleLimits(project, defaults) {
   const design = nativeRuleObject(board.design_settings);
   const rules = nativeRuleObject(design.rules);
   return Object.fromEntries(
-    pcbDesignRuleLimitKeys.map((key) => {
-      const [, defaultValue, nativeKey] = pcbDesignRuleLimits[key];
-      const value = Object.hasOwn(rules, nativeKey) ? rules[nativeKey] : defaults?.[key] ?? defaultValue;
+    pcbDesignRuleLimitKeys.map((key2) => {
+      const [, defaultValue, nativeKey] = pcbDesignRuleLimits[key2];
+      const value = Object.hasOwn(rules, nativeKey) ? rules[nativeKey] : defaults?.[key2] ?? defaultValue;
       if (!validPCBDesignRuleLimit(value))
         throw new Error(
           `KiCad constraint ${nativeKey} is outside the supported 0 to 1000 mm range.`
         );
-      return [key, value];
+      return [key2, value];
     })
   );
 }
@@ -7393,10 +7422,10 @@ function groupCircuit(circuit, joinNames = true) {
     const positions = pinPositions(part, library);
     definitions.forEach((pin, i) => {
       const index = add(positions[i]), number5 = val(child(pin, "number"));
-      const key = JSON.stringify([part.ref, number5]);
-      const previous = physical.get(key);
+      const key2 = JSON.stringify([part.ref, number5]);
+      const previous = physical.get(key2);
       if (previous !== void 0) join(index, previous);
-      physical.set(key, index);
+      physical.set(key2, index);
       pins.push(
         { key: documentPinKey(part.id, number5), index },
         { key: documentPhysicalPinKey(part.ref, number5), index }
@@ -7428,21 +7457,21 @@ function groupCircuit(circuit, joinNames = true) {
     }
     for (let x = minX; x <= maxX; x++)
       for (let y = minY; y <= maxY; y++) {
-        const key = bucketKey(x, y), list2 = buckets.get(key) ?? [];
+        const key2 = bucketKey(x, y), list2 = buckets.get(key2) ?? [];
         list2.push(i);
-        buckets.set(key, list2);
+        buckets.set(key2, list2);
       }
   });
   const coordinates = /* @__PURE__ */ new Map();
   let comparisons = 0;
   points2.forEach((p, i) => {
-    const key = `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
-    const previous = coordinates.get(key);
+    const key2 = `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+    const previous = coordinates.get(key2);
     if (previous !== void 0) {
       join(i, previous);
       return;
     }
-    coordinates.set(key, i);
+    coordinates.set(key2, i);
     const candidates = [
       ...buckets.get(bucketKey(Math.floor(p.x / cell), Math.floor(p.y / cell))) ?? [],
       ...long
@@ -7468,9 +7497,9 @@ function groupCircuit(circuit, joinNames = true) {
   }
   const groups = /* @__PURE__ */ new Map();
   const group = (index) => {
-    const key = root(index);
-    if (!groups.has(key)) groups.set(key, { wires: [], junctions: [], labels: [], pins: [] });
-    return groups.get(key);
+    const key2 = root(index);
+    if (!groups.has(key2)) groups.set(key2, { wires: [], junctions: [], labels: [], pins: [] });
+    return groups.get(key2);
   };
   wires.forEach((index, i) => group(index).wires.push(i));
   junctions.forEach((index, i) => group(index).junctions.push(i));
@@ -7512,8 +7541,8 @@ function retainNetworkDrawing(drawing, reuse) {
   const first = drawing.wires?.[0] ?? drawing.labels?.[0] ?? drawing.junctions?.[0];
   if (!reuse || !first || !isOwnedProjectNode(first)) return drawing;
   const cached = ownedNetworkDrawings.get(first);
-  if (cached && ["wires", "junctions", "labels"].every((key) => {
-    const before = cached[key] ?? [], after = drawing[key] ?? [];
+  if (cached && ["wires", "junctions", "labels"].every((key2) => {
+    const before = cached[key2] ?? [], after = drawing[key2] ?? [];
     return before.length === after.length && before.every((item, index) => item === after[index]);
   }))
     return cached;
@@ -7572,8 +7601,8 @@ function packCopper(item, order) {
 }
 function retainNetPacket(net, packet) {
   const cached = ownedNetPackets.get(net);
-  if (cached?.order === packet.order && ["tracks", "vias", "zones"].every((key) => {
-    const previous = cached[key] ?? [], next = packet[key] ?? [];
+  if (cached?.order === packet.order && ["tracks", "vias", "zones"].every((key2) => {
+    const previous = cached[key2] ?? [], next = packet[key2] ?? [];
     return previous.length === next.length && previous.every((item, index) => item === next[index]);
   }))
     return cached;
@@ -7590,15 +7619,15 @@ function packComponent(component) {
   const simulation = { ...copy.simulation };
   const fields = {};
   const nativeNames = new Map(
-    Object.entries(simulationFieldNames).map(([key, name]) => [
+    Object.entries(simulationFieldNames).map(([key2, name]) => [
       name,
-      key
+      key2
     ])
   );
-  for (const [key, value] of Object.entries(copy.fields ?? {})) {
-    if (nativeNames.has(key)) simulation[nativeNames.get(key)] = value;
-    else if (key.startsWith("Sim.")) (simulation.fields ??= {})[key] = value;
-    else fields[key] = value;
+  for (const [key2, value] of Object.entries(copy.fields ?? {})) {
+    if (nativeNames.has(key2)) simulation[nativeNames.get(key2)] = value;
+    else if (key2.startsWith("Sim.")) (simulation.fields ??= {})[key2] = value;
+    else fields[key2] = value;
   }
   const flags = copy.kicad?.filter((node) => node[0] === "exclude_from_sim") ?? [];
   if (flags.length > 1)
@@ -7634,8 +7663,8 @@ function unpackComponent(component) {
   const fields = { ...body.fields };
   if (simulation?.nativeOrder !== void 0 && (simulation.excluded === void 0 || simulation.nativeOrder > (body.kicad?.length ?? 0)))
     invalid(`${component.reference}: invalid simulation native metadata order.`);
-  for (const [key, name] of Object.entries(simulationFieldNames)) {
-    const value = simulation?.[key];
+  for (const [key2, name] of Object.entries(simulationFieldNames)) {
+    const value = simulation?.[key2];
     if (value !== void 0) {
       if (Object.hasOwn(fields, name))
         invalid(`${component.reference}: duplicate simulation field ${name}.`);
@@ -7707,11 +7736,11 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
     };
     for (const [index, group] of groups.entries()) {
       let drawing = {};
-      for (const key of ["wires", "junctions", "labels"]) {
-        if (group[key].length)
-          drawing[key] = group[key].map((index2) => {
-            const order = positions[key].get(circuit[key][index2].id);
-            return packDrawing(sheet[key][order], order, reuseOwnedGeometry);
+      for (const key2 of ["wires", "junctions", "labels"]) {
+        if (group[key2].length)
+          drawing[key2] = group[key2].map((index2) => {
+            const order = positions[key2].get(circuit[key2][index2].id);
+            return packDrawing(sheet[key2][order], order, reuseOwnedGeometry);
           });
       }
       if (!Object.keys(drawing).length) continue;
@@ -7731,8 +7760,8 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
     }
     if (board2) {
       if (!cachedNetworks)
-        for (const key of ["tracks", "vias", "zones"])
-          board2[key].forEach((item, order) => {
+        for (const key2 of ["tracks", "vias", "zones"])
+          board2[key2].forEach((item, order) => {
             if (!item.netId) return;
             const net = byId.get(item.netId);
             let packet;
@@ -7741,7 +7770,7 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
               const { netId: _netId, ...data } = structuredClone(item);
               packet = { ...data, order };
             }
-            (net.pcb[key] ??= []).push(packet);
+            (net.pcb[key2] ??= []).push(packet);
           });
       const componentsById = new Map(
         result2.components?.map((component) => [component.id, component])
@@ -7852,8 +7881,8 @@ var junctionDefaults = [
 function omitNativeDefaults(nodes, defaults) {
   const counts = /* @__PURE__ */ new Map();
   for (const node of nodes ?? []) {
-    const key = String(node[0]);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const key2 = String(node[0]);
+    counts.set(key2, (counts.get(key2) ?? 0) + 1);
   }
   const signatures = new Set(defaults.map((node) => JSON.stringify(node)));
   return (nodes ?? []).filter(
@@ -8137,7 +8166,7 @@ function toEditorDocument(project, reuseOwnedGeometry = false) {
     schematic.noConnects = retainDrawings(schematic.noConnects);
     schematic.labels = retainDrawings(schematic.labels);
   }
-  for (const key of [
+  for (const key2 of [
     "components",
     "wires",
     "junctions",
@@ -8146,7 +8175,7 @@ function toEditorDocument(project, reuseOwnedGeometry = false) {
     "texts",
     "kicad"
   ])
-    if (!schematic[key]?.length) delete schematic[key];
+    if (!schematic[key2]?.length) delete schematic[key2];
   if (!Object.keys(document2.libraries?.symbols ?? {}).length) delete document2.libraries;
   if (document2.pcb === null) delete document2.pcb;
   if (!Object.keys(document2.extensions ?? {}).length) delete document2.extensions;
@@ -8259,7 +8288,7 @@ function serializePCBContent(board, schematic, parts) {
       return `(${prefix}_poly (pts ${[g.start, ...g.points ?? [], g.end].map((p) => `(xy ${xy2(p)})`).join(" ")}) ${stroke} (fill ${g.fill ? "yes" : "no"}) ${tail}`;
     return `(${prefix}_line (start ${xy2(g.start)}) (end ${xy2(g.end)}) ${stroke} ${tail}`;
   };
-  const zone = (z, transform = (p) => p) => `(zone ${z.netId ? `(net ${quote(netName.get(z.netId))}) ` : ""}(layer ${quote(z.layer)}) (uuid ${quote(z.id)})${z.locked ? " (locked yes)" : ""} (hatch edge 0.5)${z.priority === void 0 ? "" : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ""} (clearance ${fmt2(z.clearance)})) (min_thickness ${fmt2(z.minThickness)})${z.keepout ? ` (keepout ${Object.entries(z.keepout).map(([key, disabled]) => `(${key} ${disabled ? "not_allowed" : "allowed"})`).join(" ")}) (placement (enabled no) (sheetname ""))` : ""} (fill${z.fillEnabled === false ? "" : " yes"} (thermal_gap ${fmt2(z.thermalGap)}) (thermal_bridge_width ${fmt2(z.thermalBridge)})${z.islandRemovalMode === void 0 ? "" : ` (island_removal_mode ${z.islandRemovalMode})`}) ${[z.outline, ...z.holes ?? []].map((outline) => `(polygon (pts ${outline.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join(" ")}${(z.filledPolygons ?? []).map((polygon) => ` (filled_polygon (layer ${quote(z.layer)})${polygon.island ? " (island)" : ""} (pts ${polygon.points.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join("")})`;
+  const zone = (z, transform = (p) => p) => `(zone ${z.netId ? `(net ${quote(netName.get(z.netId))}) ` : ""}(layer ${quote(z.layer)}) (uuid ${quote(z.id)})${z.locked ? " (locked yes)" : ""} (hatch edge 0.5)${z.priority === void 0 ? "" : ` (priority ${z.priority})`} (connect_pads${z.padConnection ? ` ${z.padConnection}` : ""} (clearance ${fmt2(z.clearance)})) (min_thickness ${fmt2(z.minThickness)})${z.keepout ? ` (keepout ${Object.entries(z.keepout).map(([key2, disabled]) => `(${key2} ${disabled ? "not_allowed" : "allowed"})`).join(" ")}) (placement (enabled no) (sheetname ""))` : ""} (fill${z.fillEnabled === false ? "" : " yes"} (thermal_gap ${fmt2(z.thermalGap)}) (thermal_bridge_width ${fmt2(z.thermalBridge)})${z.islandRemovalMode === void 0 ? "" : ` (island_removal_mode ${z.islandRemovalMode})`}) ${[z.outline, ...z.holes ?? []].map((outline) => `(polygon (pts ${outline.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join(" ")}${(z.filledPolygons ?? []).map((polygon) => ` (filled_polygon (layer ${quote(z.layer)})${polygon.island ? " (island)" : ""} (pts ${polygon.points.map((p) => `(xy ${xy2(transform(p))})`).join(" ")}))`).join("")})`;
   const technicalLayers = [
     [1, "F.Mask"],
     [3, "B.Mask"],
@@ -8310,7 +8339,7 @@ function serializePCBContent(board, schematic, parts) {
             ["solderPasteMargin", "solder_paste_margin"],
             ["solderPasteMarginRatio", "solder_paste_margin_ratio"]
           ].flatMap(
-            ([key, native]) => f[key] === void 0 ? [] : [`    (${native} ${fmt2(f[key])})`]
+            ([key2, native]) => f[key2] === void 0 ? [] : [`    (${native} ${fmt2(f[key2])})`]
           ),
           ...p ? [`    (path ${quote("/" + schematic.id + "/" + p.id)})`] : [],
           `    (attr ${f.pads.some((pad) => pad.type === "thru_hole") ? "through_hole" : "smd"})`,
@@ -8333,7 +8362,7 @@ function serializePCBContent(board, schematic, parts) {
         for (const pad of f.pads) {
           const layers = pad.layers ? pad.layers.map(quote).join(" ") : pad.type !== "smd" ? '"*.Cu" "*.Mask"' : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
           const extras = pad.locked ? ["(locked yes)"] : [];
-          for (const [key, native] of [
+          for (const [key2, native] of [
             ["roundrectRatio", "roundrect_rratio"],
             ["chamferRatio", "chamfer_ratio"],
             ["solderMaskMargin", "solder_mask_margin"],
@@ -8342,7 +8371,7 @@ function serializePCBContent(board, schematic, parts) {
             ["thermalBridgeAngle", "thermal_bridge_angle"],
             ["zoneConnect", "zone_connect"]
           ])
-            if (pad[key] !== void 0) extras.push(`(${native} ${fmt2(pad[key])})`);
+            if (pad[key2] !== void 0) extras.push(`(${native} ${fmt2(pad[key2])})`);
           if (pad.chamfer) extras.push(`(chamfer ${pad.chamfer.join(" ")})`);
           if (pad.removeUnusedLayers !== void 0)
             extras.push(`(remove_unused_layers ${pad.removeUnusedLayers ? "yes" : "no"})`);
@@ -8419,7 +8448,7 @@ var plain = (value) => !!value && typeof value === "object" && !Array.isArray(va
 var canonical = (value) => JSON.stringify(
   value,
   (_key, item) => plain(item) ? Object.fromEntries(
-    Object.keys(item).sort().map((key) => [key, item[key]])
+    Object.keys(item).sort().map((key2) => [key2, item[key2]])
   ) : item
 );
 function compileCapabilitySchema(schema) {
@@ -8429,12 +8458,12 @@ function compileCapabilitySchema(schema) {
     if (raw === false) return (_value, path) => `${path} is not accepted`;
     if (!plain(raw)) throw new Error("Capability schemas must be JSON objects or booleans.");
     const s = raw;
-    for (const key of Object.keys(s))
-      if (!keywords.has(key)) throw new Error(`Unsupported capability schema keyword: ${key}.`);
+    for (const key2 of Object.keys(s))
+      if (!keywords.has(key2)) throw new Error(`Unsupported capability schema keyword: ${key2}.`);
     const accepted = s.type === void 0 ? [] : Array.isArray(s.type) ? s.type : [s.type];
     if (accepted.some((type) => typeof type !== "string" || !types.has(type)))
       throw new Error("Invalid capability schema type.");
-    for (const key of [
+    for (const key2 of [
       "minItems",
       "maxItems",
       "minProperties",
@@ -8442,16 +8471,16 @@ function compileCapabilitySchema(schema) {
       "minLength",
       "maxLength"
     ]) {
-      if (s[key] !== void 0 && (!Number.isSafeInteger(s[key]) || s[key] < 0))
-        throw new Error(`Invalid schema ${key}.`);
+      if (s[key2] !== void 0 && (!Number.isSafeInteger(s[key2]) || s[key2] < 0))
+        throw new Error(`Invalid schema ${key2}.`);
     }
-    for (const key of ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"]) {
-      if (s[key] !== void 0 && (typeof s[key] !== "number" || !Number.isFinite(s[key])))
-        throw new Error(`Invalid schema ${key}.`);
+    for (const key2 of ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"]) {
+      if (s[key2] !== void 0 && (typeof s[key2] !== "number" || !Number.isFinite(s[key2])))
+        throw new Error(`Invalid schema ${key2}.`);
     }
     if (s.multipleOf !== void 0 && (typeof s.multipleOf !== "number" || !Number.isFinite(s.multipleOf) || s.multipleOf <= 0))
       throw new Error("Invalid schema multipleOf.");
-    if (s.required !== void 0 && (!Array.isArray(s.required) || s.required.some((key) => typeof key !== "string")))
+    if (s.required !== void 0 && (!Array.isArray(s.required) || s.required.some((key2) => typeof key2 !== "string")))
       throw new Error("Invalid schema required fields.");
     if (s.properties !== void 0 && !plain(s.properties))
       throw new Error("Invalid schema properties.");
@@ -8460,14 +8489,14 @@ function compileCapabilitySchema(schema) {
     if (s.uniqueItems !== void 0 && typeof s.uniqueItems !== "boolean")
       throw new Error("Invalid schema uniqueItems.");
     const properties = new Map(
-      Object.entries(s.properties ?? {}).map(([key, value]) => [key, compile(value, depth + 1)])
+      Object.entries(s.properties ?? {}).map(([key2, value]) => [key2, compile(value, depth + 1)])
     );
     const additional = s.additionalProperties === void 0 ? null : compile(s.additionalProperties, depth + 1);
     const items = s.items === void 0 ? null : compile(s.items, depth + 1);
-    const alternatives = (key) => {
-      if (s[key] === void 0) return [];
-      if (!Array.isArray(s[key]) || !s[key].length) throw new Error(`Invalid schema ${key}.`);
-      return s[key].map((value) => compile(value, depth + 1));
+    const alternatives = (key2) => {
+      if (s[key2] === void 0) return [];
+      if (!Array.isArray(s[key2]) || !s[key2].length) throw new Error(`Invalid schema ${key2}.`);
+      return s[key2].map((value) => compile(value, depth + 1));
     };
     const any = alternatives("anyOf"), one = alternatives("oneOf"), all = alternatives("allOf");
     const not = s.not === void 0 ? null : compile(s.not, depth + 1);
@@ -8524,9 +8553,9 @@ function compileCapabilitySchema(schema) {
           for (let index = 0; index < value.length; index++) {
             if (!(index in value)) return error("must not contain sparse items");
             if (s.uniqueItems) {
-              const key = canonical(value[index]);
-              if (unique.has(key)) return error("must contain unique items");
-              unique.add(key);
+              const key2 = canonical(value[index]);
+              if (unique.has(key2)) return error("must contain unique items");
+              unique.add(key2);
             }
             if (items) {
               const result = items(value[index], `${path}/${index}`, budget);
@@ -8537,16 +8566,16 @@ function compileCapabilitySchema(schema) {
           const keys2 = Object.keys(value);
           if (s.minProperties !== void 0 && keys2.length < s.minProperties || s.maxProperties !== void 0 && keys2.length > s.maxProperties)
             return error("has an unsupported property count");
-          for (const key of s.required ?? [])
-            if (!Object.hasOwn(value, key)) return error(`requires ${key}`);
-          for (const key of keys2) {
-            if (["__proto__", "prototype", "constructor"].includes(key))
+          for (const key2 of s.required ?? [])
+            if (!Object.hasOwn(value, key2)) return error(`requires ${key2}`);
+          for (const key2 of keys2) {
+            if (["__proto__", "prototype", "constructor"].includes(key2))
               return error("contains a reserved field");
-            if (!properties.has(key) && s.additionalProperties === false)
+            if (!properties.has(key2) && s.additionalProperties === false)
               return error("must not contain additional properties");
-            const check2 = properties.get(key) ?? additional;
+            const check2 = properties.get(key2) ?? additional;
             if (check2) {
-              const result = check2(value[key], `${path}/${key.slice(0, 160)}`, budget);
+              const result = check2(value[key2], `${path}/${key2.slice(0, 160)}`, budget);
               if (result) return result;
             }
           }
@@ -8627,7 +8656,7 @@ function modelCadColor(object2) {
 var object = (properties, optional = []) => ({
   type: "object",
   properties,
-  required: Object.keys(properties).filter((key) => !optional.includes(key)),
+  required: Object.keys(properties).filter((key2) => !optional.includes(key2)),
   additionalProperties: false
 });
 var number2 = (minimum, maximum) => ({ type: "number", minimum, maximum });
@@ -9302,7 +9331,7 @@ var nativeName = (name) => {
 function validateKiCadProjectFiles(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail3("expected project files.");
   const bundle = input;
-  if (Object.keys(bundle).some((key) => !["entry", "files"].includes(key)) || !safeName(bundle.entry) || !/\.kicad_(?:pro|sch|pcb)$/i.test(bundle.entry))
+  if (Object.keys(bundle).some((key2) => !["entry", "files"].includes(key2)) || !safeName(bundle.entry) || !/\.kicad_(?:pro|sch|pcb)$/i.test(bundle.entry))
     fail3("choose a .kicad_pro, .kicad_sch or .kicad_pcb entry file.");
   if (!Array.isArray(bundle.files) || !bundle.files.length || bundle.files.length > MAX_NATIVE_PROJECT_FILES)
     fail3(`a project supports 1\u2013${MAX_NATIVE_PROJECT_FILES} text files.`);
@@ -9312,13 +9341,13 @@ function validateKiCadProjectFiles(input) {
   for (const file of bundle.files) {
     const owned = !!file && typeof file === "object" && isOwnedProjectNode(file);
     const cachedSize = owned ? ownedNativeFileSizes.get(file) : void 0;
-    if (cachedSize === void 0 && (!file || typeof file !== "object" || Object.keys(file).some((key2) => !["name", "source", "encoding"].includes(key2)) || !safeName(file.name) || !nativeName(file.name) || typeof file.source !== "string" || file.source.includes("\0") || file.encoding !== void 0 && file.encoding !== "latin1" || file.encoding === "latin1" && (/[^\x00-\xff]/.test(file.source) || /\.kicad_(?:pro|sch|pcb)$/i.test(file.name))))
+    if (cachedSize === void 0 && (!file || typeof file !== "object" || Object.keys(file).some((key3) => !["name", "source", "encoding"].includes(key3)) || !safeName(file.name) || !nativeName(file.name) || typeof file.source !== "string" || file.source.includes("\0") || file.encoding !== void 0 && file.encoding !== "latin1" || file.encoding === "latin1" && (/[^\x00-\xff]/.test(file.source) || /\.kicad_(?:pro|sch|pcb)$/i.test(file.name))))
       fail3(
         "files require a contained relative name and supported KiCad text. Native project, schematic and PCB sources must be UTF-8; Latin-1 vendor sources must contain representable characters."
       );
-    const key = file.name.toLowerCase();
-    if (names.has(key)) fail3(`duplicate file ${file.name}.`);
-    names.add(key);
+    const key2 = file.name.toLowerCase();
+    if (names.has(key2)) fail3(`duplicate file ${file.name}.`);
+    names.add(key2);
     if (ext(file.name, ".openpe.json"))
       fail3("Private JSON snapshots are not native KiCad project files.");
     const size = cachedSize ?? (file.encoding === "latin1" ? file.source.length : utf8Size(file.source));
@@ -9545,13 +9574,13 @@ function schematicProjectInstances(source, original, schematic, projectName, reu
     const paths = owned.length ? structuredClone(owned) : [["path", quote(ownerPath)]];
     for (const path of paths) {
       path[1] = quote(ownerPath);
-      for (const [key, value] of [
+      for (const [key2, value] of [
         ["reference", quote(part.ref)],
         ["unit", String(part.unit || 1)]
       ]) {
-        const field = child(path, key);
+        const field = child(path, key2);
         if (field) field[1] = value;
-        else path.push([key, value]);
+        else path.push([key2, value]);
       }
       owner.push(path);
     }
@@ -9627,10 +9656,10 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
   }
   const retained = ["setup", "paper", "title_block", "embedded_fonts"];
   if (keepLayers) retained.push("layers");
-  for (const key of retained) {
-    const source2 = children(before, key);
+  for (const key2 of retained) {
+    const source2 = children(before, key2);
     if (!source2.length) continue;
-    for (const node of children(after, key)) after.splice(after.indexOf(node), 1);
+    for (const node of children(after, key2)) after.splice(after.indexOf(node), 1);
     after.push(...source2);
   }
   const oldGeneral = child(before, "general");
@@ -9643,10 +9672,10 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== "thickness"));
   const nativeLock = (node) => node.includes("locked") || val(child(node, "locked")) === "yes";
   const retain = (old, node, keys2, retainLocks = nativeLock(old) === nativeLock(node)) => {
-    for (const key of /* @__PURE__ */ new Set([...keys2, ...retainLocks ? ["locked", "unlocked"] : []])) {
-      const source2 = children(old, key);
+    for (const key2 of /* @__PURE__ */ new Set([...keys2, ...retainLocks ? ["locked", "unlocked"] : []])) {
+      const source2 = children(old, key2);
       if (!source2.length) continue;
-      for (const item of children(node, key)) node.splice(node.indexOf(item), 1);
+      for (const item of children(node, key2)) node.splice(node.indexOf(item), 1);
       node.push(...source2);
     }
     if (retainLocks) {
@@ -9666,7 +9695,7 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
       newLayer.splice(2, newLayer.length - 2, ...oldLayer.slice(2));
     }
   };
-  const matched = (old, generated2, key, apply, container) => {
+  const matched = (old, generated2, key2, apply, container) => {
     let originals;
     let scanFrom = 0;
     for (const candidate of generated2) {
@@ -9684,7 +9713,7 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
       if (node !== candidate) container[position2] = node;
       originals ??= new Map(
         old.map((record, index) => [
-          val(child(record, "uuid")) || nativeIdentity(schematicId + ": " + key(index)),
+          val(child(record, "uuid")) || nativeIdentity(schematicId + ": " + key2(index)),
           { node: record, index }
         ])
       );
@@ -10234,11 +10263,11 @@ var GerberLayer = class {
   }
   aperture(diameter) {
     if (!(diameter > 0)) throw new Error("Gerber strokes require positive widths.");
-    const key = decimal2(diameter);
-    let id = this.apertures.get(key);
+    const key2 = decimal2(diameter);
+    let id = this.apertures.get(key2);
     if (!id) {
       id = this.apertures.size + 10;
-      this.apertures.set(key, id);
+      this.apertures.set(key2, id);
     }
     this.add(`D${id}*`);
   }
@@ -10533,9 +10562,577 @@ function exportZip(files2) {
   return output;
 }
 
+// lib/pcb-dxf.ts
+var outlineLayer = "Edge.Cuts";
+var modelSpace = {
+  block: "*Model_Space",
+  record: "13",
+  begin: "15",
+  end: "16",
+  tab: "Model",
+  layout: "23"
+};
+var paperSpace = {
+  block: "*Paper_Space",
+  record: "14",
+  begin: "17",
+  end: "18",
+  tab: "Layout1",
+  layout: "24"
+};
+var spaces = [modelSpace, paperSpace];
+function writeDxfTables(pairs) {
+  const table = (name, handle, count) => pairs.push(0, "TABLE", 2, name, 5, handle, 330, "0", 100, "AcDbSymbolTable", 70, count);
+  const endTable = () => pairs.push(0, "ENDTAB");
+  const record = (name, handle, owner, subclass) => {
+    pairs.push(0, name, name === "DIMSTYLE" ? 105 : 5, handle, 330, owner);
+    pairs.push(100, "AcDbSymbolTableRecord", 100, subclass);
+  };
+  pairs.push(0, "SECTION", 2, "TABLES");
+  table("VPORT", "1", 0);
+  endTable();
+  table("LTYPE", "2", 3);
+  for (const [handle, name] of [
+    ["B", "ByBlock"],
+    ["C", "ByLayer"],
+    ["D", "Continuous"]
+  ]) {
+    record("LTYPE", handle, "2", "AcDbLinetypeTableRecord");
+    pairs.push(2, name, 70, 0, 3, "", 72, 65, 73, 0, 40, 0);
+  }
+  endTable();
+  table("LAYER", "3", 2);
+  for (const [handle, name] of [
+    ["E", "0"],
+    ["F", outlineLayer]
+  ]) {
+    record("LAYER", handle, "3", "AcDbLayerTableRecord");
+    pairs.push(2, name, 70, 0, 62, 7, 6, "Continuous", 370, -3);
+  }
+  endTable();
+  table("STYLE", "4", 1);
+  record("STYLE", "10", "4", "AcDbTextStyleTableRecord");
+  pairs.push(2, "Standard", 70, 0, 40, 0, 41, 1, 50, 0, 71, 0, 42, 2.5, 3, "txt", 4, "");
+  endTable();
+  table("VIEW", "5", 0);
+  endTable();
+  table("UCS", "6", 0);
+  endTable();
+  table("APPID", "7", 1);
+  record("APPID", "11", "7", "AcDbRegAppTableRecord");
+  pairs.push(2, "ACAD", 70, 0);
+  endTable();
+  table("DIMSTYLE", "8", 1);
+  pairs.push(100, "AcDbDimStyleTable", 71, 1, 340, "12");
+  record("DIMSTYLE", "12", "8", "AcDbDimStyleTableRecord");
+  pairs.push(2, "Standard", 70, 0, 340, "10");
+  endTable();
+  table("BLOCK_RECORD", "9", spaces.length);
+  for (const space of spaces) {
+    record("BLOCK_RECORD", space.record, "9", "AcDbBlockTableRecord");
+    pairs.push(2, space.block, 340, space.layout);
+  }
+  endTable();
+  pairs.push(0, "ENDSEC", 0, "SECTION", 2, "BLOCKS");
+  for (const space of spaces) {
+    pairs.push(0, "BLOCK", 5, space.begin, 330, space.record, 100, "AcDbEntity", 8, "0");
+    pairs.push(
+      100,
+      "AcDbBlockBegin",
+      2,
+      space.block,
+      70,
+      0,
+      10,
+      0,
+      20,
+      0,
+      30,
+      0,
+      3,
+      space.block,
+      1,
+      ""
+    );
+    pairs.push(0, "ENDBLK", 5, space.end, 330, space.record, 100, "AcDbEntity", 8, "0");
+    pairs.push(100, "AcDbBlockEnd");
+  }
+  pairs.push(0, "ENDSEC");
+}
+function writeDxfObjects(pairs) {
+  const dictionary = (handle, owner) => pairs.push(0, "DICTIONARY", 5, handle, 330, owner, 100, "AcDbDictionary", 281, 1);
+  pairs.push(0, "SECTION", 2, "OBJECTS");
+  dictionary("20", "0");
+  pairs.push(3, "ACAD_GROUP", 350, "21", 3, "ACAD_LAYOUT", 350, "22");
+  dictionary("21", "20");
+  dictionary("22", "20");
+  for (const space of spaces) pairs.push(3, space.tab, 350, space.layout);
+  for (const [index, space] of spaces.entries()) {
+    pairs.push(0, "LAYOUT", 5, space.layout, 330, "22", 100, "AcDbPlotSettings");
+    pairs.push(100, "AcDbLayout", 1, space.tab, 70, 1, 71, index, 330, space.record);
+  }
+  pairs.push(0, "ENDSEC", 0, "EOF", "");
+}
+function dxfAngle(nativeRadians) {
+  const degrees = -nativeRadians * 180 / Math.PI % 360;
+  return degrees < 0 ? degrees + 360 : degrees;
+}
+function exportBoardOutlineDxf(board) {
+  boardPolygons(board);
+  const edges = [
+    ...board.graphics.filter(({ layer }) => layer === outlineLayer),
+    ...board.footprints.flatMap(
+      (footprint) => footprint.graphics.filter(({ layer }) => layer === outlineLayer).map((graphic) => transformPCBGraphic(graphic, (p) => footprintPoint(footprint, p)))
+    )
+  ];
+  const pairs = [];
+  pairs.push(0, "SECTION", 2, "HEADER");
+  pairs.push(9, "$ACADVER", 1, "AC1015", 9, "$INSUNITS", 70, 4, 9, "$MEASUREMENT", 70, 1);
+  pairs.push(9, "$HANDSEED", 5, (256 + edges.length).toString(16).toUpperCase());
+  pairs.push(0, "ENDSEC", 0, "SECTION", 2, "CLASSES", 0, "ENDSEC");
+  writeDxfTables(pairs);
+  pairs.push(0, "SECTION", 2, "ENTITIES");
+  let handle = 256;
+  const entity = (name, subclass) => {
+    pairs.push(0, name, 5, (handle++).toString(16).toUpperCase(), 330, modelSpace.record);
+    pairs.push(100, "AcDbEntity", 8, outlineLayer, 100, subclass);
+  };
+  const point2 = ({ x, y }, offset = 0) => {
+    pairs.push(10 + offset, x, 20 + offset, -y, 30 + offset, 0);
+  };
+  const endpointCounts = /* @__PURE__ */ new Map();
+  for (const edge of edges) {
+    if (edge.stroke && edge.stroke !== "solid" && edge.stroke !== "default")
+      throw new Error("DXF export requires solid board outline graphics.");
+    const { start, end } = edge;
+    if (!edge.kind || edge.kind === "arc") {
+      for (const { x, y } of [start, end]) {
+        const key2 = `${x},${y}`;
+        endpointCounts.set(key2, (endpointCounts.get(key2) ?? 0) + 1);
+      }
+    }
+    switch (edge.kind) {
+      case "arc": {
+        const arc = pcbArc(edge);
+        if (!arc) throw new Error("The board outline contains a degenerate arc.");
+        const first = dxfAngle(arc.start);
+        const last = dxfAngle(arc.start + arc.delta);
+        entity("ARC", "AcDbCircle");
+        point2(arc.center);
+        pairs.push(40, arc.radius, 100, "AcDbArc");
+        pairs.push(50, arc.delta > 0 ? last : first, 51, arc.delta > 0 ? first : last);
+        break;
+      }
+      case "circle": {
+        const radius = Math.hypot(end.x - start.x, end.y - start.y);
+        if (!radius) throw new Error("The board outline contains a degenerate circle.");
+        entity("CIRCLE", "AcDbCircle");
+        point2(start);
+        pairs.push(40, radius);
+        break;
+      }
+      case "polygon": {
+        const vertices = [start, ...edge.points ?? [], end];
+        if (start.x === end.x && start.y === end.y) vertices.pop();
+        if (vertices.length < 3)
+          throw new Error("The board outline contains a degenerate polygon.");
+        entity("LWPOLYLINE", "AcDbPolyline");
+        pairs.push(90, vertices.length, 70, 1);
+        for (const { x, y } of vertices) pairs.push(10, x, 20, -y);
+        break;
+      }
+      case void 0:
+        if (start.x === end.x && start.y === end.y)
+          throw new Error("The board outline contains a zero-length line.");
+        entity("LINE", "AcDbLine");
+        point2(start);
+        point2(end, 1);
+        break;
+      default:
+        throw new Error("Unsupported board outline geometry.");
+    }
+  }
+  if ([...endpointCounts.values()].some((count) => count !== 2))
+    throw new Error("DXF export requires exact joins between board outline lines and arcs.");
+  pairs.push(0, "ENDSEC");
+  writeDxfObjects(pairs);
+  return pairs.join("\r\n");
+}
+
+// lib/pcb-sync.ts
+var pcbPinKey = (ref, number5) => JSON.stringify([ref, number5]);
+function fail5(message) {
+  throw new Error(message);
+}
+var key = (p) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+var ownedSchematicNets = /* @__PURE__ */ new WeakMap();
+var copyNets = (nets) => nets.map((net) => ({ name: net.name, pins: [...net.pins] }));
+function schematicPCBNets(circuit) {
+  const owned = isOwnedCircuit(circuit);
+  const cached = owned ? ownedSchematicNets.get(circuit) : void 0;
+  if (cached) return copyNets(cached);
+  const nets = computeSchematicPCBNets(circuit);
+  if (owned) {
+    ownedSchematicNets.set(circuit, nets);
+    return copyNets(nets);
+  }
+  return nets;
+}
+function computeSchematicPCBNets(circuit) {
+  if (circuit.parts.length > 2e3 || circuit.wires.length > 1e4)
+    fail5("PCB update supports at most 2,000 symbols and 10,000 wires.");
+  const points2 = [], parents = [];
+  const add = (p) => {
+    if (points2.length >= 3e4) fail5("This schematic exceeds the PCB connectivity update limit.");
+    points2.push(p);
+    parents.push(parents.length);
+    return parents.length - 1;
+  };
+  const root = (n) => {
+    while (parents[n] !== n) {
+      parents[n] = parents[parents[n]];
+      n = parents[n];
+    }
+    return n;
+  };
+  const join = (a, b) => {
+    parents[root(a)] = root(b);
+  };
+  const names = [];
+  const wires = circuit.wires.map((w) => {
+    const a = add(w.a), b = add(w.b);
+    join(a, b);
+    return a;
+  });
+  const pins = [];
+  const physical = /* @__PURE__ */ new Map();
+  for (const part of circuit.parts) {
+    const library = circuit.libraries[part.libId];
+    const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
+    const positions = pinPositions(part, library);
+    const power = Boolean(child(library, "power"));
+    definitions.forEach((pin, i) => {
+      const index = add(positions[i]), number5 = val(child(pin, "number"));
+      const pinKey = pcbPinKey(part.ref, number5);
+      const previous = physical.get(pinKey);
+      if (previous !== void 0) join(index, previous);
+      physical.set(pinKey, index);
+      pins.push({ key: pinKey, ref: part.ref, number: number5, index });
+      if (power && definitions.length === 1 && val(pin) === "power_in")
+        names.push({ name: part.value, index });
+      else if (!power && val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
+        names.push({ name: val(child(pin, "name")), index });
+    });
+  }
+  circuit.labels.forEach((l) => names.push({ name: l.text, index: add(l) }));
+  circuit.junctions.forEach(add);
+  if (points2.length > 3e4 || points2.length * circuit.wires.length > 5e6)
+    fail5(
+      "This schematic exceeds the PCB connectivity update limit. Reduce its size before updating."
+    );
+  const cell = 10;
+  const bucketKey = (x, y) => `${x},${y}`;
+  const buckets = /* @__PURE__ */ new Map();
+  const long = [];
+  const segments = circuit.wires.map((wire, index) => {
+    const { a, b } = wire;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const segment = {
+      a,
+      dx,
+      dy,
+      length: Math.hypot(dx, dy),
+      minX: Math.min(a.x, b.x) - 5e-5,
+      maxX: Math.max(a.x, b.x) + 5e-5,
+      minY: Math.min(a.y, b.y) - 5e-5,
+      maxY: Math.max(a.y, b.y) + 5e-5
+    };
+    const minX = Math.floor(segment.minX / cell), maxX = Math.floor(segment.maxX / cell), minY = Math.floor(segment.minY / cell), maxY = Math.floor(segment.maxY / cell);
+    const count = (maxX - minX + 1) * (maxY - minY + 1);
+    if (!Number.isFinite(count) || count > 256) long.push(index);
+    else
+      for (let x = minX; x <= maxX; x++)
+        for (let y = minY; y <= maxY; y++) {
+          const key2 = bucketKey(x, y), candidates = buckets.get(key2) ?? [];
+          candidates.push(index);
+          buckets.set(key2, candidates);
+        }
+    return segment;
+  });
+  const coordinates = /* @__PURE__ */ new Map();
+  points2.forEach((p, i) => {
+    const previous = coordinates.get(key(p));
+    if (previous !== void 0) join(i, previous);
+    coordinates.set(key(p), i);
+    const nearby = buckets.get(bucketKey(Math.floor(p.x / cell), Math.floor(p.y / cell))) ?? [];
+    let local = 0, distant = 0;
+    while (local < nearby.length || distant < long.length) {
+      const j = distant === long.length || local < nearby.length && nearby[local] < long[distant] ? nearby[local++] : long[distant++];
+      const s = segments[j];
+      if (s.length > 0 && Math.abs((p.x - s.a.x) * s.dy - (p.y - s.a.y) * s.dx) / s.length < 5e-5 && p.x >= s.minX && p.x <= s.maxX && p.y >= s.minY && p.y <= s.maxY)
+        join(i, wires[j]);
+    }
+  });
+  const named = /* @__PURE__ */ new Map();
+  names.forEach((n) => {
+    const previous = named.get(n.name);
+    if (previous !== void 0) join(n.index, previous);
+    named.set(n.name, n.index);
+  });
+  const groups = /* @__PURE__ */ new Map();
+  pins.forEach((p) => {
+    const r = root(p.index);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(p);
+  });
+  const groupNames = /* @__PURE__ */ new Map();
+  names.forEach((n) => {
+    const r = root(n.index);
+    if (!groupNames.has(r)) groupNames.set(r, /* @__PURE__ */ new Set());
+    groupNames.get(r).add(n.name);
+  });
+  const wireRoots = new Set(wires.map(root));
+  const noConnects = new Set((circuit.noConnects || []).map(key));
+  const result = [];
+  for (const [r, members] of groups) {
+    const labels = [...groupNames.get(r) || []].sort();
+    if (labels.length > 1)
+      fail5(
+        `Connected net has conflicting names: ${labels.join(", ")}. Use one net name before updating PCB.`
+      );
+    const unique = [...new Set(members.map((p) => p.key))].sort();
+    const connected = unique.length > 1 || wireRoots.has(r) || labels.length > 0;
+    if (members.some((p) => noConnects.has(key(points2[p.index])))) {
+      if (connected)
+        fail5(
+          `${members[0].ref} pin ${members[0].number} has both a connection and a no-connect marker.`
+        );
+      continue;
+    }
+    if (!connected) continue;
+    const first = [...members].sort((a, b) => a.key.localeCompare(b.key))[0];
+    result.push({ name: labels[0] || `Net-(${first.ref}-Pad${first.number})`, pins: unique });
+  }
+  if (new Set(result.map((n) => n.name)).size !== result.length)
+    fail5(
+      "Generated PCB net names conflict with schematic labels. Add distinct labels before updating."
+    );
+  return result.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// lib/symbol-role.ts
+function symbolRole(library, part) {
+  const id = part?.raw && child(part.raw, "lib_name") && val(child(part.raw, "lib_id")) || part?.libId || val(library);
+  if (id.startsWith("power:") || id === "Simulation_SPICE:0" || child(library, "power"))
+    return "marker";
+  const footprint = part ? partFootprint(part) : propertyValue(library, "Footprint").trim();
+  return footprint ? "physical" : "virtual";
+}
+
+// lib/schematic-netlist-export.ts
+var escapes = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&apos;",
+  "	": "&#9;",
+  "\n": "&#10;",
+  "\r": "&#13;"
+};
+function xml(value) {
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\uD800-\uDFFF\uFFFE\uFFFF]/u.test(value))
+    throw new Error("Schematic netlist contains text that cannot be represented in XML 1.0.");
+  return value.replace(/[&<>"'\t\n\r]/g, (character) => escapes[character]);
+}
+var mandatoryFields = ["Reference", "Value", "Footprint", "Datasheet", "Description"];
+var assemblyFlags = [
+  ["in_bom", "no", "exclude_from_bom"],
+  ["on_board", "no", "exclude_from_board"],
+  ["in_pos_files", "no", "exclude_from_pos_files"],
+  ["dnp", "yes", "dnp"]
+];
+function componentData(part) {
+  const raw = part.raw ?? [];
+  const fields = partFields(part);
+  for (const field of children(raw, "property")) {
+    if (child(field, "private") || field.includes("private")) delete fields[val(field)];
+  }
+  return {
+    fields: Object.entries(fields).sort(([a], [b]) => a.localeCompare(b, "en")),
+    flags: [
+      ...assemblyFlags.filter(([native, excluded]) => val(child(raw, native)) === excluded).map(([, , exported]) => exported),
+      ...participatesInSimulation(part) ? [] : ["exclude_from_sim"]
+    ]
+  };
+}
+function pinData(definition) {
+  const number5 = val(child(definition, "number"));
+  if (!number5.trim() || /^\[.*\]$/s.test(number5))
+    throw new Error("Schematic netlist requires explicit individual symbol pin numbers.");
+  return {
+    number: number5,
+    name: val(child(definition, "name")),
+    type: val(definition)
+  };
+}
+function exportSchematicNetlist(project) {
+  const circuit = project.schematic;
+  const components = /* @__PURE__ */ new Map();
+  const references = /* @__PURE__ */ new Map();
+  const libraries = /* @__PURE__ */ new Map();
+  for (const part of circuit.parts) {
+    const definition = circuit.libraries[part.libId];
+    if (child(definition, "jumper_pin_groups") || val(child(definition, "duplicate_pin_numbers_are_jumpers")) === "yes" || child(definition, "pin_maps") || child(part.raw ?? [], "pin_map_override"))
+      throw new Error(`${part.ref}: schematic netlist does not support jumper groups or pin maps.`);
+    const ref = part.ref.toUpperCase();
+    const previous = references.get(ref);
+    if (previous !== void 0 && previous !== part.ref)
+      throw new Error(`Schematic netlist references must be unique: ${part.ref}.`);
+    references.set(ref, part.ref);
+    if (!components.has(part.ref)) components.set(part.ref, []);
+    components.get(part.ref).push(part);
+    const separator = part.libId.indexOf(":");
+    if (!libraries.has(part.libId))
+      libraries.set(part.libId, {
+        lib: separator === -1 ? "" : part.libId.slice(0, separator),
+        name: part.libId.slice(separator + 1),
+        definition
+      });
+  }
+  const lines = [];
+  const encoder2 = new TextEncoder();
+  let bytes = 0;
+  const write = (line) => {
+    bytes += encoder2.encode(line).byteLength + 1;
+    if (bytes > 32 * 1024 * 1024) throw new Error("Schematic netlist exceeds 32 MiB.");
+    lines.push(line);
+  };
+  const native = projectNativeFiles(project);
+  const sourceName = xml(native.files.find((file) => /\.kicad_sch$/i.test(file.name)).name);
+  const titleBlock = child(circuit.original ?? [], "title_block") ?? [];
+  write('<?xml version="1.0" encoding="UTF-8"?>');
+  write('<export version="E">');
+  write("  <design>");
+  write(`    <source>${sourceName}</source>`);
+  write("    <tool>OpenPE</tool>");
+  write('    <sheet number="1" name="/" tstamps="/">');
+  write("      <title_block>");
+  write(`        <title>${xml(circuit.title)}</title>`);
+  for (const key2 of ["company", "rev", "date"]) {
+    const value = val(child(titleBlock, key2));
+    if (value) write(`        <${key2}>${xml(value)}</${key2}>`);
+  }
+  write(`        <source>${sourceName}</source>`);
+  write("      </title_block>");
+  write("    </sheet>");
+  write("  </design>");
+  write("  <components>");
+  const nodeElements = /* @__PURE__ */ new Map();
+  const usedLibraries = /* @__PURE__ */ new Set();
+  for (const [ref, units] of [...components].sort(
+    ([a], [b]) => a.localeCompare(b, "en", { numeric: true })
+  )) {
+    units.sort((a, b) => (a.unit ?? 1) - (b.unit ?? 1));
+    const first = units[0];
+    const { lib, name, definition } = libraries.get(first.libId);
+    const { fields, flags } = componentData(first);
+    const metadata = JSON.stringify({ fields, flags });
+    if (new Set(units.map((part) => part.unit ?? 1)).size !== units.length || units.slice(1).some(
+      (part) => part.libId !== first.libId || part.value !== first.value || JSON.stringify(componentData(part)) !== metadata
+    ))
+      throw new Error(`${ref}: schematic netlist requires distinct units with matching metadata.`);
+    const marker = ref.startsWith("#") || symbolRole(definition, first) === "marker";
+    for (const part of units) {
+      const pins = unitGraphics(definition, part.unit ?? 1).flatMap(
+        (group) => children(group, "pin")
+      );
+      if (children(part.raw ?? [], "pin").some((pin) => child(pin, "alternate")))
+        throw new Error(`${ref}: schematic netlist does not support alternate pin functions.`);
+      for (const pin of pins) {
+        const { number: number5, name: pinName, type } = pinData(pin);
+        if (marker) continue;
+        const pinKey = pcbPinKey(ref, number5);
+        const element = `      <node ref="${xml(ref)}" pin="${xml(number5)}" pinfunction="${xml(pinName)}" pintype="${xml(type)}"/>`;
+        const old = nodeElements.get(pinKey);
+        if (old !== void 0 && old !== element)
+          throw new Error(`${ref} pin ${number5}: schematic netlist has conflicting pin metadata.`);
+        nodeElements.set(pinKey, element);
+      }
+    }
+    if (marker) continue;
+    if (!ref.trim() || ref.includes("?"))
+      throw new Error("Annotate schematic component references before exporting the netlist.");
+    usedLibraries.add(first.libId);
+    write(`    <comp ref="${xml(ref)}">`);
+    write(`      <value>${xml(first.value || "~")}</value>`);
+    const byField = new Map(fields);
+    for (const field of ["Footprint", "Datasheet", "Description"]) {
+      const value = byField.get(field);
+      if (value) write(`      <${field.toLowerCase()}>${xml(value)}</${field.toLowerCase()}>`);
+    }
+    write("      <fields>");
+    for (const [field, value] of fields)
+      write(`        <field name="${xml(field)}">${xml(value)}</field>`);
+    write("      </fields>");
+    write(
+      `      <libsource lib="${xml(lib)}" part="${xml(name)}" description="${xml(byField.get("Description") ?? "")}"/>`
+    );
+    for (const [name2, value] of fields) {
+      if (!mandatoryFields.includes(name2) && name2 !== "exclude_from_sim" && !assemblyFlags.some(([, , exported]) => exported === name2))
+        write(`      <property name="${xml(name2)}" value="${xml(value)}"/>`);
+    }
+    for (const flag of flags) write(`      <property name="${flag}"/>`);
+    write('      <sheetpath names="/" tstamps="/"/>');
+    write(`      <tstamps>${units.map((part) => part.id).join(" ")}</tstamps>`);
+    write("    </comp>");
+  }
+  write("  </components>");
+  write("  <libparts>");
+  for (const id of usedLibraries) {
+    const { lib, name, definition } = libraries.get(id);
+    write(`    <libpart lib="${xml(lib)}" part="${xml(name)}">`);
+    const description = propertyValue(definition, "Description");
+    const docs = propertyValue(definition, "Datasheet");
+    if (description) write(`      <description>${xml(description)}</description>`);
+    if (docs) write(`      <docs>${xml(docs)}</docs>`);
+    write("      <pins>");
+    const exported = /* @__PURE__ */ new Set();
+    for (const unit of children(definition, "symbol")) {
+      if (/_\d+_2$/.test(val(unit))) continue;
+      for (const pin of children(unit, "pin")) {
+        const { number: number5, name: name2, type } = pinData(pin);
+        if (exported.has(number5)) continue;
+        exported.add(number5);
+        write(`        <pin num="${xml(number5)}" name="${xml(name2)}" type="${xml(type)}"/>`);
+      }
+    }
+    write("      </pins>");
+    write("    </libpart>");
+  }
+  write("  </libparts>");
+  write("  <libraries/>");
+  write("  <nets>");
+  let code = 0;
+  for (const net of schematicPCBNets(circuit)) {
+    const nodes = net.pins.flatMap((key2) => nodeElements.get(key2) ?? []);
+    if (!nodes.length) continue;
+    write(`    <net code="${++code}" name="${xml(net.name)}">`);
+    nodes.forEach(write);
+    write("    </net>");
+  }
+  write("  </nets>");
+  write("</export>");
+  return lines.join("\n") + "\n";
+}
+
 // lib/export-formats.ts
 var projectExportFormats = [
+  { id: "netlist", label: "Schematic netlist (XML)", extension: "xml", suffix: "-netlist" },
+  { id: "dxf", label: "Board outline (DXF)", extension: "dxf", suffix: "-outline" },
   { id: "gerber", label: "Gerbers", extension: "zip", suffix: "-gerber" },
+  { id: "drill", label: "Excellon drill files", extension: "zip", suffix: "-drill" },
+  { id: "stencil", label: "Stencil Gerbers", extension: "zip", suffix: "-stencil" },
   { id: "jlcpcb", label: "JLCPCB", extension: "zip", suffix: "-jlcpcb" },
   { id: "bom", label: "BOM", extension: "csv", suffix: "-bom" },
   { id: "placement", label: "CPL", extension: "csv", suffix: "-positions" },
@@ -10581,7 +11178,7 @@ function assemblyFiles(project, board, root, stem2) {
       ...Object.fromEntries(children(source ?? [], "property").map((p) => [val(p), val(p, 2)])),
       ...part?.fields
     };
-    const lcsc = ["LCSC Part #", "LCSC", "LCSC Part", "JLCPCB Part #"].map((key) => fields[key]?.trim()).find(Boolean) ?? "";
+    const lcsc = ["LCSC Part #", "LCSC", "LCSC Part", "JLCPCB Part #"].map((key2) => fields[key2]?.trim()).find(Boolean) ?? "";
     if (lcsc && !/^C\d+$/i.test(lcsc))
       throw new Error(`Invalid LCSC part number for ${reference}.`);
     rows.push({
@@ -10597,10 +11194,10 @@ function assemblyFiles(project, board, root, stem2) {
   rows.sort((a, b) => a.reference.localeCompare(b.reference, "en", { numeric: true }));
   const groups = /* @__PURE__ */ new Map();
   for (const row of rows.filter((row2) => row2.bom)) {
-    const key = JSON.stringify([row.value, row.footprint, row.lcsc]);
-    const group = groups.get(key) ?? [];
+    const key2 = JSON.stringify([row.value, row.footprint, row.lcsc]);
+    const group = groups.get(key2) ?? [];
     group.push(row);
-    groups.set(key, group);
+    groups.set(key2, group);
   }
   return [
     {
@@ -10633,36 +11230,39 @@ function assemblyFiles(project, board, root, stem2) {
 function contours(points2) {
   const result = [], path = [], indices = /* @__PURE__ */ new Map();
   for (const p of [...points2, points2[0]]) {
-    const key = `${p.x},${p.y}`, prior = indices.get(key);
+    const key2 = `${p.x},${p.y}`, prior = indices.get(key2);
     if (prior !== void 0) {
       const ring = path.slice(prior);
       if (ring.length >= 3) result.push(ring);
       for (const removed of path.splice(prior + 1)) indices.delete(`${removed.x},${removed.y}`);
     } else {
-      indices.set(key, path.length);
+      indices.set(key2, path.length);
       path.push(p);
     }
   }
   return result;
 }
-function gerberFiles(board, root, stem2) {
+function gerberFiles(board, root, stem2, stencil = false) {
   boardPolygons(board);
   const setup = child(root, "setup") ?? [];
-  const setting = (key) => Number(val(child(setup, key)) || 0);
-  for (const key of ["covering", "plugging"])
-    if (["front", "back"].some((side) => val(child(child(setup, key) ?? [], side)) === "yes"))
-      throw new Error(`Gerber export does not support enabled via ${key}.`);
-  if (["capping", "filling"].some((key) => val(child(setup, key)) === "yes"))
-    throw new Error("Gerber export does not support capped or filled vias.");
-  if (setting("solder_mask_min_width"))
-    throw new Error("Gerber export does not support a nonzero minimum solder-mask web.");
-  const zones = worldZones(board).filter((z) => !z.keepout && z.fillEnabled !== false);
-  if (zones.some((z) => z.filledPolygons === void 0))
-    throw new Error("Fill all enabled zones in Layout before exporting Gerber files.");
-  if (board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) || children(root, "via").some((v) => val(child(v, "remove_unused_layers")) === "yes"))
-    throw new Error("Gerber export does not support removing unused pad or via copper layers.");
+  const setting = (key2) => Number(val(child(setup, key2)) || 0);
+  const zones = stencil ? [] : worldZones(board).filter((z) => !z.keepout && z.fillEnabled !== false);
+  if (!stencil) {
+    for (const key2 of ["covering", "plugging"])
+      if (["front", "back"].some((side) => val(child(child(setup, key2) ?? [], side)) === "yes"))
+        throw new Error(`Gerber export does not support enabled via ${key2}.`);
+    if (["capping", "filling"].some((key2) => val(child(setup, key2)) === "yes"))
+      throw new Error("Gerber export does not support capped or filled vias.");
+    if (setting("solder_mask_min_width"))
+      throw new Error("Gerber export does not support a nonzero minimum solder-mask web.");
+    if (zones.some((z) => z.filledPolygons === void 0))
+      throw new Error("Fill all enabled zones in Layout before exporting Gerber files.");
+    if (board.footprints.some((f) => f.pads.some((p) => p.removeUnusedLayers)) || children(root, "via").some((v) => val(child(v, "remove_unused_layers")) === "yes"))
+      throw new Error("Gerber export does not support removing unused pad or via copper layers.");
+  }
+  const textLayers = stencil ? /^[FB]\.Paste$/ : /\.(?:Cu|Mask|Paste|SilkS)$/;
   const checkText = (node) => {
-    if ((node[0] === "gr_text" || node[0] === "fp_text" || node[0] === "property") && /\.(?:Cu|Mask|Paste|SilkS)$/.test(val(child(node, "layer"))) && val(child(node, "hide")) !== "yes" && val(child(child(node, "effects") ?? [], "hide")) !== "yes" && !child(node, "effects")?.includes("hide") && !node.includes("hide")) {
+    if ((node[0] === "gr_text" || node[0] === "fp_text" || node[0] === "property") && textLayers.test(val(child(node, "layer"))) && val(child(node, "hide")) !== "yes" && val(child(child(node, "effects") ?? [], "hide")) !== "yes" && !child(node, "effects")?.includes("hide") && !node.includes("hide")) {
       if (child(child(child(node, "effects") ?? [], "font") ?? [], "face") || child(node, "layer")?.includes("knockout"))
         throw new Error("Gerber export supports only the native stroke font without knockout.");
     }
@@ -10685,6 +11285,7 @@ function gerberFiles(board, root, stem2) {
     ["Edge.Cuts", "Profile,NP", "gko"]
   ];
   for (const [layer, fileFunction, extension] of layers) {
+    if (stencil && layer !== "Edge.Cuts" && !layer.endsWith(".Paste")) continue;
     const plot = new GerberLayer(fileFunction);
     for (const zone of zones.filter((z) => z.layer === layer))
       for (const polygon of zone.filledPolygons) {
@@ -10728,6 +11329,10 @@ function gerberFiles(board, root, stem2) {
     for (const g of board.graphics.filter((g2) => g2.layer === layer)) plot.graphic(g);
     files2.push({ name: `${stem2}.${extension}`, source: plot.finish() });
   }
+  return files2;
+}
+function drillFiles(board, stem2) {
+  const files2 = [];
   for (const plated of [true, false]) {
     const holes = board.footprints.flatMap(
       (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ ...padDrillPosition(f, p), diameter: p.drill }))
@@ -10756,10 +11361,6 @@ function gerberFiles(board, root, stem2) {
       source: [...commands, "M30", ""].join("\n")
     });
   }
-  files2.push({
-    name: "README.txt",
-    source: "OpenPE manufacturing export\n\nGerber X2 and metric Excellon through drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes, outline and assembly orientation before ordering.\n\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred.\n"
-  });
   return files2;
 }
 function exportProjectFile(project, format, name) {
@@ -10767,6 +11368,12 @@ function exportProjectFile(project, format, name) {
   const definition = projectExportFormats.find((entry) => entry.id === format);
   if (!definition) throw new Error("Unsupported export format.");
   const stem2 = exportStem(name), filename = stem2 + definition.suffix + "." + definition.extension;
+  if (format === "netlist")
+    return {
+      name: filename,
+      bytes: new TextEncoder().encode(exportSchematicNetlist(project)),
+      mime: "application/xml;charset=utf-8"
+    };
   if (format === "scad") {
     const model = project.pcb ? modelCadFromProject(project) : null;
     if (!model?.objects.length) throw new Error("Create a CAD solid before exporting OpenSCAD.");
@@ -10777,6 +11384,12 @@ function exportProjectFile(project, format, name) {
     };
   }
   const { board, root } = boardData(project);
+  if (format === "dxf")
+    return {
+      name: filename,
+      bytes: new TextEncoder().encode(exportBoardOutlineDxf(board)),
+      mime: "application/dxf"
+    };
   if (format === "bom" || format === "placement") {
     const file = assemblyFiles(project, board, root, stem2)[format === "bom" ? 0 : 1];
     return {
@@ -10785,8 +11398,22 @@ function exportProjectFile(project, format, name) {
       mime: "text/csv;charset=utf-8"
     };
   }
-  const files2 = gerberFiles(board, root, stem2);
-  if (format === "jlcpcb") files2.push(...assemblyFiles(project, board, root, stem2));
+  let files2;
+  if (format === "drill") {
+    files2 = drillFiles(board, stem2);
+  } else if (format === "stencil") {
+    files2 = gerberFiles(board, root, stem2, true);
+  } else {
+    files2 = [
+      ...gerberFiles(board, root, stem2),
+      ...drillFiles(board, stem2),
+      {
+        name: "README.txt",
+        source: "OpenPE manufacturing export\n\nGerber X2 and metric Excellon through drills. All files use native board X and negated board Y, in millimetres. No board translation or bottom-side mirroring is applied. Copper uses saved fills; no refill or DRC is run. Review the CAM layers, holes, outline and assembly orientation before ordering.\n\nAssembly CSV uses footprint origins, CCW degrees and Top/Bottom as viewed from the top. LCSC numbers are copied only from explicit component fields; missing numbers require supplier selection. Native DNP/BOM/position exclusions are retained. Package-specific rotation/centroid corrections are not inferred.\n"
+      }
+    ];
+    if (format === "jlcpcb") files2.push(...assemblyFiles(project, board, root, stem2));
+  }
   return { name: filename, bytes: exportZip(files2), mime: "application/zip" };
 }
 export {

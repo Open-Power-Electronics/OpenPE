@@ -7,8 +7,6 @@ import { homeExampleCatalog, homeExamples, homeRecent } from '../lib/home-exampl
 import { validExampleKey } from '../lib/workspace-example';
 import { parseProject, serializeProject } from '../lib/project';
 import { createSession } from '../lib/chat-sessions';
-import { readFileSync } from 'node:fs';
-import retiredExamples from '../lib/retired-example-identities.json';
 import { defaultAgentPreferences, restoreWorkspace } from '../lib/workspace-state';
 import { restoreWorkspace as restoreServiceWorkspace } from '../server/workspace-format.mjs';
 
@@ -61,39 +59,6 @@ test('Home retains nine Reference examples and prepares fixed Recent EMC separat
   }
   assert.equal(defaults[0].key, 'example:emc-flyback-demo');
   assert.ok(defaults.slice(1).every((entry) => entry.key.startsWith('example:reference-')));
-  assert.ok(
-    retiredExamples.every((entry) => !defaults.some((item) => item.key === `example:${entry.id}`)),
-  );
-});
-
-test('retired example identities are rejected without inferring a managed destination', () => {
-  const entry = retiredExamples[0];
-  const source = readFileSync(`tests/fixtures/pebench/${entry.id}.openpe.json`, 'utf8');
-  const session = createSession('Retained conversation');
-  const id = crypto.randomUUID();
-  assert.throws(
-    () =>
-      restoreWorkspace({
-        version: 2,
-        documents: [
-          {
-            id,
-            source,
-            sourceDraft: null,
-            dirty: false,
-            filename: 'project.kicad_pro',
-            exampleKey: `example:${entry.id}`,
-            localExample: true,
-            sessions: [session],
-            activeSessionId: session.id,
-          },
-        ],
-        activeDocumentId: id,
-        ...defaultAgentPreferences,
-      }),
-    /Invalid example opening identity/,
-  );
-  assert.equal(validExampleKey(`example:${entry.id}`), false);
 });
 
 test('removed catalog identities fail recovery without detaching or rewriting the project', () => {

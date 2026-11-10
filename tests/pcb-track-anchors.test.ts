@@ -52,11 +52,13 @@ test('fixed contacts retain native transforms, real drill holes, pad/via order a
   assert.deepEqual(anchors[0].polygon.holes[0][0], { x: 14, y: 17 });
   assert.deepEqual(anchors[1].polygon.holes[0][0], { x: 50.25, y: 60 });
   assert.deepEqual(anchors[0].layers, board.layers);
-  assert.equal(anchors[1].layers, board.layers);
+  assert.deepEqual(anchors[1].layers, board.layers);
   anchors[0].polygon.outer[0].x = -100;
+  anchors[1].layers.reverse();
   const uncentered = preparePCBTrackAnchors(board, { limitMessage: 'limit' });
   assert.ok(uncentered.every((anchor) => !Object.hasOwn(anchor, 'center')));
   assert.notEqual(uncentered[0].polygon.outer[0].x, -100);
+  assert.deepEqual(uncentered[1].layers, before.layers);
   assert.deepEqual(board, before);
 });
 
@@ -153,6 +155,7 @@ test('private Shove contacts borrow only owned pad geometry while public anchors
   assert.notEqual(exposed[0].polygon, borrowed[0].polygon);
   exposed[0].polygon.outer[0].x = -100;
   exposed[0].polygon.holes[0].push({ x: -1, y: -1 });
+  exposed[1].layers.reverse();
   assert.deepEqual(borrowPCBTrackAnchors(board, { limitMessage: 'limit' }), expected);
   assert.deepEqual(preparePCBTrackAnchors(board, { limitMessage: 'limit' }), expected);
 
