@@ -561,7 +561,13 @@ try {
     'track endpoints and lock guards share Core transactions',
     async ({ page, panel, click, number, native, undo, state }) => {
       await click(18, 30);
-      await panel.getByRole('tab', { name: 'Endpoints', exact: true }).click();
+      assert.deepEqual(
+        await panel.getByRole('tab').evaluateAll((tabs) => tabs.map((tab) => tab.title)),
+        ['General'],
+      );
+      const general = panel.getByRole('tabpanel', { name: 'General', exact: true });
+      const startX = general.getByRole('spinbutton', { name: 'Start X (mm)', exact: true });
+      assert.equal(await startX.isVisible(), true);
       const before = (await state()).board;
       await number('Start X (mm)', 11.5);
       const changed = await native();
@@ -575,12 +581,7 @@ try {
       await page.getByRole('checkbox', { name: 'Locked items', exact: true }).check();
       await selection.click();
       await panel.getByRole('checkbox', { name: 'Locked', exact: true }).check();
-      await panel.getByRole('tab', { name: 'Endpoints', exact: true }).click();
-      assert.equal(
-        await panel.getByRole('spinbutton', { name: 'Start X (mm)', exact: true }).isDisabled(),
-        true,
-      );
-      await panel.getByRole('tab', { name: 'General', exact: true }).click();
+      assert.equal(await startX.isDisabled(), true);
       assert.equal(
         await panel.getByRole('spinbutton', { name: 'Width (mm)', exact: true }).isDisabled(),
         true,

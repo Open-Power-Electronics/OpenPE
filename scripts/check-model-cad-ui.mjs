@@ -671,6 +671,14 @@ try {
       name: 'Delete object',
       exact: true,
     });
+    const componentActions = componentProperties.locator('.property-tabs-row');
+    assert.equal(await componentActions.getByRole('button', { name: 'Delete object' }).count(), 1);
+    assert.equal(await componentProperties.locator('footer').count(), 0);
+    const [componentActionsBox, componentReferenceBox] = await Promise.all([
+      componentActions.boundingBox(),
+      componentProperties.getByLabel('Reference', { exact: true }).boundingBox(),
+    ]);
+    assert.ok(componentActionsBox.y + componentActionsBox.height <= componentReferenceBox.y);
     await componentProperties.dispatchEvent('compositionstart');
     await removeComponent.click();
     assert.deepEqual(await state(), beforeSidebar, 'IME composition cannot delete a component.');
@@ -718,10 +726,15 @@ try {
     });
     const removeSolid = solidPanel.getByRole('button', { name: 'Delete object', exact: true });
     await removeSolid.waitFor();
+    const solidActions = solidPanel.locator('.property-tabs-row');
+    const applySolid = solidActions.getByRole('button', { name: 'Apply', exact: true });
+    assert.equal(await solidActions.getByRole('button', { name: 'Delete object' }).count(), 1);
+    assert.equal(await solidPanel.locator('footer').count(), 0);
     const nativeSolid = await page.evaluate(() => window.cad.core.getNativeFiles());
     const name = solidPanel.getByLabel('Solid name', { exact: true });
     await name.fill('unapplied name');
     assert.equal(await removeSolid.isDisabled(), true);
+    assert.equal(await applySolid.isEnabled(), true);
     await name.press('Escape');
     await removeSolid.focus();
     await removeSolid.press('Enter');
@@ -731,7 +744,7 @@ try {
     assert.deepEqual(await page.evaluate(() => window.cad.core.getNativeFiles()), nativeSolid);
     assert.deepEqual(errors, []);
     console.log(
-      'PASS: Model component/CAD deletion, shared footer, IME/Source/draft gates, Agent parity and native undo.',
+      'PASS: Upper Model Properties actions, component/CAD deletion, IME/Source/draft gates, Agent parity and native undo.',
     );
     throw sketchPlaneComplete;
   }
@@ -1202,7 +1215,7 @@ try {
   await sidebar.waitFor();
   const inspector = page.getByRole('complementary', { name: 'Solid properties settings' });
   await inspector.waitFor();
-  const deleteSolid = inspector.locator('footer').getByRole('button', {
+  const deleteSolid = inspector.locator('.property-tabs-row').getByRole('button', {
     name: 'Delete object',
     exact: true,
   });
@@ -1210,9 +1223,9 @@ try {
   assert.equal(
     await inspector.getByRole('button', { name: 'Reload solid parameters', exact: true }).count(),
     0,
-    'The ordinary Properties footer offers Delete without a redundant Reload action.',
+    'The ordinary Properties row offers Delete without a redundant Reload action.',
   );
-  const inspectorBody = inspector.locator('form > div').first();
+  const inspectorBody = inspector.locator('form > div').last();
   const originalInspectorViewport = page.viewportSize();
   const originalInspectorTheme = await page.evaluate(() =>
     document.documentElement.getAttribute('data-theme'),
@@ -1224,17 +1237,17 @@ try {
         const { left, right, top, bottom, width, height } = node.getBoundingClientRect();
         return { left, right, top, bottom, width, height };
       };
-      const body = element.querySelector('form > div');
-      const footer = element.querySelector('footer');
+      const body = element.querySelector('form > div:last-child');
+      const actions = element.querySelector('.property-tabs-row');
       return {
         panel: rect(element),
         input: rect(element.querySelector('input[aria-label="Solid name"]').closest('label')),
-        delete: rect(footer.querySelector('button[aria-label="Delete object"]')),
-        apply: rect(footer.querySelector('button[type="submit"]')),
-        footer: rect(footer),
+        delete: rect(actions.querySelector('button[aria-label="Delete object"]')),
+        apply: rect(actions.querySelector('button[type="submit"]')),
+        actions: rect(actions),
         body: rect(body),
         bodyOverflow: body.scrollWidth - body.clientWidth,
-        footerOverflow: footer.scrollWidth - footer.clientWidth,
+        actionOverflow: actions.scrollWidth - actions.clientWidth,
       };
     });
   try {
@@ -1251,7 +1264,7 @@ try {
       const geometry = await inspectorGeometry();
       const detail = `${viewport.width} × ${viewport.height}: ${JSON.stringify(geometry)}`;
       assert.ok(
-        Math.abs(geometry.footer.right - geometry.delete.right - 12) <= 1,
+        Math.abs(geometry.panel.right - geometry.delete.right - 12) <= 1,
         `Delete uses the shared 12 px right inset (${detail}).`,
       );
       assert.ok(
@@ -1265,7 +1278,7 @@ try {
             geometry.apply.top -
             geometry.apply.height / 2,
         ) <= 1,
-        `Footer buttons share a vertical center (${detail}).`,
+        `Properties actions share a vertical center (${detail}).`,
       );
       for (const name of ['delete', 'apply'])
         assert.ok(
@@ -1273,22 +1286,22 @@ try {
           `${name} retains a minimum 30 px target (${detail}).`,
         );
       assert.ok(
-        geometry.bodyOverflow <= 1 && geometry.footerOverflow <= 1,
-        `The inspector fields and footer have no horizontal overflow (${detail}).`,
+        geometry.bodyOverflow <= 1 && geometry.actionOverflow <= 1,
+        `The inspector fields and actions fit horizontally (${detail}).`,
       );
       assert.ok(
-        Math.abs(geometry.footer.bottom - geometry.panel.bottom) <= 1 &&
-          geometry.body.bottom <= geometry.footer.top + 1,
-        `The footer occupies its own pinned row below the fields (${detail}).`,
+        Math.abs(geometry.actions.top - geometry.panel.top - 8) <= 1 &&
+          geometry.actions.bottom <= geometry.body.top + 1,
+        `The action row stays above the fields (${detail}).`,
       );
       await inspectorBody.evaluate((element) => {
         element.scrollTop = element.scrollHeight;
       });
       const scrolled = await inspectorGeometry();
       assert.ok(
-        Math.abs(scrolled.footer.top - geometry.footer.top) <= 1 &&
-          Math.abs(scrolled.footer.bottom - geometry.footer.bottom) <= 1,
-        'Scrolling Properties keeps the footer pinned and its actions visible.',
+        Math.abs(scrolled.actions.top - geometry.actions.top) <= 1 &&
+          Math.abs(scrolled.actions.bottom - geometry.actions.bottom) <= 1,
+        'Scrolling Properties keeps the top action row visible.',
       );
       assert.equal(
         await inspector.getByRole('button', { name: 'Apply', exact: true }).isVisible(),
@@ -1425,11 +1438,7 @@ try {
       true,
       `An unapplied inspector draft blocks ${name}.`,
     );
-  assert.equal(
-    await deleteSolid.isDisabled(),
-    true,
-    'Footer Delete retains unapplied solid drafts.',
-  );
+  assert.equal(await deleteSolid.isDisabled(), true, 'Delete retains unapplied solid drafts.');
   const lengthField = inspector.getByLabel('Length (mm)', { exact: true });
   await lengthField.focus();
   await lengthField.fill('-');

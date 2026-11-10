@@ -13,26 +13,40 @@ export function PropertyTab({ children }: TabProps) {
 
 type Tab = ReactElement<TabProps>;
 
+export function PropertyActionRow({
+  children,
+  action,
+}: {
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  if (!children && !action) return null;
+  return (
+    <div className="property-tabs-row">
+      {children}
+      {action && <div className="property-tabs-action">{action}</div>}
+    </div>
+  );
+}
+
 function PropertyTabPanel({
   tab,
   selected,
   locked,
   id,
-  tabbed,
 }: {
   tab: Tab;
   selected: boolean;
   locked: boolean;
   id: string;
-  tabbed: boolean;
 }) {
   const [visited, setVisited] = useState(selected);
   if (selected && !visited) setVisited(true);
   return (
     <div
-      role={tabbed ? 'tabpanel' : undefined}
+      role="tabpanel"
       id={`${id}-panel`}
-      aria-labelledby={tabbed ? `${id}-tab` : undefined}
+      aria-labelledby={`${id}-tab`}
       hidden={!selected}
       inert={!selected}
     >
@@ -48,21 +62,24 @@ function PropertyTabPanel({
 export function PropertyTabs({
   children,
   locked = false,
+  action,
 }: {
-  children: (Tab | false | null | undefined)[];
+  children: Tab | (Tab | false | null | undefined)[];
   locked?: boolean;
+  action?: ReactNode;
 }) {
   const id = useId();
   const [selection, select] = useState('General');
-  const tabs = children.filter((tab): tab is Tab => Boolean(tab));
+  const tabs = Array.isArray(children)
+    ? children.filter((tab): tab is Tab => Boolean(tab))
+    : [children];
   const current = tabs.some((tab) => tab.props.label === selection)
     ? selection
     : tabs[0].props.label;
   if (current !== selection) select(current);
-  const tabbed = tabs.length > 1;
   return (
     <>
-      {tabbed && (
+      <PropertyActionRow action={action}>
         <div
           className="editor-dock-tabs property-tabs"
           role="tablist"
@@ -104,7 +121,7 @@ export function PropertyTabs({
             </button>
           ))}
         </div>
-      )}
+      </PropertyActionRow>
       {tabs.map((tab, index) => (
         <PropertyTabPanel
           key={tab.props.label}
@@ -112,7 +129,6 @@ export function PropertyTabs({
           tab={tab}
           selected={current === tab.props.label}
           locked={locked}
-          tabbed={tabbed}
         />
       ))}
     </>

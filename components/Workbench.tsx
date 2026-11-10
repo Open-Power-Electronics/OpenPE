@@ -65,6 +65,7 @@ import { circuitFingerprint, labelShapes, fmt, type Circuit, type Point } from '
 import { api } from '@/lib/bridge';
 import { downloadBytes, downloadText } from '@/lib/download';
 import { projectExportFormats, type ProjectExportFormat } from '@/lib/export-formats';
+import { projectPCBDesignRules } from '@/lib/kicad-project';
 import {
   importDocument,
   parseProject,
@@ -131,6 +132,7 @@ const LayoutEditor = lazy(() => import('./LayoutEditor'));
 import type { PCB3DViewState } from './PCBModelPreview';
 import type { ModelCheckIssue, ModelCheckFocus, ModelCheckReport } from './model-checks';
 import type { RuleCheckKind } from './RuleCheckPanel';
+import type { RuleSettingsDraft } from './RuleSettings';
 const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
 import { type PCB, type Footprint } from '@/lib/pcb';
 import { findPCBGraphic } from '@/lib/pcb-layout';
@@ -196,11 +198,13 @@ import type { AgentPreferences, DocumentState } from '@/lib/workspace-state';
 import { useProjectDirectory } from './useProjectDirectory';
 import type { DocumentController, DocumentUpdate } from './DesktopWorkspace';
 import {
-  defaultPCBDesignRules,
+  pcbDesignRuleLimitKeys,
   type PCBDesignRuleConfig,
+  type PCBDesignRuleLimit,
   type RuleCheckFocus,
   type RuleCheckIssue,
   type RuleCheckResult,
+  type SchematicRuleSeverities,
 } from '@/lib/design-rule-checks';
 
 const SourceEditor = lazy(() => import('./SourceEditor'));
@@ -227,38 +231,8 @@ const emptyAnnotations: AgentAnnotation[] = [];
 
 type StoredRuleReport = {
   result: RuleCheckResult;
-  revision: number;
-  schematicId?: string;
-  settings?: string;
+  basis: string;
 };
-function ruleReportIsStale(
-  report: StoredRuleReport | null,
-  kind: 'erc' | 'drc',
-  revision: number,
-  schematicId: string | undefined,
-  settings: PCBDesignRuleConfig,
-) {
-  return Boolean(
-    report &&
-    (report.revision !== revision ||
-      (kind === 'erc' && report.schematicId !== schematicId) ||
-      (kind === 'drc' && report.settings !== JSON.stringify(settings))),
-  );
-}
-function ruleCheckBasis(
-  kind: 'erc' | 'drc',
-  revision: number,
-  schematicId: string,
-  boardId: string | undefined,
-  settings: PCBDesignRuleConfig,
-) {
-  return JSON.stringify([
-    kind,
-    revision,
-    kind === 'erc' ? schematicId : boardId,
-    kind === 'drc' ? settings : null,
-  ]);
-}
 
 // Synchronous editor actions read the latest committed workbench state without
 // changing their prop identity on unrelated conversation/status updates. Async
@@ -284,6 +258,8 @@ type Modal =
   | 'library'
   | 'settings'
   | 'agent-settings'
+  | 'erc-settings'
+  | 'drc-settings'
   | 'about'
   | 'parts'
   | 'annotation'
@@ -713,6 +689,13 @@ export default function Workbench({
   const simulationVisible = spiceAvailable && simulationEnabled && view === 'canvas';
   const thermalVisible = thermalAvailable && thermalEnabled && view === 'layout';
   const parasiticsVisible = canShowParasitics && layoutAnalysis === 'parasitics';
+  const [parasiticsTerminals, setParasiticsTerminals] = useState<
+    readonly { id: string; netId: string }[]
+  >([]);
+  const parasiticsComposing = useRef(false);
+  useLayoutEffect(() => {
+    setParasiticsTerminals((current) => (current.length ? [] : current));
+  }, [parasiticsVisible, coreSnapshot.revision]);
   const layoutAnalysisVisible = thermalVisible || parasiticsVisible;
   const showLayoutSidebar = useCallback(() => {
     setLayoutAnalysis(null);
@@ -761,16 +744,78 @@ export default function Workbench({
     erc: null,
     drc: null,
   });
-  const [drcSettings, setDRCSettings] = useState<PCBDesignRuleConfig>(() => ({
-    ...defaultPCBDesignRules,
-  }));
+  const [drcSeverities, setDRCSeverities] = useState<PCBDesignRuleConfig['severities']>({});
+  const nativeFiles = project?.nativeFiles;
+  const drcSettings = useMemo(
+    () => ({ ...projectPCBDesignRules(nativeFiles), severities: drcSeverities }),
+    [nativeFiles, drcSeverities],
+  );
+  const [ercSeverities, setERCSeverities] = useState<SchematicRuleSeverities>({});
+  const ruleSettingsDraft = useRef<RuleSettingsDraft | null>(null);
+  const retainedDRCQuickLimits = useRef<readonly PCBDesignRuleLimit[]>([]);
+  const ruleBases = useMemo(
+    () => ({
+      erc: JSON.stringify([coreSnapshot.revision, doc?.id, ercSeverities]),
+      drc: JSON.stringify([coreSnapshot.revision, project?.pcb?.id, drcSettings]),
+    }),
+    [coreSnapshot.revision, doc?.id, ercSeverities, project?.pcb?.id, drcSettings],
+  );
+  const applyBasicDRCSettings = useEditorAction((settings: PCBDesignRuleConfig) => {
+    const snapshot = core.getSnapshot();
+    if (
+      !active ||
+      screen !== 'workspace' ||
+      !snapshot.project ||
+      snapshot.sourceDraft !== null ||
+      snapshot.editingBlocked
+    )
+      return false;
+    const thresholds = Object.fromEntries(
+      pcbDesignRuleLimitKeys
+        .filter((key) => settings[key] !== drcSettings[key])
+        .map((key) => [key, settings[key]]),
+    );
+    if (!Object.keys(thresholds).length) return true;
+    try {
+      core.execute('layout.drc.settings', { boardId: snapshot.project.pcb?.id, thresholds });
+    } catch (error) {
+      notify((error as Error).message);
+      return false;
+    }
+    const retained = ruleSettingsDraft.current;
+    if (retained && !retained.resetToDefault) {
+      const limits = { ...retained.limits };
+      for (const key of pcbDesignRuleLimitKeys)
+        if (Number(limits[key]) === drcSettings[key] && limits[key].trim())
+          limits[key] = String(settings[key]);
+      ruleSettingsDraft.current = { ...retained, limits };
+    }
+    return true;
+  });
+  const applyRuleSettings = useEditorAction(
+    (erc: SchematicRuleSeverities, drc: PCBDesignRuleConfig) => {
+      const snapshot = core.getSnapshot();
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        !snapshot.project ||
+        snapshot.sourceDraft !== null ||
+        snapshot.editingBlocked
+      )
+        return false;
+      if (!applyBasicDRCSettings(drc)) return false;
+      setERCSeverities(erc);
+      setDRCSeverities(drc.severities);
+      return true;
+    },
+  );
   const [ruleFocus, setRuleFocus] = useState<(RuleCheckFocus & { kind: 'erc' | 'drc' }) | null>(
     null,
   );
   const ruleFocusSequence = useRef(0);
   const ruleWork = useRef<AbortController | null>(null);
   const ruleInput = useRef({
-    lastActivity: 0,
+    lastActivity: -Infinity,
     heldPointers: new Set<number>(),
     resume: null as (() => void) | null,
   });
@@ -839,7 +884,7 @@ export default function Workbench({
   const currentRuleReport = rulesOpen && rulesOpen !== 'model' ? ruleReports[rulesOpen] : null;
   const ruleReportStale =
     rulesOpen && rulesOpen !== 'model'
-      ? ruleReportIsStale(currentRuleReport, rulesOpen, coreSnapshot.revision, doc?.id, drcSettings)
+      ? !!currentRuleReport && currentRuleReport.basis !== ruleBases[rulesOpen]
       : false;
   const closeRuleChecks = useCallback(() => {
     ruleOpenRefresh.current = null;
@@ -881,14 +926,22 @@ export default function Workbench({
     settings?: PCBDesignRuleConfig,
     automatic = false,
   ) {
-    const snapshot = core.getSnapshot();
+    const before = core.getSnapshot();
     if (!ruleLifetime.current.active || ruleLifetime.current.screen !== 'workspace') return;
-    if (!snapshot.project || !doc || ruleWork.current) return;
-    if (snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
-    const config = settings ?? drcSettings;
-    const basis = ruleCheckBasis(kind, snapshot.revision, doc.id, snapshot.project.pcb?.id, config);
+    if (!before.project || !doc || ruleWork.current) return;
+    if (before.sourceDraft !== null || before.editingBlocked) return;
+    if (kind === 'drc' && settings && !applyBasicDRCSettings(settings)) return;
+    const snapshot = core.getSnapshot();
+    if (!snapshot.project) return;
+    const config = {
+      ...projectPCBDesignRules(snapshot.project.nativeFiles),
+      severities: drcSeverities,
+    };
+    const basis =
+      kind === 'erc'
+        ? JSON.stringify([snapshot.revision, doc.id, ercSeverities])
+        : JSON.stringify([snapshot.revision, snapshot.project.pcb?.id, config]);
     ruleOpenRefresh.current = null;
-    if (kind === 'drc') setDRCSettings(config);
     const controller = new AbortController();
     ruleWork.current = controller;
     setRuleBusy({ kind, automatic });
@@ -915,7 +968,9 @@ export default function Workbench({
         );
       const result = (await capabilityHost.query(
         kind === 'erc' ? 'schematic.erc' : 'layout.drc',
-        kind === 'erc' ? { schematicId } : { boardId: snapshot.project.pcb?.id, settings: config },
+        kind === 'erc'
+          ? { schematicId, settings: { severities: ercSeverities } }
+          : { boardId: snapshot.project.pcb?.id, settings: { severities: drcSeverities } },
         { signal: controller.signal },
       )) as RuleCheckResult;
       if (!isCurrent()) return;
@@ -923,8 +978,7 @@ export default function Workbench({
         ...current,
         [kind]: {
           result,
-          revision: snapshot.revision,
-          ...(kind === 'erc' ? { schematicId } : { settings: JSON.stringify(config) }),
+          basis,
         },
       }));
     } catch (error) {
@@ -2981,10 +3035,34 @@ export default function Workbench({
       .execute(thermalEnabled ? 'thermal.hide' : 'thermal.show')
       .catch((error: Error) => notify(error.message));
   });
-  const closeParasitics = useCallback(() => {
+  const dismissParasitics = useCallback(() => {
     setLayoutAnalysis((current) => (current === 'parasitics' ? null : current));
-    parasiticsButton.current?.focus({ preventScroll: true });
   }, []);
+  const closeParasitics = useCallback(() => {
+    dismissParasitics();
+    parasiticsButton.current?.focus({ preventScroll: true });
+  }, [dismissParasitics]);
+  const parasiticsProbe = useMemo(
+    () =>
+      parasiticsVisible
+        ? {
+            terminals: parasiticsTerminals,
+            composing: parasiticsComposing,
+            onPick(terminal: { id: string; netId: string } | null) {
+              setParasiticsTerminals((current) => {
+                if (!terminal) return current.length ? [] : current;
+                if (current.length !== 1) return [terminal];
+                const [start] = current;
+                return terminal.id !== start.id && terminal.netId === start.netId
+                  ? [start, terminal]
+                  : current;
+              });
+            },
+            onExit: dismissParasitics,
+          }
+        : undefined,
+    [parasiticsVisible, parasiticsTerminals, dismissParasitics],
+  );
   const rightSidebarAction = useMemo(
     () => (
       <SidebarToggle
@@ -3187,12 +3265,10 @@ export default function Workbench({
     const kind = ruleKind;
     const stored = ruleReports[kind];
     const stale =
-      ruleReportIsStale(stored, kind, coreSnapshot.revision, doc?.id, drcSettings) ||
+      (!!stored && stored.basis !== ruleBases[kind]) ||
       (kind === 'drc' && layoutSyncStatus.pending);
     const failed =
-      (doc &&
-        ruleFailureBasis.current[kind] ===
-          ruleCheckBasis(kind, coreSnapshot.revision, doc.id, project?.pcb?.id, drcSettings)) ||
+      (doc && ruleFailureBasis.current[kind] === ruleBases[kind]) ||
       (kind === 'drc' && layoutSyncStatus.error);
     const state =
       ruleBusy?.kind === kind && (!ruleBusy.automatic || !stored)
@@ -3222,7 +3298,7 @@ export default function Workbench({
     ruleReports,
     coreSnapshot.revision,
     doc?.id,
-    drcSettings,
+    ruleBases,
     layoutSyncStatus.pending,
     layoutSyncStatus.error,
     ruleBusy,
@@ -3260,33 +3336,27 @@ export default function Workbench({
     const stored = ruleReports[kind];
     const opening = rulesOpen === kind && ruleOpenRefresh.current === view;
     if (!opening) {
-      if (stored && !ruleReportIsStale(stored, kind, coreSnapshot.revision, doc.id, drcSettings))
-        return;
-      const basis = ruleCheckBasis(
-        kind,
-        coreSnapshot.revision,
-        doc.id,
-        project.pcb?.id,
-        drcSettings,
-      );
+      if (stored?.basis === ruleBases[kind]) return;
+      const basis = ruleBases[kind];
       if (ruleFailureBasis.current[kind] === basis) return;
     }
-    const settleMs = opening || !stored ? 250 : 650;
-    const earliest = performance.now() + settleMs;
+    const first = !stored;
+    const quietMs = first ? 50 : opening ? 250 : 650;
+    const earliest = performance.now() + (first ? 0 : quietMs);
     const input = ruleInput.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
     const waitForIdle = () => {
       timer = undefined;
       if (input.heldPointers.size) return;
-      const remaining = Math.max(earliest, input.lastActivity + settleMs) - performance.now();
+      const remaining = Math.max(earliest, input.lastActivity + quietMs) - performance.now();
       if (remaining > 0) {
         timer = setTimeout(waitForIdle, Math.ceil(remaining));
         return;
       }
       idle = window.requestIdleCallback(() => {
         idle = undefined;
-        if (input.heldPointers.size || performance.now() - input.lastActivity < settleMs) {
+        if (input.heldPointers.size || performance.now() - input.lastActivity < quietMs) {
           waitForIdle();
           return;
         }
@@ -3320,7 +3390,7 @@ export default function Workbench({
     ruleBusy,
     ruleReports,
     ruleErrors,
-    drcSettings,
+    ruleBases,
     layoutSyncStatus.pending,
     layoutSyncStatus.error,
     requestRuleCheck,
@@ -3875,9 +3945,16 @@ export default function Workbench({
         stale={ruleReportStale}
         sourcePending={sourcePending}
         blockedReason={coreSnapshot.editingBlocked ?? ''}
+        drcSource={rulesOpen === 'drc' ? project : undefined}
         drcSettings={drcSettings}
+        retainedDRCQuickLimits={retainedDRCQuickLimits}
         onDRCDraftChange={setRuleDRCDraftPending}
-        onDRCSettingsChange={setDRCSettings}
+        onDRCSettingsChange={applyBasicDRCSettings}
+        onOpenSettings={
+          rulesOpen === 'model'
+            ? undefined
+            : () => setModal(rulesOpen === 'erc' ? 'erc-settings' : 'drc-settings')
+        }
         onRun={(settings) => {
           if (rulesOpen !== 'model') void runRuleChecks(rulesOpen, settings);
         }}
@@ -4372,6 +4449,7 @@ export default function Workbench({
                                       capabilityHost={capabilityHost}
                                       key={part.id}
                                       part={part}
+                                      tabAction={propertiesDeleteAction}
                                       modelFields={
                                         propertiesFootprint && propertiesBoard ? (
                                           <FootprintModels
@@ -4517,7 +4595,7 @@ export default function Workbench({
                               </div>
                             )}
                           </div>
-                          {propertiesDeleteAction && (
+                          {!part && propertiesDeleteAction && (
                             <footer className="inspector-footer">{propertiesDeleteAction}</footer>
                           )}
                         </aside>
@@ -4623,6 +4701,7 @@ export default function Workbench({
                             ? currentThermalPresentation.probeAt
                             : undefined
                         }
+                        parasiticsProbe={parasiticsProbe}
                         annotationSessionId={activeSessionId}
                         annotations={annotations}
                         onAnnotationsChange={onAnnotationsChange}
@@ -4641,6 +4720,10 @@ export default function Workbench({
                                 board={project.pcb}
                                 host={capabilityHost}
                                 revision={coreSnapshot.revision}
+                                startId={parasiticsTerminals[0]?.id}
+                                endId={parasiticsTerminals[1]?.id}
+                                composing={parasiticsComposing}
+                                onReset={() => setParasiticsTerminals([])}
                                 onClose={closeParasitics}
                               />
                             </Suspense>
@@ -5051,10 +5134,33 @@ export default function Workbench({
             <AboutDialog onClose={() => setModal(null)} />
           </DeferredDialog>
         )}
-        {(modal === 'settings' || modal === 'agent-settings') && (
+        {(modal === 'settings' ||
+          modal === 'agent-settings' ||
+          modal === 'erc-settings' ||
+          modal === 'drc-settings') && (
           <DeferredDialog title="Settings" onClose={() => setModal(null)}>
             <SettingsDialog
-              initialSection={modal === 'agent-settings' ? 'agents' : 'appearance'}
+              initialSection={
+                modal === 'agent-settings'
+                  ? 'agents'
+                  : modal === 'erc-settings' || modal === 'drc-settings'
+                    ? 'rules'
+                    : 'appearance'
+              }
+              ruleSettings={
+                screen === 'workspace' && project
+                  ? {
+                      erc: ercSeverities,
+                      drc: drcSettings,
+                      retainedDraft: ruleSettingsDraft,
+                      initialTab: modal === 'drc-settings' ? 'Copper & Routing' : 'Schematic',
+                      blockedReason:
+                        coreSnapshot.editingBlocked ??
+                        (sourcePending ? 'Apply Source edits before changing rules.' : ''),
+                      onApply: applyRuleSettings,
+                    }
+                  : undefined
+              }
               appearance={appearanceSettings}
               agents={agents}
               detecting={detecting}

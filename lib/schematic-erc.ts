@@ -1,25 +1,15 @@
 import { pinPositions, type Circuit, type Part, type Point, type Wire } from './circuit';
-import type { RuleCheckIssue, RuleCheckResult } from './design-rule-checks';
+import {
+  schematicRuleDefinitions,
+  schematicRuleIds,
+  type RuleCheckResult,
+  type SchematicRuleId,
+  type SchematicRuleSeverities,
+} from './design-rule-checks';
 import { unitGraphics } from './library';
 import { documentPinKey, documentPhysicalPinKey, projectNetGroups } from './project-net-groups';
 import { child, children, val } from './sexpr';
 
-const rules = [
-  'erc.reference-conflict',
-  'erc.pin-type-unsupported',
-  'erc.pin-type-inconsistent',
-  'erc.pin-unconnected',
-  'erc.input-undriven',
-  'erc.power-undriven',
-  'erc.output-conflict',
-  'erc.pin-conflict',
-  'erc.net-name-conflict',
-  'erc.wire-dangling',
-  'erc.wire-zero-length',
-  'erc.label-dangling',
-  'erc.no-connect-misplaced',
-  'erc.no-connect-connected',
-];
 const pinTypes = new Set([
   'input',
   'output',
@@ -36,22 +26,22 @@ const pinTypes = new Set([
 ]);
 const optionalPins = new Set(['free', 'no_connect']);
 const signalDrivers = new Set(['output', 'power_out', 'bidirectional', 'tri_state', 'passive']);
-// Default KiCad 10 conflict pairs among supported driver and power pin types.
+// Supported driver and power pin conflicts, in reporting priority order.
 const driverConflicts = [
-  ['error', 'output', 'output'],
-  ['error', 'power_out', 'power_out'],
-  ['error', 'output', 'power_out'],
-  ['error', 'output', 'open_collector'],
-  ['error', 'output', 'open_emitter'],
-  ['error', 'power_out', 'tri_state'],
-  ['error', 'power_out', 'open_collector'],
-  ['error', 'power_out', 'open_emitter'],
-  ['warning', 'output', 'tri_state'],
-  ['warning', 'bidirectional', 'power_out'],
-  ['warning', 'bidirectional', 'open_emitter'],
-  ['warning', 'tri_state', 'power_in'],
-  ['warning', 'tri_state', 'open_collector'],
-  ['warning', 'tri_state', 'open_emitter'],
+  ['output', 'output'],
+  ['power_out', 'power_out'],
+  ['output', 'power_out'],
+  ['output', 'open_collector'],
+  ['output', 'open_emitter'],
+  ['power_out', 'tri_state'],
+  ['power_out', 'open_collector'],
+  ['power_out', 'open_emitter'],
+  ['output', 'tri_state'],
+  ['bidirectional', 'power_out'],
+  ['bidirectional', 'open_emitter'],
+  ['tri_state', 'power_in'],
+  ['tri_state', 'open_collector'],
+  ['tri_state', 'open_emitter'],
 ] as const;
 const coordinate = (p: Point) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
 const pointTolerance = 0.0001;
@@ -80,14 +70,18 @@ type Pin = {
 
 /** Read-only ERC of one independent schematic. Connectivity is the same physical
  * topology used by native snapshots and PCB synchronization, not a SPICE netlist. */
-export function runSchematicERC(circuit: Circuit): RuleCheckResult {
+export function runSchematicERC(
+  circuit: Circuit,
+  severities: SchematicRuleSeverities = {},
+): RuleCheckResult {
   if (circuit.parts.length > 2000 || circuit.wires.length > 10000)
     throw new Error('ERC supports at most 2,000 components and 10,000 wires per schematic.');
+  const checkedRules = schematicRuleIds.filter((id) => severities[id] !== 'ignore');
   const result: RuleCheckResult = {
     kind: 'erc',
-    complete: true,
+    complete: checkedRules.length === schematicRuleIds.length,
     truncated: false,
-    checkedRules: [...rules],
+    checkedRules,
     issues: [],
     notes: [
       'Checks one schematic only; separate schematic files have no electrical joins.',
@@ -97,13 +91,14 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     ],
   };
   const report = (
-    ruleId: string,
-    severity: RuleCheckIssue['severity'],
+    ruleId: SchematicRuleId,
     message: string,
     ids: string[],
     location?: Point,
     token = '',
   ) => {
+    const override = severities[ruleId];
+    if (override === 'ignore') return;
     if (result.issues.length >= 1000) {
       result.truncated = true;
       result.complete = false;
@@ -118,7 +113,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     result.issues.push({
       id: `${ruleId}:${objectIds.join(',')}:${location ? coordinate(location) : ''}:${token}`,
       ruleId,
-      severity,
+      severity: override ?? schematicRuleDefinitions[ruleId][1],
       message: message.slice(0, 2048),
       objectIds,
       ...(location ? { location: { x: location.x, y: location.y } } : {}),
@@ -160,7 +155,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       conflicting.add(ref);
       report(
         'erc.reference-conflict',
-        'error',
         `${ref} is assigned to unrelated symbols or repeated units. Assign unique component references.`,
         parts.map((part) => part.id),
         parts[0],
@@ -214,7 +208,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
         result.complete = false;
         report(
           'erc.pin-type-unsupported',
-          'warning',
           `${part.ref} pin ${number} has unsupported electrical type ${type || '(missing)'}. Driver and unconnected-pin checks cannot classify it.`,
           [part.id],
           point,
@@ -318,7 +311,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     if (!nearby.length) {
       report(
         'erc.no-connect-misplaced',
-        'warning',
         'No-connect marker is not on a component pin or label.',
         [marker.id],
         marker,
@@ -331,7 +323,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     if (linked)
       report(
         'erc.no-connect-connected',
-        'warning',
         'No-connect marker is on an electrically connected pin.',
         [marker.id, ...attached.map((pin) => pin.part.id)],
         marker,
@@ -362,7 +353,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       const pin = declarations[0];
       report(
         'erc.pin-type-inconsistent',
-        'warning',
         `${pin.part.ref} pin ${pin.number} has inconsistent electrical types across its symbol declarations: ${types.join(', ')}. Its driver and unconnected-pin checks are incomplete.`,
         declarations.map((item) => item.part.id),
         pin.point,
@@ -386,7 +376,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       if (pin.type === 'no_connect' && connected(index))
         report(
           'erc.no-connect-connected',
-          'error',
           `${pin.part.ref} pin ${pin.number} is declared no-connect but is electrically connected.`,
           [pin.part.id],
           pin.point,
@@ -401,7 +390,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       )
         report(
           'erc.pin-unconnected',
-          'error',
           `${pin.part.ref} pin ${pin.number} (${pin.type}) is unconnected. Wire it or place a no-connect marker.`,
           [pin.part.id],
           pin.point,
@@ -428,7 +416,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     if (names.length > 1)
       report(
         'erc.net-name-conflict',
-        'error',
         `One connected network has conflicting names: ${names.slice(0, 8).join(', ')}.`,
         named.map((item) => item.id),
         members[0]?.point ?? circuit.labels[group.labels[0]],
@@ -439,13 +426,12 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       if (typed.length < 2) typed.push(pin);
       byType.set(pin.type, typed);
     }
-    for (const [severity, first, second] of driverConflicts) {
+    for (const [first, second] of driverConflicts) {
       const a = byType.get(first)?.[0];
       const b = byType.get(second)?.[first === second ? 1 : 0];
       if (!a || !b) continue;
       report(
         'erc.output-conflict',
-        severity,
         `${a.part.ref} pin ${a.number} (${first}) and ${b.part.ref} pin ${b.number} (${second}) share this network.`,
         [a.part.id, b.part.id],
         a.point,
@@ -459,7 +445,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     if (unspecified && other)
       report(
         'erc.pin-conflict',
-        'warning',
         `${unspecified.part.ref} pin ${unspecified.number} has unspecified electrical type and shares a network with ${other.part.ref} pin ${other.number}.`,
         [unspecified.part.id, other.part.id],
         unspecified.point,
@@ -472,7 +457,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       const name = names.length === 1 ? ` on ${names[0]}` : '';
       report(
         'erc.power-undriven',
-        'error',
         `${powerInput.part.ref} pin ${powerInput.number}${name} has no power output on its network.`,
         [powerInput.part.id],
         powerInput.point,
@@ -480,7 +464,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     } else if (!powerInput && input && !unique.some((pin) => signalDrivers.has(pin.type))) {
       report(
         'erc.input-undriven',
-        'error',
         `${input.part.ref} pin ${input.number} has no signal driver on its network.`,
         [input.part.id],
         input.point,
@@ -489,13 +472,12 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
   });
   circuit.wires.forEach((wire, index) => {
     if (same(wire.a, wire.b))
-      report('erc.wire-zero-length', 'warning', 'Wire has zero length.', [wire.id], wire.a);
+      report('erc.wire-zero-length', 'Wire has zero length.', [wire.id], wire.a);
     else
       for (const [end, point] of [wire.a, wire.b].entries())
         if (!hasTouchingWire(point, index) && !touchingPoints(point).length)
           report(
             'erc.wire-dangling',
-            'warning',
             'Wire endpoint has no pin, label or continuing wire.',
             [wire.id],
             point,
@@ -509,7 +491,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     )
       report(
         'erc.label-dangling',
-        'error',
         `Net label ${label.text} is not attached to a wire, component pin or another label.`,
         [label.id],
         label,

@@ -8,7 +8,12 @@ import { createEmptyPCB, flipPCBFootprint, padDrillPosition } from '../lib/pcb-l
 import { copperFillContour, fillCopperZones } from '../lib/pcb-polygons';
 import { defaultPCBDesignRules, runPCBDesignRules } from '../lib/pcb-drc';
 import { projectFromNativeFiles } from '../lib/kicad-project';
-import type { RuleCheckResult } from '../lib/design-rule-checks';
+import {
+  loadKiCadPCBDesignRuleLimits,
+  workbenchPCBDesignRules,
+  type RuleCheckResult,
+} from '../lib/design-rule-checks';
+import { readPCBDesignRuleSources } from '../lib/pcb-clearance-sources';
 
 const rect = (a: number, b: number, c: number, d: number): Point[] => [
   { x: a, y: b },
@@ -125,6 +130,140 @@ test('clearance uses trace widths and accepts the exact configured gap, while ze
   );
 });
 
+test('KiCad board limits can be overridden and a size-only report skips unrelated rules', () => {
+  const limits = loadKiCadPCBDesignRuleLimits(
+    JSON.stringify({
+      board: {
+        design_settings: {
+          rules: { min_clearance: 0.1, min_via_diameter: 0.5, min_through_hole_diameter: 0.3 },
+        },
+      },
+      net_settings: { classes: [{ name: 'Default', clearance: 0.23 }] },
+    }),
+  );
+  assert.equal(limits.clearance, 0.1);
+  assert.equal(limits.minThroughHole, 0.3);
+  assert.equal(limits.minViaDiameter, 0.5);
+  assert.throws(
+    () =>
+      loadKiCadPCBDesignRuleLimits(
+        '{"board":{"design_settings":{"rules":{"min_via_diameter":"0.5"}}}}',
+      ),
+    /min_via_diameter/,
+  );
+  const board = fixture();
+  board.graphics = [];
+  board.vias = [
+    { id: uid(), x: 5, y: 5, diameter: 0.499999, drill: 0.29, netId: board.nets[0].id },
+  ];
+  const footprint = pad(board, 5, 5, 1);
+  footprint.pads[0].type = 'np_thru_hole';
+  footprint.pads[0].drill = 0.2;
+  board.zones = [zone(board)];
+  const before = structuredClone(board);
+  const report = runPCBDesignRules(board, { ...limits, scopes: ['dimensions'], minAnnularRing: 0 });
+  assert.equal(report.complete, false);
+  assert.deepEqual(
+    report.issues.map((issue) => issue.ruleId),
+    ['pcb.pad-drill', 'pcb.via-drill', 'pcb.via-diameter'],
+  );
+  assert.ok(!report.checkedRules.includes('pcb.outline'));
+  const adjusted = runPCBDesignRules(board, {
+    ...limits,
+    scopes: ['dimensions'],
+    minAnnularRing: 0,
+    minViaDiameter: 0.499999,
+    minThroughHole: 0.2,
+  });
+  assert.deepEqual(adjusted.issues, []);
+  assert.deepEqual(board, before);
+});
+
+test('saved-zone clearance is applied to its fill only when selected', () => {
+  const board = fixture();
+  const outline = rect(2, 2, 8, 8);
+  board.zones = [{ ...zone(board, outline), filledPolygons: [{ points: outline }] }];
+  board.tracks = [track(board, { x: 2, y: 8.4 }, { x: 8, y: 8.4 }, 1)];
+  const settings = { clearance: 0.15, scopes: ['clearance'] as const };
+  assert.deepEqual(runPCBDesignRules(board, settings).issues, []);
+  const report = runPCBDesignRules(board, { ...settings, useZoneClearance: true });
+  assert.deepEqual(
+    report.issues.map((issue) => issue.ruleId),
+    ['pcb.clearance'],
+  );
+  assert.match(report.issues[0].message, /requires 0\.25 mm/);
+  assert.equal(report.complete, false);
+  assert.deepEqual(
+    runPCBDesignRules(board, {
+      ...settings,
+      useZoneClearance: true,
+      clearanceOverrides: [{ key: `zone:${board.zones[0].id}`, clearance: 0.25, enabled: false }],
+    }).issues,
+    [],
+  );
+});
+
+test('native net-class limits and overrides participate in clearance checks', () => {
+  const pcb = fixture();
+  pcb.tracks = [
+    track(pcb, { x: 0, y: 0 }, { x: 8, y: 0 }),
+    track(pcb, { x: 0, y: 0.7 }, { x: 8, y: 0.7 }, 1),
+  ];
+  const entry = 'test.kicad_pro';
+  const nativeFiles = {
+    entry,
+    files: [
+      {
+        name: entry,
+        source: JSON.stringify({
+          net_settings: {
+            classes: [
+              { name: 'Default', clearance: 0.2 },
+              { name: 'Power', clearance: 0.5 },
+            ],
+            netclass_patterns: [{ pattern: 'OUT', netclass: 'Power' }],
+          },
+        }),
+      },
+    ],
+  };
+  const sources = readPCBDesignRuleSources({ pcb, nativeFiles });
+  const settings = { useKiCadClearance: true };
+  assert.match(
+    runPCBDesignRules(pcb, settings, undefined, sources).issues[0].message,
+    /requires 0\.5 mm \(net class Power\)/,
+  );
+  assert.deepEqual(
+    runPCBDesignRules(
+      pcb,
+      {
+        ...settings,
+        clearanceOverrides: [{ key: 'class:Power', clearance: 0.25 }],
+      },
+      undefined,
+      sources,
+    ).issues,
+    [],
+  );
+  const unsupported = readPCBDesignRuleSources({
+    pcb,
+    nativeFiles: {
+      entry,
+      files: [
+        ...nativeFiles.files,
+        {
+          name: 'test.kicad_dru',
+          source:
+            '(version 1) (rule custom (constraint clearance (min 1mm)) (condition "A.Layer == \'F.Cu\'"))',
+        },
+      ],
+    },
+  });
+  const partial = runPCBDesignRules(pcb, settings, undefined, unsupported);
+  assert.equal(partial.complete, false);
+  assert.ok(partial.notes.some((note) => note.includes('Unsupported KiCad rule')));
+});
+
 test('independent unassigned copper is reported as unknown contact rather than silently treated as one net', () => {
   const board = fixture();
   pad(board, 5, 5).pads[0].netId = null;
@@ -134,6 +273,91 @@ test('independent unassigned copper is reported as unknown contact rather than s
   assert.ok(
     report.issues.some((i) => i.ruleId === 'pcb.unassigned-copper' && i.severity === 'warning'),
   );
+});
+
+test('drill spacing uses actual round holes across nets and respects its independent switch', () => {
+  const board = fixture();
+  const part = pad(board, 5, 5);
+  part.pads[0].type = 'np_thru_hole';
+  part.pads[0].drill = 0.8;
+  const viaId = uid();
+  board.vias = [{ id: viaId, x: 5.8, y: 5, diameter: 0.6, drill: 0.4, netId: board.nets[1].id }];
+  const settings = { scopes: ['holes'] as const, copperToHole: 0, holeToHole: 0.21 };
+  const report = runPCBDesignRules(board, settings);
+  assert.deepEqual(
+    report.issues.map((issue) => issue.ruleId),
+    ['pcb.hole-spacing'],
+  );
+  assert.deepEqual(new Set(report.issues[0].objectIds), new Set([part.pads[0].id, viaId]));
+  assert.match(report.issues[0].message, /0\.2 mm; requires 0\.21 mm/);
+  const spacingOnly = runPCBDesignRules(board, {
+    ...settings,
+    severities: { 'pcb.copper-hole': 'ignore' },
+  });
+  assert.deepEqual(spacingOnly.issues, report.issues);
+  assert.deepEqual(runPCBDesignRules(board, { ...settings, holeToHole: 0.2 }).issues, []);
+  const disabled = runPCBDesignRules(board, {
+    ...settings,
+    severities: { 'pcb.hole-spacing': 'ignore' },
+  });
+  assert.deepEqual(disabled.issues, []);
+  assert.deepEqual(disabled.checkedRules, ['pcb.copper-hole']);
+});
+
+test('silkscreen geometry and visible text dimensions run as separate configurable checks', () => {
+  const board = fixture();
+  const part = pad(board, 0, 0);
+  const stroke = {
+    id: uid(),
+    layer: 'F.SilkS' as const,
+    start: { x: 1, y: 1 },
+    end: { x: 5, y: 1 },
+    width: 0.1,
+  };
+  part.graphics = [stroke];
+  const neighbour = { ...stroke, id: uid(), start: { x: 1, y: 1.2 }, end: { x: 5, y: 1.2 } };
+  const text = {
+    id: uid(),
+    layer: 'F.SilkS' as const,
+    kind: 'text' as const,
+    width: 0,
+    start: { x: 12, y: 8 },
+    end: { x: 12, y: 8 },
+    text: { value: 'A', size: { x: 0.5, y: 0.6 }, thickness: 0.07, rotation: 0 },
+  };
+  board.graphics.push(neighbour, { ...neighbour, id: uid(), layer: 'B.SilkS' }, text, {
+    ...text,
+    id: uid(),
+    text: { ...text.text, hidden: true },
+  });
+  const settings = {
+    scopes: ['silkscreen'] as const,
+    minSilkClearance: 0.15,
+    minTextHeight: 0.8,
+    minTextThickness: 0.08,
+  };
+  const report = runPCBDesignRules(board, settings);
+  assert.deepEqual(report.issues.map(({ ruleId }) => ruleId).sort(), [
+    'pcb.silk-clearance',
+    'pcb.silk-text-height',
+    'pcb.silk-text-thickness',
+  ]);
+  assert.match(
+    report.issues.find(({ ruleId }) => ruleId === 'pcb.silk-clearance')!.message,
+    /0\.1 mm/,
+  );
+  const reconfigured = runPCBDesignRules(board, {
+    ...settings,
+    severities: { 'pcb.silk-clearance': 'ignore', 'pcb.silk-text-height': 'warning' },
+  });
+  assert.deepEqual(
+    reconfigured.issues.map(({ ruleId, severity }) => [ruleId, severity]),
+    [
+      ['pcb.silk-text-height', 'warning'],
+      ['pcb.silk-text-thickness', 'error'],
+    ],
+  );
+  assert.ok(!reconfigured.checkedRules.includes('pcb.silk-clearance'));
 });
 
 test('circular pad/via contacts and minimum rings do not depend on polygon sample angles', () => {
@@ -211,8 +435,12 @@ test('track width, via drill and offset plated annular rings use configurable mi
   assert.equal(report.issues.filter((i) => i.ruleId === 'pcb.annular-ring').length, 2);
   assert.deepEqual(padDrillPosition(f, f.pads[0]), { x: 30, y: 9.15 });
   assert.equal(
-    runPCBDesignRules(board, { minTrackWidth: 0, minViaDrill: 0, minAnnularRing: 0 }).issues.filter(
-      (i) => ['pcb.track-width', 'pcb.via-drill', 'pcb.annular-ring'].includes(i.ruleId),
+    runPCBDesignRules(board, {
+      minTrackWidth: 0,
+      minThroughHole: 0,
+      minAnnularRing: 0,
+    }).issues.filter((i) =>
+      ['pcb.track-width', 'pcb.via-drill', 'pcb.annular-ring'].includes(i.ruleId),
     ).length,
     0,
   );
@@ -571,18 +799,77 @@ test('courtyards preserve independent contours and cutouts and reject crossing o
   assert.equal(issues(board, 'pcb.courtyard-malformed').length, 1);
 });
 
-test('native EMC Flyback passes default DRC with complete coverage and unchanged files', async () => {
+test('native EMC Flyback uses conditional clearance precedence and accepts session overrides', async () => {
   const { readNativeProject } = createRequire(import.meta.url)('../electron/native-project.cjs');
   const filename = 'project/emc-flyback/emc-flyback.kicad_pro';
   const native = await readNativeProject(filename);
   const project = projectFromNativeFiles(native);
   const board = project.pcb!;
-  const before = structuredClone(board);
-  const report = runPCBDesignRules(board, {}, project.schematic);
+  const core = new ProjectCore(project);
+  const before = core.getSnapshot();
+  const boardId = board.id;
+  const nativeClearanceSettings = {
+    ...workbenchPCBDesignRules,
+    useZoneClearance: true,
+    useKiCadClearance: true,
+  };
+  const report = (await core.query('layout.drc', {
+    boardId,
+    settings: nativeClearanceSettings,
+  })) as RuleCheckResult;
   assert.equal(report.complete, true);
   assert.equal(report.truncated, false);
   assert.deepEqual(report.issues, []);
-  assert.deepEqual(board, before);
+  const changed = (await core.query('layout.drc', {
+    boardId,
+    settings: {
+      ...nativeClearanceSettings,
+      clearanceOverrides: [
+        { key: 'rule:low-voltage primary pairs (<= 13 V apart)', clearance: 0.3 },
+      ],
+    },
+  })) as RuleCheckResult;
+  assert.equal(changed.complete, true);
+  assert.ok(
+    changed.issues.some(
+      ({ message, objectIds }) =>
+        objectIds.includes('68276903-6104-4936-a5c5-7975a08ac27c') &&
+        /0\.2004 mm; requires 0\.3 mm \(rule low-voltage/.test(message),
+    ),
+  );
+  const disabledRule = (await core.query('layout.drc', {
+    boardId,
+    settings: {
+      ...nativeClearanceSettings,
+      clearanceOverrides: [
+        { key: 'rule:low-voltage primary pairs (<= 13 V apart)', clearance: 0.2, enabled: false },
+      ],
+    },
+  })) as RuleCheckResult;
+  assert.ok(
+    disabledRule.issues.some(
+      ({ message, objectIds }) =>
+        objectIds.includes('68276903-6104-4936-a5c5-7975a08ac27c') &&
+        /0\.2004 mm; requires 0\.4 mm \(zone PGND/.test(message),
+    ),
+  );
+  const runWorkbench = (clearance: number) =>
+    core.query('layout.drc', {
+      boardId,
+      settings: { ...workbenchPCBDesignRules, clearance },
+    }) as Promise<RuleCheckResult>;
+  const workbench = await runWorkbench(0.15);
+  assert.equal(workbench.complete, true);
+  assert.deepEqual(workbench.issues, []);
+  const tighter = await runWorkbench(0.21);
+  assert.ok(
+    tighter.issues.some(
+      ({ message, objectIds }) =>
+        objectIds.includes('68276903-6104-4936-a5c5-7975a08ac27c') &&
+        /0\.2004 mm; requires 0\.21 mm\.$/.test(message),
+    ),
+  );
+  assert.equal(core.getSnapshot(), before);
   assert.deepEqual(await readNativeProject(filename), native);
 });
 
@@ -604,7 +891,7 @@ test('EMC Flyback DRC completes after moving a track and refreshing saved fills'
   );
   const report = (await core.query('layout.drc', { boardId: board.id })) as RuleCheckResult;
   assert.equal(report.complete, true, report.notes.join('\n'));
-  assert.deepEqual(report.issues, []);
+  assert.ok(!report.issues.some((issue) => issue.ruleId === 'pcb.unfilled-zone'));
   assert.deepEqual(await core.query('layout.drc', { boardId: board.id }), report);
   assert.equal(core.getSnapshot(), moved);
 });
@@ -626,7 +913,7 @@ test('threshold validation rejects unknown, non-finite and out-of-range inputs',
   assert.equal(defaultPCBDesignRules.clearance, 0.15);
   for (const config of [
     { clearance: -1 },
-    { minViaDrill: Infinity },
+    { minThroughHole: Infinity },
     { copperToEdge: 1001 },
     { unknown: 1 },
     null,

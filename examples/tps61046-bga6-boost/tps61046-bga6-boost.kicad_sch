@@ -719,7 +719,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin power_in line
+        (pin input line
           (at 7.62 -2.54 180)
           (length 2.54)
           (name "FB"
@@ -752,7 +752,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin passive line
+        (pin power_out line
           (at 7.62 0 180)
           (length 2.54)
           (name "VOUT"
@@ -921,6 +921,92 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:PWR_FLAG"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -1092,6 +1178,11 @@
       (xy 106.68 22.86)
       (xy 106.68 26.67))
     (uuid "2987ac9c-e2dd-5f95-a84e-aa39611fa4ee"))
+  (wire
+    (pts
+      (xy 78.74 26.67)
+      (xy 86.36 26.67))
+    (uuid "93aa09ed-ac86-5cc9-a463-a751fabe91e1"))
   (junction
     (at 69.85 68.58)
     (uuid "108c9e62-3be2-451e-ac87-82c3519f6d60"))
@@ -1626,7 +1717,7 @@
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
-    (lib_id "Reference:tps61046-bga6-boost")
+    (lib_id "Reference:Reference_tps61046_bga6_boost")
     (lib_name "Reference_tps61046_bga6_boost")
     (at 54.61 55.88 0)
     (unit 1)
@@ -2067,6 +2158,62 @@
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
       (at 106.68 26.67 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 86.36 11.43 0)
+    (unit 1)
+    (uuid "6ec5cf13-a875-5c8c-a401-73175cdb5a1f")
+    (in_bom no)
+    (instances
+      (project "tps61046-bga6-boost"
+        (path "/69a4a7cc-46c7-446b-af0b-573fbbeb79f9"
+          (reference "#FLG1")
+          (unit 1))))
+    (property "Reference" "#FLG1"
+      (at 86.36 13.97 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 86.36 13.97 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 86.36 11.43 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 78.74 26.67 0)
+    (unit 1)
+    (uuid "bb22f9d9-3bb8-5de4-ad05-32dbbb5cf029")
+    (in_bom no)
+    (instances
+      (project "tps61046-bga6-boost"
+        (path "/69a4a7cc-46c7-446b-af0b-573fbbeb79f9"
+          (reference "#FLG2")
+          (unit 1))))
+    (property "Reference" "#FLG2"
+      (at 78.74 29.21 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 78.74 29.21 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 78.74 26.67 0)
       (effects
         (font
           (size 1.27 1.27)))

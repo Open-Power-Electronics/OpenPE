@@ -10,7 +10,7 @@
                 <mxCell id="human" parent="1" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=center;verticalAlign=middle;spacing=6;" value="Human" vertex="1">
                     <mxGeometry height="42" width="240" x="130" y="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Window-wide Agent detection&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;Vector silkscreen · Path tracing · Denoising&#xa;PCB picking · Copper preview Worker" vertex="1">
+                <mxCell id="gui" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="GUI · Workbench · Git window&#xa;Agent detection · ERC / DRC settings&#xa;Retained editors · File drafts · PDF viewer&#xa;Schematic · Layout · Model · Source&#xa;Vector silkscreen · Path tracing · Denoising&#xa;PCB picking · Copper preview Worker" vertex="1">
                     <mxGeometry height="120" width="340" x="80" y="190" as="geometry"/>
                 </mxCell>
                 <mxCell id="context" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Context Management&#xa;Project snapshot at open · Live capture at Send&#xa;Validated provider projection" vertex="1">
@@ -37,7 +37,7 @@
                 <mxCell id="cad" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Model CAD&#xa;Sketch corners / Booleans → extrusion" vertex="1">
                     <mxGeometry height="54" width="160" x="380" y="140" as="geometry"/>
                 </mxCell>
-                <mxCell id="domain" parent="core" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=14;fontColor=#5c5c5c;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Geometry · Validation · ERC / DRC" vertex="1">
+                <mxCell id="domain" parent="core" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=14;fontColor=#5c5c5c;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Geometry · Validation · ERC / DRC · Board rule settings" vertex="1">
                     <mxGeometry height="30" width="520" x="20" y="212" as="geometry"/>
                 </mxCell>
                 <mxCell id="plugins" parent="1" style="swimlane;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=#fafafa;strokeColor=#dbdbdb;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=left;verticalAlign=middle;horizontal=1;startSize=40;collapsible=0;container=1;swimlaneFillColor=#fafafa;spacingLeft=20;" value="Bundled plugins" vertex="1">
@@ -64,8 +64,8 @@
                 <mxCell id="persistence" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Persistence&#xa;Destination Git · Recovery · Recent · Results&#xa;Current schemas · Publication queue" vertex="1">
                     <mxGeometry height="65" width="260" x="300" y="55" as="geometry"/>
                 </mxCell>
-                <mxCell id="resources" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Resources · Verified PDF pages&#xa;Sibling examples/ · project/ · circuits/*.lib&#xa;Libraries / models · IC records · PDF workers" vertex="1">
-                    <mxGeometry height="65" width="300" x="580" y="55" as="geometry"/>
+                <mxCell id="resources" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Resources · Verified PDF pages&#xa;Sibling examples/ · project/ · circuits/*.lib&#xa;Offline KiCad refill: TPS61046 / EMC&#xa;Libraries / models · IC records · PDF workers" vertex="1">
+                    <mxGeometry height="77" width="300" x="580" y="55" as="geometry"/>
                 </mxCell>
                 <mxCell id="execution" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Execution&#xa;Solvers · Convergence retry&#xa;STEP parser workers" vertex="1">
                     <mxGeometry height="65" width="270" x="900" y="55" as="geometry"/>

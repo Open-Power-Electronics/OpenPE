@@ -4,7 +4,8 @@
     "Source KiCad physical pin network partitions match exported KiCad schematic netlists.",
     "KiCad PCB copper layers, pads, drill geometry, tracks and vias match pinned source boards.",
     "Board and footprint artwork, ordinary text and caption styles match; rectangles normalize to exact polygons.",
-    "Zone boundaries, holes, keepout, thermal/island settings and native filled copper match per layer.",
+    "Copper-zone outer boundaries follow the 0.5 mm board inset; internal partitions, holes and unrelated rules retain source geometry.",
+    "Eight boards retain exact source fills. TPS61046 retains copper-object UUIDs and uses a 0.25 mm zone clearance. All three zones match an independent KiCad 10.0.1 refill exactly by layer, contour and island flag. Saved copper stays within its owner and avoids foreign-pad and zone overlap.",
     "Schematic and PCB SVG exports completed with KiCad 10."
   ],
   "scope": "Structural and connectivity verification only; not ERC, DRC, simulation or production qualification.",
@@ -29,7 +30,35 @@
       "pads": 23,
       "tracksAndVias": 46,
       "zones": 3,
-      "graphics": 95
+      "graphics": 95,
+      "curatedFill": {
+        "zones": 3,
+        "minimumClearanceMm": 0.25,
+        "exactKiCadRefill": true,
+        "zonePolygons": [
+          {
+            "uuid": "85dbabd2-9c9c-4b32-9649-6178224f36aa",
+            "net": "/VIN",
+            "layer": "F.Cu",
+            "polygons": 0
+          },
+          {
+            "uuid": "ad65a479-9a23-496d-bf52-71cbf27116a6",
+            "net": "GND",
+            "layer": "F.Cu",
+            "polygons": 2
+          },
+          {
+            "uuid": "49081fa0-1f6a-43f1-94e2-793ea732967f",
+            "net": "GND",
+            "layer": "B.Cu",
+            "polygons": 1
+          }
+        ],
+        "filledAreaMm2": 371.986466474674,
+        "ownerAndCutoutsVerified": true,
+        "foreignPadAndZoneOverlapVerified": true
+      }
     },
     {
       "id": "reference-lm2735-msop8-sepic",

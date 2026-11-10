@@ -12,6 +12,9 @@ import {
 } from '../lib/project';
 import { parseKiCadPCB } from '../lib/kicad-pcb';
 import { runPCBDesignRules } from '../lib/pcb-drc';
+import { runSchematicERC } from '../lib/schematic-erc';
+import { libraries, type Circuit } from '../lib/circuit';
+import { createLibraryPart } from '../lib/library';
 import { offsetPolygons } from '../lib/pcb-polygons';
 import { parseSExpr, child, children, val, quote, writeSExpr, type SExpr } from '../lib/sexpr';
 import { KICAD_SCHEMATIC_VERSION } from '../lib/kicad-version';
@@ -61,6 +64,48 @@ function stableUpgrade(source: string) {
   };
   visit(tree, String(tree[0]));
   return writeSExpr(tree) + '\n';
+}
+
+function prepareSchematicERC(circuit: Circuit) {
+  const flagLibrary = 'power:PWR_FLAG';
+  circuit.libraries[flagLibrary] = structuredClone(libraries[flagLibrary]);
+  // Declare the rails at the existing test points, with room for the flags
+  // beside the labels and ground symbols inside the test-point panel.
+  for (const [ref, rail, x, y, rotation] of [
+    ['VBUS', 'VBUS', 106.68, 114.3, 90],
+    ['VOUT', 'VOUT', 119.38, 114.3, 90],
+    ['PGND1', 'PGND', 137.16, 111.76, 0],
+    ['SGND', 'SGND', 162.56, 111.76, 0],
+    ['CHAS', 'CHASSIS', 175.26, 111.76, 0],
+  ] as const) {
+    const point = circuit.parts.find((part) => part.ref === ref && part.value === rail);
+    if (!point) throw new Error(`Missing the EMC Flyback ${rail} test point.`);
+    const flag = createLibraryPart(circuit, circuit.libraries[flagLibrary], x, y);
+    flag.id = stable(`power-flag:${rail}`);
+    flag.rotation = rotation;
+    flag.excludeFromSimulation = true;
+    circuit.parts.push(flag);
+    if (rotation === 0)
+      circuit.wires.push({
+        id: stable(`power-flag:${rail}:lead`),
+        a: { x: point.x, y: point.y },
+        b: { x, y },
+      });
+  }
+
+  // Publish the older embedded drawings in the project library. Keep the
+  // embedded IDs that the reviewed simulation model binds to.
+  return ['Device:LED', 'Reference_Voltage:TL431DBZ', 'Isolator:LTV-817S'].map((id) => {
+    const symbol = structuredClone(circuit.libraries[id]);
+    const name = id.split(':')[1];
+    symbol[1] = quote(name);
+    for (const part of circuit.parts.filter((candidate) => candidate.libId === id)) {
+      const raw = part.raw!;
+      child(raw, 'lib_id')![1] = quote(`EMC_Demo:${name}`);
+      raw.push(['lib_name', quote(id)]);
+    }
+    return symbol;
+  });
 }
 
 /** Build-only normalization of KiCad's upgraded demo. Every geometry
@@ -224,7 +269,10 @@ function preparePCB(source: string) {
 function repairPlacement(board: SExpr) {
   const footprints = new Map(
     children(board, 'footprint').map((fp) => [
-      val(children(fp, 'property').find((p) => val(p) === 'Reference'), 2),
+      val(
+        children(fp, 'property').find((p) => val(p) === 'Reference'),
+        2,
+      ),
       fp,
     ]),
   );
@@ -349,6 +397,12 @@ prepareEmcFlybackValues(project.schematic);
 prepareEmcFlybackModelBindings(project.schematic);
 arrangeExampleText(project.schematic, 'emc-flyback-demo');
 prepareEmcFlybackTestbench(project.schematic);
+const localSymbols = prepareSchematicERC(project.schematic);
+const erc = runSchematicERC(project.schematic);
+if (!erc.complete || erc.issues.length)
+  throw new Error(
+    `EMC Flyback failed OpenPE ERC. ${erc.issues.map((issue) => issue.message).join(' ')}`,
+  );
 const filename = path.basename(homeExampleNativePath('emc-flyback-demo'));
 const stem = filename.replace(/\.kicad_pro$/, '');
 const settings = JSON.parse(await readFile(`${root}/design/emc_flyback.kicad_pro`, 'utf8'));
@@ -376,7 +430,7 @@ project.extensions['org.openpe.emc-flyback-example'] = {
   license: 'CC-BY-4.0',
   attribution: 'Chengmin Li and AI-PCB-layout contributors; KiCad library contributors',
   changes:
-    'Native KiCad 7 board normalized to supported KiCad 10 records. Footprints are repositioned to clear courtyard overlaps and align local pad connections. Tracks use horizontal, vertical and 45-degree paths. Redundant local segments are removed and zones are refilled. Original nets, pad shapes, vias and retained track identities and locks are preserved. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
+    'Native KiCad 7 board normalized to supported KiCad 10 records. Footprints are repositioned to clear courtyard overlaps and align local pad connections. Tracks use horizontal, vertical and 45-degree paths. Redundant local segments are removed and zones are refilled. Original nets, pad shapes, vias and retained track identities and locks are preserved. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Five power flags declare existing rails and the project symbol library carries the embedded LED, TL431DBZ and LTV-817S drawings. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
 };
 const native = projectNativeFiles(project, filename);
 native.files.find((f) => f.name.endsWith('.kicad_pro'))!.source = settingsSource;
@@ -418,6 +472,11 @@ for (const file of await readdir(`${root}/design`, { withFileTypes: true })) {
       });
     }
 }
+const symbolLibrary = native.files.find((file) => file.name === `symbols/${stem}.kicad_sym`)!;
+symbolLibrary.source = symbolLibrary.source.replace(
+  /\)\s*$/,
+  localSymbols.map((symbol) => `  ${writeSExpr(symbol, 1)}\n`).join('') + ')\n',
+);
 project.nativeFiles = native;
 validateProject(project);
 project.schematic = projectFromNativeFiles(projectNativeFiles(project, filename)).schematic;

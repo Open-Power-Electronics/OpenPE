@@ -130,7 +130,7 @@ test('EMC editable copies retain native KiCad 10 geometry, independent IDs, note
   assert.equal(cadA.objects.length, 4);
   assert.notEqual(cadA.objects[0].id, cadB.objects[0].id);
   assert.equal(cadA.objects.flatMap(panelCuts).length, 8);
-  assert.equal(a.schematic.parts.length, 145);
+  assert.equal(a.schematic.parts.length, 150);
   assert.equal(a.pcb!.footprints.length, 88);
   assert.equal(a.pcb!.tracks.length, 336);
   assert.equal(a.pcb!.vias.length, 155);

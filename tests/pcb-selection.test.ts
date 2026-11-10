@@ -345,11 +345,24 @@ test('physical paint order resolves exact copper ties independently of record an
         'y-inner1',
         'The upper inner copper layer wins without depending on native record order.',
       );
-      assert.equal(
-        choosePCBPointCandidate(current, layers, list, { x: 0, y: 0 }, { tolerance: 0 })?.selection
-          .id,
-        'z-front',
-        'The default active layer breaks similar copper hits even without a paint order.',
+      let choices: string[] = [];
+      choosePCBPointCandidate(
+        current,
+        layers,
+        list,
+        { x: 0, y: 0 },
+        {
+          tolerance: 0,
+          layerOrder,
+          onAmbiguous: (items) => {
+            choices = items.map(({ selection }) => selection.id);
+          },
+        },
+      );
+      assert.deepEqual(
+        choices.sort(),
+        tracks.map(({ id }) => id).sort(),
+        'Default picking keeps all comparable hits.',
       );
     }
     assert.deepEqual(current, beforeBoard);
@@ -372,8 +385,8 @@ test('physical tie ranking excludes hidden copper while retaining the nearest vi
     {
       id: 'front',
       layer: 'F.Cu',
-      start: { x: -2, y: 0.1 },
-      end: { x: 2, y: 0.1 },
+      start: { x: -2, y: 0 },
+      end: { x: 2, y: 0 },
       width: 0.2,
       netId: 'n',
     },
@@ -387,7 +400,9 @@ test('physical tie ranking excludes hidden copper while retaining the nearest vi
   };
   const pick = () =>
     choosePCBPointCandidate(board, layers, candidates, { x: 0, y: 0 }, options)?.selection.id;
-  assert.equal(pick(), 'front', 'The active layer wins when the copper surfaces and widths match.');
+  assert.equal(pick(), 'front', 'The physical order breaks a geometric tie in the default view.');
+  board.tracks[1] = { ...board.tracks[1], start: { x: -2, y: 0.1 }, end: { x: 2, y: 0.1 } };
+  assert.equal(pick(), 'back', 'The default view gives no priority to the front copper layer.');
   board.tracks[1] = { ...board.tracks[1], start: { x: -2, y: 0.4 }, end: { x: 2, y: 0.4 } };
   assert.equal(pick(), 'back', 'A nearer surface wins before paint order.');
   layers['B.Cu'] = false;

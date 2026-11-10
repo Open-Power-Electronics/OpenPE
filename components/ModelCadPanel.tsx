@@ -1,6 +1,7 @@
 'use client';
 import QuantityInput from './QuantityInput';
 import PropertyDeleteButton from './PropertyDeleteButton';
+import { PropertyActionRow } from './PropertyTabs';
 import { formatFixedQuantity, quantityLabel } from './quantity-units';
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -381,6 +382,52 @@ export default function ModelCadPanel({
           void apply();
         }}
       >
+        {!placement && (
+          <div className={styles.editActions}>
+            <PropertyActionRow
+              action={
+                <>
+                  <button
+                    type="submit"
+                    className="icon-button property-apply-action"
+                    aria-label="Apply"
+                    title="Apply"
+                    disabled={blocked || stale || changedSelection || !dirty || !parsed.object}
+                  >
+                    <Check size={17} aria-hidden="true" />
+                  </button>
+                  <PropertyDeleteButton
+                    disabled={
+                      blocked ||
+                      dirty ||
+                      baseOutdated ||
+                      changedSelection ||
+                      !base.object ||
+                      !onRemove
+                    }
+                    onClick={() => void remove()}
+                  />
+                </>
+              }
+            />
+            {panelError && (
+              <div className={styles.error}>
+                <p role="alert">{panelError}</p>
+                {(stale || changedSelection) && (
+                  <button
+                    type="button"
+                    className="dialog-button secondary"
+                    aria-label="Reload solid parameters"
+                    disabled={blocked}
+                    onClick={reset}
+                  >
+                    Reload
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div className={styles.body}>
           {toolSheet && panelError && (
             <p className={styles.sheetError} role="alert">
@@ -533,59 +580,23 @@ export default function ModelCadPanel({
             </>
           )}
         </div>
-        <footer className={`${styles.footer}${!toolSheet ? ' inspector-footer' : ''}`}>
-          {!toolSheet && panelError && (
-            <div className={styles.error}>
-              <p role="alert">{panelError}</p>
-              {(stale || changedSelection) && (
-                <button
-                  type="button"
-                  className="dialog-button secondary"
-                  aria-label="Reload solid parameters"
-                  disabled={blocked}
-                  onClick={reset}
-                >
-                  Reload
-                </button>
-              )}
-            </div>
-          )}
-          {placement ? (
-            <>
-              <p className={styles.instruction}>
-                {mode === 'move' ? 'Click the canvas to move' : 'Click the canvas to place'}
-              </p>
-              <button
-                type="button"
-                className={styles.close}
-                aria-label="Cancel"
-                title="Close"
-                disabled={busy}
-                onClick={onClose}
-              >
-                <X size={15} aria-hidden="true" />
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="submit"
-                className="icon-button property-apply-action"
-                aria-label="Apply"
-                title="Apply"
-                disabled={blocked || stale || changedSelection || !dirty || !parsed.object}
-              >
-                <Check size={17} aria-hidden="true" />
-              </button>
-              <PropertyDeleteButton
-                disabled={
-                  blocked || dirty || baseOutdated || changedSelection || !base.object || !onRemove
-                }
-                onClick={() => void remove()}
-              />
-            </>
-          )}
-        </footer>
+        {placement && (
+          <footer className={styles.footer}>
+            <p className={styles.instruction}>
+              {mode === 'move' ? 'Click the canvas to move' : 'Click the canvas to place'}
+            </p>
+            <button
+              type="button"
+              className={styles.close}
+              aria-label="Cancel"
+              title="Close"
+              disabled={busy}
+              onClick={onClose}
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          </footer>
+        )}
       </form>
     </aside>
   );

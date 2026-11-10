@@ -896,7 +896,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin power_in line
+        (pin open_collector line
           (at -10.16 0 0)
           (length 2.54)
           (name "FLAG"
@@ -907,7 +907,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin input line
+        (pin power_in line
           (at 3.81 -8.89 90)
           (length 2.54)
           (name "GND"
@@ -929,7 +929,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin output line
+        (pin input line
           (at 10.16 0 180)
           (length 2.54)
           (name "FB"
@@ -940,7 +940,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin output line
+        (pin input line
           (at -3.81 -8.89 90)
           (length 2.54)
           (name "SS"
@@ -1109,6 +1109,92 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:PWR_FLAG"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -1370,6 +1456,11 @@
       (xy 172.72 25.4)
       (xy 172.72 29.21))
     (uuid "e5256b33-c785-5ba4-af87-02908e3543b7"))
+  (wire
+    (pts
+      (xy 137.16 29.21)
+      (xy 144.78 29.21))
+    (uuid "fc39370e-4d3e-54b9-a06b-a9400f50173a"))
   (junction
     (at 36.83 58.42)
     (uuid "05ccad9f-8d65-49d5-9a9f-9dd57c4d9cff"))
@@ -2178,7 +2269,7 @@
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
-    (lib_id "Reference:lm2598-to220-7-buck")
+    (lib_id "Reference:Reference_lm2598_to220_7_buck")
     (lib_name "Reference_lm2598_to220_7_buck")
     (at 87.63 63.5 0)
     (unit 1)
@@ -2802,6 +2893,62 @@
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
       (at 172.72 29.21 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 144.78 13.97 0)
+    (unit 1)
+    (uuid "e5f4077c-bb27-525b-a7df-72f1a1e811de")
+    (in_bom no)
+    (instances
+      (project "lm2598-to220-7-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#FLG1")
+          (unit 1))))
+    (property "Reference" "#FLG1"
+      (at 144.78 16.51 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 144.78 16.51 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 144.78 13.97 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 137.16 29.21 0)
+    (unit 1)
+    (uuid "fa04d748-1694-5955-a209-b56a0cfdbaa5")
+    (in_bom no)
+    (instances
+      (project "lm2598-to220-7-buck"
+        (path "/d1caa003-d193-4916-b614-d57c7db2d82b"
+          (reference "#FLG2")
+          (unit 1))))
+    (property "Reference" "#FLG2"
+      (at 137.16 31.75 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 137.16 31.75 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 137.16 29.21 0)
       (effects
         (font
           (size 1.27 1.27)))

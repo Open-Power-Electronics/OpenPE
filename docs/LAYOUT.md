@@ -250,7 +250,7 @@ Linked footprints share Schematic's symbol identity, editable Reference/Value,
 field table and Footprint chooser. SPICE controls belong only to Schematic's
 installed and enabled SPICE Simulation plugin; Layout retains their underlying
 native attributes without showing a simulation section or participation switch. PCB pose and side follow
-the shared form, with a fixed deletion footer. Empty inspection uses the same
+the shared form, with Delete in the upper-right action row. Empty inspection uses the same
 icon and placeholder layout. Other object fields retain their labelled sections.
 Controls share typography, spacing and surfaces with 12 px content insets.
 Layers and Objects use the same swatch/name rows and right-aligned eye controls.
@@ -308,7 +308,7 @@ smaller drill. The rectangle and polygon strips share Net and Layer selectors wi
 
 Net/layer changes, unrelated board revisions and cancellation discard the complete preview without partial writes. Escape clears a draft before idle Escape exits. Polygon Backspace removes one corner. Rejection retains its exact draft for retry. Same-layer endpoints attract within eight screen pixels; Shift bypasses attraction and Ctrl/Cmd bypasses grid snapping. Preview and native output use the same layer/coordinates; hidden-layer drafts cannot commit. Edge.Cuts uses a 0.05 mm display floor, retaining native widths. Number-field Escape restores accepted input/canvas focus. Selector Escape closes options first; IME composition, including code 229, cannot apply or cancel.
 
-Closed-region interiors are fallback point targets behind precise copper and strokes, respecting visible outlines, filters and cutouts. The General tab shows the net and layer. The **Fill** tab pairs clearance and minimum width, and the **Bounds** tab pairs the position and size fields. The zone-corner and cutout coordinate lists are omitted without changing native geometry. Retained drafts survive tab and dock visibility changes. A fixed footer outside the scrolling fields keeps Delete object at the bottom right for every selected object or group. Copper zones also show a paint-bucket Fill/Refill icon immediately before Delete. Pad inspection remains distinct from object selection and does not expose owner deletion.
+Closed-region interiors are fallback point targets behind precise copper and strokes, respecting visible outlines, filters and cutouts. See [Object Properties](../DESIGN.md#object-properties) for field grouping, draft retention and actions. Pad inspection remains distinct from object selection and does not expose owner deletion.
 
 ### Rectangular outline editing
 
@@ -365,19 +365,23 @@ never move existing objects.
 
 ### Layers, labels and selection
 
-Layout starts with F.Cu active. A layer row activates its layer and a repeat
-click retains it. Each visible layer paints its copper, pads, artwork and
-captions together. The active side's layers move above unrelated layers, with
-the active layer on top. Through pads and vias paint once at the highest
-visible copper pass, with drill voids above artwork. Airwires remain an
+Layout starts in All with the physical paint order and no prioritized layer.
+F.Cu is the initial routing layer. Selecting a layer row prioritizes its layer.
+Selecting the highlighted row again or choosing **All** restores the default
+view and preserves the current routing layer, layer visibility and object selection.
+Each visible layer paints its copper, pads,
+artwork and captions together. Prioritizing a layer moves its side's layers
+above unrelated layers and places that layer on top. Through pads and vias paint
+once at the highest visible copper pass, with drill voids above artwork. Airwires remain an
 overlay. Layer eyes control visibility independently of the active layer.
 
 The **Non-active layers** selector immediately left of **Grid** in the Layout footer
 offers **All**, **Dim** and **Solo**. Ctrl+H cycles the modes
 with canvas focus. All allows point, containment, crossing and
 Select all picks on any visible layer. Dim fades inactive layers and
-Solo removes their artwork from the canvas. Both restrict new picks to
-visible geometry on the active layer, including the active-layer body geometry
+Solo removes their artwork from the canvas. Both focus the explicitly chosen
+layer or the routing layer if none has been chosen. They restrict new picks to
+visible geometry on the focused layer, including its body geometry
 of footprints and the copper span of through pads and vias. Category filters
 and selection modifiers still
 apply. Select all adds eligible objects to the existing selection. Selection
@@ -392,9 +396,9 @@ footprints.
 Keep hits within one pixel of the best surface hit, then
 retain the smallest coverage group up to the first adjacent 1.5× size gap.
 Track coverage uses width squared, pad coverage uses its shape area, and
-supported silk text uses the bundled stroke glyphs. Active-layer hits break
-ties after those comparisons. Remaining competing objects offer choices on
-click. Track-tool pickup retains its nearest-segment ordering. Broad footprint,
+supported silk text uses the bundled stroke glyphs. An explicit layer choice
+or Dim/Solo focus breaks ties after those comparisons. Remaining competing
+objects offer choices on click. Track-tool pickup retains its nearest-segment ordering. Broad footprint,
 unfilled region and saved-fill interiors are fallback targets behind precise
 hits. Fill contours stay lazy until needed. Footprint priority follows local
 body geometry. Non-plated holes are represented on Edge.Cuts.
@@ -643,11 +647,19 @@ At 0 mm the exclusion follows the rule area outline. The setting applies when
 **Keep out copper pours** is enabled and is independent of zone-to-copper
 spacing and the other rule-area flags. Changing it refreshes existing enabled
 fills as part of the same undo edit, and temporary masks use the same margin.
-Curves use nominal 0.01 mm tessellation within caps. Invalid/open/excessive
-geometry fails. Islands remain; complete KiCad
-island/fabrication rules are unsupported.
+Curves use nominal 0.01 mm tessellation within caps. Copper avoidance uses
+finer round offsets and expands the exclusion polygons to cover chord and
+coordinate rounding. Circular pads and vias use enclosing polygons. Minimum-width
+pruning also removes short remnants before the surviving copper expands. For
+zones with an explicit Always or Never island rule, a bounded same-net copper
+partition finds pieces connected to pads through tracks, plated pads, vias and
+other pours. When a zone has a connected piece, Always drops its disconnected
+pieces and Never keeps them with native island markers. A wholly disconnected
+zone retains its pieces. Area-based island pruning and exact KiCad contour
+generation are outside the editor's fill operation. Invalid, open or excessive
+geometry fails.
 
-Right-click blank space in idle Layout to access **Fill all zones** when at least one copper pour is enabled. The keyboard context menu offers it with an empty selection. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties footer Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the footer Fill action. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
+Right-click blank space in idle Layout to access **Fill all zones** when at least one copper pour is enabled. The keyboard context menu offers it with an empty selection. It fills every enabled pour across layers in one undo edit, including enabled pours without saved contours. There is no standalone fill toolbar button or settings strip. The Properties Fill/Refill icon enables and fills the selected zone as one transaction. Its hover title and accessible name distinguish Fill from Refill; it disables during calculation and normal edit barriers. The zone header has no Filled checkbox; unfilled contours use the Fill action above the fields. The explicit Fill default minimum clearance is 0.25 mm; each enabled zone retains the larger existing rule, measured from copper edges. Automatic refresh retains positive zone clearances down to the supported 0.0001 mm minimum; native zero clearance uses the 0.25 mm default only for recalculated layers because inherited KiCad rules are unavailable. Selected-zone fill respects the complete board's priorities, obstacles and enabled zones. It publishes its target and refreshes previously filled zones when enabling the target or changing effective rules affects their copper. Adding, removing, assigning or reshaping fill-disabled zone outlines preserves existing pours, including overlaps and embedded zones. Rule areas remain obstacles regardless of their fill flag. Failed calculation leaves all design data unchanged and the edit remains retryable. The `layout.fill` command accepts an optional board zone ID; omitting it explicitly fills all enabled zones. Valid command minima remain 0.0001–1,000 mm. Native zero clearance cannot supply inherited KiCad board/net-class rules, so explicit filling applies the requested minimum. Viewing and Properties disclosure never calculate fills.
 
 `filledPolygons` allows 60,000 saved vertices per board: absent is unfilled;
 empty is a completed empty fill. Native contours retain holes through doubled
@@ -953,7 +965,7 @@ topology catalogue. Component Properties uses the same `layout.delete` command
 as Agent/Layout to remove the selected footprint, clear its linked assignment and
 retain copper in one undo edit. PCB surfaces and CAD subentities do not delete
 their owner implicitly. CAD body deletion uses `modelCad.remove`; all three
-Properties views share the Delete object button and fixed footer style.
+Properties views share the Delete object button. Model components place it beside the tabs when available, and solid Properties pins Apply and Delete above the fields.
 Automatic picking prefers eligible edges/lines, then solids,
 then faces when solids are disabled. These checkboxes are the sole user-facing
 selection controls; there is no separate type mode. Active edge-treatment and
@@ -1282,11 +1294,11 @@ comparisons.
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`, `tests/pcb-dynamic-fill.test.ts`                                                                      | Synchronization, geometry, routing and dynamic fill transactions                                                                                                                                             |
 | `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                                                               |
-| `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Fixed deletion footers for selected objects/groups, icon-only fill, rejection and IME guards                                                                                                                 |
+| `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Upper-right actions for selected objects and groups, icon-only fill, rejection and IME guards                                                                                                                                                     |
 | `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                     |
 | `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                   | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                 |
 | `tests/layout-parasitics.test.ts`                                                                                                                                                                                           | Analytical DC series/parallel networks and via spans, unsupported contacts and disconnected terminals                                                                                                         |
-| `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared delete button/footer across all three views; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                        |
+| `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared upper-right actions; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                                                                                     |
 | `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                        |
 | `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                         | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                            |
 | `node --import tsx scripts/check-pcb-fill-worker-bundle.mjs` after `npm run build`                                                                                                                                         | Emitted production Worker bootstrap and chunks calculate changed copper and SVG paths in an isolated Node worker; no Electron, host service or native solver                                                 |

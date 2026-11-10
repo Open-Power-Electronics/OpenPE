@@ -184,6 +184,98 @@ var simulationFieldNames = {
 };
 var nativeSimulationFields = new Set(Object.values(simulationFieldNames));
 
+// lib/design-rule-checks.ts
+var pcbDesignRuleLimits = {
+  clearance: [0.15, 0, "min_clearance", "Minimum copper clearance (board-wide)", "pcb.clearance"],
+  minTrackWidth: [0.2, 0.2, "min_track_width", "Minimum track width", "pcb.track-width"],
+  minThroughHole: [
+    0.1,
+    0.3,
+    "min_through_hole_diameter",
+    "Minimum through-hole diameter",
+    "pcb.via-drill"
+  ],
+  minViaDiameter: [0.2, 0.5, "min_via_diameter", "Minimum via diameter", "pcb.via-diameter"],
+  minAnnularRing: [0.05, 0.1, "min_via_annular_width", "Minimum annular ring", "pcb.annular-ring"],
+  copperToEdge: [0.25, 0.5, "min_copper_edge_clearance", "Copper to board edge", "pcb.copper-edge"],
+  copperToHole: [0.25, 0.25, "min_hole_clearance", "Copper to hole", "pcb.copper-hole"],
+  holeToHole: [0, 0.25, "min_hole_to_hole", "Hole to hole", "pcb.hole-spacing"],
+  minSilkClearance: [
+    0,
+    0,
+    "min_silk_clearance",
+    "Minimum silkscreen clearance",
+    "pcb.silk-clearance"
+  ],
+  minTextHeight: [
+    0,
+    0.8,
+    "min_text_height",
+    "Minimum silkscreen text height",
+    "pcb.silk-text-height"
+  ],
+  minTextThickness: [
+    0,
+    0.08,
+    "min_text_thickness",
+    "Minimum silkscreen text thickness",
+    "pcb.silk-text-thickness"
+  ]
+};
+var pcbDesignRuleScopes = {
+  dimensions: [
+    "pcb.track-width",
+    "pcb.via-drill",
+    "pcb.pad-drill",
+    "pcb.via-diameter",
+    "pcb.annular-ring"
+  ],
+  clearance: ["pcb.short", "pcb.clearance"],
+  edge: ["pcb.outline", "pcb.copper-edge"],
+  holes: ["pcb.copper-hole", "pcb.hole-spacing"],
+  silkscreen: ["pcb.silk-clearance", "pcb.silk-text-height", "pcb.silk-text-thickness"],
+  courtyards: ["pcb.courtyard-malformed", "pcb.courtyard-overlap"],
+  keepouts: ["pcb.keepout"],
+  connectivity: ["pcb.unrouted"]
+};
+var pcbDesignRuleIds = Object.values(pcbDesignRuleScopes).flat();
+var schematicRuleDefinitions = {
+  "erc.reference-conflict": ["Reference conflict", "error"],
+  "erc.pin-type-unsupported": ["Unsupported pin type", "warning"],
+  "erc.pin-type-inconsistent": ["Inconsistent pin type", "warning"],
+  "erc.pin-unconnected": ["Unconnected pin", "error"],
+  "erc.input-undriven": ["Undriven input", "error"],
+  "erc.power-undriven": ["Undriven power input", "error"],
+  "erc.output-conflict": ["Output conflict", "error"],
+  "erc.pin-conflict": ["Pin conflict", "warning"],
+  "erc.net-name-conflict": ["Net name conflict", "error"],
+  "erc.wire-dangling": ["Dangling wire", "warning"],
+  "erc.wire-zero-length": ["Zero-length wire", "warning"],
+  "erc.label-dangling": ["Dangling label", "error"],
+  "erc.no-connect-misplaced": ["Misplaced no-connect marker", "warning"],
+  "erc.no-connect-connected": ["Connected no-connect marker", "error"]
+};
+var schematicRuleIds = Object.keys(schematicRuleDefinitions);
+var pcbDesignRuleLimitKeys = Object.keys(pcbDesignRuleLimits);
+var pcbDesignRuleScopeKeys = Object.keys(pcbDesignRuleScopes);
+var defaultPCBDesignRules = {
+  ...Object.fromEntries(
+    pcbDesignRuleLimitKeys.map((key) => [key, pcbDesignRuleLimits[key][0]])
+  ),
+  scopes: pcbDesignRuleScopeKeys,
+  useZoneClearance: false,
+  useKiCadClearance: false,
+  clearanceOverrides: [],
+  severities: {}
+};
+var workbenchPCBDesignRules = {
+  ...defaultPCBDesignRules,
+  useKiCadClearance: true,
+  holeToHole: pcbDesignRuleLimits.holeToHole[1],
+  minTextHeight: pcbDesignRuleLimits.minTextHeight[1],
+  minTextThickness: pcbDesignRuleLimits.minTextThickness[1]
+};
+
 // api/capability-schema.ts
 var keywords = /* @__PURE__ */ new Set([
   "type",
@@ -4871,7 +4963,7 @@ var reference_simulation_default = {
         {
           ref: "U1",
           libId: "Reference_lm2596_to220_5_buck",
-          signature: '["1",["-10.16","5.08","0"],["2.54"],"power_in"]|["2",["10.16","5.08","180"],["2.54"],"power_out"]|["3",["2.54","-8.89","90"],["2.54"],"power_in"]|["4",["10.16","0","180"],["2.54"],"input"]|["5",["-10.16","0","0"],["2.54"],"output"]',
+          signature: '["1",["-10.16","5.08","0"],["2.54"],"power_in"]|["2",["10.16","5.08","180"],["2.54"],"power_out"]|["3",["2.54","-8.89","90"],["2.54"],"power_in"]|["4",["10.16","0","180"],["2.54"],"input"]|["5",["-10.16","0","0"],["2.54"],"input"]',
           kind: "X",
           terminals: [
             "1",
@@ -5055,6 +5147,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -5252,7 +5376,7 @@ var reference_simulation_default = {
         {
           ref: "U1",
           libId: "Reference_tps61046_bga6_boost",
-          signature: '["A1",["-7.62","2.54","0"],["2.54"],"power_in"]|["A2",["0","-11.43","90"],["2.54"],"power_in"]|["B1",["7.62","-2.54","180"],["2.54"],"power_in"]|["B2",["7.62","2.54","180"],["2.54"],"power_out"]|["C1",["-7.62","-2.54","0"],["2.54"],"input"]|["C2",["7.62","0","180"],["2.54"],"passive"]',
+          signature: '["A1",["-7.62","2.54","0"],["2.54"],"power_in"]|["A2",["0","-11.43","90"],["2.54"],"power_in"]|["B1",["7.62","-2.54","180"],["2.54"],"input"]|["B2",["7.62","2.54","180"],["2.54"],"power_out"]|["C1",["-7.62","-2.54","0"],["2.54"],"input"]|["C2",["7.62","0","180"],["2.54"],"power_out"]',
           kind: "X",
           terminals: [
             "A1",
@@ -5437,6 +5561,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -5704,7 +5860,7 @@ var reference_simulation_default = {
         {
           ref: "U1",
           libId: "Reference_lm2735_msop8_sepic",
-          signature: '["1",["-7.62","-2.54","0"],["2.54"],"no_connect"]|["2",["0","-8.89","90"],["2.54"],"power_in"]|["3",["-7.62","2.54","0"],["2.54"],"power_in"]|["4",["-7.62","0","0"],["2.54"],"input"]|["5",["7.62","0","180"],["2.54"],"input"]|["6",["2.54","-8.89","90"],["2.54"],"power_in"]|["7",["7.62","2.54","180"],["2.54"],"power_out"]|["8",["-7.62","-5.08","0"],["2.54"],"no_connect"]|["9",["0","-8.89","90"],["2.54"],"power_in"]',
+          signature: '["1",["-6.35","-2.54","0"],["1.27"],"no_connect"]|["2",["0","-8.89","90"],["2.54"],"power_in"]|["3",["-7.62","2.54","0"],["2.54"],"power_in"]|["4",["-7.62","0","0"],["2.54"],"input"]|["5",["7.62","0","180"],["2.54"],"input"]|["6",["2.54","-8.89","90"],["2.54"],"power_in"]|["7",["7.62","2.54","180"],["2.54"],"power_out"]|["8",["-6.35","-5.08","0"],["1.27"],"no_connect"]|["9",["0","-8.89","90"],["2.54"],"power_in"]',
           kind: "X",
           terminals: [
             "3",
@@ -5924,6 +6080,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -6177,7 +6365,7 @@ var reference_simulation_default = {
         {
           ref: "U1",
           libId: "Reference_lm25017_wson8_flybuck",
-          signature: '["1",["1.27","-13.97","90"],["2.54"],"input"]|["2",["-8.89","1.27","0"],["2.54"],"input"]|["3",["-8.89","-6.35","0"],["2.54"],"input"]|["4",["-8.89","-2.54","0"],["2.54"],"power_in"]|["5",["11.43","-6.35","180"],["2.54"],"input"]|["6",["11.43","-2.54","180"],["2.54"],"output"]|["7",["11.43","6.35","180"],["2.54"],"power_out"]|["8",["11.43","2.54","180"],["2.54"],"power_in"]|["9",["-1.27","-13.97","90"],["2.54"],"passive"]',
+          signature: '["1",["1.27","-13.97","90"],["2.54"],"power_in"]|["2",["-8.89","1.27","0"],["2.54"],"power_in"]|["3",["-8.89","-6.35","0"],["2.54"],"input"]|["4",["-8.89","-2.54","0"],["2.54"],"input"]|["5",["11.43","-6.35","180"],["2.54"],"input"]|["6",["11.43","-2.54","180"],["2.54"],"power_out"]|["7",["11.43","6.35","180"],["2.54"],"input"]|["8",["11.43","2.54","180"],["2.54"],"power_out"]|["9",["-1.27","-13.97","90"],["2.54"],"passive"]',
           kind: "X",
           terminals: [
             "4",
@@ -6621,6 +6809,54 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG3",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -7154,6 +7390,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -7551,6 +7819,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -8092,6 +8392,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -8210,7 +8542,7 @@ var reference_simulation_default = {
         {
           ref: "U1",
           libId: "Reference_lmr70503_bga8_buckboost",
-          signature: '["A1",["8.89","-7.62","180"],["2.54"],"power_in"]|["A2",["8.89","-3.81","180"],["2.54"],"output"]|["B1",["-8.89","1.27","0"],["2.54"],"power_in"]|["B2",["8.89","1.27","180"],["2.54"],"output"]|["C1",["-3.81","-12.7","90"],["2.54"],"input"]|["C2",["0","-12.7","90"],["2.54"],"passive"]|["D1",["8.89","6.35","180"],["2.54"],"input"]|["D2",["-8.89","6.35","0"],["2.54"],"input"]',
+          signature: '["A1",["8.89","-7.62","180"],["2.54"],"output"]|["A2",["8.89","-3.81","180"],["2.54"],"input"]|["B1",["-8.89","1.27","0"],["2.54"],"input"]|["B2",["8.89","1.27","180"],["2.54"],"output"]|["C1",["-3.81","-12.7","90"],["2.54"],"power_in"]|["C2",["0","-12.7","90"],["2.54"],"power_in"]|["D1",["8.89","6.35","180"],["2.54"],"power_out"]|["D2",["-8.89","6.35","0"],["2.54"],"power_in"]',
           kind: "X",
           terminals: [
             "D2",
@@ -8520,6 +8852,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],
@@ -8822,7 +9186,7 @@ var reference_simulation_default = {
         {
           ref: "U1",
           libId: "Reference_lm2598_to220_7_buck",
-          signature: '["1",["10.16","5.08","180"],["2.54"],"power_out"]|["2",["-10.16","5.08","0"],["2.54"],"power_in"]|["3",["-10.16","0","0"],["2.54"],"power_in"]|["4",["3.81","-8.89","90"],["2.54"],"input"]|["5",["0","-8.89","90"],["2.54"],"output"]|["6",["10.16","0","180"],["2.54"],"output"]|["7",["-3.81","-8.89","90"],["2.54"],"output"]',
+          signature: '["1",["10.16","5.08","180"],["2.54"],"power_out"]|["2",["-10.16","5.08","0"],["2.54"],"power_in"]|["3",["-10.16","0","0"],["2.54"],"open_collector"]|["4",["3.81","-8.89","90"],["2.54"],"power_in"]|["5",["0","-8.89","90"],["2.54"],"output"]|["6",["10.16","0","180"],["2.54"],"input"]|["7",["-3.81","-8.89","90"],["2.54"],"input"]',
           kind: "X",
           terminals: [
             "2",
@@ -9078,6 +9442,38 @@ var reference_simulation_default = {
           modelId: "",
           modelName: "",
           value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
         }
       ],
       directives: [],

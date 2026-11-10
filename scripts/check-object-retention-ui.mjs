@@ -533,7 +533,8 @@ try {
     );
     throw focusedLayoutComplete;
   }
-  if (process.argv.includes('--status-layout')) {
+  const statusRowOnly = process.argv.includes('--status-row');
+  if (statusRowOnly || process.argv.includes('--status-layout')) {
     await button('Source').click();
     const originalNative = await readNativeFiles(page);
     await button('Schematic').click();
@@ -575,23 +576,63 @@ try {
           before,
         );
         assert.match(await coordinate.textContent(), /X .+ Y .+ mm/);
+        await rules.locator('[data-rule-errors]:not([data-rule-errors="unknown"])').waitFor();
         await page.screenshot({
           path: `test-results/status-coordinates-${view.toLowerCase()}.png`,
           animations: 'disabled',
         });
         const originalViewport = page.viewportSize();
         await page.setViewportSize({ width: 1120, height: originalViewport.height });
-        const compact = await coordinate.boundingBox();
-        const compactFooter = await footer.boundingBox();
-        const compactGrid = await grid.boundingBox();
+        const [compact, compactFooter, compactRule, compactGrid] = await Promise.all([
+          coordinate.boundingBox(),
+          footer.boundingBox(),
+          rules.boundingBox(),
+          grid.boundingBox(),
+        ]);
+        assert.ok(compactFooter.width <= 480, `${view} exercises a narrow drawing footer.`);
+        for (const control of [compactRule, compactGrid]) {
+          assert.ok(
+            Math.abs(compact.y + compact.height / 2 - control.y - control.height / 2) <= 1,
+            `${view} coordinates and footer controls stay on one row.`,
+          );
+        }
         assert.ok(
-          Math.abs(compact.x + compact.width / 2 - compactFooter.x - compactFooter.width / 2) <= 3,
+          compact.x >= compactRule.x + compactRule.width &&
+            compact.x + compact.width <= compactGrid.x,
+          `${view} coordinates fit between the footer controls.`,
+        );
+        const [textWidth, visibleWidth] = await coordinate.evaluate((element) => [
+          element.scrollWidth,
+          element.clientWidth,
+        ]);
+        assert.ok(
+          textWidth <= visibleWidth + 1,
+          `${view} coordinates fit in the compact footer (${textWidth} px of ${visibleWidth} px).`,
         );
         assert.ok(
           Math.abs(compactGrid.x + compactGrid.width - compactFooter.x - compactFooter.width + 4) <=
             1,
-          `${view} Grid stays at the right edge beside the centered coordinate row.`,
+          `${view} Grid stays at the right edge of the single row.`,
         );
+        if (view === 'Layout') {
+          await footer.evaluate((element) => (element.style.inlineSize = '160px'));
+          await grid.focus();
+          assert.equal(
+            await grid.evaluate((control) => {
+              const footer = control.closest('footer');
+              const bounds = footer.getBoundingClientRect();
+              const grid = control.getBoundingClientRect();
+              return (
+                footer.scrollLeft > 0 &&
+                grid.left >= bounds.left &&
+                grid.right <= bounds.left + footer.clientWidth
+              );
+            }),
+            true,
+            'Grid remains reachable by keyboard at the minimum drawing width.',
+          );
+          await footer.evaluate((element) => element.style.removeProperty('inline-size'));
+        }
         await page.setViewportSize(originalViewport);
       }
       assert.equal((await grid.textContent()).trim(), await grid.getAttribute('aria-description'));
@@ -705,8 +746,9 @@ try {
     for (const view of ['Schematic', 'Layout']) {
       await button(view).click();
       await page.getByTestId(view === 'Layout' ? 'layout-canvas' : 'schematic-canvas').waitFor();
-      await assertDrawingRegions(view);
+      if (!statusRowOnly) await assertDrawingRegions(view);
       await assertStatusRuleControls(view);
+      if (statusRowOnly) continue;
       await assertSidebarDragResize(view);
       {
         const canvasId = view === 'Layout' ? 'layout-canvas' : 'schematic-canvas';
@@ -774,6 +816,11 @@ try {
       );
       await button('Toggle right sidebar').click();
       await assertDrawingRegions(view);
+    }
+    if (statusRowOnly) {
+      assert.deepEqual(errors, []);
+      console.log('PASS: Schematic and Layout keep Rule, coordinates and Grid on one narrow row.');
+      throw focusedLayoutComplete;
     }
     await button('Model').click();
     await firstRequest;

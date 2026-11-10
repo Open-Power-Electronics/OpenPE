@@ -1,13 +1,20 @@
 import type { Circuit, Point } from './circuit';
 import type { PCB } from './pcb';
 import {
-  defaultPCBDesignRules,
+  defaultPCBRuleSeverity,
+  pcbDesignRuleScopes,
+  resolvePCBDesignRules,
   type PCBDesignRuleConfig,
+  type PCBDesignRuleId,
+  type RuleCheckIssue,
   type RuleCheckResult,
 } from './design-rule-checks';
 import { analyzePCBConnectivity, padCopperLayers } from './pcb-connectivity';
+import type { PCBDesignRuleSources } from './pcb-clearance-sources';
 import { footprintPoint, padDrillPosition, padPosition } from './pcb-layout';
 import { transformPCBGraphic } from './pcb-geometry';
+import { pcbSilkscreen } from './pcb-silkscreen';
+import { pcbStrokeText } from './pcb-stroke-text';
 import {
   boardPolygons,
   circlePolygon,
@@ -44,6 +51,8 @@ type Body = {
   edges: [Point, Point][];
   polygon?: Polygon;
   radius: number;
+  clearance?: number;
+  clearanceLabel?: string;
   at: Point;
   minX: number;
   minY: number;
@@ -57,20 +66,6 @@ type IndexedEdge = Bounds & { line: [Point, Point]; ring: number };
 type EdgeIndex = Bounds & { edges?: IndexedEdge[]; left?: EdgeIndex; right?: EdgeIndex };
 const epsilon = 0.00001;
 const maxIssues = 1000;
-const rules = [
-  'pcb.outline',
-  'pcb.courtyard-malformed',
-  'pcb.courtyard-overlap',
-  'pcb.short',
-  'pcb.clearance',
-  'pcb.track-width',
-  'pcb.via-drill',
-  'pcb.annular-ring',
-  'pcb.copper-edge',
-  'pcb.copper-hole',
-  'pcb.keepout',
-  'pcb.unrouted',
-];
 const courtyardLayers = ['F.CrtYd', 'B.CrtYd'] as const;
 const pointBounds = (points: Point[], radius = 0): Bounds =>
   points.reduce(
@@ -107,20 +102,7 @@ function courtyardContoursIntersect(contours: Point[][], spend: () => void): boo
   return false;
 }
 const mm = (value: number) => `${Number(value.toFixed(4))} mm`;
-function configuration(input: Partial<PCBDesignRuleConfig>): PCBDesignRuleConfig {
-  if (!input || typeof input !== 'object' || Array.isArray(input))
-    throw new Error('Choose a valid PCB design-rule configuration.');
-  for (const [key, value] of Object.entries(input))
-    if (
-      !Object.hasOwn(defaultPCBDesignRules, key) ||
-      typeof value !== 'number' ||
-      !Number.isFinite(value) ||
-      value < 0 ||
-      value > 1000
-    )
-      throw new Error('PCB design-rule thresholds must be finite values from 0 to 1000 mm.');
-  return { ...defaultPCBDesignRules, ...input };
-}
+const nanometres = (value: number) => Math.round(value * 1e6);
 
 /** Read-only checks of the supported board geometry. Saved fills are inspected,
  * never recalculated; errors or bounded work leave an explicitly partial report.
@@ -129,19 +111,40 @@ export function runPCBDesignRules(
   board: PCB,
   config: Partial<PCBDesignRuleConfig> = {},
   schematic?: Circuit,
+  sources?: PCBDesignRuleSources,
 ): RuleCheckResult {
-  const settings = configuration(config);
+  const settings = resolvePCBDesignRules(config);
+  const scopedRules = settings.scopes.flatMap((scope) => pcbDesignRuleScopes[scope]);
+  const checkedRules = scopedRules.filter((id) => settings.severities[id] !== 'ignore');
+  const enabled = new Set(checkedRules);
+  const hasIgnoredRules = checkedRules.length !== scopedRules.length;
+  const dimensions = pcbDesignRuleScopes.dimensions.some((id) => enabled.has(id));
+  const annular = enabled.has('pcb.annular-ring');
+  const edge = enabled.has('pcb.copper-edge');
+  const outline = edge || enabled.has('pcb.outline');
+  const copperHoles = enabled.has('pcb.copper-hole');
+  const holeSpacing = enabled.has('pcb.hole-spacing') && settings.holeToHole > 0;
+  const holesEnabled = copperHoles || holeSpacing;
+  const clearance = enabled.has('pcb.short') || enabled.has('pcb.clearance');
+  const courtyardsEnabled =
+    enabled.has('pcb.courtyard-malformed') || enabled.has('pcb.courtyard-overlap');
+  const keepouts = enabled.has('pcb.keepout');
+  const connectivityEnabled = enabled.has('pcb.unrouted');
+  const needsCopper = edge || copperHoles || clearance || keepouts;
+  const completeScope = settings.scopes.length === Object.keys(pcbDesignRuleScopes).length;
   const references = new Map(schematic?.parts.map((part) => [part.id, part.ref]));
   const result: RuleCheckResult = {
     kind: 'drc',
-    complete: true,
+    complete: completeScope && !hasIgnoredRules,
     truncated: false,
-    checkedRules: [...rules],
+    checkedRules,
     issues: [],
     notes: [
       'Checks use the supported pads, tracks, through vias, copper graphics, saved fills and closed Edge.Cuts. Curves use the editor’s bounded polygon approximation.',
       'Footprint courtyards are checked at zero minimum spacing on each courtyard layer. Missing courtyards and custom courtyard constraints are not checked.',
-      'Unrouted checks use assigned-pad copper connectivity. Solder mask, silkscreen, creepage, impedance, net classes, differential pairs and fabrication rules are not checked.',
+      'Unrouted checks use assigned-pad copper connectivity. Solder mask, creepage, impedance and differential pairs are outside the checker.',
+      ...(completeScope ? [] : ['The report covers the selected rule groups.']),
+      ...(hasIgnoredRules ? ['Rules set to Ignore are omitted from the report.'] : []),
     ],
   };
   let operations = 0;
@@ -155,8 +158,10 @@ export function runPCBDesignRules(
     message: string,
     objectIds: string[],
     location?: Point,
-    severity: 'error' | 'warning' = 'error',
+    severity: RuleCheckIssue['severity'] = defaultPCBRuleSeverity,
   ) => {
+    const configured = settings.severities[ruleId as PCBDesignRuleId];
+    if (configured === 'ignore') return;
     if (result.issues.length >= maxIssues) {
       result.truncated = true;
       throw new Error('PCB DRC reached the 1000-issue report limit.');
@@ -164,7 +169,7 @@ export function runPCBDesignRules(
     result.issues.push({
       id: `${ruleId}:${objectIds.join(':')}:${result.issues.length}`,
       ruleId,
-      severity,
+      severity: configured ?? severity,
       message: message.slice(0, 2048),
       objectIds: [...new Set(objectIds)],
       ...(location ? { location: { x: location.x, y: location.y } } : {}),
@@ -174,6 +179,23 @@ export function runPCBDesignRules(
     result.complete = false;
     issue(rule, message, ids, at, 'warning');
   };
+  const overrides = new Map(
+    settings.clearanceOverrides.map((override) => [override.key, override]),
+  );
+  const customRules =
+    settings.useKiCadClearance && enabled.has('pcb.clearance')
+      ? (sources?.rules.toReversed().filter(({ key }) => overrides.get(key)?.enabled !== false) ??
+        [])
+      : [];
+  const zoneSources = new Map(sources?.zones.map((zone) => [zone.key, zone]));
+  if (enabled.has('pcb.clearance') && settings.useKiCadClearance && sources?.notes.length) {
+    coverage(
+      'pcb.unsupported-clearance-rule',
+      'Some KiCad clearance settings are outside the supported checker. See Net classes and Custom rules for details.',
+      [board.id],
+    );
+    result.notes.push(...sources.notes);
+  }
   const overlapsBounds = (a: Bounds, b: Bounds, margin: number) =>
     a.minX <= b.maxX + margin &&
     b.minX <= a.maxX + margin &&
@@ -357,17 +379,20 @@ export function runPCBDesignRules(
     };
   };
   try {
-    const graphics = [
-      ...board.graphics,
-      ...board.footprints.flatMap((f) =>
-        f.graphics.map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
-      ),
-    ];
+    const graphics =
+      !needsCopper && !outline
+        ? []
+        : [
+            ...board.graphics,
+            ...board.footprints.flatMap((f) =>
+              f.graphics.map((g) => transformPCBGraphic(g, (p) => footprintPoint(f, p))),
+            ),
+          ];
     let boundary: Polygon[] = [];
     try {
-      boundary = boardPolygons(board);
+      if (outline) boundary = boardPolygons(board);
       const outlineEdges = graphics
-        .filter((g) => g.layer === 'Edge.Cuts')
+        .filter((g) => outline && g.layer === 'Edge.Cuts')
         .flatMap((g) => {
           const points = graphicVertices(g);
           return (g.kind === 'circle' || g.kind === 'polygon' ? [...points, points[0]] : points)
@@ -392,7 +417,7 @@ export function runPCBDesignRules(
       );
     }
     phase = 'footprint courtyards';
-    for (const layer of courtyardLayers) {
+    for (const layer of courtyardsEnabled ? courtyardLayers : []) {
       const courtyards: (Bounds & {
         id: string;
         label: string;
@@ -452,6 +477,7 @@ export function runPCBDesignRules(
           ...pointBounds(points),
         });
       }
+      if (!enabled.has('pcb.courtyard-overlap')) continue;
       courtyards.sort((a, b) => a.minX - b.minX);
       for (let i = 0; i < courtyards.length; i++) {
         const a = courtyards[i];
@@ -472,11 +498,22 @@ export function runPCBDesignRules(
       }
     }
     phase = 'copper shapes and minimum dimensions';
-    for (const f of board.footprints)
+    for (const f of dimensions || needsCopper || holesEnabled ? board.footprints : [])
       for (const p of f.pads) {
         const at = padPosition(f, p),
           drill = padDrillPosition(f, p);
-        if (p.drill)
+        if (
+          enabled.has('pcb.pad-drill') &&
+          p.drill &&
+          nanometres(p.drill) < nanometres(settings.minThroughHole)
+        )
+          issue(
+            'pcb.pad-drill',
+            `${f.reference ?? 'Footprint'} pad ${p.number} drill ${mm(p.drill)} is below ${mm(settings.minThroughHole)}.`,
+            [f.id, p.id],
+            drill,
+          );
+        if (holesEnabled && p.drill)
           holes.push({
             id: p.id,
             at: drill,
@@ -486,25 +523,29 @@ export function runPCBDesignRules(
           });
         const layers = padCopperLayers(board, f, p);
         if (!layers.length) continue;
+        if (!needsCopper && !(annular && p.type === 'thru_hole' && p.drill)) continue;
         const polygon = padPolygon(f, p);
         if (p.type === 'thru_hole' && p.drill) {
-          let ring = Infinity;
-          for (const [a, b] of polygonEdges(polygon)) {
-            spend();
-            ring = Math.min(ring, Math.sqrt(pointSegmentDistance(drill, a, b)) - p.drill / 2);
+          if (annular) {
+            let ring = Infinity;
+            for (const [a, b] of polygonEdges(polygon)) {
+              spend();
+              ring = Math.min(ring, Math.sqrt(pointSegmentDistance(drill, a, b)) - p.drill / 2);
+            }
+            if (!insidePolygon(drill, polygon, spend)) ring = -p.drill / 2;
+            if (p.shape === 'circle')
+              ring = p.size.x / 2 - Math.sqrt(squaredDistance(at, drill)) - p.drill / 2;
+            if (ring + epsilon < settings.minAnnularRing)
+              issue(
+                'pcb.annular-ring',
+                `${f.reference ?? 'Footprint'} pad ${p.number} has ${mm(ring)} minimum annular ring; requires ${mm(settings.minAnnularRing)}.`,
+                [f.id, p.id],
+                at,
+              );
           }
-          if (!insidePolygon(drill, polygon, spend)) ring = -p.drill / 2;
-          if (p.shape === 'circle')
-            ring = p.size.x / 2 - Math.sqrt(squaredDistance(at, drill)) - p.drill / 2;
-          if (ring + epsilon < settings.minAnnularRing)
-            issue(
-              'pcb.annular-ring',
-              `${f.reference ?? 'Footprint'} pad ${p.number} has ${mm(ring)} minimum annular ring; requires ${mm(settings.minAnnularRing)}.`,
-              [f.id, p.id],
-              at,
-            );
-          polygon.holes.push(circlePolygon(drill, p.drill / 2));
+          if (needsCopper) polygon.holes.push(circlePolygon(drill, p.drill / 2));
         }
+        if (!needsCopper) continue;
         const copper = body(
           p.id,
           'pad',
@@ -519,43 +560,62 @@ export function runPCBDesignRules(
           copper.disk = { at, outer: p.size.x / 2, inner: p.drill ? p.drill / 2 : 0 };
         bodies.push(copper);
       }
-    for (const track of board.tracks) {
-      if (track.width + epsilon < settings.minTrackWidth)
+    for (const track of dimensions || needsCopper ? board.tracks : []) {
+      if (
+        enabled.has('pcb.track-width') &&
+        nanometres(track.width) < nanometres(settings.minTrackWidth)
+      )
         issue(
           'pcb.track-width',
           `Track width ${mm(track.width)} is below ${mm(settings.minTrackWidth)}.`,
           [track.id],
           track.start,
         );
-      bodies.push(
-        body(
-          track.id,
-          'track',
-          'Track',
-          track.netId,
-          [track.layer],
-          [track.start, track.end],
-          track.width / 2,
-        ),
-      );
+      if (needsCopper)
+        bodies.push(
+          body(
+            track.id,
+            'track',
+            'Track',
+            track.netId,
+            [track.layer],
+            [track.start, track.end],
+            track.width / 2,
+          ),
+        );
     }
-    for (const via of board.vias) {
-      if (via.drill + epsilon < settings.minViaDrill)
+    for (const via of dimensions || needsCopper || holesEnabled ? board.vias : []) {
+      if (
+        enabled.has('pcb.via-drill') &&
+        nanometres(via.drill) < nanometres(settings.minThroughHole)
+      )
         issue(
           'pcb.via-drill',
-          `Via drill ${mm(via.drill)} is below ${mm(settings.minViaDrill)}.`,
+          `Via drill ${mm(via.drill)} is below ${mm(settings.minThroughHole)}.`,
           [via.id],
           via,
         );
-      const ring = (via.diameter - via.drill) / 2;
-      if (ring + epsilon < settings.minAnnularRing)
+      if (
+        enabled.has('pcb.via-diameter') &&
+        nanometres(via.diameter) < nanometres(settings.minViaDiameter)
+      )
+        issue(
+          'pcb.via-diameter',
+          `Via diameter ${mm(via.diameter)} is below ${mm(settings.minViaDiameter)}.`,
+          [via.id],
+          via,
+        );
+      const ring = Math.floor((nanometres(via.diameter) - nanometres(via.drill)) / 2);
+      if (annular && ring < nanometres(settings.minAnnularRing))
         issue(
           'pcb.annular-ring',
-          `Via annular ring ${mm(ring)} is below ${mm(settings.minAnnularRing)}.`,
+          `Via annular ring ${mm(ring / 1e6)} is below ${mm(settings.minAnnularRing)}.`,
           [via.id],
           via,
         );
-      holes.push({ id: via.id, at: via, radius: via.drill / 2, netId: via.netId, plated: true });
+      if (holesEnabled)
+        holes.push({ id: via.id, at: via, radius: via.drill / 2, netId: via.netId, plated: true });
+      if (!needsCopper) continue;
       const polygon = {
         outer: circlePolygon(via, via.diameter / 2),
         holes: [circlePolygon(via, via.drill / 2)],
@@ -573,7 +633,9 @@ export function runPCBDesignRules(
       copper.disk = { at: via, outer: via.diameter / 2, inner: via.drill / 2 };
       bodies.push(copper);
     }
-    for (const g of graphics.filter((g) => board.layers.some((layer) => layer === g.layer))) {
+    for (const g of needsCopper
+      ? graphics.filter((g) => board.layers.some((layer) => layer === g.layer))
+      : []) {
       if (g.kind === 'text' || g.kind === 'dimension') {
         coverage(
           'pcb.unsupported-copper',
@@ -606,8 +668,8 @@ export function runPCBDesignRules(
         ),
       );
     }
-    const zones = worldZones(board);
-    const fills = filledCopperPolygons(board);
+    const zones = needsCopper || connectivityEnabled ? worldZones(board) : [];
+    const fills = needsCopper ? filledCopperPolygons(board) : null;
     for (const zone of zones) {
       if (
         !board.layers.some((layer) => layer === zone.layer) ||
@@ -623,28 +685,112 @@ export function runPCBDesignRules(
           zone.outline[0],
         );
       else {
-        for (const polygon of fills.get(zone.id) ?? [])
-          bodies.push(
-            body(
-              zone.id,
-              'zone',
-              'Saved zone fill',
-              zone.netId,
-              [zone.layer],
-              polygon.outer,
-              0,
-              polygon,
-            ),
+        for (const polygon of fills?.get(zone.id) ?? []) {
+          const copper = body(
+            zone.id,
+            'zone',
+            'Saved zone fill',
+            zone.netId,
+            [zone.layer],
+            polygon.outer,
+            0,
+            polygon,
           );
+          const key = `zone:${zone.id}`;
+          const override = overrides.get(key);
+          if (
+            settings.useZoneClearance &&
+            enabled.has('pcb.clearance') &&
+            override?.enabled !== false
+          ) {
+            copper.clearance = override?.clearance ?? zone.clearance;
+            copper.clearanceLabel = `zone ${zoneSources.get(key)?.label ?? zone.id}`;
+          }
+          bodies.push(copper);
+        }
       }
     }
-    const sorted = [...bodies].sort((a, b) => a.minX - b.minX);
+    const sorted = clearance ? [...bodies].sort((a, b) => a.minX - b.minX) : [];
+    const netClasses = new Map(
+      sorted.map(({ netId }) => {
+        const name = netId ? sources?.netNames.get(netId) : undefined;
+        return [netId, (name && sources?.assignments.get(name)) || 'Default'];
+      }),
+    );
+    if (settings.useKiCadClearance && enabled.has('pcb.clearance')) {
+      for (const copper of sorted) {
+        if (!copper.netId) continue;
+        const netClass = sources?.classes.get(netClasses.get(copper.netId) ?? 'Default');
+        if (!netClass) continue;
+        const override = overrides.get(netClass.key);
+        if (override?.enabled === false) continue;
+        const limit = override?.clearance ?? netClass.clearance;
+        if (limit > (copper.clearance ?? 0)) {
+          copper.clearance = limit;
+          copper.clearanceLabel = `net class ${netClass.label}`;
+        }
+      }
+    }
+    const searchClearance = sorted.reduce(
+      (maximum, copper) => Math.max(maximum, copper.clearance ?? 0),
+      customRules.reduce(
+        (maximum, rule) => Math.max(maximum, overrides.get(rule.key)?.clearance ?? rule.clearance),
+        enabled.has('pcb.clearance') ? settings.clearance : 0,
+      ),
+    );
+    const courtyardTargets = new Map<string, Body[]>();
+    const courtyardHits = new WeakMap<Body, Map<string, boolean>>();
+    const intersectsCourtyard = (copper: Body, reference: string) => {
+      const hits = courtyardHits.get(copper) ?? new Map<string, boolean>();
+      const hit = hits.get(reference);
+      if (hit !== undefined) return hit;
+      let targets = courtyardTargets.get(reference);
+      if (!targets) {
+        targets = [];
+        spend(board.footprints.length);
+        const footprint = board.footprints.find(
+          (f) => f.reference === reference || references.get(f.symbolId ?? '') === reference,
+        );
+        if (footprint) {
+          for (const layer of courtyardLayers) {
+            const artwork = footprint.graphics.filter(
+              (g) => g.layer === layer && g.kind !== 'text' && g.kind !== 'dimension',
+            );
+            if (!artwork.length) continue;
+            spend(artwork.length ** 2);
+            const contours = closedGraphicContours(
+              artwork.map((g) => transformPCBGraphic(g, (p) => footprintPoint(footprint, p))),
+              'courtyard',
+            );
+            for (const polygon of polygonsFromContours(contours)) {
+              targets.push(
+                body(footprint.id, 'graphic', reference, null, [], polygon.outer, 0, polygon),
+              );
+            }
+          }
+        }
+        courtyardTargets.set(reference, targets);
+      }
+      const intersects = targets.some(
+        (target) =>
+          overlapsBounds(copper, target, epsilon) && distance(copper, target, 0) <= epsilon,
+      );
+      hits.set(reference, intersects);
+      courtyardHits.set(copper, hits);
+      return intersects;
+    };
+    const ruleTypes = { track: 'Track', via: 'Via', pad: 'Pad', zone: 'Zone', graphic: 'Graphic' };
+    const ruleOperand = (copper: Body) => ({
+      netClass: netClasses.get(copper.netId) ?? 'Default',
+      type: ruleTypes[copper.kind],
+      intersectsCourtyard: (reference: string) => intersectsCourtyard(copper, reference),
+    });
     const reported = new Set<string>();
     phase = 'copper contact and clearance';
     for (let i = 0; i < sorted.length; i++)
       for (
         let j = i + 1;
-        j < sorted.length && sorted[j].minX <= sorted[i].maxX + settings.clearance + epsilon;
+        j < sorted.length && sorted[j].minX <= sorted[i].maxX + searchClearance + epsilon;
         j++
       ) {
         spend();
@@ -654,11 +800,37 @@ export function runPCBDesignRules(
           a.id === b.id ||
           (a.netId !== null && a.netId === b.netId) ||
           !a.layers.some((layer) => b.layers.includes(layer)) ||
-          !overlapsBounds(a, b, settings.clearance + epsilon)
+          !overlapsBounds(a, b, searchClearance + epsilon)
         )
           continue;
-        const gap = distance(a, b);
-        if (gap > epsilon && gap + epsilon >= settings.clearance) continue;
+        let required = enabled.has('pcb.clearance') ? settings.clearance : 0;
+        let clearanceLabel = '';
+        if (customRules.length) {
+          const left = ruleOperand(a),
+            right = ruleOperand(b);
+          for (const rule of customRules) {
+            spend();
+            if (!rule.matches(left, right) && !rule.matches(right, left)) continue;
+            required = overrides.get(rule.key)?.clearance ?? rule.clearance;
+            clearanceLabel = `rule ${rule.label}`;
+            break;
+          }
+        }
+        if (!clearanceLabel) {
+          for (const copper of [a, b]) {
+            if (copper.clearance !== undefined && copper.clearance > required) {
+              required = copper.clearance;
+              clearanceLabel = copper.clearanceLabel ?? '';
+            }
+          }
+        }
+        if (enabled.has('pcb.clearance') && required < settings.clearance) {
+          required = settings.clearance;
+          clearanceLabel = '';
+        }
+        if (!overlapsBounds(a, b, required + epsilon)) continue;
+        const gap = distance(a, b, required);
+        if (gap > epsilon && gap + epsilon >= required) continue;
         const knownNets = a.netId !== null && b.netId !== null;
         const rule = !knownNets
           ? 'pcb.unassigned-copper'
@@ -675,10 +847,10 @@ export function runPCBDesignRules(
             ? `${a.label} is within ${mm(gap)} of ${b.label}, but at least one copper object has no assigned net. Assign nets and check this contact/clearance.`
             : rule === 'pcb.short'
               ? `${a.label} touches ${b.label} on a shared copper layer with different or unassigned nets.`
-              : `${a.label} to ${b.label} clearance is ${mm(gap)}; requires ${mm(settings.clearance)}.`,
+              : `${a.label} to ${b.label} clearance is ${mm(gap)}; requires ${mm(required)}${clearanceLabel ? ` (${clearanceLabel})` : ''}.`,
           [a.id, b.id],
           { x: (a.at.x + b.at.x) / 2, y: (a.at.y + b.at.y) / 2 },
-          knownNets ? 'error' : 'warning',
+          knownNets ? defaultPCBRuleSeverity : 'warning',
         );
       }
     const boundaryEdges = boundary.flatMap(polygonEdges);
@@ -694,7 +866,7 @@ export function runPCBDesignRules(
         return pointSegmentDistance(p, a, b) <= epsilon ** 2;
       });
     for (const copper of bodies) {
-      if (boundary.length) {
+      if (edge && boundary.length) {
         let gap = Infinity;
         let outside =
           !onBoard(copper.points[0]) ||
@@ -762,7 +934,7 @@ export function runPCBDesignRules(
             copper.at,
           );
       }
-      for (const hole of holes) {
+      for (const hole of copperHoles ? holes : []) {
         spend();
         if (hole.id === copper.id || (hole.plated && hole.netId && hole.netId === copper.netId))
           continue;
@@ -801,9 +973,147 @@ export function runPCBDesignRules(
           );
       }
     }
+    if (holeSpacing) {
+      phase = 'drill-to-drill clearance';
+      const ordered = holes.toSorted((a, b) => a.at.x - a.radius - (b.at.x - b.radius));
+      for (let i = 0; i < ordered.length; i++) {
+        const a = ordered[i];
+        for (let j = i + 1; j < ordered.length; j++) {
+          const b = ordered[j];
+          if (b.at.x - b.radius > a.at.x + a.radius + settings.holeToHole) break;
+          spend();
+          const gap = Math.hypot(a.at.x - b.at.x, a.at.y - b.at.y) - a.radius - b.radius;
+          if (gap + epsilon < settings.holeToHole)
+            issue(
+              'pcb.hole-spacing',
+              `Drill-to-drill clearance is ${mm(Math.max(0, gap))}; requires ${mm(settings.holeToHole)}.`,
+              [a.id, b.id],
+              a.at,
+            );
+        }
+      }
+    }
+    const silkClearance = enabled.has('pcb.silk-clearance') && settings.minSilkClearance > 0;
+    const silkHeight = enabled.has('pcb.silk-text-height') && settings.minTextHeight > 0;
+    const silkThickness = enabled.has('pcb.silk-text-thickness') && settings.minTextThickness > 0;
+    if (silkClearance || silkHeight || silkThickness) {
+      phase = 'silkscreen';
+      const silkBodies: Body[] = [];
+      const owners = new Map<string, string>();
+      if (silkClearance)
+        for (const footprint of board.footprints)
+          for (const graphic of footprint.graphics) owners.set(graphic.id, footprint.id);
+      const plainSilk = new Set<string>();
+      for (const graphic of pcbSilkscreen(board, schematic, false)) {
+        spend();
+        if (silkBodies.length >= 15000)
+          throw new Error('PCB DRC supports at most 15000 silkscreen objects.');
+        const { id, kind, layer, start, text } = graphic;
+        if (
+          kind === 'dimension' ||
+          (silkClearance && graphic.stroke && !['solid', 'default'].includes(graphic.stroke))
+        ) {
+          coverage(
+            'pcb.unsupported-silkscreen',
+            'This silkscreen object is outside supported stroke or text checks.',
+            [id],
+            start,
+          );
+          continue;
+        }
+        if (text) {
+          if (!text.value.trim()) continue;
+          const width = text.thickness || Math.min(text.size.x, text.size.y) / (text.bold ? 5 : 8);
+          for (const [check, actual, minimum, rule, label] of [
+            [silkHeight, text.size.y, settings.minTextHeight, 'pcb.silk-text-height', 'height'],
+            [
+              silkThickness,
+              width,
+              settings.minTextThickness,
+              'pcb.silk-text-thickness',
+              'stroke thickness',
+            ],
+          ] as const) {
+            if (check && nanometres(actual) < nanometres(minimum))
+              issue(
+                rule,
+                `Silkscreen text ${label} is ${mm(actual)}; requires ${mm(minimum)}.`,
+                [id],
+                start,
+              );
+          }
+          if (!silkClearance) continue;
+          spend(text.value.length);
+          const stroke = pcbStrokeText(text, start);
+          if ('unsupported' in stroke) {
+            coverage(
+              'pcb.unsupported-silkscreen',
+              `Silkscreen clearance cannot check ${stroke.unsupported}.`,
+              [id],
+              start,
+            );
+            continue;
+          }
+          const points = stroke.paths.flat();
+          if (!points.length) continue;
+          const shape = body(
+            id,
+            'graphic',
+            'Silkscreen text',
+            null,
+            [layer],
+            points,
+            stroke.width / 2,
+          );
+          shape.edges = stroke.paths.flatMap((path) =>
+            path.slice(1).map((p, i) => [path[i], p] as [Point, Point]),
+          );
+          silkBodies.push(shape);
+        } else if (silkClearance) {
+          const points = graphicVertices(graphic);
+          const closed = kind === 'polygon' || kind === 'circle';
+          const polygon = graphic.fill && closed ? { outer: points, holes: [] } : undefined;
+          if (!polygon && graphic.width === 0) continue;
+          plainSilk.add(id);
+          silkBodies.push(
+            body(
+              id,
+              'graphic',
+              'Silkscreen graphic',
+              null,
+              [layer],
+              closed && !polygon ? [...points, points[0]] : points,
+              graphic.width / 2,
+              polygon,
+            ),
+          );
+        }
+      }
+      silkBodies.sort((a, b) => a.minX - b.minX);
+      for (let i = 0; i < silkBodies.length; i++) {
+        const a = silkBodies[i];
+        for (let j = i + 1; j < silkBodies.length; j++) {
+          const b = silkBodies[j];
+          if (b.minX > a.maxX + settings.minSilkClearance) break;
+          spend();
+          if (a.layers[0] !== b.layers[0] || !overlapsBounds(a, b, settings.minSilkClearance))
+            continue;
+          if (plainSilk.has(a.id) && plainSilk.has(b.id) && owners.get(a.id) === owners.get(b.id))
+            continue;
+          const gap = distance(a, b, settings.minSilkClearance);
+          if (gap + epsilon < settings.minSilkClearance)
+            issue(
+              'pcb.silk-clearance',
+              `Silkscreen clearance is ${mm(gap)}; requires ${mm(settings.minSilkClearance)}.`,
+              [a.id, b.id],
+              a.at,
+            );
+        }
+      }
+    }
     phase = 'copper keepouts';
     const holeBounds = new WeakMap<Point[], Bounds>();
-    for (const zone of zones.filter((z) => z.keepout)) {
+    for (const zone of keepouts ? zones.filter((z) => z.keepout) : []) {
       if (zone.keepout!.footprints)
         coverage(
           'pcb.keepout-footprint',
@@ -879,17 +1189,22 @@ export function runPCBDesignRules(
           );
       }
     }
-    const connectivity = analyzePCBConnectivity(board);
-    const names = new Map(board.nets.map((net) => [net.id, net.name]));
-    for (const edge of connectivity.edges)
-      issue(
-        'pcb.unrouted',
-        `Net ${names.get(edge.netId) ?? edge.netId} has disconnected pad groups.`,
-        [edge.startPadId, edge.endPadId],
-        { x: (edge.start.x + edge.end.x) / 2, y: (edge.start.y + edge.end.y) / 2 },
-      );
-    for (const warning of connectivity.warnings)
-      if (!result.notes.includes(warning)) result.notes.push(warning);
+    if (connectivityEnabled) {
+      const connectivity = analyzePCBConnectivity(board);
+      const names = new Map(board.nets.map((net) => [net.id, net.name]));
+      for (const connection of connectivity.edges)
+        issue(
+          'pcb.unrouted',
+          `Net ${names.get(connection.netId) ?? connection.netId} has disconnected pad groups.`,
+          [connection.startPadId, connection.endPadId],
+          {
+            x: (connection.start.x + connection.end.x) / 2,
+            y: (connection.start.y + connection.end.y) / 2,
+          },
+        );
+      for (const warning of connectivity.warnings)
+        if (!result.notes.includes(warning)) result.notes.push(warning);
+    }
   } catch (error) {
     result.complete = false;
     result.notes.push((error as Error).message);

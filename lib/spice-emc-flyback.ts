@@ -1,5 +1,5 @@
-import { pinPositions, type Circuit, type Part } from './circuit';
-import { displayPartValue, partFields, unitGraphics } from './library';
+import { libraries, pinPositions, type Circuit, type Part } from './circuit';
+import { displayPartValue, partFields, partFootprint, unitGraphics } from './library';
 import { primitiveInitialCondition } from './simulation-initial-conditions';
 import {
   activePassiveModel,
@@ -16,6 +16,7 @@ import {
 } from './spice';
 import { transientOutputStep, validateTransientTiming } from './spice-timing';
 import { simulationSourceExpression } from './simulation-source-parameters';
+import { participatesInSimulation } from './simulation-participation';
 import profile from './emc-flyback-simulation.json';
 import models from '../resources/emc-flyback-models-lock.json';
 import { emcFlybackCapacitorEsr, emcFlybackInitialNodeGroups } from './emc-flyback-initial-state';
@@ -92,10 +93,29 @@ function value(p: Part, kind: 'R' | 'C' | 'L', explicit = false) {
   const text = (explicit ? displayPartValue(p) : p.value).trim().split(/\s+/)[0];
   return passiveValue(kind === 'R' ? text.replace(/R$/i, '') : text, kind);
 }
-function validate(d: Circuit) {
+function validate(circuit: Circuit) {
+  // The official single-pin ERC flag is a declaration with no simulation stamp.
+  // Validate all modeled pins and their connections against the same profile.
+  const flagId = 'power:PWR_FLAG';
+  const d =
+    JSON.stringify(circuit.libraries[flagId]) === JSON.stringify(libraries[flagId])
+      ? {
+          ...circuit,
+          parts: circuit.parts.filter(
+            (part) =>
+              !(
+                part.libId === flagId &&
+                /^#FLG\d+$/.test(part.ref) &&
+                part.value === 'PWR_FLAG' &&
+                !participatesInSimulation(part) &&
+                !partFootprint(part)
+              ),
+          ),
+        }
+      : circuit;
   if (
     d.parts.length !== profile.parts.length ||
-    d.parts.length > 200 ||
+    circuit.parts.length > 200 ||
     d.wires.length > 1000 ||
     d.labels.length + d.junctions.length > 1000
   )

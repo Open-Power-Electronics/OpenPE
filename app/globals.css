@@ -83,6 +83,7 @@
   --symbol-virtual: #b45309;
   --error: #f04142;
   --error-ink: #b52a2a;
+  --rule-warning-ink: light-dark(#8a4e00, #ffc46b);
   --permission-caution: #d4a000;
   --overlay: rgb(32 32 32 / 22%);
   --caption-background: #202020;

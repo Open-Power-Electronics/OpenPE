@@ -210,8 +210,8 @@ test('native C3 branch drag has GUI-Agent file parity and restores original nati
 });
 
 for (const pose of [
-  { name: 'horizontal leads', target: { x: 167.64, y: 74.93 }, wires: 204 },
-  { name: 'collapsed short lead', target: { x: 165.1, y: 77.47 }, wires: 202 },
+  { name: 'horizontal leads', target: { x: 167.64, y: 74.93 }, additionalWires: 2 },
+  { name: 'collapsed short lead', target: { x: 165.1, y: 77.47 }, additionalWires: 0 },
 ])
   test(`real EMC R1 connected drag retains pin and label nets through ${pose.name} and one native undo`, () => {
     const core = new ProjectCore(
@@ -241,7 +241,7 @@ for (const pose of [
         pose.target,
       ),
     );
-    assert.equal(preview.wires.length, pose.wires + 10);
+    assert.equal(preview.wires.length, source.wires.length + pose.additionalWires);
     assert.ok(
       preview.wires.every((wire) => !samePoint(wire.a, wire.b)),
       'A collapsed lead creates no zero-length wire.',

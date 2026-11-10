@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { readNativeProject } from './source-editor-test-helpers.mjs';
+import { checkComponentDeletePlacement } from './schematic-panel-test-helpers.mjs';
 import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
 // Real workspace, recovered proposal and mocked services; no providers or Electron.
@@ -82,6 +83,8 @@ try {
     window.openpe = {
       titleBarOverlay: false,
       listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       writeWorkspaceRecovery: async (content) => {
         await fetch('http://localhost/api/state', {
           method: content === null ? 'DELETE' : 'POST',
@@ -200,7 +203,10 @@ try {
   assert.deepEqual(await currentProject(), baseline);
 
   await page.getByTestId('part-R1').click();
-  await checkDeleteFooter('component');
+  await checkComponentDeletePlacement(
+    page.getByRole('complementary', { name: 'Object properties', exact: true }),
+  );
+  await page.screenshot({ path: 'test-results/schematic-delete/component-actions.png' });
   await button('Delete object').click();
   assert.deepEqual(await currentProject(), manual, 'Properties deletion uses the same cleanup');
   await button('Undo').click();

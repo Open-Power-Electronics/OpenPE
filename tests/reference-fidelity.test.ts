@@ -125,7 +125,7 @@ async function verifyTPSRefill(
   assert.equal(sourceZones.length, 3);
   assert.equal(actualZones.length, 3);
   const saved = filledCopperPolygons(board);
-  assert.equal(saved.size, 3, 'All three enabled TPS zones have actual saved copper.');
+  assert.equal(saved.size, 2, 'KiCad saves copper on the two GND zones.');
   for (const original of sourceZones) {
     const id = val(child(original, 'uuid'));
     const actual = actualZones.find((zone) => val(child(zone, 'uuid')) === id);
@@ -171,9 +171,14 @@ async function verifyTPSRefill(
       modelZone.clearance,
       Math.max(0.25, Number(val(child(child(original, 'connect_pads')!, 'clearance')))),
     );
+    const copper = saved.get(id);
+    if (nativeNet(actual) === '/VIN') {
+      assert.equal(copper, undefined, 'KiCad removes all disconnected VIN copper.');
+      assert.equal(children(actual, 'filled_polygon').length, 0);
+      continue;
+    }
+    assert.ok(copper?.length);
     assert.ok(modelZone.filledPolygons!.every((polygon) => polygon.points.length >= 3));
-    const copper = saved.get(id)!;
-    assert.ok(copper.length > 0);
     assert.deepEqual(
       subtractPolygons(
         copper,
@@ -185,11 +190,27 @@ async function verifyTPSRefill(
   }
   const core = new ProjectCore(project);
   const before = core.getSnapshot();
-  const drc = (await core.query('layout.drc', { boardId: board.id })) as RuleCheckResult;
+  const drc = (await core.query('layout.drc', {
+    boardId: board.id,
+    settings: { useKiCadClearance: false },
+  })) as RuleCheckResult;
   assert.deepEqual(
     drc.issues.filter((issue) => issue.severity === 'error'),
     [],
-    'The actual regenerated TPS board passes bounded Core DRC.',
+    'The regenerated TPS board has no errors under the global Core thresholds.',
+  );
+  assert.equal(drc.complete, false);
+  assert.deepEqual(
+    drc.issues.map((issue) => issue.ruleId),
+    ['pcb.unfilled-zone'],
+  );
+  const projectDRC = (await core.query('layout.drc', { boardId: board.id })) as RuleCheckResult;
+  assert.ok(
+    projectDRC.issues.some(
+      ({ ruleId, message }) =>
+        ruleId === 'pcb.clearance' && /requires 0\.2 mm \(net class Default\)/.test(message),
+    ),
+    'The project check applies the native net-class clearance.',
   );
   assert.equal(core.getSnapshot().source, before.source);
   assert.equal(core.getSnapshot().revision, before.revision);

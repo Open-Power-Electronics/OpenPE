@@ -1210,6 +1210,92 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:PWR_FLAG"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -1481,6 +1567,11 @@
       (xy 165.1 27.94)
       (xy 165.1 31.75))
     (uuid "3600515d-9be1-53b5-a3f7-4423d62eb053"))
+  (wire
+    (pts
+      (xy 105.41 31.75)
+      (xy 113.03 31.75))
+    (uuid "03e25255-3e7d-50d5-aab4-99f615050b18"))
   (junction
     (at 29.21 68.58)
     (uuid "05fd10d5-68b8-44b8-b5a5-f70a6c1f9adb"))
@@ -2363,7 +2454,7 @@
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
-    (lib_id "Reference:lmr12010-sot236-buck")
+    (lib_id "Reference:Reference_lmr12010_sot236_buck")
     (lib_name "Reference_lmr12010_sot236_buck")
     (at 77.47 73.66 0)
     (unit 1)
@@ -2884,6 +2975,62 @@
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
       (at 165.1 31.75 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 113.03 16.51 0)
+    (unit 1)
+    (uuid "e4ed68a9-8c8e-5ca1-a5de-6f11d3658113")
+    (in_bom no)
+    (instances
+      (project "lmr12010-sot236-buck"
+        (path "/f5e72392-05cc-42f0-8937-3855f40e69a9"
+          (reference "#FLG1")
+          (unit 1))))
+    (property "Reference" "#FLG1"
+      (at 113.03 19.05 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 113.03 19.05 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 113.03 16.51 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 105.41 31.75 0)
+    (unit 1)
+    (uuid "fdbb17de-83ea-575b-a220-15d71c417f1d")
+    (in_bom no)
+    (instances
+      (project "lmr12010-sot236-buck"
+        (path "/f5e72392-05cc-42f0-8937-3855f40e69a9"
+          (reference "#FLG2")
+          (unit 1))))
+    (property "Reference" "#FLG2"
+      (at 105.41 34.29 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 105.41 34.29 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 105.41 31.75 0)
       (effects
         (font
           (size 1.27 1.27)))

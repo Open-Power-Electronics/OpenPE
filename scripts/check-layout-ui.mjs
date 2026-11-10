@@ -655,7 +655,6 @@ try {
   await canvas.press('Enter');
   await canvas.locator('[data-copper-zone]').first().waitFor({ state: 'attached' });
   assert.equal(await canvas.locator('[data-copper-zone]').last().getAttribute('d'), '');
-  await page.getByRole('tab', { name: 'Fill', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).fill('0.5');
   await page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true }).press('Enter');
   await button('Source').click();

@@ -5,8 +5,9 @@ import { ProjectCore } from '../core/project-core';
 import { registerProjectCapabilities } from '../core/register-project';
 import { emptyCircuit, uid } from '../lib/circuit';
 import { createProject } from '../lib/project';
+import { projectFromNativeFiles } from '../lib/kicad-project';
 import { createEmptyPCB } from '../lib/pcb-layout';
-import type { RuleCheckResult } from '../lib/design-rule-checks';
+import type { PCBDesignRuleConfig, RuleCheckResult } from '../lib/design-rule-checks';
 
 function fixture() {
   const circuit = emptyCircuit();
@@ -41,6 +42,27 @@ test('human and Agent rule queries return the same read-only report for their ex
     assert.equal((agent as Record<string, unknown>).revision, String(snapshot.revision));
     assert.equal((agent as Record<string, unknown>).schematicId, schematicId);
     assert.ok(direct.issues.some((issue) => issue.ruleId === 'erc.wire-dangling'));
+    const severityArgs = {
+      schematicId,
+      settings: { severities: { 'erc.wire-dangling': 'error' } },
+    };
+    const overridden = (await host.query('schematic.erc', severityArgs, {
+      actor: 'agent',
+    })) as RuleCheckResult;
+    assert.deepEqual(overridden, await core.query('schematic.erc', severityArgs));
+    assert.deepEqual(
+      overridden.issues,
+      direct.issues.map((issue) =>
+        issue.ruleId === 'erc.wire-dangling' ? { ...issue, severity: 'error' } : issue,
+      ),
+    );
+    const ignored = (await host.query('schematic.erc', {
+      schematicId,
+      settings: { severities: { 'erc.wire-dangling': 'ignore' } },
+    })) as RuleCheckResult;
+    assert.ok(!ignored.issues.some((issue) => issue.ruleId === 'erc.wire-dangling'));
+    assert.ok(!ignored.checkedRules.includes('erc.wire-dangling'));
+    assert.equal(ignored.complete, false);
     const other = (await host.query('schematic.erc', {
       schematicId: snapshot.project!.additionalSchematics![0].id,
     })) as RuleCheckResult;
@@ -51,9 +73,19 @@ test('human and Agent rule queries return the same read-only report for their ex
     assert.ok(drc.issues.some((issue) => issue.ruleId === 'pcb.track-width'));
     const changed = (await host.query('layout.drc', {
       boardId,
-      settings: { minTrackWidth: 0 },
+      settings: { minTrackWidth: 0, scopes: ['dimensions'], useZoneClearance: true },
     })) as RuleCheckResult;
     assert.ok(!changed.issues.some((issue) => issue.ruleId === 'pcb.track-width'));
+    assert.ok(changed.checkedRules.includes('pcb.via-diameter'));
+    assert.ok(!changed.checkedRules.includes('pcb.copper-edge'));
+    assert.equal(changed.complete, false);
+    assert.deepEqual(
+      changed,
+      await core.query('layout.drc', {
+        boardId,
+        settings: { minTrackWidth: 0, scopes: ['dimensions'], useZoneClearance: true },
+      }),
+    );
     assert.equal(core.getSnapshot(), snapshot);
     assert.deepEqual(events, []);
     assert.equal(snapshot.undoDepth, 0);
@@ -87,10 +119,33 @@ test('rule queries reject pending Source, closed documents, wrong targets and ma
     await assert.rejects(host.query('schematic.erc', { schematicId: uid() }), /no longer/);
     await assert.rejects(host.query('layout.drc', { boardId: uid() }), /no longer/);
     for (const settings of [
+      { severities: { 'erc.wire-dangling': 'info' } },
+      { severities: { 'pcb.track-width': 'warning' } },
+      { clearance: 0 },
+    ])
+      await assert.rejects(
+        host.query('schematic.erc', { schematicId: project.schematic.id, settings }),
+      );
+    for (const settings of [
       { clearance: -1 },
       { extra: 1 },
-      { minViaDrill: '0.3' },
+      { minThroughHole: '0.3' },
       { clearance: 1001 },
+      { scopes: [] },
+      { scopes: ['dimensions', 'dimensions'] },
+      { scopes: ['solder-mask'] },
+      { useZoneClearance: 'yes' },
+      { useKiCadClearance: 'yes' },
+      { severities: { 'pcb.track-width': 'info' } },
+      { severities: { 'pcb.unknown': 'warning' } },
+      { clearanceOverrides: [{ key: 'zone:a', clearance: 0.2, enabled: 'false' }] },
+      { clearanceOverrides: [{ key: 'zone:a', clearance: -1 }] },
+      {
+        clearanceOverrides: [
+          { key: 'zone:a', clearance: 0 },
+          { key: 'zone:a', clearance: 1 },
+        ],
+      },
     ])
       await assert.rejects(host.query('layout.drc', { boardId: project.pcb!.id, settings }));
     core.updateSource('{pending');
@@ -116,6 +171,64 @@ test('rule queries reject pending Source, closed documents, wrong targets and ma
     );
   } finally {
     dispose();
+    host.dispose();
+  }
+});
+
+test('project DRC minima round-trip through native Save as, Source and undo', async () => {
+  const core = fixture();
+  const boardId = core.getSnapshot().project!.pcb!.id;
+  const before = core.getNativeFiles();
+  const host = createCapabilityHost({ revision: () => String(core.getSnapshot().revision) });
+  const unregister = registerProjectCapabilities(host, core);
+  try {
+    const current = () =>
+      host.query('layout.drc', { boardId: core.getSnapshot().project!.pcb!.id }) as Promise<
+        RuleCheckResult & { settings: PCBDesignRuleConfig }
+      >;
+    const baseline = await current();
+    const thresholds = { clearance: 0.32, minTrackWidth: 0.07, minThroughHole: 0.28 };
+    const args = { boardId, thresholds };
+    await host.execute('layout.drc.settings', args, { actor: 'agent' });
+    const edited = core.getNativeFiles();
+    const pro = edited.files.find((file) => file.name === edited.entry)!;
+    const data = JSON.parse(pro.source);
+    assert.deepEqual(data.board.design_settings.rules, {
+      min_clearance: 0.32,
+      min_track_width: 0.07,
+      min_through_hole_diameter: 0.28,
+    });
+    assert.deepEqual(
+      edited.files.filter((file) => file.name !== edited.entry),
+      before.files.filter((file) => file.name !== before.entry),
+    );
+    assert.equal(core.getSnapshot().undoDepth, 1);
+    const after = await current();
+    assert.equal(after.settings.minThroughHole, 0.28);
+    assert.equal(after.settings.useKiCadClearance, true);
+    assert.ok(!after.issues.some((issue) => issue.ruleId === 'pcb.track-width'));
+    const revision = core.getSnapshot().revision;
+    await host.execute('layout.drc.settings', args);
+    assert.equal(core.getSnapshot().revision, revision);
+    core.setNativeEntryName('Saved.kicad_pro');
+    const reopened = new ProjectCore(projectFromNativeFiles(core.getNativeFiles()));
+    const reopenedReport = (await reopened.query('layout.drc', {
+      boardId: reopened.getSnapshot().project!.pcb!.id,
+    })) as typeof after;
+    assert.deepEqual(reopenedReport.settings, after.settings);
+    core.setNativeEntryName(before.entry);
+    assert.ok(core.undo());
+    assert.deepEqual(core.getNativeFiles(), before);
+    assert.deepEqual((await current()).settings, baseline.settings);
+    assert.ok(core.redo());
+    assert.deepEqual(core.getNativeFiles(), edited);
+    data.board.design_settings.rules.min_clearance = 0.42;
+    core.updateNativeSource(edited.entry, JSON.stringify(data));
+    await assert.rejects(host.execute('layout.drc.settings', args), /Apply the Source/);
+    assert.ok(core.applySource());
+    assert.equal((await current()).settings.clearance, 0.42);
+  } finally {
+    unregister();
     host.dispose();
   }
 });

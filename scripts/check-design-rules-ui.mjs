@@ -118,7 +118,7 @@ const bundle = await build({
   stdin: {
     contents: `import React from 'react';import {createRoot} from 'react-dom/client';
       import Workspace from './components/DesktopWorkspace';
-      window.ruleTestCores={};window.ruleTestLayoutContexts={};window.ruleTestRuns=[];createRoot(document.getElementById('root')).render(<Workspace/>);`,
+      window.ruleTestCores={};window.ruleTestLayoutContexts={};window.ruleTestRuns=[];window.ruleTestInitialDelays={};createRoot(document.getElementById('root')).render(<Workspace/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -135,6 +135,19 @@ const bundle = await build({
     {
       name: 'observe-real-cores-for-test-edits',
       setup(plugin) {
+        plugin.onLoad({ filter: /[\\/]components[\\/]Workbench\.tsx$/ }, async ({ path: file }) => {
+          const original = await readFile(file, 'utf8');
+          const marker = '      if (remaining > 0) {';
+          assert.ok(original.includes(marker), 'Test observes the real rule scheduler delay.');
+          return {
+            contents: original.replace(
+              marker,
+              `      window.ruleTestInitialDelays[kind] ??= Math.max(0, remaining);\n${marker}`,
+            ),
+            loader: 'tsx',
+            resolveDir: path.dirname(file),
+          };
+        });
         plugin.onLoad(
           { filter: /[\\/]components[\\/]LayoutEditor\.tsx$/ },
           async ({ path: file }) => {
@@ -393,14 +406,17 @@ try {
     assert.equal(
       await action.locator('[data-rule-warnings]').evaluate((element) => {
         const probe = document.createElement('span');
-        probe.style.color = 'var(--muted)';
+        probe.style.color =
+          Number(element.getAttribute('data-rule-warnings')) > 0
+            ? 'var(--rule-warning-ink)'
+            : 'var(--muted)';
         element.append(probe);
-        const gray = getComputedStyle(probe).color;
+        const expectedColor = getComputedStyle(probe).color;
         probe.remove();
-        return getComputedStyle(element).color === gray;
+        return getComputedStyle(element).color === expectedColor;
       }),
       true,
-      'Footer warnings use muted gray.',
+      'Footer warnings are amber for positive counts and gray otherwise.',
     );
     const order = await page
       .locator('.editor-mode-actions:visible')
@@ -424,12 +440,16 @@ try {
       .locator('xpath=ancestor::*[contains(@class, "status-bar")]')
       .first()
       .boundingBox();
-    assert.ok(Math.abs(bounds.x - drawing.x - 8) <= 2);
-    assert.ok(bounds.width <= 480 && bounds.width <= drawing.width - 16);
+    const trigger = await action.boundingBox();
+    assert.ok(Math.abs(bounds.x - trigger.x) <= 1);
+    const maxWidths = { ERC: 384, DRC: 384, Model: 480 };
+    const maxWidth = maxWidths[kind];
+    assert.ok(bounds.width <= maxWidth + 1 && bounds.width <= drawing.width - 8);
     assert.ok(bounds.y > drawing.y);
     assert.ok(Math.abs(bounds.y + bounds.height + 8 - footer.y) <= 2);
     assert.equal(await panel(kind).getByRole('tab').count(), 0);
-    await panel(kind).getByRole('separator', { name: 'Resize Rule panel' }).waitFor();
+    if (kind === 'Model')
+      await panel(kind).getByRole('separator', { name: 'Resize Rule panel' }).waitFor();
     assert.equal(await page.locator('dialog[open]').count(), 0);
     assert.equal(await ruleButton.getAttribute('aria-expanded'), 'true');
     assert.equal(
@@ -478,6 +498,21 @@ try {
       const count = ruleButton.locator(`[data-rule-${label}]`);
       assert.equal(await count.getAttribute(`data-rule-${label}`), String(expected));
       assert.equal((await count.textContent()).trim(), String(expected));
+      if (severity === 'warning') {
+        assert.equal(await count.locator('svg.lucide-triangle-alert').count(), 1);
+        assert.equal(
+          await count.evaluate((element, hasWarnings) => {
+            const probe = document.createElement('span');
+            probe.style.color = hasWarnings ? 'var(--rule-warning-ink)' : 'var(--muted)';
+            document.body.append(probe);
+            const expectedColor = getComputedStyle(probe).color;
+            probe.remove();
+            return getComputedStyle(element).color === expectedColor;
+          }, expected > 0),
+          true,
+          'The warning triangle keeps its shape and changes color with the count.',
+        );
+      }
       if (severity === 'error' && expected > 0) {
         assert.equal(await count.locator('svg.lucide-circle-x').count(), 1);
         assert.equal(await count.locator('svg.lucide-circle-check').count(), 0);
@@ -547,8 +582,7 @@ try {
   };
   const unchanged = async (index, baseline, reason) =>
     assert.deepEqual(await snapshot(index), baseline, reason);
-  const clean = (kind) =>
-    panel(kind).getByText('No violations found in checked rules.', { exact: true });
+  const clean = (kind) => panel(kind).getByText('No violations', { exact: true });
   const layoutContext = () => page.evaluate((id) => window.ruleTestLayoutContexts[id], board.id);
   const markerUncovered = async (kind, testId) => {
     assert.equal(await panel(kind).isVisible(), true, 'Locating keeps Rule open.');
@@ -559,7 +593,9 @@ try {
       if (!marker) return false;
       const point = marker.getBoundingClientRect();
       const drawing = document.querySelector(`[data-testid="${testId}"]`).getBoundingClientRect();
-      const popup = document.querySelector('[role="dialog"][aria-label="Rule"]').getBoundingClientRect();
+      const popup = document
+        .querySelector('[role="dialog"][aria-label="Rule"]')
+        .getBoundingClientRect();
       return (
         point.left >= drawing.left &&
         point.right <= drawing.right &&
@@ -626,6 +662,11 @@ try {
   );
   assert.equal(requested.has(drcChunk), false);
   await page.waitForFunction(() => window.ruleIdleWaiting);
+  assert.equal(
+    await page.evaluate(() => window.ruleTestInitialDelays.erc),
+    0,
+    'An untouched project queues its first ERC without a settle timer.',
+  );
   assert.equal(await runCount('schematic.erc'), 0, 'Settling alone cannot start a check.');
   await page.evaluate(() => {
     window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, buttons: 1 }));
@@ -695,7 +736,11 @@ try {
     (id) => window.ruleTestCores[id].getSnapshot().editingBlocked !== null,
     projectIds[0],
   );
-  await page.evaluate((id) => window.ruleTestCores[id].setEditingBlocked(null), projectIds[0]);
+  await page.evaluate((id) => {
+    window.holdRuleIdle();
+    window.ruleTestCores[id].setEditingBlocked(null);
+  }, projectIds[0]);
+  await page.waitForFunction(() => window.ruleIdleWaiting);
   await button('Run ERC').waitFor({ state: 'visible' });
   const afterBarrier = await snapshot(0);
   assert.deepEqual(
@@ -704,6 +749,7 @@ try {
     'Lifecycle gates preserve canonical/native bytes and undo.',
   );
   await button('Run ERC').click();
+  await page.evaluate(() => window.releaseRuleIdle());
   const ercIssue = panel('ERC').getByRole('button', {
     name: /Locate issue: Q1 pin 1 .*is unconnected/,
   });
@@ -846,6 +892,10 @@ try {
   const initialDRCRuns = await runCount('layout.drc');
   await button('Layout').click();
   await page.waitForFunction(() => window.ruleTestRuns.includes('layout.drc'));
+  assert.ok(
+    (await page.evaluate(() => window.ruleTestInitialDelays.drc)) <= 50,
+    'First Layout admission waits only for the short quiet-input interval.',
+  );
   await assertUnknownCounts('Checking…');
   assert.equal(await panel().count(), 0, 'First Layout admission checks DRC without opening Rule.');
   // Opening Rule cancels the previous check and queues a refresh for idle time.
@@ -1008,27 +1058,148 @@ try {
     'Hidden-layer violations locate only the marker.',
   );
   await setLayoutVisibility(page, 'F.Cu', true);
-  const annular = panel('DRC').getByRole('spinbutton', {
-    name: 'Minimum annular ring (mm)',
+  const clearance = panel('DRC').getByRole('spinbutton', {
+    name: 'Minimum copper clearance (board-wide) (mm)',
     exact: true,
   });
   const beforeInvalidEdit = await runCount('layout.drc');
-  await annular.fill('1000.1');
-  assert.equal(Number(await annular.inputValue()), 1000.1);
-  assert.equal(await annular.getAttribute('aria-invalid'), 'true');
+  await clearance.fill('1000.1');
+  assert.equal(Number(await clearance.inputValue()), 1000.1);
+  assert.equal(await clearance.getAttribute('aria-invalid'), 'true');
   assert.equal(await button('Recheck DRC').isDisabled(), true);
   assert.equal(
     await runCount('layout.drc'),
     beforeInvalidEdit,
     'An invalid DRC draft blocks rechecking.',
   );
-  await annular.fill('1');
-  await button('Recheck DRC').click();
+  await clearance.fill('0.15');
+  const editAnnular = async (value) => {
+    await button('DRC settings').click();
+    const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+    const categories = settings.getByRole('tablist', { name: 'Settings sections' });
+    await categories.waitFor();
+    assert.deepEqual(await categories.getByRole('tab').allTextContents(), [
+      'Appearance',
+      'Rule',
+      'Agents',
+    ]);
+    const ruleTabs = settings.getByRole('tablist', { name: 'Rule settings', exact: true });
+    const ruleTab = (name) => ruleTabs.getByRole('tab', { name, exact: true });
+    const rulePage = (name) => settings.getByRole('tabpanel', { name, exact: true });
+    const copper = rulePage('Copper & Routing');
+    assert.equal(await ruleTab('Copper & Routing').getAttribute('aria-selected'), 'true');
+    assert.equal(
+      await copper
+        .getByRole('group', { name: 'Connectivity', exact: true })
+        .getByRole('combobox')
+        .count(),
+      2,
+    );
+    await ruleTab('Schematic').click();
+    const conflictSeverity = settings.getByRole('combobox', { name: 'Output conflict severity' });
+    assert.equal(await conflictSeverity.getAttribute('aria-description'), 'Error');
+    await conflictSeverity.click();
+    const conflictOptions = settings.getByRole('listbox', { name: 'Output conflict severity' });
+    await conflictOptions.waitFor();
+    assert.deepEqual(await conflictOptions.getByRole('option').allTextContents(), [
+      'Error',
+      'Warning',
+      'Off',
+    ]);
+    await conflictSeverity.press('Escape');
+    assert.equal(
+      await settings.getByRole('button', { name: 'Apply rules', exact: true }).count(),
+      0,
+    );
+    const holesTab = ruleTab('Holes & Vias');
+    await holesTab.click();
+    const holes = rulePage('Holes & Vias');
+    const viaCopper = holes.getByRole('group', { name: 'Via & pad copper', exact: true });
+    const severity = viaCopper.getByRole('combobox', { name: 'Minimum annular ring severity' });
+    assert.equal(await severity.getAttribute('aria-description'), 'Error');
+    assert.equal(await severity.locator('svg.lucide-circle-alert').count(), 1);
+    await severity.click();
+    const choices = settings.getByRole('listbox', { name: 'Minimum annular ring severity' });
+    await choices.waitFor();
+    assert.equal(
+      await choices
+        .getByRole('option', { name: 'Warning', exact: true })
+        .locator('svg.lucide-triangle-alert')
+        .count(),
+      1,
+    );
+    await severity.press('Escape');
+    const rows = await holes
+      .getByRole('spinbutton')
+      .evaluateAll((inputs) => inputs.map((input) => input.getBoundingClientRect().top));
+    assert.equal(rows.length, 5);
+    assert.ok(
+      rows.slice(1).every((top, index) => rows[index] < top),
+      'Each threshold occupies its own row.',
+    );
+    const annular = viaCopper.getByRole('spinbutton', {
+      name: 'Minimum annular ring (mm)',
+      exact: true,
+    });
+    const done = settings.getByRole('button', { name: 'Done', exact: true });
+    const reset = settings.getByRole('button', { name: 'Reset to default', exact: true });
+    await annular.fill('1000.1');
+    const boardTab = ruleTab('Board & Placement');
+    await boardTab.click();
+    const outline = rulePage('Board & Placement').getByRole('group', {
+      name: 'Outline & keepouts',
+      exact: true,
+    });
+    await outline.getByRole('combobox', { name: 'Board outline severity', exact: true }).waitFor();
+    await outline
+      .getByRole('spinbutton', { name: 'Copper to board edge (mm)', exact: true })
+      .waitFor();
+    await boardTab.press('ArrowLeft');
+    assert.equal(await holesTab.getAttribute('aria-selected'), 'true');
+    assert.equal(await holesTab.evaluate((tab) => document.activeElement === tab), true);
+    assert.equal(await annular.inputValue(), '1000.1', 'Changing tabs retains the invalid draft.');
+    await done.click();
+    assert.equal(await settings.isVisible(), true);
+    assert.equal(await annular.getAttribute('aria-invalid'), 'true');
+    const runsBeforeReset = await runCount('layout.drc');
+    await reset.click();
+    const confirmation = page.getByRole('dialog', { name: 'Reset rule settings?', exact: true });
+    const cancelReset = confirmation.getByRole('button', { name: 'Cancel', exact: true });
+    await cancelReset.waitFor();
+    assert.equal(await confirmation.locator(':scope > .dialog-content').count(), 0);
+    assert.equal(await confirmation.getAttribute('aria-describedby'), null);
+    assert.equal(await confirmation.getByRole('button', { name: 'Maximize dialog' }).count(), 0);
+    assert.equal(await confirmation.getByRole('button', { name: 'Close dialog' }).count(), 1);
+    assert.equal(await cancelReset.evaluate((button) => document.activeElement === button), true);
+    await cancelReset.click();
+    await confirmation.waitFor({ state: 'hidden' });
+    assert.equal(await reset.evaluate((button) => document.activeElement === button), true);
+    assert.equal(await annular.inputValue(), '1000.1');
+    await reset.press('Enter');
+    await confirmation.getByRole('button', { name: 'Reset', exact: true }).click();
+    await confirmation.waitFor({ state: 'hidden' });
+    assert.equal(await settings.isVisible(), true);
+    assert.equal(await annular.inputValue(), '0.05');
+    assert.equal(await runCount('layout.drc'), runsBeforeReset);
+    await annular.fill(value);
+    await annular.dispatchEvent('compositionstart');
+    await done.dispatchEvent('click');
+    assert.equal(await settings.isVisible(), true);
+    await annular.dispatchEvent('compositionend');
+    await done.click();
+    await settings.waitFor({ state: 'hidden' });
+    await openDRC();
+  };
+  await editAnnular('1');
   const padIssue = panel('DRC').getByRole('button', {
     name: /Locate issue: J1 pad 1 has .*minimum annular ring/,
   });
   await padIssue.waitFor();
   assert.equal(await padIssue.locator('button').count(), 0);
+  const padTag = await padIssue.getByText('J1 pad 1', { exact: true }).boundingBox();
+  const padRuleName = await padIssue.getByText('Annular ring', { exact: true }).boundingBox();
+  assert.ok(padTag.x > padRuleName.x + padRuleName.width);
+  assert.ok(Math.abs(padTag.y - padRuleName.y) <= 2);
   await padIssue.focus();
   await padIssue.press('Enter');
   await markerUncovered('DRC', 'layout-canvas');
@@ -1038,16 +1209,16 @@ try {
     'Footprint and pad issue IDs select the owner exactly once.',
   );
   assert.equal((await layoutContext()).inspector, false);
-  await annular.focus();
-  await annular.fill('0.15');
-  assert.equal(Number(await annular.inputValue()), 0.15);
-  await button('Recheck DRC').click();
+  await editAnnular('0.15');
   await padIssue.waitFor({ state: 'detached' });
-  await unchanged(
-    1,
-    boardBaseline,
-    'Filters, visibility, pad locating and checking limits preserve native state.',
-  );
+  const updatedAnnular = await snapshot(1);
+  const nativeRules = ({ native }) =>
+    JSON.parse(native.files.find((file) => file.name === native.entry).source).board.design_settings
+      .rules;
+  const siblingSources = ({ native }) => native.files.filter((file) => file.name !== native.entry);
+  assert.equal(nativeRules(updatedAnnular).min_via_annular_width, 0.15);
+  assert.equal(updatedAnnular.undoDepth, boardBaseline.undoDepth + 2);
+  assert.deepEqual(siblingSources(updatedAnnular), siblingSources(boardBaseline));
   const minimum = panel('DRC').getByRole('spinbutton', {
     name: 'Minimum track width (mm)',
     exact: true,
@@ -1063,11 +1234,10 @@ try {
   await button('Recheck DRC').click();
   await shortIssue.waitFor();
   await widthIssue.waitFor({ state: 'detached' });
-  await unchanged(
-    1,
-    boardBaseline,
-    'Changing DRC thresholds never edits project settings, native bytes or undo.',
-  );
+  const updatedWidth = await snapshot(1);
+  assert.equal(nativeRules(updatedWidth).min_track_width, 0.05);
+  assert.equal(updatedWidth.undoDepth, updatedAnnular.undoDepth + 1);
+  assert.deepEqual(siblingSources(updatedWidth), siblingSources(boardBaseline));
   await page.screenshot({ path: 'test-results/design-rules-workspace-drc.png' });
 
   await page.evaluate((id) => {
@@ -1112,7 +1282,13 @@ try {
   await clean('DRC').waitFor();
   assert.equal(await layout.locator('[data-rule-check-marker]').count(), 0);
   await button('Close Rule').click();
-  await page.evaluate((id) => window.ruleTestCores[id].undo(), projectIds[1]);
+  await page.evaluate(
+    ({ id, undoDepth }) => {
+      const core = window.ruleTestCores[id];
+      while (core.getSnapshot().undoDepth > undoDepth) core.undo();
+    },
+    { id: projectIds[1], undoDepth: boardBaseline.undoDepth },
+  );
   await settled();
   assert.equal((await snapshot(1)).source, sources[1]);
   assert.equal(recovery.documents[1].dirty, false);

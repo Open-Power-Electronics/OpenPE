@@ -5,6 +5,7 @@ import ComponentProperties, { type ComponentPropertiesProps } from './ComponentP
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import PropertiesEmptyState from './PropertiesEmptyState';
 import PropertyDeleteButton from './PropertyDeleteButton';
+import { PropertyActionRow } from './PropertyTabs';
 import { NumberField } from './LayoutPropertyFields';
 import { modelReferenceKey } from '@/lib/example-model-paths';
 import {
@@ -2563,6 +2564,12 @@ function PCBModelPreview({
       setComponentDeleteBusy(false);
     }
   }
+  const componentDeleteAction = selectedFootprint && (
+    <PropertyDeleteButton
+      disabled={componentDeleteBlocked}
+      onClick={() => void removeComponent()}
+    />
+  );
   const interacting = !measuring && !annotating && !cad.tool && !cad.pan;
   const interactionDisabled = cad.selectionBlocked;
   const issueNavigationBlocked =
@@ -3359,6 +3366,7 @@ function PCBModelPreview({
                     {selectedFootprint ? (
                       schematic ? (
                         <ComponentProperties
+                          tabAction={componentDeleteAction}
                           footprint={selectedFootprint}
                           schematic={schematic}
                           active={active && !sourcePending && sidebarVisible && !explosionActive}
@@ -3376,7 +3384,10 @@ function PCBModelPreview({
                           onRequestSave={onRequestSave}
                         />
                       ) : (
-                        <p>Component schematic is unavailable.</p>
+                        <>
+                          <PropertyActionRow action={componentDeleteAction} />
+                          <p>Component schematic is unavailable.</p>
+                        </>
                       )
                     ) : (
                       <PropertiesEmptyState icon={Box}>
@@ -3389,14 +3400,6 @@ function PCBModelPreview({
                       </p>
                     )}
                   </div>
-                  {selectedFootprint && (
-                    <footer className="inspector-footer">
-                      <PropertyDeleteButton
-                        disabled={componentDeleteBlocked}
-                        onClick={() => void removeComponent()}
-                      />
-                    </footer>
-                  )}
                 </section>
               )}
             </EditorDisplayDrawer>

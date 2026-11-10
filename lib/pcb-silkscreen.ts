@@ -4,14 +4,23 @@ import { transformPCBGraphic } from './pcb-geometry';
 import { footprintPoint } from './pcb-layout';
 
 /** Resolve linked captions without changing the embedded native field content. */
-export function pcbSilkscreen(board: PCB, schematic?: Circuit): BoardLine[] {
+export function pcbSilkscreen(
+  board: PCB,
+  schematic?: Circuit,
+  includeReferenceFallback = true,
+): BoardLine[] {
+  const parts = new Map(schematic?.parts.map((part) => [part.id, part]));
   return [
     ...board.graphics,
     ...board.footprints.flatMap((footprint) => {
-      const part = schematic?.parts.find((p) => p.id === footprint.symbolId);
+      const part = footprint.symbolId ? parts.get(footprint.symbolId) : undefined;
       const reference = part?.ref ?? footprint.reference ?? '';
       const graphics = [...footprint.graphics];
-      if (reference && !graphics.some((g) => g.text?.property === 'Reference'))
+      if (
+        includeReferenceFallback &&
+        reference &&
+        !graphics.some((g) => g.text?.property === 'Reference')
+      )
         graphics.push({
           id: `display-reference-${footprint.id}`,
           kind: 'text',

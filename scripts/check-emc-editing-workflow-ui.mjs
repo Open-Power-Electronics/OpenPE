@@ -265,7 +265,7 @@ try {
   await schematic.waitFor();
   const original = await native();
   const baseline = await readNativeProject(page);
-  assert.equal(baseline.schematic.parts.length, 145);
+  assert.equal(baseline.schematic.parts.length, 150);
   assert.equal(baseline.pcb.footprints.length, 88);
   assert.equal(baseline.pcb.tracks.length, 336);
   await clean();

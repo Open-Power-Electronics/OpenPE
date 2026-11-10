@@ -51,7 +51,15 @@ import layoutPropertySchemas from './layout-property-schemas.json';
 import { schematicTexts } from '../lib/schematic-text';
 import { displayName, MAX_DISPLAY_NAME_LENGTH } from '../lib/display-name';
 import { ownProject } from '../lib/immutable-project';
-import { defaultPCBDesignRules } from '../lib/design-rule-checks';
+import {
+  maxPCBClearanceOverrides,
+  pcbDesignRuleIds,
+  pcbDesignRuleLimitKeys,
+  pcbDesignRuleScopeKeys,
+  designRuleSeverities,
+  schematicRuleIds,
+  resolvePCBDesignRules,
+} from '../lib/design-rule-checks';
 import {
   modelCadFromProject,
   modelCadGeometryKey,
@@ -67,7 +75,9 @@ import {
 import { extrudeModelCadSketch, modelCadSketchExtrusionSchema } from '../lib/model-cad-sketch';
 import {
   projectNativeFiles,
+  projectPCBDesignRules,
   projectWithNativeFiles,
+  withNativePCBDesignRuleLimits,
   withNativeProjectName,
   validateKiCadProjectFiles,
   type KiCadProjectFiles,
@@ -132,14 +142,45 @@ const point = {
 };
 const ids = { type: 'array', items: identity, uniqueItems: true, maxItems: 30000 };
 const sheet = { schematicId: identity };
-const designRuleSettings = {
+const ruleSeverities = (ruleIds: readonly string[]) => ({
   type: 'object',
   properties: Object.fromEntries(
-    Object.keys(defaultPCBDesignRules).map((key) => [
-      key,
-      { type: 'number', minimum: 0, maximum: 1000 },
-    ]),
+    ruleIds.map((id) => [id, { type: 'string', enum: designRuleSeverities }]),
   ),
+  additionalProperties: false,
+});
+const designRuleThresholdProperties = Object.fromEntries(
+  pcbDesignRuleLimitKeys.map((key) => [key, { type: 'number', minimum: 0, maximum: 1000 }]),
+);
+const designRuleSettings = {
+  type: 'object',
+  properties: {
+    ...designRuleThresholdProperties,
+    scopes: {
+      type: 'array',
+      items: { type: 'string', enum: pcbDesignRuleScopeKeys },
+      minItems: 1,
+      maxItems: pcbDesignRuleScopeKeys.length,
+      uniqueItems: true,
+    },
+    useZoneClearance: { type: 'boolean' },
+    useKiCadClearance: { type: 'boolean' },
+    severities: ruleSeverities(pcbDesignRuleIds),
+    clearanceOverrides: {
+      type: 'array',
+      maxItems: maxPCBClearanceOverrides,
+      items: {
+        type: 'object',
+        properties: {
+          key: identity,
+          clearance: { type: 'number', minimum: 0, maximum: 1000 },
+          enabled: { type: 'boolean' },
+        },
+        required: ['key', 'clearance'],
+        additionalProperties: false,
+      },
+    },
+  },
   additionalProperties: false,
 };
 const object = (properties: Record<string, unknown> = {}, required: string[] = []) => ({
@@ -176,8 +217,10 @@ export const coreQueryDefinitions: CoreDefinition[] = [
   ),
   definition(
     'schematic.erc',
-    'Check the selected schematic for supported electrical rule violations without editing it.',
-    object(sheet, ['schematicId']),
+    'Check the selected schematic for supported electrical rule violations with optional severity overrides.',
+    object({ ...sheet, settings: object({ severities: ruleSeverities(schematicRuleIds) }, []) }, [
+      'schematicId',
+    ]),
   ),
   definition(
     'schematic.drafting',
@@ -186,7 +229,7 @@ export const coreQueryDefinitions: CoreDefinition[] = [
   ),
   definition(
     'layout.drc',
-    'Check the PCB for supported design rule violations using optional millimetre thresholds.',
+    'Check the PCB with optional millimetre thresholds, saved zones and KiCad clearance rules. Override values by source key from the result.',
     object({ boardId: identity, settings: designRuleSettings }, ['boardId']),
   ),
   definition(
@@ -220,6 +263,14 @@ export const coreQueryDefinitions: CoreDefinition[] = [
 ];
 export const coreCommandDefinitions: CoreDefinition[] = [
   ...layoutCommandDefinitions,
+  objectCommand(
+    'layout.drc.settings',
+    'Update native board-wide DRC minima in one undo edit. Omitted thresholds retain their current values. Does not run checks or change geometry.',
+    object({ boardId: identity, thresholds: object(designRuleThresholdProperties) }, [
+      'boardId',
+      'thresholds',
+    ]),
+  ),
   objectCommand(
     'schematic.symbol.draw',
     'Create or edit one embedded single-unit symbol with rectangles, circles, polylines and electrical pins. Uses local millimetres, preserves other instances and rejects disconnected wired pins. One project undo edit.',
@@ -1005,20 +1056,43 @@ export class ProjectCore {
       const { runSchematicERC } = await import('../lib/schematic-erc');
       ready();
       return {
-        ...runSchematicERC(schematic),
+        ...runSchematicERC(schematic, args.settings?.severities),
         revision: String(revision),
         schematicId: schematic.id,
       };
     }
     if (!project.pcb || project.pcb.id !== args.boardId)
       throw new Error('This PCB layout is no longer in the project.');
-    const { runPCBDesignRules } = await import('../lib/pcb-drc');
+    const [{ runPCBDesignRules }, { readPCBDesignRuleSources }] = await Promise.all([
+      import('../lib/pcb-drc'),
+      import('../lib/pcb-clearance-sources'),
+    ]);
     ready();
+    const settings = resolvePCBDesignRules(
+      args.settings,
+      projectPCBDesignRules(project.nativeFiles),
+    );
+    const sources = settings.scopes.includes('clearance')
+      ? readPCBDesignRuleSources(project)
+      : undefined;
     return {
-      ...runPCBDesignRules(project.pcb, args.settings, project.schematic),
+      ...runPCBDesignRules(project.pcb, settings, project.schematic, sources),
       revision: String(revision),
       boardId: project.pcb.id,
-      settings: { ...defaultPCBDesignRules, ...args.settings },
+      settings,
+      ...(sources && {
+        clearanceSources: {
+          zones: sources.zones,
+          netClasses: [...sources.classes.values()],
+          rules: sources.rules.map(({ key, label, clearance, condition }) => ({
+            key,
+            label,
+            clearance,
+            condition,
+          })),
+          notes: sources.notes,
+        },
+      }),
     };
   }
 
@@ -1197,6 +1271,17 @@ export class ProjectCore {
     if (id === 'project.rename') {
       this.commitProject({ ...project, name: displayName(args.name) });
       return this.query('project.snapshot');
+    }
+    if (id === 'layout.drc.settings') {
+      if (!project.pcb || project.pcb.id !== args.boardId)
+        throw new Error('This PCB layout is no longer in the project.');
+      const next = withNativePCBDesignRuleLimits(project, args.thresholds);
+      if (next !== project) this.commitProject(next);
+      return {
+        revision: String(this.revision),
+        boardId: project.pcb.id,
+        settings: projectPCBDesignRules(this.requireProject().nativeFiles),
+      };
     }
     if (id.startsWith('modelCad.')) {
       const preview = this.buildModelCadCommand(id, args);

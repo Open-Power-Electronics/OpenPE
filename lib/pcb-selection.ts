@@ -530,6 +530,7 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     tolerance: number;
     /** Optional subpixel distance tie supplied in board units by the viewport. */
     tieTolerance?: number;
+    /** The explicit or focused layer. Ordinary browsing has no layer preference. */
     priorityLayer?: string;
     highContrast?: boolean;
     /** Track manipulation retains its nearest-segment pickup and layer preference. */
@@ -562,15 +563,12 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
     : undefined;
   let objects: ReturnType<typeof pointObjects> | undefined;
   const allObjects = () => (objects ??= pointObjects(board));
-  const selectedLayer = options.priorityLayer as BoardLayer | undefined;
-  const activeLayer = selectedLayer ?? 'F.Cu';
+  const activeLayer = options.priorityLayer as BoardLayer | undefined;
   const activeSilk = silkLayer(activeLayer);
   // Ordinary layout point queries use a three-screen-pixel collection margin.
   const pixel = options.tolerance / 3;
   const priority = (list: readonly string[]) =>
-    (!options.trackPickup || selectedLayer !== undefined) &&
-    layers[activeLayer] &&
-    list.includes(activeLayer);
+    activeLayer !== undefined && layers[activeLayer] && list.includes(activeLayer);
   const layerRanks = options.layerOrder
     ? new Map(options.layerOrder.map((name, index) => [name, index]))
     : undefined;
@@ -686,8 +684,10 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
       const silk = scores.filter(({ score }) => score.silk);
       if (silk.length) return silk;
     }
-    if (options.highContrast && activeLayer.endsWith('.CrtYd')) {
-      const footprints = scores.filter(({ candidate }) => candidate.selection?.kind === 'footprint');
+    if (options.highContrast && activeLayer?.endsWith('.CrtYd')) {
+      const footprints = scores.filter(
+        ({ candidate }) => candidate.selection?.kind === 'footprint',
+      );
       if (footprints.length) return footprints;
     }
     return scores;
@@ -953,12 +953,8 @@ export function choosePCBPointCandidate<T extends PCBPointCandidate>(
             layerRank: layerRank([zone.layer]),
           });
       const preferredBounds =
-        layers[activeLayer]
-          ? pcbFootprintBodyBounds(
-              board,
-              owner,
-              pcbDisplayForLayer(layers, activeLayer),
-            )
+        activeLayer !== undefined && layers[activeLayer]
+          ? pcbFootprintBodyBounds(board, owner, pcbDisplayForLayer(layers, activeLayer))
           : undefined;
       const body =
         bounds && inContour(at, corners(bounds).map(transform))

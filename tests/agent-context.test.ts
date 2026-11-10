@@ -21,6 +21,7 @@ import { makePrompt } from '../server/agents.mjs';
 import { readFile } from 'node:fs/promises';
 import { parseProject } from '../lib/project';
 import { projectDatasheetContext } from '../lib/example-datasheets';
+import { agentProject } from '../lib/agent-project-access';
 import { createDatasheetService } from '../server/datasheets.mjs';
 
 function fixture() {
@@ -156,7 +157,7 @@ test('a greeting starts every runnable Agent without preparing the reviewed PDF'
   const workspace: AgentWorkspaceContext = {
     version: 1,
     capturedAt: new Date().toISOString(),
-    project: JSON.parse(serializeProject(project)),
+    project: agentProject(JSON.parse(serializeProject(project))),
     source: agentSource(null, ''),
     ui: { activeSchematicId: circuit.id },
     simulation: { status: 'disabled' },

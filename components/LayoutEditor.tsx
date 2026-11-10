@@ -288,6 +288,12 @@ type Props = {
   analysisPanel?: ReactNode;
   analysisPanelVisible?: boolean;
   onAnalysisProbe?: (point: Point | null) => void;
+  parasiticsProbe?: {
+    terminals: readonly { id: string; netId: string }[];
+    composing: RefObject<boolean>;
+    onPick: (terminal: { id: string; netId: string } | null) => void;
+    onExit: () => void;
+  };
   undoAction?: ReactNode;
   grid?: boolean;
   gridSpacing?: number;
@@ -353,6 +359,7 @@ function LayoutEditor({
   analysisPanel,
   analysisPanelVisible = false,
   onAnalysisProbe,
+  parasiticsProbe,
   undoAction,
   grid = true,
   gridSpacing = defaultLayoutGridSpacing,
@@ -419,11 +426,13 @@ function LayoutEditor({
   const [priorityLayer, setPriorityLayer] = useState<BoardLayer | null>(null);
   const activeLayer = priorityLayer ?? layer;
   const [inactiveLayerMode, setInactiveLayerMode] = useState<PCBInactiveLayerMode>('Normal');
+  const focusedLayer = inactiveLayerMode === 'Normal' ? priorityLayer : activeLayer;
   const selectionLayers = useMemo(
     () => inactiveLayerMode === 'Normal' ? visibleLayers : pcbDisplayForLayer(visibleLayers, activeLayer),
     [visibleLayers, inactiveLayerMode, activeLayer],
   );
   const layers = inactiveLayerMode === 'Hide' ? selectionLayers : visibleLayers;
+  const analysisProbing = Boolean(onAnalysisProbe || parasiticsProbe);
   const [appearanceTab, setAppearanceTab] = useState<LayoutAppearanceTab>('layers');
   const [visualizationExpanded, setVisualizationExpanded] = useState(true);
   const [selectionFiltersOpen, setSelectionFiltersOpen] = useState(true);
@@ -1086,8 +1095,9 @@ function LayoutEditor({
     [layers, copperLayers],
   );
   const paintLayerOrder = useMemo(
-    () => pcbActiveLayerPaintOrder(physicalLayerOrder, activeLayer),
-    [physicalLayerOrder, activeLayer],
+    () =>
+      focusedLayer ? pcbActiveLayerPaintOrder(physicalLayerOrder, focusedLayer) : physicalLayerOrder,
+    [physicalLayerOrder, focusedLayer],
   );
   useEffect(() => {
     const copperLayer = copperLayers.includes(layer) ? layer : copperLayers[0];
@@ -1430,8 +1440,8 @@ function LayoutEditor({
     );
   }, [active]);
   useLayoutEffect(() => {
-    if (onAnalysisProbe) activate('select', true);
-  }, [Boolean(onAnalysisProbe)]);
+    if (analysisProbing) activate('select', true);
+  }, [Boolean(onAnalysisProbe), Boolean(parasiticsProbe)]);
   useEffect(() => {
     if (visible) return;
     setSelectionChoice(null);
@@ -1577,7 +1587,10 @@ function LayoutEditor({
   }
   function activate(next: Tool, retainAnalysisProbe = false) {
     measurement.clear();
-    if (!retainAnalysisProbe) onAnalysisProbe?.(null);
+    if (!retainAnalysisProbe) {
+      onAnalysisProbe?.(null);
+      parasiticsProbe?.onExit();
+    }
     cancelGesture();
     setTool(next);
     setCursor(cursorPosition.current);
@@ -1688,6 +1701,13 @@ function LayoutEditor({
       return false;
     }
   }
+  function restoreDefaultLayerView() {
+    if (focusedLayer === null) return;
+    if (drawing && activeLayer !== layer) setOutline(null);
+    cancelGesture();
+    setPriorityLayer(null);
+    setInactiveLayerMode('Normal');
+  }
   function changePriorityLayer(next: BoardLayer) {
     if (next === activeLayer) {
       if (priorityLayer === null) setPriorityLayer(next);
@@ -1710,6 +1730,10 @@ function LayoutEditor({
     }
   }
   function changeInactiveLayerMode(next: PCBInactiveLayerMode) {
+    if (next === 'Normal') {
+      restoreDefaultLayerView();
+      return;
+    }
     if (next === inactiveLayerMode) return;
     cancelGesture();
     setInactiveLayerMode(next);
@@ -2145,7 +2169,7 @@ function LayoutEditor({
     return choosePCBPointCandidate(pcb, selectionLayers, candidates, canvasPoint(at, false), {
       tolerance: (view.width / size.width) * 3,
       tieTolerance: (view.width / size.width) * 0.1,
-      priorityLayer: trackPickup ? priorityLayer ?? undefined : activeLayer,
+      priorityLayer: focusedLayer ?? undefined,
       highContrast: inactiveLayerMode !== 'Normal',
       trackPickup,
       onAmbiguous,
@@ -2186,7 +2210,7 @@ function LayoutEditor({
             {
               tolerance: 0,
               filters: { ...filters, pad: true },
-              priorityLayer: activeLayer,
+              priorityLayer: focusedLayer ?? undefined,
               layerOrder: paintLayerOrder,
             },
           )?.padId
@@ -2766,6 +2790,10 @@ function LayoutEditor({
   }
   function start(e: React.PointerEvent<SVGSVGElement>) {
     if (!active || hasOpenOverlay() || ![0, 1, 2].includes(e.button)) return;
+    if (e.button === 0 && parasiticsProbe?.composing.current) {
+      e.preventDefault();
+      return;
+    }
     flushLayoutCamera(svg.current);
     if (outlineResize) {
       e.preventDefault();
@@ -2795,7 +2823,7 @@ function LayoutEditor({
       return;
     }
     if (tool === 'measure') return;
-    if (onAnalysisProbe || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
+    if (analysisProbing || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
       return;
     const p =
       (tool === 'route' || trackDrag) && (e.ctrlKey || e.metaKey)
@@ -3058,7 +3086,7 @@ function LayoutEditor({
     // Idle pointer motion only updates the coordinate subscriber. Tools keep
     // their live cursor preview without rebuilding the entire board on hover.
     updateCursor(p, !overlayOpen && tool !== 'select' && tool !== 'hand' && tool !== 'annotate');
-    if (onAnalysisProbe || (analysisComponentDetail && tool === 'select' && !annotationDisabled)) {
+    if (analysisProbing || (analysisComponentDetail && tool === 'select' && !annotationDisabled)) {
       if (pointer.current === e.pointerId && pointerStart.current)
         pointerMoved.current ||=
           Math.hypot(e.clientX - pointerStart.current.x, e.clientY - pointerStart.current.y) > 4;
@@ -3163,6 +3191,22 @@ function LayoutEditor({
     setInspectedPadId('');
     setInspector(false);
   }
+  function pickParasiticsTerminal(e: React.PointerEvent<SVGSVGElement>) {
+    if (!parasiticsProbe || annotationDisabled || latestBoard.current !== pcb) return;
+    flushLayoutCamera(svg.current);
+    // Use the painted pad/via targets so the active layer and paint order
+    // resolve overlapping terminals the same way they appear on the board.
+    for (const element of document.elementsFromPoint(e.clientX, e.clientY)) {
+      if (!svg.current?.contains(element)) continue;
+      const terminal = element.closest<SVGElement>('[data-pad-id], [data-via-type]');
+      if (!terminal) continue;
+      const { padId, selectionId, netId } = terminal.dataset;
+      const id = padId ?? selectionId;
+      if (id && netId && terminal.dataset.padType !== 'np_thru_hole')
+        parasiticsProbe.onPick({ id, netId });
+      return;
+    }
+  }
   function end(e: React.PointerEvent<SVGSVGElement>) {
     if (pointer.current !== e.pointerId) return;
     const moved =
@@ -3181,6 +3225,10 @@ function LayoutEditor({
       if (trackDrag?.pointer) setTrackDrag(null);
       setMarquee(null);
       setGesture(null);
+      return;
+    }
+    if (parasiticsProbe) {
+      if (!moved && e.button === 0) pickParasiticsTerminal(e);
       return;
     }
     if (tool === 'measure') {
@@ -3343,6 +3391,7 @@ function LayoutEditor({
     if (
       !active ||
       hasOpenOverlay() ||
+      parasiticsProbe?.composing.current ||
       e.nativeEvent.isComposing ||
       e.nativeEvent.keyCode === 229 ||
       e.repeat ||
@@ -3351,6 +3400,7 @@ function LayoutEditor({
       return;
     flushLayoutCamera(svg.current);
     const key = e.key.toLowerCase();
+    const layerKey = ['pageup', 'pagedown', '+', '-'].includes(key);
     if (tool === 'measure' && key !== ' ' && key !== 'home') {
       if (key === 'escape') {
         e.preventDefault();
@@ -3371,7 +3421,7 @@ function LayoutEditor({
         cancelGesture();
         setError('');
       }
-      if (['pageup', 'pagedown', '+', '-'].includes(key)) {
+      if (layerKey) {
         const target =
           key === 'pageup'
             ? 'F.Cu'
@@ -3385,11 +3435,14 @@ function LayoutEditor({
       }
       return;
     }
-    if (onAnalysisProbe) {
+    if (analysisProbing && !(parasiticsProbe && layerKey && !e.ctrlKey && !e.metaKey)) {
       if (key === 'escape' || key === 'home' || key === ' ') {
         e.preventDefault();
         e.stopPropagation();
-        if (key === 'escape') onAnalysisProbe(null);
+        if (key === 'escape') {
+          if (parasiticsProbe) parasiticsProbe.onPick(null);
+          else onAnalysisProbe?.(null);
+        }
         else if (key === 'home') fit(e.ctrlKey || e.metaKey ? 'all' : 'board');
         else if (!e.ctrlKey && !e.metaKey) fit('board');
       }
@@ -3487,7 +3540,7 @@ function LayoutEditor({
       return;
     e.preventDefault();
     e.stopPropagation();
-    if (['pageup', 'pagedown', '+', '-'].includes(key)) {
+    if (layerKey) {
       const current = viaTarget ?? route?.layer ?? layer;
       const target =
         key === 'pageup'
@@ -3695,6 +3748,17 @@ function LayoutEditor({
   }, [airwirePresentation]);
   const airwires = airwirePresentation.wires;
   const visibleLayer = (layer: string) => Boolean(layers[layer as BoardLayer]);
+  const parasiticsMarkers = parasiticsProbe?.terminals.map(({ id }) => {
+    const via = pcb.vias.find((via) => via.id === id);
+    if (via) return copperLayers.some(visibleLayer) ? via : null;
+    if (!layers.footprints) return null;
+    for (const footprint of pcb.footprints) {
+      const pad = footprint.pads.find((pad) => pad.id === id);
+      if (pad && padCopperLayers(pcb, footprint, pad).some(visibleLayer))
+        return padPosition(footprint, pad);
+    }
+    return null;
+  });
   function footprintBody(f: Footprint) {
     const bounds = footprintBounds.get(f.id);
     if (!bounds) return null;
@@ -4068,6 +4132,7 @@ function LayoutEditor({
   const hasCameraOverlays = Boolean(
     lockMarkers.length ||
     analysisMarkers ||
+    parasiticsMarkers?.some(Boolean) ||
     tool === 'measure' ||
     (analysisComponentDetail && selectedFootprint) ||
     selectedRectangle ||
@@ -4112,7 +4177,7 @@ function LayoutEditor({
           <g
             key={name}
             data-layout-layer={name}
-            data-priority-layer={name === activeLayer ? name : undefined}
+            data-priority-layer={name === focusedLayer ? name : undefined}
             opacity={inactiveLayerMode === 'Dim' && name !== activeLayer ? 0.25 : undefined}
           >
             {copperDrawing.get(name)}
@@ -4136,6 +4201,7 @@ function LayoutEditor({
       airwireDrawing,
       captionDrawing,
       activeLayer,
+      focusedLayer,
       inactiveLayerMode,
       paintLayerOrder,
       viaLayer,
@@ -4152,8 +4218,11 @@ function LayoutEditor({
         displayLayers={displayLayers}
         layers={visibleLayers}
         onLayersChange={setLayers}
-        priorityLayer={activeLayer}
-        onPriorityLayerChange={changePriorityLayer}
+        priorityLayer={focusedLayer}
+        onPriorityLayerChange={(next) => {
+          if (next === focusedLayer) restoreDefaultLayerView();
+          else changePriorityLayer(next);
+        }}
         tab={appearanceTab}
         onTabChange={setAppearanceTab}
         visualizationExpanded={visualizationExpanded}
@@ -4178,7 +4247,7 @@ function LayoutEditor({
       appearanceBoard,
       displayLayers,
       visibleLayers,
-      activeLayer,
+      focusedLayer,
       appearanceTab,
       visualizationExpanded,
       filters,
@@ -4192,7 +4261,7 @@ function LayoutEditor({
   );
   const contextIdle = tool === 'select' && !drag && !trackDrag && !marquee && !outlineResize;
   const contextEditingBlocked = Boolean(
-    onAnalysisProbe || fillBusy || syncStatus?.pending || syncStatus?.error,
+    analysisProbing || fillBusy || syncStatus?.pending || syncStatus?.error,
   );
   const contextLocked = selection.some((item) => pcbLockObject(pcb, item)?.locked);
   const contextLockTargets = inspectedPad
@@ -4454,6 +4523,48 @@ function LayoutEditor({
         trackDrag.start.x !== trackDrag.current.x ||
         trackDrag.start.y !== trackDrag.current.y)),
   );
+  const propertiesActions = !inspectedPad && selection.length > 0 && (
+    <>
+      {selectedZone && !selectedZone.keepout && (
+        <button
+          type="button"
+          className="tool-button property-fill-action"
+          data-edit-action
+          disabled={
+            !propertiesActive || fillBusy || tool !== 'select' || !!drag || !!trackDrag || !!marquee
+          }
+          aria-label={
+            selectedZone.fillEnabled !== false && selectedZone.filledPolygons !== undefined
+              ? 'Refill zone'
+              : 'Fill zone'
+          }
+          title={
+            fillBusy
+              ? 'Filling zone…'
+              : selectedZone.fillEnabled !== false && selectedZone.filledPolygons !== undefined
+                ? 'Refill zone'
+                : 'Fill zone'
+          }
+          aria-busy={fillBusy}
+          onClick={() => fillZone(selectedZone.id)}
+        >
+          <PaintBucket size={16} aria-hidden />
+        </button>
+      )}
+      <PropertyDeleteButton
+        disabled={
+          !propertiesActive ||
+          selection.some((item) => pcbLockObject(pcb, item)?.locked) ||
+          fillBusy ||
+          tool !== 'select' ||
+          !!drag ||
+          !!trackDrag ||
+          !!marquee
+        }
+        onClick={() => remove(selection)}
+      />
+    </>
+  );
   return (
     <div className="layout-editor" data-layout-editor data-pcb-theme={darkBoard ? 'dark' : 'light'}>
       <div
@@ -4492,6 +4603,7 @@ function LayoutEditor({
                   compact
                   iconOnly
                   showChevron={false}
+                  disabled={Boolean(parasiticsProbe)}
                   options={[
                     ...(tool === 'select' && selection.length && !drag && !trackDrag
                       ? [{ value: 'move', label: 'Move selection' }]
@@ -4574,7 +4686,7 @@ function LayoutEditor({
           )}
           <div
             ref={host}
-            className={`canvas-wrap layout-canvas tool-${tool}${onAnalysisProbe ? ' is-analysis-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
+            className={`canvas-wrap layout-canvas tool-${tool}${analysisProbing ? ' is-analysis-probing' : ''}${pan.current ? ' is-panning' : ''}${moving ? ' is-moving' : ''}`}
           >
             <svg
               ref={svg}
@@ -4618,7 +4730,7 @@ function LayoutEditor({
               onDoubleClick={(e) => {
                 if (!active || hasOpenOverlay()) return;
                 e.preventDefault();
-                if (onAnalysisProbe) return;
+                if (analysisProbing) return;
                 if (trackDrag || drag?.mode === 'move') return;
                 if (route) finishRoute();
                 else if (drawing) finishShape();
@@ -4720,6 +4832,35 @@ function LayoutEditor({
                       </g>
                     ))}
                     {analysisMarkers?.(view.width / size.width)}
+                    {parasiticsMarkers?.map(
+                      (point, index) =>
+                        point && (
+                          <g
+                            key={index}
+                            data-parasitics-terminal={index + 1}
+                            data-annotation-overlay
+                            pointerEvents="none"
+                            aria-hidden="true"
+                            transform={`translate(${point.x} ${point.y}) scale(${view.width / size.width})`}
+                          >
+                            <circle
+                              r={9}
+                              fill="var(--text-strong)"
+                              stroke="var(--canvas)"
+                              strokeWidth={2}
+                            />
+                            <text
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                              fill="var(--canvas)"
+                              fontSize={11}
+                              fontWeight={600}
+                            >
+                              {index + 1}
+                            </text>
+                          </g>
+                        ),
+                    )}
                     {tool === 'measure' && (
                       <MeasurementDrawing
                         measurement={measurement}
@@ -4737,7 +4878,7 @@ function LayoutEditor({
                       analysisComponentDetail(selectedFootprint, layers, view.width / size.width)}
                     {active &&
                       tool === 'select' &&
-                      !onAnalysisProbe &&
+                      !analysisProbing &&
                       selectedRectangle &&
                       (selectedRectangle.zoneId
                         ? selectedZone &&
@@ -5339,7 +5480,7 @@ function LayoutEditor({
                         label: 'Select all',
                         icon: Scan,
                         separated: true,
-                        disabled: tool !== 'select' || Boolean(onAnalysisProbe),
+                        disabled: tool !== 'select' || analysisProbing,
                         run: selectAll,
                       },
                     ]
@@ -5364,8 +5505,8 @@ function LayoutEditor({
             ruleStatus={ruleStatus}
             centerCoordinates
             mode={
-              onAnalysisProbe
-                ? 'Analysis probe'
+              analysisProbing
+                ? (parasiticsProbe ? 'Parasitics' : 'Analysis probe')
                 : trackDrag
                   ? trackDrag.mode === 'corner'
                     ? 'Dragging track corner'
@@ -5507,6 +5648,7 @@ function LayoutEditor({
                   >
                     <div className="layout-inspector-content" key={propertiesSubject}>
                       <LayoutProperties
+                        actions={propertiesActions}
                         board={pcb}
                         schematic={schematic}
                         active={propertiesActive && !fillBusy}
@@ -5560,55 +5702,6 @@ function LayoutEditor({
                         }}
                       />
                     </div>
-                    {!inspectedPad && selection.length > 0 && (
-                      <footer className="inspector-footer layout-inspector-footer">
-                        {selectedZone && !selectedZone.keepout && (
-                          <button
-                            type="button"
-                            className="tool-button property-fill-action"
-                            data-edit-action
-                            disabled={
-                              !propertiesActive ||
-                              fillBusy ||
-                              tool !== 'select' ||
-                              !!drag ||
-                              !!trackDrag ||
-                              !!marquee
-                            }
-                            aria-label={
-                              selectedZone.fillEnabled !== false &&
-                              selectedZone.filledPolygons !== undefined
-                                ? 'Refill zone'
-                                : 'Fill zone'
-                            }
-                            title={
-                              fillBusy
-                                ? 'Filling zone…'
-                                : selectedZone.fillEnabled !== false &&
-                                    selectedZone.filledPolygons !== undefined
-                                  ? 'Refill zone'
-                                  : 'Fill zone'
-                            }
-                            aria-busy={fillBusy}
-                            onClick={() => fillZone(selectedZone.id)}
-                          >
-                            <PaintBucket size={16} aria-hidden />
-                          </button>
-                        )}
-                        <PropertyDeleteButton
-                          disabled={
-                            !propertiesActive ||
-                            selection.some((item) => pcbLockObject(pcb, item)?.locked) ||
-                            fillBusy ||
-                            tool !== 'select' ||
-                            !!drag ||
-                            !!trackDrag ||
-                            !!marquee
-                          }
-                          onClick={() => remove(selection)}
-                        />
-                      </footer>
-                    )}
                   </aside>
                 )}
               </RetainedLayoutProperties>

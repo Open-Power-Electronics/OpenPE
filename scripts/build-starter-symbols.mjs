@@ -10,6 +10,7 @@ const ids = [
   'Device:D_Schottky',
   'Transistor_FET:Q_NMOS_GDS',
   'power:GND',
+  'power:PWR_FLAG',
   'Connector_Generic:Conn_01x01',
   'Simulation_SPICE:VPULSE',
   'Simulation_SPICE:VDC',

@@ -138,6 +138,7 @@ function PartProperties({
   onSave,
   modelFields,
   geometryFields,
+  tabAction,
   onRequestSave,
   capabilityHost,
   active = true,
@@ -149,6 +150,7 @@ function PartProperties({
   part: Part;
   modelFields?: ReactNode;
   geometryFields?: ReactNode;
+  tabAction?: ReactNode;
   circuit?: Circuit;
   active?: boolean;
   locked?: boolean;
@@ -888,7 +890,11 @@ function PartProperties({
           if (event.target instanceof HTMLInputElement) save();
         }}
         onKeyDown={(event) => {
-          if (geometryContainer.current?.contains(event.target as Node)) return;
+          if (
+            geometryContainer.current?.contains(event.target as Node) ||
+            (event.target instanceof Element && event.target.closest('.property-tabs-action'))
+          )
+            return;
           if (!active || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
             event.preventDefault();
             event.stopPropagation();
@@ -916,7 +922,7 @@ function PartProperties({
           }
         }}
       >
-        <PropertyTabs locked={locked}>
+        <PropertyTabs locked={locked} action={tabAction}>
           <PropertyTab label="General" icon={SlidersHorizontal}>
             <div className="property-primary">
               <label>
@@ -1005,6 +1011,7 @@ export default memo(
   (previous, next) =>
     previous.onSave === next.onSave &&
     previous.modelFields === next.modelFields &&
+    previous.tabAction === next.tabAction &&
     previous.circuit === next.circuit &&
     previous.onRequestSave === next.onRequestSave &&
     previous.active === next.active &&

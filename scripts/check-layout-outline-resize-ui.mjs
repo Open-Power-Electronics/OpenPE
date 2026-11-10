@@ -168,7 +168,6 @@ try {
       );
       await page.getByRole('button', { name: 'Undo', exact: true }).click();
       assert.deepEqual((await state()).board, original.board);
-      if (isZone) await page.getByRole('tab', { name: 'Bounds', exact: true }).click();
       const width = page.getByRole('spinbutton', { name: 'Width (mm)', exact: true });
       await width.fill(String(rectangle.bounds.maxX - rectangle.bounds.minX + 1.25));
       await width.press('Enter');

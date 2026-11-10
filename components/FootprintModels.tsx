@@ -1,5 +1,5 @@
 'use client';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Box, FolderOpen, FolderSearch, Library, Trash2 } from 'lucide-react';
 import type { Footprint, FootprintModel } from '@/lib/pcb';
 import { api } from '@/lib/bridge';
@@ -370,6 +370,7 @@ export default function FootprintModels({
 }
 
 export function UnassignedModelField() {
+  const hintId = useId();
   return (
     <div className="property-field property-resource-field">
       <input
@@ -379,19 +380,14 @@ export function UnassignedModelField() {
         disabled
         aria-label="Model field name"
       />
-      <input
-        className="property-field-value"
-        value=""
-        placeholder="Assign a footprint first"
-        readOnly
-        disabled
-        aria-label="Model"
-      />
+      <span className="property-field-value property-resource-hint" id={hintId}>
+        Unassigned
+      </span>
       <button
         type="button"
         className="icon-button"
         aria-label="Browse models"
-        title="Assign a footprint first"
+        aria-describedby={hintId}
         disabled
       >
         <FolderSearch size={17} />

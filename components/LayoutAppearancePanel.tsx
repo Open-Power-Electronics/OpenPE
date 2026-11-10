@@ -57,7 +57,7 @@ export default function LayoutAppearancePanel({
   displayLayers: BoardLayer[];
   layers: PCBDisplay;
   onLayersChange: (layers: PCBDisplay) => void;
-  priorityLayer: BoardLayer;
+  priorityLayer: BoardLayer | null;
   onPriorityLayerChange: (layer: BoardLayer) => void;
   tab: LayoutAppearanceTab;
   onTabChange: (tab: LayoutAppearanceTab) => void;
@@ -218,6 +218,8 @@ export default function LayoutAppearancePanel({
                       className="layout-layer-name editor-visibility-name"
                       aria-label={name}
                       aria-pressed={priorityLayer === name}
+                      title={priorityLayer === name ? 'Restore default view' : undefined}
+                      data-edit-action
                       onClick={() => actions.onPriorityLayerChange(name)}
                     >
                       <i

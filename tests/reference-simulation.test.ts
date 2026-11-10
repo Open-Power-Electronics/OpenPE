@@ -8,6 +8,7 @@ import { symbolRole } from '../lib/symbol-role';
 import { buildSpiceDeck, defaultTransient, simulationSupportError, spiceNets } from '../lib/spice';
 import { buildSpiceDeck as serviceDeck } from '../server/spice-format.mjs';
 import { createPart, pinPositions, libraries, type Circuit, type Point } from '../lib/circuit';
+import { samePoint } from '../lib/wiring';
 import { partFields, partFootprint, unitGraphics } from '../lib/library';
 import lock from '../resources/reference-models-lock.json';
 import { lm2596AdjustableDerivedModel, tiModels } from '../lib/ti-dcdc';
@@ -151,8 +152,15 @@ for (const entry of referenceExamples)
         .every((label) => /^(?:VIN|VOUT\d*)$/.test(label.text)),
       'Added grounds use symbols rather than GND text aliases.',
     );
+    const benchPins = bench.flatMap((part) =>
+      pinPositions(part, project.schematic.libraries[part.libId]),
+    );
     assert.equal(
-      project.schematic.wires.filter((wire) => !originalWires.has(wire.id)).length,
+      project.schematic.wires.filter(
+        (wire) =>
+          !originalWires.has(wire.id) &&
+          benchPins.some((pin) => samePoint(pin, wire.a) || samePoint(pin, wire.b)),
+      ).length,
       bench.length * 2,
     );
     assert.equal(

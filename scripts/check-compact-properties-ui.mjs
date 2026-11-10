@@ -395,7 +395,17 @@ try {
         await page.getByRole('button', { name: choice, exact: true }).click();
         const disclosure = page.locator('.layout-inspector summary');
         const summaries = await disclosure.all();
-        const tabs = await page.locator('.layout-inspector .property-tabs').getByRole('tab').all();
+        const inspector = page.locator('.layout-inspector');
+        const tabList = inspector.getByRole('tablist', { name: 'Property sections' });
+        const tabs = await tabList.getByRole('tab').all();
+        if (choice === 'footprint') {
+          assert.equal(tabs.length, 1);
+          const general = tabList.getByRole('tab', { name: 'General', selected: true });
+          assert.equal(await general.innerText(), 'General');
+          assert.ok(await inspector.getByRole('tabpanel', { name: 'General' }).isVisible());
+          await general.press('ArrowRight');
+          assert.ok(await general.evaluate((tab) => document.activeElement === tab));
+        }
         for (const tab of tabs) {
           await tab.click();
           await assertControlBounds(

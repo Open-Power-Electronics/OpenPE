@@ -5446,7 +5446,7 @@ var ic_datasheets_default = [
       family: "LM2596",
       reference: "U1",
       schematic_value: "LM2596T-ADJ",
-      symbol_library_id: "Regulator_Switching:LM2596T-ADJ",
+      symbol_library_id: "Reference:Reference_lm2596_to220_5_buck",
       footprint: "Package_TO_SOT_THT:TO-220-5_P3.4x3.7mm_StaggerOdd_Lead3.8mm_Vertical",
       package: "TO-220-5",
       datasheet_variant: "Adjustable output, TO-220-5"
@@ -5685,7 +5685,7 @@ var ic_datasheets_default = [
       family: "TPS61046",
       reference: "U1",
       schematic_value: "TPS61046",
-      symbol_library_id: "Reference:tps61046-bga6-boost",
+      symbol_library_id: "Reference:Reference_tps61046_bga6_boost",
       footprint: "Package_BGA:Texas_DSBGA-6_0.855x1.255mm_Layout2x3_P0.4mm_LevelC",
       package: "BGA-6",
       datasheet_variant: "TPS61046, 6-ball WCSP"
@@ -5955,7 +5955,7 @@ var ic_datasheets_default = [
       family: "LM2735",
       reference: "U1",
       schematic_value: "LM2735Y",
-      symbol_library_id: "Reference:lm2735-msop8-sepic",
+      symbol_library_id: "Reference:Reference_lm2735_msop8_sepic",
       footprint: "Package_SO:MSOP-8-1EP_3x3mm_P0.65mm_EP1.68x1.88mm",
       package: "MSOP-8",
       datasheet_variant: "LM2735-Y, MSOP-PowerPAD (DGN), 8 pins"
@@ -6241,7 +6241,7 @@ var ic_datasheets_default = [
       family: "LM25017",
       reference: "U1",
       schematic_value: "LM25017",
-      symbol_library_id: "Reference:lm25017-wson8-flybuck",
+      symbol_library_id: "Reference:Reference_lm25017_wson8_flybuck",
       footprint: "Package_SON:WSON-8-1EP_4x4mm_P0.8mm_EP2.2x3mm_ThermalVias",
       package: "WSON-8",
       datasheet_variant: "LM25017, WSON (NGU), 8 pins"
@@ -6511,7 +6511,7 @@ var ic_datasheets_default = [
       family: "LM5001",
       reference: "U1",
       schematic_value: "LM5001",
-      symbol_library_id: "Regulator_Switching:LM5001MA",
+      symbol_library_id: "Reference:Reference_lm5001_soic8_boost",
       footprint: "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
       package: "SOIC-8",
       datasheet_variant: "LM5001 (non-Q1), SOIC-8"
@@ -6783,7 +6783,7 @@ var ic_datasheets_default = [
       family: "LM27761",
       reference: "U1",
       schematic_value: "LM27761",
-      symbol_library_id: "Regulator_SwitchedCapacitor:LM27761",
+      symbol_library_id: "Reference:Reference_lm27761_wson8_pump",
       footprint: "Package_SON:WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm",
       package: "WSON-8",
       datasheet_variant: "LM27761, WSON (DSG), 8 pins"
@@ -7069,7 +7069,7 @@ var ic_datasheets_default = [
       family: "LMR12010",
       reference: "U1",
       schematic_value: "LMR12010X",
-      symbol_library_id: "Reference:lmr12010-sot236-buck",
+      symbol_library_id: "Reference:Reference_lmr12010_sot236_buck",
       footprint: "Package_TO_SOT_SMD:SOT-23-6",
       package: "SOT-23-6",
       datasheet_variant: "LMR12010X, SOT-23-6"
@@ -7338,7 +7338,7 @@ var ic_datasheets_default = [
       family: "LMR70503",
       reference: "U1",
       schematic_value: "LMR70503",
-      symbol_library_id: "Reference:lmr70503-bga8-buckboost",
+      symbol_library_id: "Reference:Reference_lmr70503_bga8_buckboost",
       footprint: "Package_BGA:Texas_DSBGA-8_0.9x1.9mm_Layout2x4_P0.5mm",
       package: "BGA-8",
       datasheet_variant: "LMR70503, 8-bump thin DSBGA"
@@ -7595,7 +7595,7 @@ var ic_datasheets_default = [
       family: "LM2598",
       reference: "U1",
       schematic_value: "LM2598_ADJ",
-      symbol_library_id: "Reference:lm2598-to220-7-buck",
+      symbol_library_id: "Reference:Reference_lm2598_to220_7_buck",
       footprint: "Package_TO_SOT_THT:TO-220-7_P2.54x5.08mm_StaggerOdd_Lead3.08mm_Vertical",
       package: "TO-220-7",
       datasheet_variant: "Adjustable output, TO-220-7"
@@ -8804,6 +8804,10 @@ function compileCapabilitySchema(schema) {
 var import_clipper_lib = __toESM(require_clipper(), 1);
 var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
+var padCornerSegments = 8;
+var padCornerStep = Math.PI / 2 / padCornerSegments;
+var clearanceArcTolerance = 1e-3;
+var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
 
 // lib/thermal.ts
 var THERMAL_LIMITS = {

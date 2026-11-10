@@ -329,7 +329,7 @@ try {
         : {}),
     });
     await run(
-      `properties actions: fixed footer deletes ${kind}`,
+      `properties actions: upper action row deletes ${kind}`,
       async ({ page, canvas, point, snapshot, box }) => {
         assert.equal(
           await page.getByRole('button', { name: 'Delete object', exact: true }).count(),
@@ -361,12 +361,21 @@ try {
         const remove = panel.getByRole('button', { name: 'Delete object', exact: true });
         await remove.waitFor();
         assert.equal(await remove.count(), 1);
-        assert.equal(
-          await panel
-            .locator('.layout-inspector-content')
-            .getByRole('button', { name: 'Delete object', exact: true })
-            .count(),
-          0,
+        assert.equal(await panel.locator('footer').count(), 0);
+        assert.ok(
+          await remove.evaluate((button) => {
+            const row = button.closest('.property-tabs-row');
+            const action = button.getBoundingClientRect();
+            const body = row?.closest('.layout-inspector-content').getBoundingClientRect();
+            const fields = row?.nextElementSibling?.getBoundingClientRect();
+            return (
+              body &&
+              fields &&
+              Math.abs(body.right - action.right - 12) < 1 &&
+              action.bottom <= fields.top
+            );
+          }),
+          'Delete is right-aligned above the fields.',
         );
         assert.equal(await panel.getByText('Zone corners', { exact: true }).count(), 0);
         assert.equal(await panel.getByText('Cutout 1', { exact: true }).count(), 0);
@@ -377,28 +386,13 @@ try {
         if (kind === 'zone') {
           const tabs = panel.getByRole('tablist', { name: 'Property sections' });
           const general = tabs.getByRole('tab', { name: 'General', exact: true });
-          const bounds = tabs.getByRole('tab', { name: 'Bounds', exact: true });
-          const rules = tabs.getByRole('tab', { name: 'Fill', exact: true });
           assert.deepEqual(
             await tabs.getByRole('tab').evaluateAll((nodes) => nodes.map((node) => node.title)),
-            ['General', 'Bounds', 'Fill'],
+            ['General'],
           );
-          assert.equal(await tabs.getByRole('tab').locator('svg').count(), 3);
+          assert.equal(await general.locator('svg').count(), 1);
           assert.equal(await general.getAttribute('aria-selected'), 'true');
-          const labelOpacity = (tab) =>
-            tab.locator('.reveal-button-label').evaluate(async (label) => {
-              await Promise.all(label.getAnimations().map((animation) => animation.finished));
-              return getComputedStyle(label).opacity;
-            });
-          assert.equal(await labelOpacity(rules), '0');
-          const restingWidth = (await rules.boundingBox()).width;
-          await rules.hover();
-          assert.equal(await labelOpacity(rules), '1');
-          assert.ok((await rules.boundingBox()).width > restingWidth);
-          assert.equal(await general.getAttribute('aria-selected'), 'true');
-          await page.mouse.move(1, 1);
-          assert.equal(await labelOpacity(rules), '0');
-          const beforeSwitch = await snapshot();
+          const beforeEdit = await snapshot();
           await general.dispatchEvent('keydown', {
             key: 'ArrowRight',
             keyCode: 229,
@@ -406,34 +400,33 @@ try {
           });
           assert.equal(await general.getAttribute('aria-selected'), 'true');
           await general.press('ArrowRight');
-          assert.equal(await bounds.getAttribute('aria-selected'), 'true');
-          assert.equal(await labelOpacity(bounds), '1');
+          assert.equal(await general.getAttribute('aria-selected'), 'true');
           const width = panel
-            .getByRole('tabpanel', { name: 'Bounds' })
+            .getByRole('tabpanel', { name: 'General', exact: true })
             .getByRole('spinbutton', { name: 'Width (mm)', exact: true });
           await width.fill('0');
           await width.press('Enter');
-          await bounds.press('ArrowRight');
-          assert.equal(await rules.getAttribute('aria-selected'), 'true');
-          assert.equal(await width.count(), 0);
-          await rules.press('ArrowLeft');
-          assert.equal(
-            await width.inputValue(),
-            '0',
-            'Switching tabs retains an invalid bounds draft.',
-          );
+          assert.equal(await width.inputValue(), '0', 'Invalid bounds drafts remain editable.');
           await width.press('Escape');
           assert.equal(Number(await width.inputValue()), 20);
-          await bounds.press('Home');
           assert.deepEqual(
             await snapshot(),
-            beforeSwitch,
-            'Tab switches and rejected drafts never edit geometry.',
+            beforeEdit,
+            'Tab navigation and rejected drafts never edit geometry.',
           );
           const fill = panel.getByRole('button', { name: 'Fill zone', exact: true });
           assert.equal((await fill.textContent()).trim(), '', 'Fill is an icon-only action.');
           assert.equal(await fill.getAttribute('title'), 'Fill zone');
           assert.equal(await fill.locator('svg').count(), 1);
+          const [fillBox, removeBox] = await Promise.all([
+            fill.boundingBox(),
+            remove.boundingBox(),
+          ]);
+          assert.ok(fillBox.x + fillBox.width < removeBox.x && fillBox.y === removeBox.y);
+          await general.press('Tab');
+          assert.equal(await fill.evaluate((button) => button === document.activeElement), true);
+          await fill.press('Tab');
+          assert.equal(await remove.evaluate((button) => button === document.activeElement), true);
           await mkdir('test-results/layout-properties-actions', { recursive: true });
           for (const theme of ['light', 'dark']) {
             await page.evaluate(
@@ -445,20 +438,6 @@ try {
             });
           }
         }
-        const beforeScroll = await remove.boundingBox();
-        await panel.locator('.layout-inspector-content').evaluate((el) => {
-          el.scrollTop = el.scrollHeight;
-        });
-        assert.deepEqual(
-          await remove.boundingBox(),
-          beforeScroll,
-          'Footer stays outside the scrolling fields.',
-        );
-        const bounds = await panel.boundingBox();
-        assert.ok(Math.abs(bounds.x + bounds.width - beforeScroll.x - beforeScroll.width - 12) < 1);
-        assert.ok(
-          Math.abs(bounds.y + bounds.height - beforeScroll.y - beforeScroll.height - 6) < 1,
-        );
         await remove.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
         await panel.dispatchEvent('compositionstart');
         await remove.click();
@@ -1616,7 +1595,7 @@ try {
   );
 
   await run(
-    'continuous editing: clicking the active layer retains the route and pending via',
+    'continuous editing: clearing layer priority retains the route and pending via',
     async ({ page, canvas, point, snapshot }) => {
       await page.getByRole('button', { name: 'Route tracks', exact: true }).click();
       const start = { x: 50, y: 35 };
@@ -1641,8 +1620,8 @@ try {
         .getByRole('button', { name: 'F.Cu', exact: true });
       assert.equal(await currentLayer.getAttribute('aria-pressed'), 'true');
       await currentLayer.click();
-      assert.equal(await currentLayer.getAttribute('aria-pressed'), 'true');
-      assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), 'F.Cu');
+      assert.equal(await currentLayer.getAttribute('aria-pressed'), 'false');
+      assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), null);
       assert.equal(await page.evaluate(() => window.layoutContext().layer), 'F.Cu');
       await toggleLayoutVisualization(page, 'Visible layers');
       assert.equal(await route.count(), 1);

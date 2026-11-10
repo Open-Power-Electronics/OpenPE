@@ -23,6 +23,7 @@ export default function Dialog({
   busy = false,
   compact = false,
   wide = false,
+  maximizable = true,
   className = '',
   anchorRef,
   modal = true,
@@ -37,12 +38,13 @@ export default function Dialog({
   label?: string;
   eyebrow?: string;
   icon?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
   busy?: boolean;
   compact?: boolean;
   wide?: boolean;
+  maximizable?: boolean;
   className?: string;
   anchorRef?: RefObject<HTMLElement | null>;
   modal?: boolean;
@@ -55,7 +57,9 @@ export default function Dialog({
   const id = useId();
   const backdropDown = useRef(false);
   const composing = useRef(false);
-  const [maximized, setMaximized] = useState(false);
+  const [isMaximized, setMaximized] = useState(false);
+  const maximized = maximizable && isMaximized;
+  const hasContent = children !== undefined;
   const [placementRevision, setPlacementRevision] = useState(0);
   const [localSize, setLocalSize] = useState<InspectorSize>({});
   const windowOrigin = useRef<{ left: number; top: number } | null>(null);
@@ -300,7 +304,7 @@ export default function Dialog({
       data-maximized={maximized || undefined}
       data-resized-height={maximized || size.height !== undefined ? true : undefined}
       aria-label={label}
-      aria-describedby={id}
+      aria-describedby={hasContent ? id : undefined}
       aria-modal={modal}
       onCompositionStart={() => {
         composing.current = true;
@@ -422,19 +426,21 @@ export default function Dialog({
           {eyebrow && <p className="dialog-eyebrow">{eyebrow}</p>}
           <h2>{title}</h2>
         </div>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={maximized ? 'Restore dialog' : 'Maximize dialog'}
-          title={maximized ? 'Restore' : 'Maximize'}
-          onClick={() => {
-            finishMove(false);
-            finishResize(false);
-            setMaximized((value) => !value);
-          }}
-        >
-          {maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-        </button>
+        {maximizable && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={maximized ? 'Restore dialog' : 'Maximize dialog'}
+            title={maximized ? 'Restore' : 'Maximize'}
+            onClick={() => {
+              finishMove(false);
+              finishResize(false);
+              setMaximized((value) => !value);
+            }}
+          >
+            {maximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+        )}
         <button
           type="button"
           className="icon-button"
@@ -446,9 +452,11 @@ export default function Dialog({
           <X size={18} />
         </button>
       </header>
-      <div className="dialog-content" id={id}>
-        {children}
-      </div>
+      {hasContent && (
+        <div className="dialog-content" id={id}>
+          {children}
+        </div>
+      )}
       {footer && <footer className="dialog-footer">{footer}</footer>}
       {open && !maximized && (
         <DialogResize

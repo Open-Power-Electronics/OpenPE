@@ -17,6 +17,7 @@ import {
   type WorkbenchCapabilityPorts,
 } from '../lib/workbench-capabilities';
 import { projectDatasheetContext } from '../lib/example-datasheets';
+import { agentProject } from '../lib/agent-project-access';
 import { agentSource, validateAgentWorkspaceContext } from '../context/agent-workspace-context';
 import { validateAgentWorkspaceContext as validateServiceContext } from '../server/agent-context-format.mjs';
 import { circuitFingerprint } from '../lib/circuit';
@@ -121,7 +122,7 @@ test('workspace observations reject forged specifications, cross-project binding
   const context = {
     version: 1,
     capturedAt: new Date().toISOString(),
-    project: JSON.parse(serializeProject(project)),
+    project: agentProject(JSON.parse(serializeProject(project))),
     source: agentSource(null, ''),
     ui: { activeSchematicId: project.schematic.id },
     simulation: { status: 'disabled' },

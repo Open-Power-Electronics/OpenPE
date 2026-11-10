@@ -253,6 +253,15 @@ async function runChecks() {
   assert.ok(Math.abs(nativeWidth - 280) <= 1, 'The native Layout sidebar starts at 280 px.');
   const nativeDrawingWidth = (await drawing.boundingBox()).width;
   if (process.argv.includes('--parasitics-dock')) {
+    const readDesign = () =>
+      page.evaluate(async () => {
+        const host = window.thermalWorkbenchHost();
+        return {
+          source: await host.query('project.source'),
+          history: await host.query('history.get'),
+        };
+      });
+    const originalDesign = await readDesign();
     const parasiticsButton = page.getByRole('button', { name: 'Layout Parasitics', exact: true });
     const parasitics = page.getByRole('region', { name: 'Layout Parasitics', exact: true });
     const thermal = page.getByRole('region', { name: 'Layout Thermal', exact: true });
@@ -280,17 +289,43 @@ async function runChecks() {
     );
     await parasitics.waitFor();
 
-    for (const [name, position] of [
-      ['Net', 'Home'],
-      ['Start terminal', 'Home'],
-      ['End terminal', 'End'],
-    ]) {
-      const selector = parasitics.getByRole('combobox', { name, exact: true });
-      await selector.press('ArrowDown');
-      await selector.press(position);
-      await selector.press('Enter');
+    await layout.press('Home');
+    for (const name of ['Net', 'Start terminal', 'End terminal'])
+      assert.equal(await parasitics.getByRole('combobox', { name, exact: true }).count(), 0);
+    const pads = project.pcb.footprints.flatMap((footprint) => footprint.pads);
+    const net = project.pcb.nets.find(({ name }) => name === 'Net-(D1-K)');
+    const [start, end] = pads.filter((pad) => pad.netId === net.id);
+    const [via] = project.pcb.vias;
+    const viaPad = pads.find((pad) => pad.netId === via.netId);
+    async function clickTerminal(selector) {
+      const { x, y } = await layout.locator(selector).evaluate((terminal) => {
+        const target = terminal.querySelector('[data-layout-via-target]');
+        const point = new DOMPoint(target?.cx.baseVal.value ?? 0, target?.cy.baseVal.value ?? 0);
+        const screen = point.matrixTransform(terminal.getScreenCTM());
+        return { x: screen.x, y: screen.y };
+      });
+      await page.mouse.click(x, y);
     }
+    const clickPad = (pad) => clickTerminal(`[data-pad-id="${pad.id}"]`);
+    const clickVia = () => clickTerminal(`[data-via-type][data-selection-id="${via.id}"]`);
+    const first = layout.locator('[data-parasitics-terminal="1"]');
+    const second = layout.locator('[data-parasitics-terminal="2"]');
     const measure = parasitics.getByRole('button', { name: 'Measure', exact: true });
+    assert.equal(await measure.isDisabled(), true);
+    const thickness = parasitics.getByRole('textbox', { name: 'Copper thickness', exact: true });
+    await thickness.focus();
+    await thickness.dispatchEvent('compositionstart');
+    await clickPad(start);
+    assert.equal(await first.count(), 0, 'A canvas click cannot pick during IME composition.');
+    await thickness.dispatchEvent('compositionend');
+    await clickPad(start);
+    await first.waitFor();
+    await clickPad(start);
+    await clickVia();
+    assert.equal(await second.count(), 0, 'Duplicate and different-net picks are ignored.');
+    assert.equal(await measure.isDisabled(), true);
+    await clickPad(end);
+    await second.waitFor();
     assert.equal(await measure.isEnabled(), true);
     assert.equal(
       await measure.evaluate((button) => {
@@ -306,6 +341,24 @@ async function runChecks() {
       true,
       'IME Enter cannot activate Measure inside the dock.',
     );
+    await measure.click();
+    const resistance = parasitics.getByText('Equivalent DC resistance', { exact: true });
+    await resistance.waitFor();
+    await clickVia();
+    await second.waitFor({ state: 'detached' });
+    await resistance.waitFor({ state: 'detached' });
+    await clickPad(viaPad);
+    await second.waitFor();
+    assert.equal(await measure.isEnabled(), true, 'A through via can be a terminal.');
+    await parasitics.getByRole('button', { name: 'Reset', exact: true }).click();
+    await first.waitFor({ state: 'detached' });
+    assert.equal(await measure.isDisabled(), true);
+    await clickPad(start);
+    await first.waitFor();
+    await layout.press('Escape');
+    await first.waitFor({ state: 'detached' });
+    await clickPad(start);
+    await first.waitFor();
 
     assert.deepEqual(
       await page.evaluate(() => window.thermalWorkbenchHost().execute('thermal.show')),
@@ -313,6 +366,7 @@ async function runChecks() {
     );
     await thermal.waitFor();
     await parasitics.waitFor({ state: 'hidden' });
+    await first.waitFor({ state: 'detached' });
     await parasiticsButton.click();
     await parasitics.waitFor();
     await thermal.waitFor({ state: 'hidden' });
@@ -343,9 +397,10 @@ async function runChecks() {
     await parasitics.waitFor({ state: 'hidden' });
     await nativeSidebar.waitFor();
     assert.equal(runRequests, 0);
+    assert.deepEqual(await readDesign(), originalDesign, 'Measurement leaves design and undo unchanged.');
     assert.deepEqual(errors, []);
     console.log(
-      'Layout Parasitics dock passed: shared width, active canvas, IME guard, Thermal switching, sidebar restoration and plugin teardown.',
+      'Layout Parasitics dock passed: canvas pad and via picks, measurement, reset, IME guard, Thermal switching, sidebar restoration and plugin teardown.',
     );
     return;
   }

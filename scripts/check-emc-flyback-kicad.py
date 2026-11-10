@@ -1,4 +1,4 @@
-"""Explicit, headless KiCad 10 connectivity, layout and DRC checks."""
+"""Explicit, headless KiCad 10 connectivity, layout, ERC and DRC checks."""
 import argparse
 import json
 import os
@@ -45,6 +45,14 @@ for a, b in [(('V1', '1'), ('R21', '1')), (('R21', '2'), ('T1', '1')),
              (('I1', '2'), ('U3', '3'))]:
     assert net_for(*a) == net_for(*b), f'Incorrect testbench connection {a} / {b}'
 assert net_for('V1', '2') != net_for('R22', '2'), 'Native PGND and SGND must remain separate.'
+
+erc_report = OUT / 'erc.json'
+# Use the configured KiCad symbol tables for ERC's library comparison.
+subprocess.run([args.cli, 'sch', 'erc', '--format', 'json', '--exit-code-violations',
+                '-o', str(erc_report), str(converted.with_suffix('.kicad_sch'))], check=True)
+erc = json.loads(erc_report.read_text(encoding='utf-8'))
+assert erc['sheets'] and all(not sheet['violations'] for sheet in erc['sheets']), 'Native schematic failed ERC.'
+
 before = pcb.LoadBoard(str(original.with_suffix('.kicad_pcb')))
 after = pcb.LoadBoard(str(converted.with_suffix('.kicad_pcb')))
 point = lambda p: (p.x, p.y)
@@ -118,6 +126,6 @@ assert not report['violations'] and not report['unconnected_items'], 'Native PCB
 summary = {'kicad': pcb.GetBuildVersion(), 'footprints': len(after.GetFootprints()),
            'tracksAndVias': len(after.GetTracks()), 'padGroups': len(new_pads),
            'zones': len(after.Zones()), 'nativeConnectivityEqual': True, 'padCopperEqual': True,
-           'drcErrors': 0, 'unconnectedItems': 0}
+           'ercIssues': 0, 'drcErrors': 0, 'unconnectedItems': 0}
 (OUT / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
 print(json.dumps(summary))

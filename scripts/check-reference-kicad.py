@@ -8,8 +8,10 @@ from copy import deepcopy
 from fractions import Fraction
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 import pcbnew as pcb
@@ -276,20 +278,28 @@ def copper_identities(board):
     }
 
 
-def verify_tps_saved_fills(board):
+def tps_fill_records(board):
+    return {(z.m_Uuid.AsString(), layer): sorted_geometry(
+                {**polygon, 'island': bool(z.IsIsland(layer, index))}
+                for index, polygon in enumerate(polygon_geometry(z.GetFilledPolysList(layer))))
+            for z in board.Zones() for layer in z.GetLayerSet().Seq()}
+
+
+def verify_tps_saved_fills(board, refilled):
     zones = list(board.Zones())
     if len(zones) != 3 or any(z.GetIsRuleArea() for z in zones):
         raise AssertionError('TPS61046 requires exactly three enabled copper zones.')
+    saved_fills = tps_fill_records(board)
+    if saved_fills != tps_fill_records(refilled):
+        raise AssertionError('TPS61046 saved contours or island flags differ from the KiCad refill.')
     records = []
     for zone in zones:
         if zone.GetLocalClearance() < pcb.FromMM(0.25):
             raise AssertionError('TPS61046 filled zones require at least 0.25 mm clearance.')
         for layer in zone.GetLayerSet().Seq():
-            if layer not in [pcb.F_Cu, pcb.B_Cu] or not zone.HasFilledPolysForLayer(layer):
-                raise AssertionError('TPS61046 zone lacks actual saved copper on its layer.')
+            if layer not in [pcb.F_Cu, pcb.B_Cu]:
+                raise AssertionError('TPS61046 zone must be on an outer copper layer.')
             copper = pcb.SHAPE_POLY_SET(zone.GetFilledPolysList(layer))
-            if copper.OutlineCount() == 0 or copper.Area() <= 0:
-                raise AssertionError('TPS61046 saved copper must have positive finite area.')
             # Saved copper rounds to 0.1 micrometre; source outlines/cutouts retain
             # nanometres. Bound that rounding band against the actual polygon.
             owner = pcb.SHAPE_POLY_SET(zone.Outline())
@@ -318,6 +328,10 @@ def verify_tps_saved_fills(board):
             if overlap.Area() >= 1:
                 raise AssertionError('TPS61046 saved fills overlap across different nets.')
     return {'zones': len(records), 'minimumClearanceMm': 0.25,
+            'exactKiCadRefill': True,
+            'zonePolygons': [{'uuid': zone.m_Uuid.AsString(), 'net': zone.GetNetname(),
+                              'layer': board.GetLayerName(layer), 'polygons': copper.OutlineCount()}
+                             for zone, layer, copper in records],
             'filledAreaMm2': sum(copper.Area() for _, _, copper in records) / 1e12,
             'ownerAndCutoutsVerified': True, 'foreignPadAndZoneOverlapVerified': True}
 
@@ -410,9 +424,18 @@ def main():
         expected_board = curated_board_geometry(before, refilled)
         fill_verification = None
         if refilled:
+            if version != '10.0.1':
+                raise RuntimeError(f'TPS61046 comparison requires KiCad 10.0.1, found {version}')
             if copper_identities(original_board) != copper_identities(exported_board):
                 raise AssertionError(f'{slug}: source copper-object UUIDs changed')
-            fill_verification = verify_tps_saved_fills(exported_board)
+            scratch = Path(tempfile.mkdtemp(prefix='tps61046-refill-', dir=output))
+            comparison_board = scratch / board.name
+            shutil.copyfile(board, comparison_board)
+            shutil.copyfile(board.with_suffix('.kicad_pro'), comparison_board.with_suffix('.kicad_pro'))
+            run(['pcb', 'drc', '--refill-zones', '--save-board', '--format', 'json',
+                 '--all-track-errors', '--severity-all', '-o', str(scratch / 'drc.json'),
+                 str(comparison_board)])
+            fill_verification = verify_tps_saved_fills(exported_board, pcb.LoadBoard(str(comparison_board)))
         (output / f'{slug}-before.json').write_text(json.dumps(before, indent=2), 'utf-8')
         (output / f'{slug}-expected.json').write_text(json.dumps(expected_board, indent=2), 'utf-8')
         (output / f'{slug}-after.json').write_text(json.dumps(after, indent=2), 'utf-8')
@@ -440,7 +463,7 @@ def main():
                        'KiCad PCB copper layers, pads, drill geometry, tracks and vias match pinned source boards.',
                        'Board and footprint artwork, ordinary text and caption styles match; rectangles normalize to exact polygons.',
                        'Copper-zone outer boundaries follow the 0.5 mm board inset; internal partitions, holes and unrelated rules retain source geometry.',
-                       'Eight boards retain exact source fills. TPS61046 retains copper-object UUIDs and uses three saved fills with a 0.25 mm minimum clearance; KiCad verifies actual positive fill area, owner/cutout containment and absence of foreign-pad/zone overlap.',
+                       'Eight boards retain exact source fills. TPS61046 retains copper-object UUIDs and uses a 0.25 mm zone clearance. All three zones match an independent KiCad 10.0.1 refill exactly by layer, contour and island flag. Saved copper stays within its owner and avoids foreign-pad and zone overlap.',
                        'Schematic and PCB SVG exports completed with KiCad 10.'],
             'scope': 'Structural and connectivity verification only; not ERC, DRC, simulation or production qualification.',
             'examples': results,

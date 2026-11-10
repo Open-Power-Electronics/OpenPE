@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { emptyCircuit, type Circuit, type Part } from '../lib/circuit';
-import { parseProject } from '../lib/project';
 import { runSchematicERC } from '../lib/schematic-erc';
 import { quote, type SExpr } from '../lib/sexpr';
 
@@ -221,13 +219,21 @@ test('no-connect markers suppress unused active pins and diagnose misplaced or w
   wire(circuit, 0, 0, 20, 0);
   const connected = issues(circuit, 'erc.no-connect-connected');
   assert.equal(connected.length, 1);
-  assert.equal(connected[0].severity, 'warning');
+  assert.equal(connected[0].severity, 'error');
   assert.ok(connected[0].objectIds.includes(input.id));
   const forbidden = part(circuit, 'no_connect', 20, 0);
-  assert.ok(
-    issues(circuit, 'erc.no-connect-connected').some((issue) =>
-      issue.objectIds.includes(forbidden.id),
-    ),
+  const noConnectFindings = issues(circuit, 'erc.no-connect-connected');
+  assert.equal(noConnectFindings.length, 2);
+  assert.ok(noConnectFindings.some((issue) => issue.objectIds.includes(forbidden.id)));
+  assert.deepEqual(
+    noConnectFindings.map((issue) => issue.severity),
+    ['error', 'error'],
+  );
+  assert.deepEqual(
+    runSchematicERC(circuit, { 'erc.no-connect-connected': 'warning' })
+      .issues.filter((issue) => issue.ruleId === 'erc.no-connect-connected')
+      .map((issue) => issue.severity),
+    ['warning', 'warning'],
   );
 });
 
@@ -300,19 +306,22 @@ test('open-collector buses and tri-state buses are not treated as multiple stron
     part(circuit, type, 0, 0);
     assert.equal(issues(circuit, 'erc.output-conflict').length, 0, type);
     part(circuit, 'output', 0, 0);
-    assert.equal(
-      issues(circuit, 'erc.output-conflict')[0].severity,
-      type === 'tri_state' ? 'warning' : 'error',
-    );
+    assert.equal(issues(circuit, 'erc.output-conflict')[0].severity, 'error');
   }
   const mixed = emptyCircuit();
   part(mixed, 'open_collector', 0, 0);
   part(mixed, 'open_emitter', 0, 0);
   assert.deepEqual(issues(mixed, 'erc.output-conflict'), []);
-  part(mixed, 'tri_state', 0, 0);
-  assert.equal(issues(mixed, 'erc.output-conflict')[0].severity, 'warning');
-  part(mixed, 'power_out', 0, 0);
+  const triState = part(mixed, 'tri_state', 0, 0);
   assert.equal(issues(mixed, 'erc.output-conflict')[0].severity, 'error');
+  const powerOut = part(mixed, 'power_out', 0, 0);
+  const conflict = issues(mixed, 'erc.output-conflict')[0];
+  assert.equal(conflict.severity, 'error');
+  assert.deepEqual(conflict.objectIds, [triState.id, powerOut.id].sort());
+  const warning = runSchematicERC(mixed, { 'erc.output-conflict': 'warning' }).issues.find(
+    (issue) => issue.ruleId === 'erc.output-conflict',
+  );
+  assert.deepEqual(warning, { ...conflict, severity: 'warning' });
 });
 
 test('unspecified pin type warns when sharing a network with an electrical pin', () => {
@@ -325,21 +334,6 @@ test('unspecified pin type warns when sharing a network with an electrical pin',
   assert.equal(conflict.length, 1);
   assert.equal(conflict[0].severity, 'warning');
   assert.deepEqual(conflict[0].objectIds, [unknown.id, passive.id]);
-});
-
-test('EMC Flyback reports the five undriven power nets identified by KiCad 10.0.1', () => {
-  const project = parseProject(readFileSync('lib/emc-flyback-example.json', 'utf8'));
-  const report = runSchematicERC(project.schematic);
-  assert.equal(report.complete, true);
-  assert.ok(
-    report.issues.every(
-      (issue) => issue.ruleId === 'erc.power-undriven' && issue.severity === 'error',
-    ),
-  );
-  assert.deepEqual(
-    report.issues.map((issue) => issue.message.match(/ on (\S+) has no power output/)?.[1]).sort(),
-    ['CHASSIS', 'PGND', 'SGND', 'VBUS', 'VOUT'],
-  );
 });
 
 test('conflicting physical net names and locally unattached labels are reported independently', () => {

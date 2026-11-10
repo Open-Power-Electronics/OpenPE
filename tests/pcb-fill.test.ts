@@ -185,7 +185,8 @@ for (const example of referenceExamples) {
     const board = createReferenceExample(example.id).pcb!;
     const before = structuredClone(board);
     const filled = fillCopperZones(board);
-    const report = runPCBDesignRules(filled);
+    const report = runPCBDesignRules(filled, { useZoneClearance: true });
+    assert.equal(report.complete, true);
     assert.equal(report.truncated, false);
     assert.deepEqual(
       report.issues.filter((issue) => ['pcb.short', 'pcb.clearance'].includes(issue.ruleId)),
@@ -199,6 +200,66 @@ for (const example of referenceExamples) {
     assert.deepEqual(board, before, 'Pinned example input is unchanged.');
   });
 }
+
+test('native island policies remove or mark a disconnected fragment of a connected pour', () => {
+  const board = fixture();
+  board.vias = [];
+  const zone = board.zones[0];
+  board.tracks[0].start = { x: 15, y: 0 };
+  board.tracks[0].end = { x: 15, y: 20 };
+  board.footprints = [
+    {
+      id: uid(),
+      libraryId: 'Test:IslandAnchor',
+      x: 5,
+      y: 10,
+      rotation: 0,
+      side: 'front',
+      symbolId: null,
+      pads: [
+        {
+          id: uid(),
+          number: '1',
+          type: 'smd',
+          shape: 'rect',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          size: { x: 1, y: 1 },
+          netId: zone.netId,
+        },
+      ],
+      graphics: [],
+    },
+  ];
+  zone.padConnection = 'yes';
+  zone.islandRemovalMode = 1;
+  const kept = fillCopperZone(board, zone.id).zones[0].filledPolygons!;
+  assert.equal(kept.length, 2);
+  assert.equal(kept.filter((polygon) => polygon.island).length, 1);
+  zone.islandRemovalMode = 0;
+  const removed = fillCopperZones(board).zones[0].filledPolygons!;
+  assert.deepEqual(
+    removed,
+    kept.filter((polygon) => !polygon.island),
+  );
+  board.footprints = [];
+  const floating = fillCopperZones(board).zones[0].filledPolygons!;
+  assert.equal(floating.length, 2);
+  assert.ok(floating.every((polygon) => !polygon.island));
+});
+
+test('TPS61046 runtime refill matches KiCad empty-zone and island outcomes', () => {
+  const board = createReferenceExample('reference-tps61046-bga6-boost').pcb!;
+  const refilled = fillCopperZones(board);
+  for (const zone of refilled.zones) {
+    const saved = board.zones.find((original) => original.id === zone.id)!;
+    assert.deepEqual(
+      zone.filledPolygons!.map((polygon) => !!polygon.island),
+      (saved.filledPolygons ?? []).map((polygon) => !!polygon.island),
+    );
+  }
+});
 
 test('LM25017 native GND2 refill matches the saved copper along all three exposed L1 keepout edges', () => {
   const source = readFileSync(

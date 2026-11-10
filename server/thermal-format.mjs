@@ -6164,19 +6164,19 @@ function operation(subject, clip, type) {
 }
 var subtractPolygons = (a, b) => operation(a, b, import_clipper_lib.default.ClipType.ctDifference);
 var intersectPolygons = (a, b) => operation(a, b, import_clipper_lib.default.ClipType.ctIntersection);
+function circleSideCount(radius) {
+  return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
+}
 function circlePolygon(at, radius) {
-  const count = Math.min(
-    128,
-    Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01)))
-  );
+  const count = circleSideCount(radius);
   return Array.from({ length: count }, (_, i) => ({
     x: at.x + radius * Math.cos(i * Math.PI * 2 / count),
     y: at.y + radius * Math.sin(i * Math.PI * 2 / count)
   }));
 }
-function strokedPath(points, width, closed) {
+function strokedPath(points, width, closed, arcTolerance = 0.01) {
   if (points.length < 2 || width <= 0) return [];
-  const engine = new import_clipper_lib.default.ClipperOffset(2, 0.01 * scale), tree = new import_clipper_lib.default.PolyTree();
+  const engine = new import_clipper_lib.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib.default.PolyTree();
   engine.AddPath(
     integer(points),
     import_clipper_lib.default.JoinType.jtRound,
@@ -6262,12 +6262,20 @@ function polygonsFromContours(loops) {
     holes: p.holes.map(decimal)
   }));
 }
+var padCornerSegments = 8;
+var padCornerStep = Math.PI / 2 / padCornerSegments;
+function padCornerRadius(p) {
+  const side = Math.min(p.size.x, p.size.y);
+  if (p.shape === "oval") return side / 2;
+  if (p.shape === "roundrect") return side * (p.roundrectRatio ?? 0);
+  return 0;
+}
 function padPolygon(f, p) {
   const w = p.size.x, h = p.size.y;
   let local;
   if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
-    const radius = p.shape === "oval" ? Math.min(w, h) / 2 : p.shape === "roundrect" ? Math.min(w, h) * (p.roundrectRatio ?? 0) : 0;
+    const radius = padCornerRadius(p);
     const corners = [
       { x: -1, y: -1, name: "top_left" },
       { x: 1, y: -1, name: "top_right" },
@@ -6283,9 +6291,9 @@ function padPolygon(f, p) {
           { x: c.x * (w / 2 - (i % 2 ? cut : 0)), y: c.y * (h / 2 - (i % 2 ? 0 : cut)) }
         ];
       if (!radius) return [{ x: c.x * w / 2, y: c.y * h / 2 }];
-      return Array.from({ length: 9 }, (_, j) => ({
-        x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * Math.PI / 16),
-        y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * Math.PI / 16)
+      return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
+        x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
+        y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep)
       }));
     });
   }
@@ -6306,6 +6314,8 @@ function worldZones(board) {
     )
   ];
 }
+var clearanceArcTolerance = 1e-3;
+var clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
 function filledCopperPolygons(board) {
   const result = /* @__PURE__ */ new Map();
   let vertices = 0;

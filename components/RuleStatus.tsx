@@ -31,18 +31,19 @@ export default function RuleStatus({
   const errors = current?.issues.filter((issue) => issue.severity === 'error').length;
   const warnings = current?.issues.filter((issue) => issue.severity === 'warning').length;
   const incomplete = current && (!current.complete || current.truncated);
-  const clean = Boolean(current && !incomplete && errors === 0);
-  const ErrorIcon = clean ? CircleCheck : incomplete && errors === 0 ? Circle : CircleX;
+  const complete = state === 'ready' && !!current && !incomplete;
+  const ErrorIcon = errors ? CircleX : complete && errors === 0 ? CircleCheck : Circle;
   const label = {
     unchecked: 'Not checked',
     stale: '',
     checking: 'Checking…',
     failed: 'Check failed',
-    ready: '',
+    ready: incomplete ? 'Partial report' : '',
   }[state];
   const description = [
     kind.toUpperCase(),
-    current ? `${errors} errors, ${warnings} warnings` : label,
+    current ? `${errors} errors, ${warnings} warnings` : '',
+    label,
   ]
     .filter(Boolean)
     .join('. ');
@@ -68,7 +69,7 @@ export default function RuleStatus({
         ref={buttonRef}
         type="button"
         className="rule-status"
-        data-complete={current && current.complete && !current.truncated ? true : undefined}
+        data-complete={complete || undefined}
         aria-label="Rule"
         title="Rule"
         aria-description={description}
@@ -104,7 +105,7 @@ export default function RuleStatus({
           <AlertTriangle size={14} />
           {warnings ?? '—'}
         </span>
-        {label && (
+        {state !== 'ready' && label && (
           <span className="rule-status-state" aria-hidden="true">
             {label}
           </span>

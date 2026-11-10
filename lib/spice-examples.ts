@@ -477,14 +477,9 @@ export function buildExampleSpice(d: Circuit, c: TransientConfig): SpiceDeck {
         queue.push(n);
       }
     }
-  if (
-    nets
-      .probeNodes()
-      .some(
-        (entry) =>
-          simulationParts(d).some((p) => p.id === entry.target.id) && !reached.has(entry.node),
-      )
-  )
+  // Only model terminals participate in the simulated circuit. A package can
+  // also have unused physical pins outside its reviewed simulation mapping.
+  if ([...connections.keys()].some((node) => !reached.has(node)))
     throw new Error('Disconnected circuit island. Connect all simulation components.');
   const modelIds = [
     ...new Set(

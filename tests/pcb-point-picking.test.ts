@@ -421,8 +421,8 @@ test('similar track coverage uses the active copper layer independently of track
       { x: 0.15, y: 0 },
       { tolerance: 0.2 },
     )?.selection.id,
-    'front',
-    'The default active copper layer also breaks ties in physical-stack mode.',
+    'back',
+    'Default picking uses the closer centreline without an explicit layer preference.',
   );
   board.tracks[1].width = 0.1;
   assert.equal(

@@ -1,13 +1,7 @@
 import { useMemo } from 'react';
-import {
-  CircuitBoard,
-  MoveHorizontal,
-  PaintBucket,
-  Scan,
-  SlidersHorizontal,
-  SquareDashed,
-} from 'lucide-react';
+import { CircuitBoard, SlidersHorizontal, SquareDashed } from 'lucide-react';
 import PropertiesEmptyState from './PropertiesEmptyState';
+import type { ReactNode } from 'react';
 import type { Circuit } from '@/lib/circuit';
 import { isOwnedProjectNode } from '@/lib/immutable-project';
 import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
@@ -36,7 +30,7 @@ import {
   PropertyGrid,
   PropertyToggle,
 } from './LayoutPropertyFields';
-import { PropertyTab, PropertyTabs } from './PropertyTabs';
+import { PropertyActionRow, PropertyTab, PropertyTabs } from './PropertyTabs';
 
 type Props = {
   spiceAvailable?: boolean;
@@ -61,6 +55,7 @@ type Props = {
   lockTargets: PCBLockTarget[];
   onLock: (locked: boolean) => void;
   showEmptyState?: boolean;
+  actions?: ReactNode;
   snap: (value: number) => number;
   onCommit: (board: PCB) => boolean;
   onFootprint: (footprint: Footprint) => boolean;
@@ -107,6 +102,7 @@ export default function LayoutProperties({
   lockTargets,
   onLock,
   showEmptyState = true,
+  actions,
   snap,
   onCommit,
   onFootprint,
@@ -305,6 +301,7 @@ export default function LayoutProperties({
           {lockControl}
         </div>
       ) : null}
+      {!pad && !footprint && !track && !zone && !graphic && <PropertyActionRow action={actions} />}
       <fieldset className="layout-properties-fields" disabled={locked && !tabbed}>
         {pad && padOwner ? (
           <PropertyTabs locked={locked}>
@@ -453,6 +450,7 @@ export default function LayoutProperties({
             {footprint && (
               <ComponentProperties
                 showIdentity={false}
+                tabAction={actions}
                 footprint={footprint}
                 schematic={schematic}
                 active={active}
@@ -470,7 +468,7 @@ export default function LayoutProperties({
               />
             )}
             {track && (
-              <PropertyTabs locked={locked}>
+              <PropertyTabs locked={locked} action={actions}>
                 <PropertyTab label="General" icon={SlidersHorizontal}>
                   <PropertySection title="Track" showTitle={false}>
                     <Select
@@ -503,8 +501,6 @@ export default function LayoutProperties({
                       onCommit={(width) => onTrack({ width })}
                     />
                   </PropertySection>
-                </PropertyTab>
-                <PropertyTab label="Endpoints" icon={MoveHorizontal}>
                   {(['start', 'end'] as const).map((end) => (
                     <PropertyGrid key={end}>
                       {(['x', 'y'] as const).map((axis) => (
@@ -575,7 +571,7 @@ export default function LayoutProperties({
               </>
             )}
             {zone && (
-              <PropertyTabs locked={locked}>
+              <PropertyTabs locked={locked} action={actions}>
                 <PropertyTab label="General" icon={SlidersHorizontal}>
                   <PropertySection
                     title={zone.keepout ? 'Rule area' : 'Copper zone'}
@@ -616,13 +612,6 @@ export default function LayoutProperties({
                         ),
                       )}
                   </PropertySection>
-                </PropertyTab>
-                {Boolean(rectangle?.zoneId) && (
-                  <PropertyTab label="Bounds" icon={Scan}>
-                    {rectangleFields}
-                  </PropertyTab>
-                )}
-                <PropertyTab label="Fill" icon={PaintBucket}>
                   {zone.keepout ? (
                     <NumberField
                       {...field}
@@ -713,11 +702,13 @@ export default function LayoutProperties({
                       />
                     </PropertyGrid>
                   )}
+                  {Boolean(rectangle?.zoneId) && rectangleFields}
                 </PropertyTab>
               </PropertyTabs>
             )}
             {graphic && (
               <LayoutGraphicProperties
+                actions={actions}
                 graphic={graphic}
                 active={active}
                 locked={locked}

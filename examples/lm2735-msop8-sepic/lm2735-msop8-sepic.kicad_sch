@@ -752,8 +752,8 @@
             (type background))))
       (symbol "Reference_lm2735_msop8_sepic_1_1"
         (pin no_connect line
-          (at -7.62 -2.54 0)
-          (length 2.54)
+          (at -6.35 -2.54 0)
+          (length 1.27)
           (name "NC"
             (effects
               (font
@@ -829,8 +829,8 @@
               (font
                 (size 1.27 1.27)))))
         (pin no_connect line
-          (at -7.62 -5.08 0)
-          (length 2.54)
+          (at -6.35 -5.08 0)
+          (length 1.27)
           (name "NC"
             (effects
               (font
@@ -843,7 +843,7 @@
           (at 0 -8.89 90)
           (length 2.54)
           (hide yes)
-          (name "PAD"
+          (name "GND"
             (effects
               (font
                 (size 1.27 1.27))))
@@ -996,6 +996,92 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:PWR_FLAG"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -1237,6 +1323,11 @@
       (xy 154.94 26.67)
       (xy 154.94 30.48))
     (uuid "c8c9ac7a-c93d-5393-a262-94e6348902dd"))
+  (wire
+    (pts
+      (xy 95.25 30.48)
+      (xy 102.87 30.48))
+    (uuid "67684444-89e3-5682-a04b-e22152918777"))
   (junction
     (at 40.64 59.69)
     (uuid "0a552e1f-b15d-4f78-aae4-6306a8d447a1"))
@@ -1947,7 +2038,7 @@
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
-    (lib_id "Reference:lm2735-msop8-sepic")
+    (lib_id "Reference:Reference_lm2735_msop8_sepic")
     (lib_name "Reference_lm2735_msop8_sepic")
     (at 57.15 62.23 0)
     (unit 1)
@@ -2491,6 +2582,62 @@
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
       (at 154.94 30.48 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 102.87 15.24 0)
+    (unit 1)
+    (uuid "abc113ea-fcac-54c8-ab9e-95062b2d223f")
+    (in_bom no)
+    (instances
+      (project "lm2735-msop8-sepic"
+        (path "/0ff534e9-0989-452d-98cf-e96729a5a9b8"
+          (reference "#FLG1")
+          (unit 1))))
+    (property "Reference" "#FLG1"
+      (at 102.87 17.78 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 102.87 17.78 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 102.87 15.24 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 95.25 30.48 0)
+    (unit 1)
+    (uuid "fccf0256-e561-5eab-af95-ae0e98e3178e")
+    (in_bom no)
+    (instances
+      (project "lm2735-msop8-sepic"
+        (path "/0ff534e9-0989-452d-98cf-e96729a5a9b8"
+          (reference "#FLG2")
+          (unit 1))))
+    (property "Reference" "#FLG2"
+      (at 95.25 33.02 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 95.25 33.02 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 95.25 30.48 0)
       (effects
         (font
           (size 1.27 1.27)))

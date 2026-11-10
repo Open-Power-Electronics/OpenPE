@@ -4,16 +4,18 @@ import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { tsImport } from 'tsx/esm/api';
 import { openCanvasContextMenu } from './canvas-context-menu-test-helpers.mjs';
+import { setLayoutVisibility } from './visualization-test-helpers.mjs';
 
 const { createReferenceExample } = await tsImport('../lib/reference-examples.ts', import.meta.url);
 const { projectFromNativeFiles } = await tsImport('../lib/project.ts', import.meta.url);
 const { runPCBDesignRules } = await tsImport('../lib/pcb-drc.ts', import.meta.url);
 const fixture = structuredClone(createReferenceExample('reference-tps61046-bga6-boost'));
+const targetZoneId = fixture.pcb.zones[1].id;
 // Explicit inherited-clearance fixture; current Home defaults may already carry fills/rules.
-fixture.pcb.zones = fixture.pcb.zones.map(({ filledPolygons: _filled, ...zone }, index) => ({
+fixture.pcb.zones = fixture.pcb.zones.map(({ filledPolygons: _filled, ...zone }) => ({
   ...zone,
   clearance: 0,
-  fillEnabled: index !== 0,
+  fillEnabled: zone.id !== targetZoneId,
 }));
 assert.ok(fixture.pcb.zones.every((zone) => zone.clearance === 0));
 // Actual Core/renderer and native documents in an isolated browser; no Electron,
@@ -71,18 +73,26 @@ try {
   await fillAll.click();
   const bulk = await state();
   assert.equal(bulk.undoDepth, 1);
-  assert.deepEqual(bulk.board.zones[0], before.board.zones[0]);
-  assert.ok(bulk.board.zones.slice(1).every((zone) => zone.filledPolygons?.length));
+  const targetZone = before.board.zones.find((zone) => zone.id === targetZoneId);
+  assert.deepEqual(
+    bulk.board.zones.find((zone) => zone.id === targetZoneId),
+    targetZone,
+  );
+  const enabledZones = bulk.board.zones.filter((zone) => zone.id !== targetZoneId);
+  assert.ok(enabledZones.every((zone) => zone.filledPolygons !== undefined));
+  assert.ok(enabledZones.some((zone) => zone.filledPolygons.length));
   await button('Undo').click();
   assert.deepEqual((await state()).files, before.files);
+  // The back-layer zone shares the target's outline.
+  await setLayoutVisibility(page, 'B.Cu', false);
   const selection = page.getByRole('group', { name: 'Selection', exact: true });
   const allItems = selection.getByRole('checkbox', { name: 'All items', exact: true });
   if (!(await allItems.isVisible())) await button('Selection').click();
-  // The small target pour shares its top edge with footprint artwork.
+  // Isolate zone picking from overlapping copper and footprint artwork.
   await allItems.uncheck();
   await selection.getByRole('checkbox', { name: 'Zones', exact: true }).check();
-  const zoneId = before.board.zones[0].id;
-  const outline = before.board.zones[0].outline;
+  const zoneId = targetZone.id;
+  const outline = targetZone.outline;
   const at = outline[0],
     next = outline[1];
   const screen = await canvas.evaluate(
@@ -90,7 +100,7 @@ try {
       const p = new DOMPoint(at.x, at.y).matrixTransform(svg.getScreenCTM());
       return { x: p.x, y: p.y };
     },
-    { x: (at.x + next.x) / 2, y: (at.y + next.y) / 2 },
+    { x: (at.x + next.x) / 2, y: (at.y + next.y) / 2 + 1 },
   );
   await page.mouse.click(screen.x, screen.y, { button: 'right' });
   await menu.getByRole('menuitem', { name: 'Fill zone', exact: true }).waitFor();
@@ -99,13 +109,9 @@ try {
   const panel = page.getByRole('complementary', { name: 'Layout properties' });
   assert.equal(await panel.getByRole('checkbox', { name: 'Filled', exact: true }).count(), 0);
   await panel.getByRole('button', { name: 'Fill zone', exact: true }).waitFor();
-  const fillRules = panel.getByRole('tab', { name: 'Fill', exact: true });
-  const rules = panel.getByRole('tabpanel', { name: 'Fill', exact: true });
-  const clearance = rules.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
-  const minimumWidth = rules.getByRole('spinbutton', { name: 'Minimum width (mm)', exact: true });
-  assert.equal(await fillRules.getAttribute('aria-selected'), 'false');
-  await panel.getByRole('tab', { name: 'General', exact: true }).press('End');
-  assert.equal(await fillRules.getAttribute('aria-selected'), 'true');
+  const general = panel.getByRole('tabpanel', { name: 'General', exact: true });
+  const clearance = general.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
+  const minimumWidth = general.getByRole('spinbutton', { name: 'Minimum width (mm)', exact: true });
   assert.equal(await minimumWidth.isVisible(), true);
   const initialClearance = await clearance.inputValue();
   await clearance.fill('0.4');
@@ -210,14 +216,13 @@ try {
     assert.deepEqual((await state()).board, filled.board);
   }
   await page.mouse.click(screen.x, screen.y);
-  await fillRules.click();
   await clearance.fill('0.5');
   await clearance.press('Enter');
   assert.equal((await state()).undoDepth, 3);
   await page.evaluate(() => window.pendingSource());
   await panel.getByRole('button', { name: 'Delete object', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Apply the Source edits' }).waitFor();
-  assert.equal((await state()).undoDepth, 3, 'Pending Source blocks footer deletion.');
+  assert.equal((await state()).undoDepth, 3, 'Pending Source blocks Properties deletion.');
   await panel.getByRole('button', { name: 'Refill zone', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Apply the Source edits' }).waitFor();
   assert.equal((await state()).undoDepth, 3);

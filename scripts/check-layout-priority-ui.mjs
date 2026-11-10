@@ -287,24 +287,6 @@ try {
     assert.equal(await panel.getByRole('slider', { name: 'Copper opacity' }).count(), 0);
     await toggleLayoutVisualization(page, 'Visible layers');
   };
-  const repeatLayer = async (layer) => {
-    await toggleLayoutVisualization(page, 'Visible layers');
-    const panel = page.getByRole('group', { name: 'Visible layers', exact: true });
-    const current = panel.getByRole('button', { name: layer, exact: true });
-    assert.equal(await current.getAttribute('aria-pressed'), 'true');
-    const editingLayer = await page.evaluate(() => window.layoutContext().layer);
-    await current.click();
-    assert.equal(await panel.locator('button[aria-pressed="true"]').count(), 1);
-    assert.equal(await current.getAttribute('aria-pressed'), 'true');
-    assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), layer);
-    assert.equal(
-      await page.evaluate(() => window.layoutContext().layer),
-      editingLayer,
-      'Clicking the active row again preserves the copper tool layer.',
-    );
-    await toggleLayoutVisualization(page, 'Visible layers');
-    await clean();
-  };
   const layerMode = page.getByRole('combobox', { name: 'Non-active layers', exact: true });
   const layerModes = page.getByRole('listbox', { name: 'Non-active layers', exact: true });
   const setLayerMode = async (mode) => {
@@ -421,33 +403,103 @@ try {
   };
 
   assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), null);
+  assert.equal(await layerMode.getAttribute('aria-description'), 'All');
+  assert.equal(await page.evaluate(() => window.layoutContext().routing.activeLayer), 'F.Cu');
+  await toggleLayoutVisualization(page, 'Visible layers');
+  assert.equal(
+    await page
+      .getByRole('group', { name: 'Visible layers', exact: true })
+      .locator('button[aria-pressed="true"]')
+      .count(),
+    0,
+  );
+  await toggleLayoutVisualization(page, 'Visible layers');
+  assert.equal(await canvas.locator('[data-priority-layer]').count(), 0);
   const defaultPaintOrder = await canvas
     .locator('[data-layout-layer]')
     .evaluateAll((groups) => groups.map((group) => group.getAttribute('data-layout-layer')));
   for (const [lower, upper] of [
     ['B.Cu', 'In2.Cu'],
     ['In2.Cu', 'In1.Cu'],
-    ['In1.Cu', 'F.SilkS'],
-    ['F.SilkS', 'F.Cu'],
+    ['In1.Cu', 'F.Cu'],
+    ['F.Cu', 'F.SilkS'],
   ])
     assert.ok(
       defaultPaintOrder.includes(lower) &&
         defaultPaintOrder.includes(upper) &&
         defaultPaintOrder.indexOf(lower) < defaultPaintOrder.indexOf(upper),
-      `The default F.Cu view paints ${upper} above ${lower}.`,
+      `The default view paints ${upper} above ${lower} in physical order.`,
     );
+  const crossing = await point({ x: 34, y: 9 });
+  await page.mouse.click(crossing.x, crossing.y);
+  const defaultChoices = page.getByRole('menu', { name: 'Choose layout object', exact: true });
+  await defaultChoices.getByRole('menuitem', { name: 'Track · F.Cu · front-last' }).waitFor();
+  await defaultChoices.getByRole('menuitem', { name: 'Track · B.Cu · back-first' }).click();
+  assert.deepEqual(await selection(), ['back-first']);
+  await clearSelection();
+  await setLayerMode('Dim');
+  assert.equal(
+    await canvas.locator('[data-priority-layer]').getAttribute('data-priority-layer'),
+    'F.Cu',
+  );
+  await setLayerMode('Solo');
+  assert.equal(await canvas.locator('[data-layout-layer="B.Cu"]').count(), 0);
+  await setLayerMode('All');
+  assert.equal(await canvas.locator('[data-priority-layer]').count(), 0);
+  await clean();
   await expectDrillOpenings();
+  await choosePriority('F.Cu');
+  await expectTop({ x: 34, y: 9 }, 'front-last');
+  await toggleLayoutVisualization(page, 'Visible layers');
+  const frontLayer = page
+    .getByRole('group', { name: 'Visible layers', exact: true })
+    .getByRole('button', { name: 'F.Cu', exact: true });
+  assert.equal(await frontLayer.getAttribute('aria-pressed'), 'true');
+  await frontLayer.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  assert.equal(await frontLayer.getAttribute('aria-pressed'), 'true');
+  await frontLayer.press('Enter');
+  assert.equal(await frontLayer.getAttribute('aria-pressed'), 'false');
+  assert.equal(await frontLayer.evaluate((button) => button === document.activeElement), true);
+  assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), null);
+  assert.equal(await canvas.locator('[data-priority-layer]').count(), 0);
+  await toggleLayoutVisualization(page, 'Visible layers');
+  await page.mouse.click(crossing.x, crossing.y);
+  await defaultChoices.getByRole('menuitem', { name: 'Track · B.Cu · back-first' }).click();
+  assert.deepEqual(await selection(), ['back-first']);
+
+  await choosePriority('B.Cu');
+  await setLayerMode('Solo');
+  await toggleLayoutVisualization(page, 'Visible layers');
+  await page
+    .getByRole('group', { name: 'Visible layers', exact: true })
+    .getByRole('checkbox', { name: 'F.SilkS', exact: true })
+    .uncheck();
+  const beforeReset = await page.evaluate(() => window.layoutContext());
+  assert.equal(await layerMode.getAttribute('aria-description'), 'Solo');
+  await setLayerMode('All');
+  assert.equal(await layerMode.getAttribute('aria-description'), 'All');
+  assert.equal(await canvas.locator('[data-priority-layer]').count(), 0);
+  assert.equal(await canvas.locator('[data-layout-layer="F.Cu"]').count(), 1);
+  const afterReset = await page.evaluate(() => window.layoutContext());
+  assert.equal(afterReset.priorityLayer, null);
+  assert.equal(afterReset.routing.activeLayer, 'B.Cu');
+  assert.deepEqual(afterReset.layers, beforeReset.layers);
+  assert.deepEqual(afterReset.selection, beforeReset.selection);
+  await toggleLayoutVisualization(page, 'Visible layers');
+  await setLayoutVisibility(page, 'F.SilkS', true);
+  await clearSelection();
+  await clean();
+  await choosePriority('F.Cu');
+  await setLayerMode('All');
+  assert.equal(await page.evaluate(() => window.layoutContext().priorityLayer), null);
+
   await choosePriority('F.SilkS');
   await expectDrillOpenings();
-  await repeatLayer('F.SilkS');
   await setLayoutVisibility(page, 'F.SilkS', false);
   await choosePriority('F.Cu');
   await expectTop({ x: 12, y: 9 }, 'front-first');
   await expectTop({ x: 34, y: 9 }, 'front-last');
-  await choosePriority('F.Cu');
-  await repeatLayer('F.Cu');
   await choosePriority('B.Cu');
-  await repeatLayer('B.Cu');
   assert.equal(await page.evaluate(() => window.layoutContext().layer), 'B.Cu');
   await expectTop({ x: 12, y: 9 }, 'back-last');
   await expectTop({ x: 34, y: 9 }, 'back-first');
@@ -506,6 +558,10 @@ try {
   const footer = page.locator('.layout-status');
   const gridDensity = footer.getByRole('combobox', { name: 'Grid density', exact: true });
   const assertFooterSelectors = async () => {
+    await footer.evaluate(async (element) => {
+      element.scrollLeft = element.scrollWidth - element.clientWidth;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
     const grid = await gridDensity.boundingBox();
     const mode = await layerMode.boundingBox();
     const bounds = await footer.boundingBox();
@@ -528,8 +584,9 @@ try {
     element.style.width = '210px';
   });
   await assertFooterSelectors();
-  await footer.evaluate((element) => {
+  await footer.evaluate(async (element) => {
     element.style.removeProperty('width');
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   await layerMode.press('ArrowDown');
   assert.equal(
@@ -691,7 +748,7 @@ try {
   await page.screenshot({ path: 'test-results/layout-lm2596-layer-rows.png' });
   assert.deepEqual(errors, [], 'The real native outline/fill regression has no renderer errors.');
   console.log(
-    'Layout layers: persistent active layer, Normal/Dim/Hide, visibility, point and area picking, shared through geometry and native outline selection without edits.',
+    'Layout layers: default view reset, layer display modes, visibility, point and area picking, shared through geometry and native outline selection without edits.',
   );
 } finally {
   await browser.close();

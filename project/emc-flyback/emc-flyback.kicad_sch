@@ -4352,6 +4352,92 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:PWR_FLAG"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -6049,6 +6135,30 @@
     (pts
       (xy 345.44 5.08)
       (xy 345.44 10.16)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "070a0626-50af-5e5a-a85e-609660c5539e")
+    (pts
+      (xy 132.08 111.76)
+      (xy 137.16 111.76)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "5c82dfcc-d76f-5549-a425-d5d592b88767")
+    (pts
+      (xy 157.48 111.76)
+      (xy 162.56 111.76)))
+  (wire
+    (stroke
+      (width 0)
+      (type default))
+    (uuid "555c6952-1581-5066-a70d-bc77cf8f543d")
+    (pts
+      (xy 170.18 111.76)
+      (xy 175.26 111.76)))
   (junction
     (at 228.6 185.42)
     (diameter 0)
@@ -11108,7 +11218,7 @@
           (reference "#PWR090")
           (unit 1)))))
   (symbol
-    (lib_id "Isolator:LTV-817S")
+    (lib_id "EMC_Demo:LTV-817S")
     (at 241.3 157.48 0)
     (unit 1)
     (body_style 1)
@@ -11200,6 +11310,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "U4")
           (unit 1))))
+    (lib_name "Isolator:LTV-817S")
     (property "Sim.Library" "circuits/EMC_flyback_control.lib"
       (at 241.3 157.48 0)
       (effects
@@ -12535,7 +12646,7 @@
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
-    (lib_id "Device:LED")
+    (lib_id "EMC_Demo:LED")
     (at 370.84 85.09 90)
     (unit 1)
     (body_style 1)
@@ -12624,7 +12735,8 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D6")
-          (unit 1)))))
+          (unit 1))))
+    (lib_name "Device:LED"))
   (symbol
     (lib_id "EMC_Demo:PGND")
     (at 241.3 116.84 0)
@@ -16511,7 +16623,7 @@
           (reference "J5")
           (unit 1)))))
   (symbol
-    (lib_id "Device:LED")
+    (lib_id "EMC_Demo:LED")
     (at 165.1 85.09 90)
     (unit 1)
     (body_style 1)
@@ -16600,7 +16712,8 @@
       (project "emc-flyback"
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "D5")
-          (unit 1)))))
+          (unit 1))))
+    (lib_name "Device:LED"))
   (symbol
     (lib_id "Device:C")
     (at 228.6 180.34 0)
@@ -17282,7 +17395,7 @@
           (reference "R18")
           (unit 1)))))
   (symbol
-    (lib_id "Reference_Voltage:TL431DBZ")
+    (lib_id "EMC_Demo:TL431DBZ")
     (at 238.76 185.42 90)
     (unit 1)
     (body_style 1)
@@ -17374,6 +17487,7 @@
         (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
           (reference "U3")
           (unit 1))))
+    (lib_name "Reference_Voltage:TL431DBZ")
     (property "Sim.Library" "circuits/EMC_flyback_control.lib"
       (at 238.76 185.42 0)
       (effects
@@ -18134,6 +18248,161 @@
       (hide yes))
     (property "Sim.Params" "y1=0.5 y2=0 td=2m tr=10u tf=10u tw=2m per=1"
       (at 345.44 0 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 106.68 114.3 90)
+    (unit 1)
+    (exclude_from_sim yes)
+    (in_bom no)
+    (on_board yes)
+    (dnp no)
+    (uuid "82f15ab9-d892-5c32-a73d-00a87f2fb520")
+    (property "Reference" "#FLG1"
+      (at 106.68 117.856 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 106.68 117.856 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "#FLG1")
+          (unit 1))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 106.68 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 119.38 114.3 90)
+    (unit 1)
+    (exclude_from_sim yes)
+    (in_bom no)
+    (on_board yes)
+    (dnp no)
+    (uuid "14c687fa-3fd4-5b97-a1a4-312e429797fc")
+    (property "Reference" "#FLG2"
+      (at 119.38 117.856 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 119.38 117.856 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "#FLG2")
+          (unit 1))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 119.38 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 137.16 111.76 0)
+    (unit 1)
+    (exclude_from_sim yes)
+    (in_bom no)
+    (on_board yes)
+    (dnp no)
+    (uuid "08a82aba-0858-57c9-a567-ef6426541452")
+    (property "Reference" "#FLG3"
+      (at 137.16 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 137.16 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "#FLG3")
+          (unit 1))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 137.16 111.76 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 162.56 111.76 0)
+    (unit 1)
+    (exclude_from_sim yes)
+    (in_bom no)
+    (on_board yes)
+    (dnp no)
+    (uuid "ef46c3df-4597-5828-a648-7d2e6738a618")
+    (property "Reference" "#FLG4"
+      (at 162.56 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 162.56 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "#FLG4")
+          (unit 1))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 162.56 111.76 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 175.26 111.76 0)
+    (unit 1)
+    (exclude_from_sim yes)
+    (in_bom no)
+    (on_board yes)
+    (dnp no)
+    (uuid "a5bdb7c6-5b42-5b09-a93a-c2decf6dae2d")
+    (property "Reference" "#FLG5"
+      (at 175.26 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 175.26 114.3 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (instances
+      (project "emc-flyback"
+        (path "/3aa54833-627b-4ee3-b4f0-5318a2e5851b"
+          (reference "#FLG5")
+          (unit 1))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 175.26 111.76 0)
       (effects
         (font
           (size 1.27 1.27)))

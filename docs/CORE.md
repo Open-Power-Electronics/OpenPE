@@ -98,7 +98,7 @@ whole-project undo. Accepted fills still refresh through central commit.
 
 ERC returns checked revision/sheet; DRC returns revision/board/effective thresholds. Stable object IDs and millimetre positions support locating, while issue IDs belong to that report only. Sheet/document/settings changes require a fresh matching report.
 
-Checks never apply drafts, mutate Core, emit design changes, advance revision, create undo, write files or refill zones. Capability invocation events still occur. Reports/thresholds/markers stay outside Source/recovery/Git/dirty state.
+Checks never apply drafts, mutate Core, emit design changes, advance revision, create undo, write files or refill zones. Capability invocation events still occur. Reports and markers stay in the workbench session. A separate `layout.drc.settings` command commits native threshold edits using the same validation, undo and dirty-state path as other project edits. DRC reads its base thresholds from the accepted native project.
 
 [Design rules](DESIGN-RULES.md) owns coverage: physical connectivity is independent of simulation participation; unsupported pin/geometry coverage is explicit. Reports cap at 1,000 issues and mark truncation incomplete. `complete:true` means the implemented bounded rules completed, not KiCad parity or hardware qualification.
 

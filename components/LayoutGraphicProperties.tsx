@@ -27,6 +27,7 @@ type Props = {
   layers: BoardLayer[];
   onCommit: (graphic: BoardLine) => boolean;
   geometry?: boolean;
+  actions?: ReactNode;
   fieldContent?: { value: string; onCommit?: (value: string) => boolean };
 };
 
@@ -40,6 +41,7 @@ export default function LayoutGraphicProperties({
   layers,
   onCommit,
   geometry = true,
+  actions,
   fieldContent,
 }: Props) {
   const [vertexLimit, setVertexLimit] = useState(128);
@@ -244,7 +246,7 @@ export default function LayoutGraphicProperties({
       : null;
 
   return (
-    <PropertyTabs locked={locked}>
+    <PropertyTabs locked={locked} action={actions}>
       <PropertyTab label="General" icon={SlidersHorizontal}>
         <PropertySection title="Appearance" showTitle={false}>
           {select(

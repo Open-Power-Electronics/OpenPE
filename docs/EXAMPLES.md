@@ -96,18 +96,26 @@ regenerating or replacing their bytes.
 Generation/preparation verifies and copies required
 assets without changing model choices or transforms. Generated project asset copies are
 ignored in Git. Private regression snapshots live
-in `tests/fixtures/reference/*.json`; these are not user project files. Embedded source symbols, physical pin mappings, package placement,
-pads, nets, tracks, vias and zone ownership are retained.
+in `tests/fixtures/reference/*.json`; these are not user project files. The
+reference projects ship their curated controller definitions in a local
+`Reference` symbol library matching the embedded definitions. Conversion uses
+official `PWR_FLAG` symbols to declare the input supply and return, including
+the separate LM25017 secondary return. It corrects controller pin types and
+keeps the two LM2735 NC pin tips clear of the EN wire. Physical pin numbers,
+simulation mappings, package placement, pads, nets, tracks, vias and zone
+ownership are retained.
 Of the 28 copper-zone outlines, the 20 touching the board edge are clipped to a
 rectangle inset 0.5 mm from the board boundary, following the existing saved-copper
 margins. Internal split-rail lines and the eight local-zone outlines stay fixed;
 holes, wiring, package models and pinned source hashes remain unchanged. Eight
 reference boards retain their exact source filled polygons. TPS61046's three
-enabled copper zones are filled during generation with the same bounded operation
-as Layout Fill and a 0.25 mm minimum clearance. This supplies the small VIN zone's
-missing saved copper while retaining source pads, tracks, vias, nets, placement,
-UUIDs and the declared inset boundaries. Its snapshots and original native project
-carry the same fills; thermal analysis reads them without refilling.
+enabled zones use KiCad 10.0.1 during example generation with a 0.25 mm minimum
+clearance. Generation transfers the native fill records by zone UUID and keeps
+source pads, tracks, vias, nets, placement and the inset boundaries. KiCad removes
+the disconnected VIN copper. The native board and regression snapshot retain the
+same fills. KiCad writes no fill record for the empty VIN zone. OpenPE reports
+that zone as missing saved copper and Layout Thermal requires a completed fill
+before Run.
 KiCad local UI caches (`.kicad_prl`) are excluded.
 
 Each Home controller, including EMC Flyback, also has an [official datasheet and reviewed parameter
@@ -159,9 +167,10 @@ multi-layer zones per layer and preserves their filled polygons. Reference
 curation clips only copper-zone outer boundaries to the board inset; the
 independent KiCad check derives this expected boundary change and compares all
 other copper geometry, zone holes and settings exactly. TPS61046's declared fill
-and minimum-clearance changes are checked separately against the actual saved
-geometry, and `tests/reference-drc.test.ts` requires the generated board to have
-no bounded Core DRC errors. The adapter omits
+and minimum-clearance changes are checked against an independent KiCad 10.0.1
+refill by zone UUID, layer, contour coordinates and island flags.
+`tests/reference-drc.test.ts` checks the saved copper with the zone clearance
+source enabled. The adapter omits
 printing settings and ancillary records such as sheet names, source paths, tags
 and pin descriptions from private generated snapshots; the pinned originals retain them.
 Package model references remain structured footprint data. Unsupported
@@ -243,10 +252,10 @@ npm run build:format
 
 This regenerates the nine curated native project sets and EMC Flyback, their
 private regression snapshots, `lib/reference-simulation.json`, the shared
-conversion audit and notices, followed by the service formats. EMC conversion
-requires official KiCad 10 through `KICAD_CLI`. Change generator/source
-definitions to change regeneration output; verify the original desktop assets
-separately below. Source saves edits to whichever actual files are open.
+conversion audit and notices, followed by the service formats. Set `KICAD_CLI`
+to KiCad 10.0.1 for the TPS61046 refill and EMC conversion. Change the generator
+or source definitions to change the output. The checks below verify the original
+desktop assets. Source saves edits to whichever actual files are open.
 
 Prepare solver resources and original simulation sidecars separately; these
 commands may download pinned resources:
@@ -303,6 +312,13 @@ on missing resources instead of downloading them. Desktop integration/startup
 checks require an explicit user request. [verification.json](../resources/example-catalog/verification.json)
 records structural/connectivity checks under KiCad 10.0.1; it is not simulation,
 ERC or DRC evidence and does not validate subsequent changes.
+
+Example generation requires a complete OpenPE ERC report with zero issues
+for the nine schematics under `examples/` and EMC Flyback under `project/`. The native portability test
+repeats the check through Core after a native Save as round trip. To check the
+same designs with KiCad 10, run `kicad-cli sch erc --exit-code-violations` on
+each `.kicad_sch` in its original project directory with the standard KiCad
+symbol libraries configured.
 
 [Simulation](SIMULATION.md#home-profiles-and-verification-scope) owns
 profile timing, acceptance criteria, controller derivatives and electrical

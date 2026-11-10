@@ -5,6 +5,7 @@ import { lstat, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ProjectCore } from '../core/project-core';
+import type { RuleCheckResult } from '../lib/design-rule-checks';
 import { homeExampleCatalog, homeExampleNativePath } from '../lib/home-examples';
 import {
   projectFromNativeFiles,
@@ -75,6 +76,13 @@ for (const entry of homeExampleCatalog) {
     }
 
     const core = new ProjectCore(reopened);
+    for (const sheet of [reopened.schematic, ...(reopened.additionalSchematics ?? [])]) {
+      const erc = (await core.query('schematic.erc', {
+        schematicId: sheet.id,
+      })) as RuleCheckResult;
+      assert.equal(erc.complete, true);
+      assert.deepEqual(erc.issues, []);
+    }
     const before = core.query('source.files');
     const settingsFile = reopenedFiles.files.find((file: { name: string }) =>
       file.name.endsWith('.kicad_pro'),
@@ -102,11 +110,21 @@ for (const entry of homeExampleCatalog) {
       ...defaultThermalConfig(board),
       heatSources: [{ footprintId: heater.id, powerW: 1 }],
     };
-    assert.deepEqual(
-      prepareThermalModel(board, thermal),
-      prepareThermalModel(project.pcb!, thermal),
-      'Thermal geometry follows the native board; 1 W is an explicit test input, not inferred loss.',
-    );
+    if (entry.file === 'tps61046-bga6-boost') {
+      for (const candidate of [project.pcb!, board]) {
+        const vin = candidate.nets.find((net) => net.name === '/VIN');
+        const zone = candidate.zones.find((item) => item.netId === vin?.id);
+        assert.ok(zone?.fillEnabled);
+        assert.equal(zone.filledPolygons, undefined, 'Save as preserves the absent KiCad fill.');
+        assert.throws(() => prepareThermalModel(candidate, thermal), /Fill copper zones/);
+      }
+    } else {
+      assert.deepEqual(
+        prepareThermalModel(board, thermal),
+        prepareThermalModel(project.pcb!, thermal),
+        'Thermal geometry follows the native board; 1 W is an explicit test input, not inferred loss.',
+      );
+    }
     assert.deepEqual(
       await readNativeProject(originalPath),
       native,

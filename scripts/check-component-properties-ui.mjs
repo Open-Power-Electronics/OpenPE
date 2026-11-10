@@ -12,7 +12,7 @@ const core=new ProjectCore(parseProject(${JSON.stringify(source)}));const origin
 window.openpe={chooseComponentModel:async()=>({path:'\${KIPRJMOD}/models/'+ 'b'.repeat(64)+'.step'}),inspectSpiceModel:async()=>null};
 window.current=()=>core.getSnapshot().project;window.historyDepth=()=>core.getSnapshot().undoDepth;
 window.nativePCB=()=>projectNativeFiles(core.getSnapshot().project).files.find(f=>f.name.endsWith('.kicad_pcb')).source;
-function Fixture(){const snapshot=useSyncExternalStore(core.subscribe,core.getSnapshot);const [view,setView]=useState('Schematic');const project=snapshot.project;return <><nav>{['Schematic','Layout','Model'].map(v=><button key={v} onClick={()=>setView(v)}>{v}</button>)}<button onClick={()=>core.undo()}>Undo</button></nav><div className="layout-properties" data-mode={view}><ComponentProperties key={view} footprint={project.pcb.footprints.find(f=>f.id===id)} schematic={project.schematic} active resetKey snap={v=>v} fileId="00000000-0000-4000-8000-000000000001" getRevision={()=>core.getSnapshot().revision} onFootprint={next=>core.replaceBoard({...project.pcb,footprints:project.pcb.footprints.map(f=>f.id===id?next:f)})} onSavePartProperties={()=>true}/></div></>;}createRoot(document.getElementById('root')).render(<Fixture/>);
+function Fixture(){const snapshot=useSyncExternalStore(core.subscribe,core.getSnapshot);const [view,setView]=useState('Schematic');const project=snapshot.project;return <><nav>{['Schematic','Layout','Model'].map(v=><button key={v} onClick={()=>setView(v)}>{v}</button>)}<button onClick={()=>core.undo()}>Undo</button></nav><div className={view===\'Layout\'?\'layout-properties layout-inspector layout-part-inspector\':\'layout-properties\'} data-mode={view}><ComponentProperties key={view} footprint={project.pcb.footprints.find(f=>f.id===id)} schematic={project.schematic} active resetKey snap={v=>v} fileId="00000000-0000-4000-8000-000000000001" getRevision={()=>core.getSnapshot().revision} onFootprint={next=>core.replaceBoard({...project.pcb,footprints:project.pcb.footprints.map(f=>f.id===id?next:f)})} onSavePartProperties={()=>true}/></div></>;}createRoot(document.getElementById('root')).render(<Fixture/>);
 `,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -46,6 +46,8 @@ try {
     await browse().waitFor();
     const model = page.getByLabel('Model', { exact: true }),
       footprint = page.getByRole('button', { name: 'Browse footprints', exact: true });
+    const side = page.getByRole('combobox', { name: 'Footprint side', exact: true });
+    const properties = page.locator('.layout-properties');
     assert.equal(await footprint.count(), 1);
     assert.equal(await model.count(), 1);
     assert.equal(await page.getByRole('button', { name: 'Add STEP file', exact: true }).count(), 0);
@@ -56,6 +58,29 @@ try {
       }),
       true,
     );
+    for (const width of [256, 340]) {
+      await properties.evaluate((element, width) => {
+        element.style.width = `${width}px`;
+      }, width);
+      const [modelBox, sideBox] = await Promise.all([model.boundingBox(), side.boundingBox()]);
+      assert.ok(
+        Math.abs(sideBox.x - modelBox.x) <= 1 && Math.abs(sideBox.width - modelBox.width) <= 1,
+        `${view} Side and Model controls align at ${width} px.`,
+      );
+      const iconCenters = await properties
+        .locator('.property-field > :is(.icon-button, .select-trigger) > svg')
+        .evaluateAll((icons) =>
+          icons.map((icon) => {
+            const { left, width } = icon.getBoundingClientRect();
+            return left + width / 2;
+          }),
+        );
+      assert.ok(iconCenters.length >= 4, 'The fixture includes browse, select and remove icons.');
+      assert.ok(
+        Math.max(...iconCenters) - Math.min(...iconCenters) <= 0.5,
+        `${view} action icons share a centerline at ${width} px (${iconCenters.join(', ')}).`,
+      );
+    }
   }
   await browse().click();
   const dialog = page.getByRole('dialog', { name: 'Component models', exact: true });

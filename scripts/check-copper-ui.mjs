@@ -197,7 +197,6 @@ try {
       await page.getByRole('combobox', { name: 'Zone layer', exact: true }).innerText(),
       zone.layer,
     );
-    await page.getByRole('tab', { name: 'Fill', exact: true }).click();
     const clearance = page.getByRole('spinbutton', { name: 'Clearance (mm)', exact: true });
     await clearance.fill('0.5');
     await clearance.press('Enter');

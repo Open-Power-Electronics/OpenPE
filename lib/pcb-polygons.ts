@@ -5,8 +5,11 @@ import { pcbArc, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
 import { invalidatePCBFill, pcbFillInputsChanged } from './pcb';
 import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pcb-layout';
 import { isOwnedPCB, ownProjectData } from './immutable-project';
+import { padCopperLayers, partitionPCBRoutingCopper } from './pcb-connectivity';
+import { borrowPCBPadCopperContour } from './pcb-pad-contour';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
+type CopperFillPolygon = Polygon & { island?: true };
 export const polygonResolution = 0.0001; // Millimetres per integer clipping coordinate.
 const scale = 1 / polygonResolution;
 const integer = (points: Point[]) =>
@@ -34,9 +37,9 @@ export const subtractPolygons = (a: Polygon[], b: Polygon[]) =>
   operation(a, b, Clipper.ClipType.ctDifference);
 export const intersectPolygons = (a: Polygon[], b: Polygon[]) =>
   operation(a, b, Clipper.ClipType.ctIntersection);
-function offset(polygons: Polygon[], amount: number): Polygon[] {
+function offset(polygons: Polygon[], amount: number, arcTolerance = 0.01): Polygon[] {
   if (!amount) return polygons;
-  const engine = new Clipper.ClipperOffset(2, 0.01 * scale),
+  const engine = new Clipper.ClipperOffset(2, arcTolerance * scale),
     tree = new Clipper.PolyTree();
   engine.AddPaths(paths(polygons), Clipper.JoinType.jtRound, Clipper.EndType.etClosedPolygon);
   engine.Execute(tree, amount * scale);
@@ -46,19 +49,24 @@ function offset(polygons: Polygon[], amount: number): Polygon[] {
   }));
 }
 export const offsetPolygons = offset;
+function circleSideCount(radius: number): number {
+  return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
+}
 export function circlePolygon(at: Point, radius: number): Point[] {
-  const count = Math.min(
-    128,
-    Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))),
-  );
+  const count = circleSideCount(radius);
   return Array.from({ length: count }, (_, i) => ({
     x: at.x + radius * Math.cos((i * Math.PI * 2) / count),
     y: at.y + radius * Math.sin((i * Math.PI * 2) / count),
   }));
 }
-function strokedPath(points: Point[], width: number, closed: boolean): Polygon[] {
+function strokedPath(
+  points: Point[],
+  width: number,
+  closed: boolean,
+  arcTolerance = 0.01,
+): Polygon[] {
   if (points.length < 2 || width <= 0) return [];
-  const engine = new Clipper.ClipperOffset(2, 0.01 * scale),
+  const engine = new Clipper.ClipperOffset(2, arcTolerance * scale),
     tree = new Clipper.PolyTree();
   engine.AddPath(
     integer(points),
@@ -181,18 +189,23 @@ export function polygonsFromContours(loops: Point[][]): Polygon[] {
     holes: p.holes.map(decimal),
   }));
 }
+const padCornerSegments = 8;
+const padCornerStep = Math.PI / 2 / padCornerSegments;
+
+function padCornerRadius(p: Pad): number {
+  const side = Math.min(p.size.x, p.size.y);
+  if (p.shape === 'oval') return side / 2;
+  if (p.shape === 'roundrect') return side * (p.roundrectRatio ?? 0);
+  return 0;
+}
+
 export function padPolygon(f: Footprint, p: Pad): Polygon {
   const w = p.size.x,
     h = p.size.y;
   let local: Point[];
   if (p.shape === 'circle') local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
-    const radius =
-      p.shape === 'oval'
-        ? Math.min(w, h) / 2
-        : p.shape === 'roundrect'
-          ? Math.min(w, h) * (p.roundrectRatio ?? 0)
-          : 0;
+    const radius = padCornerRadius(p);
     const corners = [
       { x: -1, y: -1, name: 'top_left' },
       { x: 1, y: -1, name: 'top_right' },
@@ -208,9 +221,9 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
           { x: c.x * (w / 2 - (i % 2 ? cut : 0)), y: c.y * (h / 2 - (i % 2 ? 0 : cut)) },
         ];
       if (!radius) return [{ x: (c.x * w) / 2, y: (c.y * h) / 2 }];
-      return Array.from({ length: 9 }, (_, j) => ({
-        x: c.x * (w / 2 - radius) + radius * Math.cos(start + (j * Math.PI) / 16),
-        y: c.y * (h / 2 - radius) + radius * Math.sin(start + (j * Math.PI) / 16),
+      return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
+        x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
+        y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep),
       }));
     });
   }
@@ -262,9 +275,10 @@ export function fillCopperZone(
         : item,
     ),
   });
-  const filled = fillCopperZones(enabled, clearance);
-  const result = filled.zones.find((item) => item.id === zoneId)!;
-  return { ...enabled, zones: enabled.zones.map((item) => (item.id === zoneId ? result : item)) };
+  requireFillNets(enabled);
+  const targets = new Set([zoneId]);
+  const calculated = calculateCopperPolygons(enabled, clearance, undefined, targets);
+  return withCopperFills(enabled, calculated, clearance, targets);
 }
 
 /** Bounded manual fill calculation. Persist only after the entire operation succeeds. */
@@ -275,16 +289,123 @@ export function copperPolygons(
   return calculateCopperPolygons(board, minimumClearance);
 }
 
+const clearanceArcTolerance = 0.001;
+// Clipper rounds the arc step count, so the final chord can span 1.5 steps.
+// Reserve its sagitta and coordinate rounding before subtracting copper obstacles.
+const clearanceArcGuard = 3 * clearanceArcTolerance + 4 * polygonResolution;
+
+function clearanceOffset(polygons: Polygon[], gap: number): Polygon[] {
+  return offset(polygons, gap + clearanceArcGuard, clearanceArcTolerance);
+}
+
+function circularClearance(at: Point, radius: number): Polygon {
+  const enclosingRadius = radius / Math.cos(Math.PI / circleSideCount(radius));
+  return { outer: circlePolygon(at, enclosingRadius + 4 * polygonResolution), holes: [] };
+}
+
+const hasIslandPolicy = (zone: BoardZone) =>
+  zone.islandRemovalMode === 0 || zone.islandRemovalMode === 1;
+
+function applyCopperIslandPolicy(
+  board: PCB,
+  zones: readonly BoardZone[],
+  fills: Map<string, CopperFillPolygon[]>,
+  selected?: ReadonlySet<string>,
+) {
+  const targets = zones.filter(
+    (zone) =>
+      (!selected || selected.has(zone.id)) && hasIslandPolicy(zone) && fills.get(zone.id)?.length,
+  );
+  if (!targets.length) return;
+  const nets = new Set(targets.map((zone) => zone.netId));
+  const pads = board.footprints.flatMap((footprint) =>
+    footprint.pads.flatMap((pad) => {
+      if (!pad.netId || !nets.has(pad.netId)) return [];
+      const layers = padCopperLayers(board, footprint, pad);
+      return layers.length
+        ? [
+            {
+              id: pad.id,
+              netId: pad.netId,
+              layers,
+              polygon: borrowPCBPadCopperContour(footprint, pad),
+            },
+          ]
+        : [];
+    }),
+  );
+  if (!pads.length) return;
+  const vias = board.vias.flatMap((via) =>
+    via.netId && nets.has(via.netId)
+      ? [
+          {
+            id: via.id,
+            netId: via.netId,
+            layers: board.layers,
+            polygon: {
+              outer: circlePolygon(via, via.diameter / 2),
+              holes: [circlePolygon(via, via.drill / 2)],
+            },
+          },
+        ]
+      : [],
+  );
+  const saved = selected ? filledCopperPolygons(board) : undefined;
+  const piecesByZone = new Map(
+    zones.flatMap((zone) => {
+      const netId = zone.netId;
+      if (!netId || !nets.has(netId)) return [];
+      const polygons =
+        !selected || selected.has(zone.id)
+          ? (fills.get(zone.id) ?? saved?.get(zone.id))
+          : saved?.get(zone.id);
+      return [
+        [
+          zone.id,
+          (polygons ?? []).map((polygon, index) => ({
+            id: `fill:${zone.id}:${index}`,
+            netId,
+            layers: [zone.layer],
+            polygon,
+          })),
+        ] as const,
+      ];
+    }),
+  );
+  let work = 0;
+  const partition = partitionPCBRoutingCopper(
+    board.tracks.filter((track) => nets.has(track.netId)),
+    [...pads, ...vias, ...[...piecesByZone.values()].flat()],
+    (units = 1) => {
+      work += units;
+      if (work > 2_000_000) throw new Error('Copper island detection exceeds the geometry limit.');
+    },
+  );
+  const connected = new Set(pads.map((pad) => partition.get(pad.id)));
+  for (const zone of targets) {
+    const pieces = piecesByZone.get(zone.id)!;
+    if (!pieces.some((piece) => connected.has(partition.get(piece.id)))) continue;
+    fills.set(
+      zone.id,
+      pieces.flatMap((piece) => {
+        if (connected.has(partition.get(piece.id))) return [piece.polygon];
+        return zone.islandRemovalMode === 1 ? [{ ...piece.polygon, island: true }] : [];
+      }),
+    );
+  }
+}
+
 function calculateCopperPolygons(
   board: PCB,
   minimumClearance: number,
   affectedLayers?: ReadonlySet<CopperLayer>,
-): Map<string, Polygon[]> {
+  targets?: ReadonlySet<string>,
+): Map<string, CopperFillPolygon[]> {
   if (!Number.isFinite(minimumClearance) || minimumClearance < 0.0001 || minimumClearance > 1000)
     throw new Error('Copper fill clearance must be from 0.0001 to 1000 mm.');
   const zones = worldZones(board).filter((z) => z.layer.endsWith('.Cu'));
   const fills = zones.filter((z) => !z.keepout && z.fillEnabled !== false);
-  const result = new Map<string, Polygon[]>();
+  const result = new Map<string, CopperFillPolygon[]>();
   if (!fills.length) return result;
   const complexity =
     zones.reduce((n, z) => n + z.outline.length + (z.holes ?? []).flat().length, 0) +
@@ -326,14 +447,22 @@ function calculateCopperPolygons(
         other.netId !== z.netId &&
         ordered.indexOf(other) < ordered.indexOf(z)
       )
-        blocked.push(...offset(result.get(other.id) ?? [], Math.max(clearance, other.clearance)));
+        blocked.push(
+          ...clearanceOffset(result.get(other.id) ?? [], Math.max(clearance, other.clearance)),
+        );
     }
     for (const track of board.tracks)
       if (track.layer === z.layer && track.netId !== z.netId)
-        blocked.push(...strokePolygon([track.start, track.end], track.width + 2 * clearance));
+        blocked.push(
+          ...strokedPath(
+            [track.start, track.end],
+            track.width + 2 * (clearance + clearanceArcGuard),
+            false,
+            clearanceArcTolerance,
+          ),
+        );
     for (const via of board.vias)
-      if (via.netId !== z.netId)
-        blocked.push({ outer: circlePolygon(via, via.diameter / 2 + clearance), holes: [] });
+      if (via.netId !== z.netId) blocked.push(circularClearance(via, via.diameter / 2 + clearance));
     const thermal: Polygon[] = [];
     for (const { f, p, shape } of pads) {
       const present =
@@ -358,9 +487,14 @@ function calculateCopperPolygons(
                   : z.padConnection === 'yes'
                     ? 'solid'
                     : 'thermal';
-      if (!p.netId || p.netId !== z.netId || connection === 'none' || p.type === 'np_thru_hole')
-        blocked.push(...offset([shape], clearance));
-      else if (connection === 'thermal') {
+      if (!p.netId || p.netId !== z.netId || connection === 'none' || p.type === 'np_thru_hole') {
+        if (p.shape === 'circle')
+          blocked.push(circularClearance(padPosition(f, p), p.size.x / 2 + clearance));
+        else {
+          const chordLoss = padCornerRadius(p) * (1 - Math.cos(padCornerStep / 2));
+          blocked.push(...clearanceOffset([shape], clearance + chordLoss));
+        }
+      } else if (connection === 'thermal') {
         const gap = offset([shape], z.thermalGap);
         const at = padPosition(f, p),
           r = Math.hypot(p.size.x, p.size.y) / 2 + z.thermalGap + z.thermalBridge;
@@ -378,12 +512,27 @@ function calculateCopperPolygons(
       }
     }
     region = subtractPolygons(region, [...blocked, ...thermal, ...holes]);
-    // Remove features thinner than the zone's minimum width, without inventing connections.
-    const opened = offset(offset(region, -z.minThickness / 2), z.minThickness / 2);
+    // Remove narrow webs and undersized remnants before expanding the surviving cores.
+    const radius = z.minThickness / 2;
+    const cores = offset(region, -radius).filter(({ outer }) => {
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity;
+      for (const { x, y } of outer) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+      return Math.max(maxX - minX, maxY - minY) + polygonResolution >= z.minThickness;
+    });
+    const opened = offset(cores, radius);
     // Rounded offset approximations must not add copper outside any original constraint.
     region = intersectPolygons(opened, region);
     result.set(z.id, region);
   }
+  applyCopperIslandPolicy(board, fills, result, targets);
   return result;
 }
 
@@ -465,20 +614,24 @@ export function copperFillContour(polygon: Polygon): Point[] {
   return contour;
 }
 
-/** One atomic board replacement: native-style saved fills, in each owner's coordinates. */
-export function fillCopperZones(board: PCB, minimumClearance = defaultCopperFillClearance): PCB {
+function requireFillNets(board: PCB): void {
   const zones = worldZones(board).filter(
     (z) => z.layer.endsWith('.Cu') && !z.keepout && z.fillEnabled !== false,
   );
   if (zones.some((z) => !z.netId))
     throw new Error('Assign a net to each copper zone before filling.');
-  const calculated = copperPolygons(board, minimumClearance);
+}
+
+/** One atomic board replacement: native-style saved fills, in each owner's coordinates. */
+export function fillCopperZones(board: PCB, minimumClearance = defaultCopperFillClearance): PCB {
+  requireFillNets(board);
+  const calculated = calculateCopperPolygons(board, minimumClearance);
   return withCopperFills(board, calculated, minimumClearance);
 }
 
 function withCopperFills(
   board: PCB,
-  calculated: ReadonlyMap<string, Polygon[]>,
+  calculated: ReadonlyMap<string, CopperFillPolygon[]>,
   minimumClearance: number,
   targets?: ReadonlySet<string>,
 ): PCB {
@@ -489,7 +642,10 @@ function withCopperFills(
       ? {
           ...z,
           clearance: Math.max(z.clearance, minimumClearance),
-          filledPolygons: polygons.map((p) => ({ points: copperFillContour(p).map(local) })),
+          filledPolygons: polygons.map((p) => ({
+            points: copperFillContour(p).map(local),
+            ...(p.island ? { island: true as const } : {}),
+          })),
         }
       : z;
     vertices += (result.filledPolygons ?? []).reduce((n, p) => n + p.points.length, 0);
@@ -616,7 +772,12 @@ export function refreshPCBFill(previous: PCB, next: PCB): PCB {
     }),
   };
   const minimumClearance = 0.0001;
-  const calculated = calculateCopperPolygons(effective, minimumClearance, affectedLayers);
+  const calculated = calculateCopperPolygons(
+    effective,
+    minimumClearance,
+    affectedLayers,
+    targetIds,
+  );
   const refreshed = withCopperFills(effective, calculated, minimumClearance, targetIds);
   if (!isOwnedPCB(previous)) return refreshed;
   const owned = ownProjectData(refreshed, previous);

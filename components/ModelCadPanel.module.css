@@ -404,6 +404,14 @@
 .placement .transforms .section {
   margin: 0;
 }
+.editActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--properties-group-gap);
+  padding: var(--properties-inset);
+  padding-bottom: 0;
+}
 .footer {
   display: flex;
   align-items: center;
@@ -414,24 +422,14 @@
   flex-shrink: 0;
   background: var(--panel);
 }
-.docked .footer {
-  padding: 6px 12px;
-  justify-content: flex-end;
-  background: var(--surface);
-}
-.footer > span {
-  flex: 1;
-}
-.footer p {
+.footer p,
+.error > p {
   flex-basis: 100%;
   margin: 0;
   font-size: var(--font-small);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.footer [role='alert'] {
-  color: var(--error-ink);
 }
 .error {
   display: flex;
@@ -441,6 +439,7 @@
 }
 .error > p {
   flex: 1;
+  color: var(--error-ink);
 }
 .error > button {
   flex-shrink: 0;
@@ -466,7 +465,7 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.placement .footer > button:not(:global(.property-apply-action)) {
+.placement .footer > button {
   min-height: var(--control-height);
   padding: 4px 8px;
   border-radius: var(--radius);

@@ -1,6 +1,33 @@
 import assert from 'node:assert/strict';
 import { openSchematicPanel } from './schematic-visualization-test-helpers.mjs';
 
+export async function checkComponentDeletePlacement(inspector) {
+  const action = inspector.getByRole('button', { name: 'Delete object', exact: true });
+  assert.equal(await inspector.locator('.inspector-footer').count(), 0);
+  assert.equal(
+    await action.evaluate((button) => {
+      const row = button.closest('.property-tabs-row');
+      const bounds = button.getBoundingClientRect();
+      const strip = row?.getBoundingClientRect();
+      const dock = button.closest('.inspector').getBoundingClientRect();
+      const tabList = row?.querySelector('[role="tablist"]');
+      const fields = row?.nextElementSibling?.getBoundingClientRect();
+      return (
+        !!strip &&
+        !!fields &&
+        strip.right <= dock.right &&
+        Math.abs(strip.right - bounds.right) < 1 &&
+        Math.abs((strip.top + strip.bottom) / 2 - (bounds.top + bounds.bottom) / 2) < 1 &&
+        fields.top >= strip.bottom &&
+        (!tabList ||
+          (!tabList.contains(button) && tabList.getBoundingClientRect().right <= bounds.left))
+      );
+    }),
+    true,
+    'Component deletion sits to the right of the tabs and above the fields.',
+  );
+}
+
 // Shared Schematic panel and Properties checks for desktop and isolated Workbench tests.
 export async function checkInspectorResize(page, inspector) {
   assert.equal(
@@ -57,26 +84,7 @@ export async function checkInspectorResize(page, inspector) {
   await page.mouse.move(x + 1000, y, { steps: 5 });
   await page.mouse.up();
   assert.ok(Math.abs((await dock.boundingBox()).width - 280) < 1);
-  assert.equal(
-    await inspector.evaluate((element) => {
-      const section = element.closest('.editor-properties-drawer');
-      const panel = section.getBoundingClientRect();
-      const header = section
-        .querySelector(':scope > .editor-display-drawer-header')
-        .getBoundingClientRect();
-      const footer = element.querySelector('.inspector-footer').getBoundingClientRect();
-      const action = element.querySelector('.property-delete-action').getBoundingClientRect();
-      return (
-        header.top >= panel.top &&
-        action.top >= footer.top &&
-        action.bottom <= footer.bottom &&
-        Math.abs(action.right - footer.right + 12) < 1 &&
-        Math.abs(footer.bottom - action.bottom - 6) < 1
-      );
-    }),
-    true,
-    'Docked Properties keeps deletion in the bottom-right footer.',
-  );
+  await checkComponentDeletePlacement(inspector);
   await handle.dblclick();
   assert.ok(Math.abs((await dock.boundingBox()).width - initial.width) < 2);
 }

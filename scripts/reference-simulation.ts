@@ -207,14 +207,7 @@ export function prepareReferenceSimulation(d: Circuit, id: string, modelId: stri
   d.libraries[localId] = symbol;
   controller.libId = localId;
   if (controller.raw) {
-    const catalog: Record<string, string> = {
-      'lm2596-5': 'Regulator_Switching:LM2596T-ADJ',
-      'reference-lm5001': 'Regulator_Switching:LM5001MA',
-      'reference-lm27761': 'Regulator_SwitchedCapacitor:LM27761',
-    };
-    child(controller.raw, 'lib_id')![1] = quote(
-      catalog[modelId] ?? `Reference:${id.replace('reference-', '')}`,
-    );
+    child(controller.raw, 'lib_id')![1] = quote(`Reference:${localId}`);
     const name = child(controller.raw, 'lib_name');
     if (name) name[1] = quote(localId);
     else controller.raw.push(['lib_name', quote(localId)]);

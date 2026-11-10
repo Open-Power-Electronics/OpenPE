@@ -745,7 +745,7 @@
           (fill
             (type background))))
       (symbol "Reference_lmr70503_bga8_buckboost_1_1"
-        (pin power_in line
+        (pin output line
           (at 8.89 -7.62 180)
           (length 2.54)
           (name "VREF"
@@ -756,7 +756,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin output line
+        (pin input line
           (at 8.89 -3.81 180)
           (length 2.54)
           (name "FB"
@@ -767,7 +767,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin power_in line
+        (pin input line
           (at -8.89 1.27 0)
           (length 2.54)
           (name "EN"
@@ -789,7 +789,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin input line
+        (pin power_in line
           (at -3.81 -12.7 90)
           (length 2.54)
           (name "GND"
@@ -800,7 +800,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin passive line
+        (pin power_in line
           (at 0 -12.7 90)
           (length 2.54)
           (name "GND"
@@ -811,7 +811,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin input line
+        (pin power_out line
           (at 8.89 6.35 180)
           (length 2.54)
           (name "SW"
@@ -822,7 +822,7 @@
             (effects
               (font
                 (size 1.27 1.27)))))
-        (pin input line
+        (pin power_in line
           (at -8.89 6.35 0)
           (length 2.54)
           (name "VIN"
@@ -991,6 +991,92 @@
             (effects
               (font
                 (size 1.27 1.27))))))
+      (embedded_fonts no))
+    (symbol "power:PWR_FLAG"
+      (power global)
+      (pin_numbers
+        (hide yes))
+      (pin_names
+        (offset 0)
+        (hide yes))
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+      (in_pos_files yes)
+      (duplicate_pin_numbers_are_jumpers no)
+      (property "Reference" "#FLG"
+        (at 0 1.905 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Value" "PWR_FLAG"
+        (at 0 3.81 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Footprint" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Datasheet" ""
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "Description" "Special symbol for telling ERC where power comes from"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (property "ki_keywords" "flag power"
+        (at 0 0 0)
+        (show_name no)
+        (do_not_autoplace no)
+        (hide yes)
+        (effects
+          (font
+            (size 1.27 1.27))))
+      (symbol "PWR_FLAG_0_0"
+        (pin power_out line
+          (at 0 0 90)
+          (length 0)
+          (name ""
+            (effects
+              (font
+                (size 1.27 1.27))))
+          (number "1"
+            (effects
+              (font
+                (size 1.27 1.27))))))
+      (symbol "PWR_FLAG_0_1"
+        (polyline
+          (pts
+            (xy 0 0)
+            (xy 0 1.27)
+            (xy -1.016 1.905)
+            (xy 0 2.54)
+            (xy 1.016 1.905)
+            (xy 0 1.27))
+          (stroke
+            (width 0)
+            (type default))
+          (fill
+            (type none))))
       (embedded_fonts no)))
   (wire
     (pts
@@ -1227,6 +1313,11 @@
       (xy 118.11 31.75)
       (xy 118.11 35.56))
     (uuid "e0364fc6-ee22-53b9-a44f-64abe62cf8d5"))
+  (wire
+    (pts
+      (xy 86.36 35.56)
+      (xy 93.98 35.56))
+    (uuid "9901d1a5-64c7-521c-a4f0-29dd7efdc691"))
   (junction
     (at 105.41 67.31)
     (uuid "14b21246-22c1-43d6-a754-b6b0e8a0ca15"))
@@ -1567,7 +1658,7 @@
           (size 1.27 1.27)))
       (hide yes)))
   (symbol
-    (lib_id "Reference:lmr70503-bga8-buckboost")
+    (lib_id "Reference:Reference_lmr70503_bga8_buckboost")
     (lib_name "Reference_lmr70503_bga8_buckboost")
     (at 55.88 68.58 0)
     (unit 1)
@@ -2335,6 +2426,62 @@
           (size 1.27 1.27))))
     (property "Description" "Power symbol creates a global label with name \"GND\" , ground"
       (at 118.11 35.56 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 93.98 20.32 0)
+    (unit 1)
+    (uuid "824c200d-ec5a-55f2-ad6a-37b0269fad6e")
+    (in_bom no)
+    (instances
+      (project "lmr70503-bga8-buckboost"
+        (path "/b5a6b0c1-6389-4e02-a773-2642f4e0466d"
+          (reference "#FLG1")
+          (unit 1))))
+    (property "Reference" "#FLG1"
+      (at 93.98 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 93.98 22.86 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 93.98 20.32 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes)))
+  (symbol
+    (lib_id "power:PWR_FLAG")
+    (at 86.36 35.56 0)
+    (unit 1)
+    (uuid "7f745fc6-4ff9-5901-a194-eb31c68de932")
+    (in_bom no)
+    (instances
+      (project "lmr70503-bga8-buckboost"
+        (path "/b5a6b0c1-6389-4e02-a773-2642f4e0466d"
+          (reference "#FLG2")
+          (unit 1))))
+    (property "Reference" "#FLG2"
+      (at 86.36 38.1 0)
+      (effects
+        (font
+          (size 1.27 1.27)))
+      (hide yes))
+    (property "Value" "PWR_FLAG"
+      (at 86.36 38.1 0)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Special symbol for telling ERC where power comes from"
+      (at 86.36 35.56 0)
       (effects
         (font
           (size 1.27 1.27)))

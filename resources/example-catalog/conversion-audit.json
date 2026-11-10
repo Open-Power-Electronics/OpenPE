@@ -1,11 +1,11 @@
 [
   {
     "id": "reference-lm2596-to220-5-buck",
-    "sha256": "7fb0cba01bb6bb0b7454d5adad79510c7cf83f0f6d075b887a9ed2573be06fb6",
-    "bytes": 250400,
+    "sha256": "6f62ce6a66f60d10638a8804430775948718c3e944f1ae26db0975f8b59ab2c7",
+    "bytes": 415072,
     "schematic": {
-      "components": 21,
-      "wires": 33
+      "components": 23,
+      "wires": 34
     },
     "pcb": {
       "footprints": 9,
@@ -105,11 +105,11 @@
   },
   {
     "id": "reference-tps61046-bga6-boost",
-    "sha256": "fdb6a3891f695c9d96211afd74449ce9883fb93fd7dbb8009fa4f0900069518d",
-    "bytes": 237301,
+    "sha256": "9ed8a77bfe514bfc2cb0ea0cd50b000a682ea97424d823dbf20775538783b6b6",
+    "bytes": 316220,
     "schematic": {
-      "components": 20,
-      "wires": 34
+      "components": 22,
+      "wires": 35
     },
     "pcb": {
       "footprints": 10,
@@ -207,17 +207,18 @@
       ]
     },
     "copperFill": {
-      "operation": "fillCopperZones",
+      "operation": "KiCad refill",
+      "version": "10.0.1",
       "minimumClearanceMm": 0.25
     }
   },
   {
     "id": "reference-lm2735-msop8-sepic",
-    "sha256": "3b50e01ce5025316cdc3eb8d114ee5c77e1ab46f6f55d60c70dc2a33eacc378b",
-    "bytes": 271535,
+    "sha256": "ae3037021a552b6fb0257494fee124f4989b5bf526e24fd1603120fb1eb27b75",
+    "bytes": 450599,
     "schematic": {
-      "components": 26,
-      "wires": 48
+      "components": 28,
+      "wires": 49
     },
     "pcb": {
       "footprints": 14,
@@ -317,11 +318,11 @@
   },
   {
     "id": "reference-lm25017-wson8-flybuck",
-    "sha256": "9a597f0552768a3502d037b3cb79377ff7b572b1471442188789a09f8cd4a248",
-    "bytes": 648293,
+    "sha256": "a80eda1384e0463ebd0042c312f35c982bb1a39d630f52511f14e44e39dd3850",
+    "bytes": 662711,
     "schematic": {
-      "components": 37,
-      "wires": 73
+      "components": 40,
+      "wires": 75
     },
     "pcb": {
       "footprints": 21,
@@ -501,11 +502,11 @@
   },
   {
     "id": "reference-lm5001-soic8-boost",
-    "sha256": "4efdf68de9835248285beb03de45e2e5ebe82897c993c5308ae795cab194e5e1",
-    "bytes": 268896,
+    "sha256": "4b158796e63ab98a1ef9547c3f2b1e142cb743fa0b2f152b2998e07561d26b76",
+    "bytes": 447286,
     "schematic": {
-      "components": 28,
-      "wires": 46
+      "components": 30,
+      "wires": 47
     },
     "pcb": {
       "footprints": 15,
@@ -605,11 +606,11 @@
   },
   {
     "id": "reference-lm27761-wson8-pump",
-    "sha256": "877b4bb576c46596703f37b43dd93f42f7a08a197dc7e59c40d5438933f88f02",
-    "bytes": 269977,
+    "sha256": "e757c9aa8550326d76998fe316f6b621c643faa88898e50c8df7fe945a149ee7",
+    "bytes": 444985,
     "schematic": {
-      "components": 20,
-      "wires": 46
+      "components": 22,
+      "wires": 47
     },
     "pcb": {
       "footprints": 9,
@@ -709,11 +710,11 @@
   },
   {
     "id": "reference-lmr12010-sot236-buck",
-    "sha256": "56550b433ec54b3e67d4ff46589db21eb9b122ff64905a26aa1b00bcc80686d9",
-    "bytes": 369220,
+    "sha256": "1131df63a023e49688bcb5ed810ad4f89be0d78f0cf4ba9f80fa638f98383e51",
+    "bytes": 602248,
     "schematic": {
-      "components": 29,
-      "wires": 54
+      "components": 31,
+      "wires": 55
     },
     "pcb": {
       "footprints": 17,
@@ -813,11 +814,11 @@
   },
   {
     "id": "reference-lmr70503-bga8-buckboost",
-    "sha256": "88e8311113667f4bc0b676bf062633454d6273824558d15ae6a6ff90326db2d6",
-    "bytes": 236677,
+    "sha256": "f7badc4084e9f1c4ef5c9df1867916abd0f46a2f7054ba5d3ba987078a43288d",
+    "bytes": 394661,
     "schematic": {
-      "components": 22,
-      "wires": 47
+      "components": 24,
+      "wires": 48
     },
     "pcb": {
       "footprints": 13,
@@ -917,11 +918,11 @@
   },
   {
     "id": "reference-lm2598-to220-7-buck",
-    "sha256": "b0babe1cb797cd6285628f0f8896b5c1f72b3556ed9dc5696ac1cc4d2514b22c",
-    "bytes": 332904,
+    "sha256": "7e4fe6c8a4257e79861f3c096d8837ee23a9e7830dd6de7002df51cb0aa5bb2b",
+    "bytes": 547572,
     "schematic": {
-      "components": 30,
-      "wires": 52
+      "components": 32,
+      "wires": 53
     },
     "pcb": {
       "footprints": 16,

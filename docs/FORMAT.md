@@ -116,6 +116,14 @@ editing and geometry limits.
 
 ## Source transactions
 
+Applied DRC minima are native project settings under
+`board.design_settings.rules` in `.kicad_pro`. OpenPE reads the saved values,
+uses its defaults for absent fields and edits only the changed recognized
+threshold keys. The shared minimum drill diameter uses
+`min_through_hole_diameter` for both via and pad checks. The ordinary project
+transaction carries these edits through Source, recovery, undo, Save and Save as.
+See [Design rules](DESIGN-RULES.md#layout-drc) for coverage and precedence.
+
 Source lists regular project folders and files, including empty folders,
 `footprints/`, `symbols/`, `circuits/`, `models/`, native `3D/`, `spice/` and
 `thermal/`. Native files keep validated editing; fully loaded ordinary text files

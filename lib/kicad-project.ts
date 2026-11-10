@@ -1,6 +1,15 @@
 import { emptyCircuit, parseCircuitTree, type Circuit } from './circuit';
 import { parseKiCadPCB, expandNativeBoardZones } from './kicad-pcb';
 import { nativeIdentity } from './kicad-project-identity';
+import {
+  loadKiCadPCBDesignRuleLimits,
+  pcbDesignRuleLimitKeys,
+  readKiCadPCBDesignRuleLimits,
+  resolvePCBDesignRules,
+  setKiCadPCBDesignRuleLimits,
+  workbenchPCBDesignRules,
+  type PCBDesignRuleThresholds,
+} from './design-rule-checks';
 import { toProjectDocument } from './project-document';
 import { rememberNativeSourceJson } from './project-json';
 import {
@@ -339,6 +348,7 @@ function parseFiles(bundle: KiCadProjectFiles, owner?: Project): ParsedNative {
   const projectFile = bundle.files.find((file) => ext(file.name, '.kicad_pro'));
   if (projectFile) {
     const settings = projectSettings(projectFile.source);
+    readKiCadPCBDesignRuleLimits(settings);
     referencedModels(settings);
     if (
       settings.text_variables &&
@@ -1132,6 +1142,41 @@ export function replaceNativeProjectFile(project: Project, name: string, source:
     ...bundle,
     files: bundle.files.map((item) => (item === file ? { ...item, source } : item)),
   });
+}
+
+export function projectPCBDesignRules(files: KiCadProjectFiles | undefined) {
+  const source = files?.files.find((file) => ext(file.name, '.kicad_pro'))?.source;
+  return resolvePCBDesignRules(
+    loadKiCadPCBDesignRuleLimits(source, workbenchPCBDesignRules),
+    workbenchPCBDesignRules,
+  );
+}
+
+/** Keep live geometry and sibling sources intact when changing native board minima. */
+export function withNativePCBDesignRuleLimits(
+  project: Project,
+  thresholds: Partial<PCBDesignRuleThresholds>,
+): Project {
+  const current = projectPCBDesignRules(project.nativeFiles);
+  const changed = Object.fromEntries(
+    pcbDesignRuleLimitKeys
+      .filter((key) => thresholds[key] !== undefined && thresholds[key] !== current[key])
+      .map((key) => [key, thresholds[key]]),
+  );
+  if (!Object.keys(changed).length) return project;
+  const bundle = project.nativeFiles?.files.some((file) => ext(file.name, '.kicad_pro'))
+    ? project.nativeFiles
+    : projectNativeFilesSnapshot(project);
+  const file = bundle.files.find((item) => ext(item.name, '.kicad_pro'))!;
+  const settings = setKiCadPCBDesignRuleLimits(projectSettings(file.source), changed);
+  const source = JSON.stringify(settings, null, 2) + '\n';
+  return {
+    ...project,
+    nativeFiles: {
+      ...bundle,
+      files: bundle.files.map((item) => (item === file ? { ...item, source } : item)),
+    },
+  };
 }
 
 /** Explicit name edits persist in project settings without renaming any native file. */

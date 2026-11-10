@@ -9,7 +9,9 @@ for (const example of referenceExamples) {
     const project = createReferenceExample(example.id);
     const board = project.pcb!;
     const before = structuredClone(board);
-    const report = runPCBDesignRules(board);
+    const report = runPCBDesignRules(board, {
+      useZoneClearance: example.id === 'reference-tps61046-bga6-boost',
+    });
     assert.deepEqual(
       report.issues.filter((issue) => issue.severity === 'error'),
       [],

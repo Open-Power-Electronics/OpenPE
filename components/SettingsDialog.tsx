@@ -1,6 +1,14 @@
 'use client';
-import { useId, useState } from 'react';
-import { Bot, CheckCircle2, LoaderCircle, RotateCw, Sun, Unplug } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import {
+  Bot,
+  CheckCircle2,
+  ClipboardCheck,
+  LoaderCircle,
+  RotateCw,
+  Sun,
+  Unplug,
+} from 'lucide-react';
 import type { Agent } from './Chat';
 import AppearanceSettings, { type useAppearance } from './AppearanceSettings';
 import AgentLogo from './AgentLogo';
@@ -9,6 +17,7 @@ import { agentProviders } from '@/lib/agent-providers';
 import { useAgentSettings } from './AgentSettings';
 import Select from './Select';
 import type { FollowUpMode } from '@/lib/agent-settings';
+import RuleSettings, { type RuleSettingsActions, type RuleSettingsProps } from './RuleSettings';
 
 export default function SettingsDialog({
   appearance,
@@ -18,6 +27,7 @@ export default function SettingsDialog({
   onDetect,
   onClose,
   initialSection = 'appearance',
+  ruleSettings,
 }: {
   appearance: ReturnType<typeof useAppearance>;
   agents: Agent[];
@@ -25,13 +35,21 @@ export default function SettingsDialog({
   error: string;
   onDetect: () => Promise<void>;
   onClose: () => void;
-  initialSection?: 'appearance' | 'agents';
+  initialSection?: 'appearance' | 'agents' | 'rules';
+  ruleSettings?: RuleSettingsProps;
 }) {
   const [section, setSection] = useState<string>(initialSection);
+  const [visitedRules, setVisitedRules] = useState(initialSection === 'rules');
+  const ruleActions = useRef<RuleSettingsActions>(null);
+  function selectSection(next: string) {
+    if (next === 'rules') setVisitedRules(true);
+    setSection(next);
+  }
   const agentSettings = useAgentSettings();
   const id = useId();
   const sections = [
     { id: 'appearance', label: 'Appearance', icon: Sun },
+    { id: 'rules', label: 'Rule', icon: ClipboardCheck },
     { id: 'agents', label: 'Agents', icon: Bot },
   ];
   return (
@@ -40,7 +58,17 @@ export default function SettingsDialog({
       className="settings-dialog"
       onClose={onClose}
       footer={
-        <button className="dialog-button primary" onClick={onClose}>
+        <button
+          type="button"
+          className="dialog-button primary"
+          onPointerDown={(event) => {
+            if (section === 'rules' && ruleActions.current?.isComposing()) event.preventDefault();
+          }}
+          onClick={() => {
+            if (section === 'rules' && ruleSettings && !ruleActions.current?.apply()) return;
+            onClose();
+          }}
+        >
           Done
         </button>
       }
@@ -52,6 +80,7 @@ export default function SettingsDialog({
           aria-label="Settings sections"
           aria-orientation="vertical"
           onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
             if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
             event.preventDefault();
             const index = sections.findIndex((item) => item.id === section);
@@ -62,7 +91,7 @@ export default function SettingsDialog({
                   ? sections.length - 1
                   : (index + (event.key === 'ArrowDown' ? 1 : -1) + sections.length) %
                     sections.length;
-            setSection(sections[next].id);
+            selectSection(sections[next].id);
             event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
           }}
         >
@@ -75,7 +104,7 @@ export default function SettingsDialog({
               aria-controls={id + '-' + key}
               aria-selected={section === key}
               tabIndex={section === key ? 0 : -1}
-              onClick={() => setSection(key)}
+              onClick={() => selectSection(key)}
             >
               <Icon size={18} aria-hidden="true" />
               {label}
@@ -92,6 +121,26 @@ export default function SettingsDialog({
         >
           <div className="settings-pane-content">
             <AppearanceSettings settings={appearance} />
+          </div>
+        </div>
+        <div
+          className="settings-pane"
+          role="tabpanel"
+          id={id + '-rules'}
+          aria-labelledby={id + '-rules-tab'}
+          hidden={section !== 'rules'}
+          tabIndex={0}
+        >
+          <div className="settings-pane-content">
+            {visitedRules &&
+              (ruleSettings ? (
+                <RuleSettings {...ruleSettings} ref={ruleActions} />
+              ) : (
+                <>
+                  <h3 className="settings-section-heading">Rule</h3>
+                  <p>Open a project to configure its design rules.</p>
+                </>
+              ))}
           </div>
         </div>
         <div

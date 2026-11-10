@@ -8,9 +8,9 @@
   display: flex;
   flex-direction: column;
   position: absolute;
-  inset-inline-start: 8px;
+  inset-inline-start: var(--status-control-inset);
   inset-block-end: 8px;
-  inline-size: min(480px, calc(100% - 16px));
+  inline-size: min(var(--rule-panel-width, 480px), calc(100% - 2 * var(--status-control-inset)));
   block-size: var(--bottom-panel-size, min(300px, 45vh));
   min-inline-size: 0;
   container-type: inline-size;
@@ -97,6 +97,7 @@
   margin: var(--properties-group-gap) 0;
   padding: 4px 0;
   font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 
 .summary > span {
@@ -105,12 +106,16 @@
   gap: 6px;
 }
 
-.summary > span:first-child > svg {
+.summary [data-count-state='error'] {
   color: var(--error-ink);
 }
 
-.summary > span:nth-child(2) {
-  color: var(--muted);
+.summary [data-count-state='warning'] {
+  color: var(--rule-warning-ink);
+}
+
+.summary [data-count-state='clear'] {
+  color: var(--brand-ink);
 }
 
 .issues {
@@ -172,27 +177,91 @@
   font-size: var(--font-caption);
 }
 
-.electrical .body {
-  overflow-x: hidden;
+.erc,
+.drc {
+  --rule-panel-width: 384px;
+  block-size: var(--bottom-panel-size, min(240px, 45vh));
 }
 
-.electrical .issues {
+.panel[data-fit-content] {
+  block-size: auto;
+  max-block-size: min(240px, 45vh);
+}
+
+/* A focused grip stays available until the panel hands focus to Close. */
+.panel[data-fit-content] > :global(.bottom-panel-resize):not(:focus) {
+  display: none;
+}
+
+.drc {
+  font-size: max(14px, var(--font-body));
+}
+
+.drc .body {
+  font-size: max(13px, var(--font-control));
+}
+
+.drc :is(.title, .runStatus, .ruleName) {
+  font-size: inherit;
+}
+
+.drc .issues {
   inline-size: auto;
   min-inline-size: 0;
 }
 
-.electrical .issue {
+.drc .issue {
   display: block;
   overflow-wrap: anywhere;
 }
 
-.electrical .message,
-.electrical .ruleName {
+.drc .message,
+.drc .ruleName {
   white-space: normal;
 }
 
-.electrical .ruleName {
-  margin-inline-end: 4px;
+.drc .issueHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-block-end: 2px;
+}
+
+.drc .ruleName {
+  font-weight: 600;
+}
+
+.issueTags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-inline-start: auto;
+  min-inline-size: 0;
+  text-align: end;
+}
+
+.issueTag {
+  min-inline-size: 0;
+  padding: 0 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.issueTag[data-kind='net'] {
+  background: color-mix(in srgb, var(--surface) 93%, var(--brand-ink));
+  color: var(--brand-ink);
+}
+
+.issueTag[data-kind='layer'] {
+  background: var(--tint);
+}
+
+.drc .issue {
+  padding: 8px 10px;
 }
 
 .statusMessage,
@@ -201,6 +270,14 @@
   margin: var(--properties-group-gap) 0;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.empty.clearResult {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--brand-ink);
 }
 
 .statusMessage {
@@ -220,53 +297,236 @@
   text-align: center;
 }
 
+.panel[data-fit-content] .clearResult {
+  margin-block-end: 0;
+  padding-block: 8px;
+}
+
 .limits {
+  display: grid;
+  gap: 12px;
   min-width: 0;
   margin: 0;
-  padding: 4px 0 var(--properties-group-gap);
+  padding: 8px 0 4px;
+  border: 0;
+}
+
+.quickLimits {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 0;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
 }
 
+.quickLimits .limitGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.addQuickLimit {
+  min-inline-size: 0;
+  align-self: end;
+}
+
+.addQuickLimit > :global(.select-trigger) {
+  inline-size: 100%;
+  justify-content: center;
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+  font-size: inherit;
+}
+
+.addQuickLimit > :global(.select-trigger) > :global(.select-value) {
+  flex: 0 1 auto;
+  color: inherit;
+}
+
+.addQuickLimitMenu:global(.select-popup) {
+  width: max-content;
+}
+
+.addQuickLimitMenu:global(.select-popup) :global(.select-option[role='option']) > span > strong {
+  overflow: visible;
+  white-space: normal;
+  font-size: max(13px, var(--font-control));
+}
+
+.addQuickLimitMenu :global(.select-option-check) {
+  display: none;
+}
+
+.quickLimits .limitField {
+  display: grid;
+  align-content: space-between;
+  gap: 4px;
+}
+
+@container (width < 24em) {
+  .quickLimits .fieldControls :global(.quantity-input) {
+    flex-direction: column;
+    --quantity-unit-width: auto;
+  }
+
+  .quickLimits .fieldControls :global(.quantity-input.quantity-input) > input {
+    flex: auto;
+    width: 100%;
+  }
+
+  .quickLimits .fieldControls :global(.quantity-input.quantity-input) > :global(.select-trigger) {
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--line-soft);
+  }
+}
+
 .limitGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--properties-row-gap) var(--properties-column-gap);
-}
-
-@container (width < 420px) {
-  .limitGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (width < 260px) {
-  .limitGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.limitGrid > label {
-  display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 1fr auto;
-  align-items: start;
-  gap: var(--properties-label-gap);
-  min-width: 0;
-  color: var(--muted);
-  font-size: var(--font-small);
-  line-height: 1.4;
 }
 
-.limitGrid > label > span:first-child {
+.limitField {
   min-width: 0;
+  color: var(--text);
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-.limitGrid :global(.quantity-input) {
-  --quantity-unit-width: max(30px, calc(var(--font-small) * 2.2));
+.fieldControls {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.limitGrid :global(.quantity-input):has(input[aria-invalid='true']) {
+.fieldControls :global(.quantity-input) {
+  flex: 1 1 6.8em;
+  --quantity-unit-width: max(32px, 2.3em);
+}
+
+.fieldControls :global(.quantity-input.quantity-input) > input {
+  padding-inline: 4px 5px;
+}
+
+.fieldControls :global(.quantity-input.quantity-input) > :is(input, :global(.select-trigger)) {
+  font-size: inherit;
+}
+
+.fieldControls :global(.quantity-input):has(input[aria-invalid='true']) {
   border-color: var(--error-ink);
+}
+
+.severitySelect {
+  min-width: 0;
+}
+
+.severitySelect > :global(.select-trigger) {
+  inline-size: 100%;
+  font-size: inherit;
+}
+
+.severityMenu {
+  --menu-width: max(170px, 11.5em);
+  font-size: max(14px, var(--font-body));
+}
+
+.severityMenu :global(.select-option) strong {
+  font-size: inherit;
+}
+
+:is(.severitySelect, .severityMenu) .severityError {
+  color: var(--error-ink);
+}
+
+:is(.severitySelect, .severityMenu) .severityWarning {
+  color: var(--rule-warning-ink);
+}
+
+.sourceHeading {
+  margin: 0 0 5px;
+  color: var(--text-strong);
+  font: inherit;
+  font-weight: 600;
+}
+
+.ruleSettings {
+  font-size: max(14px, var(--font-body));
+}
+
+.resetRules:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
+.resetRules:focus-visible {
+  outline: 1px solid var(--interface-green);
+  outline-offset: 2px;
+}
+
+.resetRules:disabled {
+  opacity: 0.55;
+}
+
+.ruleSettings .limitField {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding-block: 6px;
+}
+
+.ruleSettings .limitField + .limitField {
+  border-top: 1px solid var(--line-soft);
+}
+
+.ruleSettings .limitField > :is(label, span) {
+  flex: 1 1 11em;
+  min-width: 0;
+}
+
+.ruleSettings .fieldControls {
+  min-width: 0;
+  max-inline-size: 100%;
+}
+
+.ruleSettings .severitySelect,
+.ruleSettings .fieldControls :global(.quantity-input) {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+}
+
+.ruleSettings .severitySelect {
+  inline-size: 9.5em;
+}
+
+.ruleSettings .fieldControls :global(.quantity-input) {
+  inline-size: 8em;
+}
+
+.settingsTabs:global(.editor-visualization-tabs) {
+  flex-wrap: wrap;
+  padding-inline: 0;
+}
+
+.settingsTabs:global(.editor-visualization-tabs) > :global(.editor-dock-tab) {
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+  font-size: inherit;
+}
+
+.ruleSettingsError {
+  position: sticky;
+  inset-block-end: 0;
+  margin: 12px 0 0;
+  padding-block: 8px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface);
+  color: var(--error-ink);
+  line-height: 1.4;
+}
+
+.settingsError {
+  margin: 6px 0;
+  color: var(--error-ink);
+  line-height: 1.4;
 }

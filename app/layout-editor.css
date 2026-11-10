@@ -451,7 +451,7 @@
   text-align: center;
   color: var(--muted);
 }
-.layout-canvas.tool-select .layout-footprint {
+.layout-canvas.tool-select:not(.is-analysis-probing) .layout-footprint {
   cursor: move;
 }
 .layout-footprint.is-placement {
@@ -665,17 +665,17 @@
   overscroll-behavior: contain;
   scrollbar-width: none;
 }
-.layout-inspector-footer .property-fill-action {
+.property-tabs-action .property-fill-action {
   --fill-action-ink: light-dark(#985021, #e4a56e);
 
   width: 30px;
   height: 30px;
   color: var(--fill-action-ink);
 }
-.layout-inspector-footer .property-fill-action:hover:not(:disabled) {
+.property-tabs-action .property-fill-action:hover:not(:disabled) {
   background: color-mix(in srgb, var(--fill-action-ink) 10%, transparent);
 }
-.layout-inspector-footer .property-fill-action:disabled {
+.property-tabs-action .property-fill-action:disabled {
   color: color-mix(in srgb, var(--fill-action-ink) 55%, var(--surface));
 }
 .layout-part-inspector .part-properties input {
@@ -836,7 +836,7 @@
 .layout-properties-heading .layout-properties-lock {
   margin: 0;
 }
-.layout-properties-heading + .layout-properties-fields > .layout-property-section:first-child > h3 {
+.layout-properties-heading ~ .layout-properties-fields > .layout-property-section:first-child > h3 {
   display: none;
 }
 .layout-properties-fields {
@@ -1239,10 +1239,10 @@
   scrollbar-gutter: stable;
 }
 
-.layout-parasitics-note {
+.layout-parasitics-status {
   margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
+  color: var(--text-strong);
+  font-size: var(--font-control);
 }
 
 .layout-parasitics-body .dialog-error {
@@ -1254,6 +1254,7 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   min-height: var(--editor-footer-height);
   padding: 2px 12px;
   border-top: 1px solid var(--line-soft);

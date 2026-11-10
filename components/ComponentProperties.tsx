@@ -7,7 +7,9 @@ import PartIdentity from './PartIdentity';
 import PartProperties from './PartProperties';
 import FootprintIdentity from './FootprintIdentity';
 import FootprintModels from './FootprintModels';
-import { NumberField, TextField, PropertySelect as Select } from './LayoutPropertyFields';
+import { NumberField, TextField } from './LayoutPropertyFields';
+import Select from './Select';
+import { PropertyActionRow } from './PropertyTabs';
 import { preparePCBFootprintProperties, type PCBFootprintProperties } from '@/lib/pcb-properties';
 export type ComponentPropertiesProps = {
   footprint: Footprint;
@@ -20,6 +22,7 @@ export type ComponentPropertiesProps = {
   capabilityHost?: CapabilityHost;
   onRequestSave?: (saveAs: boolean) => void;
   actions?: ReactNode;
+  tabAction?: ReactNode;
   showIdentity?: boolean;
   fileId?: string;
   projectSource?: string;
@@ -47,6 +50,7 @@ export default function ComponentProperties({
   onRequestSave,
   onSavePartProperties,
   actions,
+  tabAction,
   showIdentity = true,
   fileId,
   projectSource,
@@ -69,17 +73,21 @@ export default function ComponentProperties({
         capabilityHost={capabilityHost}
         onChange={(models) => update({ models })}
       />
-      <Select
-        active={active && geometryEditable}
-        label="Footprint side"
-        displayLabel="Side"
-        value={footprint.side}
-        options={[
-          { value: 'front', label: 'Front' },
-          { value: 'back', label: 'Back' },
-        ]}
-        onChange={(side) => side === footprint.side || update({ side: side as Footprint['side'] })}
-      />
+      <div className="property-field">
+        <span className="property-parameter-name">Side</span>
+        <Select
+          active={active && geometryEditable}
+          label="Footprint side"
+          value={footprint.side}
+          options={[
+            { value: 'front', label: 'Front' },
+            { value: 'back', label: 'Back' },
+          ]}
+          onChange={(side) =>
+            side === footprint.side || update({ side: side as Footprint['side'] })
+          }
+        />
+      </div>
     </>
   );
   const geometryFields = (
@@ -121,6 +129,7 @@ export default function ComponentProperties({
             fileId={fileId}
             getRevision={getRevision}
             spiceAvailable={spiceAvailable}
+            tabAction={tabAction}
             modelFields={assignmentFields}
             geometryFields={geometryFields}
             active={active && !!onSavePartProperties}
@@ -136,6 +145,7 @@ export default function ComponentProperties({
       ) : (
         <>
           {showIdentity && <FootprintIdentity footprint={footprint} actions={actions} />}
+          <PropertyActionRow action={tabAction} />
           <div className="layout-property-section">
             <div className="property-primary layout-property-primary">
               <TextField
