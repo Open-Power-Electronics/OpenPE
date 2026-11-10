@@ -14,7 +14,7 @@ const sources = [
   ['ti-models', 'Texas Instruments models', '/licenses/ti-models.txt'],
   ['example-models', 'Example models', '/licenses/example-models.txt'],
   ['ngspice', 'ngspice', '/licenses/ngspice.txt'],
-  ['thermal', 'Thermal tools', '/licenses/thermal.txt'],
+  ['thermal', 'Layout Thermal tools', '/licenses/thermal.txt'],
   ['ai-pcb-layout', 'PE Layout Skill', '/licenses/ai-pcb-layout.txt'],
   ['occt-import-js', 'STEP parser', '/licenses/occt-import-js.txt'],
   ['pdf-reader', 'PDF reader', '/licenses/pdf-reader.txt'],

@@ -2,6 +2,12 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { api } from './bridge';
 import type { CapabilityHost } from '@/api/capabilities';
+import {
+  analyzeLayoutParasitics,
+  PARASITICS_THICKNESS_RANGE,
+  type ParasiticsInput,
+} from './layout-parasitics';
+import type { PCB } from './pcb';
 
 export type PluginAction = 'install' | 'uninstall' | 'enable' | 'disable';
 export type WorkbenchPlugin = {
@@ -32,6 +38,7 @@ export type WorkbenchPluginCatalog = {
 export const SPICE_PLUGIN_ID = 'spice-simulation@openpe';
 export const THERMAL_PLUGIN_ID = 'pcb-thermal@openpe';
 export const PCB_DESIGN_PLUGIN_ID = 'ai-pcb-layout@openpe';
+export const LAYOUT_PARASITICS_PLUGIN_ID = 'layout-parasitics@openpe';
 export const pcbDesignDocuments = [
   'workflow',
   'analysis-and-measurement',
@@ -110,7 +117,7 @@ export function useWorkbenchPlugins() {
   return state;
 }
 
-export function workbenchPluginAvailability(id: string): boolean | string {
+export function workbenchPluginAvailability(id: string): true | string {
   if (!snapshot.catalog)
     return snapshot.error || 'OpenPE plugin state is still loading. Retry when Plugins has loaded.';
   const plugin = snapshot.catalog.plugins.find((plugin) => plugin.id === id);
@@ -146,7 +153,14 @@ export function registerWorkbenchPluginCapabilities(host: CapabilityHost) {
         required: ['action', 'id'],
         properties: {
           action: { enum: ['install', 'uninstall', 'enable', 'disable'] },
-          id: { enum: [SPICE_PLUGIN_ID, THERMAL_PLUGIN_ID, PCB_DESIGN_PLUGIN_ID] },
+          id: {
+            enum: [
+              SPICE_PLUGIN_ID,
+              THERMAL_PLUGIN_ID,
+              PCB_DESIGN_PLUGIN_ID,
+              LAYOUT_PARASITICS_PLUGIN_ID,
+            ],
+          },
         },
         additionalProperties: false,
       },
@@ -185,4 +199,65 @@ export function registerWorkbenchPluginCapabilities(host: CapabilityHost) {
     listeners.delete(listener);
     for (const unregister of dispose) unregister();
   };
+}
+
+/** Read the originating project's accepted board through the shared GUI and Agent host. */
+export function registerLayoutParasiticsCapability(
+  host: CapabilityHost,
+  read: () => {
+    project: { pcb: PCB | null } | null;
+    revision: number;
+    sourceDraft: string | null;
+    editingBlocked: string | null;
+  },
+) {
+  function available(state = read()) {
+    const plugin = workbenchPluginAvailability(LAYOUT_PARASITICS_PLUGIN_ID);
+    if (plugin !== true) return plugin;
+    if (state.editingBlocked) return state.editingBlocked;
+    if (state.sourceDraft !== null)
+      return 'Apply the Source edits before measuring PCB resistance.';
+    return !!state.project?.pcb || 'This project has no PCB layout.';
+  }
+  const identity = { type: 'string', minLength: 1, maxLength: 200 };
+  const thickness = {
+    type: 'number',
+    minimum: PARASITICS_THICKNESS_RANGE.min,
+    maximum: PARASITICS_THICKNESS_RANGE.max,
+  };
+  return host.register<ParasiticsInput & { boardId: string }>({
+    owner: 'plugin',
+    plugin: LAYOUT_PARASITICS_PLUGIN_ID,
+    id: 'parasitics.measure',
+    kind: 'query',
+    description:
+      'Estimate two-terminal DC resistance and shortest modeled path length between same-net pad or via IDs on the current PCB. Copper thickness and via plating are in mm. Inspect Layout for board and endpoint IDs.',
+    inputSchema: {
+      type: 'object',
+      required: ['boardId', 'startId', 'endId'],
+      properties: {
+        boardId: identity,
+        startId: identity,
+        endId: identity,
+        copperThicknessMm: thickness,
+        viaPlatingMm: thickness,
+      },
+      additionalProperties: false,
+    },
+    available: () => available(),
+    handler: ({ boardId, ...input }, { expectedRevision, signal }) => {
+      const state = read();
+      const gate = available(state);
+      if (gate !== true) throw new Error(gate);
+      signal.throwIfAborted();
+      if (expectedRevision !== undefined && expectedRevision !== String(state.revision))
+        throw new Error(
+          'The project changed before measurement. Measure the current layout again.',
+        );
+      const board = state.project?.pcb;
+      if (!board || board.id !== boardId)
+        throw new Error('This PCB layout is no longer in the project.');
+      return { boardId, revision: state.revision, ...analyzeLayoutParasitics(board, input) };
+    },
+  });
 }

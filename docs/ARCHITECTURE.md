@@ -4,7 +4,7 @@
 
 The separate [architecture vision](../assets/vision.drawio) retains the original Page-2 concept and an adapted future direction. Its dashed goals do not define current capabilities; [assets/README.md](../assets/README.md) explains the two sheets.
 
-OpenPE is an Electron desktop application with a Next.js/React renderer and authenticated loopback Express service. Packaged Express runs in Electron's main process. Bundled SPICE Simulation, Thermal FEM and PE Layout Skill share this application/source tree with independent lifecycle gates; there is no general workbench extension loader or separate plugin sandbox.
+OpenPE is an Electron desktop application with a Next.js/React renderer and authenticated loopback Express service. Packaged Express runs in Electron's main process. SPICE Simulation, Layout Thermal, PE Layout Skill and Layout Parasitics are bundled in the application with independent lifecycle gates. The catalog is an allowlist of those bundled features.
 
 [Core](CORE.md) owns transactions; [API](API.md) owns executable schemas/transports; [Format](FORMAT.md) owns native content; [Design](../DESIGN.md) owns visual interaction. [README](../README.md) covers setup and [AGENTS](../AGENTS.md) defines engineering/check requirements. Feature contracts own their detailed algorithms and UI-independent limits.
 
@@ -21,9 +21,11 @@ flowchart TB
     Core --> Domain[Pure domain models / geometry: lib]
     GUI <--> CopperWorker[Renderer copper preview Worker]
     CopperWorker --> Domain
-    API --> Plugin[Plugin: SPICE / Thermal / PCB guidance]
+    API --> Plugin[Plugin: SPICE / Layout Thermal / PCB guidance]
+    API --> Parasitics[Plugin: Layout Parasitics]
     API --> Ports[Host adapters: files / Git / libraries / CAD preparation]
     Plugin --> Ports
+    Parasitics -->|Current accepted PCB| Core
     Ports --> Host[Electron / authenticated service]
     GUI -->|CAD preview HTTP| Host
     GUI -->|Recovery IPC / HTTP| Host
@@ -38,7 +40,7 @@ Arrows describe calls/responsibility, not processes. Core events and validated r
 | Agent               | Chat, provider catalog, `server/agents.mjs` and restricted adapters                                  | Origin-bound process/stream/tool adaptation and reviews                         |
 | Uniform API         | `api/capabilities.ts`, `api/capability-schema.ts`                                                    | Independent schemas, discovery, dispatch, cancellation/events                   |
 | Core                | `core/project-core.ts`, command registrations, pure `lib/` domain code                               | Immutable accepted document, drafts, revisions and whole-project undo           |
-| Plugin              | Feature capabilities/components, `server/spice*.mjs`, `server/thermal*.mjs`, `server/pcb-design.mjs` | Bundled feature lifecycle, compilation, execution and private results           |
+| Plugin              | Feature capabilities/components, `lib/layout-parasitics.ts`, `server/spice*.mjs`, `server/thermal*.mjs`, `server/pcb-design.mjs` | Bundled feature lifecycle, analysis, guidance and private solver results |
 | Host infrastructure | `electron/`, `server/` and named `lib/*-capabilities.ts` ports                                       | Grants, persistence, native dialogs, verified resources and process I/O         |
 
 ### Core abstraction levels
@@ -134,6 +136,7 @@ STEP conversion uses bounded reusable OCCT worker threads with fixed tessellatio
 | Solver compilation, private execution derivatives, settings/results/probes                                     | Respective bundled simulation feature                                     |
 | Reviewed controller datasheets                                                                                 | Host reference adapter; internal resource catalog, outside document state |
 | PE Layout Skill workflow/reference loading and turn injection                                                  | Bundled plugin plus host infrastructure                                   |
+| Layout Parasitics DC network and result                                                                        | Pure bundled analysis and per-panel presentation                           |
 
 Simulation participation, model mappings and portable model references remain native data editable through Source/Core commands, undoable and exportable while SPICE is unavailable. The Schematic SPICE Simulation action, Properties parameter section and settings-dock participation switches require confirmed installed/enabled plugin state; Layout has no SPICE controls. Plugin removal cannot remove document attributes or portable files. Model selection/execution belongs to SPICE; hash-checked copying/Save portability belongs to host persistence. The native model picker inspects only its explicitly selected bounded file and returns declarations/issues without bodies or include access; pure binding checks validate symbols and model ports. Active model source is Core data, while declaration catalogs remain renderer presentation.
 
@@ -173,7 +176,15 @@ Blender process, downloaded environment, host capability or document state is
 added. [Layout](LAYOUT.md) owns convergence, cancellation and appearance limits;
 [Libraries](LIBRARIES.md#licenses-and-replaceable-parser) owns dependency notices.
 
-Thermal settings/fields stay in the feature session. Workbench publishes generic analysis-panel/drawing/readout slots to Layout; Layout displays the selected-surface raster and real-node probes in its existing camera without storing fields as PCB data or introducing another execution path.
+Layout Thermal settings and fields stay in the feature session. Workbench selects the active right analysis panel for Layout and supplies drawing and readout slots for Layout Thermal. Layout displays the selected-surface raster and real-node probes in its existing camera without storing fields as PCB data or introducing another execution path.
+
+Layout Parasitics calls a read-only per-project capability from the Layout analysis dock
+or a scoped Agent query. Workbench supplies the current validated PCB from
+`ProjectCore` to `lib/layout-parasitics.ts` through the adapter in
+`lib/workbench-plugins.ts`. The bounded network analysis runs in the renderer
+with confirmed plugin state and revision, Source and close gates. The result
+stays in the requesting panel or Agent response. This path has no additional
+HTTP route, solver process or store.
 
 EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `project/emc-flyback/circuits/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
 
@@ -265,9 +276,9 @@ PE Layout Skill loads only fixed IDs from pinned resources, verifies hashes/life
 
 The SPICE handler validates source/settings, builds its supported execution model, resolves verified portable models through grants and uses the pinned solver. The host retries an explicit convergence failure once with a higher transient iteration ceiling, preserving circuit/timing/precision. The ordered plan participates in result identity and artifacts retain the successful deck. SSE delivers bounded native-sample previews and clears failed-attempt samples before retry. Explicit Stop retains validated partial results; failure/automatic cancellation discards previews. Only finite completed results persist and may add verified model references through Core.
 
-Desktop runs require a saved destination. Load-only restoration recompiles current source and matches solver/model/execution identities before exposing saved settings/results; misses never solve/download. Run may reuse a matching completed SPICE record. Thermal explicit Run always solves; its restoration verifies the recompiled PCB model, archived artifacts and runtime. [Simulation](SIMULATION.md) and [Thermal](THERMAL.md) own those identities/limits.
+Desktop runs require a saved destination. Load-only restoration recompiles current source and matches solver/model/execution identities before exposing saved settings/results; misses never solve/download. Run may reuse a matching completed SPICE record. Layout Thermal performs a new solve on explicit Run; its restoration verifies the recompiled PCB model, archived artifacts and runtime. [Simulation](SIMULATION.md) and [Layout Thermal](THERMAL.md) own those identities/limits.
 
-The optional heat-input path reads matching completed primary-sheet SPICE samples through a read-only host port and integrates compiler-declared dissipative terminal power over the final 20%. Thermal records verified electrical configuration/interval/sample identity; it does not derive heat from reduced curves. Both plugin gates apply to coupling; Manual remains independent.
+The optional heat-input path reads matching completed primary-sheet SPICE samples through a read-only host port and integrates compiler-declared dissipative terminal power over the final 20%. Layout Thermal records verified electrical configuration/interval/sample identity; it does not derive heat from reduced curves. Both plugin gates apply to coupling; Manual remains independent.
 
 ### Native saving and example preparation
 
@@ -314,7 +325,7 @@ replacement, refresh and failure isolation in an isolated browser without Electr
 | Solver/tools and corresponding source | Versioned `resources/ngspice/`, `resources/thermal/`, `resources/third-party-source/`                                           |
 | Official libraries/models and locks   | `resources/kicad/`, private verified caches and source-controlled locks/notices                                                 |
 
-`server/flat-analysis-files.mjs` owns the per-directory queue shared by result-store instances and individual-file publication. SPICE/Thermal keep logical artifact identities while writing stem-prefixed physical files and publishing the project-bound manifest last. Private sibling `*-backups` folders hold staged and previous bytes for failure rollback. Unknown sidecars and other projects stay protected; cross-file filesystem crash atomicity is not guaranteed. Result readers require current v2 records and ignore retired nested layouts. These host results never enter Core documents.
+`server/flat-analysis-files.mjs` owns the per-directory queue shared by result-store instances and individual-file publication. SPICE Simulation and Layout Thermal keep logical artifact identities while writing stem-prefixed physical files and publishing the project-bound manifest last. Private sibling `*-backups` folders hold staged and previous bytes for failure rollback. Unknown sidecars and other projects stay protected; cross-file filesystem crash atomicity is not guaranteed. Result readers require current v2 records and ignore retired nested layouts. These host results never enter Core documents.
 
 Generated service bundles/schemas/validators are required artifacts, not redundant source copies. `scripts/build-format.mjs` generates them from canonical TypeScript, writing both validators before the service bundles that embed them and building independent outputs concurrently; `scripts/write-generated-file.mjs` compares complete bytes, retains unchanged output identities/timestamps and atomically replaces changed files with bounded Windows retries. Static validator generation retains only schema branches read by enum errors and property-key checks; unfamiliar generated accesses fail the build. The canonical schema, validation functions, owned-input reuse and complete error values remain unchanged. Service consumers share `server/project-format.mjs` rather than embedding duplicate validators.
 
@@ -426,7 +437,7 @@ complete test set. Focused runs pass test paths after `npm test --`.
 | Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                                    |
 | Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                                     |
 | Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                                             |
-| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`; `check-analysis-sidebar-resize-ui.mjs` (SPICE/Thermal grips, shared widths and camera/native retention) |
+| Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`; `check-analysis-sidebar-resize-ui.mjs` (SPICE and Layout Thermal grips, shared widths and camera/native retention) |
 | Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                                                                                  |
 | Domain/runtime measurements | `benchmark-emc-interaction.mjs`; `benchmark-project-runtime.ts`; `benchmark-startup.mjs`                                                                                                                                             |
 | Plugin/solver boundary      | Workbench-plugin, participation, runtime and model-adapter tests; isolated simulation/thermal/Agent UI checks                                                                                                                        |

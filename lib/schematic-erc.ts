@@ -54,7 +54,8 @@ const driverConflicts = [
   ['warning', 'tri_state', 'open_emitter'],
 ] as const;
 const coordinate = (p: Point) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
-const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < 0.0001;
+const pointTolerance = 0.0001;
+const same = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) < pointTolerance;
 const onSegment = (p: Point, w: Wire) => {
   const length = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y);
   return (
@@ -143,6 +144,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
   }
   const conflicting = new Set<string>();
   for (const [ref, parts] of references) {
+    if (parts.length === 1) continue;
     if (
       new Set(parts.map((part) => part.libId)).size > 1 ||
       new Set(
@@ -184,6 +186,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       children(unit, 'pin'),
     );
     const positions = pinPositions(part, library);
+    const marker = !!child(library, 'power');
     for (let pinIndex = 0; pinIndex < definitions.length; pinIndex++) {
       spend();
       const definition = definitions[pinIndex],
@@ -191,7 +194,6 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       assertPoint(point);
       const type = val(definition),
         number = val(child(definition, 'number'));
-      const marker = !!child(library, 'power');
       const hidden = definition.includes('hide') || val(child(definition, 'hide')) === 'yes';
       pins.push({
         part,
@@ -258,17 +260,16 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
         wireBuckets.set(key, entries);
       }
   });
-  const touchingWires = (point: Point, except = -1) => {
-    const found: number[] = [];
-    const candidates = [
-      ...(wireBuckets.get(`${Math.floor(point.x / 10)},${Math.floor(point.y / 10)}`) ?? []),
-      ...longWires,
-    ];
-    for (const index of candidates) {
-      spend();
-      if (index !== except && onSegment(point, circuit.wires[index])) found.push(index);
+  const hasTouchingWire = (point: Point, except = -1) => {
+    const local = wireBuckets.get(`${Math.floor(point.x / 10)},${Math.floor(point.y / 10)}`);
+    for (const candidates of [local, longWires]) {
+      if (!candidates) continue;
+      for (const index of candidates) {
+        spend();
+        if (index !== except && onSegment(point, circuit.wires[index])) return true;
+      }
     }
-    return found;
+    return false;
   };
   const pointBuckets = new Map<string, { point: Point; pin?: Pin; labelId?: string }[]>();
   for (const entry of [
@@ -282,8 +283,12 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
   }
   const touchingPoints = (point: Point) => {
     const found: { point: Point; pin?: Pin; labelId?: string }[] = [];
-    for (let x = Math.floor(point.x) - 1; x <= Math.floor(point.x) + 1; x++)
-      for (let y = Math.floor(point.y) - 1; y <= Math.floor(point.y) + 1; y++)
+    const minX = Math.floor(point.x - pointTolerance);
+    const maxX = Math.floor(point.x + pointTolerance);
+    const minY = Math.floor(point.y - pointTolerance);
+    const maxY = Math.floor(point.y + pointTolerance);
+    for (let x = minX; x <= maxX; x++)
+      for (let y = minY; y <= maxY; y++)
         for (const entry of pointBuckets.get(`${x},${y}`) ?? []) {
           spend();
           if (same(entry.point, point)) found.push(entry);
@@ -304,7 +309,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
     (group, index) =>
       group.wires.length > 0 ||
       group.labels.length > 0 ||
-      new Set(netPins[index].map((pin) => pin.physical)).size > 1,
+      netPins[index].some((pin) => pin.physical !== netPins[index][0].physical),
   );
   const connected = (index: number) => connections[index];
   for (const marker of circuit.noConnects ?? []) {
@@ -487,7 +492,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
       report('erc.wire-zero-length', 'warning', 'Wire has zero length.', [wire.id], wire.a);
     else
       for (const [end, point] of [wire.a, wire.b].entries())
-        if (!touchingWires(point, index).length && !touchingPoints(point).length)
+        if (!hasTouchingWire(point, index) && !touchingPoints(point).length)
           report(
             'erc.wire-dangling',
             'warning',
@@ -499,7 +504,7 @@ export function runSchematicERC(circuit: Circuit): RuleCheckResult {
   });
   for (const label of circuit.labels)
     if (
-      !touchingWires(label).length &&
+      !hasTouchingWire(label) &&
       !touchingPoints(label).some((entry) => entry.pin || entry.labelId !== label.id)
     )
       report(

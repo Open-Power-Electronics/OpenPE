@@ -12,12 +12,12 @@ import styles from './RuleCheckPanel.module.css';
 
 const limitFields = [
   ['clearance', 'Copper clearance'],
-  ['minTrackWidth', 'Minimum track width'],
-  ['minViaDrill', 'Minimum via drill'],
-  ['minAnnularRing', 'Minimum annular ring'],
+  ['minTrackWidth', 'Minimum track width', 'Min. track width'],
+  ['minViaDrill', 'Minimum via drill', 'Min. via drill'],
+  ['minAnnularRing', 'Minimum annular ring', 'Min. annular ring'],
   ['copperToEdge', 'Copper to board edge'],
   ['copperToHole', 'Copper to hole'],
-] as const satisfies readonly (readonly [keyof PCBDesignRuleConfig, string])[];
+] as const satisfies readonly (readonly [keyof PCBDesignRuleConfig, string, string?])[];
 type LimitDrafts = Record<(typeof limitFields)[number][0], string>;
 
 function limitDrafts(settings?: PCBDesignRuleConfig): LimitDrafts {
@@ -158,7 +158,7 @@ export default function RuleCheckPanel({
         id={panelId}
         role="dialog"
         aria-label="Rule"
-        className={styles.panel}
+        className={kind === 'model' ? styles.panel : `${styles.panel} ${styles.electrical}`}
         onCompositionStartCapture={() => {
           composing.current = true;
         }}
@@ -318,9 +318,9 @@ export default function RuleCheckPanel({
               disabled={busy || !drcSettings}
             >
               <div className={styles.limitGrid}>
-                {limitFields.map(([key, label]) => (
+                {limitFields.map(([key, label, caption = label]) => (
                   <label key={key}>
-                    <span>{label}</span>
+                    <span>{caption}</span>
                     <QuantityInput
                       decimalPlaces={2}
                       unit={'mm'}
@@ -423,10 +423,8 @@ export default function RuleCheckPanel({
                       >
                         <span className={styles.ruleName} aria-description={issue.ruleId}>
                           {ruleLabel(issue.ruleId)}
-                        </span>
-                        <span className={styles.message} title={issue.message}>
-                          {issue.message}
-                        </span>
+                        </span>{' '}
+                        <span className={styles.message}>{issue.message}</span>
                       </button>
                     </li>
                   ))}

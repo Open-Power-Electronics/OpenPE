@@ -5317,7 +5317,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: grid;
   grid-auto-rows: auto;
   gap: 2px;
-  min-width: 0;
   max-width: calc(100vw - 16px);
   max-height: calc(100dvh - 16px);
   overflow-y: auto;
@@ -5983,11 +5982,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 
 .select-popup {
   position: fixed;
-  width: max-content;
-  min-width: min(
-    var(--select-popup-min-width, 180px),
-    var(--select-popup-width-limit, calc(100vw - 16px))
-  );
+  width: min(var(--menu-width), var(--select-popup-width-limit, calc(100vw - 16px)));
   max-width: calc(100vw - 16px);
   z-index: 60;
   overflow: auto;
@@ -6001,7 +5996,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 .select-popup.grid-density-popup {
-  --select-popup-min-width: 88px;
+  --menu-width: 88px;
   padding: 4px;
 }
 
@@ -6029,12 +6024,12 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   background: var(--tint);
 }
 
-.select-option[data-separated] {
+.select-option[data-separated]:not(:first-child) {
   position: relative;
   margin-top: 8px;
 }
 
-.select-option[data-separated]::before {
+.select-option[data-separated]:not(:first-child)::before {
   position: absolute;
   inset: -5px 8px auto;
   height: 1px;
@@ -6075,6 +6070,16 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
+.select-popup:not(.agent-menu, .permission-menu, .property-model-menu)
+  .select-option
+  > span
+  > strong,
+:is(.project-context-menu, .canvas-context-menu) .select-option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .select-option strong,
 .select-option small {
   display: block;
@@ -6103,6 +6108,10 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 
 .select-check-hidden {
   visibility: hidden;
+}
+
+.application-menu .select-check-hidden {
+  display: none;
 }
 
 .agent-menu {
@@ -7128,7 +7137,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   font-size: var(--font-small);
 }
 .select-popup.property-model-menu {
-  min-width: 0;
   font-size: var(--font-small);
 }
 .property-model-menu .select-option {
@@ -7732,7 +7740,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   background: var(--canvas);
 }
 .waveform-layout-popup {
-  min-width: 0;
   width: 152px;
   padding: 6px;
   overflow-y: auto;

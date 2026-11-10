@@ -279,7 +279,7 @@ try {
     type: 'module',
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
-  const panel = page.getByRole('region', { name: 'Thermal FEM', exact: true });
+  const panel = page.getByRole('region', { name: 'Layout Thermal', exact: true });
   await panel.waitFor();
   await page.getByRole('button', { name: 'Run', exact: true }).waitFor();
   await page.waitForFunction(
@@ -512,7 +512,7 @@ try {
   await map.waitFor();
 
   holdStatus = true;
-  await page.getByRole('button', { name: 'Close Thermal', exact: true }).click();
+  await page.getByRole('button', { name: 'Close Layout Thermal', exact: true }).click();
   await panel.waitFor({ state: 'detached' });
   await page.evaluate(() => window.thermalTest.setVisible(true));
   await waitForAsync(

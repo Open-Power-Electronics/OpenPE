@@ -48,7 +48,7 @@ const polygonArea = (polygons) =>
 export function thermalGeometry(model) {
   if (model.board.length !== 1)
     throw new Error(
-      'Thermal FEM currently requires one contiguous board outline; board cutouts are supported.',
+      'Layout Thermal currently requires one contiguous board outline; board cutouts are supported.',
     );
   const lines = [
     'SetFactory("Built-in");',

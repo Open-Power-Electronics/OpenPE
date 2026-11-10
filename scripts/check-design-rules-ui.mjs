@@ -634,8 +634,12 @@ try {
   await delay(1700);
   assert.equal(await runCount('schematic.erc'), 0, 'A held pointer defers the idle check.');
   await page.evaluate(() => {
-    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 9 }));
+    window.holdRuleIdle();
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 9 }));
   });
+  await page.waitForFunction(() => window.ruleIdleWaiting);
+  assert.equal(await runCount('schematic.erc'), 0, 'Pointer cancellation queues a new idle check.');
+  await page.evaluate(() => window.releaseRuleIdle());
   await page.waitForFunction(() => window.ruleTestRuns.includes('schematic.erc'));
   await page.waitForFunction(() =>
     document.querySelector('.rule-status[aria-description*="Checking"]'),

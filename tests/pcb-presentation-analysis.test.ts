@@ -95,7 +95,7 @@ test('zone outline paths retain only exact owned shapes and prune committed entr
   ]);
   const third = preparePCBZoneOutlinePaths(changed, second.cache, render);
   assert.equal(calls, board.zones.length + 1);
-  assert.notEqual(third.paths.get(changed[0].id), first.paths.get(changed[0].id));
+  assert.notEqual(third.paths.get(changed[0].id)?.path, first.paths.get(changed[0].id)?.path);
   const moved = ownProjectData([
     {
       ...changed[0],
@@ -117,7 +117,7 @@ test('zone outline paths retain only exact owned shapes and prune committed entr
   assert.equal(unowned.cache.size, 0, 'Caller freezing does not qualify for retention.');
   mutable[0].holes![0][0].x += 1;
   const mutated = preparePCBZoneOutlinePaths(mutable, unowned.cache, render);
-  assert.notEqual(mutated.paths.get(changed[0].id), unowned.paths.get(changed[0].id));
+  assert.notEqual(mutated.paths.get(changed[0].id)?.path, unowned.paths.get(changed[0].id)?.path);
   assert.throws(
     () =>
       preparePCBZoneOutlinePaths(changed, new Map(), () => {
@@ -126,11 +126,65 @@ test('zone outline paths retain only exact owned shapes and prune committed entr
     /path failure/,
   );
   const retry = preparePCBZoneOutlinePaths(changed, new Map(), render);
-  assert.equal(
+  assert.deepEqual(
     retry.paths.get(changed[0].id),
     third.paths.get(changed[0].id),
     'Failed preparation does not seed a cache.',
   );
+});
+
+test('coincident board copper outlines paint once and retain full selection targets', () => {
+  const [basis] = fixture().zones;
+  const triangle = (id: string, points: [number, number][]) => ({
+    ...basis,
+    id,
+    outline: points.map(([x, y]) => ({ x, y })),
+  });
+  const upper = triangle('upper', [
+    [0, 0],
+    [4, 2],
+    [0, 3],
+  ]);
+  const lower = triangle('lower', [
+    [4, 2],
+    [0, 0],
+    [4, 0],
+  ]);
+  const partial = triangle('partial', [
+    [6, 3],
+    [2, 1],
+    [6, 1],
+  ]);
+  const nearby = triangle('nearby', [
+    [0, 1e-10],
+    [4, 2 + 1e-10],
+    [2, 4],
+  ]);
+  const otherLayer = { ...lower, id: 'back', layer: 'B.Cu' as const };
+  const ruleArea = {
+    ...lower,
+    id: 'rule',
+    keepout: { tracks: false, vias: false, pads: false, copperpour: true, footprints: false },
+  };
+  const zones = ownProjectData([upper, lower, partial, nearby, otherLayer, ruleArea]);
+  const first = preparePCBZoneOutlinePaths(zones, new Map());
+  const fullPath = (zone: PCB['zones'][number]) =>
+    polygonPath([{ outer: zone.outline, holes: [] }]);
+  assert.deepEqual(first.paths.get('upper'), { path: fullPath(upper) });
+  assert.deepEqual(first.paths.get('lower'), {
+    path: 'M 0 0 L 4 0 L 4 2',
+    target: fullPath(lower),
+  });
+  assert.deepEqual(first.paths.get('partial'), {
+    path: 'M 6 3 L 4 2 M 2 1 L 6 1 L 6 3',
+    target: fullPath(partial),
+  });
+  assert.deepEqual(first.paths.get('back'), { path: fullPath(otherLayer) });
+  assert.deepEqual(first.paths.get('rule'), { path: fullPath(ruleArea) });
+  assert.deepEqual(first.paths.get('nearby'), { path: fullPath(nearby) });
+
+  const afterRemoval = preparePCBZoneOutlinePaths([zones[1]], first.cache);
+  assert.deepEqual(afterRemoval.paths.get('lower'), { path: fullPath(lower) });
 });
 
 function counted() {

@@ -361,13 +361,13 @@ export function registerWorkbenchCapabilities(
   if (ports().thermal) {
     command(
       'thermal.show',
-      'Open Thermal FEM in Layout and wait until its capabilities are ready.',
+      'Open Layout Thermal in Layout and wait until its capabilities are ready.',
       emptyCapabilityInput,
       (_, signal) => ports().thermal!(true, signal),
     );
     command(
       'thermal.hide',
-      'Hide Thermal FEM and cancel active work while retaining completed results.',
+      'Hide Layout Thermal and cancel active work while retaining completed results.',
       emptyCapabilityInput,
       (_, signal) => ports().thermal!(false, signal),
     );

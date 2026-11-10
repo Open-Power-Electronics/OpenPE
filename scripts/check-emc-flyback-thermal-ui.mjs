@@ -297,8 +297,8 @@ try {
     dirty: baseline.dirty,
   };
   await page.getByRole('button', { name: 'Layout', exact: true }).click();
-  await page.getByRole('button', { name: 'Thermal FEM', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Thermal FEM', exact: true });
+  await page.getByRole('button', { name: 'Layout Thermal', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Layout Thermal', exact: true });
   await panel.waitFor();
   const detected = await waitForAsync(page, async () => {
     const status = await window.thermalWorkbenchHost().query('thermal.status');

@@ -328,7 +328,7 @@ export default function ProjectNavigation({
                     }}
                   >
                     <Icon size={16} aria-hidden="true" />
-                    {label}
+                    <span>{label}</span>
                   </button>
                 ))
               : [
@@ -358,7 +358,7 @@ export default function ProjectNavigation({
                     }}
                   >
                     <Icon size={16} aria-hidden="true" />
-                    {label}
+                    <span>{label}</span>
                   </button>
                 ))}
             {!menuSession &&
@@ -378,7 +378,7 @@ export default function ProjectNavigation({
                     }}
                   >
                     <ArchiveRestore size={16} aria-hidden="true" />
-                    Restore {session.title}
+                    <span>Restore {session.title}</span>
                   </button>
                 ))}
           </div>,

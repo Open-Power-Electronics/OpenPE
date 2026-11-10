@@ -62,7 +62,7 @@ Reviewed datasheets are host references outside Core native files, drafts, undo 
 | Layout                 | Board queries, checked routing/vias/transforms/drag, zones/fills/properties and DRC      |
 | Model CAD              | Independent solids, analytic sketch Boolean extrusion and prepared edits                 |
 | Host/library           | Verified placement/assignment, UI context, native save/export and local Git              |
-| Plugin                 | Lifecycle, SPICE settings/results/waveforms and Thermal settings/fields/probes           |
+| Plugin                 | Lifecycle, SPICE settings and waveforms, Layout Thermal settings and fields              |
 
 The PCB links to the primary schematic; commands identify sheet/board explicitly. Complete canonical replacement still validates supported bounded content. Native access resolves opaque grants in Electron; no command accepts arbitrary paths, executables or download URLs.
 
@@ -122,9 +122,9 @@ Each turn permits 32 reviews; each mounted conversation retains at most 64 recor
 
 ## Plugin boundary
 
-Bundled SPICE/Thermal handlers share the host with human controls, independently gated by installed/enabled state. Disable/uninstall cancels work and releases resident state. Hiding settings cancels active work but retains completed state; SPICE explicit Stop also retains validated partial results.
+Bundled SPICE and Layout Thermal handlers share the host with human controls, independently gated by installed/enabled state. Disable/uninstall cancels work and releases resident state. Hiding settings cancels active work but retains completed state; SPICE explicit Stop also retains validated partial results.
 
-Simulation attributes and verified portable references are document data, independent of plugin availability. Solver settings/results/probes/waveforms are session data. Completed records persist only through grant-bound host adapters under generated `spice/` / `thermal/` directories excluded from native discovery. Load-only restore validates current inputs/resources without changing Core/Source/undo/dirty state. See [Simulation](SIMULATION.md), [Thermal](THERMAL.md#completed-desktop-records) and [provider management](PLUGINS.md#provider-discovery-and-management).
+Simulation attributes and verified portable references are document data, independent of plugin availability. Solver settings/results/probes/waveforms are session data. Completed records persist only through grant-bound host adapters under generated `spice/` / `thermal/` directories excluded from native discovery. Load-only restore validates current inputs/resources without changing Core/Source/undo/dirty state. See [Simulation](SIMULATION.md), [Layout Thermal](THERMAL.md#completed-desktop-records) and [provider management](PLUGINS.md#provider-discovery-and-management).
 
 ## Verification
 

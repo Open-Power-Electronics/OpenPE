@@ -1,4 +1,4 @@
-OpenPE Thermal FEM: bundled Gmsh 4.15.2 and Elmer 26.1 (Windows x64)
+OpenPE Layout Thermal: bundled Gmsh 4.15.2 and Elmer 26.1 (Windows x64)
 
 OpenPE invokes the unmodified, hash-pinned official executables as separate local processes.
 The Elmer archive is the official rel26.1 release; its solver banner retains the upstream 9.0 (Rev: Release) label compiled on 2026-01-20.

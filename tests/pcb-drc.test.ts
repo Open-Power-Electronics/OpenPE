@@ -258,6 +258,20 @@ test('copper-to-edge checks include cutouts, outside copper and trace widths', (
   );
 });
 
+test('board edge checks retain an offset plated drill outside its pad bounds', () => {
+  const board = fixture();
+  board.graphics = [];
+  outline(board, rect(0, 0, 20, 20));
+  const [drilled] = pad(board, 5, 5).pads;
+  drilled.type = 'thru_hole';
+  drilled.drill = 1;
+  drilled.drillOffset = { x: -4.9, y: 0 };
+  assert.deepEqual(
+    issues(board, 'pcb.copper-edge').map((issue) => issue.objectIds),
+    [[drilled.id]],
+  );
+});
+
 test('zero edge separation allows a true boundary touch but rejects polygon crossings through a concave notch', () => {
   const board = fixture();
   board.graphics = [];

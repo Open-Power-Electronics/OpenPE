@@ -46,11 +46,14 @@
                 <mxCell id="spice" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="SPICE Simulation" vertex="1">
                     <mxGeometry height="100" width="240" x="20" y="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="thermal" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Thermal FEM" vertex="1">
+                <mxCell id="thermal" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Layout Thermal" vertex="1">
                     <mxGeometry height="100" width="240" x="330" y="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="guidance" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="PE Layout Skill · Guidance" vertex="1">
-                    <mxGeometry height="50" width="550" x="20" y="190" as="geometry"/>
+                    <mxGeometry height="50" width="260" x="310" y="190" as="geometry"/>
+                </mxCell>
+                <mxCell id="parasitics" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Layout Parasitics&#xa;Local PCB DC resistance query" vertex="1">
+                    <mxGeometry height="50" width="260" x="20" y="190" as="geometry"/>
                 </mxCell>
                 <mxCell id="host" parent="1" style="swimlane;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=#fafafa;strokeColor=#dbdbdb;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=left;verticalAlign=middle;horizontal=1;startSize=40;collapsible=0;container=1;swimlaneFillColor=#fafafa;spacingLeft=20;" value="Host infrastructure · Electron / Loopback Express" vertex="1">
                     <mxGeometry height="210" width="1190" x="80" y="760" as="geometry"/>
@@ -123,6 +126,14 @@
                         <Array as="points">
                             <mxPoint x="1310" y="360"/>
                             <mxPoint x="1310" y="830"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="parasitics-board" edge="1" parent="1" source="parasitics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#848484;strokeWidth=1.5;endArrow=block;endFill=1;dashed=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" target="project-core" value="">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="670" y="645"/>
+                            <mxPoint x="670" y="520"/>
                         </Array>
                     </mxGeometry>
                 </mxCell>

@@ -94,6 +94,7 @@ export default function DesktopTitlebar({
               placeholder={label}
               compact
               showChevron={false}
+              popupClassName="application-menu"
               disabled={!items.length}
               options={items}
               onChange={(value) => runMenu(label, value)}

@@ -34,7 +34,7 @@ Thermal inputs use the final 20% of the original accepted native SPICE samples. 
 
 OpenPE uses constant isotropic FR4 at 0.3 W/(m·K), copper at 400 W/(m·K), 35 µm copper layers, 25 µm plating and prescribed front/back/edge convection of 10/10/5 W/(m²·K). Supported losses enter the PCB through their actual pads. The [upstream design report](https://github.com/ChengminLi/AI-PCB-layout/blob/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo/report/EMC_flyback_design_report.pdf), pages 18–19, includes an aluminium case, Q1 thermal contact, radiation, anisotropic FR4, temperature-dependent cooling/losses and additional prescribed device losses. Its load and thermal assumptions differ from the Home bench.
 
-PCB pad temperatures cannot stand for component junction/case temperatures or establish agreement with that enclosure-coupled model. The editable CAD enclosure adds no thermal coupling to this solver. [Thermal FEM](THERMAL.md) defines the supported board-only analysis. The reference PDF SHA-256 is `d67a002e928b233f77dcb4d43a48ebd78a6bd54956720b65b271e794f894ced3`.
+PCB pad temperatures cannot stand for component junction/case temperatures or establish agreement with that enclosure-coupled model. The editable CAD enclosure adds no thermal coupling to this solver. [Layout Thermal](THERMAL.md) defines the supported board-only analysis. The reference PDF SHA-256 is `d67a002e928b233f77dcb4d43a48ebd78a6bd54956720b65b271e794f894ced3`.
 
 ## Enclosure CAD
 

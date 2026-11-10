@@ -56,24 +56,24 @@ function jsonSnapshot(value, limit) {
     const item = pending.pop();
     const current = item.value;
     if (++count > 2000000 || item.depth > 32)
-      throw new Error('Thermal FEM input exceeds the bounded JSON structure.');
+      throw new Error('Layout Thermal input exceeds the bounded JSON structure.');
     if (current === null || typeof current === 'boolean' || typeof current === 'string') continue;
     if (typeof current === 'number' && Number.isFinite(current)) continue;
     if (!current || typeof current !== 'object')
-      throw new Error('Thermal FEM input must contain finite JSON values.');
+      throw new Error('Layout Thermal input must contain finite JSON values.');
     if (seen.has(current)) continue;
     seen.add(current);
     if (
       !Array.isArray(current) &&
       ![Object.prototype, null].includes(Object.getPrototypeOf(current))
     )
-      throw new Error('Thermal FEM input must contain plain JSON objects.');
+      throw new Error('Layout Thermal input must contain plain JSON objects.');
     for (const child of Object.values(current))
       pending.push({ value: child, depth: item.depth + 1 });
   }
   const text = JSON.stringify(value);
   if (typeof text !== 'string' || Buffer.byteLength(text) > limit)
-    throw new Error('The saved Thermal FEM JSON is too large.');
+    throw new Error('The saved Layout Thermal JSON is too large.');
   return { value: JSON.parse(text), bytes: Buffer.from(text) };
 }
 
@@ -119,18 +119,18 @@ function checkedModel(input) {
         items.length > 128 || items.some((item) => typeof item !== 'string' || item.length > 4096),
     )
   )
-    throw new Error('Invalid saved Thermal FEM model.');
+    throw new Error('Invalid saved Layout Thermal model.');
   const config = validateThermalConfig(model.config);
   if (
     config.copperThicknessMm.length !== model.layers.length ||
     !config.heatSources.some((source) => source.powerW > 0) ||
     !Object.values(config.convection).some((coefficient) => coefficient > 0)
   )
-    throw new Error('Invalid saved Thermal FEM model settings.');
+    throw new Error('Invalid saved Layout Thermal model settings.');
   const body = { ...model };
   delete body.basis;
   if (model.basis !== thermalFingerprint(body))
-    throw new Error('The saved Thermal FEM model does not match its input basis.');
+    throw new Error('The saved Layout Thermal model does not match its input basis.');
   return snapshot;
 }
 
@@ -142,7 +142,7 @@ function checkedSolver(solver) {
       (version) => typeof version !== 'string' || !version || version.length > 256,
     )
   )
-    throw new Error('Invalid saved Thermal FEM solver identity.');
+    throw new Error('Invalid saved Layout Thermal solver identity.');
   return { gmsh: solver.gmsh, elmer: solver.elmer, identity: solver.identity };
 }
 
@@ -153,7 +153,7 @@ function checkedResult(input, model, solver) {
     result.solver.gmsh !== solver.gmsh ||
     result.solver.elmer !== solver.elmer
   )
-    throw new Error('The saved Thermal FEM result does not match its model and solver.');
+    throw new Error('The saved Layout Thermal result does not match its model and solver.');
   return jsonSnapshot(result, resultLimit);
 }
 
@@ -177,7 +177,7 @@ export function thermalRunKey(model, solver, files) {
         !validKey(entry.sha256),
     )
   )
-    throw new Error('Invalid saved Thermal FEM artifact identity.');
+    throw new Error('Invalid saved Layout Thermal artifact identity.');
   const sorted = files
     .map(({ name, size, sha256 }) => ({ name, size, sha256 }))
     .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
@@ -199,7 +199,7 @@ async function directory(parent, name, create = false) {
     info.isSymbolicLink() ||
     normalize(await realpath(file)) !== normalize(file)
   )
-    throw new Error('Thermal FEM folders must be real directories without links.');
+    throw new Error('Layout Thermal folders must be real directories without links.');
   return file;
 }
 
@@ -211,7 +211,7 @@ async function regular(file) {
     info.nlink > 1 ||
     !Number.isSafeInteger(info.size)
   )
-    throw new Error('Saved Thermal FEM artifacts must be regular files without links.');
+    throw new Error('Saved Layout Thermal artifacts must be regular files without links.');
   return info;
 }
 
@@ -225,11 +225,11 @@ const sameFile = (left, right) =>
 async function readChunks(file, signal, limit, consume) {
   signal.throwIfAborted();
   const before = await regular(file);
-  if (before.size > limit) throw new Error('The saved Thermal FEM file is too large.');
+  if (before.size > limit) throw new Error('The saved Layout Thermal file is too large.');
   const handle = await open(file, 'r');
   try {
     if (!sameFile(before, await handle.stat()))
-      throw new Error('A Thermal FEM artifact changed while opening.');
+      throw new Error('A Layout Thermal artifact changed while opening.');
     const buffer = Buffer.alloc(1024 * 1024);
     let size = 0;
     while (true) {
@@ -238,7 +238,7 @@ async function readChunks(file, signal, limit, consume) {
       if (!bytesRead) break;
       size += bytesRead;
       if (size > before.size || size > limit)
-        throw new Error('A Thermal FEM artifact changed while reading.');
+        throw new Error('A Layout Thermal artifact changed while reading.');
       await consume(buffer.subarray(0, bytesRead));
     }
     if (
@@ -246,7 +246,7 @@ async function readChunks(file, signal, limit, consume) {
       !sameFile(before, await handle.stat()) ||
       !sameFile(before, await regular(file))
     )
-      throw new Error('A Thermal FEM artifact changed while reading.');
+      throw new Error('A Layout Thermal artifact changed while reading.');
     signal.throwIfAborted();
     return size;
   } finally {
@@ -265,7 +265,7 @@ async function hashFile(file, signal, size = Infinity) {
   const hash = createHash('sha256');
   const actualSize = await readChunks(file, signal, size, (chunk) => hash.update(chunk));
   if (!sameFile(identity, await regular(file)))
-    throw new Error('A Thermal FEM artifact changed while verifying.');
+    throw new Error('A Layout Thermal artifact changed while verifying.');
   return { size: actualSize, sha256: hash.digest('hex'), identity };
 }
 
@@ -279,7 +279,7 @@ async function copyArtifact(source, destination, signal) {
       while (offset < chunk.length) {
         signal.throwIfAborted();
         const { bytesWritten } = await target.write(chunk, offset, chunk.length - offset);
-        if (!bytesWritten) throw new Error('Could not write a complete Thermal FEM artifact.');
+        if (!bytesWritten) throw new Error('Could not write a complete Layout Thermal artifact.');
         offset += bytesWritten;
       }
     });
@@ -293,9 +293,9 @@ async function inventory(folder) {
   const entries = await readdir(folder, { withFileTypes: true });
   const top = entries.map((entry) => entry.name);
   if (artifacts.some((name) => !top.includes(name)) || !top.includes('mesh'))
-    throw new Error('The Thermal FEM record is incomplete.');
+    throw new Error('The Layout Thermal record is incomplete.');
   const mesh = await directory(folder, 'mesh');
-  if (!mesh) throw new Error('The Thermal FEM native mesh is missing.');
+  if (!mesh) throw new Error('The Layout Thermal native mesh is missing.');
   const nested = await readdir(mesh, { withFileTypes: true });
   if (
     meshFiles.some((name) => !nested.some((entry) => entry.name === name)) ||
@@ -308,13 +308,13 @@ async function inventory(folder) {
           !meshSidecar(entry.name)),
     )
   )
-    throw new Error('The Thermal FEM native mesh contains missing, linked or unknown files.');
+    throw new Error('The Layout Thermal native mesh contains missing, linked or unknown files.');
   const fields = [
     ...entries.filter((entry) => vtuName(entry.name)).map((entry) => entry.name),
     ...nested.filter((entry) => vtuName(entry.name)).map((entry) => `mesh/${entry.name}`),
   ];
   if (fields.length !== 1)
-    throw new Error('The Thermal FEM record must contain exactly one temperature VTU field.');
+    throw new Error('The Layout Thermal record must contain exactly one temperature VTU field.');
   const names = [
     ...artifacts,
     ...entries.filter((entry) => meshSidecar(entry.name)).map((entry) => entry.name),
@@ -324,7 +324,7 @@ async function inventory(folder) {
   for (const name of names) {
     const info = await regular(path.join(folder, name));
     if (!info.size && !name.endsWith('.log') && name !== 'mesh/mesh.names')
-      throw new Error('The Thermal FEM record contains an empty required artifact.');
+      throw new Error('The Layout Thermal record contains an empty required artifact.');
   }
   return names;
 }
@@ -332,7 +332,7 @@ async function inventory(folder) {
 /** Only Electron supplies this live native-destination resolver. */
 export function createProjectThermalStore(resolveFile) {
   const granted = resolveFile();
-  if (!granted) throw new Error('Save the project before running Thermal FEM.');
+  if (!granted) throw new Error('Save the project before running Layout Thermal.');
   const projectFile = path.resolve(granted);
   const projectName = path.basename(projectFile);
   const stem = path.basename(projectFile, path.extname(projectFile));
@@ -343,10 +343,10 @@ export function createProjectThermalStore(resolveFile) {
   async function root(create) {
     const current = resolveFile();
     if (!current || normalize(path.resolve(current)) !== normalize(projectFile))
-      throw new Error('The Thermal FEM project grant or destination changed. Save and retry.');
+      throw new Error('The Layout Thermal project grant or destination changed. Save and retry.');
     const parent = await realpath(path.dirname(projectFile));
     if (nativeParent && normalize(parent) !== normalize(nativeParent))
-      throw new Error('The Thermal FEM project directory changed. Save and retry.');
+      throw new Error('The Layout Thermal project directory changed. Save and retry.');
     nativeParent = parent;
     return directory(parent, 'thermal', create);
   }
@@ -357,7 +357,7 @@ export function createProjectThermalStore(resolveFile) {
     for (const entry of manifest.files) {
       const actual = await hashFile(path.join(target, entry.file), signal, entry.size);
       if (actual.size !== entry.size || actual.sha256 !== entry.sha256)
-        throw new Error('Thermal FEM artifact failed its integrity check: ' + entry.name + '.');
+        throw new Error('Layout Thermal artifact failed its integrity check: ' + entry.name + '.');
       identities.set(entry.file, actual.identity);
     }
     const inputBytes = await boundedRead(
@@ -375,14 +375,14 @@ export function createProjectThermalStore(resolveFile) {
       ['result.json', resultBytes],
     ])
       if (digest(bytes) !== manifest.files.find((entry) => entry.name === name).sha256)
-        throw new Error('Thermal FEM artifact failed its integrity check: ' + name + '.');
+        throw new Error('Layout Thermal artifact failed its integrity check: ' + name + '.');
     const model = checkedModel(JSON.parse(inputBytes)).value;
     const result = checkedResult(JSON.parse(resultBytes), model, solver).value;
     if (thermalRunKey(model, solver, manifest.files) !== manifest.key)
-      throw new Error('The saved Thermal FEM run identity does not match its input.');
+      throw new Error('The saved Layout Thermal run identity does not match its input.');
     for (const [name, identity] of identities)
       if (!sameFile(identity, await regular(path.join(target, name))))
-        throw new Error('A Thermal FEM artifact changed while verifying.');
+        throw new Error('A Layout Thermal artifact changed while verifying.');
     return { model, result, solver };
   }
 
@@ -438,7 +438,7 @@ export function createProjectThermalStore(resolveFile) {
       )
     )
       throw new Error(
-        'Invalid saved flat Thermal FEM manifest. Preserve ' + manifestName + ' and retry.',
+        'Invalid saved flat Layout Thermal manifest. Preserve ' + manifestName + ' and retry.',
       );
     const identities = new Map([[manifestName, identity]]);
     const record = await verifyRecord(parent, manifest, signal, identities);
@@ -465,7 +465,7 @@ export function createProjectThermalStore(resolveFile) {
         } catch (error) {
           signal.throwIfAborted();
           throw new Error(
-            'Could not load saved Thermal FEM files. Preserve thermal/' +
+            'Could not load saved Layout Thermal files. Preserve thermal/' +
               manifestName +
               '. ' +
               error.message,
@@ -484,14 +484,14 @@ export function createProjectThermalStore(resolveFile) {
         const previous = await readFlatRecord(parent, signal);
         const sourceDirectory = path.resolve(source);
         if (!(await directory(path.dirname(sourceDirectory), path.basename(sourceDirectory))))
-          throw new Error('The Thermal FEM working directory is missing.');
+          throw new Error('The Layout Thermal working directory is missing.');
         const logicalNames = await inventory(sourceDirectory);
         const names = [...logicalNames, 'input.json', 'result.json'].map((name) =>
           analysisFilename(stem, name),
         );
         names.push(manifestName);
         if (new Set(names.map(normalize)).size !== names.length)
-          throw new Error('Thermal FEM artifact basenames collide in flat storage.');
+          throw new Error('Layout Thermal artifact basenames collide in flat storage.');
         const staging = await createAnalysisStaging(parent);
         try {
           const files = [];
@@ -542,7 +542,9 @@ export function createProjectThermalStore(resolveFile) {
             check: async () => {
               const current = await root(false);
               if (normalize(current ?? '') !== normalize(parent))
-                throw new Error('The Thermal FEM project destination changed before publication.');
+                throw new Error(
+                  'The Layout Thermal project destination changed before publication.',
+                );
             },
           });
         } finally {

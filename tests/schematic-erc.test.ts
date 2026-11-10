@@ -372,6 +372,32 @@ test('dangling endpoints and zero-length wires use object identities and precise
   assert.equal(issues(circuit, 'erc.wire-zero-length').length, 1);
 });
 
+test('dense wire buckets stop searching endpoints once a continuing wire is found', () => {
+  const circuit = emptyCircuit();
+  for (let index = 0; index < 1100; index++) wire(circuit, 0, 0, 1, 0);
+  const report = runSchematicERC(circuit);
+  assert.equal(report.complete, true);
+  assert.deepEqual(report.issues, []);
+});
+
+test('no-connect markers search across bucket edges and still require the exact distance tolerance', () => {
+  const circuit = emptyCircuit();
+  part(circuit, 'passive', -1, -1);
+  const unconnected = part(circuit, 'passive', 0, 0);
+  circuit.noConnects = [
+    { id: 'near', x: -1.00003, y: -1.00003 },
+    { id: 'outside-tolerance', x: -0.00008, y: -0.00008 },
+  ];
+  const report = runSchematicERC(circuit);
+  assert.deepEqual(
+    report.issues.map(({ ruleId, objectIds }) => ({ ruleId, objectIds })),
+    [
+      { ruleId: 'erc.no-connect-misplaced', objectIds: ['outside-tolerance'] },
+      { ruleId: 'erc.pin-unconnected', objectIds: [unconnected.id] },
+    ],
+  );
+});
+
 test('unknown pin types make coverage incomplete, and all checks remain deterministic and read-only', () => {
   const circuit = emptyCircuit();
   part(circuit, 'future_pin_type', 0, 0);

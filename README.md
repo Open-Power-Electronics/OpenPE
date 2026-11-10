@@ -10,6 +10,7 @@
 - Draw custom single-unit component symbols and embedded footprints through shared GUI/Agent commands.
 - Inspect boards in 3D and create Model CAD solids with sketch contour Booleans, extrusion, fillets, chamfers and solid Boolean operations.
 - Run supported SPICE transients and steady PCB thermal analysis.
+- Estimate two-terminal PCB DC resistance from routed copper. [Layout Parasitics](docs/LAYOUT.md#layout-parasitics)
 - Keep independent projects and conversations, recover drafts and compare local Git history.
 - Work with Codex or Claude Code through scoped project tools, or review proposals from DeepSeek Harness and Pi. Cursor supports CLI detection only.
 
@@ -72,7 +73,7 @@ Simulation support depends on the documented circuits and models. Thermal analys
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Product and UI      | [Design](DESIGN.md) · [Layout and Model](docs/LAYOUT.md) · [ERC/DRC](docs/DESIGN-RULES.md)                                                            |
 | Files and history   | [Native format](docs/FORMAT.md) · [Version history](docs/VERSION-HISTORY.md)                                                                          |
-| Simulation          | [SPICE](docs/SIMULATION.md) · [Thermal FEM](docs/THERMAL.md) · [EMC Flyback](docs/EMC-FLYBACK.md)                                                     |
+| Simulation          | [SPICE](docs/SIMULATION.md) · [Layout Thermal](docs/THERMAL.md) · [EMC Flyback](docs/EMC-FLYBACK.md)                                                  |
 | Examples and assets | [Examples](docs/EXAMPLES.md) · [Datasheets](docs/DATASHEETS.md) · [Libraries and licenses](docs/LIBRARIES.md)                                         |
 | Internals           | [Architecture](docs/ARCHITECTURE.md) · [Diagram](assets/architecture.drawio) · [Core](docs/CORE.md) · [API](docs/API.md) · [Plugins](docs/PLUGINS.md) |
 | Contributing        | [Engineering contract](AGENTS.md)                                                                                                                     |

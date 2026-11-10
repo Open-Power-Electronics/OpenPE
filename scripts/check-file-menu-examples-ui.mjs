@@ -225,6 +225,20 @@ try {
     assert.equal(await page.getByRole('heading', { name: 'Examples', exact: true }).count(), 0);
 
     const recentMenu = await showBranch(page, 'Recent');
+    const fileMenu = menu(page, 'File');
+    assert.deepEqual(await fileMenu.getByRole('option').allTextContents(), [
+      'New project',
+      'Open project',
+      'Recent',
+      'Example',
+    ]);
+    for (const popup of [fileMenu, recentMenu]) {
+      assert.equal((await popup.boundingBox()).width, 140);
+      const labels = await popup
+        .locator('.select-option strong')
+        .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).whiteSpace));
+      assert.ok(labels.length > 0 && labels.every((whiteSpace) => whiteSpace === 'nowrap'));
+    }
     assert.deepEqual(
       (await recentMenu.getByRole('option').allTextContents()).map((value) => value.trim()),
       manifest.recent.map((item) => item.title),

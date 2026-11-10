@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+  bundledWorkbenchCatalog,
   createWorkbenchPlugins,
   pcbDesignPluginId,
   spicePluginId,
@@ -37,6 +38,7 @@ test('partial plugin catalogs fail closed without adding or changing bundled ent
     [thermalPluginId, spicePluginId],
     [spicePluginId, pcbDesignPluginId],
     [thermalPluginId, pcbDesignPluginId],
+    [spicePluginId, thermalPluginId, pcbDesignPluginId],
   ]) {
     const bytes = JSON.stringify({
       version: 1,
@@ -53,7 +55,7 @@ test('partial plugin catalogs fail closed without adding or changing bundled ent
   }
   const complete = JSON.stringify({
     version: 1,
-    plugins: [spicePluginId, thermalPluginId, pcbDesignPluginId].map((id) => ({
+    plugins: bundledWorkbenchCatalog().plugins.map(({ id }: { id: string }) => ({
       id,
       installed: true,
       enabled: id === pcbDesignPluginId,

@@ -17,7 +17,7 @@ const fallback = {
   resources:
     'The bundled thermal solvers are unavailable. Run npm run thermal:prepare to repair the thermal resources.',
   result:
-    'Saved thermal results could not be verified. Check their integrity or run Thermal again.',
+    'Saved thermal results could not be verified. Check their integrity or run Layout Thermal again.',
   spice:
     'SPICE heat sources could not be loaded. Complete SPICE Simulation for the current project and try again.',
 };

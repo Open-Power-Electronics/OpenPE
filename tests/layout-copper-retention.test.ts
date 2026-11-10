@@ -136,7 +136,9 @@ function fixture() {
     boardSurface: 'board-outline',
     pattern: 'test-layout',
     zoneOwners: new Map([['A', 'footprint-owner']]),
-    zoneOutlinePaths: new Map(zones.map((zone) => [zone.id, `outline-${zone.id}`])),
+    zoneOutlinePaths: new Map<string, { path: string; target?: string }>(
+      zones.map((zone) => [zone.id, { path: `outline-${zone.id}` }]),
+    ),
     selectionPaint: {},
     highlightNets: new Set<string>(),
     placed: { zones, tracks: [{ id: 'T', layer: 'F.Cu', netId: 'N', start: { x: 0, y: 0 } }] },
@@ -189,9 +191,13 @@ test('fill invalidation, ownership, highlight and outline paths invalidate only 
   assert.equal(restored.outlines, first.outlines);
   const outline = render({
     ...basis,
-    zoneOutlinePaths: new Map([...basis.zoneOutlinePaths, ['A', 'resized-A']]),
+    zoneOutlinePaths: new Map([
+      ...basis.zoneOutlinePaths,
+      ['A', { path: 'resized-A', target: 'full-A' }],
+    ]),
   });
   assert.equal(outline.outlines.get('F.Cu')![0].props.path, 'resized-A');
+  assert.equal(outline.outlines.get('F.Cu')![0].props.target, 'full-A');
   assert.equal(outline.outlines.get('F.Cu')![1], first.outlines.get('F.Cu')![1]);
 });
 
@@ -232,7 +238,7 @@ test('abandoned zone preparation cannot replace the committed retention maps', (
   const proposed = {
     ...basis,
     copperPaths: new Map([...basis.copperPaths, ['A', 'abandoned-fill']]),
-    zoneOutlinePaths: new Map([...basis.zoneOutlinePaths, ['A', 'abandoned-outline']]),
+    zoneOutlinePaths: new Map([...basis.zoneOutlinePaths, ['A', { path: 'abandoned-outline' }]]),
   };
   const abandoned = render(proposed, false);
   assert.equal(abandoned.fills.get('F.Cu')![0].props.path, 'abandoned-fill');

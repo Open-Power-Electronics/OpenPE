@@ -534,29 +534,29 @@ try {
   await layerMode.press('ArrowDown');
   assert.equal(
     await layerModes
-      .getByRole('option', { name: 'Normal', exact: true })
+      .getByRole('option', { name: 'All', exact: true })
       .getAttribute('aria-selected'),
     'true',
   );
   await layerMode.press('End');
   await layerMode.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
-  assert.equal(await layerMode.getAttribute('aria-description'), 'Normal');
+  assert.equal(await layerMode.getAttribute('aria-description'), 'All');
   assert.equal(await layerModes.isVisible(), true);
   await layerMode.press('Enter');
-  assert.equal(await layerMode.getAttribute('aria-description'), 'Hide');
-  await setLayerMode('Normal');
+  assert.equal(await layerMode.getAttribute('aria-description'), 'Solo');
+  await setLayerMode('All');
   await canvas.evaluate((svg) => svg.dispatchEvent(new KeyboardEvent('keydown', {
     key: 'h', ctrlKey: true, bubbles: true, isComposing: true,
   })));
-  assert.equal(await layerMode.getAttribute('aria-description'), 'Normal');
+  assert.equal(await layerMode.getAttribute('aria-description'), 'All');
   await canvas.press('Control+h');
   assert.equal(await layerMode.getAttribute('aria-description'), 'Dim');
   assert.equal(await canvas.locator('[data-layout-layer="B.Cu"]').getAttribute('opacity'), '0.25');
   await canvas.press('Control+h');
-  assert.equal(await layerMode.getAttribute('aria-description'), 'Hide');
+  assert.equal(await layerMode.getAttribute('aria-description'), 'Solo');
   assert.equal(await canvas.locator('[data-layout-layer="B.Cu"]').count(), 0);
   await canvas.press('Control+h');
-  assert.equal(await layerMode.getAttribute('aria-description'), 'Normal');
+  assert.equal(await layerMode.getAttribute('aria-description'), 'All');
   assert.equal(await canvas.locator('[data-layout-layer="B.Cu"]').count(), 1);
   await setLayerMode('Dim');
   for (const crossing of [false, true]) {
@@ -577,7 +577,7 @@ try {
   await clearSelection();
   const frontOnly = await point({ x: 7, y: 9 });
   await page.mouse.click(frontOnly.x, frontOnly.y);
-  assert.deepEqual(await selection(), [], 'Dim mode excludes inactive layers from point picks.');
+  assert.deepEqual(await selection(), [], 'Dim excludes inactive layers from point picks.');
 
   await choosePriority('F.SilkS');
   await expectPaint({ x: 12, y: 9 }, canvas.locator('[data-selection-id="silk"] path').last());
@@ -610,7 +610,7 @@ try {
   await clearSelection();
   await canvas.press('Control+a');
   assert.deepEqual(await selection(), ['edge-0', 'edge-1', 'edge-2', 'edge-3']);
-  await setLayerMode('Normal');
+  await setLayerMode('All');
 
   await setLayoutVisibility(page, 'Pad numbers', false);
   await setLayoutVisibility(page, 'Pad net names', false);
@@ -635,7 +635,7 @@ try {
   await page.screenshot({ path: 'test-results/layout-layer-rows.png' });
   assert.deepEqual(errors, [], 'No renderer errors.');
   await clean();
-  await setLayerMode('Normal');
+  await setLayerMode('All');
 
   const sources = JSON.parse(await readFile('lib/reference-examples.json', 'utf8'));
   const lm = parseProject(sources['reference-lm2596-to220-5-buck']).pcb;

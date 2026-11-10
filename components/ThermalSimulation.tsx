@@ -286,7 +286,7 @@ export default function ThermalSimulation({
     if (!active.spiceAvailable)
       return 'Install and enable SPICE Simulation in Plugins > Marketplace.';
     if (!active.visible || active.sourcePending || !active.project.pcb)
-      return 'Open Thermal in Layout and apply Source edits before loading SPICE heat sources.';
+      return 'Open Layout Thermal and apply Source edits before loading SPICE heat sources.';
     if (!active.fileId)
       return 'Save this project and complete its SPICE simulation before loading heat sources.';
     if (runControl.current) return 'Stop the thermal run before loading SPICE heat sources.';
@@ -386,12 +386,12 @@ export default function ThermalSimulation({
   async function run(signal: AbortSignal) {
     const active = origin.current;
     if (!active.visible || active.sourcePending || !active.project.pcb)
-      throw new Error('Open Thermal in Layout and apply Source edits before running.');
+      throw new Error('Open Layout Thermal and apply Source edits before running.');
     if (runControl.current) throw new Error('A thermal run is already active.');
     if (spiceControl.current) throw new Error('Wait for SPICE heat sources to finish loading.');
     if (heatInputRef.current === 'spice' && !active.spiceAvailable)
       throw new Error(
-        'Enable SPICE Simulation or choose Manual heat input before running Thermal.',
+        'Enable SPICE Simulation or choose Manual heat input before running Layout Thermal.',
       );
     if (detectControl.current)
       throw new Error('Solver detection is still running. Retry when detection completes.');
@@ -481,7 +481,7 @@ export default function ThermalSimulation({
       current.current.resultSource !== origin.current.source ||
       origin.current.sourcePending
     )
-      throw new Error('Run Thermal and open its solved temperature map before exporting.');
+      throw new Error('Run Layout Thermal and open its solved temperature map before exporting.');
     const copy = svg.cloneNode(true) as SVGSVGElement;
     copy.style.removeProperty('display');
     copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -520,9 +520,9 @@ export default function ThermalSimulation({
     available: () => (capabilityHost ? workbenchPluginAvailability(THERMAL_PLUGIN_ID) : true),
     canRun: () =>
       !origin.current.visible
-        ? 'Open Thermal in Layout before running.'
+        ? 'Open Layout Thermal before running.'
         : origin.current.sourcePending
-          ? 'Apply Source edits before running Thermal.'
+          ? 'Apply Source edits before running Layout Thermal.'
           : !origin.current.project.pcb
             ? 'This project has no PCB Layout to simulate.'
             : runControl.current
@@ -530,13 +530,13 @@ export default function ThermalSimulation({
               : spiceControl.current
                 ? 'Wait for SPICE heat sources to finish loading.'
                 : heatInputRef.current === 'spice' && !origin.current.spiceAvailable
-                  ? 'Enable SPICE Simulation or choose Manual heat input before running Thermal.'
+                  ? 'Enable SPICE Simulation or choose Manual heat input before running Layout Thermal.'
                   : detectControl.current
                     ? 'Solver detection is still running. Retry when detection completes.'
                     : current.current.solver?.available
                       ? true
                       : current.current.solver?.error ||
-                        'The bundled thermal solvers are not ready. Open Thermal and retry.',
+                        'The bundled thermal solvers are not ready. Open Layout Thermal and retry.',
     read,
     configure,
     canImport: canImportSpice,
@@ -560,7 +560,7 @@ export default function ThermalSimulation({
           state.resultSource !== origin.current.source ||
           origin.current.sourcePending
         )
-          throw new Error('Run Thermal before probing board temperatures.');
+          throw new Error('Run Layout Thermal before probing board temperatures.');
         update({ probe: closestThermalNode(state.result, point, state.surface) });
       }
       return read();
@@ -1008,14 +1008,14 @@ export default function ThermalSimulation({
           ? 'Stopped'
           : '';
   const error = sourcePending
-    ? 'Apply Source edits before running Thermal.'
+    ? 'Apply Source edits before running Layout Thermal.'
     : session.error ||
       session.solver?.error ||
       (!project.pcb ? 'This project has no PCB Layout to simulate.' : '');
   return (
-    <section className={styles.panel} data-docked={docked || undefined} aria-label="Thermal FEM">
+    <section className={styles.panel} data-docked={docked || undefined} aria-label="Layout Thermal">
       <header className={styles.header}>
-        <h2>Thermal FEM</h2>
+        <h2>Layout Thermal</h2>
         <span
           role="status"
           className={styles.status}
@@ -1025,7 +1025,7 @@ export default function ThermalSimulation({
         </span>
         <button
           className="tool-button"
-          aria-label="Close Thermal"
+          aria-label="Close Layout Thermal"
           title="Close"
           onClick={() =>
             host.catalog().some((item) => item.id === 'thermal.hide')

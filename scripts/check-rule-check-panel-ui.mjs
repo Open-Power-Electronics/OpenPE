@@ -104,31 +104,28 @@ try {
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }, changes);
   const button = (name) => page.getByRole('button', { name, exact: true });
-  const assertScrollableIssue = async (body, text) => {
-    assert.equal(
-      await text.evaluate((message) => {
-        const style = getComputedStyle(message);
-        return (
-          style.whiteSpace === 'nowrap' &&
-          style.textOverflow === 'clip' &&
-          message.scrollWidth <= message.clientWidth
-        );
-      }),
-      true,
-      'The whole message occupies one line without internal clipping.',
-    );
+  const assertWrappedIssue = async (body, text) => {
+    const layout = await text.evaluate((message) => {
+      const region = message.closest('[data-rule-body]');
+      const left = region.getBoundingClientRect().left;
+      const range = document.createRange();
+      range.selectNodeContents(message);
+      const lines = [...range.getClientRects()];
+      return {
+        wrapped: new Set(lines.map(({ top }) => top)).size > 1,
+        contained: lines.every(
+          ({ left: x, right }) => x >= left && right <= left + region.clientWidth,
+        ),
+        overflow: region.scrollWidth - region.clientWidth,
+      };
+    });
+    assert.deepEqual(layout, { wrapped: true, contained: true, overflow: 0 });
     await body.focus();
     await body.press('ArrowRight');
-    await page.waitForFunction(() => document.activeElement?.scrollLeft > 0);
-    assert.equal(
-      await text.evaluate((message) => {
-        const body = message.closest('[data-rule-body]');
-        body.scrollLeft = body.scrollWidth;
-        return message.getBoundingClientRect().right <= body.getBoundingClientRect().right;
-      }),
-      true,
-      'Horizontal scrolling reaches the end of the message.',
-    );
+    assert.equal(await body.evaluate((region) => region.scrollLeft), 0);
+    await body.press('End');
+    await page.waitForFunction(() => document.activeElement?.scrollTop > 0);
+    await body.press('Home');
   };
   const assertRunIMEBlocked = async (action) => {
     assert.equal(await action.isEnabled(), true);
@@ -217,14 +214,14 @@ try {
     'The locate action spans the complete issue row.',
   );
   assert.ok(rowBox.height <= 34, 'Short issues fit on one line.');
-  const longMessage = report.issues[0].message.repeat(20);
+  const longMessage = `${report.issues[0].message} ${'LONG_REFERENCE_'.repeat(60)} Pin 1 needs a connection.`;
   await update({ report: { ...report, issues: [{ ...report.issues[0], message: longMessage }] } });
   const longRow = button(`Locate issue: ${longMessage}`);
   assert.equal(await longRow.getByText(longMessage, { exact: true }).textContent(), longMessage);
-  assert.equal(Math.round((await longRow.boundingBox()).height), Math.round(rowBox.height));
+  assert.ok((await longRow.boundingBox()).height > rowBox.height);
   const longText = longRow.getByText(longMessage, { exact: true });
-  assert.equal(await longText.getAttribute('title'), longMessage);
-  await assertScrollableIssue(erc.getByRole('region', { name: 'ERC report' }), longText);
+  assert.equal(await longText.getAttribute('title'), null);
+  await assertWrappedIssue(erc.getByRole('region', { name: 'ERC report' }), longText);
   const powerMessage = '#PWR104 pin 1 on SGND has no power output on its network.';
   await update({
     report: {
@@ -426,9 +423,23 @@ try {
       canLocate: false,
     },
   });
-  await assertScrollableIssue(
-    drc.getByRole('region', { name: 'Model report' }),
-    drc.getByText(modelError, { exact: true }),
+  const modelBody = drc.getByRole('region', { name: 'Model report' });
+  const modelText = modelBody.getByText(modelError, { exact: true });
+  assert.equal(
+    await modelText.evaluate((element) => getComputedStyle(element).whiteSpace),
+    'nowrap',
+  );
+  await modelBody.focus();
+  await modelBody.press('ArrowRight');
+  await page.waitForFunction(() => document.activeElement?.scrollLeft > 0);
+  assert.equal(
+    await modelText.evaluate((message) => {
+      const body = message.closest('[data-rule-body]');
+      body.scrollLeft = body.scrollWidth;
+      return message.getBoundingClientRect().right <= body.getBoundingClientRect().right;
+    }),
+    true,
+    'Model horizontal scrolling still reaches the end of the message.',
   );
   await update({
     modelReport: {
@@ -531,17 +542,16 @@ try {
     true,
     'Rule controls fit the narrow panel without horizontal overflow.',
   );
-  const geometryWarning =
-    'PCB DRC could not complete all geometry checks. Review the report notes and check the remaining geometry separately.';
+  const geometryWarning = `Copper on ${'LONG_NET_'.repeat(30)} is 0.08 mm from the board edge. The limit is 0.2 mm.`;
   await update({
     report: {
       ...clean,
       kind: 'drc',
       complete: false,
-      issues: [{ ...report.issues[1], ruleId: 'pcb.geometry-limit', message: geometryWarning }],
+      issues: [{ ...report.issues[1], ruleId: 'pcb.copper-edge', message: geometryWarning }],
     },
   });
-  await assertScrollableIssue(
+  await assertWrappedIssue(
     drc.getByRole('region', { name: 'DRC report' }),
     drc.getByText(geometryWarning, { exact: true }),
   );
@@ -553,7 +563,7 @@ try {
   assert.equal(await page.evaluate(() => window.closedPanels), 2);
   assert.deepEqual(errors, []);
   console.log(
-    'Rule panel: compact whole-row ERC/DRC locating with pointer/keyboard/IME guards, incomplete/stale/Source states, complete limit drafts, focus, one-line issues and lower-left popup passed.',
+    'Rule panel: compact whole-row ERC/DRC locating with pointer/keyboard/IME guards, incomplete/stale/Source states, complete limit drafts, focus, wrapping without horizontal overflow and lower-left popup passed.',
   );
 } finally {
   await browser.close();

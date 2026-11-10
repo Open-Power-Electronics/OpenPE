@@ -239,7 +239,7 @@ export default function CanvasContextMenu({
           }}
         >
           <Icon size={16} aria-hidden="true" />
-          {label}
+          <span>{label}</span>
         </button>
       ))}
     </div>,

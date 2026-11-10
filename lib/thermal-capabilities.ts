@@ -75,7 +75,7 @@ export function registerThermalCapabilities(
       id: 'thermal.run',
       kind: 'command',
       description:
-        'Refresh verified completed electrical losses when SPICE heat input is selected, then mesh the current PCB with Gmsh and solve steady board temperatures with Elmer. Open Thermal in Layout first. Desktop projects must be saved; the latest successful run and its process files are saved beside the project, outside design content.',
+        'Refresh verified completed electrical losses when SPICE heat input is selected, then mesh the current PCB with Gmsh and solve steady board temperatures with Elmer. Open Layout Thermal first. Desktop projects must be saved; the latest successful run and its process files are saved beside the project, outside design content.',
       mutation: 'external',
       review: 'optional',
       available: () => (adapter.available() === true ? adapter.canRun() : adapter.available()),

@@ -174,9 +174,11 @@ import { agentSource, type AgentWorkspaceContext } from '@/context/agent-workspa
 import { agentProject, assertAgentSourceDraftSafe } from '@/lib/agent-project-access';
 import type { AgentSimulationContext } from '@/context/agent-simulation-context';
 import {
+  LAYOUT_PARASITICS_PLUGIN_ID,
   SPICE_PLUGIN_ID,
   THERMAL_PLUGIN_ID,
   useWorkbenchPlugins,
+  registerLayoutParasiticsCapability,
   registerWorkbenchPluginCapabilities,
 } from '@/lib/workbench-plugins';
 import { schematicTexts } from '@/lib/schematic-text';
@@ -204,6 +206,7 @@ import {
 const SourceEditor = lazy(() => import('./SourceEditor'));
 const SimulationDialog = lazy(() => import('./SimulationDialog'));
 const ThermalSimulation = lazy(() => import('./ThermalSimulation'));
+const LayoutParasiticsPanel = lazy(() => import('./LayoutParasiticsPanel'));
 const RuleCheckPanel = lazy(() => import('./RuleCheckPanel'));
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 const ComponentDrawingEditor = lazy(() => import('./ComponentDrawingEditor'));
@@ -296,6 +299,7 @@ function ToolButton({
   hint = label,
   active,
   disabled,
+  buttonRef,
   onClick,
   children,
 }: {
@@ -303,11 +307,13 @@ function ToolButton({
   hint?: string;
   active?: boolean;
   disabled?: boolean;
+  buttonRef?: React.Ref<HTMLButtonElement>;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
+      ref={buttonRef}
       className={`tool-button ${active ? 'active' : ''}`}
       aria-label={label}
       title={hint}
@@ -535,7 +541,16 @@ export default function Workbench({
   const thermalAvailable = !!workbenchPlugins.catalog?.plugins.some(
     (plugin) => plugin.id === THERMAL_PLUGIN_ID && plugin.installed && plugin.enabled,
   );
-  const [thermalEnabled, setThermalEnabled] = useState(false);
+  const parasiticsAvailable = !!workbenchPlugins.catalog?.plugins.some(
+    (plugin) => plugin.id === LAYOUT_PARASITICS_PLUGIN_ID && plugin.installed && plugin.enabled,
+  );
+  const [layoutAnalysis, setLayoutAnalysis] = useState<'thermal' | 'parasitics' | null>(null);
+  const thermalEnabled = layoutAnalysis === 'thermal';
+  const parasiticsButton = useRef<HTMLButtonElement>(null);
+  const closeThermal = useCallback(
+    () => setLayoutAnalysis((current) => (current === 'thermal' ? null : current)),
+    [],
+  );
   const [thermalOpened, setThermalOpened] = useState(false);
   const [thermalPresentation, setThermalPresentation] = useState<ThermalLayoutPresentation | null>(
     null,
@@ -551,8 +566,8 @@ export default function Workbench({
   const thermalAgentContext = useRef<(() => AgentThermalContext) | null>(null);
   const thermalLocateRef = useRef<((footprintId: string) => boolean) | null>(null);
   useEffect(() => {
-    if (!thermalAvailable) setThermalEnabled(false);
-  }, [thermalAvailable]);
+    if (!thermalAvailable) closeThermal();
+  }, [thermalAvailable, closeThermal]);
   useEffect(() => {
     if (spiceAvailable) return;
     setSimulationEnabled(false);
@@ -605,6 +620,18 @@ export default function Workbench({
   const exportBusy = useRef(false);
   const confirmBusyRef = useRef(false);
   const [view, setView] = useState<EditorView>(sourceDraft !== null ? 'source' : 'canvas');
+  const canShowParasitics =
+    active &&
+    screen === 'workspace' &&
+    view === 'layout' &&
+    parasiticsAvailable &&
+    !sourcePending &&
+    !coreSnapshot.editingBlocked &&
+    Boolean(project?.pcb);
+  useEffect(() => {
+    if (!canShowParasitics)
+      setLayoutAnalysis((current) => (current === 'parasitics' ? null : current));
+  }, [canShowParasitics]);
   // Source stays mounted after first use, retaining its text history across views.
   const [sourceOpened, setSourceOpened] = useState(sourceDraft !== null);
   const [gitOpened, setGitOpened] = useState(false);
@@ -685,16 +712,19 @@ export default function Workbench({
     (view !== '3d' || Boolean(project?.pcb));
   const simulationVisible = spiceAvailable && simulationEnabled && view === 'canvas';
   const thermalVisible = thermalAvailable && thermalEnabled && view === 'layout';
+  const parasiticsVisible = canShowParasitics && layoutAnalysis === 'parasitics';
+  const layoutAnalysisVisible = thermalVisible || parasiticsVisible;
   const showLayoutSidebar = useCallback(() => {
-    setThermalEnabled(false);
+    setLayoutAnalysis(null);
     showRightSidebar();
   }, [showRightSidebar]);
   const showSchematicSidebar = useCallback(() => {
     setSimulationEnabled(false);
     showRightSidebar();
   }, [showRightSidebar]);
-  const ordinarySidebarVisible = rightSidebarVisible && !thermalVisible && !simulationVisible;
-  const toggleCurrentRightSidebar = thermalVisible
+  const ordinarySidebarVisible =
+    rightSidebarVisible && !layoutAnalysisVisible && !simulationVisible;
+  const toggleCurrentRightSidebar = layoutAnalysisVisible
     ? showLayoutSidebar
     : simulationVisible
       ? showSchematicSidebar
@@ -739,7 +769,11 @@ export default function Workbench({
   );
   const ruleFocusSequence = useRef(0);
   const ruleWork = useRef<AbortController | null>(null);
-  const ruleInput = useRef({ lastActivity: 0, heldPointers: new Set<number>() });
+  const ruleInput = useRef({
+    lastActivity: 0,
+    heldPointers: new Set<number>(),
+    resume: null as (() => void) | null,
+  });
   useEffect(() => {
     if (!active || screen !== 'workspace') return;
     const input = ruleInput.current;
@@ -753,10 +787,12 @@ export default function Workbench({
     const endPointer = (event: PointerEvent) => {
       input.heldPointers.delete(event.pointerId);
       noteActivity();
+      if (!input.heldPointers.size) input.resume?.();
     };
     const resetPointers = () => {
       input.heldPointers.clear();
       noteActivity();
+      input.resume?.();
     };
     const activityEvents = ['pointermove', 'wheel', 'keydown', 'keyup', 'input'] as const;
     for (const event of activityEvents)
@@ -903,9 +939,15 @@ export default function Workbench({
       }
     }
   }
-  const requestRuleCheck = useEditorAction((kind: 'erc' | 'drc') =>
-    runRuleChecks(kind, undefined, true),
-  );
+  const requestRuleCheck = useEditorAction((kind: 'erc' | 'drc', queuedView: EditorView) => {
+    if (view !== queuedView || modal || confirmation) return;
+    if (
+      kind === 'drc' &&
+      (layoutSyncStatus.pending || layoutSyncStatus.error || (rulesOpen && ruleDRCDraftPending))
+    )
+      return;
+    void runRuleChecks(kind, undefined, true);
+  });
   async function locateRuleIssue(issue: RuleCheckIssue) {
     if (
       !rulesOpen ||
@@ -1297,6 +1339,7 @@ export default function Workbench({
       prepareModelCad: (objects, signal) => prepareModelCadObjects(core, objects, signal),
     });
     const disposePlugins = registerWorkbenchPluginCapabilities(capabilityHost);
+    const disposeParasitics = registerLayoutParasiticsCapability(capabilityHost, core.getSnapshot);
     const disposeProviderPlugins = registerProviderPluginCapabilities(capabilityHost);
     const disposeLibraries = registerLibraryCapabilities(capabilityHost, core, {
       available: () => resourcePorts.current.available?.() ?? false,
@@ -1320,6 +1363,7 @@ export default function Workbench({
       disposeFiles();
       disposeLibraries();
       disposeProviderPlugins();
+      disposeParasitics();
       disposePlugins();
       disposeCore();
     };
@@ -2631,20 +2675,20 @@ export default function Workbench({
     },
     thermal: async (visible, signal) => {
       if (!thermalAvailable)
-        throw new Error('Install and enable Thermal FEM in Plugins > Marketplace.');
+        throw new Error('Install and enable Layout Thermal in Plugins > Marketplace.');
       if (!visible) {
-        setThermalEnabled(false);
+        closeThermal();
         return { visible: false };
       }
-      if (!active) throw new Error('Activate this project before opening Thermal FEM.');
-      if (sourcePending) throw new Error('Apply Source edits before opening Thermal FEM.');
+      if (!active) throw new Error('Activate this project before opening Layout Thermal.');
+      if (sourcePending) throw new Error('Apply Source edits before opening Layout Thermal.');
       if (!projectRef.current?.pcb)
-        throw new Error('Open a PCB layout before opening Thermal FEM.');
+        throw new Error('Open a PCB layout before opening Layout Thermal.');
       if (!(await changeView('layout', signal)))
-        throw new Error('Apply valid Source edits before opening Thermal FEM.');
+        throw new Error('Apply valid Source edits before opening Layout Thermal.');
       setScreen('workspace');
       setThermalOpened(true);
-      setThermalEnabled(true);
+      setLayoutAnalysis('thermal');
       setModal(null);
       const started = performance.now();
       while (true) {
@@ -2654,7 +2698,7 @@ export default function Workbench({
           if (status.visible) return { visible: true };
         }
         if (performance.now() - started > 15000)
-          throw new Error('Thermal FEM could not open. Try again.');
+          throw new Error('Layout Thermal could not open. Try again.');
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       }
     },
@@ -2684,40 +2728,46 @@ export default function Workbench({
     modal,
     sourcePending,
   ]);
+  const canAddSchematicFile = Boolean(doc && schematicFiles.length < MAX_SCHEMATIC_FILES);
+  const canExportBoard = Boolean(project?.pcb);
+  const canExportModel = Boolean(modelCad?.objects.length);
   const titlebarMenus: TitlebarMenu[] = [
     {
       label: 'File',
       items: [
         { label: 'New project', run: () => newFile() },
-        ...(doc && schematicFiles.length < MAX_SCHEMATIC_FILES
-          ? [
-              {
-                label: 'New file',
-                run: () => {
-                  void newSchematicFile();
-                },
-              },
-            ]
-          : []),
         {
           label: 'Open project',
           run: () => {
             void open();
           },
         },
-        ...exampleList.sections.map((section, index) => ({
-          label: section.title,
-          separatorBefore: index === 0,
-          items: section.examples.map((example) => ({
-            label: example.title,
-            run: () => newFile(example.id),
+        ...exampleList.sections
+          .filter((section) => section.examples.length > 0)
+          .map((section, index) => ({
+            label: section.title,
+            separatorBefore: index === 0,
+            items: section.examples.map((example) => ({
+              label: example.title,
+              run: () => newFile(example.id),
+            })),
           })),
-        })),
+        ...(canAddSchematicFile
+          ? [
+              {
+                label: 'New file',
+                separatorBefore: true,
+                run: () => {
+                  void newSchematicFile();
+                },
+              },
+            ]
+          : []),
         ...(doc
           ? [
               {
                 label: 'Save',
-                separatorBefore: true,
+                separatorBefore: !canAddSchematicFile,
                 run: () => {
                   void save();
                 },
@@ -2728,16 +2778,12 @@ export default function Workbench({
                   void save(true);
                 },
               },
-              ...(project?.pcb
+              ...(canExportBoard
                 ? [
                     {
                       label: 'Export',
                       items: projectExportFormats
-                        .filter((format) =>
-                          format.id === 'scad'
-                            ? Boolean(project?.pcb && modelCadFromProject(project)?.objects.length)
-                            : Boolean(project?.pcb),
-                        )
+                        .filter((format) => format.id !== 'scad' || canExportModel)
                         .map((format) => ({
                           label: format.label,
                           run: () => {
@@ -2760,20 +2806,22 @@ export default function Workbench({
               ...(coreSnapshot.canUndo ? [{ label: 'Undo', run: undoStep }] : []),
               ...(coreSnapshot.canRedo ? [{ label: 'Redo', run: redoStep }] : []),
               ...(view === 'canvas' && selection.length
-                ? [
-                    { label: 'Move selection', run: () => requestSchematicMove(false) },
-                    { label: 'Drag with connections', run: () => requestSchematicMove(true) },
-                    { label: 'Copy selection', run: copySelection },
-                    { label: 'Duplicate selection', run: duplicate },
-                    { label: 'Delete selection', run: remove },
-                  ]
+                ? [{ label: 'Copy', run: copySelection, separatorBefore: true }]
                 : []),
               ...(view === 'canvas' && clipboard.current
-                ? [{ label: 'Paste', run: pasteSelection }]
+                ? [{ label: 'Paste', run: pasteSelection, separatorBefore: !selection.length }]
+                : []),
+              ...(view === 'canvas' && selection.length
+                ? [
+                    { label: 'Duplicate', run: duplicate },
+                    { label: 'Move', run: () => requestSchematicMove(false) },
+                    { label: 'Drag connected', run: () => requestSchematicMove(true) },
+                    { label: 'Delete', run: remove },
+                  ]
                 : []),
             ]
           : []),
-        { label: 'Settings', run: () => setModal('settings') },
+        { label: 'Settings', run: () => setModal('settings'), separatorBefore: true },
       ],
     },
     {
@@ -2791,6 +2839,7 @@ export default function Workbench({
           ? [
               {
                 label: 'Schematic',
+                separatorBefore: true,
                 run: async () => {
                   if (await changeView('canvas')) setScreen('workspace');
                 },
@@ -2819,13 +2868,14 @@ export default function Workbench({
         ...(screen === 'workspace' && doc
           ? [
               {
-                label: sidebarVisible ? 'Hide sidebar' : 'Show sidebar',
+                label: sidebarVisible ? 'Hide left panel' : 'Show left panel',
                 run: () => setSidebarVisible((value) => !value),
+                separatorBefore: true,
               },
               ...(rightSidebarAvailable
                 ? [
                     {
-                      label: ordinarySidebarVisible ? 'Hide right sidebar' : 'Show right sidebar',
+                      label: ordinarySidebarVisible ? 'Hide right panel' : 'Show right panel',
                       run: toggleCurrentRightSidebar,
                     },
                   ]
@@ -2931,7 +2981,10 @@ export default function Workbench({
       .execute(thermalEnabled ? 'thermal.hide' : 'thermal.show')
       .catch((error: Error) => notify(error.message));
   });
-  const closeThermal = useCallback(() => setThermalEnabled(false), []);
+  const closeParasitics = useCallback(() => {
+    setLayoutAnalysis((current) => (current === 'parasitics' ? null : current));
+    parasiticsButton.current?.focus({ preventScroll: true });
+  }, []);
   const rightSidebarAction = useMemo(
     () => (
       <SidebarToggle
@@ -3057,19 +3110,45 @@ export default function Workbench({
       locateThermalComponent,
     ],
   );
-  const thermalAction = useMemo(
+  const layoutPluginActions = useMemo(
     () =>
-      thermalAvailable ? (
-        <ToolButton
-          label="Thermal FEM"
-          active={thermalEnabled}
-          disabled={sourcePending || !project?.pcb}
-          onClick={openThermal}
-        >
-          <PluginLogo id={THERMAL_PLUGIN_ID} />
-        </ToolButton>
+      thermalAvailable || parasiticsAvailable ? (
+        <>
+          {thermalAvailable && (
+            <ToolButton
+              label="Layout Thermal"
+              active={thermalEnabled}
+              disabled={sourcePending || !project?.pcb}
+              onClick={openThermal}
+            >
+              <PluginLogo id={THERMAL_PLUGIN_ID} />
+            </ToolButton>
+          )}
+          {parasiticsAvailable && (
+            <ToolButton
+              label="Layout Parasitics"
+              active={parasiticsVisible}
+              buttonRef={parasiticsButton}
+              disabled={!canShowParasitics}
+              onClick={() =>
+                setLayoutAnalysis((current) => (current === 'parasitics' ? null : 'parasitics'))
+              }
+            >
+              <PluginLogo id={LAYOUT_PARASITICS_PLUGIN_ID} />
+            </ToolButton>
+          )}
+        </>
       ) : null,
-    [thermalAvailable, thermalEnabled, sourcePending, project?.pcb, openThermal],
+    [
+      thermalAvailable,
+      thermalEnabled,
+      parasiticsAvailable,
+      parasiticsVisible,
+      canShowParasitics,
+      sourcePending,
+      project?.pcb,
+      openThermal,
+    ],
   );
   const ruleStatus = useMemo(() => {
     const disabled =
@@ -3178,8 +3257,9 @@ export default function Workbench({
     if (kind === 'drc' && (!project.pcb || layoutSyncStatus.pending || layoutSyncStatus.error))
       return;
     if (rulesOpen === 'drc' && ruleDRCDraftPending) return;
-    if (!rulesOpen || ruleOpenRefresh.current !== view) {
-      const stored = ruleReports[kind];
+    const stored = ruleReports[kind];
+    const opening = rulesOpen === kind && ruleOpenRefresh.current === view;
+    if (!opening) {
       if (stored && !ruleReportIsStale(stored, kind, coreSnapshot.revision, doc.id, drcSettings))
         return;
       const basis = ruleCheckBasis(
@@ -3191,27 +3271,35 @@ export default function Workbench({
       );
       if (ruleFailureBasis.current[kind] === basis) return;
     }
-    const settleMs = 1500;
-    let timer: ReturnType<typeof setTimeout>;
+    const settleMs = opening || !stored ? 250 : 650;
+    const earliest = performance.now() + settleMs;
+    const input = ruleInput.current;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let idle: number | undefined;
     const waitForIdle = () => {
-      const input = ruleInput.current;
-      const remaining = settleMs - (performance.now() - input.lastActivity);
-      if (input.heldPointers.size || remaining > 0) {
-        timer = setTimeout(waitForIdle, input.heldPointers.size ? settleMs : remaining);
+      timer = undefined;
+      if (input.heldPointers.size) return;
+      const remaining = Math.max(earliest, input.lastActivity + settleMs) - performance.now();
+      if (remaining > 0) {
+        timer = setTimeout(waitForIdle, Math.ceil(remaining));
         return;
       }
       idle = window.requestIdleCallback(() => {
         idle = undefined;
         if (input.heldPointers.size || performance.now() - input.lastActivity < settleMs) {
-          timer = setTimeout(waitForIdle, settleMs);
+          waitForIdle();
           return;
         }
-        void requestRuleCheck(kind);
+        input.resume = null;
+        requestRuleCheck(kind, view);
       });
     };
-    timer = setTimeout(waitForIdle, settleMs);
+    input.resume = () => {
+      if (timer === undefined && idle === undefined) waitForIdle();
+    };
+    waitForIdle();
     return () => {
+      input.resume = null;
       clearTimeout(timer);
       if (idle !== undefined) window.cancelIdleCallback(idle);
     };
@@ -3475,11 +3563,10 @@ export default function Workbench({
   const closeHeaderProject = useEditorAction(requestProjectClose);
   const hasDocument = Boolean(doc);
   const headerProjectTitle = project?.name ?? project?.schematic.title;
-  // File labels vary with document presence and the schematic-file limit; actions still resolve the
-  // latest menu so retained chrome cannot bypass current Source/save guards.
+  // Keep fallback labels aligned with the latest menu indices used by the guarded actions.
   const headerFileOptions = useMemo(
     () => titlebarMenuOptions(titlebarMenus[0].items),
-    [hasDocument, schematicFiles.length],
+    [hasDocument, canAddSchematicFile, canExportBoard, canExportModel, exampleList.sections],
   );
   const appHeader = useMemo(
     () => (
@@ -3507,6 +3594,7 @@ export default function Workbench({
                 placeholder="File"
                 compact
                 showChevron={false}
+                popupClassName="application-menu"
                 options={headerFileOptions}
                 onChange={runHeaderFileAction}
               />
@@ -3603,7 +3691,7 @@ export default function Workbench({
         screen !== 'workspace' ||
         view !== 'layout' ||
         !rightSidebarVisible ||
-        thermalVisible ||
+        layoutAnalysisVisible ||
         modal ||
         confirmation ||
         snapshot.project?.pcb !== board ||
@@ -3695,7 +3783,7 @@ export default function Workbench({
         screen !== 'workspace' ||
         !['schematic', 'layout', '3d'].includes(view) ||
         !rightSidebarVisible ||
-        (view === 'layout' && thermalVisible) ||
+        layoutAnalysisVisible ||
         modal ||
         confirmation ||
         snapshot.sourceDraft !== null ||
@@ -4482,7 +4570,7 @@ export default function Workbench({
                     <Suspense fallback={<p role="status">Loading layout editor…</p>}>
                       <RetainedLayoutEditor
                         visible={active && screen === 'workspace' && view === 'layout'}
-                        sidebarVisible={rightSidebarVisible && !thermalVisible}
+                        sidebarVisible={rightSidebarVisible && !layoutAnalysisVisible}
                         onShowSidebar={showLayoutSidebar}
                         onToggleSidebar={toggleRightSidebar}
                         ruleFocus={ruleFocus?.kind === 'drc' && !ruleReportStale ? ruleFocus : null}
@@ -4514,7 +4602,7 @@ export default function Workbench({
                         onRequestSave={requestPropertiesSave}
                         syncStatus={layoutSyncStatus}
                         undoAction={undoAction}
-                        analysisAction={thermalAction}
+                        analysisAction={layoutPluginActions}
                         analysisDrawing={thermalDrawing}
                         analysisComponentSurface={currentThermalPresentation?.surface}
                         analysisComponentDetail={thermalComponentDetail}
@@ -4528,7 +4616,7 @@ export default function Workbench({
                         }
                         analysisReadout={thermalReadout}
                         analysisPanel={layoutAnalysisPanelMount}
-                        analysisPanelVisible={thermalVisible}
+                        analysisPanelVisible={layoutAnalysisVisible}
                         analysisLocateRef={thermalLocateRef}
                         onAnalysisProbe={
                           currentThermalPresentation?.probing
@@ -4544,7 +4632,22 @@ export default function Workbench({
                     </Suspense>
                     {/* Keep plugin lifecycle updates outside the retained editor's hidden tree. */}
                     {layoutAnalysisPanelTarget &&
-                      createPortal(thermalPanel, layoutAnalysisPanelTarget)}
+                      createPortal(
+                        <>
+                          {thermalPanel}
+                          {parasiticsVisible && project.pcb && (
+                            <Suspense fallback={null}>
+                              <LayoutParasiticsPanel
+                                board={project.pcb}
+                                host={capabilityHost}
+                                revision={coreSnapshot.revision}
+                                onClose={closeParasitics}
+                              />
+                            </Suspense>
+                          )}
+                        </>,
+                        layoutAnalysisPanelTarget,
+                      )}
                   </div>
                 )}
                 {objectOpened && project && (

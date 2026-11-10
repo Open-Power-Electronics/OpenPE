@@ -183,16 +183,28 @@ export const LayoutZoneOutlineDrawing = memo(function LayoutZoneOutlineDrawing({
   zoneId,
   layer,
   path,
+  target,
   selection,
 }: {
   zoneId: string;
   layer: BoardLayer;
   path: string;
+  target?: string;
   selection: LayoutSelection;
 }) {
   const selected = useLayoutSelection(selection, zoneId);
   return (
     <g data-selection-id={zoneId}>
+      {target && (
+        <path
+          d={target}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={0.08}
+          strokeDasharray="0.5 0.35"
+          data-export-exclude
+        />
+      )}
       <PCBSelectionPaint color={pcbLayerColor(layer)} selected={selected}>
         {(color) => (
           <path
@@ -202,6 +214,7 @@ export const LayoutZoneOutlineDrawing = memo(function LayoutZoneOutlineDrawing({
             stroke={color}
             strokeWidth={0.08}
             strokeDasharray="0.5 0.35"
+            pointerEvents={target ? 'none' : undefined}
           />
         )}
       </PCBSelectionPaint>

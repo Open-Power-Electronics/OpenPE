@@ -682,6 +682,10 @@ export function runPCBDesignRules(
         );
       }
     const boundaryEdges = boundary.flatMap(polygonEdges);
+    const boundaryEdgeBounds = boundaryEdges.map(edgeBounds);
+    const boundaryMargin = Math.max(settings.copperToEdge, epsilon);
+    const reachesBoundary = (bounds: Bounds) =>
+      boundaryEdgeBounds.some((edge) => overlapsBounds(bounds, edge, boundaryMargin));
     phase = 'copper-to-edge and copper-to-hole clearance';
     const onBoard = (p: Point) =>
       boundary.some((polygon) => insidePolygon(p, polygon, spend)) ||
@@ -698,7 +702,16 @@ export function runPCBDesignRules(
             copper.polygon &&
             boundary.some((polygon) => polygon.holes.some((hole) => insideBody(hole[0], copper))),
           );
-        if (copper.disk) {
+        // A non-centered drill can reach beyond its pad's outer bounds.
+        const nearBoundary = copper.disk
+          ? reachesBoundary(pointBounds([copper.disk.at], copper.disk.outer))
+          : reachesBoundary(copper) ||
+            copper.polygon?.holes.some((hole) => reachesBoundary(pointBounds(hole, copper.radius)));
+        if (!nearBoundary) {
+          // No boundary can touch this body or violate its clearance. Retain
+          // the same work-limit accounting without visiting every edge pair.
+          spend(boundaryEdges.length * (copper.disk ? 1 : copper.edges.length));
+        } else if (copper.disk) {
           // A circular annulus has one exact radial interval. Repeating this
           // calculation for every display polygon edge only spends the budget.
           for (const [c, d] of boundaryEdges) {

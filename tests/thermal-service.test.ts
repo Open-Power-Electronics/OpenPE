@@ -96,7 +96,7 @@ function completedResult(model: ThermalModel): ThermalResult {
   };
 }
 
-test('current complete lifecycle preserves independent SPICE and Thermal FEM flags', async () => {
+test('current complete lifecycle preserves independent SPICE and Layout Thermal flags', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-thermal-lifecycle-'));
   const filename = path.join(directory, 'workbench-plugins-v1.json');
   try {
@@ -115,15 +115,14 @@ test('current complete lifecycle preserves independent SPICE and Thermal FEM fla
       catalog.plugins.find((p: { id: string }) => p.id === spicePluginId)?.enabled,
       false,
     );
-    assert.equal(
-      catalog.plugins.find((p: { id: string }) => p.id === thermalPluginId)?.enabled,
-      true,
-    );
+    const thermal = catalog.plugins.find((p: { id: string }) => p.id === thermalPluginId);
+    assert.equal(thermal?.name, 'Layout Thermal');
+    assert.equal(thermal?.enabled, true);
     await service.requireThermal();
     await assert.rejects(service.requireSpice(), /SPICE/);
     assert.equal(await readFile(filename, 'utf8'), bytes);
     await service.change('disable', thermalPluginId);
-    await assert.rejects(service.requireThermal(), /Thermal FEM/);
+    await assert.rejects(service.requireThermal(), /Layout Thermal/);
     const saved = JSON.parse(await readFile(filename, 'utf8'));
     assert.deepEqual(
       saved.plugins.map((plugin: { id: string }) => plugin.id),

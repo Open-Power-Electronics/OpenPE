@@ -1204,3 +1204,83 @@
   stroke: var(--text);
   stroke-width: 1.5px;
 }
+
+.layout-parasitics-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.layout-parasitics-panel > .editor-dock-header {
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-top: 0;
+}
+
+.layout-parasitics-panel > .editor-dock-header h2 {
+  overflow-wrap: anywhere;
+}
+
+.layout-parasitics-body {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: var(--properties-row-gap);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--properties-inset);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.layout-parasitics-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.layout-parasitics-body .dialog-error {
+  margin: 0;
+}
+
+.layout-parasitics-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: var(--editor-footer-height);
+  padding: 2px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.layout-parasitics-results {
+  margin: 0;
+  font-size: var(--font-control);
+}
+
+.layout-parasitics-results > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.layout-parasitics-results dt {
+  color: var(--muted);
+}
+
+.layout-parasitics-results dd {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}

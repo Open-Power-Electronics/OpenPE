@@ -11,7 +11,7 @@ GUI/Agent parity covers design, simulation and project-file operations through s
 | Schematic symbol drawing, placement, Properties, wiring, connected pickup, copy/paste and removal | `schematic.*`, `part.*`, `library.*`                                               | Validated Core edit; original identities/connections retained, copies receive fresh identities  |
 | PCB footprint drawing, placement, routing, pickup, Properties, zones and board drawings           | `layout.*`                                                                         | Same geometry preparation, collision checks, fills and single undo result                       |
 | Model CAD and component model selection                                                           | `modelCad.*`, `enclosure.exportStep`, `layout.model.*`                             | Exact host-prepared geometry/resource identities, then Core validation                          |
-| SPICE and Thermal settings, probes, Run/Stop and supported result operations                      | `simulation.*`, `thermal.*`, `part.spiceModel.*`, `part.sourceType`                | Same mounted plugin handlers, saved-destination gates and automatic verified result restoration |
+| SPICE and Layout Thermal settings, probes, Run/Stop and supported result operations               | `simulation.*`, `thermal.*`, `part.spiceModel.*`, `part.sourceType`                | Same mounted plugin handlers, saved-destination gates and automatic verified result restoration |
 | Native Source, Save/Save as, export and local history                                             | `source.*`, `project.save`, `project.export`, `versions.*`                         | Same Source/revision gates, native grants and history restoration                               |
 | New/open/example/close/Explorer and ordinary project text                                         | `project.new/open/openExample/close/reveal`, `project.examples`, `project.files.*` | Origin-bound workspace actions and existing file drafts/native pickers                          |
 
@@ -27,7 +27,7 @@ Model contents and logs remain unavailable to Agents, including explicit project
 - [Library capabilities](#library-capabilities)
 - [Plugin lifecycle capabilities](#plugin-lifecycle-capabilities)
 - [SPICE capabilities](#spice-capabilities)
-- [Thermal FEM capabilities](#thermal-fem-capabilities)
+- [Layout Thermal capabilities](#layout-thermal-capabilities)
 - [Agent tools](#agent-tools)
 - [Local HTTP service](#local-http-service)
 - [Electron bridge](#electron-bridge)
@@ -642,7 +642,7 @@ simulation are exposed.
 
 ## Rule-check queries
 
-`schematic.erc` and `layout.drc` are Core-owned queries with mutation `false`, review `none` and no abstraction level. The Schematic and Layout controls invoke the same capability handlers available to Agent `openpe_query`; they require no SPICE/Thermal plugin. Both schemas reject extra keys. `schematicId` and `boardId` are required current project identities, each 1–200 characters. The human ERC control passes the active schematic ID; the query can check any identified schematic in its originating project without changing the active sheet. Each schematic is independent, with no cross-file electrical joins. DRC targets the project's current PCB, associated with its primary schematic.
+`schematic.erc` and `layout.drc` are Core-owned queries with mutation `false`, review `none` and no abstraction level. The Schematic and Layout controls invoke the same capability handlers available to Agent `openpe_query`; both checks are independent of SPICE Simulation and Layout Thermal. Both schemas reject extra keys. `schematicId` and `boardId` are required current project identities, each 1–200 characters. The human ERC control passes the active schematic ID; the query can check any identified schematic in its originating project without changing the active sheet. Each schematic is independent, with no cross-file electrical joins. DRC targets the project's current PCB, associated with its primary schematic.
 
 ```ts
 type PCBDesignRuleConfig = {
@@ -832,12 +832,17 @@ Owner is `host`; level is absent. List is a query with mutation `false`; change 
 | ID                         | Input                                                                                             | Result and behaviour                                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `workbench.plugins.list`   | `{refresh?:boolean}`                                                                              | Confirmed `WorkbenchPluginCatalog`; shared cache lasts five minutes.                                                         |
-| `workbench.plugins.change` | `{action:PluginAction, id:'spice-simulation@openpe'/'pcb-thermal@openpe'/'ai-pcb-layout@openpe'}` | Updated `WorkbenchPluginCatalog`; reconciles lifecycle across mounted projects.                                              |
+| `workbench.plugins.change` | `{action:PluginAction, id:WorkbenchPluginId}`                                                      | Updated `WorkbenchPluginCatalog`; reconciles lifecycle across mounted projects.                                              |
 | `provider.plugins.list`    | `{provider:'codex'/'claude', refresh?:boolean}`                                                   | Provider catalog with `plugins`, `controlsVersion`, `browse`, `marketplaces`, `actions`, `warning` and optional `updatedAt`. |
 | `provider.plugins.change`  | `{provider:'codex'/'claude', action:PluginAction, id:string}`                                     | `{ok:true}` after a supported provider action succeeds.                                                                      |
 
 ```ts
 type PluginAction = 'install' | 'uninstall' | 'enable' | 'disable';
+type WorkbenchPluginId =
+  | 'spice-simulation@openpe'
+  | 'pcb-thermal@openpe'
+  | 'ai-pcb-layout@openpe'
+  | 'layout-parasitics@openpe';
 type WorkbenchPluginCatalog = {
   controlsVersion: 1;
   plugins: {
@@ -954,7 +959,7 @@ retains validated partial samples; automatic cancellation discards live previews
 There is no solver runtime timeout. Load-only restore/settings/waveform behavior
 follows [Simulation](SIMULATION.md#execution-streaming-and-completed-results).
 
-## Thermal FEM capabilities
+## Layout Thermal capabilities
 
 Host commands `thermal.show` and `thermal.hide` take `{}`. Show requires an enabled plugin, an active project with a PCB and applied Source, switches to Layout and waits for the resident capabilities. Hide cancels active work and retains a completed session result.
 
@@ -970,7 +975,29 @@ Seven resident capabilities belong to `plugin: 'pcb-thermal@openpe'`. All measur
 | `thermal.probe`       | `{point:{x,y,z?}/null}`            | Nearest actual solver node; omitted z uses the displayed front/back surface. Null clears it.                                                                                                                                                                                |
 | `thermal.exportImage` | `{}`                               | Exports the displayed temperature map through the image bridge; external mutation with optional review.                                                                                                                                                                     |
 
-`ThermalConfig` is defined in [`lib/thermal.ts`](../lib/thermal.ts): ambient °C, front/back/edge convection W/(m²·K), each copper-layer thickness mm, dielectric/copper conductivity W/(m·K), plating and mesh size mm, and per-footprint W into the PCB. Optional `spiceSource:{config:TransientConfig,startS,endS,resultBasis}` records host-verified imported sample provenance. Run and lookup revalidate it; explicit `heatSources` edits without `spiceSource` select manual inputs and clear provenance. Materials, all imported heat into pads and equal dielectric gaps are explicit assumptions. `thermal.changed` events and optional workspace `thermal` context are bounded observations. The result's original settings remain available when current settings change. First opening a saved project's panel restores the latest matching verified field and its configuration through the load-only result route. Results and settings stay outside Core design state, undo, recovery and dirty state. See [Thermal](THERMAL.md) for geometry, persistence, lifecycle and numerical verification.
+`ThermalConfig` is defined in [`lib/thermal.ts`](../lib/thermal.ts): ambient °C, front/back/edge convection W/(m²·K), each copper-layer thickness mm, dielectric/copper conductivity W/(m·K), plating and mesh size mm, and per-footprint W into the PCB. Optional `spiceSource:{config:TransientConfig,startS,endS,resultBasis}` records host-verified imported sample provenance. Run and lookup revalidate it; explicit `heatSources` edits without `spiceSource` select manual inputs and clear provenance. Materials, all imported heat into pads and equal dielectric gaps are explicit assumptions. `thermal.changed` events and optional workspace `thermal` context are bounded observations. The result's original settings remain available when current settings change. First opening a saved project's panel restores the latest matching verified field and its configuration through the load-only result route. Results and settings stay outside Core design state, undo, recovery and dirty state. See [Layout Thermal](THERMAL.md) for geometry, persistence, lifecycle and numerical verification.
+
+## Layout Parasitics capability
+
+`parasitics.measure` is a read-only query owned by plugin `layout-parasitics@openpe`.
+It has no Core level. Input is
+`{boardId:string,startId:string,endId:string,copperThicknessMm?:number,viaPlatingMm?:number}`
+with no extra keys. Each ID is 1–200 characters. `boardId` identifies the current
+PCB. The terminal IDs identify distinct copper pads or vias on the same assigned
+net. Both thickness inputs are in mm and accept finite values from 0.001 to 1
+inclusive. See [Layout Parasitics](LAYOUT.md#layout-parasitics) for defaults and
+geometry constraints.
+
+The result is
+`{boardId,revision,netId,netName,startLayer,endLayer,copperThicknessMm,viaPlatingMm,shortestLengthMm,shortestResistanceOhm,equivalentResistanceOhm,path}`.
+`revision` is the numeric Core revision. `startLayer` and `endLayer` are strings
+describing the copper layer or layers at each terminal. `path` is the ordered
+shortest-route list of `{id,kind:'track'/'via'}` objects, with consecutive spans
+of the same via represented by one entry. The query requires confirmed installed
+and enabled plugin state, applied Source and an open project. It reads the accepted
+PCB revision, including unsaved edits, and checks any supplied capability revision.
+Rejected or disconnected measurements return errors. The same query serves the
+Layout Parasitics dock and scoped Agent tools.
 
 ## Agent tools
 
@@ -1029,7 +1056,7 @@ The registered method/path pairs are listed below. Inputs listed in braces are J
 | `POST /api/plugins`                                    | `{provider,action:PluginAction,id}`                                                                     | `{ok:true}`; qualified `plugin@marketplace` ID and CLI-supported operation required. One active plugin operation per provider.                                                                                                                                                                                     |
 | `GET /api/workbench-plugins`                           | No query parameters                                                                                     | Bundled workbench catalog. Malformed lifecycle state fails closed.                                                                                                                                                                                                                                                 |
 | `POST /api/datasheets/page`                            | `{exampleId:string,page:integer,image?:boolean}`                                                        | Authenticated, origin-checked fixed reference catalog lookup. Returns the PDF-page result above without renderer-added `projectId`/`bindings`. Rejects unknown IDs, extra fields and out-of-range pages before I/O; accepts no URL/path.                                                                           |
-| `POST /api/workbench-plugins`                          | `{id,action:PluginAction}`                                                                              | `{ok:true}`; only bundled allowlisted SPICE Simulation, Thermal FEM and PE Layout Skill identities. The capability wrapper subsequently reloads the catalog.                                                                                                                                                       |
+| `POST /api/workbench-plugins`                          | `{id:WorkbenchPluginId,action:PluginAction}`                                                            | `{ok:true}` for the fixed catalog identities. The capability wrapper subsequently reloads the catalog.                                                                                                                                                                                                              |
 | `GET /api/pcb-design/guide`                            | Optional `document` query from the fixed guidance enum                                                  | Verified PCB guidance result above; authenticated, origin-checked and plugin-gated. Rejects unknown selectors or extra parameters before file access.                                                                                                                                                              |
 | `GET /api/libraries/:kind`                             | Path `kind=symbols/footprints`; query `q?`, `library?`, `id?`, `offset?`                                | With a nonempty `id`, resolved detail; otherwise `{entries,total,libraries}`. Search returns at most 100 entries.                                                                                                                                                                                                  |
 | `GET /api/library-model`                               | Query `id`, `index?`                                                                                    | `{meshes,model}` for an existing model reference in a bundled official or pinned example footprint. Index defaults to 0.                                                                                                                                                                                           |
@@ -1082,9 +1109,9 @@ Completed manifests require the complete run configuration separately from nativ
 
 SPICE manifests require complete transient settings, `identityVersion: 2` and the actual executable's `solverSha256`; installation paths and timestamps are excluded from that identity. Ordered vectors/units remain execution inputs, while returned labels and probe targets are rebound to the current compiled circuit. Both explicit Run and automatic lookup require the current complete identity. Other identity versions, installation-path identities and settings reconstructed from execution decks are unsupported.
 
-Saved results use `openpe-spice-v2` / `openpe-thermal-v2` manifests, with `project` bound to the native basename and direct `spice/<stem>.*` / `thermal/<stem>.*` artifacts. SPICE `files` entries are `{name,file}`; Thermal entries also include `size` and `sha256`. Physical names prefix the logical artifact basename with the native stem; execution keys use logical input identities. Store instances share a per-directory queue, publish individual files with the manifest last and roll back failed writes through private sibling `*-backups` folders. Unknown sidecars and conflicting/damaged files remain protected; this is not filesystem-wide crash atomicity. Retired nested records are ignored without loading or migration. See [SPICE persistence](SIMULATION.md#execution-streaming-and-completed-results) and [Thermal records](THERMAL.md#completed-desktop-records).
+Saved results use `openpe-spice-v2` / `openpe-thermal-v2` manifests, with `project` bound to the native basename and direct `spice/<stem>.*` / `thermal/<stem>.*` artifacts. SPICE `files` entries are `{name,file}`; Layout Thermal entries also include `size` and `sha256`. Physical names prefix the logical artifact basename with the native stem; execution keys use logical input identities. Store instances share a per-directory queue, publish individual files with the manifest last and roll back failed writes through private sibling `*-backups` folders. Unknown sidecars and conflicting/damaged files remain protected; this is not filesystem-wide crash atomicity. Retired nested records are ignored without loading or migration. See [SPICE persistence](SIMULATION.md#execution-streaming-and-completed-results) and [Layout Thermal records](THERMAL.md#completed-desktop-records).
 
-Thermal requests accept private validated project Source, settings and an opaque file ID, never meshes, scripts, paths, executables or URLs. Thermal lookup revalidates saved configuration against the current PCB and compares the complete prepared model. SPICE-derived configurations also require matching verified electrical samples and watts through the shared read-only SPICE completed-result port. Only compiler-declared dissipative paths are averaged; reactive energy, sources and unmodelled losses are excluded. An optional caller configuration must also match. Lookup never solves, downloads or edits design data. Electron resolves the opaque file ID and rechecks it before publication/removal. Completed artifacts are direct `thermal/<stem>.*` files; no records enter native Source, undo or recovery. Thermal lookup cancellation returns 409 with `Thermal result lookup cancelled.` while the response remains open. The thermal plugin gate applies before lookup, compilation or resource verification. SPICE is independently gated; disabling it cancels coupled thermal work while manual thermal runs remain independent.
+Layout Thermal requests accept private validated project Source, settings and an opaque file ID, never meshes, scripts, paths, executables or URLs. Layout Thermal lookup revalidates saved configuration against the current PCB and compares the complete prepared model. SPICE-derived configurations also require matching verified electrical samples and watts through the shared read-only SPICE completed-result port. Only compiler-declared dissipative paths are averaged; reactive energy, sources and unmodelled losses are excluded. An optional caller configuration must also match. Lookup never solves, downloads or edits design data. Electron resolves the opaque file ID and rechecks it before publication/removal. Completed artifacts are direct `thermal/<stem>.*` files; no records enter native Source, undo or recovery. Thermal lookup cancellation returns 409 with `Thermal result lookup cancelled.` while the response remains open. The thermal plugin gate applies before lookup, compilation or resource verification. SPICE is independently gated; disabling it cancels coupled thermal work while manual thermal runs remain independent.
 
 Errors generally return `{error:string}`; some SPICE errors also include `code`, including `OPENPE_SPICE_CONVERGENCE`. Common statuses are 400 for rejected input, 401 for expired authentication, 403 for Origin/plugin restrictions, 409 for conflicts/stale tool replies, 429 for chat concurrency, 422 for library/simulation/Agent-tool failures, 502 for provider/model-discovery failures and 503 for unavailable plugin state/shutdown. Stored-data and unhandled errors can return 500. After SSE starts, failures use events rather than a new HTTP error body.
 
@@ -1219,7 +1246,7 @@ type SimulationResult = {
 };
 ```
 
-The optional completed-result `dissipation` summary integrates signed V·I over every full-resolution solver output row before display reduction, over the final 20% of the requested duration. Its exact interval, original row count and ordered current vectors must match the current deck. Thermal import requires this verified summary and rejects negative dissipative averages; live, partial and display-only results without this summary cannot supply heat. Heat-summary version and vector/node metadata participate in completed-run cache identity. See [SPICE Simulation](SIMULATION.md#full-resolution-dissipative-power) for excluded losses and the distinct approximate EMC Flyback model.
+The optional completed-result `dissipation` summary integrates signed V·I over every full-resolution solver output row before display reduction, over the final 20% of the requested duration. Its exact interval, original row count and ordered current vectors must match the current deck. Layout Thermal import requires this verified summary and rejects negative dissipative averages; live, partial and display-only results without this summary cannot supply heat. Heat-summary version and vector/node metadata participate in completed-run cache identity. See [SPICE Simulation](SIMULATION.md#full-resolution-dissipative-power) for excluded losses and the distinct approximate EMC Flyback model.
 
 With `Accept: text/event-stream`, transient events are:
 
@@ -1354,7 +1381,7 @@ Project export uses `openpe:export`, a validated complete snapshot and one requi
 
 Image export accepts a verified PNG data URL, at most 48,000,000 characters, with integer dimensions from 1 to 4,096 pixels. It opens a native picker and does not change project dirty state or destination grants.
 
-Model STEP export retains the `exportEnclosure` bridge method and `enclosure.exportStep` capability as current protocol identifiers. It accepts at most 8,000,000 bytes of validated source containing CAD bodies. The host reuses the preview kernel's fixed OpenCASCADE construction with verified packaged Gmsh, a 60-second geometry bound and completed-artifact validation, then opens the native STEP/STP picker and writes atomically to that selection. Renderer input supplies no path, executable or script. Overlapping independent bodies remain separate unless explicitly combined. STEP contains analytical profiles, selected-edge treatments and Boolean cutouts with their XYZ poses, excluding PCB/package shapes and material/color/opacity properties. Export is independent of Thermal FEM plugin state and does not run a solve, edit the project or grant a native project destination.
+Model STEP export retains the `exportEnclosure` bridge method and `enclosure.exportStep` capability as current protocol identifiers. It accepts at most 8,000,000 bytes of validated source containing CAD bodies. The host reuses the preview kernel's fixed OpenCASCADE construction with verified packaged Gmsh, a 60-second geometry bound and completed-artifact validation, then opens the native STEP/STP picker and writes atomically to that selection. Renderer input supplies no path, executable or script. Overlapping independent bodies remain separate unless explicitly combined. STEP contains analytical profiles, selected-edge treatments and Boolean cutouts with their XYZ poses, excluding PCB/package shapes and material/color/opacity properties. Export is independent of Layout Thermal plugin state and does not run a solve, edit the project or grant a native project destination.
 
 ## Examples
 
@@ -1433,7 +1460,8 @@ await host.execute('simulation.configure', {
 | Embedded symbol/footprint authoring                  | [`lib/symbol-drawing.ts`](../lib/symbol-drawing.ts), [`lib/footprint-drawing.ts`](../lib/footprint-drawing.ts)                                                                                                                |
 | Bundled/provider lifecycle                           | [`lib/workbench-plugins.ts`](../lib/workbench-plugins.ts), [`lib/provider-plugin-capabilities.ts`](../lib/provider-plugin-capabilities.ts)                                                                                    |
 | Resident simulation and waveform handlers            | [`lib/simulation-capabilities.ts`](../lib/simulation-capabilities.ts), [`components/SimulationDialog.tsx`](../components/SimulationDialog.tsx), [`components/SimulationWaveforms.tsx`](../components/SimulationWaveforms.tsx) |
-| Resident Thermal FEM handlers                        | [`lib/thermal-capabilities.ts`](../lib/thermal-capabilities.ts), [`components/ThermalSimulation.tsx`](../components/ThermalSimulation.tsx), [`lib/thermal.ts`](../lib/thermal.ts)                                             |
+| Resident Layout Thermal handlers                     | [`lib/thermal-capabilities.ts`](../lib/thermal-capabilities.ts), [`components/ThermalSimulation.tsx`](../components/ThermalSimulation.tsx), [`lib/thermal.ts`](../lib/thermal.ts)                                             |
+| Layout Parasitics                                    | [`lib/workbench-plugins.ts`](../lib/workbench-plugins.ts), [`lib/layout-parasitics.ts`](../lib/layout-parasitics.ts), [`components/LayoutParasiticsPanel.tsx`](../components/LayoutParasiticsPanel.tsx)                         |
 | Agent tool envelopes and review                      | [`server/agent-capabilities.mjs`](../server/agent-capabilities.mjs), [`lib/chat-stream.ts`](../lib/chat-stream.ts)                                                                                                            |
 | Agent identities and connection labels               | [`lib/agent-providers.ts`](../lib/agent-providers.ts); generated [`server/agent-provider-format.mjs`](../server/agent-provider-format.mjs)                                                                                    |
 | Local HTTP and native bridge                         | [`server/index.mjs`](../server/index.mjs), [`electron/preload.cjs`](../electron/preload.cjs), [`lib/bridge.ts`](../lib/bridge.ts)                                                                                             |

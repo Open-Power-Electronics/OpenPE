@@ -975,7 +975,7 @@ try {
   await button('Layout').click();
   const canvas = page.getByTestId('layout-canvas');
   await canvas.waitFor();
-  await assertWindowActions(page.locator('.layout-toolbar'), 'Thermal FEM');
+  await assertWindowActions(page.locator('.layout-toolbar'), 'Layout Thermal');
   const sidebar = page.getByRole('complementary', { name: 'Layout sidebar', exact: true });
   await sidebar.waitFor();
   await checkDrawerSharing(sidebar, canvas, true);

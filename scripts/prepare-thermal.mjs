@@ -419,7 +419,7 @@ for (const item of lock.sourceNotices ?? []) {
 }
 
 const noticeHeader =
-  `OpenPE Thermal FEM: bundled Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion} (Windows x64)\n\n` +
+  `OpenPE Layout Thermal: bundled Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion} (Windows x64)\n\n` +
   'OpenPE invokes the unmodified, hash-pinned official executables as separate local processes.\n' +
   'The Elmer archive is the official rel26.1 release; its solver banner retains the upstream 9.0 (Rev: Release) label compiled on 2026-01-20.\n' +
   'Runtime files, upstream solver and identified dependency source archives, build materials and license notices ship under resources/thermal/1.\n' +

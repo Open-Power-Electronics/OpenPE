@@ -204,6 +204,11 @@ import type { CapabilityHost } from '@/api/capabilities';
 const pixelsPerMM = 96 / 25.4;
 const outlineWidth = 0.05;
 const regionMinThickness = 0.2;
+const inactiveLayerModeLabels: Record<PCBInactiveLayerMode, string> = {
+  Normal: 'All',
+  Dim: 'Dim',
+  Hide: 'Solo',
+};
 
 const RetainedLayoutProperties = memo(
   function RetainedLayoutProperties({
@@ -1137,7 +1142,9 @@ function LayoutEditor({
   const committedZonePaths = useRef<ReturnType<typeof preparePCBZoneOutlinePaths>['cache']>(
     new Map(),
   );
-  const committedZoneDrawingPaths = useRef<Map<string, string>>(new Map());
+  const committedZoneDrawingPaths = useRef<ReturnType<typeof preparePCBZoneOutlinePaths>['paths']>(
+    new Map(),
+  );
   const ownedZonePaths = useMemo(
     () =>
       isOwnedProjectNode(placed.zones)
@@ -1157,9 +1164,13 @@ function LayoutEditor({
   ) {
     const previousZoneDrawingEntries = [...previousZoneDrawingPaths];
     if (
-      [...zoneOutlinePaths].every(([id, path], index) => {
+      [...zoneOutlinePaths].every(([id, drawing], index) => {
         const previous = previousZoneDrawingEntries[index];
-        return previous?.[0] === id && previous[1] === path;
+        return (
+          previous?.[0] === id &&
+          previous[1].path === drawing.path &&
+          previous[1].target === drawing.target
+        );
       })
     )
       zoneOutlinePaths = previousZoneDrawingPaths;
@@ -3844,18 +3855,20 @@ function LayoutEditor({
           copperLayer,
           placed.zones
             .filter((zone) => zone.layer === copperLayer)
-            .map((zone) =>
-              retainOutline(
+            .map((zone) => {
+              const drawing = zoneOutlinePaths.get(zone.id);
+              return retainOutline(
                 {
                   key: zone.id,
                   zoneId: zone.id,
                   layer: zone.layer,
-                  path: zoneOutlinePaths.get(zone.id) ?? '',
+                  path: drawing?.path ?? '',
+                  target: drawing?.target,
                   selection: selectionPaint,
                 },
                 ({ key, ...props }) => <LayoutZoneOutlineDrawing key={key} {...props} />,
-              ),
-            ),
+              );
+            }),
         );
     return drawings;
   }, copperOutlineInputs);
@@ -5403,7 +5416,10 @@ function LayoutEditor({
                   popupBoundary=".editor-drawing-region"
                   active={active && visible}
                   value={inactiveLayerMode}
-                  options={pcbInactiveLayerModes.map((mode) => ({ value: mode, label: mode }))}
+                  options={pcbInactiveLayerModes.map((mode) => ({
+                    value: mode,
+                    label: inactiveLayerModeLabels[mode],
+                  }))}
                   onChange={(value) => {
                     const mode = pcbInactiveLayerModes.find((item) => item === value);
                     if (mode) changeInactiveLayerMode(mode);

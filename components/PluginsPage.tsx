@@ -16,7 +16,7 @@ import {
 } from '@/lib/workbench-plugins';
 import Dialog from './Dialog';
 import AgentLogo from './AgentLogo';
-import PluginLogo from './PluginLogo';
+import PluginLogo, { hasPluginLogo } from './PluginLogo';
 
 const providers = ['openpe', 'codex', 'claude'] as const;
 type Provider = (typeof providers)[number];
@@ -62,9 +62,7 @@ const labels: Record<Action, string> = {
 };
 function PluginIcon({ plugin }: { plugin: Plugin }) {
   const bundled =
-    plugin.scope === 'application' &&
-    plugin.origin === 'openpe' &&
-    [SPICE_PLUGIN_ID, THERMAL_PLUGIN_ID, PCB_DESIGN_PLUGIN_ID].includes(plugin.id);
+    plugin.scope === 'application' && plugin.origin === 'openpe' && hasPluginLogo(plugin.id);
   return (
     <span className={`plugin-mark${bundled ? ' plugin-mark-bundled' : ''}`} aria-hidden="true">
       {bundled ? (
@@ -425,7 +423,9 @@ export default function PluginsPage({
                       ? 'Bundled workflow and references'
                       : selectedPlugin.id === THERMAL_PLUGIN_ID
                         ? 'OpenPE workbench · bundled Gmsh + Elmer'
-                        : 'OpenPE workbench · bundled ngspice'
+                        : selectedPlugin.id === SPICE_PLUGIN_ID
+                          ? 'OpenPE workbench · bundled ngspice'
+                          : 'OpenPE workbench'
                     : providerNames[selectedPlugin.provider]}
                 </dd>
               </div>

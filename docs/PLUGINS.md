@@ -35,8 +35,9 @@ DeepSeek/Pi use context/proposals; Cursor supports detection only.
 | `workbench.plugins.list` / `.change` | Read confirmed bundled catalog; change a fixed allowlisted ID using install/uninstall/enable/disable     |
 | `provider.plugins.list` / `.change`  | Read one provider's installed entries; mutate an explicit qualified ID after service policy/scope checks |
 | `pcbDesign.guide`                    | Read a fixed, verified workflow/reference when enabled                                                   |
+| `parasitics.measure`                | [Two-terminal PCB DC resistance and route length](LAYOUT.md#layout-parasitics)                         |
 | `simulation.*`                       | [SPICE settings, runs, probes and waveforms](SIMULATION.md#shared-simulation-capabilities)               |
-| `thermal.*`                          | [Thermal settings, runs, probes and images](THERMAL.md#interface)                                        |
+| `thermal.*`                          | [Layout Thermal settings, runs, probes and images](THERMAL.md#interface)                                 |
 
 Discover exact schemas and live availability with `capabilities.list`. Review
 queues immutable commands; Apply/Auto use the same validation and captured
@@ -48,17 +49,21 @@ project aborts its owned work but cannot undo completed external writes. See
 
 ## Bundled workbench lifecycle
 
-SPICE Simulation (`spice-simulation@openpe`), Thermal FEM
-(`pcb-thermal@openpe`) and PE Layout Skill (`ai-pcb-layout@openpe`) are
-preinstalled/enabled. Install activates packaged resources without downloading
-code or running provider CLIs; uninstalled entries remain in Marketplace.
+SPICE Simulation (`spice-simulation@openpe`), Layout Thermal (`pcb-thermal@openpe`),
+PE Layout Skill (`ai-pcb-layout@openpe`) and Layout Parasitics
+(`layout-parasitics@openpe`) are preinstalled and enabled. Install activates
+packaged resources without downloading code or running provider CLIs.
+Uninstalled entries remain in Marketplace.
 
 `server/workbench-plugin-catalog.json` fixes the catalog.
 `server/workbench-plugins.mjs` atomically persists flags in
 `workbench-plugins-v1.json`, separate from projects, recovery and provider
-receipts. Saved state must include each current catalog entry exactly once with
-explicit installation and enabled flags. Missing files initialize the bundled
-defaults; partial, obsolete or malformed files are preserved and fail closed.
+receipts. Saved state must include each of the four current catalog entries
+exactly once with explicit installation and enabled flags. Missing files
+initialize the bundled defaults. Partial, obsolete or malformed files are
+preserved and fail closed. If an existing file has only the other three entries,
+add an explicit `layout-parasitics@openpe` row with `installed` and `enabled`
+boolean flags in application data and restart OpenPE.
 
 | Action              | Effect                                                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -72,8 +77,11 @@ action, Properties parameter section and settings-dock participation switches re
 and enabled. Shared component Properties exposes parameters in Schematic, Layout
 and Model; the action and participation switches remain Schematic-only. All solver/detection/model/result routes independently check
 service-owned lifecycle state; stale responses cannot restore disabled UI.
-SPICE and Thermal cancellation remain independent. Their run/restore and panel
-retention rules belong in [Simulation](SIMULATION.md) and [Thermal](THERMAL.md).
+SPICE and Layout Thermal cancellation remain independent. Their run/restore and panel
+retention rules belong in [Simulation](SIMULATION.md) and [Layout Thermal](THERMAL.md).
+Disabling or uninstalling Layout Parasitics removes its Layout action, closes
+its dock and makes its query unavailable. See the
+[measurement scope](LAYOUT.md#layout-parasitics).
 
 ### PE Layout Skill
 
@@ -164,8 +172,8 @@ render as images.
 
 | Check                                                                            | Scope                                                                              |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `tests/workbench-plugins.test.ts`, `tests/workbench-plugin-capabilities.test.ts` | Persistence, corrupt state, shared lifecycle and service cancellation              |
-| `tests/pcb-design-plugin.test.ts`                                                | Bundled hashes, trusted instructions, corruption and turn cancellation             |
+| `tests/workbench-plugins.test.ts`, `tests/workbench-plugin-capabilities.test.ts` | Persistence, shared lifecycle, service cancellation and Layout Parasitics query gates |
+| `tests/pcb-design-plugin.test.ts`                                                | Bundled hashes, trusted instructions, incomplete catalogs and turn cancellation    |
 | `tests/plugins.test.ts`                                                          | Installed lists, receipts, provider/scope/policy isolation, bounds and concurrency |
 | `tests/chat.test.ts`                                                             | Model discovery, cancellation and owned child cleanup, including Windows fallback  |
 | `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                 | Schemas, review/revisions, cancellation and synthetic scoped transports            |

@@ -61,10 +61,10 @@
                 <mxCell id="vision-spice" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;align=center;verticalAlign=middle;spacing=8;" value="SPICE Simulation&#xa;Supported transients" vertex="1">
                     <mxGeometry height="60" width="228" x="888" y="604" as="geometry"/>
                 </mxCell>
-                <mxCell id="vision-thermal" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;align=center;verticalAlign=middle;spacing=8;" value="Thermal FEM&#xa;Steady PCB analysis" vertex="1">
+                <mxCell id="vision-thermal" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;align=center;verticalAlign=middle;spacing=8;" value="Layout Thermal&#xa;Steady PCB analysis" vertex="1">
                     <mxGeometry height="60" width="228" x="1140" y="604" as="geometry"/>
                 </mxCell>
-                <mxCell id="vision-heat" parent="1" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#5c5c5c;fillColor=none;strokeColor=none;align=left;verticalAlign=middle;spacing=0;fontSize=14;align=center;" value="SPICE → Thermal: verified dissipative heat input" vertex="1">
+                <mxCell id="vision-heat" parent="1" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#5c5c5c;fillColor=none;strokeColor=none;align=left;verticalAlign=middle;spacing=0;fontSize=14;align=center;" value="Verified dissipative heat input from SPICE to Layout Thermal" vertex="1">
                     <mxGeometry height="24" width="480" x="888" y="668" as="geometry"/>
                 </mxCell>
                 <mxCell id="vision-guidance" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;align=center;verticalAlign=middle;spacing=8;" value="PE Layout Skill&#xa;Pinned guidance and board review" vertex="1">

@@ -107,7 +107,7 @@ export function createWorkbenchPlugins(dataDir, options = {}) {
       const plugin = (await read()).find((row) => row.id === thermalPluginId);
       if (!plugin?.installed || !plugin.enabled)
         throw new Error(
-          'Install and enable Thermal FEM in Plugins > Marketplace to run thermal analysis.',
+          'Install and enable Layout Thermal in Plugins > Marketplace to run thermal analysis.',
         );
     },
     async requirePcbDesign() {

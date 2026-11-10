@@ -180,7 +180,7 @@ async function contents(parent: string) {
   );
 }
 
-test('Thermal FEM saves complete flat artifacts with original logical names, exact bytes and the existing run key', async () => {
+test('Layout Thermal saves complete flat artifacts with original logical names, exact bytes and the existing run key', async () => {
   const f = await fixture();
   try {
     assert.equal(await f.store.read(signal()), null);
@@ -220,7 +220,7 @@ test('Thermal FEM saves complete flat artifacts with original logical names, exa
   }
 });
 
-test('flat Thermal FEM results isolate native projects sharing a directory', async () => {
+test('flat Layout Thermal results isolate native projects sharing a directory', async () => {
   const f = await fixture();
   try {
     await f.store.write(f.source, f.input, f.output, solver, signal());
@@ -240,7 +240,7 @@ test('flat Thermal FEM results isolate native projects sharing a directory', asy
   }
 });
 
-test('Thermal FEM flattens mesh fields and VTK sidecars while retaining original solver input bytes', async () => {
+test('Layout Thermal flattens mesh fields and VTK sidecars while retaining original solver input bytes', async () => {
   const f = await fixture(true);
   try {
     const sif = 'Header\n Mesh DB "." "mesh"\nEnd\n';
@@ -273,7 +273,7 @@ test('Thermal FEM flattens mesh fields and VTK sidecars while retaining original
   }
 });
 
-test('flat Thermal FEM publication preserves unknown sidecars and rejects unowned filename collisions', async () => {
+test('flat Layout Thermal publication preserves unknown sidecars and rejects unowned filename collisions', async () => {
   const f = await fixture();
   try {
     await mkdir(f.parent);
@@ -300,7 +300,7 @@ test('flat Thermal FEM publication preserves unknown sidecars and rejects unowne
   }
 });
 
-test('Thermal FEM publication retries sharing locks and rolls back every prior file if manifest publication fails', async (context) => {
+test('Layout Thermal publication retries sharing locks and rolls back every prior file if manifest publication fails', async (context) => {
   const f = await fixture();
   const originalRename = fileSystem.rename;
   try {
@@ -351,7 +351,7 @@ test('Thermal FEM publication retries sharing locks and rolls back every prior f
   }
 });
 
-test('Thermal FEM preserves external edits made after prior-record verification', async (context) => {
+test('Layout Thermal preserves external edits made after prior-record verification', async (context) => {
   const f = await fixture();
   const originalOpen = fileSystem.open;
   try {
@@ -383,7 +383,7 @@ test('Thermal FEM preserves external edits made after prior-record verification'
   }
 });
 
-test('Thermal FEM replaces obsolete owned field filenames only after a new complete success', async () => {
+test('Layout Thermal replaces obsolete owned field filenames only after a new complete success', async () => {
   const f = await fixture();
   try {
     await f.store.write(f.source, f.input, f.output, solver, signal());
@@ -403,7 +403,7 @@ test('Thermal FEM replaces obsolete owned field filenames only after a new compl
   }
 });
 
-test('incomplete, cancelled and colliding mesh artifacts preserve every prior successful Thermal FEM byte', async () => {
+test('incomplete, cancelled and colliding mesh artifacts preserve every prior successful Layout Thermal byte', async () => {
   const f = await fixture();
   try {
     await f.store.write(f.source, f.input, f.output, solver, signal());
@@ -432,7 +432,7 @@ test('incomplete, cancelled and colliding mesh artifacts preserve every prior su
   }
 });
 
-test('flat Thermal FEM validates every artifact, project identity and physical filename before reading or replacement', async () => {
+test('flat Layout Thermal validates every artifact, project identity and physical filename before reading or replacement', async () => {
   const f = await fixture();
   try {
     await f.store.write(f.source, f.input, f.output, solver, signal());
@@ -473,7 +473,7 @@ test('flat Thermal FEM validates every artifact, project identity and physical f
   }
 });
 
-test('Thermal FEM ignores retired nested records and preserves their files', async () => {
+test('Layout Thermal ignores retired nested records and preserves their files', async () => {
   const f = await fixture();
   try {
     const files = (await expectedFiles(f.source, f.input, f.output)).map(
@@ -514,7 +514,7 @@ test('Thermal FEM ignores retired nested records and preserves their files', asy
   }
 });
 
-test('a cancelled queued Thermal FEM lookup does not observe an empty destination', async () => {
+test('a cancelled queued Layout Thermal lookup does not observe an empty destination', async () => {
   const f = await fixture();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -551,7 +551,7 @@ test('a cancelled queued Thermal FEM lookup does not observe an empty destinatio
   }
 });
 
-test('Thermal FEM rechecks live grants before flat publication and preserves the prior result', async () => {
+test('Layout Thermal rechecks live grants before flat publication and preserves the prior result', async () => {
   const f = await fixture();
   try {
     assert.throws(() => createProjectThermalStore(() => null), /Save the project/);
@@ -575,7 +575,7 @@ test('Thermal FEM rechecks live grants before flat publication and preserves the
   }
 });
 
-test('Thermal FEM rejects linked source files and destination folders without touching targets', async () => {
+test('Layout Thermal rejects linked source files and destination folders without touching targets', async () => {
   const f = await fixture();
   try {
     const outside = path.join(f.root, 'untouched');
@@ -605,7 +605,7 @@ test('Thermal FEM rejects linked source files and destination folders without to
 });
 
 test(
-  'real Thermal FEM completion saves flat slab artifacts before temporary cleanup',
+  'real Layout Thermal completion saves flat slab artifacts before temporary cleanup',
   { skip: process.env.OPENPE_TEST_THERMAL !== '1' },
   async () => {
     const f = await fixture();

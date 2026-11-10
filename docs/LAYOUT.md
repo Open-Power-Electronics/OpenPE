@@ -340,7 +340,7 @@ in an isolated renderer.
 
 ### Thermal result presentation
 
-[Thermal FEM](THERMAL.md) owns analysis/results and replaces the ordinary dock
+[Layout Thermal](THERMAL.md) owns analysis/results and replaces the ordinary dock
 while open. Layout consumes a generic field/readout at actual PCB coordinates
 using its existing camera. Front/Back share one complete-result scale; probes
 pick real solved surface nodes and ignore holes/outside clicks. Escape/another
@@ -372,12 +372,14 @@ the active layer on top. Through pads and vias paint once at the highest
 visible copper pass, with drill voids above artwork. Airwires remain an
 overlay. Layer eyes control visibility independently of the active layer.
 
-The **Non-active layers** selector immediately left of **Grid** in the Layout footer offers Normal, Dim and Hide. Ctrl+H cycles the modes with
-canvas focus. In Normal, point, containment, crossing and Select all can pick
-any visible layer. Dim fades inactive layers and Hide removes their artwork
-from the canvas. Both restrict new picks to visible geometry on the active
-layer, including the active-layer body geometry of footprints and the copper
-span of through pads and vias. Category filters and selection modifiers still
+The **Non-active layers** selector immediately left of **Grid** in the Layout footer
+offers **All**, **Dim** and **Solo**. Ctrl+H cycles the modes
+with canvas focus. All allows point, containment, crossing and
+Select all picks on any visible layer. Dim fades inactive layers and
+Solo removes their artwork from the canvas. Both restrict new picks to
+visible geometry on the active layer, including the active-layer body geometry
+of footprints and the copper span of through pads and vias. Category filters
+and selection modifiers still
 apply. Select all adds eligible objects to the existing selection. Selection
 and the eye settings survive mode changes. Explicit
 report navigation remains independent of the selection mode. Hidden geometry
@@ -385,7 +387,8 @@ still obstructs electrical routing.
 
 Point selection collects eligible copper and artwork within three screen pixels.
 With either silkscreen layer active, eligible independent silk on either side
-takes precedence. An active courtyard in Dim or Hide prefers footprints.
+takes precedence. In Dim and Solo, an active courtyard prefers
+footprints.
 Keep hits within one pixel of the best surface hit, then
 retain the smallest coverage group up to the first adjacent 1.5× size gap.
 Track coverage uses width squared, pad coverage uses its shape area, and
@@ -1163,7 +1166,7 @@ It accepts no renderer path. Appearance is not STEP material metadata. File Expo
 OpenSCAD model carries the same solids, poses, holes and Boolean recipes with faceted
 circles, material colours and opacity, and rejects fillets/chamfers without writing.
 Arbitrary mesh imports, executable geometry programs, SCAD import/execution and
-whole-assembly simulation are unsupported. CAD does not couple into board Thermal FEM.
+whole-assembly simulation are unsupported. The Layout Thermal solver models the PCB geometry independently of CAD bodies.
 
 ### Model resolution and alignment
 
@@ -1235,6 +1238,38 @@ and one undo transaction. Runtime discovery defines exact IDs/schemas;
 [API.md](API.md#layout-capabilities) is the reference. Camera/filters/gestures are
 not generic automation commands. Native writes still require grants/pickers.
 
+## Layout Parasitics
+
+The bundled Layout Parasitics plugin estimates two-terminal DC resistance on the
+current accepted PCB. Select two distinct copper pads or through vias on the same
+assigned net. The measurement uses a pad's center and the front copper layer of
+a selected via. It treats pads as ideal conductors, including the layer connections
+within a plated through-hole pad, on their enabled copper layers.
+
+The bounded network uses straight track centerlines with shared endpoints or
+endpoints coincident with pad/via centers within 1 nm. Each track contributes
+`R = ρL/(wt)` for length `L`, width `w` and uniform copper thickness `t`. Each
+via interval contributes `R = ρL/[πp(d+p)]` for drill diameter `d` and barrel
+plating `p`. Use `ρ = 1.724 × 10⁻⁸ Ω·m` at 20 °C with formula dimensions in
+meters. The defaults are 0.035 mm copper and 0.025 mm plating. Copper layers are
+spaced evenly across the board thickness and plating must fit inside each modeled
+annulus. These are explicit material and stackup assumptions.
+
+Equivalent resistance includes the parallel routes in the network. The shortest
+route is measured by total track length and vertical via distance. Its series
+resistance is reported separately. The estimate covers DC conduction in the
+supported copper network. Inductance, capacitance, return-plane effects, shorts to
+other nets, frequency-dependent losses and fabrication tolerances are outside its
+scope.
+
+Unsupported contacts, including off-center contacts, track-body joins, overlapping
+same-net pads/vias, nonempty same-net saved fills and copper artwork anywhere on
+the board, reject the measurement. Unfilled zones, empty fills and keepouts
+contribute no copper. The graph is limited to 256 nodes and 512 tracks on the
+selected net, with at most 2,000,000 contact operations and 120,000 anchor contour
+vertices. Disconnected terminals also return an error. OpenPE implements the
+two-terminal workflow independently. [KiCad-Parasitics](https://github.com/Steffen-W/KiCad-Parasitics)
+
 ## Examples and verification
 
 Home has nine curated projects under Example and fixed EMC Flyback Recent. Their original
@@ -1250,6 +1285,7 @@ comparisons.
 | `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Fixed deletion footers for selected objects/groups, icon-only fill, rejection and IME guards                                                                                                                 |
 | `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                     |
 | `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                   | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                 |
+| `tests/layout-parasitics.test.ts`                                                                                                                                                                                           | Analytical DC series/parallel networks and via spans, unsupported contacts and disconnected terminals                                                                                                         |
 | `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                       | Shared delete button/footer across all three views; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                        |
 | `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                    | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                        |
 | `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                         | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                            |

@@ -330,8 +330,8 @@ try {
     canvasId: 'layout-canvas',
     ordinary: page.getByRole('complementary', { name: 'Layout sidebar', exact: true }),
     handleName: 'Resize layout sidebar width',
-    openName: 'Thermal FEM',
-    closeName: 'Close Thermal',
+    openName: 'Layout Thermal',
+    closeName: 'Close Layout Thermal',
     minimum: 224,
     ordinaryHandleName: 'Resize layout sidebar width',
   });

@@ -14,8 +14,8 @@ function fixture() {
   let received: unknown;
   let finish: (() => void) | null = null;
   const adapter: ThermalCapabilityAdapter = {
-    available: () => enabled || 'Enable Thermal FEM first.',
-    canRun: () => visible || 'Open Thermal in Layout first.',
+    available: () => enabled || 'Enable Layout Thermal first.',
+    canRun: () => visible || 'Open Layout Thermal first.',
     read: () => ({ running, received: received ?? null }),
     configure: async (input) => {
       received = input;
@@ -117,11 +117,11 @@ test('thermal host cancellation covers a human run, close suspension and plugin 
 test('thermal run rechecks visibility and the confirmed plugin gate', async () => {
   const { host, hide, disable } = fixture();
   hide();
-  await assert.rejects(host.execute('thermal.run'), /Open Thermal/);
+  await assert.rejects(host.execute('thermal.run'), /Open Layout Thermal/);
   disable();
   await assert.rejects(
     host.execute('thermal.configure', { config: { ambientC: 25 } }),
-    /Enable Thermal FEM/,
+    /Enable Layout Thermal/,
   );
   assert.equal(
     host

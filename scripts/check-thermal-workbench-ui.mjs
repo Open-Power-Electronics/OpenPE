@@ -74,7 +74,7 @@ const browser = await chromium.launch({
     process.env.OPENPE_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
   headless: true,
 });
-try {
+async function runChecks() {
   const page = await browser.newPage({ viewport: { width: 1480, height: 920 } });
   page.setDefaultTimeout(30000);
   const errors = [];
@@ -92,6 +92,9 @@ try {
       },
       connection: async () => ({ base: 'http://localhost', token: 'thermal-workbench-test' }),
       newFile: async () => fileId,
+      listExamples: async () => ({ entries: [], warnings: [] }),
+      listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      onRecentChanged: () => () => {},
       releaseFile: async () => {},
       projectDirectory: async () => ({ entries: [], truncated: false }),
       setDirty: async () => {},
@@ -219,6 +222,7 @@ try {
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
   await page.getByTestId('schematic-canvas').waitFor();
+  await page.waitForFunction(() => Boolean(window.thermalWorkbenchHost()));
   assert.equal(statusRequests, 0, 'Thermal code is dormant before it is opened.');
   assert.equal(
     await page.evaluate(() =>
@@ -246,10 +250,107 @@ try {
   });
   const drawing = page.locator('.layout-main .layout-canvas');
   const nativeWidth = (await nativeSidebar.boundingBox()).width;
-  assert.ok(Math.abs(nativeWidth - 300) <= 1, 'The native Layout sidebar starts at 300 px.');
+  assert.ok(Math.abs(nativeWidth - 280) <= 1, 'The native Layout sidebar starts at 280 px.');
   const nativeDrawingWidth = (await drawing.boundingBox()).width;
-  await page.getByRole('button', { name: 'Thermal FEM', exact: true }).click();
-  const panel = page.getByRole('region', { name: 'Thermal FEM', exact: true });
+  if (process.argv.includes('--parasitics-dock')) {
+    const parasiticsButton = page.getByRole('button', { name: 'Layout Parasitics', exact: true });
+    const parasitics = page.getByRole('region', { name: 'Layout Parasitics', exact: true });
+    const thermal = page.getByRole('region', { name: 'Layout Thermal', exact: true });
+    await parasiticsButton.click();
+    await parasitics.waitFor();
+    await nativeSidebar.waitFor({ state: 'hidden' });
+    assert.equal(
+      await parasitics.evaluate((panel) =>
+        Boolean(panel.closest('.layout-analysis-dock') && !panel.closest('dialog')),
+      ),
+      true,
+      'Layout Parasitics opens inside the shared nonmodal right dock.',
+    );
+    assert.ok(Math.abs((await parasitics.boundingBox()).width - nativeWidth) <= 1);
+    assert.ok(Math.abs((await drawing.boundingBox()).width - nativeDrawingWidth) <= 1);
+    const layout = page.getByTestId('layout-canvas');
+    const initialView = await layout.getAttribute('viewBox');
+    const canvas = await layout.boundingBox();
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    await page.mouse.wheel(0, -150);
+    await page.waitForFunction(
+      (before) =>
+        document.querySelector('[data-testid="layout-canvas"]').getAttribute('viewBox') !== before,
+      initialView,
+    );
+    await parasitics.waitFor();
+
+    for (const [name, position] of [
+      ['Net', 'Home'],
+      ['Start terminal', 'Home'],
+      ['End terminal', 'End'],
+    ]) {
+      const selector = parasitics.getByRole('combobox', { name, exact: true });
+      await selector.press('ArrowDown');
+      await selector.press(position);
+      await selector.press('Enter');
+    }
+    const measure = parasitics.getByRole('button', { name: 'Measure', exact: true });
+    assert.equal(await measure.isEnabled(), true);
+    assert.equal(
+      await measure.evaluate((button) => {
+        const key = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          keyCode: 229,
+          bubbles: true,
+          cancelable: true,
+        });
+        button.dispatchEvent(key);
+        return key.defaultPrevented;
+      }),
+      true,
+      'IME Enter cannot activate Measure inside the dock.',
+    );
+
+    assert.deepEqual(
+      await page.evaluate(() => window.thermalWorkbenchHost().execute('thermal.show')),
+      { visible: true },
+    );
+    await thermal.waitFor();
+    await parasitics.waitFor({ state: 'hidden' });
+    await parasiticsButton.click();
+    await parasitics.waitFor();
+    await thermal.waitFor({ state: 'hidden' });
+    assert.equal(
+      (await page.evaluate(() => window.thermalWorkbenchHost().query('thermal.status'))).visible,
+      false,
+      'Switching docks retains the Thermal session without displaying it.',
+    );
+    await parasitics.getByRole('button', { name: /^Close/ }).click();
+    await parasitics.waitFor({ state: 'hidden' });
+    await nativeSidebar.waitFor();
+    assert.equal(
+      await parasiticsButton.evaluate((button) => button === document.activeElement),
+      true,
+    );
+    assert.ok(Math.abs((await nativeSidebar.boundingBox()).width - nativeWidth) <= 1);
+    assert.ok(Math.abs((await drawing.boundingBox()).width - nativeDrawingWidth) <= 1);
+
+    await parasiticsButton.click();
+    await parasitics.waitFor();
+    await page.evaluate(() =>
+      window.thermalWorkbenchHost().execute('workbench.plugins.change', {
+        action: 'disable',
+        id: 'layout-parasitics@openpe',
+      }),
+    );
+    await parasiticsButton.waitFor({ state: 'hidden' });
+    await parasitics.waitFor({ state: 'hidden' });
+    await nativeSidebar.waitFor();
+    assert.equal(runRequests, 0);
+    assert.deepEqual(errors, []);
+    console.log(
+      'Layout Parasitics dock passed: shared width, active canvas, IME guard, Thermal switching, sidebar restoration and plugin teardown.',
+    );
+    return;
+  }
+  await page.getByRole('button', { name: 'Layout Thermal', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Layout Thermal', exact: true });
   const heatInput = page.getByRole('combobox', { name: 'Thermal heat input', exact: true });
   await heatInput.press('ArrowDown');
   await heatInput.press('Home');
@@ -257,7 +358,7 @@ try {
   await panel.waitFor();
   const expectThermalWidth = async (expected, drawingWidth) => {
     await page.waitForFunction((expected) => {
-      const panel = document.querySelector('[aria-label="Thermal FEM"][data-docked]');
+      const panel = document.querySelector('[aria-label="Layout Thermal"][data-docked]');
       return panel && Math.abs(panel.getBoundingClientRect().width - expected) <= 1;
     }, expected);
     assert.ok(
@@ -269,12 +370,12 @@ try {
   const openWithNativeWidth = async () => {
     const width = (await nativeSidebar.boundingBox()).width;
     const drawingWidth = (await drawing.boundingBox()).width;
-    await page.getByRole('button', { name: 'Thermal FEM', exact: true }).click();
+    await page.getByRole('button', { name: 'Layout Thermal', exact: true }).click();
     await panel.waitFor();
     await expectThermalWidth(width, drawingWidth);
   };
   const closeThermal = async () => {
-    await page.getByRole('button', { name: 'Close Thermal', exact: true }).click();
+    await page.getByRole('button', { name: 'Close Layout Thermal', exact: true }).click();
     await nativeSidebar.waitFor();
   };
   await closeThermal();
@@ -462,8 +563,8 @@ try {
   );
   await unitGroup.locator('summary').click();
   assert.equal(await unitGroup.locator('input').first().isDisabled(), true);
-  await page.getByRole('button', { name: 'Close Thermal', exact: true }).click();
-  await page.getByRole('button', { name: 'Thermal FEM', exact: true }).click();
+  await page.getByRole('button', { name: 'Close Layout Thermal', exact: true }).click();
+  await page.getByRole('button', { name: 'Layout Thermal', exact: true }).click();
   assert.equal(
     await unitGroup.getAttribute('open'),
     null,
@@ -946,6 +1047,9 @@ try {
   console.log(
     'Screenshots: test-results/thermal-workbench-layout-ui.png, test-results/thermal-workbench-ui.png (mocked renderer data; no thermal solver was executed).',
   );
+}
+try {
+  await runChecks();
 } finally {
   await browser.close();
 }

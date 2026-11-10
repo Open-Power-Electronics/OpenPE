@@ -1,7 +1,21 @@
-import { SPICE_PLUGIN_ID, THERMAL_PLUGIN_ID, PCB_DESIGN_PLUGIN_ID } from '@/lib/workbench-plugins';
+import {
+  LAYOUT_PARASITICS_PLUGIN_ID,
+  SPICE_PLUGIN_ID,
+  THERMAL_PLUGIN_ID,
+  PCB_DESIGN_PLUGIN_ID,
+} from '@/lib/workbench-plugins';
+
+export function hasPluginLogo(id: string) {
+  return [
+    SPICE_PLUGIN_ID,
+    THERMAL_PLUGIN_ID,
+    PCB_DESIGN_PLUGIN_ID,
+    LAYOUT_PARASITICS_PLUGIN_ID,
+  ].includes(id);
+}
 
 export default function PluginLogo({ id }: { id: string }) {
-  if (![SPICE_PLUGIN_ID, THERMAL_PLUGIN_ID, PCB_DESIGN_PLUGIN_ID].includes(id)) return null;
+  if (!hasPluginLogo(id)) return null;
   return (
     <svg
       className="plugin-logo"
@@ -30,6 +44,13 @@ export default function PluginLogo({ id }: { id: string }) {
           <path className="plugin-logo-signal" d="M40 19h7v23H23v6" />
           <circle className="plugin-logo-node" cx="40" cy="19" r="3" stroke="none" />
           <circle className="plugin-logo-node" cx="23" cy="48" r="3" stroke="none" />
+        </>
+      ) : id === LAYOUT_PARASITICS_PLUGIN_ID ? (
+        <>
+          <circle cx="12" cy="48" r="6" />
+          <circle cx="52" cy="16" r="6" />
+          <path d="M12 42V27l11-11h23" />
+          <path className="plugin-logo-signal" d="M18 48h23l11-11V22" />
         </>
       ) : (
         <>

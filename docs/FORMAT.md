@@ -164,7 +164,7 @@ create a separate datasheet JSON file in a native project. There is no synthetic
 data remains separately matched to the validated controller; see the
 [datasheet contract](DATASHEETS.md).
 
-Generated project `spice/` and `thermal/` directories are excluded from native discovery and file-set validation. Current artifacts are direct `<native-stem>.*` files in those directories, with a project-bound v2 manifest; no project/run/mesh subdirectories are written. Source can edit fully loaded artifact text as ordinary files; solver artifacts/results never enter editable design, native drafts, undo or recovery. Private sibling staging/rollback folders end in `-backups` and remain outside native discovery. Only current v2 manifests and direct result files are read; retired nested records are ignored. Publication contracts are in [Simulation](SIMULATION.md#execution-streaming-and-completed-results) and [Thermal](THERMAL.md#completed-desktop-records).
+Generated project `spice/` and `thermal/` directories are excluded from native discovery and file-set validation. Current artifacts are direct `<native-stem>.*` files in those directories, with a project-bound v2 manifest; no project/run/mesh subdirectories are written. Source can edit fully loaded artifact text as ordinary files; solver artifacts/results never enter editable design, native drafts, undo or recovery. Private sibling staging/rollback folders end in `-backups` and remain outside native discovery. Only current v2 manifests and direct result files are read; retired nested records are ignored. Publication contracts are in [Simulation](SIMULATION.md#execution-streaming-and-completed-results) and [Layout Thermal](THERMAL.md#completed-desktop-records).
 
 ## Native access and writes
 

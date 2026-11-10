@@ -172,6 +172,29 @@
   font-size: var(--font-caption);
 }
 
+.electrical .body {
+  overflow-x: hidden;
+}
+
+.electrical .issues {
+  inline-size: auto;
+  min-inline-size: 0;
+}
+
+.electrical .issue {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.electrical .message,
+.electrical .ruleName {
+  white-space: normal;
+}
+
+.electrical .ruleName {
+  margin-inline-end: 4px;
+}
+
 .statusMessage,
 .error,
 .empty {
