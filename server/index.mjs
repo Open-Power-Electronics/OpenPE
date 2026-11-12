@@ -252,7 +252,14 @@ export async function startServer({
         await modelLister(req.query.provider, cwd, control.signal, { cursorCredential }),
       );
     } catch (e) {
-      if (!res.destroyed) res.status(502).json({ error: e.message });
+      if (res.destroyed) return;
+      const error =
+        req.query.provider === 'cursor'
+          ? e?.modelListDiagnostic === true
+            ? e.message
+            : 'Could not load Cursor models.'
+          : e.message;
+      res.status(502).json({ error });
     }
   });
   app.get('/api/state', async (req, res) => {

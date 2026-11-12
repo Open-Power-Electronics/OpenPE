@@ -280,14 +280,11 @@ function copperGroups(items: Body[], spend: Spend) {
   return find;
 }
 
-/** Physical routing groups keyed by native IDs. Anchors describe pad/via copper,
- * including drill voids. Saved fills do not certify a reconnect. */
-export function partitionPCBRoutingCopper(
-  tracks: PCB['tracks'],
-  anchors: readonly { id: string; netId: string; layers: string[]; polygon: Polygon }[],
-  spend: Spend,
-) {
-  const nets = new Map<string, (Body & { id: string })[]>();
+type RoutingAnchor = { id: string; netId: string; layers: readonly string[]; polygon: Polygon };
+type IdentifiedBody = Body & { id: string };
+
+function routingNetBodies(tracks: PCB['tracks'], anchors: readonly RoutingAnchor[], spend: Spend) {
+  const nets = new Map<string, IdentifiedBody[]>();
   const add = (
     id: string,
     netId: string,
@@ -316,12 +313,105 @@ export function partitionPCBRoutingCopper(
     add(track.id, track.netId, [track.start, track.end], track.width / 2, [track.layer]);
   for (const anchor of anchors)
     add(anchor.id, anchor.netId, anchor.polygon.outer, 0, anchor.layers, anchor.polygon);
+  return nets;
+}
+
+function publishGroups(items: IdentifiedBody[], group: (index: number) => number, partition: Map<string, string>) {
+  items.forEach((item, index) => partition.set(item.id, items[group(index)].id));
+}
+
+/** Physical routing groups keyed by native IDs. Anchors describe pad/via copper,
+ * including drill voids. Saved fills do not certify a reconnect. */
+export function partitionPCBRoutingCopper(
+  tracks: PCB['tracks'],
+  anchors: readonly RoutingAnchor[],
+  spend: Spend,
+) {
   const partition = new Map<string, string>();
-  for (const items of nets.values()) {
-    const group = copperGroups(items, spend);
-    items.forEach((item, index) => partition.set(item.id, items[group(index)].id));
-  }
+  for (const items of routingNetBodies(tracks, anchors, spend).values())
+    publishGroups(items, copperGroups(items, spend), partition);
   return partition;
+}
+
+/** Stationary copper groups for one gesture. Later calls recheck only pairs that
+ * touch the supplied moved tracks or anchors and charge the retained stationary
+ * work again. Equivalence classes match a full partitionPCBRoutingCopper of the
+ * combined records. */
+export function createIncrementalPCBRoutingPartition(
+  tracks: PCB['tracks'],
+  anchors: readonly RoutingAnchor[],
+  spend: Spend,
+) {
+  let charged = 0;
+  const count = (units = 1) => {
+    charged += units;
+    spend(units);
+  };
+  const nets = routingNetBodies(tracks, anchors, count);
+  const stationary = new Map<
+    string,
+    { items: IdentifiedBody[]; parents: number[]; sorted: { body: IdentifiedBody; index: number }[] }
+  >();
+  for (const [netId, items] of nets) {
+    const group = copperGroups(items, count);
+    stationary.set(netId, {
+      items,
+      parents: items.map((_, index) => group(index)),
+      sorted: items
+        .map((body, index) => ({ body, index }))
+        .sort((a, b) => a.body.minX - b.body.minX),
+    });
+  }
+  const stationaryWork = charged;
+  return {
+    apply(nextTracks: PCB['tracks'], nextAnchors: readonly RoutingAnchor[], budget: Spend) {
+      budget(stationaryWork);
+      const moved = routingNetBodies(nextTracks, nextAnchors, budget);
+      const partition = new Map<string, string>();
+      const netIds = new Set([...stationary.keys(), ...moved.keys()]);
+      for (const netId of netIds) {
+        const base = stationary.get(netId);
+        const extra = moved.get(netId) ?? [];
+        if (!base) {
+          publishGroups(extra, copperGroups(extra, budget), partition);
+          continue;
+        }
+        const items = base.items.concat(extra);
+        const parents = base.parents.slice();
+        for (let index = 0; index < extra.length; index++) parents.push(base.items.length + index);
+        const find = (index: number): number => {
+          while (parents[index] !== index) {
+            parents[index] = parents[parents[index]];
+            index = parents[index];
+          }
+          return index;
+        };
+        const unite = (left: number, right: number) => {
+          const a = find(left);
+          const b = find(right);
+          if (a !== b) parents[b] = a;
+        };
+        for (let index = 0; index < extra.length; index++) {
+          const body = extra[index];
+          const at = base.items.length + index;
+          for (const entry of base.sorted) {
+            if (entry.body.minX > body.maxX + epsilon) break;
+            if (entry.body.maxX + epsilon < body.minX) continue;
+            budget();
+            if (find(entry.index) !== find(at) && touches(entry.body, body, budget))
+              unite(entry.index, at);
+          }
+          for (let other = 0; other < index; other++) {
+            budget();
+            const there = base.items.length + other;
+            if (find(there) !== find(at) && touches(extra[other], body, budget)) unite(there, at);
+          }
+        }
+        items.forEach((item, index) => partition.set(item.id, items[find(index)].id));
+      }
+      return partition;
+    },
+  };
 }
 
 /** Link disconnected copper groups with a minimum spanning tree, independent

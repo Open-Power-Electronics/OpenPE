@@ -196,6 +196,28 @@ test('OpenSCAD remains a separate exchange format and rejects unsupported solids
   assert.equal(rejected.dialogs.length, 0);
 });
 
+test('Export passes the canonical parent into the contained write', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'openpe-export-parent-'));
+  const file = path.join(root, 'bom.csv');
+  let received: { parentCanonical?: string; message?: string } | undefined;
+  const run = createNativeExport({
+    ...formats,
+    fileGrants: new FileGrants(),
+    showSaveDialog: async () => ({ canceled: false, filePath: file }),
+    atomicWrite: async (
+      _file: string,
+      _bytes: Buffer,
+      _check: () => Promise<void>,
+      options?: { parentCanonical?: string; message?: string },
+    ) => {
+      received = options;
+    },
+  });
+  await run(request());
+  assert.equal(received?.parentCanonical, await realpath(root));
+  assert.match(received?.message ?? '', /linked/);
+});
+
 test('file grants identify paths by the native canonical path', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'openpe-grants-'));
   const file = path.join(directory, 'Board.kicad_pro');

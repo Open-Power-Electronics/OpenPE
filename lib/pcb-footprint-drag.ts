@@ -2,10 +2,19 @@ import { uid, type Point } from './circuit';
 import type { PCB } from './pcb';
 import { ownProjectData } from './immutable-project';
 import { insidePolygon, squaredDistance, trackTouchesPolygon } from './pcb-collision';
-import { padCopperLayers, partitionPCBRoutingCopper } from './pcb-connectivity';
+import {
+  createIncrementalPCBRoutingPartition,
+  padCopperLayers,
+  partitionPCBRoutingCopper,
+} from './pcb-connectivity';
 import { movePCBSelection, padDrillPosition, type PCBSelection } from './pcb-layout';
 import { borrowPCBPadOutline } from './pcb-pad-contour';
-import { createPCBRouter, type RoutingOptions } from './pcb-routing';
+import {
+  createDynamicPCBRouter,
+  createPCBRouter,
+  createPCBRouterSession,
+  type RoutingOptions,
+} from './pcb-routing';
 import { preparePCBArtworkObstacles } from './pcb-routing-artwork';
 import { preparePCBTrackAnchors, type PCBTrackAnchor } from './pcb-track-anchors';
 import type { PCBTrackDragPreview } from './pcb-track-drag';
@@ -42,7 +51,10 @@ export function createPCBFootprintDrag(
   source: PCB,
   selection: readonly PCBSelection[],
   clearance: number,
-): { preview: (delta: Point, posture?: boolean) => PCBTrackDragPreview } {
+): {
+  preview: (delta: Point, posture?: boolean) => PCBTrackDragPreview;
+  leadIds?: readonly string[];
+} {
   const failed = (error: string): PCBTrackDragPreview => ({ board: source, error, changedIds: [] });
   try {
     if (!Number.isFinite(clearance) || clearance < 0.05 || clearance > 20)
@@ -102,8 +114,64 @@ export function createPCBFootprintDrag(
       originalAnchors.filter(({ netId }) => movedPads.has(netId)),
       spend,
     );
+    const routerSession = createPCBRouterSession();
+    const stationaryArtwork = preparePCBArtworkObstacles({
+      ...board,
+      footprints: board.footprints.filter(({ id }) => !footprintIds.has(id)),
+      tracks: stationaryTracks,
+    });
+    const baseRouters = new Map<string, ReturnType<typeof createPCBRouter>>();
+    const partitionIndex = createIncrementalPCBRoutingPartition(
+      stationaryTracks.filter(({ netId }) => movedPads.has(netId)),
+      stationaryAnchors,
+      spend,
+    );
+    const routerKey = (options: Omit<RoutingOptions, 'clearance'>) =>
+      JSON.stringify([
+        options.layer,
+        options.netId,
+        options.width,
+        options.obstacleType ?? 'track',
+        options.allowInheritedWidth ?? false,
+      ]);
+    const routerFor = (
+      options: Omit<RoutingOptions, 'clearance'>,
+      footprints: PCB['footprints'],
+      tracks: readonly Track[],
+      trackCount: number,
+    ) => {
+      const key = routerKey(options);
+      const full = { ...options, clearance };
+      if (!baseRouters.has(key))
+        baseRouters.set(key, createPCBRouter(stationaryArtwork, full, routerSession));
+      spend(objectCount + trackCount - board.tracks.length);
+      if (!footprints.length && !tracks.length) return baseRouters.get(key)!;
+      const dynamicFootprints = footprints.length
+        ? preparePCBArtworkObstacles({
+            ...stationaryArtwork,
+            footprints,
+            tracks: [],
+            vias: [],
+            graphics: [],
+            zones: [],
+          }).footprints
+        : footprints;
+      return createDynamicPCBRouter(
+        {
+          ...stationaryArtwork,
+          footprints: dynamicFootprints,
+          tracks: [...tracks],
+          vias: [],
+          graphics: [],
+          zones: [],
+        },
+        full,
+        routerSession,
+      );
+    };
 
     return {
+      leadIds: leads.map(({ track }) => track.id),
       preview(delta, posture) {
         try {
           work = 0;
@@ -122,21 +190,22 @@ export function createPCBFootprintDrag(
             };
           };
 
-          const obstacles = preparePCBArtworkObstacles({ ...moved, tracks: stationaryTracks });
-          const routersFor = (basis: PCB) => {
+          const routersFor = (
+            footprints: PCB['footprints'],
+            tracks: readonly Track[],
+            trackCount: number,
+          ) => {
             const routers = new Map<string, ReturnType<typeof createPCBRouter>>();
             return (options: Omit<RoutingOptions, 'clearance'>) => {
-              const { layer, netId, width } = options;
-              const key = JSON.stringify([layer, netId, width]);
+              const key = routerKey(options);
               const saved = routers.get(key);
               if (saved) return saved;
-              spend(objectCount + basis.tracks.length - board.tracks.length);
-              const router = createPCBRouter(basis, { ...options, clearance });
+              const router = routerFor(options, footprints, tracks, trackCount);
               routers.set(key, router);
               return router;
             };
           };
-          const planWith = routersFor(obstacles);
+          const planWith = routersFor(poses, [], stationaryTracks.length);
           const replacements = new Map<string, Track>();
           const added: Track[] = [];
           for (const lead of leads) {
@@ -178,9 +247,8 @@ export function createPCBFootprintDrag(
             .map((track) => replacements.get(track.id) ?? track)
             .concat(added);
           const next = { ...moved, tracks };
-          const trackBasis = { ...obstacles, tracks };
-          const validateTrackWith = routersFor(trackBasis);
           const changed = [...replacements.values(), ...added];
+          const validateTrackWith = routersFor(poses, changed, tracks.length);
           for (const track of changed) {
             const { layer, netId, width } = track;
             const validator = validateTrackWith({ layer, netId, width, allowInheritedWidth: true });
@@ -191,10 +259,7 @@ export function createPCBFootprintDrag(
           // The pad group translates rigidly, so its original internal clearance
           // is unchanged. Recheck all moved pad and drill envelopes against the
           // full stationary board and every rerouted track.
-          const validatePadWith = routersFor({
-            ...trackBasis,
-            footprints: trackBasis.footprints.filter(({ id }) => !footprintIds.has(id)),
-          });
+          const validatePadWith = routersFor([], changed, tracks.length);
           for (const footprint of poses)
             for (const pad of footprint.pads) {
               const layers = padCopperLayers(board, footprint, pad);
@@ -224,9 +289,9 @@ export function createPCBFootprintDrag(
             { ...next, footprints: poses, vias: [] },
             { limitMessage },
           );
-          const partition = partitionPCBRoutingCopper(
-            tracks.filter(({ netId }) => movedPads.has(netId)),
-            stationaryAnchors.concat(anchors),
+          const partition = partitionIndex.apply(
+            changed.filter(({ netId }) => movedPads.has(netId)),
+            anchors,
             spend,
           );
           const forward = new Map<string, string>();

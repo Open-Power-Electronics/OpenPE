@@ -10,6 +10,8 @@ import { fileMenuAction } from './file-menu-test-helpers.mjs';
 // OPENPE_EXPERIENCE_OPERATIONS=model-cad-edit measures four real CAD commits and four undos.
 // OPENPE_EXPERIENCE_OPERATIONS=schematic-paced measures low-frequency individual inputs.
 // OPENPE_EXPERIENCE_OPERATIONS=track-paced measures individual Layout drag inputs (v2).
+// Footprint-drag geometry (main-thread preview, not painted frames) is
+// scripts/benchmark-footprint-drag.mjs. Desktop frame capture stays in this file.
 // OPENPE_EXPERIENCE_OPERATIONS=layout-native-wheel opts into five guarded OS inputs.
 // OPENPE_EXPERIENCE_OPERATIONS=layout-zoom-frames opts into 24 acknowledged wheel
 // inputs with 16 ms idle pacing and active-window renderer RAF cadence recording.

@@ -104,6 +104,38 @@ export function pcbSelectionEligible(
   }
 }
 export type PCBSelectionMode = 'replace' | 'add' | 'toggle' | 'subtract';
+
+/** Footprint body, pad, silkscreen or courtyard under the pointer.
+ * The preferred id wins when it is one of those hits. */
+export function pcbFootprintDragTarget(
+  board: PCB,
+  candidates: readonly { padId?: string; selection?: { kind: string; id: string } }[],
+  preferredId?: string,
+): string | undefined {
+  const ids: string[] = [];
+  const add = (id: string | undefined) => {
+    if (id && !ids.includes(id)) ids.push(id);
+  };
+  for (const candidate of candidates) {
+    if (candidate.selection?.kind === 'footprint') add(candidate.selection.id);
+    if (candidate.padId) {
+      const owner = board.footprints.find((footprint) =>
+        footprint.pads.some((pad) => pad.id === candidate.padId),
+      );
+      add(owner?.id);
+    }
+    if (candidate.selection?.kind === 'graphic') {
+      for (const owner of board.footprints) {
+        const graphic = owner.graphics.find((item) => item.id === candidate.selection!.id);
+        const layer = graphic?.layer;
+        if (graphic && layer && (layer.endsWith('.SilkS') || layer.endsWith('.CrtYd')))
+          add(owner.id);
+      }
+    }
+  }
+  if (preferredId && ids.includes(preferredId)) return preferredId;
+  return ids[0];
+}
 export type PCBPointSelectionOptions = {
   preparedFills?: ReadonlyMap<string, Polygon[]>;
   includeFills?: boolean;

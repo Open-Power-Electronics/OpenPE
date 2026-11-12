@@ -86,6 +86,12 @@ const catalogs = {
         ],
       },
     ],
+    unavailable: [
+      {
+        id: 'claude-opus-5-5',
+        reason: 'Cursor model claude-opus-5-5 variant uses unknown parameter cyber.',
+      },
+    ],
   },
 };
 const bundle = await build({
@@ -448,6 +454,18 @@ try {
   const contextPicker = page.getByRole('combobox', { name: 'Context', exact: true });
   const fastSwitch = page.getByRole('switch', { name: 'Fast', exact: true });
   await contextPicker.waitFor();
+  await page
+    .getByRole('note', {
+      name: 'Unavailable models: claude-opus-5-5 — Cursor model claude-opus-5-5 variant uses unknown parameter cyber.',
+      exact: true,
+    })
+    .waitFor();
+  await model.click();
+  const excluded = page.getByRole('option', { name: /claude-opus-5-5/ });
+  assert.equal(await excluded.getAttribute('aria-disabled'), 'true');
+  await excluded.click({ force: true });
+  assert.equal((await snapshot()).model, '');
+  await page.keyboard.press('Escape');
   await waitEffort('Medium');
   assert.equal(await page.getByText('No reasoning effort', { exact: true }).count(), 0);
   assert.equal((await contextPicker.textContent())?.trim(), '500K');

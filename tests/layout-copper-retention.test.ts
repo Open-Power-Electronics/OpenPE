@@ -62,6 +62,9 @@ const compiled = await build({
       const LayoutZoneFillDrawing='zone-fill',LayoutZoneOutlineDrawing='zone-outline',LayoutTrackDrawing='track';
       export default function draw(input){
         const {copperLayers,layers,copperZones,copperPaths,fillPreview,fillPreviewZones,boardSurface,pattern,zoneOwners,zoneOutlinePaths,selectionPaint,highlightNets,placed,netNames}=input;
+        const motionBoard=placed;
+        const showFootprintMotion=false;
+        const footprintMotionIds=null;
         const visibleLayer=(name)=>Boolean(layers[name]);
         ${section('  const copperFillInputs = [', '  const footprintPasses = useMemo(')}
         ${statement('  const retainTrack = useRetainedElements(')}

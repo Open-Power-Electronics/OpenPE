@@ -2,6 +2,37 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 
+// POSIX open refuses to follow a final symlink. Windows has no O_NOFOLLOW;
+// a junction is rejected when lstat reports a link or realpath(parent) is not
+// the canonical parent. Windows reparse behavior is unverified.
+function containedCreateFlags() {
+  const { O_CREAT, O_EXCL, O_RDWR, O_NOFOLLOW } = fs.constants;
+  if (typeof O_CREAT !== 'number' || typeof O_EXCL !== 'number' || typeof O_RDWR !== 'number')
+    throw new Error('Exclusive create flags are unavailable.');
+  if (process.platform === 'win32') return O_RDWR | O_CREAT | O_EXCL;
+  if (typeof O_NOFOLLOW !== 'number')
+    throw new Error('O_NOFOLLOW is required to create a contained file.');
+  return O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW;
+}
+
+/** The parent must still be the canonical directory immediately before a write. */
+async function assertCanonicalParent(parent, expectedCanonical, message) {
+  if (typeof parent !== 'string' || typeof expectedCanonical !== 'string' || typeof message !== 'string')
+    throw new Error('assertCanonicalParent requires a parent, canonical path, and message.');
+  const info = await fsp.lstat(parent);
+  if (info.isSymbolicLink() || !info.isDirectory()) throw new Error(message);
+  const canonical = await fsp.realpath(parent);
+  if (!samePath(canonical, expectedCanonical)) throw new Error(message);
+  const again = await fsp.lstat(parent);
+  if (
+    again.isSymbolicLink() ||
+    !again.isDirectory() ||
+    again.dev !== info.dev ||
+    again.ino !== info.ino
+  )
+    throw new Error(message);
+}
+
 // macOS APFS can be case-sensitive. Cache the probed device; do not assume a platform default.
 const caseFoldByDevice = new Map();
 
@@ -158,7 +189,11 @@ async function assertContainedPath(root, target, options) {
       try {
         info = await fsp.lstat(current);
       } catch (error) {
-        if (options.allowMissing && last && error.code === 'ENOENT') return current;
+        if (options.allowMissing && last && error.code === 'ENOENT') {
+          const parent = path.dirname(current);
+          await assertCanonicalParent(parent, parent, options.message);
+          return current;
+        }
         throw error;
       }
       if (info.isSymbolicLink()) throw new Error(options.message);
@@ -174,9 +209,11 @@ async function assertContainedPath(root, target, options) {
 }
 
 module.exports = {
+  assertCanonicalParent,
   assertContainedPath,
   canonicalDirectory,
   canonicalGrantPath,
+  containedCreateFlags,
   logicalSuffixOfCanonical,
   samePath,
 };

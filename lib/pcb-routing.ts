@@ -1,5 +1,6 @@
 import type { Point } from './circuit';
-import type { CopperLayer, PCB } from './pcb';
+import type { BoardLine, CopperLayer, PCB } from './pcb';
+import { isOwnedProjectNode } from './immutable-project';
 import { padCopperLayers } from './pcb-connectivity';
 import { footprintPoint, padDrillPosition, padPosition, routePoints } from './pcb-layout';
 import { pcbArc, transformPCBGraphic } from './pcb-geometry';
@@ -46,7 +47,82 @@ type CornerBounds = Bounds & {
   maxDifference: number;
 };
 type ObstacleTree = Bounds & { items?: Obstacle[]; children?: ObstacleTree[] };
+type RouterSlice = {
+  obstacles: Obstacle[];
+  vertices: number;
+  edgeTolerance: number;
+  edgeCuts: boolean;
+};
+type PreparedRouter = {
+  obstacles: readonly Obstacle[];
+  broadPhase: readonly ObstacleTree[];
+  vertices: number;
+  edgeTolerance: number;
+  edgeCuts: boolean;
+  boundary: Polygon[];
+  boundaryEdges: [Point, Point][];
+  boundaryNodes: Map<number, Point[]>;
+  segmentClearance: Map<string, { ok: boolean; work: number }>;
+};
+/** Private obstacle reuse for one gesture. Owned unchanged records keep their
+ * slices; moved records miss and are checked exactly. A prepared station keeps
+ * the stationary clearance index so a later dynamic router only builds pairs
+ * for records on the supplied board. The session is not a document and must be
+ * dropped with the gesture. */
+export type PCBRouterSession = {
+  slices: WeakMap<object, Map<string, RouterSlice>>;
+  stations: Map<string, { signature: readonly Obstacle[]; tree: ObstacleTree | undefined }>;
+  prepared: Map<string, PreparedRouter>;
+  outlines: Map<string, Polygon[]>;
+  identities: WeakMap<object, number>;
+  nextIdentity: number;
+};
+export function createPCBRouterSession(): PCBRouterSession {
+  return {
+    slices: new WeakMap(),
+    stations: new Map(),
+    prepared: new Map(),
+    outlines: new Map(),
+    identities: new WeakMap(),
+    nextIdentity: 1,
+  };
+}
 const safety = 0.002;
+
+function sameObstacles(left: readonly Obstacle[], right: readonly Obstacle[]) {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) if (left[index] !== right[index]) return false;
+  return true;
+}
+
+function outlineIdentity(session: PCBRouterSession, board: PCB) {
+  const id = (value: object) => {
+    let saved = session.identities.get(value);
+    if (saved === undefined) session.identities.set(value, (saved = session.nextIdentity++));
+    return saved;
+  };
+  let key = '';
+  for (const graphic of board.graphics)
+    if (graphic.layer === 'Edge.Cuts') key += `g${id(graphic)};`;
+  for (const footprint of board.footprints) {
+    let edges = '';
+    for (const graphic of footprint.graphics)
+      if (graphic.layer === 'Edge.Cuts') edges += `g${id(graphic)};`;
+    if (edges)
+      key += `@${footprint.x},${footprint.y},${footprint.rotation},${footprint.side}:${edges}`;
+  }
+  return key;
+}
+
+function boardOutline(board: PCB, session?: PCBRouterSession) {
+  if (!session) return boardPolygons(board);
+  const key = outlineIdentity(session, board);
+  const saved = session.outlines.get(key);
+  if (saved) return saved;
+  const polygons = boardPolygons(board);
+  session.outlines.set(key, polygons);
+  return polygons;
+}
 const blockedMessage =
   'Route blocked. Move around the obstacle or reduce the track width or clearance.';
 const limitMessage =
@@ -259,8 +335,15 @@ const compact = (points: Point[]) => {
 };
 
 /** Immutable, layer-aware routing geometry with optional Walk Around detours.
- * Existing copper never moves. Both previews and commits use these same checks. */
-export function createPCBRouter(board: PCB, options: RoutingOptions) {
+ * Existing copper never moves. Both previews and commits use these same checks.
+ * A gesture session reuses slices of unchanged owned records. New geometry is
+ * indexed beside that stationary tree and receives the same clearance tests. */
+export function createPCBRouter(
+  board: PCB,
+  options: RoutingOptions,
+  session?: PCBRouterSession,
+  reuseStation = false,
+) {
   const {
     layer,
     netId,
@@ -286,11 +369,21 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
   )
     throw new Error('Choose a valid copper layer, net, track width and clearance before routing.');
   const margin = width / 2 + clearance + safety;
+  const routingKey = `${layer}\0${netId ?? ''}\0${margin}\0${obstacleType}\0${board.layers.join('\0')}`;
+  const preparedStation = reuseStation ? session?.prepared.get(routingKey) : undefined;
+  if (reuseStation && !preparedStation)
+    throw new Error('Router station is not prepared for this clearance.');
+  const obstacleReserve = preparedStation?.obstacles.length ?? 0;
   const obstacles: Obstacle[] = [];
-  let vertices = 0;
-  const add = (points: Point[], radius: number, polygon?: Polygon) => {
+  const stationary: Obstacle[] = [];
+  const dynamic: Obstacle[] = [];
+  let vertices = preparedStation?.vertices ?? 0;
+  let edgeTolerance = 0;
+  let edgeCuts = false;
+  const createObstacle = (points: Point[], radius: number, polygon: Polygon | undefined, pending: number) => {
     vertices += points.length + (polygon?.holes.reduce((n, h) => n + h.length, 0) ?? 0);
-    if (obstacles.length >= 15000 || vertices > 120000) throw new Error(limitMessage);
+    if (obstacleReserve + obstacles.length + pending >= 15000 || vertices > 120000)
+      throw new Error(limitMessage);
     if (!points.length) return;
     const r = radius + margin;
     const bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
@@ -300,7 +393,7 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
       bounds.maxX = Math.max(bounds.maxX, p.x + r);
       bounds.maxY = Math.max(bounds.maxY, p.y + r);
     }
-    obstacles.push({
+    return {
       ...bounds,
       polygon,
       radius: r,
@@ -310,110 +403,255 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
         : points.length === 1
           ? [[points[0], points[0]]]
           : points.slice(1).map((p, i) => [points[i], p]),
+    } satisfies Obstacle;
+  };
+  const add = (points: Point[], radius: number, polygon?: Polygon) => {
+    const obstacle = createObstacle(points, radius, polygon, 0);
+    if (!obstacle) return;
+    obstacles.push(obstacle);
+    dynamic.push(obstacle);
+  };
+  const adopt = (
+    source: object,
+    role: string,
+    build: (
+      addSlice: (points: Point[], radius: number, polygon?: Polygon) => void,
+      noteTolerance: (tolerance: number) => void,
+      noteEdge: () => void,
+    ) => void,
+  ) => {
+    const key = `${routingKey}|${role}`;
+    const owned = Boolean(session && isOwnedProjectNode(source));
+    const saved = owned ? session!.slices.get(source)?.get(key) : undefined;
+    if (saved) {
+      vertices += saved.vertices;
+      if (
+        vertices > 120000 ||
+        obstacleReserve + obstacles.length + saved.obstacles.length > 15000
+      )
+        throw new Error(limitMessage);
+      edgeTolerance = Math.max(edgeTolerance, saved.edgeTolerance);
+      edgeCuts ||= saved.edgeCuts;
+      for (const obstacle of saved.obstacles) {
+        obstacles.push(obstacle);
+        stationary.push(obstacle);
+      }
+      return;
+    }
+    const local: Obstacle[] = [];
+    const vertexStart = vertices;
+    let localTolerance = 0;
+    let localEdges = false;
+    build(
+      (points, radius, polygon) => {
+        const obstacle = createObstacle(points, radius, polygon, local.length);
+        if (obstacle) local.push(obstacle);
+      },
+      (tolerance) => {
+        localTolerance = Math.max(localTolerance, tolerance);
+      },
+      () => {
+        localEdges = true;
+      },
+    );
+    edgeTolerance = Math.max(edgeTolerance, localTolerance);
+    edgeCuts ||= localEdges;
+    for (const obstacle of local) {
+      obstacles.push(obstacle);
+      dynamic.push(obstacle);
+    }
+    if (!owned || !session) return;
+    let slices = session.slices.get(source);
+    if (!slices) session.slices.set(source, (slices = new Map()));
+    slices.set(key, {
+      obstacles: local,
+      vertices: vertices - vertexStart,
+      edgeTolerance: localTolerance,
+      edgeCuts: localEdges,
     });
   };
-  for (const f of board.footprints)
-    for (const p of f.pads) {
-      if ((netId === null || p.netId !== netId) && padCopperLayers(board, f, p).includes(layer)) {
-        if (p.shape === 'circle') add([padPosition(f, p)], p.size.x / 2);
-        else {
-          const shape = borrowPCBPadOutline(f, p);
-          const radius =
-            Math.min(p.size.x, p.size.y) *
-            (p.shape === 'oval' ? 0.5 : p.shape === 'roundrect' ? (p.roundrectRatio ?? 0) : 0);
-          // Cover the maximum sagitta of padPolygon's 9-point quarter arcs.
-          add(shape.outer, radius * (1 - Math.cos(Math.PI / 32)), shape);
-        }
-      }
-      // A plated same-net pad is a legal routing anchor, including its center.
-      if (p.drill && (netId === null || p.netId !== netId || p.type === 'np_thru_hole')) {
-        add([padDrillPosition(f, p)], p.drill / 2);
-      }
-    }
-  for (const t of board.tracks)
-    if (t.layer === layer && t.netId !== netId) add([t.start, t.end], t.width / 2);
-  for (const v of board.vias) if (v.netId !== netId) add([v], v.diameter / 2);
-  // New tracks invalidate saved pours; only explicit track keepouts block routing.
-  for (const z of worldZones(board)) {
-    if (z.layer !== layer) continue;
-    if (z.keepout?.[obstacleType === 'pad' ? 'pads' : obstacleType === 'via' ? 'vias' : 'tracks']) {
-      const shape = { outer: z.outline, holes: z.holes ?? [] };
-      add(shape.outer, 0, shape);
-    }
-  }
-  const graphics = board.graphics.filter((g) => g.layer === layer || g.layer === 'Edge.Cuts');
-  for (const footprint of board.footprints) {
-    const point = (p: Point) => footprintPoint(footprint, p);
-    for (const graphic of footprint.graphics) {
-      if (graphic.layer !== layer && graphic.layer !== 'Edge.Cuts') continue;
-      if (graphic.kind === 'dimension' && graphic.dimension && graphic.layer.endsWith('.Cu')) {
-        // Match the local strokes used by the artwork collision adapter before
-        // rounding their transformed endpoints into board space.
+  const contributeGraphic = (
+    graphic: BoardLine,
+    addGraphic: (points: Point[], radius: number, polygon?: Polygon) => void,
+    noteTolerance: (tolerance: number) => void,
+    noteEdge: () => void,
+  ) => {
+    if (graphic.layer !== layer && graphic.layer !== 'Edge.Cuts') return;
+    if (graphic.layer === 'Edge.Cuts') noteEdge();
+    if (graphic.kind === 'text') return;
+    if (graphic.kind === 'dimension') {
+      if (graphic.layer === layer)
         for (const stroke of pcbDimensionStrokes(graphic))
-          graphics.push(transformPCBGraphic(stroke, point));
-      } else graphics.push(transformPCBGraphic(graphic, point));
+          addGraphic([stroke.start, stroke.end], stroke.width / 2);
+      return;
     }
-  }
-  let edgeTolerance = 0;
-  for (const g of graphics) {
-    if (g.layer !== layer && g.layer !== 'Edge.Cuts') continue;
-    if (g.kind === 'text') continue;
-    if (g.kind === 'dimension') {
-      if (g.layer === layer)
-        for (const stroke of pcbDimensionStrokes(g))
-          add([stroke.start, stroke.end], stroke.width / 2);
-      continue;
-    }
-    const points = graphicVertices(g);
-    const arc = g.kind === 'arc' ? pcbArc(g) : null;
+    const points = graphicVertices(graphic);
+    const arc = graphic.kind === 'arc' ? pcbArc(graphic) : null;
     const tolerance =
-      g.kind === 'circle'
-        ? Math.sqrt(squaredDistance(g.start, g.end)) * (1 - Math.cos(Math.PI / points.length))
+      graphic.kind === 'circle'
+        ? Math.sqrt(squaredDistance(graphic.start, graphic.end)) * (1 - Math.cos(Math.PI / points.length))
         : arc
           ? arc.radius * (1 - Math.cos(Math.abs(arc.delta) / (2 * (points.length - 1))))
           : 0;
-    if (g.layer === 'Edge.Cuts') {
-      edgeTolerance = Math.max(edgeTolerance, tolerance);
-      continue;
+    if (graphic.layer === 'Edge.Cuts') {
+      noteTolerance(tolerance);
+      return;
     }
-    if (g.fill && (g.kind === 'polygon' || g.kind === 'circle'))
-      add(points, g.width / 2 + tolerance, { outer: points, holes: [] });
+    if (graphic.fill && (graphic.kind === 'polygon' || graphic.kind === 'circle'))
+      addGraphic(points, graphic.width / 2 + tolerance, { outer: points, holes: [] });
     else
-      add(
-        g.kind === 'polygon' || g.kind === 'circle' ? [...points, points[0]] : points,
-        g.width / 2 + tolerance,
+      addGraphic(
+        graphic.kind === 'polygon' || graphic.kind === 'circle' ? [...points, points[0]] : points,
+        graphic.width / 2 + tolerance,
       );
+  };
+  for (const footprint of board.footprints)
+    adopt(footprint, 'pads', (addPad) => {
+      for (const pad of footprint.pads) {
+        if ((netId === null || pad.netId !== netId) && padCopperLayers(board, footprint, pad).includes(layer)) {
+          if (pad.shape === 'circle') addPad([padPosition(footprint, pad)], pad.size.x / 2);
+          else {
+            const shape = borrowPCBPadOutline(footprint, pad);
+            const radius =
+              Math.min(pad.size.x, pad.size.y) *
+              (pad.shape === 'oval' ? 0.5 : pad.shape === 'roundrect' ? (pad.roundrectRatio ?? 0) : 0);
+            // Cover the maximum sagitta of padPolygon's 9-point quarter arcs.
+            addPad(shape.outer, radius * (1 - Math.cos(Math.PI / 32)), shape);
+          }
+        }
+        // A plated same-net pad is a legal routing anchor, including its center.
+        if (pad.drill && (netId === null || pad.netId !== netId || pad.type === 'np_thru_hole'))
+          addPad([padDrillPosition(footprint, pad)], pad.drill / 2);
+      }
+    });
+  for (const track of board.tracks)
+    if (track.layer === layer && track.netId !== netId)
+      adopt(track, 'track', (addTrack) => addTrack([track.start, track.end], track.width / 2));
+  for (const via of board.vias)
+    if (via.netId !== netId) adopt(via, 'via', (addVia) => addVia([via], via.diameter / 2));
+  // New tracks invalidate saved pours; only explicit track keepouts block routing.
+  for (const zone of worldZones(board)) {
+    if (zone.layer !== layer) continue;
+    if (zone.keepout?.[obstacleType === 'pad' ? 'pads' : obstacleType === 'via' ? 'vias' : 'tracks']) {
+      const shape = { outer: zone.outline, holes: zone.holes ?? [] };
+      add(shape.outer, 0, shape);
+    }
   }
+  for (const graphic of board.graphics)
+    if (graphic.layer === layer || graphic.layer === 'Edge.Cuts')
+      adopt(graphic, 'graphic', (addGraphic, noteTolerance, noteEdge) =>
+        contributeGraphic(graphic, addGraphic, noteTolerance, noteEdge),
+      );
+  for (const footprint of board.footprints)
+    adopt(footprint, 'graphics', (addGraphic, noteTolerance, noteEdge) => {
+      const point = (p: Point) => footprintPoint(footprint, p);
+      for (const graphic of footprint.graphics) {
+        if (graphic.layer !== layer && graphic.layer !== 'Edge.Cuts') continue;
+        if (graphic.kind === 'dimension' && graphic.dimension && graphic.layer.endsWith('.Cu')) {
+          // Match the local strokes used by the artwork collision adapter before
+          // rounding their transformed endpoints into board space.
+          for (const stroke of pcbDimensionStrokes(graphic))
+            contributeGraphic(transformPCBGraphic(stroke, point), addGraphic, noteTolerance, noteEdge);
+        } else contributeGraphic(transformPCBGraphic(graphic, point), addGraphic, noteTolerance, noteEdge);
+      }
+    });
   // No outline permits early layout work. An existing broken outline fails closed.
-  const boundary = graphics.some((g) => g.layer === 'Edge.Cuts') ? boardPolygons(board) : [];
+  if (preparedStation && stationary.length)
+    throw new Error('Dynamic routing included a stationary record.');
+  if (preparedStation && edgeCuts)
+    throw new Error('Dynamic routing cannot change the board outline.');
+  if (preparedStation) {
+    edgeTolerance = Math.max(edgeTolerance, preparedStation.edgeTolerance);
+    edgeCuts = preparedStation.edgeCuts;
+  }
+  const boundary = preparedStation
+    ? preparedStation.boundary
+    : edgeCuts
+      ? boardOutline(board, session)
+      : [];
   const edgeMargin = margin + edgeTolerance;
-  const boundaryEdges = boundary.flatMap(polygonEdges);
-  vertices += boundaryEdges.length;
+  const boundaryEdges = preparedStation
+    ? preparedStation.boundaryEdges
+    : boundary.flatMap(polygonEdges);
+  if (!preparedStation) vertices += boundaryEdges.length;
   if (vertices > 120000) throw new Error(limitMessage);
   // Validation and direct paths need exact boundary edges, but no offset
   // clipping. Prepare private detour hints only if a route reaches search.
   // Publish after success so a failed preparation remains retryable.
   let boundaryNodes: Point[] | undefined;
-  const detourBoundaryNodes = () =>
-    (boundaryNodes ??= boundary.length
+  const storedNodes = session?.prepared.get(routingKey)?.boundaryNodes;
+  const detourBoundaryNodes = () => {
+    if (boundaryNodes) return boundaryNodes;
+    const saved = storedNodes?.get(edgeMargin);
+    if (saved) return (boundaryNodes = saved);
+    const nodes = boundary.length
       ? offsetPolygons(boundary, -edgeMargin - safety)
           .flatMap((p) => [p.outer, ...p.holes])
           .flat()
-      : []);
+      : [];
+    storedNodes?.set(edgeMargin, nodes);
+    return (boundaryNodes = nodes);
+  };
   // Capture the source support planes during construction, but clip a detour
   // hull only when search needs it. Never reread caller geometry or settings.
   const detourCorners = (obstacle: Obstacle) =>
     (obstacle.corners ??= obstacleCorners(obstacle.cornerBounds));
-  // Prepared geometry is private to this router. Every retained candidate still
-  // receives exact polygon/segment tests; the tree only removes distant work.
-  const tree = obstacleTree(obstacles);
+  // A complete first assembly keeps one tree, matching an uncached router.
+  // Later gesture calls reuse the stationary tree and index only new obstacles.
+  const broadPhase: ObstacleTree[] = [];
+  const queryObstacles = preparedStation ? [...preparedStation.obstacles, ...obstacles] : obstacles;
+  if (preparedStation) {
+    broadPhase.push(...preparedStation.broadPhase);
+    const moved = obstacles.length ? obstacleTree(obstacles) : undefined;
+    if (moved) broadPhase.push(moved);
+  } else if (!session || stationary.length === 0) {
+    const tree = obstacleTree(obstacles);
+    if (tree) broadPhase.push(tree);
+  } else {
+    const station = session.stations.get(routingKey);
+    const tree =
+      station && sameObstacles(station.signature, stationary)
+        ? station.tree
+        : obstacleTree(stationary);
+    if (!station || station.tree !== tree)
+      session.stations.set(routingKey, { signature: stationary, tree });
+    if (tree) broadPhase.push(tree);
+    const moved = dynamic.length ? obstacleTree(dynamic) : undefined;
+    if (moved) broadPhase.push(moved);
+  }
+  if (session && !preparedStation)
+    session.prepared.set(routingKey, {
+      obstacles: queryObstacles,
+      broadPhase: [...broadPhase],
+      vertices,
+      edgeTolerance,
+      edgeCuts,
+      boundary,
+      boundaryEdges,
+      boundaryNodes: new Map(),
+      segmentClearance: new Map(),
+    });
 
-  function visitObstacles(
+  const stationaryTrees = preparedStation ? preparedStation.broadPhase : broadPhase;
+  const dynamicTrees = preparedStation ? broadPhase.slice(preparedStation.broadPhase.length) : [];
+  const dynamicBounds = dynamicTrees.length
+    ? dynamicTrees.reduce(
+        (bounds, tree) => ({
+          minX: Math.min(bounds.minX, tree.minX),
+          minY: Math.min(bounds.minY, tree.minY),
+          maxX: Math.max(bounds.maxX, tree.maxX),
+          maxY: Math.max(bounds.maxY, tree.maxY),
+        }),
+        { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+      )
+    : undefined;
+  function visitTrees(
+    trees: readonly ObstacleTree[],
     bounds: Bounds,
     visit: (obstacle: Obstacle) => boolean,
-    spend: () => void,
+    spend: (units?: number) => void,
   ): boolean {
-    const pending = tree ? [tree] : [];
+    const pending = [...trees];
     while (pending.length) {
       const node = pending.pop()!;
       spend();
@@ -427,43 +665,78 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
     }
     return true;
   }
+  function visitObstacles(
+    bounds: Bounds,
+    visit: (obstacle: Obstacle) => boolean,
+    spend: (units?: number) => void,
+  ): boolean {
+    return visitTrees(broadPhase, bounds, visit, spend);
+  }
 
-  function checker(budget?: () => void) {
+  function checker(budget?: (units?: number) => void) {
     let work = 0;
-    const spend = () => {
-      if (++work > 2_000_000) throw new Error(limitMessage);
-      budget?.();
+    const spend = (units = 1) => {
+      work += units;
+      if (work > 2_000_000) throw new Error(limitMessage);
+      budget?.(units);
+    };
+    const segmentBounds = (a: Point, b: Point): Bounds => ({
+      minX: Math.min(a.x, b.x),
+      maxX: Math.max(a.x, b.x),
+      minY: Math.min(a.y, b.y),
+      maxY: Math.max(a.y, b.y),
+    });
+    const hitsObstacle = (a: Point, b: Point) => (obstacle: Obstacle) => {
+      if (
+        obstacle.polygon &&
+        (insidePolygon(a, obstacle.polygon, spend) || insidePolygon(b, obstacle.polygon, spend))
+      )
+        return false;
+      for (const [c, d] of obstacle.edges) {
+        spend();
+        if (segmentDistance(a, b, c, d) < obstacle.radius ** 2) return false;
+      }
+      return true;
     };
     const segmentClear = (a: Point, b: Point) => {
-      if (boundary.length) {
-        if (![a, b].every((p) => boundary.some((shape) => insidePolygon(p, shape, spend))))
-          return false;
-        for (const [c, d] of boundaryEdges) {
-          spend();
-          if (segmentDistance(a, b, c, d) < edgeMargin ** 2) return false;
+      const cache = preparedStation?.segmentClearance;
+      const key = cache
+        ? a.x < b.x || (a.x === b.x && a.y <= b.y)
+          ? `${a.x},${a.y},${b.x},${b.y}`
+          : `${b.x},${b.y},${a.x},${a.y}`
+        : '';
+      const saved = key ? cache?.get(key) : undefined;
+      if (!saved) {
+        const before = work;
+        let ok = true;
+        if (boundary.length) {
+          if (![a, b].every((p) => boundary.some((shape) => insidePolygon(p, shape, spend))))
+            ok = false;
+          if (ok)
+            for (const [c, d] of boundaryEdges) {
+              spend();
+              if (segmentDistance(a, b, c, d) < edgeMargin ** 2) {
+                ok = false;
+                break;
+              }
+            }
         }
+        if (
+          ok &&
+          !visitTrees(stationaryTrees, segmentBounds(a, b), hitsObstacle(a, b), spend)
+        )
+          ok = false;
+        cache?.set(key, { ok, work: work - before });
+        if (!ok) return false;
+      } else {
+        spend(saved.work);
+        if (!saved.ok) return false;
       }
-      return visitObstacles(
-        {
-          minX: Math.min(a.x, b.x),
-          maxX: Math.max(a.x, b.x),
-          minY: Math.min(a.y, b.y),
-          maxY: Math.max(a.y, b.y),
-        },
-        (o) => {
-          if (
-            o.polygon &&
-            (insidePolygon(a, o.polygon, spend) || insidePolygon(b, o.polygon, spend))
-          )
-            return false;
-          for (const [c, d] of o.edges) {
-            spend();
-            if (segmentDistance(a, b, c, d) < o.radius ** 2) return false;
-          }
-          return true;
-        },
-        spend,
-      );
+      if (!dynamicTrees.length || !dynamicBounds) return true;
+      const box = segmentBounds(a, b);
+      return overlaps(box, dynamicBounds)
+        ? visitTrees(dynamicTrees, box, hitsObstacle(a, b), spend)
+        : true;
     };
     const clear = (points: Point[]) =>
       points.length === 1
@@ -582,7 +855,7 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
         maxX = Math.max(start.x, end.x) + padding,
         minY = Math.min(start.y, end.y) - padding,
         maxY = Math.max(start.y, end.y) + padding;
-      const nearby = obstacles
+      const nearby = queryObstacles
         .filter((o) => o.maxX >= minX && o.minX <= maxX && o.maxY >= minY && o.minY <= maxY)
         .sort((a, b) => {
           const score = (o: Obstacle) =>
@@ -830,4 +1103,11 @@ export function createPCBRouter(board: PCB, options: RoutingOptions) {
     }
   }
   return { route, walk, validate, validateRegion };
+}
+
+/** Clearance index for records added beside a station prepared by createPCBRouter.
+ * The supplied board must contain only the moved records; stationary copper stays
+ * in the session index. Missing preparation throws. */
+export function createDynamicPCBRouter(board: PCB, options: RoutingOptions, session: PCBRouterSession) {
+  return createPCBRouter(board, options, session, true);
 }

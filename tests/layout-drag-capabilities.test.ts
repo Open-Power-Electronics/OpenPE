@@ -279,3 +279,55 @@ test('footprint drag bends native leads and checks hidden obstacles and same-net
   assert.match(blocked.error, /connectivity/);
   assert.equal(blocked.board, locked);
 });
+
+test('warm footprint drag matches a cold preview and a blocked pose cannot commit the older board', () => {
+  const { project, board } = footprintFixture();
+  const input = {
+    boardId: board.id,
+    selection: [{ kind: 'footprint' as const, id: board.footprints[0].id }],
+    delta: { x: 1, y: 0 },
+    clearance: 0.25,
+  };
+  const core = new ProjectCore(project);
+  const basis = core.getSnapshot().project!.pcb!;
+  const cold = createPCBInteractiveDrag(basis, input.selection, input);
+  const warm = createPCBInteractiveDrag(basis, input.selection, input);
+  warm.preview({ x: 0.25, y: 0 });
+  const copper = (pcb: NonNullable<typeof basis>) => ({
+    footprints: pcb.footprints.map(({ id, x, y }) => ({ id, x, y })),
+    tracks: pcb.tracks.map(({ id, start, end, width, layer, netId }, index) => ({
+      id: index < basis.tracks.length ? id : 'elbow',
+      start,
+      end,
+      width,
+      layer,
+      netId,
+    })),
+  });
+  for (const delta of [
+    { x: 1, y: 0 },
+    { x: 0, y: 2 },
+    { x: 0, y: 4 },
+  ]) {
+    const left = cold.preview(delta);
+    const right = warm.preview(delta);
+    const repeated = warm.preview(delta);
+    assert.equal(right.error, left.error);
+    assert.deepEqual(copper(right.board), copper(left.board));
+    assert.deepEqual(repeated.changedIds, right.changedIds);
+    assert.deepEqual(copper(repeated.board), copper(right.board));
+  }
+  const valid = warm.preview({ x: 0, y: 2 });
+  assert.equal(valid.error, '');
+  const blocked = warm.preview({ x: 0, y: 4 });
+  assert.match(blocked.error, /blocked/i);
+  assert.equal(blocked.board, basis);
+  assert.notEqual(blocked.board, valid.board);
+  const before = core.getSnapshot();
+  assert.throws(() => core.execute('layout.drag', { ...input, delta: { x: 0, y: 4 } }), /blocked/i);
+  assert.equal(core.getSnapshot(), before);
+  const exact = warm.preview(input.delta);
+  assert.equal(exact.error, '');
+  assert.equal(core.replaceBoard(exact.board), true);
+  assert.deepEqual(copper(core.getSnapshot().project!.pcb!), copper(exact.board));
+});

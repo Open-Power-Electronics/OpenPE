@@ -4,7 +4,12 @@ import { resolveAgent } from './agents.mjs';
 import { validModelId } from './model-id.mjs';
 import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
 import { verifyPiIsolation } from './agent-provider-runtime.mjs';
-import { listCursorModels, loadCursorSdk, readCursorApiKey } from './agent-cursor.mjs';
+import {
+  listCursorModels,
+  loadCursorSdk,
+  publishCursorListError,
+  readCursorApiKey,
+} from './agent-cursor.mjs';
 import { listPiModels } from './agent-pi.mjs';
 import { stopOwnedProcess } from './owned-process.mjs';
 
@@ -15,10 +20,15 @@ import { stopOwnedProcess } from './owned-process.mjs';
 export async function listAgentModels(provider, cwd, signal, options = {}) {
   if (!isAgentProvider(provider)) throw new Error('Unknown agent.');
   if (provider === 'cursor') {
-    const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
-    const apiKey = await readCursorApiKey(options.cursorCredential);
-    if (signal.aborted) throw new Error('Model loading cancelled.');
-    return listCursorModels(apiKey, sdk, signal);
+    let apiKey = '';
+    try {
+      const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
+      apiKey = await readCursorApiKey(options.cursorCredential);
+      if (signal.aborted) throw new Error('Model loading cancelled.');
+      return await listCursorModels(apiKey, sdk, signal);
+    } catch (error) {
+      throw publishCursorListError(error, apiKey);
+    }
   }
   if (provider === 'deepseek') {
     const launch = await (options.resolve || resolveAgent)(provider);

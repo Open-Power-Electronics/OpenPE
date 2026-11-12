@@ -228,8 +228,12 @@ and [version history](VERSION-HISTORY.md) for example opening and snapshots.
 Export applies valid Source and writes independent manufacturing and exchange
 files without changing the save destination or baseline. It compiles the output
 before opening the picker and publishes one atomic file replacement. The host
-rejects linked destinations and protects open project sources. Archives contain
-generated files only.
+rejects linked destinations and protects open project sources. A missing file is
+created with `O_NOFOLLOW|O_CREAT|O_EXCL` on POSIX after the parent is lstat'd
+again and its realpath still equals the canonical parent. Windows has no
+`O_NOFOLLOW`; a junction or other reparse point is rejected when `lstat` reports
+a link or that realpath differs. Windows junction behavior is unverified.
+Archives contain generated files only.
 
 ## Design exchange
 

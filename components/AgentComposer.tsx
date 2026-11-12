@@ -206,6 +206,11 @@ export default function AgentComposer({
     }
   }
   const availabilityId = `${inputId}-availability`;
+  const unavailableText = catalog.unavailable.length
+    ? `Unavailable models: ${catalog.unavailable
+        .map((model) => `${model.id} — ${model.reason}`)
+        .join('; ')}`
+    : '';
   function submit() {
     if (
       composing.current ||
@@ -371,6 +376,7 @@ export default function AgentComposer({
             <ModelSelect
               key={provider}
               models={catalog.models}
+              unavailable={catalog.unavailable}
               currentModel={catalog.currentModel}
               loading={catalog.loading && !availabilityText}
               error={requiresAgent ? undefined : catalog.error}
@@ -516,11 +522,18 @@ export default function AgentComposer({
             {isStop ? <Square size={14} /> : <ArrowUp size={17} />}
           </button>
         </div>
-        {availabilityText && (
+        {(availabilityText || unavailableText) && (
           <div className="composer-availability">
-            <span id={availabilityId} role="status" aria-description={catalog.error}>
-              {availabilityText}
-            </span>
+            {availabilityText && (
+              <span id={availabilityId} role="status" aria-description={catalog.error}>
+                {availabilityText}
+              </span>
+            )}
+            {unavailableText && (
+              <span className="composer-unavailable-models" role="note">
+                {unavailableText}
+              </span>
+            )}
             {availabilityAction && (
               <button
                 type="button"

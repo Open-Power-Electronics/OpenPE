@@ -187,7 +187,11 @@ OpenPE never reads other tools' credential files, edits provider configuration
 files directly, or approves interactive CLI requests. A Cursor API key is the
 documented exception: Settings stores it through Electron `safeStorage` as
 `cursor-credential.bin` in the OpenPE data directory, and the service alone
-passes it to `@cursor/sdk`. Cancellation cannot reverse completed CLI
+passes it to `@cursor/sdk`. POSIX creation uses mode 0600. On Windows the file
+remains in the per-user OpenPE data directory under `%APPDATA%`, which inherits
+that profile's user-only ACL; OpenPE does not call `icacls`. Windows ACL
+inheritance is unverified. A failed rename surfaces a non-ENOENT error from
+removing the temporary file. Cancellation cannot reverse completed CLI
 writes. Installed state proves neither authentication nor restricted-thread
 compatibility. Provider plugins do not add tools or permissions to OpenPE's
 catalog: Codex receives its dynamic tools, and Claude and Cursor use the

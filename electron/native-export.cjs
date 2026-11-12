@@ -1,10 +1,11 @@
 const path = require('node:path');
 const { assertContainedPath, canonicalDirectory } = require('../server/host-path.cjs');
 
-async function checkDestination(file) {
+async function destinationGuard(file) {
   const message = 'Choose a regular export file without linked directories.';
   const rooted = await canonicalDirectory(path.dirname(file), { message });
   await assertContainedPath(rooted, file, { message, kind: 'file', allowMissing: true });
+  return { message, parentCanonical: rooted.canonical };
 }
 
 function createNativeExport({
@@ -51,15 +52,19 @@ function createNativeExport({
       );
       if (path.extname(file).toLowerCase() !== '.' + definition.extension)
         throw new Error('Choose a .' + definition.extension + ' export file.');
+      const guard = await destinationGuard(file);
       const check = async () => {
         isCurrent();
         if (fileGrants.owners(file).length)
           throw new Error('Export cannot overwrite an open project source.');
-        await checkDestination(file);
+        await destinationGuard(file);
         isCurrent();
       };
       await check();
-      await atomicWrite(file, Buffer.from(output.bytes), check);
+      await atomicWrite(file, Buffer.from(output.bytes), check, {
+        parentCanonical: guard.parentCanonical,
+        message: guard.message,
+      });
       return { name: path.basename(file), format: options.format };
     } finally {
       pending = false;

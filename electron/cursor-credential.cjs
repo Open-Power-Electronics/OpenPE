@@ -61,15 +61,24 @@ function createCursorCredentialStore({ directory, safeStorage, filesystem = fs }
       const handle = await filesystem.open(temp, 'wx');
       try {
         await handle.writeFile(bytes);
+        // POSIX mode 0600 restricts the file to the current user. Windows chmod
+        // does not set an ACL. The file is created in the per-user OpenPE data
+        // directory (OPENPE_DATA_DIR or %APPDATA%\OpenPE), which inherits that
+        // profile's user-only ACL. This does not call icacls. Windows ACL
+        // inheritance is unverified.
         await handle.chmod(0o600);
       } finally {
         await handle.close();
       }
       try {
         await filesystem.rename(temp, file);
-      } catch (error) {
-        await filesystem.unlink(temp).catch(() => {});
-        throw error;
+      } catch (renameError) {
+        try {
+          await filesystem.unlink(temp);
+        } catch (unlinkError) {
+          if (unlinkError.code !== 'ENOENT') throw unlinkError;
+        }
+        throw renameError;
       }
       return statusOf(normalized);
     },

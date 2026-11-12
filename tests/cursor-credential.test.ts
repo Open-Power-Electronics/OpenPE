@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -40,6 +40,7 @@ test('Cursor API key storage encrypts one file and reports only its suffix', asy
     assert.equal(await store.read(), key);
     const bytes = await readFile(store.file);
     assert.equal(bytes.includes(Buffer.from(key)), false);
+    if (process.platform !== 'win32') assert.equal((await stat(store.file)).mode & 0o777, 0o600);
     assert.equal(bytes.toString(), Buffer.from(key).toString('base64'));
     await assert.rejects(store.write('short'), /Invalid Cursor API key/);
     assert.equal(await store.read(), key);
@@ -57,4 +58,43 @@ test('Cursor API key storage encrypts one file and reports only its suffix', asy
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('Cursor credential rename failure does not hide a temporary removal error', async () => {
+  const storage = memoryStorage();
+  const filesystem = {
+    modes: [] as number[],
+    async open() {
+      return {
+        async writeFile() {},
+        async chmod(mode: number) {
+          filesystem.modes.push(mode);
+        },
+        async close() {},
+      };
+    },
+    async rename() {
+      throw Object.assign(new Error('rename failed'), { code: 'EPERM' });
+    },
+    async unlink() {
+      throw Object.assign(new Error('unlink failed'), { code: 'EIO' });
+    },
+  };
+  const store = createCursorCredentialStore({
+    directory: path.join('keys'),
+    safeStorage: storage,
+    filesystem,
+  });
+  await assert.rejects(store.write(key), (error: unknown) => {
+    assert.equal((error as NodeJS.ErrnoException).code, 'EIO');
+    return true;
+  });
+  assert.deepEqual(filesystem.modes, [0o600]);
+  filesystem.unlink = async () => {
+    throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+  };
+  await assert.rejects(store.write(key), (error: unknown) => {
+    assert.equal((error as NodeJS.ErrnoException).code, 'EPERM');
+    return true;
+  });
 });

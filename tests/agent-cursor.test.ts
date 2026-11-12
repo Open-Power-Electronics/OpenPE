@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startServer } from '../server/index.mjs';
 import { detectAgents, resolveAgent, runAgent } from '../server/agents.mjs';
 import { listAgentModels } from '../server/agent-models.mjs';
 import {
@@ -13,7 +16,7 @@ import {
   proveCursorMcpTools,
   validCursorRequestParameters,
 } from '../server/agent-cursor.mjs';
-import { isCursorBooleanParameter } from '../lib/cursor-catalog';
+import { isCursorBooleanParameter, readCursorUnavailableModels } from '../lib/cursor-catalog';
 import { startAgentMCP } from '../server/agent-mcp.mjs';
 
 const apiKey = 'cursor_test_key_value_0001';
@@ -117,7 +120,6 @@ const catalog = [
     parameters: [],
     variants: [{ params: [], isDefault: true }],
   },
-  { id: 'not a model' },
 ];
 const grokRequest = {
   effort: 'high' as const,
@@ -231,6 +233,7 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
     listed.models.map((model: any) => model.id),
     ['grok-4.7', 'composer-2.5', 'plain'],
   );
+  assert.deepEqual(listed.unavailable, []);
   assert.equal(listed.models[0].label, 'Grok 4.7');
   assert.equal(listed.models[0].effortParameter, 'reasoning_effort');
   assert.deepEqual(listed.models[0].efforts, ['low', 'high']);
@@ -250,7 +253,10 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
   assert.deepEqual(listed.models[1].efforts, []);
   assert.equal(listed.models[1].parameters[0].default, 'false');
   assert.deepEqual(listed.models[2].parameters, []);
-  assert.equal(cursorCatalogEntry({ id: 'not a model' }), null);
+  assert.throws(
+    () => cursorCatalogEntry({ id: 'not a model' }),
+    /Cursor model \(invalid id\) is not a catalog model\./,
+  );
   assert.deepEqual(cursorModelSelection(catalog[0], grokRequest), {
     id: 'grok-4.7',
     params: [
@@ -258,6 +264,7 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
       { id: 'reasoning_effort', value: 'high' },
       { id: 'fast', value: 'true' },
     ],
+    maxMode: false,
   });
   assert.deepEqual(
     cursorCheckRequest(listed.models[0], { id: 'reasoning_effort', value: 'low' }),
@@ -312,13 +319,13 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
           { id: 'fast', value: 'true' },
         ],
       }),
-    /no variant/,
+    /no single variant/,
   );
   assert.throws(
     () => cursorModelSelection(catalog[1], { parameters: [{ id: 'fast', value: 'true' }], effort: 'low' }),
     /does not expose a reasoning effort/,
   );
-  assert.deepEqual(cursorModelSelection(catalog[2], {}), { id: 'plain' });
+  assert.deepEqual(cursorModelSelection(catalog[2], {}), { id: 'plain', maxMode: false });
   assert.throws(
     () =>
       cursorCatalogEntry({
@@ -339,26 +346,24 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
       }),
     /multiple reasoning efforts/,
   );
-  const hidden = cursorCatalogEntry({
-    id: 'claude-opus-5-5',
-    displayName: 'Opus',
-    parameters: [
-      {
-        id: 'fast',
-        displayName: 'Fast',
-        values: [{ value: 'false' }, { value: 'true', displayName: 'Fast' }],
-      },
-    ],
-    variants: cursorVariants([{ id: 'fast', values: ['false', 'true'] }], { fast: 'true' }, [
-      { id: 'cyber', value: 'true' },
-    ]),
-  });
-  assert.ok(hidden);
-  assert.deepEqual(
-    hidden.parameters.map((parameter) => parameter.id),
-    ['fast'],
+  assert.throws(
+    () =>
+      cursorCatalogEntry({
+        id: 'claude-opus-5-5',
+        displayName: 'Opus',
+        parameters: [
+          {
+            id: 'fast',
+            displayName: 'Fast',
+            values: [{ value: 'false' }, { value: 'true', displayName: 'Fast' }],
+          },
+        ],
+        variants: cursorVariants([{ id: 'fast', values: ['false', 'true'] }], { fast: 'true' }, [
+          { id: 'cyber', value: 'true' },
+        ]),
+      }),
+    /claude-opus-5-5 variant uses unknown parameter cyber/,
   );
-  assert.equal(hidden.effortParameter, undefined);
   const mixed = {
     id: 'gpt-5.5',
     displayName: 'GPT',
@@ -383,7 +388,45 @@ test('Cursor model catalog exposes every parameter and its catalog default', asy
   assert.deepEqual(cursorModelSelection(mixed, { parameters: [{ id: 'reasoning', value: 'extra-high' }] }), {
     id: 'gpt-5.5',
     params: [{ id: 'reasoning', value: 'extra-high' }],
+    maxMode: false,
   });
+  assert.deepEqual(
+    cursorModelSelection(
+      {
+        id: 'max-model',
+        parameters: [
+          {
+            id: 'fast',
+            values: [{ value: 'false' }, { value: 'true' }],
+          },
+        ],
+        variants: [
+          { params: [{ id: 'fast', value: 'true' }], isDefault: true, isMaxMode: true },
+          { params: [{ id: 'fast', value: 'false' }], isMaxMode: false },
+        ],
+      },
+      { parameters: [{ id: 'fast', value: 'true' }] },
+    ),
+    { id: 'max-model', params: [{ id: 'fast', value: 'true' }], maxMode: true },
+  );
+  assert.throws(
+    () =>
+      cursorCatalogEntry({
+        id: 'dup-model',
+        parameters: [],
+        variants: [{ params: [], isDefault: true }, { params: [] }],
+      }),
+    /dup-model has more than one variant/,
+  );
+  assert.throws(
+    () =>
+      cursorCatalogEntry({
+        id: 'bad-max',
+        parameters: [],
+        variants: [{ params: [], isDefault: true, isMaxMode: 'yes' }],
+      }),
+    /bad-max has an invalid max-mode flag/,
+  );
   assert.throws(() => cursorModelSelection(mixed, { effort: 'high' }), /does not expose a reasoning effort/);
 });
 
@@ -424,7 +467,19 @@ test('Cursor streams text, cancels without dropping it, and proves the tool set'
   assert.deepEqual(calls[0].local.settingSources, []);
   assert.equal(calls[0].local.sandboxOptions.enabled, false);
   assert.equal(calls[0].mcpServers.openpe.env.OPENPE_AGENT_BRIDGE_TOKEN, capabilityToken);
-  assert.equal(Object.values(calls[0].mcpServers.openpe.env).includes(apiKey), false);
+  assert.equal(Object.isFrozen(calls[0].mcpServers.openpe.env), true);
+  assert.deepEqual(Object.keys(calls[0].mcpServers.openpe.env).sort(), [
+    'ELECTRON_RUN_AS_NODE',
+    'OPENPE_AGENT_BRIDGE_TOKEN',
+    'OPENPE_AGENT_BRIDGE_URL',
+    'OPENPE_QUESTIONS_TOKEN',
+    'OPENPE_QUESTIONS_URL',
+  ]);
+  assert.equal(calls[0].mcpServers.openpe.env.OPENPE_AGENT_BRIDGE_URL, capabilityUrl);
+  assert.equal(calls[0].mcpServers.openpe.env.OPENPE_QUESTIONS_URL, questionUrl);
+  assert.equal(Object.values(calls[0].mcpServers.openpe.env).some((value) => String(value).includes(apiKey)), false);
+  assert.equal(calls[0].model.maxMode, false);
+  assert.deepEqual(calls[0].local.fs, { isolated: true });
   assert.deepEqual(calls[0].model.params, [
     { id: 'context', value: '500k' },
     { id: 'reasoning_effort', value: 'high' },
@@ -447,12 +502,20 @@ test('Cursor streams text, cancels without dropping it, and proves the tool set'
 });
 
 test('Cursor fails closed when the SDK cannot prove its built-in tools', () => {
+  const filesystem = { isolated: true };
+  const env = Object.freeze({
+    ELECTRON_RUN_AS_NODE: '1',
+    OPENPE_AGENT_BRIDGE_URL: capabilityUrl,
+    OPENPE_AGENT_BRIDGE_TOKEN: capabilityToken,
+    OPENPE_QUESTIONS_URL: questionUrl,
+    OPENPE_QUESTIONS_TOKEN: questionToken,
+  });
   const options = {
     local: {
       cwd: '/private',
       settingSources: [],
       sandboxOptions: { enabled: false },
-      fs: { isolated: true },
+      fs: filesystem,
     },
     mcpServers: {
       openpe: {
@@ -460,31 +523,95 @@ test('Cursor fails closed when the SDK cannot prove its built-in tools', () => {
         command: process.execPath,
         args: [fileURLToPath(new URL('../server/agent-mcp.mjs', import.meta.url))],
         cwd: '/private',
-        env: {
-          ELECTRON_RUN_AS_NODE: '1',
-          OPENPE_AGENT_BRIDGE_TOKEN: capabilityToken,
-          OPENPE_QUESTIONS_TOKEN: questionToken,
-        },
+        env,
       },
     },
     allowedProtoTools,
     disallowedProtoTools,
   };
-  assertCursorSdkTools(
-    { options },
-    { cwd: '/private', apiKey, capabilityToken, questionToken },
-  );
+  const expected = {
+    cwd: '/private',
+    fs: filesystem,
+    env,
+    apiKey,
+    capabilityUrl,
+    capabilityToken,
+    questionUrl,
+    questionToken,
+  };
+  assertCursorSdkTools({ options }, expected);
   assert.throws(
     () =>
       assertCursorSdkTools(
         { options: { ...options, allowedProtoTools: [...allowedProtoTools, 'read_tool_call'] } },
-        { cwd: '/private', apiKey, capabilityToken, questionToken },
+        expected,
       ),
     /built-in tools/,
   );
   assert.throws(
-    () => assertCursorSdkTools({ options: { allowedProtoTools: ['mcp_tool_call'] } }, { cwd: '/private' }),
+    () => assertCursorSdkTools({ options: { allowedProtoTools: ['mcp_tool_call'] } }, expected),
     /cannot prove/,
+  );
+  assert.throws(
+    () =>
+      assertCursorSdkTools(
+        { options: { ...options, local: { ...options.local, fs: { isolated: true } } } },
+        expected,
+      ),
+    /host filesystem/,
+  );
+  const leaked = {
+    ...env,
+    OPENPE_AGENT_BRIDGE_URL: `${capabilityUrl}/${apiKey}`,
+  };
+  assert.throws(
+    () =>
+      assertCursorSdkTools(
+        {
+          options: {
+            ...options,
+            mcpServers: { openpe: { ...options.mcpServers.openpe, env: leaked } },
+          },
+        },
+        { ...expected, env: leaked },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /not isolated/);
+      assert.equal(error.message.includes(apiKey), false);
+      return true;
+    },
+  );
+  const dirty = { ...env, NODE_OPTIONS: '--require /tmp/injected.js' };
+  assert.throws(
+    () =>
+      assertCursorSdkTools(
+        {
+          options: {
+            ...options,
+            mcpServers: { openpe: { ...options.mcpServers.openpe, env: dirty } },
+          },
+        },
+        { ...expected, env: dirty },
+      ),
+    /not isolated/,
+  );
+  const wrongBridge = {
+    ...env,
+    OPENPE_QUESTIONS_URL: 'http://127.0.0.1:9/api/agent-questions/33333333-3333-4333-8333-333333333333',
+  };
+  assert.throws(
+    () =>
+      assertCursorSdkTools(
+        {
+          options: {
+            ...options,
+            mcpServers: { openpe: { ...options.mcpServers.openpe, env: wrongBridge } },
+          },
+        },
+        { ...expected, env: wrongBridge },
+      ),
+    /not isolated/,
   );
 });
 
@@ -538,4 +665,341 @@ test('Cursor MCP proof accepts only the OpenPE tools and the question bridge', a
     }),
     /question connection/,
   );
+});
+
+test('Cursor stop before send resolves disposes the agent and finishes cancelled', async () => {
+  let started!: () => void;
+  const sawSend = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let disposals = 0;
+  const state = sdkFor(
+    async () => ({
+      send: () => {
+        started();
+        return new Promise(() => {});
+      },
+      [Symbol.asyncDispose]: async () => {
+        disposals += 1;
+      },
+    }),
+    [],
+  );
+  const control = new AbortController();
+  const pending = runAgent(
+    'cursor',
+    { prompt: 'Check isolation', context: {}, model: 'grok-4.7', ...grokRequest },
+    '.',
+    () => {},
+    control.signal,
+    { ...bridges(), sdk: state.sdk },
+  );
+  await sawSend;
+  control.abort();
+  const result = await Promise.race([
+    pending,
+    new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('Cursor stop hung before send resolved.')), 1000);
+    }),
+  ]);
+  assert.equal(result.outcome, 'cancelled');
+  assert.equal(disposals, 1);
+});
+
+test('Cursor stop without cancel support keeps text and does not read later output', async () => {
+  let disposals = 0;
+  let waited = false;
+  let cancelled = false;
+  const state = sdkFor(
+    async () => ({
+      send: async () => ({
+        supports: (operation: string) => operation === 'stream' || operation === 'wait',
+        stream: async function* () {
+          yield { type: 'assistant', message: { content: [{ type: 'text', text: 'Kept' }] } };
+          yield { type: 'assistant', message: { content: [{ type: 'text', text: 'Late' }] } };
+          await new Promise(() => {});
+        },
+        wait: async () => {
+          waited = true;
+          return new Promise(() => {});
+        },
+        cancel: async () => {
+          cancelled = true;
+        },
+      }),
+      [Symbol.asyncDispose]: async () => {
+        disposals += 1;
+      },
+    }),
+    [],
+  );
+  const control = new AbortController();
+  const events: any[] = [];
+  const result = await Promise.race([
+    runAgent(
+      'cursor',
+      { prompt: 'Check isolation', context: {}, model: 'grok-4.7', ...grokRequest },
+      '.',
+      (event) => {
+        events.push(event);
+        if (event.type === 'text-delta') control.abort();
+      },
+      control.signal,
+      { ...bridges(), sdk: state.sdk },
+    ),
+    new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('Cursor stop hung without cancel support.')), 1000);
+    }),
+  ]);
+  assert.equal(result.outcome, 'cancelled');
+  assert.deepEqual(
+    events.filter((event) => event.type === 'text-delta').map((event) => event.delta),
+    ['Kept'],
+  );
+  assert.equal(
+    events.some((event) => event.type === 'error'),
+    false,
+  );
+  assert.equal(waited, false);
+  assert.equal(cancelled, false);
+  assert.equal(disposals, 1);
+});
+
+test('Cursor does not send when the retained filesystem is a different object', async () => {
+  let sent = false;
+  const state = sdkFor(
+    async (options) => ({
+      options: {
+        ...options,
+        local: { ...options.local, fs: { isolated: true } },
+        allowedProtoTools,
+        disallowedProtoTools,
+      },
+      send: async () => {
+        sent = true;
+        throw new Error('send must not run');
+      },
+    }),
+    [],
+  );
+  await assert.rejects(
+    runAgent(
+      'cursor',
+      { prompt: 'Check isolation', context: {}, model: 'grok-4.7', ...grokRequest },
+      '.',
+      () => {},
+      new AbortController().signal,
+      { ...bridges(), sdk: state.sdk },
+    ),
+    /host filesystem/,
+  );
+  assert.equal(sent, false);
+});
+
+test('a malformed Cursor model is excluded with a reason and valid models stay selectable', async () => {
+  let creates = 0;
+  const state = sdkFor(
+    async () => {
+      creates += 1;
+      return {};
+    },
+    [{ type: 'assistant', message: { content: [{ type: 'text', text: 'Ready' }] } }],
+  );
+  const broken = {
+    id: 'claude-opus-5-5',
+    displayName: 'Opus',
+    parameters: [
+      {
+        id: 'fast',
+        displayName: 'Fast',
+        values: [{ value: 'false' }, { value: 'true', displayName: 'Fast' }],
+      },
+    ],
+    variants: cursorVariants([{ id: 'fast', values: ['false', 'true'] }], { fast: 'true' }, [
+      { id: 'cyber', value: 'true' },
+    ]),
+  };
+  const explosive = { id: 'explode-1' };
+  Object.defineProperty(explosive, 'parameters', {
+    get() {
+      throw new Error(`sdk boom ${apiKey}`);
+    },
+  });
+  state.sdk.Cursor.models.list = (async () => [
+    ...catalog,
+    broken,
+    { id: 'bad model' },
+    { id: 'no-default', parameters: [], variants: [{ params: [] }] },
+    explosive,
+  ]) as unknown as typeof state.sdk.Cursor.models.list;
+  const listed = await listAgentModels('cursor', '.', new AbortController().signal, {
+    sdk: state.sdk,
+    cursorCredential: { read: async () => apiKey },
+  });
+  assert.deepEqual(
+    listed.models.map((model: any) => model.id),
+    ['grok-4.7', 'composer-2.5', 'plain'],
+  );
+  assert.deepEqual(listed.unavailable, [
+    {
+      id: 'claude-opus-5-5',
+      reason: 'Cursor model claude-opus-5-5 variant uses unknown parameter cyber.',
+    },
+    {
+      id: '(invalid id)',
+      reason: 'Cursor model (invalid id) is not a catalog model.',
+    },
+    {
+      id: 'no-default',
+      reason: 'Cursor model no-default has no single catalog default.',
+    },
+    {
+      id: 'explode-1',
+      reason: 'Cursor model explode-1 is not a catalog model.',
+    },
+  ]);
+  assert.deepEqual(readCursorUnavailableModels(listed.unavailable), listed.unavailable);
+  assert.equal(JSON.stringify(listed).includes(apiKey), false);
+  assert.equal(JSON.stringify(listed).includes('sdk boom'), false);
+  assert.equal(JSON.stringify(listed).includes('bad model'), false);
+  assert.throws(
+    () => readCursorUnavailableModels([{ id: 'explode-1', reason: `sdk boom ${apiKey}` }]),
+    /invalid model catalog/,
+  );
+  const events: any[] = [];
+  const completed = await runAgent(
+    'cursor',
+    { prompt: 'Check isolation', context: {}, model: 'grok-4.7', ...grokRequest },
+    '.',
+    (event) => events.push(event),
+    new AbortController().signal,
+    { ...bridges(), sdk: state.sdk },
+  );
+  assert.equal(completed.outcome, 'completed');
+  assert.equal(creates, 1);
+  assert.deepEqual(
+    events.filter((event) => event.type === 'text-delta').map((event) => event.delta),
+    ['Ready'],
+  );
+  await assert.rejects(
+    runAgent(
+      'cursor',
+      { prompt: 'Check isolation', context: {}, model: 'claude-opus-5-5' },
+      '.',
+      () => {},
+      new AbortController().signal,
+      { ...bridges(), sdk: state.sdk },
+    ),
+    /Cursor model claude-opus-5-5 variant uses unknown parameter cyber\./,
+  );
+  await assert.rejects(
+    runAgent(
+      'cursor',
+      { prompt: 'Check isolation', context: {}, model: 'missing-model' },
+      '.',
+      () => {},
+      new AbortController().signal,
+      { ...bridges(), sdk: state.sdk },
+    ),
+    /Choose a Cursor model from the catalog\./,
+  );
+  assert.equal(creates, 1);
+});
+
+test('Cursor model listing fails when the catalog is invalid or has no usable model', async () => {
+  const state = sdkFor(async () => ({}), []);
+  const options = {
+    sdk: state.sdk,
+    cursorCredential: { read: async () => apiKey },
+  };
+  const list = () => listAgentModels('cursor', '.', new AbortController().signal, options);
+  state.sdk.Cursor.models.list = (async () => ({ models: catalog })) as unknown as typeof state.sdk.Cursor.models.list;
+  await assert.rejects(list(), /Cursor returned an invalid model catalog\./);
+  state.sdk.Cursor.models.list = (async () =>
+    Array.from({ length: 501 }, () => catalog[2])) as unknown as typeof state.sdk.Cursor.models.list;
+  await assert.rejects(list(), /Cursor returned an invalid model catalog\./);
+  state.sdk.Cursor.models.list = (async () => []) as unknown as typeof state.sdk.Cursor.models.list;
+  await assert.rejects(list(), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal(error.message, 'Cursor returned no usable models.');
+    assert.equal((error as { modelListDiagnostic?: boolean }).modelListDiagnostic, true);
+    return true;
+  });
+  state.sdk.Cursor.models.list = (async () => [
+    { id: 'bad model' },
+    {
+      id: 'claude-opus-5-5',
+      parameters: [
+        {
+          id: 'fast',
+          values: [{ value: 'false' }, { value: 'true' }],
+        },
+      ],
+      variants: cursorVariants([{ id: 'fast', values: ['false', 'true'] }], { fast: 'true' }, [
+        { id: 'cyber', value: 'true' },
+      ]),
+    },
+  ]) as unknown as typeof state.sdk.Cursor.models.list;
+  await assert.rejects(list(), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal(error.message, 'Cursor returned no usable models.');
+    assert.equal(error.message.includes('cyber'), false);
+    assert.equal(error.message.includes('bad model'), false);
+    assert.equal(error.message.includes(apiKey), false);
+    assert.equal((error as { modelListDiagnostic?: boolean }).modelListDiagnostic, true);
+    return true;
+  });
+});
+
+test('Cursor model listing does not expose SDK exception text', async () => {
+  const state = sdkFor(async () => ({}), []);
+  state.sdk.Cursor.models.list = async () => {
+    throw new Error(`rejected ${apiKey} at the edge`);
+  };
+  await assert.rejects(
+    listAgentModels('cursor', '.', new AbortController().signal, {
+      sdk: state.sdk,
+      cursorCredential: { read: async () => apiKey },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'Cursor rejected the stored API key.');
+      assert.equal(error.message.includes(apiKey), false);
+      return true;
+    },
+  );
+  state.sdk.Cursor.models.list = async () => {
+    throw new Error('connect ECONNREFUSED 10.9.8.7:443');
+  };
+  await assert.rejects(
+    listAgentModels('cursor', '.', new AbortController().signal, {
+      sdk: state.sdk,
+      cursorCredential: { read: async () => apiKey },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'Could not load Cursor models.');
+      assert.equal(error.message.includes('ECONNREFUSED'), false);
+      return true;
+    },
+  );
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-cursor-models-'));
+  const leaked = await startServer({
+    dataDir: directory,
+    modelLister: async () => {
+      throw new Error(`sdk ${apiKey} exploded`);
+    },
+  });
+  try {
+    const response = await fetch(`${leaked.base}/api/models?provider=cursor`, {
+      headers: { 'X-OpenPE-Token': leaked.token },
+    });
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.error, 'Could not load Cursor models.');
+    assert.equal(JSON.stringify(body).includes(apiKey), false);
+  } finally {
+    leaked.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

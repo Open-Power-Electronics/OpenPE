@@ -954,7 +954,7 @@ for (const transport of ['model discovery', 'agent transport'] as const) {
           options: ExecFileOptions,
           callback: (error: Error, stdout: string, stderr: string) => void,
         ) => {
-          assert.equal(file, 'taskkill.exe');
+          assert.equal(file, path.win32.join(process.env.SystemRoot || '', 'System32', 'taskkill.exe'));
           assert.ok(child?.pid);
           assert.deepEqual(args, ['/pid', String(child.pid), '/t', '/f']);
           assert.equal(options.windowsHide, true);

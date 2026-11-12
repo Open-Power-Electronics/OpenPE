@@ -6058,6 +6058,28 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   color: var(--error-ink);
 }
 
+.composer-unavailable-models {
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+}
+
+.select-popup.model-menu {
+  --menu-width: 280px;
+}
+
+.model-menu .select-option[aria-disabled='true'] {
+  cursor: default;
+}
+
+.model-menu .select-option[aria-disabled='true'] strong,
+.model-menu .select-option[aria-disabled='true'] small {
+  color: var(--muted);
+}
+
+.model-menu .select-option[aria-disabled='true'] small {
+  white-space: normal;
+}
+
 .composer-settings .select-trigger {
   font-size: var(--font-caption);
   line-height: 1.5;

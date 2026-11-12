@@ -484,7 +484,11 @@ share checks. With a closed board outline, standalone and route-transition via c
 ### Connected footprint drag
 
 Drag a footprint with the pointer in Select mode, press D with footprints
-selected, or choose **Drag with tracks** in the canvas menu. M
+selected, or choose **Drag with tracks** in the canvas menu. In the default
+left-button mode, pressing on the footprint body, a pad, silkscreen or courtyard
+and moving more than four screen pixels drags that footprint. A stationary
+ambiguous click still opens Choose layout object. Selection-only mode does not
+press-drag. M
 translates the selected objects independently. A footprint-only selection moves
 as a group. Affected native track ends follow their pad offsets on the connected
 copper layers. A track with both ends on moved pads translates with them.
@@ -506,7 +510,32 @@ The canvas and `layout.drag` share preparation through
 and single-transaction commit follow the connected track rules below. For a
 footprint selection, omit `obstacleMode` or supply `walk-around`. Agent placement
 defaults to the exact displacement and requires explicit `constrain:true` to
-accept a legal boundary.
+accept a legal boundary. One gesture keeps a private router session. The first
+preparation of each clearance key stores the stationary obstacle tree, board
+outline and successful stationary segment results. Later poses rebuild obstacles
+only for the moved footprints and replacement tracks, and recheck clearance only
+for pairs that involve those records. A moved-copper partition starts from the
+stationary groups and unions only the moved pads and replacement tracks. Both
+results match a full rebuild of the same pose. The eight-pose boundary search is
+unchanged: it still revalidates the last displayed displacement and probes
+toward the cursor, then commits that one validated pose. Walk-around remains the
+per-probe cost when a direct span is blocked. The session ends with the gesture.
+
+During the gesture the static board drawing stays on the committed documents.
+The dragged footprint is a translated preview of that same package, and
+replacement tracks plus ratsnest endpoints on its pads are redrawn from the
+validated preview. Pointer release commits that preview once. Saved pours stay
+on the committed copper until that transaction refreshes them. The refresh
+matches a full refill contour for contour. Every pour subtracts the complete
+clip set. Clipper rounding can turn a floating-point miss into a shared
+integer edge, and the following opening follows that exact difference, so
+every clip path stays in the operation. A repeated refresh reuses stored
+contours only when the exact inputs of the pour are unchanged: zone geometry
+and rules, net, layer, clearance, thickness, thermal relief, pad connection,
+island removal, priority, board outline, keepouts, and every track, via and
+pad. The comparison is that full record, not a hash. Any change recalculates
+the pours. Fill failure rejects the edit and leaves the accepted copper in
+place.
 
 ### Connected track drag
 
@@ -566,7 +595,12 @@ constraint status/reason and changed IDs. No blocked or stale preview can commit
 Routing checks include hidden copper, holes, artwork, closed edges/cutouts and
 keepouts; selected nets also check each other. A failed reconnect blocks the edit.
 
-Pointer/arrows update the exact preview; `/` changes reconnect posture;
+Pointer motion publishes the first pose in a frame immediately and any later
+pose in that frame on the next animation frame. Arrows update immediately.
+Release and click revalidate the pointer's exact pose, including a pose not yet
+published, and commit that result once. Enter commits the published preview.
+A blocked request cannot commit an older valid preview.
+`/` changes reconnect posture;
 click/Enter commits once. Re-selecting the current copper layer preserves the
 gesture while setting its display priority. Escape, tool/layer/filter changes, replacement or
 deactivation cancels without writes. If current-cursor replanning cannot produce
@@ -1308,7 +1342,7 @@ Passing the bundled PCB directly compares against its saved contours.
 
 | Check                                                                                                                                                                                                                      | Scope                                                                                                                                                                                                        |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`, `tests/pcb-dynamic-fill.test.ts`                                                                      | Synchronization, geometry, routing and dynamic fill transactions                                                                                                                                             |
+| `tests/pcb-project-sync.test.ts`, `tests/pcb-layout.test.ts`, `tests/pcb-routing.test.ts`, `tests/pcb-fill.test.ts`, `tests/pcb-fill-incremental.test.ts`, `tests/pcb-footprint-press.test.ts`, `tests/pcb-dynamic-fill.test.ts` | Synchronization, geometry, routing, dynamic fill transactions, incremental refill parity and footprint press-drag targeting |
 | `tests/pcb-properties.test.ts`, `node scripts/check-layout-properties-ui.mjs`                                                                                                                                              | Unified object fields, pad/via classification, native geometry/rules, undo and rejected drafts                                                                                                               |
 | `node scripts/check-layout-editing-ui.mjs 'properties actions'`                                                                                                                                                            | Upper-right actions for selected objects and groups, icon-only fill, rejection and IME guards                                                                                                                                                     |
 | `tests/pcb-track-chain-drag.test.ts`, `tests/fixtures/emc-track-drag-kicad10.json`                                                                                                                                         | Ten installed KiCad 10.0.1 EMC references, tested in Shove/Walk Around through GUI and Agent paths; sampled centerlines, same-chain selection, native roundtrip and undo                                     |
@@ -1417,6 +1451,17 @@ retains bounded RAF timestamps and complete intervals between the first and last
 delivered wheel events, excluding setup and the idle tail. It reports average
 callback frequency, P95/maximum frame interval and counts above 33.3/50 ms.
 Camera restoration, unchanged dirty state and native-file equality are checked.
+
+Connected footprint drag geometry, without painted frames, is
+[benchmark-footprint-drag.mjs](../scripts/benchmark-footprint-drag.mjs). It warms one
+gesture, then records preview and blocked-boundary time on EMC Flyback and
+LMR12010. It does not launch Electron and does not replace the acceptance plan
+above. Painted pointer frames, dropped frames, input-to-paint duration, React
+commit time and release-to-commit time are
+[benchmark-footprint-drag-frames.mjs](../scripts/benchmark-footprint-drag-frames.mjs).
+It fits the board, then presses a screen point taken from the rendered footprint
+bounds, in the default left-button mode. It uses an isolated data directory and
+does not replace the acceptance plan above.
 
 DOM markers, second RAF and callback cadence are separate renderer measurements,
 not physical-device latency or GPU/display presentation. The bundled Chromium's

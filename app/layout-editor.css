@@ -131,6 +131,9 @@
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+.layout-canvas [data-footprint-motion-hidden] {
+  display: none;
+}
 .layout-canvas {
   flex: 1;
   min-width: 0;

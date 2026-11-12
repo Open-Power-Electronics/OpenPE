@@ -42,8 +42,12 @@ app.whenReady().then(async () => {
     );
     const sdk = await loadCursorSdk();
     const catalog = await listCursorModels(apiKey, sdk);
+    if (!Array.isArray(catalog.unavailable))
+      throw new Error('Cursor model discovery did not return unavailable models.');
     const ids = catalog.models.map((model) => model.id);
     for (const model of catalog.models) console.log(`${model.id}\t${model.label}`);
+    for (const entry of catalog.unavailable)
+      console.log(`unavailable\t${entry.id}\t${entry.reason}`);
     const requested = process.env.OPENPE_CURSOR_CHECK_MODEL;
     if (!requested)
       throw new Error(`Set OPENPE_CURSOR_CHECK_MODEL to one of: ${ids.join(', ')}`);

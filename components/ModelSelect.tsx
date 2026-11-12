@@ -5,6 +5,10 @@ import Select from './Select';
 import { AlertCircle } from 'lucide-react';
 import type { ReasoningEffort } from '@/lib/chat-stream';
 import { isProviderReasoningEffort } from '@/lib/agent-providers';
+import {
+  readCursorUnavailableModels,
+  type CursorUnavailableModel,
+} from '@/lib/cursor-catalog';
 
 const parameterIdPattern = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const parameterValuePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
@@ -23,7 +27,11 @@ type ModelOption = {
   effortParameter?: string;
   parameters?: AgentModelParameter[];
 };
-type ModelCatalog = { models: ModelOption[]; defaultModel?: string | null };
+type ModelCatalog = {
+  models: ModelOption[];
+  unavailable: CursorUnavailableModel[];
+  defaultModel?: string | null;
+};
 
 function validParameterText(value: unknown) {
   return typeof value === 'string' && value.length > 0 && value.length <= 100 && !/[\u0000-\u001F\u007F]/.test(value);
@@ -106,11 +114,19 @@ export function useAgentModelCatalog({
           result.models.some((item: ModelOption) => !validModelOption(provider, item))
         )
           throw new Error('The agent returned an invalid model catalog.');
+        const unavailable =
+          provider === 'cursor' ? readCursorUnavailableModels(result.unavailable) : [];
+        if (provider === 'cursor' && result.models.length === 0)
+          throw new Error('The agent returned an invalid model catalog.');
         if (!control.signal.aborted)
           setResult({
             provider,
             attempt,
-            catalog: { models: result.models, defaultModel: result.defaultModel },
+            catalog: {
+              models: result.models,
+              unavailable,
+              defaultModel: result.defaultModel,
+            },
           });
       })
       .catch((e) => {
@@ -122,9 +138,11 @@ export function useAgentModelCatalog({
   const current =
     available && result?.provider === provider && result.attempt === attempt ? result : null;
   const models = current?.catalog?.models ?? [];
+  const unavailable = current?.catalog?.unavailable ?? [];
   const currentModel = value || current?.catalog?.defaultModel || observedModel;
   return {
     models,
+    unavailable,
     currentModel,
     selected: models.find((model) => model.id === currentModel),
     loading: available && !current,
@@ -133,8 +151,30 @@ export function useAgentModelCatalog({
   };
 }
 
+function unavailableOptions(models: ModelOption[], unavailable: CursorUnavailableModel[]) {
+  const used = new Set(models.map((model) => model.id));
+  return unavailable.map((model, index) => {
+    let value = model.id;
+    if (used.has(value)) {
+      let suffix = 2;
+      while (used.has(`${model.id}#${suffix}`)) suffix += 1;
+      value = `${model.id}#${suffix}`;
+    }
+    used.add(value);
+    return {
+      value,
+      label: model.id,
+      description: model.reason,
+      disabled: true,
+      muted: true,
+      separatorBefore: index === 0,
+    };
+  });
+}
+
 export default function ModelSelect({
   models,
+  unavailable,
   currentModel,
   loading,
   error,
@@ -142,6 +182,7 @@ export default function ModelSelect({
   disabled,
 }: {
   models: ModelOption[];
+  unavailable: CursorUnavailableModel[];
   currentModel: string;
   loading: boolean;
   error?: string;
@@ -149,10 +190,12 @@ export default function ModelSelect({
   disabled: boolean;
 }) {
   const selected = models.some((model) => model.id === currentModel);
+  const blocked = new Set(unavailable.map((model) => model.id));
   return (
     <div className="composer-model-picker">
       <Select
         label="Choose model"
+        popupClassName="model-menu"
         value={currentModel}
         placeholder={loading ? 'Loading model…' : 'Choose model'}
         disabled={disabled || (!models.length && !currentModel)}
@@ -163,7 +206,8 @@ export default function ModelSelect({
             value: model.id,
             label: model.label,
           })),
-          ...(currentModel && !selected
+          ...unavailableOptions(models, unavailable),
+          ...(currentModel && !selected && !blocked.has(currentModel)
             ? [
                 {
                   value: currentModel,
