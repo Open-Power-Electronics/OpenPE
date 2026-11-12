@@ -30,9 +30,12 @@ const installMessage =
   'The bundled ngspice solver is missing or cannot start. Repair the OpenPE installation, or run npm run simulation:prepare in a development checkout, then restart OpenPE.';
 
 export async function detectSpice(signal, root) {
-  if (process.platform !== 'win32' || process.arch !== 'x64')
-    return { available: false, error: 'This OpenPE build includes ngspice for Windows x64 only.' };
-  const runtime = spiceRuntime(root);
+  let runtime;
+  try {
+    runtime = spiceRuntime(root);
+  } catch (error) {
+    return { available: false, error: error.message };
+  }
   const candidates = [runtime.executable];
   for (const executable of candidates) {
     if (signal?.aborted) throw new Error('Simulation cancelled.');

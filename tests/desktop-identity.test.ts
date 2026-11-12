@@ -25,6 +25,7 @@ test('desktop preload forwards every operation to a registered main channel and 
         directorySource,
         spicePickerSource,
         readFileSync(new URL('../electron/component-model-picker.cjs', import.meta.url), 'utf8'),
+        readFileSync(new URL('../electron/cursor-credential.cjs', import.meta.url), 'utf8'),
       ]
         .join('\n')
         .matchAll(/ipcMain\.handle\(\s*'([^']+)'/g),
@@ -63,10 +64,14 @@ test('desktop preload forwards every operation to a registered main channel and 
   assert.deepEqual([...exposed.keys()], ['openpe']);
   const bridge = exposed.get('openpe')!;
   assert.equal(bridge.titleBarOverlay, true);
+  assert.equal(bridge.titleBarInset, false);
 
   const options = { fileId: 'opaque-project-id', source: 'validated native source' };
   const operations: Array<[string, string, unknown[]]> = [
     ['connection', 'connection', []],
+    ['cursorCredentialStatus', 'cursor-credential-status', []],
+    ['cursorCredentialStore', 'cursor-credential-store', ['cursor_test_key_value_0001']],
+    ['cursorCredentialRemove', 'cursor-credential-remove', []],
     ['chooseComponentModel', 'choose-component-model', ['opaque-project-id']],
     ['open', 'open', []],
     ['openRecent', 'open-recent', ['recent-id']],
@@ -204,6 +209,7 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
             './project-directory.cjs',
             './spice-model-picker.cjs',
             './component-model-picker.cjs',
+            './cursor-credential.cjs',
           ].includes(specifier),
           `Unexpected bootstrap dependency: ${specifier}`,
         );
@@ -222,4 +228,31 @@ test('desktop bootstrap sets its OpenPE data directory before applying the appli
     }
     assert.equal(packageJson.build.productName, 'OpenPE');
   }
+});
+
+test('desktop chrome is overlay on Windows and inset on macOS', () => {
+  const expose = (platform: string) => {
+    let api: Record<string, unknown> | undefined;
+    new vm.Script(preloadSource, { filename: 'electron/preload.cjs' }).runInNewContext({
+      process: { platform },
+      require: () => ({
+        contextBridge: {
+          exposeInMainWorld: (_name: string, value: Record<string, unknown>) => {
+            api = value;
+          },
+        },
+        ipcRenderer: { invoke() {}, on() {}, removeListener() {} },
+      }),
+    });
+    return api!;
+  };
+  assert.deepEqual(
+    { overlay: expose('win32').titleBarOverlay, inset: expose('win32').titleBarInset },
+    { overlay: true, inset: false },
+  );
+  assert.deepEqual(
+    { overlay: expose('darwin').titleBarOverlay, inset: expose('darwin').titleBarInset },
+    { overlay: true, inset: true },
+  );
+  assert.throws(() => expose('linux'), /Unsupported desktop platform linux/);
 });

@@ -9,7 +9,7 @@ const bundle = await build({
   stdin: {
     contents: `import React,{StrictMode,Suspense,startTransition,useLayoutEffect,useState} from 'react';import{createRoot}from'react-dom/client';import{flushSync}from'react-dom';
       import Titlebar from './components/DesktopTitlebar';
-      window.openpe={titleBarOverlay:false};window.titlebarCalls=[];window.titlebarCounts={menus:{},navigation:0};window.titlebarSuspended=0;
+      window.openpe={titleBarOverlay:false,titleBarInset:false};window.titlebarCalls=[];window.titlebarCounts={menus:{},navigation:0};window.titlebarSuspended=0;
       const initial={native:false,phase:'A',valid:true,back:true,forward:false,file:['New','Save'],view:['Schematic','Layout'],edit:['Undo'],help:['About'],suspend:false};
       const never=new Promise(()=>{});
       function Pause({state}){if(state.suspend){window.titlebarSuspended++;throw never}return null}

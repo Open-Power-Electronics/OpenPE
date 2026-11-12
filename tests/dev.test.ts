@@ -185,7 +185,7 @@ test('failure replay bounds Unicode by bytes without splitting UTF-8 characters 
   }
 });
 
-test('development preparation retains all five steps in order without nested npm commands', async () => {
+test('development preparation retains every step in order without nested npm commands', async () => {
   const log = output();
   const calls: { file: string; args: string[]; options: SpawnOptions }[] = [];
   const env = { ...process.env, OPENPE_DEV_FIXTURE: 'retained' };
@@ -204,6 +204,8 @@ test('development preparation retains all five steps in order without nested npm
     calls.map((call) => path.basename(call.args.at(-1)!)),
     [
       'build-format.mjs',
+      'prepare-emc-analytical-models.ts',
+      'download-manufacturer-models.mjs',
       'download-example-models.ts',
       'prepare-default-examples.ts',
       'prepare-ngspice.mjs',

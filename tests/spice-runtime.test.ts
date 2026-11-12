@@ -10,6 +10,10 @@ import os from 'node:os';
 import path from 'node:path';
 import type { SpiceDeck } from '../lib/spice';
 
+const solverPlatform = `${process.platform}-${process.arch}`;
+const ngspiceExecutable =
+  solverPlatform === 'win32-x64' ? 'ngspice_con.exe' : solverPlatform === 'darwin-arm64' ? 'ngspice' : '';
+
 class SolverProcess extends EventEmitter {
   stdout = new PassThrough();
   stderr = new PassThrough();
@@ -23,11 +27,11 @@ class SolverProcess extends EventEmitter {
 
 test(
   'solver runs beyond 60 seconds and still completes or cancels with temporary-file cleanup',
-  { skip: process.platform !== 'win32' || process.arch !== 'x64' },
+  { skip: !ngspiceExecutable },
   async (context) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-spice-runtime-'));
     await mkdir(path.join(root, 'bin'));
-    await writeFile(path.join(root, 'bin', 'ngspice_con.exe'), 'isolated solver fixture');
+    await writeFile(path.join(root, 'bin', ngspiceExecutable), 'isolated solver fixture');
     // Mock detection before importing the runner, which captures promisified execFile.
     const originalExecFile = childProcess.execFile;
     childProcess.execFile = Object.assign(

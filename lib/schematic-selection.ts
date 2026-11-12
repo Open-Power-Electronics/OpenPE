@@ -1,4 +1,5 @@
 import type { Circuit, Part, Point } from './circuit';
+import { isCommandModifier } from './command-modifier';
 import { unitGraphics } from './library';
 import { selectedField } from './schematic-edit';
 import { child, children, num } from './sexpr';
@@ -9,7 +10,7 @@ export type SchematicSelectionBounds = { x: number; y: number; width: number; he
 export type SelectionModifiers = { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean };
 
 export function selectionMode(modifiers: SelectionModifiers): SelectionMode {
-  const control = modifiers.ctrlKey || modifiers.metaKey;
+  const control = isCommandModifier(modifiers);
   return control
     ? modifiers.shiftKey
       ? 'subtract'

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { thermalPlanarGraph } from '../server/thermal-planar.mjs';
+import { polygonResolution } from '../lib/pcb-polygons';
+import { thermalContourSnapTolerance, thermalPlanarGraph } from '../server/thermal-planar.mjs';
 
 const square = (left: number, top: number, right: number, bottom: number) => [
   { x: left, y: top },
@@ -61,6 +62,61 @@ test('crossings and partial collinear overlap become one conforming shared edge 
     }
   const segments = graph.segments.map((edge: number[]) => edge.join(','));
   assert.equal(new Set(segments).size, segments.length);
+});
+
+test('board-edge weld tolerance is half a clipping-cell diagonal and does not consume a full cell', () => {
+  assert.equal(thermalContourSnapTolerance, polygonResolution / Math.SQRT2);
+  assert.ok(thermalContourSnapTolerance < polygonResolution);
+});
+
+test('a quantized cutout intrusion is welded onto the board edge', () => {
+  const dipped = polygonResolution / 4;
+  assert.ok(dipped < thermalContourSnapTolerance);
+  const graph = thermalPlanarGraph(
+    scenario(
+      [
+        [
+          { x: 3, y: 3 },
+          { x: 5, y: 4 + dipped },
+          { x: 7, y: 3 },
+          { x: 5, y: 2 },
+        ],
+      ],
+      square(4, 4, 6, 6),
+    ),
+  );
+  assert.equal(
+    graph.points.some((point: { x: number; y: number }) => point.y === 4 + dipped),
+    false,
+  );
+  assert.ok(graph.points.some((point: { x: number; y: number }) => point.x === 5 && point.y === 4));
+  assert.equal(
+    graph.points.some(
+      (point: { x: number; y: number }) => point.x > 4 && point.x < 6 && point.y > 4 && point.y < 6,
+    ),
+    false,
+  );
+});
+
+test('a full clipping-cell offset stays off the board edge', () => {
+  const offset = polygonResolution;
+  assert.ok(offset > thermalContourSnapTolerance);
+  const graph = thermalPlanarGraph(
+    scenario(
+      [
+        [
+          { x: 3, y: 3 },
+          { x: 5, y: 4 + offset },
+          { x: 7, y: 3 },
+          { x: 5, y: 2 },
+        ],
+      ],
+      square(4, 4, 6, 6),
+    ),
+  );
+  assert.ok(
+    graph.points.some((point: { x: number; y: number }) => point.x === 5 && point.y === 4 + offset),
+  );
 });
 
 test('coincident hole/material contours share boundary edges and keep the complete cutout loop', () => {

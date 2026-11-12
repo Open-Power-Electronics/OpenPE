@@ -1,5 +1,5 @@
 'use client';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   Bot,
   CheckCircle2,
@@ -41,6 +41,31 @@ export default function SettingsDialog({
   const [section, setSection] = useState<string>(initialSection);
   const [visitedRules, setVisitedRules] = useState(initialSection === 'rules');
   const ruleActions = useRef<RuleSettingsActions>(null);
+  const [cursorKey, setCursorKey] = useState('');
+  const [cursorCredential, setCursorCredential] = useState<{
+    configured: boolean;
+    suffix?: string;
+  } | null>(null);
+  const [cursorError, setCursorError] = useState('');
+  const cursorComposing = useRef(false);
+  useEffect(() => {
+    const status = window.openpe?.cursorCredentialStatus;
+    if (!status) {
+      setCursorError('Cursor API key storage requires the desktop app.');
+      return;
+    }
+    let active = true;
+    void status()
+      .then((value) => {
+        if (active) setCursorCredential(value);
+      })
+      .catch((error: Error) => {
+        if (active) setCursorError(error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   function selectSection(next: string) {
     if (next === 'rules') setVisitedRules(true);
     setSection(next);
@@ -191,6 +216,11 @@ export default function SettingsDialog({
               {agentProviders.map(({ id, settingsName }) => {
                 const a = agents.find((a) => a.id === id);
                 const installed = a?.installed;
+                const cursorStatus = !cursorCredential
+                  ? 'Checking API key…'
+                  : cursorCredential.configured
+                    ? `API key configured · ${cursorCredential.suffix}`
+                    : 'API key not configured';
                 return (
                   <div className="connection-item" key={id}>
                     <div className={`connection-icon ${id}`}>
@@ -199,26 +229,122 @@ export default function SettingsDialog({
                     <div>
                       <strong>{settingsName}</strong>
                       <span>
-                        {detecting
-                          ? 'Detecting…'
-                          : a?.available
-                            ? a.version || 'CLI detected'
-                            : installed
-                              ? 'CLI detected · unavailable'
-                              : 'Not installed'}
+                        {id === 'cursor'
+                          ? detecting
+                            ? 'Detecting…'
+                            : a?.available
+                              ? a.version
+                                ? `SDK ${a.version}`
+                                : cursorStatus
+                              : a?.error || cursorStatus
+                          : detecting
+                            ? 'Detecting…'
+                            : a?.available
+                              ? a.version || 'CLI detected'
+                              : installed
+                                ? 'CLI detected · unavailable'
+                                : 'Not installed'}
                       </span>
+                      {id === 'cursor' && (
+                        <form
+                          className="cursor-key"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            if (cursorComposing.current) return;
+                            const store = window.openpe?.cursorCredentialStore;
+                            if (!store) {
+                              setCursorError('Cursor API key storage requires the desktop app.');
+                              return;
+                            }
+                            void store(cursorKey)
+                              .then(async (value) => {
+                                setCursorCredential(value);
+                                setCursorKey('');
+                                setCursorError('');
+                                await onDetect();
+                              })
+                              .catch((error: Error) => setCursorError(error.message));
+                          }}
+                        >
+                          <label>
+                            Cursor API key
+                            <input
+                              type="password"
+                              autoComplete="off"
+                              spellCheck={false}
+                              value={cursorKey}
+                              onChange={(event) => setCursorKey(event.target.value)}
+                              onCompositionStart={() => {
+                                cursorComposing.current = true;
+                              }}
+                              onCompositionEnd={() => {
+                                cursorComposing.current = false;
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+                                  event.preventDefault();
+                              }}
+                            />
+                          </label>
+                          <div className="cursor-key-actions">
+                            <button className="dialog-button primary" type="submit">
+                              Save key
+                            </button>
+                            <button
+                              className="dialog-button"
+                              type="button"
+                              disabled={!cursorCredential?.configured}
+                              onClick={() => {
+                                if (cursorComposing.current) return;
+                                const remove = window.openpe?.cursorCredentialRemove;
+                                if (!remove) {
+                                  setCursorError('Cursor API key storage requires the desktop app.');
+                                  return;
+                                }
+                                void remove()
+                                  .then(async (value) => {
+                                    setCursorCredential(value);
+                                    setCursorError('');
+                                    await onDetect();
+                                  })
+                                  .catch((error: Error) => setCursorError(error.message));
+                              }}
+                            >
+                              Remove key
+                            </button>
+                          </div>
+                          {cursorError && (
+                            <p className="dialog-error" role="alert">
+                              {cursorError}
+                            </p>
+                          )}
+                        </form>
+                      )}
                     </div>
                     {detecting ? (
                       <LoaderCircle size={18} className="spin muted" />
                     ) : a?.available ? (
-                      <span role="img" aria-label="CLI detected; sign-in not verified">
+                      <span
+                        role="img"
+                        aria-label={
+                          id === 'cursor'
+                            ? 'Cursor API key configured; sign-in not verified'
+                            : 'CLI detected; sign-in not verified'
+                        }
+                      >
                         <CheckCircle2 size={19} className="green" />
                       </span>
                     ) : (
                       <span
                         role="img"
-                        aria-description={a?.error}
-                        aria-label={installed ? 'CLI unavailable' : 'Not installed'}
+                        aria-description={id === 'cursor' ? a?.error || cursorError : a?.error}
+                        aria-label={
+                          id === 'cursor'
+                            ? 'Cursor API key not configured'
+                            : installed
+                              ? 'CLI unavailable'
+                              : 'Not installed'
+                        }
                       >
                         <Unplug size={19} className="muted" />
                       </span>

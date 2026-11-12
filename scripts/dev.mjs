@@ -10,6 +10,8 @@ export const formatPreparation = ['Preparing project formats', [['scripts/build-
 export const examplePreparation = [
   'Preparing Home projects and models',
   [
+    ['--import', 'tsx', 'scripts/prepare-emc-analytical-models.ts'],
+    ['scripts/download-manufacturer-models.mjs'],
     ['--import', 'tsx', 'scripts/download-example-models.ts'],
     ['--import', 'tsx', 'scripts/prepare-default-examples.ts'],
   ],

@@ -1,8 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const maxRecoveryCharacters = 96 * 1024 * 1024;
+function desktopChrome() {
+  if (process.platform === 'win32') return { titleBarOverlay: true, titleBarInset: false };
+  if (process.platform === 'darwin') return { titleBarOverlay: true, titleBarInset: true };
+  throw new Error(`Unsupported desktop platform ${process.platform}.`);
+}
+const chrome = desktopChrome();
 contextBridge.exposeInMainWorld('openpe', {
-  titleBarOverlay: process.platform === 'win32',
+  titleBarOverlay: chrome.titleBarOverlay,
+  titleBarInset: chrome.titleBarInset,
   connection: () => ipcRenderer.invoke('openpe:connection'),
+  cursorCredentialStatus: () => ipcRenderer.invoke('openpe:cursor-credential-status'),
+  cursorCredentialStore: (key) => {
+    if (typeof key !== 'string' || key.length > 512)
+      return Promise.reject(new Error('Invalid Cursor API key.'));
+    return ipcRenderer.invoke('openpe:cursor-credential-store', key);
+  },
+  cursorCredentialRemove: () => ipcRenderer.invoke('openpe:cursor-credential-remove'),
   writeWorkspaceRecovery: (content) => {
     if (content !== null && (typeof content !== 'string' || content.length > maxRecoveryCharacters))
       return Promise.reject(new Error('Invalid encoded recovery data.'));

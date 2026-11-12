@@ -99,10 +99,11 @@ Changes identify their layer, update the owning contract and regenerate formats 
 - `server/datasheets.mjs` owns read-only pinned PDF page access through `/api/datasheets/page`. It verifies original bundled PDFs or fixed vendor downloads and retains two verified buffers in memory. `server/datasheet-worker.mjs` parses or rasterizes the requested page. Workbench binds live reads to the validated controller and rejects stale results. `context/agent-prompt-context.ts` derives the reference identity or reviewed parameter excerpt from the validated submission. [Datasheets](DATASHEETS.md#submission-and-on-demand-context) owns access and bounds.
 - `server/component-models.mjs` owns approved immutable local STEP bytes, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. Preview requests identify a validated project component/model index and share the bounded STEP worker pool. Shared component Properties commits native PCB model records through Core.
 - Provider CLIs and solvers use restricted child-process adapters. Library indexing and STEP conversion use bounded workers. These are implementation mechanisms, not independent plugin processes.
-- Codex/Claude expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools and Cursor is detection-only. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the private DeepSeek user-question patch and the sole explicitly loaded Pi question extension. The latter two receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
+- Codex, Claude, and Cursor expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools. Cursor uses `@cursor/sdk` in the service process: MCP-only built-ins, inline OpenPE MCP, no setting sources, and a private temporary directory. Its API key is `safeStorage` ciphertext at `cursor-credential.bin` in the OpenPE data directory, outside recovery, history, and Agent context. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the Cursor `openpe_ask_user` MCP tool, the private DeepSeek user-question patch, and the sole explicitly loaded Pi question extension. The latter three receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
 
 `server/agent-models.mjs` owns bounded provider model/effort discovery before
-inference, including Claude's initialization control exchange. Native effort
+inference, including Claude's initialization control exchange and Cursor's
+`Cursor.models.list()` catalog. Native effort
 values share the generated provider contract with renderer preferences and chat
 admission; [API](API.md#chat-requests-and-sse) owns their protocol limits.
 
@@ -363,14 +364,41 @@ owns generation, required KiCad versions and portable assets. The separate
 regression inputs.
 
 `scripts/dev.mjs` supplies the preparation steps shared by development and
-production builds. `npm run examples:prepare` generates formats and prepares
+production builds. `npm run examples:prepare` generates formats, generates the two OpenPE analytical STEP bodies, downloads the WE-CMB manufacturer model and shared simulation libraries, and prepares
 Home assets. `npm run build` generates formats before checking architecture
 alongside Home preparation, while bundled solver preparation runs in parallel.
-All stages must succeed before `next build`. Packaging prepares libraries
-before running the production build. Development prepares resources in order
-before starting its renderer and desktop children. Use `--verbose` for full
-stage diagnostics. Missing resources can require network access. A disk build
-does not reload Electron or service modules in a running instance.
+All stages must succeed before `next build`. `npm run package` runs
+`scripts/package-desktop.mjs` after `libraries:download`. It regenerates the
+brand icons, runs the production build, then `electron-builder`.
+electron-builder packages npm dependencies and optionalDependencies.
+`@cursor/sdk` loads peer dependency `zod` (`^3.25.0 || ^4.0.0`) at runtime, so
+OpenPE declares `zod` directly (`^4.6.7`, the installed release that satisfies
+that peer range and exports `zod/v4` and `zod/v4-mini`). The command then runs
+`scripts/check-packaged-modules.mjs` with `ELECTRON_RUN_AS_NODE=1` from the app
+resources directory. The check resolves every bare import reachable from the
+packaged service, including `@cursor/sdk`, `express`, `occt-import-js`,
+`pdfjs-dist`, `@napi-rs/canvas`, and the host Cursor platform package's
+tree-sitter natives, and fails if a module resolves outside the archive.
+macOS arm64 reads `release/mac-arm64/OpenPE.app`. Windows x64 reads
+`release/win-unpacked/OpenPE.exe`; that Windows check has not been executed.
+Windows x64 uses `--win dir nsis`: an unpacked directory and a one-click NSIS installer.
+macOS arm64 uses `--mac dir dmg`, `build/openpe.icns` from the
+Signal E master, category `public.app-category.developer-tools`, `identity`
+null, and the hardened-runtime entitlements in `build/entitlements.mac.plist`
+while signing stays off. The unsigned disk image is subject to Gatekeeper.
+Any other host or architecture throws. Shared
+`extraResources` are native examples, the project group, KiCad libraries,
+`resources/thermal/1`, `resources/example-catalog/simulation/models`, and the
+ngspice manifest and source notice. ngspice runtime files are `build.win` and
+`build.mac` `extraResources`, matching the `win32-x64` and `darwin-arm64` file
+lists in `resources/ngspice-lock.json` exactly. `asarUnpack` extracts
+`occt-import-js`, `@napi-rs`, and the host `@cursor/sdk` platform package
+(`@cursor/sdk-darwin-arm64` or `@cursor/sdk-win32-x64`), including its
+tree-sitter N-API binaries and helper executables, outside the archive.
+Development prepares resources in order before starting its renderer and
+desktop children. Use `--verbose` for full stage diagnostics. Missing resources
+can require network access. A disk build does not reload Electron or service
+modules in a running instance.
 
 The development-only cache in `scripts/dev-preparation-cache.mjs` reuses the
 format, model and Home stages when inputs and outputs match
@@ -393,7 +421,7 @@ corresponding sources/notices and current builds separate from test outputs.
 
 ## Verification
 
-[AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
+[AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. Windows x64 and macOS arm64 are both required; macOS arm64 is tested locally, and deferred Windows verification is recorded there. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
 
 | Agent or renderer concern                                                     | Focused checks                                                                                                                                 |
 | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

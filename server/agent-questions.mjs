@@ -6,7 +6,7 @@ const text = (value, limit) => typeof value === 'string' && value.trim() && valu
 // Normalize only clarification questions, never approvals or arbitrary tool schemas.
 export function agentQuestions(provider, input) {
   if (
-    !['codex', 'claude', 'deepseek', 'pi'].includes(provider) ||
+    !['codex', 'claude', 'deepseek', 'pi', 'cursor'].includes(provider) ||
     !Array.isArray(input) ||
     !input.length ||
     input.length > 4

@@ -15,6 +15,14 @@ import { createProject, serializeProject } from '../lib/project';
 import { createProjectSpiceStore } from '../server/project-spice-files.mjs';
 import { switchingStageFixture } from './fixtures/switching-stage';
 
+const solverPlatform = `${process.platform}-${process.arch}`;
+const ngspiceExecutable =
+  solverPlatform === 'win32-x64'
+    ? 'ngspice_con.exe'
+    : solverPlatform === 'darwin-arm64'
+      ? 'ngspice'
+      : '';
+
 function completedRawFixture(deck: SpiceDeck) {
   const variables = [
     '0 time time',
@@ -36,11 +44,11 @@ function completedRawFixture(deck: SpiceDeck) {
 
 test(
   'runner reuses project results across fresh module instances, rechecking solver/models and invalidating changes',
-  { skip: process.platform !== 'win32' || process.arch !== 'x64' },
+  { skip: !ngspiceExecutable },
   async (context) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-persisted-run-'));
     await mkdir(path.join(root, 'bin'));
-    await writeFile(path.join(root, 'bin', 'ngspice_con.exe'), 'solver fixture');
+    await writeFile(path.join(root, 'bin', ngspiceExecutable), 'solver fixture');
     const originalExecFile = childProcess.execFile;
     let detections = 0,
       runs = 0,
@@ -206,7 +214,7 @@ test(
       };
       const relocated = path.join(root, 'relocated');
       await mkdir(path.join(relocated, 'bin'), { recursive: true });
-      await writeFile(path.join(relocated, 'bin', 'ngspice_con.exe'), 'solver fixture');
+      await writeFile(path.join(relocated, 'bin', ngspiceExecutable), 'solver fixture');
       assert.deepEqual(
         await restarted.findSimulationResult(
           rebound,
@@ -218,7 +226,7 @@ test(
         expectedRebound,
         'A relocated byte-identical solver and changed local probe metadata reuse verified samples.',
       );
-      await writeFile(path.join(relocated, 'bin', 'ngspice_con.exe'), 'changed solver');
+      await writeFile(path.join(relocated, 'bin', ngspiceExecutable), 'changed solver');
       assert.equal(
         await restarted.findSimulationResult(
           rebound,
@@ -343,7 +351,7 @@ test(
         null,
         'A single-attempt plan cannot reuse the two-attempt plan identity.',
       );
-      await rm(path.join(root, 'bin', 'ngspice_con.exe'));
+      await rm(path.join(root, 'bin', ngspiceExecutable));
 
       await assert.rejects(
         restarted.runSimulation(
@@ -375,11 +383,11 @@ test(
 
 test(
   'opening simulation recovers current saved custom timing with full identity checks and no analysis or writes',
-  { skip: process.platform !== 'win32' || process.arch !== 'x64' },
+  { skip: !ngspiceExecutable },
   async (context) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'openpe-restored-run-'));
     await mkdir(path.join(root, 'bin'));
-    await writeFile(path.join(root, 'bin', 'ngspice_con.exe'), 'isolated solver fixture');
+    await writeFile(path.join(root, 'bin', ngspiceExecutable), 'isolated solver fixture');
     const originalExecFile = childProcess.execFile;
     let detections = 0,
       runs = 0;

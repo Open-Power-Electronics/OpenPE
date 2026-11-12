@@ -81,7 +81,7 @@ canvas interaction follows [Layout Parasitics](../DESIGN.md#layout-parasitics).
 ## Shared capability interface
 
 Human controls and scoped Codex/Claude tools use the same per-project host.
-DeepSeek/Pi use context/proposals; Cursor supports detection only.
+DeepSeek/Pi use context/proposals. Cursor uses the service-hosted SDK with the same scoped tools as Codex/Claude.
 
 | Capability                           | Contract                                                                                                 |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
@@ -183,12 +183,15 @@ Provider-managed/non-user-scope entries stay managed by their provider.
 
 Codex switches write only `plugins."ID".enabled` through `config/value/write`,
 rechecking policy and effective state. Renderer-selected keys/paths are rejected.
-OpenPE never reads credentials, edits provider configuration files directly or
-approves interactive CLI requests. Cancellation cannot reverse completed CLI
+OpenPE never reads other tools' credential files, edits provider configuration
+files directly, or approves interactive CLI requests. A Cursor API key is the
+documented exception: Settings stores it through Electron `safeStorage` as
+`cursor-credential.bin` in the OpenPE data directory, and the service alone
+passes it to `@cursor/sdk`. Cancellation cannot reverse completed CLI
 writes. Installed state proves neither authentication nor restricted-thread
 compatibility. Provider plugins do not add tools or permissions to OpenPE's
-catalog: Codex receives its dynamic tools and Claude the application-owned stdio
-MCP bridge, with unrelated shell/web/tool access restricted.
+catalog: Codex receives its dynamic tools, and Claude and Cursor use the
+application-owned stdio MCP bridge, with unrelated shell/web/tool access restricted.
 
 ## Receipts, caches and restart boundaries
 
@@ -221,7 +224,9 @@ apply to ngspice runtime.
 Codex/Claude model discovery allows 300 ms for owned child EOF exit; completed
 Codex/Claude turns allow 500 ms. Their Windows cleanup starts at most one
 process-tree helper with a one-second deadline, then falls back to the captured
-child process if still open. An exited child cannot start a new PID-based helper.
+child process if still open. POSIX cleanup spawns the child as a process-group
+leader and signals that group with `kill(-pid)`; `ESRCH` means the process has
+already exited. An exited child cannot start a new PID-based helper.
 
 Display metadata comes only from real-path-contained CLI package roots:
 manifests up to 128 KB and icons up to 32 KB. Paths and executable/MCP
@@ -237,9 +242,9 @@ render as images.
 | `tests/plugins.test.ts`                                                          | Installed lists, receipts, provider/scope/policy isolation, bounds and concurrency |
 | `tests/browser-previews.test.ts`, `tests/browser-previews-bridge.test.ts`           | Browser authentication, fixed plugin endpoints and desktop-only project grants     |
 | `node scripts/check-thermal-workbench-ui.mjs --parasitics-dock`                  | Endpoints, measurement, fixed footer status, reset and dock switching             |
-| `tests/chat.test.ts`                                                             | Model discovery, cancellation and owned child cleanup, including Windows fallback  |
+| `tests/chat.test.ts`, `tests/agent-cursor.test.ts`, `tests/cursor-credential.test.ts` | Model discovery, Cursor SDK isolation, credential ciphertext, and cancellation |
 | `tests/capabilities.test.ts`, `tests/agent-capabilities.test.ts`                 | Schemas, review/revisions, cancellation and synthetic scoped transports            |
-| `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands and model-specific effort selection |
+| `node scripts/check-plugins-ui.mjs`, `node scripts/check-agent-tools-ui.mjs`, `node scripts/check-agent-effort-ui.mjs` | Isolated mocked lists, controls, Agent commands, model-specific effort selection and Cursor catalog parameters |
 | `node scripts/e2e-plugins.mjs`                                                   | Opt-in desktop checks with fixtures; no real installs                              |
 
 Mock tests do not establish installed-provider compatibility or authentication.

@@ -7499,12 +7499,12 @@
         "schematic": {
           "path": "tests/fixtures/reference-retired/upstream/lm25183-wson8-flyback/input.kicad_sch",
           "upstreamPath": "data/val/lm25183_wson8_flyback/input.kicad_sch",
-          "sha256": "214b2fac5bf9dc53e6ddbb8ad7b1eca752977433b58154787949879cb2833331"
+          "sha256": "c3d56310184b25dd5802f4f9770b8745722ee4cf3a311e562656e13e5b316901"
         },
         "pcb": {
           "path": "tests/fixtures/reference-retired/upstream/lm25183-wson8-flyback/expert.kicad_pcb",
           "upstreamPath": "data/val/lm25183_wson8_flyback/expert.kicad_pcb",
-          "sha256": "d587db099180264b7aabf53108911edd071737e58f516a0593ea7ced73c507a8"
+          "sha256": "8601d4eccadcd1849842b93c6580d0086f95b0a0eec238445fa69d7fa318e021"
         }
       },
       "topology": "Flyback",

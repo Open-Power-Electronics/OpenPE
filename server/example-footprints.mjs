@@ -29,6 +29,7 @@ import {
   emcProjectAssets,
   verifyEmcFlybackAssets,
 } from './emc-flyback-assets.mjs';
+import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
 
 const root = fileURLToPath(new URL('../resources/example-catalog/footprints/', import.meta.url));
 const packages = new Map(manifest.footprints.map((entry) => [entry.id, entry]));
@@ -219,14 +220,9 @@ export async function prepareExampleFootprints(project, projectFile) {
     await mkdir(dir).catch((error) => {
       if (error.code !== 'EEXIST') throw error;
     });
-    const info = await lstat(dir);
-    const normalize = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
-    if (
-      !info.isDirectory() ||
-      info.isSymbolicLink() ||
-      normalize(await realpath(dir)) !== normalize(path.resolve(dir))
-    )
-      throw new Error('The example footprints folder must be a real directory beside the project.');
+    await canonicalDirectory(dir, {
+      message: 'The example footprints folder must be a real directory beside the project.',
+    });
   }
   await safeDirectory(directory);
   const files = new Map();
@@ -311,7 +307,9 @@ export async function prepareExampleFootprints(project, projectFile) {
 // Changed/unknown files and live legacy references retain their original paths.
 export async function cleanupExampleLayout(project, projectFile, bundle) {
   const directory = path.resolve(path.dirname(projectFile));
-  const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
+  const rooted = await canonicalDirectory(directory, {
+    message: 'Example cleanup cannot follow linked paths.',
+  });
   async function regular(relative) {
     const parts = relative.split('/');
     if (
@@ -320,19 +318,18 @@ export async function cleanupExampleLayout(project, projectFile, bundle) {
     )
       throw new Error('Invalid example cleanup path.');
     let target = directory;
-    for (const part of ['', ...parts]) {
+    for (const part of parts) {
       target = path.join(target, part);
       const info = await lstat(target).catch((error) => {
         if (error.code === 'ENOENT') return null;
         throw error;
       });
       if (!info) return null;
-      if (
-        info.isSymbolicLink() ||
-        normalize(await realpath(target)) !== normalize(path.resolve(target))
-      )
-        throw new Error('Example cleanup cannot follow linked paths.');
+      if (info.isSymbolicLink()) throw new Error('Example cleanup cannot follow linked paths.');
     }
+    await assertContainedPath(rooted, target, {
+      message: 'Example cleanup cannot follow linked paths.',
+    });
     return (await lstat(target)).isFile() ? target : null;
   }
   for (const file of bundle.files) {

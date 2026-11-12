@@ -8,6 +8,7 @@ import {
   quantityUnits,
   readQuantity,
 } from './quantity-units';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'> & {
   value: string | number;
@@ -131,7 +132,7 @@ export default function QuantityInput({
           if (
             event.key === 'Enter' ||
             event.key === 'Escape' ||
-            ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')
+            ((isCommandModifier(event)) && event.key.toLowerCase() === 's')
           )
             event.preventDefault();
           event.stopPropagation();

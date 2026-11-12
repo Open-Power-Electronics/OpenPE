@@ -6199,12 +6199,12 @@
         "schematic": {
           "path": "tests/fixtures/reference-retired/upstream/tps6755-pdip8-buckboost/input.kicad_sch",
           "upstreamPath": "data/val/tps6755_pdip8_buckboost/input.kicad_sch",
-          "sha256": "2f472853ee644cc748da478e8d86196cd746b9acee7c2d69641352dce2369545"
+          "sha256": "e19c51a77893fe61b01011014686a67f1d1f48bd9f737e821a6d5f4cc33a2bc6"
         },
         "pcb": {
           "path": "tests/fixtures/reference-retired/upstream/tps6755-pdip8-buckboost/expert.kicad_pcb",
           "upstreamPath": "data/val/tps6755_pdip8_buckboost/expert.kicad_pcb",
-          "sha256": "dd8b1cd669fdd3f00626fbd5588e2c1f36586b9b43753acc4726fe399265a76c"
+          "sha256": "b55923afe5c61ae1ce5978b110dff3578f7eac4d58651e2db59d2c9cb509ac16"
         }
       },
       "topology": "Buck-Boost",

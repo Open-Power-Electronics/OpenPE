@@ -46,7 +46,7 @@ var providerReasoningEfforts = {
   claude: ["low", "medium", "high", "xhigh", "max"],
   deepseek: [],
   pi: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
-  cursor: []
+  cursor: reasoningEfforts
 };
 function isReasoningEffort(value) {
   return typeof value === "string" && reasoningEfforts.some((effort) => effort === value);

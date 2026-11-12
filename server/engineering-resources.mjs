@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertSolverPlatforms, hostSolverPlatform } from './solver-platform.mjs';
 
 const repositoryResources = fileURLToPath(new URL('../resources/', import.meta.url));
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -29,10 +30,7 @@ async function regularFile(root, relative, expectedHash) {
 
 export async function engineeringResources(signal, resourceRoot = repositoryResources) {
   checkAbort(signal);
-  if (process.platform !== 'win32' || process.arch !== 'x64')
-    throw new Error(
-      'Bundled engineering tools currently require Windows x64 Gmsh and Elmer resources.',
-    );
+  const platformId = hostSolverPlatform();
   const root = path.join(resourceRoot, 'thermal', '1');
   const parentInfo = await lstat(path.join(resourceRoot, 'thermal'));
   if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink())
@@ -48,21 +46,33 @@ export async function engineeringResources(signal, resourceRoot = repositoryReso
       ? path.join(resourceRoot, 'thermal-lock.json')
       : path.join(root, 'thermal-lock.json');
   const lock = JSON.parse(await readFile(lockPath, 'utf8'));
+  const platform = assertSolverPlatforms(lock.platforms);
   if (
     JSON.stringify(manifest) !== JSON.stringify(lock) ||
     lock.version !== 1 ||
-    lock.platform !== 'win32-x64'
+    !platform.files ||
+    !Object.keys(platform.files).length
   )
     throw new Error('Bundled engineering resource manifest does not match the pinned lock.');
-  for (const [relative, hash] of Object.entries(lock.files)) {
+  for (const name of ['gmsh', 'elmerGrid', 'elmer'])
+    if (typeof platform.executables?.[name] !== 'string')
+      throw new Error(`Bundled engineering lock is missing executable ${name}.`);
+  for (const [relative, hash] of Object.entries(platform.files)) {
     checkAbort(signal);
     await regularFile(root, relative, hash);
   }
   return {
     root,
-    lock,
-    gmsh: path.join(root, lock.executables.gmsh),
-    elmerGrid: path.join(root, lock.executables.elmerGrid),
-    elmer: path.join(root, lock.executables.elmer),
+    lock: {
+      version: lock.version,
+      platform: platformId,
+      gmshVersion: lock.gmshVersion,
+      elmerVersion: lock.elmerVersion,
+      executables: platform.executables,
+      files: platform.files,
+    },
+    gmsh: path.join(root, platform.executables.gmsh),
+    elmerGrid: path.join(root, platform.executables.elmerGrid),
+    elmer: path.join(root, platform.executables.elmer),
   };
 }

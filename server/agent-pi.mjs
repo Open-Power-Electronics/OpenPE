@@ -1,7 +1,8 @@
-import { spawn, execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { performance } from 'node:perf_hooks';
 import { piIsolationFlags } from './agent-provider-runtime.mjs';
+import { stopOwnedProcess } from './owned-process.mjs';
 import { createEventNormalizer } from './agent-events.mjs';
 import { validModelId } from './model-id.mjs';
 import { providerReasoningEfforts } from './agent-provider-format.mjs';
@@ -69,6 +70,7 @@ function piRPCSession(launch, cwd, signal, options, handlers) {
         },
         windowsHide: true,
         shell: false,
+        detached: process.platform !== 'win32',
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
@@ -82,16 +84,11 @@ function piRPCSession(launch, cwd, signal, options, handlers) {
     const kill = () => {
       if (closed || stopping) return;
       stopping = true;
-      if (proc.pid && process.platform === 'win32')
-        execFile(
-          'taskkill.exe',
-          ['/pid', String(proc.pid), '/t', '/f'],
-          { windowsHide: true, timeout: 3000 },
-          () => {
-            if (!closed) proc.kill();
-          },
-        );
-      else proc.kill('SIGTERM');
+      stopOwnedProcess(proc, {
+        closed: () => closed,
+        signal: 'SIGTERM',
+        timeoutMs: 3000,
+      });
     };
     const finish = (error, result) => {
       if (settled) return;

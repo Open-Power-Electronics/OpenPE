@@ -49,7 +49,7 @@ export const providerReasoningEfforts: Record<AgentProviderId, readonly Reasonin
   claude: ['low', 'medium', 'high', 'xhigh', 'max'],
   deepseek: [],
   pi: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-  cursor: [],
+  cursor: reasoningEfforts,
 };
 
 export function isReasoningEffort(value: unknown): value is ReasoningEffort {

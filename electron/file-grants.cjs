@@ -1,7 +1,6 @@
 const { randomUUID } = require('node:crypto');
-const path = require('node:path');
-const normalize = (p) =>
-  process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+const { canonicalGrantPath } = require('../server/host-path.cjs');
+const normalize = canonicalGrantPath;
 
 // Opaque IDs refer only to paths granted by native dialogs in this process.
 class FileGrants {

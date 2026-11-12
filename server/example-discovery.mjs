@@ -1,19 +1,17 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { lstat, opendir, realpath } from 'node:fs/promises';
+import { opendir } from 'node:fs/promises';
+import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
 
 const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
 const privateFolder =
   /^(?:\.|(?:node_modules|spice|thermal|history\.git|cache|simulation-cache)$)|-backups$/i;
 
-async function entries(directory) {
-  const info = await lstat(directory);
-  if (
-    !info.isDirectory() ||
-    info.isSymbolicLink() ||
-    normalize(await realpath(directory)) !== normalize(path.resolve(directory))
-  )
-    throw new Error('Example discovery requires a regular, unlinked directory.');
+async function entries(directory, rooted) {
+  await assertContainedPath(rooted, directory, {
+    message: 'Example discovery requires a regular, unlinked directory.',
+    kind: 'directory',
+  });
   const result = [];
   for await (const entry of await opendir(directory)) {
     if (result.length >= 1024) throw new Error('An example directory exceeds 1024 entries.');
@@ -24,7 +22,10 @@ async function entries(directory) {
 
 /** Host-owned discovery only. Keys identify files; they are never file paths or grants. */
 export async function discoverExamples(root, nativeName, keyPrefix = '', excludedDirectories = []) {
-  const top = await entries(root);
+  const rooted = await canonicalDirectory(root, {
+    message: 'Example discovery requires a regular, unlinked directory.',
+  });
+  const top = await entries(root, rooted);
   const excluded = new Set(excludedDirectories.map(normalize));
   const projects = [],
     warnings = [];
@@ -72,7 +73,7 @@ export async function discoverExamples(root, nativeName, keyPrefix = '', exclude
     if (++directories > 128) throw new Error('Example discovery exceeds 128 project directories.');
     let children;
     try {
-      children = await entries(path.join(root, directory));
+      children = await entries(path.join(root, directory), rooted);
     } catch (error) {
       warnings.push(`Could not inspect ${directory}: ${error.message}`);
       continue;

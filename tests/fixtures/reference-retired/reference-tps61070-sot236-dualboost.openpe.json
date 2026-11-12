@@ -5087,12 +5087,12 @@
         "schematic": {
           "path": "tests/fixtures/reference-retired/upstream/tps61070-sot236-dualboost/input.kicad_sch",
           "upstreamPath": "data/test/tps61070_sot236_dualboost/input.kicad_sch",
-          "sha256": "4057caee1f8412c1ac79a3f7cea8689e0948fec0c6b0320df36d24a2007e81b6"
+          "sha256": "720a5f69078ebc473b3edd02874e5dacff1394acfe6683141c28bec7b1f194cc"
         },
         "pcb": {
           "path": "tests/fixtures/reference-retired/upstream/tps61070-sot236-dualboost/expert.kicad_pcb",
           "upstreamPath": "data/test/tps61070_sot236_dualboost/expert.kicad_pcb",
-          "sha256": "b51e41cd0c20c1a5807abff73341f0203cec4941a4125bfa7e1c6c1911bcadaf"
+          "sha256": "9c9fef633c4effffe9a6b8bc96db923e72845eda5bd3938268d3ca77b1a717b8"
         }
       },
       "topology": "Dual Boost",

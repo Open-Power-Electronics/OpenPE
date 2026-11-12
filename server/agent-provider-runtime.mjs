@@ -3,12 +3,6 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 
-export function agentIntegrationError(provider) {
-  return provider === 'cursor'
-    ? 'Cursor chat is unavailable because its CLI cannot provide a tool-isolated OpenPE session.'
-    : null;
-}
-
 // These executable names and package entry points are owned by the service.
 // Renderer input never selects a program, package, path or argument.
 export const agentLaunchers = {
@@ -22,7 +16,6 @@ export const agentLaunchers = {
       '@mariozechner/pi-coding-agent/dist/cli.js',
     ],
   },
-  cursor: { commands: ['agent', 'cursor-agent'], entries: [] },
 };
 
 export const piIsolationFlags = [

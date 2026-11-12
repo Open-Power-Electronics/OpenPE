@@ -25,6 +25,7 @@ import { emcFlybackPassiveValue, prepareEmcFlybackValues } from './emc-flyback-v
 import { homeExampleNativePath } from '../lib/home-examples';
 import models from '../resources/emc-flyback-models-lock.json';
 import { prepareEmcFlybackModelBindings } from './emc-flyback-model-bindings';
+import { emcAnalyticalReplacement } from './emc-flyback-analytical-models.mjs';
 import { prepareEmcFlybackTestbench } from './emc-flyback-testbench';
 import layout from './emc-flyback-layout.json';
 import { writeHomeExampleNativeFiles, writeExampleFile as writeFile } from './example-native-files';
@@ -112,13 +113,34 @@ function prepareSchematicERC(circuit: Circuit) {
 
 /** Build-only normalization of KiCad's upgraded demo. Every geometry
  * record reaches the strict runtime parser; unknown content still fails. */
+function retargetAnalyticalModel(node: SExpr) {
+  if (node[0] !== 'model') return;
+  const replacement = emcAnalyticalReplacement(val(node).split('/').at(-1));
+  if (!replacement) return;
+  const { entry } = replacement;
+  const published = entry.file.split('/').at(-1)!;
+  const current = val(node);
+  node[1] = quote(current.slice(0, current.length - current.split('/').at(-1)!.length) + published);
+  for (const [key, values] of [
+    ['offset', entry.offset],
+    ['scale', entry.scale],
+    ['rotate', entry.rotate],
+  ] as const) {
+    const xyz = child(child(node, key)!, 'xyz');
+    if (!xyz) throw new Error(`EMC ${entry.replaces} model is missing ${key}.`);
+    values.forEach((value, index) => {
+      xyz[index + 1] = String(value);
+    });
+  }
+}
 function preparePCB(source: string) {
   const board = parseSExpr(source);
   if (val(child(board, 'version')) !== '20260206')
     throw new Error('Expected upgraded KiCad 10 PCB.');
   function visit(node: SExpr) {
     if (node[0] === 'tstamp') node[0] = 'uuid';
-    if (node[0] === 'model')
+    if (node[0] === 'model') {
+      retargetAnalyticalModel(node);
       node[1] = quote(
         portableExampleModelSource(
           val(node).replace(
@@ -127,6 +149,7 @@ function preparePCB(source: string) {
           ),
         ),
       );
+    }
     const unlocked = child(node, 'locked');
     if (unlocked && val(unlocked) === 'no') node.splice(node.indexOf(unlocked), 1);
     if (node[0] === 'via') {
@@ -432,7 +455,7 @@ project.extensions['org.openpe.emc-flyback-example'] = {
   license: 'CC-BY-4.0',
   attribution: 'Chengmin Li and AI-PCB-layout contributors; KiCad library contributors',
   changes:
-    'Native KiCad 7 board normalized to supported KiCad 10 records. Footprints are repositioned to clear courtyard overlaps and align local pad connections. Tracks use horizontal, vertical and 45-degree paths. Redundant local segments are removed and zones are refilled. Original nets, pad shapes, vias and retained track identities and locks are preserved. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Five power flags declare existing rails and the project symbol library carries the embedded LED, TL431DBZ and LTV-817S drawings. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
+    'Native KiCad 7 board normalized to supported KiCad 10 records. Footprints are repositioned to clear courtyard overlaps and align local pad connections. Tracks use horizontal, vertical and 45-degree paths. Redundant local segments are removed and zones are refilled. Original nets, pad shapes, vias and retained track identities and locks are preserved. Passive Values retain only the nominal value; rating, dielectric, package and series text is preserved in Specifications fields. Instance Reference/Value text is arranged for legibility. Five power flags declare existing rails and the project symbol library carries the embedded LED, TL431DBZ and LTV-817S drawings. Four editable OpenPE CAD panels replace the MECH1/MECH2 enclosure placeholders, which are omitted from PCB footprints and project footprint libraries. L2 and T1 use OpenPE analytical models aligned to the footprint pads. Original source files and static enclosure assets are pinned separately. Behavioural transient model and board-only thermal analysis are bounded approximations.',
 };
 const native = projectNativeFiles(project, filename);
 native.files.find((f) => f.name.endsWith('.kicad_pro'))!.source = settingsSource;
@@ -463,6 +486,11 @@ for (const file of await readdir(`${root}/design`, { withFileTypes: true })) {
       if (['Case_UChannel_revD.kicad_mod', 'Cover_PMMA_revD.kicad_mod'].includes(name)) continue;
       const footprint = parseSExpr(await readFile(`${root}/design/${file.name}/${name}`, 'utf8'));
       child(footprint, 'version')![1] = '20260206';
+      const visitModels = (node: SExpr) => {
+        retargetAnalyticalModel(node);
+        for (const item of node) if (Array.isArray(item)) visitModels(item);
+      };
+      visitModels(footprint);
       native.files.push({
         name: `footprints/${stem}.pretty/${name}`,
         source: portableExampleModelSource(

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, readdir, realpath, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { renameWithRetry } from './atomic-write.mjs';
+import { logicalSuffixOfCanonical } from './host-path.cjs';
 
 const queues = new Map();
 const normalize = (file) => (process.platform === 'win32' ? file.toLowerCase() : file);
@@ -54,7 +55,7 @@ async function regularDirectory(directory) {
   if (
     !info.isDirectory() ||
     info.isSymbolicLink() ||
-    normalize(await realpath(directory)) !== normalize(path.resolve(directory))
+    !logicalSuffixOfCanonical(path.resolve(directory), await realpath(directory))
   )
     throw new Error('Analysis folders must be real directories without links.');
 }

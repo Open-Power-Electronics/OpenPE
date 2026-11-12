@@ -2,6 +2,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, ChevronRight, MessageCircleQuestion } from 'lucide-react';
 import type { AgentQuestion } from '@/lib/chat-stream';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 export default function AgentQuestions({
   questions,
@@ -129,7 +130,7 @@ export default function AgentQuestions({
         }
         if (
           event.key === 'Enter' &&
-          event.ctrlKey !== event.metaKey &&
+          isCommandModifier(event) &&
           !event.altKey &&
           !event.shiftKey &&
           !disabled

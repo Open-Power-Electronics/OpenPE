@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { desktopChrome } from '@/lib/desktop-chrome';
 import Select, { type SelectOption } from './Select';
 import useRetainedElements from './useRetainedElements';
 
@@ -41,10 +42,11 @@ export default function DesktopTitlebar({
   onBack?: () => void;
   onForward?: () => void;
 }) {
-  const [visible, setVisible] = useState(false);
+  const [chrome, setChrome] = useState<'overlay' | 'inset' | null>(null);
   useEffect(() => {
-    setVisible(window.openpe?.titleBarOverlay === true);
+    setChrome(desktopChrome(window.openpe));
   }, []);
+  const visible = chrome !== null;
   const actions = useRef({ menus, onBack, onForward });
   // Every committed parent render refreshes actions, even when its menu labels
   // and retained drawing agree. Abandoned renders cannot replace live guards.
@@ -108,7 +110,7 @@ export default function DesktopTitlebar({
   return useMemo(
     () =>
       visible ? (
-        <div className="desktop-titlebar" aria-label="Window toolbar">
+        <div className="desktop-titlebar" data-chrome={chrome} aria-label="Window toolbar">
           <div className="desktop-titlebar-content">
             {navigation}
             <nav className="caption-menus" aria-label="Application menus">
@@ -118,6 +120,6 @@ export default function DesktopTitlebar({
           </div>
         </div>
       ) : null,
-    [visible, navigation, menuElements],
+    [visible, chrome, navigation, menuElements],
   );
 }

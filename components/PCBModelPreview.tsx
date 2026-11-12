@@ -133,6 +133,7 @@ import {
 import { modelMeasurementPoint } from '@/lib/model-measurement';
 import type { ModelSketchPointer } from './ModelSketchCoordinates';
 import type { ModelCheckIssue, ModelCheckReport, ModelCheckFocus } from './model-checks';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 const modelSilkscreenGeometryLimit = 8192;
 
@@ -2928,7 +2929,7 @@ function PCBModelPreview({
                   if (hit)
                     cad.selectGeometry(
                       { kind: 'body', objectId: hit.id },
-                      e.shiftKey || e.ctrlKey || e.metaKey,
+                      e.shiftKey || isCommandModifier(e),
                     );
                   return;
                 }
@@ -2944,7 +2945,7 @@ function PCBModelPreview({
                 if (cad.edgeSelection) {
                   const edge = pickCadEdge.current(point);
                   if (edge) {
-                    cad.toggleEdge(edge, e.shiftKey || e.ctrlKey || e.metaKey);
+                    cad.toggleEdge(edge, e.shiftKey || isCommandModifier(e));
                     showProperties();
                     return;
                   }
@@ -2968,7 +2969,7 @@ function PCBModelPreview({
                     const face = body && modelCadFaceAtPoint(body, hit.local, hit.normal);
                     if (face) geometry = { kind: 'face', objectId: hit.id, faceId: face.id };
                   }
-                  cad.selectGeometry(geometry, e.shiftKey || e.ctrlKey || e.metaKey);
+                  cad.selectGeometry(geometry, e.shiftKey || isCommandModifier(e));
                   return;
                 }
                 if (!picked.footprint) {
@@ -2980,7 +2981,7 @@ function PCBModelPreview({
                         objectId: edge.id,
                         edgeId: edge.edgeId,
                       },
-                      e.shiftKey || e.ctrlKey || e.metaKey,
+                      e.shiftKey || isCommandModifier(e),
                     );
                     return;
                   }

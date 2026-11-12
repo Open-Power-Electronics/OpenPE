@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseProject, serializeProject } from '../lib/project';
@@ -193,4 +194,21 @@ test('OpenSCAD remains a separate exchange format and rejects unsupported solids
     /OpenSCAD/,
   );
   assert.equal(rejected.dialogs.length, 0);
+});
+
+test('file grants identify paths by the native canonical path', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'openpe-grants-'));
+  const file = path.join(directory, 'Board.kicad_pro');
+  await writeFile(file, 'project');
+  const grants = new FileGrants();
+  const id = grants.create(file);
+  assert.equal(grants.find(await realpath(file)), id);
+  const otherCase = path.join(path.dirname(await realpath(file)), 'board.kicad_pro');
+  let nativeSame = false;
+  try {
+    nativeSame = realpathSync.native(otherCase) === realpathSync.native(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  assert.equal(grants.find(otherCase), process.platform === 'win32' || nativeSame ? id : undefined);
 });

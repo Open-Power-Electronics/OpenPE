@@ -42,6 +42,7 @@ try {
         window.fileCalls = { saves: [], exports: [], exportOutcome: 'success' };
         window.openpe = {
           titleBarOverlay,
+          titleBarInset: false,
           writeWorkspaceRecovery: async (content) => {
             await fetch('http://localhost/api/state', {
               method: content === null ? 'DELETE' : 'POST',

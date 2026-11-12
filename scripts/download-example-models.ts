@@ -1,5 +1,5 @@
 // Prepare portable model files beside native designs; private snapshots retain references.
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { referenceExamples } from '../lib/reference-examples';
 import { homeExampleNativePath } from '../lib/home-examples';
@@ -23,14 +23,27 @@ const store = async (id: string, signal: AbortSignal) => {
   const model = simulationModelDefinitions.find((entry) => entry.id === id);
   if (!model) throw new Error('Unsupported simulation model identity.');
   // Shared build resources use pinned identity/hash names, independently of project paths.
-  const bytes = await readFile(
-    path.resolve('resources/example-catalog/simulation/models', `${id}-${model.sha256}.lib`),
-  ).catch((error: NodeJS.ErrnoException) => {
+  const directory = path.resolve('resources/example-catalog/simulation/models');
+  const file = path.join(directory, `${id}-${model.sha256}.lib`);
+  const existing = await readFile(file).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== 'ENOENT') throw error;
     return null;
   });
   signal.throwIfAborted();
-  return bytes ? verifyProjectModelBytes(model, bytes) : download(id, signal);
+  if (existing) return verifyProjectModelBytes(model, existing);
+  const verified = verifyProjectModelBytes(model, await download(id, signal));
+  await mkdir(directory, { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  try {
+    await writeFile(temporary, verified, { flag: 'wx' });
+    signal.throwIfAborted();
+    await rename(temporary, file);
+  } finally {
+    await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error;
+    });
+  }
+  return verified;
 };
 
 const files = [
@@ -54,13 +67,9 @@ for (const file of files) {
       .filter((model) => ids.has(model.id))
       .map((model) => ({ ...model }));
   const nativeFile = path.resolve(homeEntry ? homeExampleNativePath(homeEntry.id) : file);
-  await prepareProjectModelFiles(
-    project,
-    nativeFile,
-    nativeFile,
-    store,
-    new AbortController().signal,
-  );
+  const signal = new AbortController().signal;
+  for (const id of ids) await store(id, signal);
+  await prepareProjectModelFiles(project, nativeFile, nativeFile, store, signal);
   await writeGeneratedFile(file, serializeProject(project));
   console.log(`${file}: ${ids.size} verified separate model files.`);
 }

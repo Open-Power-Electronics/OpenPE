@@ -17,6 +17,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { ProjectCore } from '@/core/project-core';
+import { isCommandModifier } from '@/lib/command-modifier';
+import { desktopChrome } from '@/lib/desktop-chrome';
 import { createNativeProjectDirtyChecker } from '@/lib/native-project-dirty';
 import { createBlankProject, DEFAULT_PROJECT_FILENAME } from '@/lib/create-blank-project';
 import { projectMetadataEqual } from '@/lib/project-metadata-equal';
@@ -580,7 +582,7 @@ export default function Workbench({
   const [selectionFilters, setSelectionFilters] = useState(defaultSchematicSelectionFilters);
   const [hasNativeTitlebar, setHasNativeTitlebar] = useState(true);
   useEffect(() => {
-    setHasNativeTitlebar(window.openpe?.titleBarOverlay === true);
+    setHasNativeTitlebar(desktopChrome(window.openpe) !== null);
   }, []);
   const schematicTabs = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2199,7 +2201,7 @@ export default function Workbench({
       const input = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
       if (!active || e.defaultPrevented || e.isComposing || e.keyCode === 229 || hasOpenOverlay())
         return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if ((isCommandModifier(e)) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (screen === 'workspace') void save(e.shiftKey);
         return;
@@ -2214,7 +2216,7 @@ export default function Workbench({
       }
       if (modal) return;
       const k = e.key.toLowerCase();
-      if (e.ctrlKey || e.metaKey) {
+      if (isCommandModifier(e)) {
         if (view === 'canvas' && tool === 'annotate' && !['o', 'a', 'c'].includes(k)) {
           e.preventDefault();
           return;
@@ -4522,7 +4524,7 @@ export default function Workbench({
                                         e.stopPropagation();
                                         return;
                                       }
-                                      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                                      if ((isCommandModifier(e)) && e.key.toLowerCase() === 's') {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         if (saveNetName(e.currentTarget.value))

@@ -213,6 +213,7 @@ try {
   await page.addInitScript((nativeTitlebar) => {
     window.openpe = {
       titleBarOverlay: nativeTitlebar,
+      titleBarInset: false,
       connection: async () => ({ base: 'http://localhost', token: 'test' }),
       projectDirectory: async () => ({ entries: [], truncated: false }),
       projectFilePreview: async () => {

@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { writeFileSync } from 'node:fs';
+import { realpathSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 writeFileSync('fixture.pid', String(process.pid));
 const mode = process.argv[2];
@@ -142,7 +142,7 @@ if (mode.startsWith('claude-catalog')) {
     if (e.method === 'initialize' && mode !== 'handshake-hang') send({ id: e.id, result: {} });
     if (e.method === 'config/read') {
       assert.equal(e.params.includeLayers, false);
-      assert.equal(e.params.cwd, process.cwd());
+      assert.equal(realpathSync(e.params.cwd), realpathSync(process.cwd()));
       return send(
         mode === 'catalog-config-error'
           ? { id: e.id, error: { message: 'Config unavailable' } }

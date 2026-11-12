@@ -7,6 +7,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { thermalGeometry, parseThermalPlanarMesh, extrudeThermalMesh } from './thermal-mesh.mjs';
 import { validateThermalResult } from './thermal-format.mjs';
 import { engineeringResources as resources } from './engineering-resources.mjs';
+import { hostSolverPlatform } from './solver-platform.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const checkAbort = (signal) => {
@@ -71,8 +72,8 @@ export async function readThermalGmshLog(file, signal) {
   }
 }
 
-function run(executable, args, cwd, runtime, signal, onProgress) {
-  checkAbort(signal);
+function solverEnvironment(runtime, cwd) {
+  const platform = hostSolverPlatform();
   const env = { ...process.env };
   for (const key of Object.keys(env))
     if (/^(ELMER|GMSH|PYTHON|OMP_|OPENBLAS_|GFORTRAN_|LD_|DYLD_|PATH$)/i.test(key)) delete env[key];
@@ -81,13 +82,28 @@ function run(executable, args, cwd, runtime, signal, onProgress) {
   // Gmsh parses session/options files from its home directory at startup.
   // Isolate them in the owned empty job directory, never the user's profile.
   env.GMSH_HOME = cwd;
-  env.PATH = [
+  const directories = [
     path.join(runtime.root, 'elmer', 'bin'),
     path.join(runtime.root, 'elmer', 'lib'),
-    path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32'),
-  ].join(path.delimiter);
+  ];
+  if (platform === 'win32-x64') {
+    if (!process.env.SystemRoot)
+      throw new Error('Windows SystemRoot is required for bundled Elmer and Gmsh.');
+    directories.push(path.join(process.env.SystemRoot, 'System32'));
+  } else if (platform === 'darwin-arm64') {
+    directories.push('/usr/bin', '/bin');
+  } else {
+    throw new Error(`Unsupported OpenPE solver platform ${platform}.`);
+  }
+  env.PATH = directories.join(path.delimiter);
   env.OMP_NUM_THREADS = '2';
   env.OPENBLAS_NUM_THREADS = '2';
+  return env;
+}
+
+function run(executable, args, cwd, runtime, signal, onProgress) {
+  checkAbort(signal);
+  const env = solverEnvironment(runtime, cwd);
   return new Promise((resolve, reject) => {
     let log = '',
       complete = false;

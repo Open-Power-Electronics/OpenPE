@@ -1,3 +1,4 @@
+import childProcess from 'node:child_process';
 import { lstat, mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { availableParallelism } from 'node:os';
@@ -122,41 +123,87 @@ async function saveTimings(root, durations, signal) {
   }
 }
 
+function captureTestChildren() {
+  const children = new Set();
+  const prototype = childProcess.ChildProcess.prototype;
+  const spawn = prototype.spawn;
+  prototype.spawn = function captureSpawn(...args) {
+    const result = spawn.apply(this, args);
+    children.add(this);
+    this.once('exit', () => children.delete(this));
+    return result;
+  };
+  return {
+    restore() {
+      prototype.spawn = spawn;
+    },
+    // Node 24 cancels an isolated test file with SIGTERM and stops waiting when
+    // the abort signal rejects once(exit). The test-file process handles SIGTERM,
+    // so an active handle keeps it alive until SIGKILL.
+    async terminate() {
+      await Promise.all(
+        [...children].map(
+          (child) =>
+            new Promise((resolve) => {
+              child.once('exit', () => resolve());
+              if (child.exitCode !== null || child.signalCode !== null) {
+                resolve();
+                return;
+              }
+              try {
+                child.kill('SIGKILL');
+              } catch (error) {
+                if (error.code !== 'ESRCH') throw error;
+                resolve();
+              }
+            }),
+        ),
+      );
+    },
+  };
+}
+
 export async function runTests(
   args = [],
   { root = process.cwd(), signal, output = process.stdout } = {},
 ) {
   const plan = await planTests(args, root);
   if (signal?.aborted) return 1;
-  output.write(`Running ${plan.files.length} test files with concurrency ${plan.concurrency}.\n`);
-  const durations = {};
-  let success = false;
-  const tests = run({
-    cwd: root,
-    files: plan.files.map((file) => path.join(root, file)),
-    concurrency: plan.concurrency,
-    isolation: 'process',
-    execArgv: ['--import', 'tsx'],
-    testNamePatterns: plan.testNamePatterns.length ? plan.testNamePatterns : undefined,
-    testSkipPatterns: plan.testSkipPatterns.length ? plan.testSkipPatterns : undefined,
-    only: plan.only,
-    signal,
-    setup(stream) {
-      stream.on('test:summary', (summary) => {
-        if (summary.file) {
-          const file = path.relative(root, summary.file).replaceAll('\\', '/');
-          if (summary.success && plan.files.includes(file)) durations[file] = summary.duration_ms;
-        } else success = summary.success;
-      });
-    },
-  });
-  const reporter = tests.compose(spec);
-  reporter.pipe(output, { end: false });
-  await finished(reporter);
-  if (!success || signal?.aborted) return 1;
-  if (plan.full && Object.keys(durations).length === plan.files.length)
-    await saveTimings(root, durations, signal);
-  return signal?.aborted ? 1 : 0;
+  const captured = captureTestChildren();
+  try {
+    output.write(`Running ${plan.files.length} test files with concurrency ${plan.concurrency}.\n`);
+    const durations = {};
+    let success = false;
+    const tests = run({
+      cwd: root,
+      files: plan.files.map((file) => path.join(root, file)),
+      concurrency: plan.concurrency,
+      isolation: 'process',
+      execArgv: ['--import', 'tsx'],
+      testNamePatterns: plan.testNamePatterns.length ? plan.testNamePatterns : undefined,
+      testSkipPatterns: plan.testSkipPatterns.length ? plan.testSkipPatterns : undefined,
+      only: plan.only,
+      signal,
+      setup(stream) {
+        stream.on('test:summary', (summary) => {
+          if (summary.file) {
+            const file = path.relative(root, summary.file).replaceAll('\\', '/');
+            if (summary.success && plan.files.includes(file)) durations[file] = summary.duration_ms;
+          } else success = summary.success;
+        });
+      },
+    });
+    const reporter = tests.compose(spec);
+    reporter.pipe(output, { end: false });
+    await finished(reporter);
+    if (!success || signal?.aborted) return 1;
+    if (plan.full && Object.keys(durations).length === plan.files.length)
+      await saveTimings(root, durations, signal);
+    return 0;
+  } finally {
+    if (signal?.aborted) await captured.terminate();
+    captured.restore();
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

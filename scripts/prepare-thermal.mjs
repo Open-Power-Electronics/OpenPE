@@ -19,6 +19,14 @@ import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { t as listTar } from 'tar';
+import { assertSolverPlatforms, hostSolverPlatform } from '../server/solver-platform.mjs';
+import {
+  assertLockedRelease,
+  assertPinnedLocalArchive,
+  downloadReleaseAsset,
+  extractVerifiedArchive,
+  parseSolverPrepareArgs,
+} from './solver-release.mjs';
 
 const exec = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -27,20 +35,35 @@ const workspace = fileURLToPath(new URL('../', import.meta.url));
 const root = path.join(workspace, 'resources/thermal/1');
 const downloads = path.join(workspace, '.openpe/downloads');
 const publicNotice = path.join(workspace, 'public/licenses/thermal.txt');
-const verify = process.argv.includes('--verify');
-if (process.argv.slice(2).some((argument) => argument !== '--verify'))
-  throw new Error('Usage: node scripts/prepare-thermal.mjs [--verify]');
+const prepareArgs = parseSolverPrepareArgs(
+  process.argv,
+  'Usage: node scripts/prepare-thermal.mjs [--verify | --archive <path>]',
+);
+const verify = prepareArgs.verify;
+const archivePath = prepareArgs.archive;
 const lock = JSON.parse(
   await readFile(path.join(workspace, 'resources/thermal-lock.json'), 'utf8'),
 );
+const platformId = hostSolverPlatform();
+const platform = assertSolverPlatforms(lock.platforms);
+const runtimeFiles = platform.files;
+const runtimeArchives = platform.archives ?? [];
+const sources = [...(lock.sources ?? []), ...(platform.sources ?? [])];
+const sourceFiles = platform.sourceFiles ?? [];
+const sourceNotices = [...(lock.sourceNotices ?? []), ...(platform.sourceNotices ?? [])];
 const hashPattern = /^[0-9a-f]{64}$/;
 if (
   lock.version !== 1 ||
-  lock.platform !== 'win32-x64' ||
-  lock.archives?.length !== 2 ||
-  lock.sources?.length < 2
+  lock.gmshVersion !== '4.15.2' ||
+  lock.elmerVersion !== '26.1' ||
+  !runtimeFiles ||
+  !Object.keys(runtimeFiles).length ||
+  sources.length < 2
 )
-  throw new Error('Invalid pinned thermal resource lock.');
+  throw new Error(`Invalid pinned thermal resource lock for ${platformId}.`);
+if (platformId === 'win32-x64' && runtimeArchives.length !== 2)
+  throw new Error('Windows thermal lock does not contain its two runtime archives.');
+if (platformId === 'darwin-arm64') assertLockedRelease(platform.archive);
 
 function relative(value) {
   if (
@@ -226,7 +249,8 @@ async function download(item, file) {
         const allowed = (host) =>
           host === url.hostname ||
           host === 'release-assets.githubusercontent.com' ||
-          host === 'objects.githubusercontent.com';
+          host === 'objects.githubusercontent.com' ||
+          host === 'codeload.github.com';
         for (let hop = 0; hop <= 5; hop++) {
           response = await fetch(current, {
             redirect: 'manual',
@@ -326,14 +350,31 @@ if (!verify) {
   await directory(root);
 }
 let runtimeValid = true;
-for (const [name, hash] of Object.entries(lock.files))
+for (const [name, hash] of Object.entries(runtimeFiles))
   runtimeValid = (await matches(path.join(root, relative(name)), hash)) && runtimeValid;
+if (archivePath) {
+  if (!platform.archive)
+    throw new Error('This platform has no single pinned thermal release archive.');
+  await assertPinnedLocalArchive(archivePath, platform.archive);
+}
 if (!runtimeValid) {
   if (verify)
     throw new Error(
       'Bundled thermal runtime files are missing or changed. Run npm run thermal:prepare.',
     );
-  for (const archive of lock.archives) {
+  if (platformId === 'darwin-arm64') {
+    const archive = platform.archive;
+    const cached = archivePath ?? path.join(downloads, relative(archive.name));
+    if (!archivePath)
+      await downloadReleaseAsset({
+        url: archive.url,
+        sha256: archive.sha256,
+        size: archive.size,
+        file: cached,
+      });
+    await extractVerifiedArchive({ archive: cached, destination: root, files: runtimeFiles });
+  } else if (platformId === 'win32-x64') {
+  for (const archive of runtimeArchives) {
     const namespace = archive.name.startsWith('gmsh-')
       ? 'gmsh'
       : archive.name.startsWith('ElmerFEM-')
@@ -342,7 +383,7 @@ if (!runtimeValid) {
     if (!namespace || !archive.prefix?.endsWith('/'))
       throw new Error('Invalid thermal runtime archive mapping.');
     relative(archive.prefix.slice(0, -1));
-    const files = Object.keys(lock.files).filter((name) => name.startsWith(namespace + '/'));
+    const files = Object.keys(runtimeFiles).filter((name) => name.startsWith(namespace + '/'));
     const archiveEntry = (name) =>
       archive.prefix +
       (name.startsWith('elmer/licenses/gcc/')
@@ -356,7 +397,7 @@ if (!runtimeValid) {
       await extractArchive(cache, new Map(files.map((name) => [archiveEntry(name), name])), stage);
       for (const name of files) {
         const extracted = path.join(stage, name);
-        if (!(await matches(extracted, lock.files[name])))
+        if (!(await matches(extracted, runtimeFiles[name])))
           throw new Error(`Extracted thermal runtime file failed verification: ${name}.`);
         await copy(extracted, path.join(root, name));
       }
@@ -369,17 +410,20 @@ if (!runtimeValid) {
       await rm(stage, { recursive: true, force: true });
     }
   }
+  } else {
+    throw new Error(`Unsupported OpenPE solver platform ${platformId}.`);
+  }
 }
-for (const item of [...lock.sources, ...(lock.sourceFiles ?? [])]) {
+for (const item of [...sources, ...sourceFiles]) {
   const destination = path.join(root, 'sources', relative(item.name));
   if (!(await matches(destination, item.sha256, item.size))) await download(item, destination);
 }
 
-for (const item of lock.sourceNotices ?? []) {
+for (const item of sourceNotices) {
   relative(item.name);
   relative(item.archive);
   relative(item.entry);
-  if (!lock.sources.some((source) => source.name === item.archive))
+  if (!sources.some((source) => source.name === item.archive))
     throw new Error('Unknown thermal source notice archive.');
   const file = path.join(root, 'licenses', item.name);
   if (!(await matches(file, item.sha256, item.size))) {
@@ -419,34 +463,59 @@ for (const item of lock.sourceNotices ?? []) {
 }
 
 const noticeHeader =
-  `OpenPE Layout Thermal: bundled Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion} (Windows x64)\n\n` +
-  'OpenPE invokes the unmodified, hash-pinned official executables as separate local processes.\n' +
-  'The Elmer archive is the official rel26.1 release; its solver banner retains the upstream 9.0 (Rev: Release) label compiled on 2026-01-20.\n' +
+  (platformId === 'win32-x64'
+    ? `OpenPE Layout Thermal: bundled Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion} (Windows x64)\n\n` +
+      'OpenPE invokes the unmodified, hash-pinned official executables as separate local processes.\n' +
+      'The Elmer archive is the official rel26.1 release; its solver banner retains the upstream 9.0 (Rev: Release) label compiled on 2026-01-20.\n'
+    : `OpenPE Layout Thermal: bundled Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion} (darwin-arm64)\n\n` +
+      'npm run thermal:prepare downloads the pinned GitHub release archive, checks its SHA-256 and size, then checks every file hash. It does not compile.\n' +
+      'Maintainers rebuild that archive with npm run solvers:build-macos. scripts/build-thermal-macos.sh requires Apple clang 17.0.0, macOS SDK 26.2, CMake 4.4.5 and Homebrew GCC 16.2.0. That command is not part of ordinary setup.\n' +
+      'The Elmer configuration is -DWITH_MPI=OFF -DWITH_ELMERGUI=OFF -DWITH_OpenMP=OFF -DWITH_Mumps=OFF -DWITH_UMFPACK=ON. OpenBLAS 0.3.13 is built from the pinned tarball; Homebrew OpenBLAS is not linked.\n' +
+      'Gmsh is the official 4.15.2 MacOSARM SDK. Its gmsh -info output reports OpenCASCADE 7.8.1. Absolute toolchain rpaths are removed; Mach-O dependencies stay inside the bundle or in the macOS system libraries.\n') +
   'Runtime files, upstream solver and identified dependency source archives, build materials and license notices ship under resources/thermal/1.\n' +
   'The source archives remain unmodified; the source hash and original HTTPS URL are recorded in thermal-lock.json and manifest.json.\n' +
   'Gmsh is GPL version 2 or later with its upstream linking exception. Elmer modules retain their GPL/LGPL and individual dependency licenses.\n' +
-  'See the original notices below and the per-file notices in the source archives. The tools and libraries can be replaced and rebuilt; reverse engineering for debugging modifications to LGPL libraries is permitted.\n\n' +
-  lock.sources.map((item) => `${item.name}\n${item.url}\nSHA-256: ${item.sha256}\n`).join('\n') +
-  (lock.sourceFiles?.length
-    ? `\nThe ${lock.sourceFiles.length} immutable MSYS2 GCC build-recipe and patch files are included individually under sources/${lock.sourceFiles[0].name.split('/')[0]}. Their original commit URLs, Git blob identities and SHA-256 hashes are in the manifest.\n`
+  'libgfortran is covered by the GCC Runtime Library Exception in COPYING.RUNTIME. The tools and libraries can be replaced and rebuilt; reverse engineering for debugging modifications to LGPL libraries is permitted.\n\n' +
+  sources.map((item) => `${item.name}\n${item.url}\nSHA-256: ${item.sha256}\n`).join('\n') +
+  (sourceFiles.length
+    ? `\nThe ${sourceFiles.length} immutable MSYS2 GCC build-recipe and patch files are included individually under sources/${sourceFiles[0].name.split('/')[0]}. Their original commit URLs, Git blob identities and SHA-256 hashes are in the manifest.\n`
     : '');
 let notice = noticeHeader;
-for (const name of Object.keys(lock.files).filter((name) =>
+for (const name of Object.keys(runtimeFiles).filter((name) =>
   /(?:LICENSE|COPYING|CREDITS)/.test(name),
 ))
   notice += `\n---------------- ${name} ----------------\n\n${await readFile(path.join(root, name), 'utf8')}\n`;
-for (const item of lock.sourceNotices ?? [])
+for (const item of sourceNotices)
   notice += `\n---------------- ${item.name} ----------------\n\n${await readFile(path.join(root, 'licenses', item.name), 'utf8')}\n`;
 const sourceNotice =
   noticeHeader +
-  '\nBuild instructions (paths inside the source archives):\n' +
-  'sources/gmsh-4.15.2-source.tgz: gmsh-4.15.2-source/README.txt, gmsh-4.15.2-source/CMakeLists.txt, gmsh-4.15.2-source/doc/texinfo/gmsh.texi.\n' +
-  'sources/elmerfem-release-26.1.tar.gz: elmerfem-release-26.1/README.adoc, elmerfem-release-26.1/CMakeLists.txt, elmerfem-release-26.1/.github/workflows/build-windows-mingw.yaml.\n' +
-  'Additional library source archives retain their upstream build scripts; the MSYS2 GCC source recipe and patches retain the fixed upstream commit. No archive scripts are executed by preparation.\n' +
-  'The upstream packages use additional libraries under their own licenses. Original build configuration and third-party notices are retained in the source archives and runtime notice files.\n';
+  (platformId === 'win32-x64'
+    ? '\nBuild instructions (paths inside the source archives):\n' +
+      'sources/gmsh-4.15.2-source.tgz: gmsh-4.15.2-source/README.txt, gmsh-4.15.2-source/CMakeLists.txt, gmsh-4.15.2-source/doc/texinfo/gmsh.texi.\n' +
+      'sources/elmerfem-release-26.1.tar.gz: elmerfem-release-26.1/README.adoc, elmerfem-release-26.1/CMakeLists.txt, elmerfem-release-26.1/.github/workflows/build-windows-mingw.yaml.\n' +
+      'Additional library source archives retain their upstream build scripts; the MSYS2 GCC source recipe and patches retain the fixed upstream commit. No archive scripts are executed by preparation.\n' +
+      'The upstream packages use additional libraries under their own licenses. Original build configuration and third-party notices are retained in the source archives and runtime notice files.\n'
+    : '\nmacOS maintainer build: npm run solvers:build-macos runs scripts/build-thermal-macos.sh, then packs the release archive. Toolchain pins are Apple clang 17.0.0, macOS SDK 26.2, CMake 4.4.5 and Homebrew GCC 16.2.0. Deployment target is 26.0. SOURCE_DATE_EPOCH is 1786424074.\n' +
+      'Gmsh is unpacked from the official SDK and is not rebuilt. Elmer and OpenBLAS build instructions also remain inside their source archives.\n');
 const metadata = JSON.stringify(lock, null, 2) + '\n';
+const noticeDirectory = path.join(workspace, 'resources/notices');
+await directory(noticeDirectory);
+const fragment = path.join(noticeDirectory, `thermal-${platformId}.txt`);
+const otherId = platformId === 'win32-x64' ? 'darwin-arm64' : 'win32-x64';
+const otherFragment = path.join(noticeDirectory, `thermal-${otherId}.txt`);
+const otherNotice = await readFile(otherFragment, 'utf8').catch((error) => {
+  if (error.code === 'ENOENT')
+    throw new Error(`Missing thermal notice fragment for ${otherId}.`);
+  throw error;
+});
+const combined =
+  `OpenPE Layout Thermal bundles Gmsh ${lock.gmshVersion} and Elmer ${lock.elmerVersion} for win32-x64 and darwin-arm64.\n` +
+  'Each platform has its own hash manifest. An unknown or missing platform is an error.\n\n' +
+  `===== win32-x64 =====\n\n${platformId === 'win32-x64' ? notice : otherNotice}\n` +
+  `===== darwin-arm64 =====\n\n${platformId === 'darwin-arm64' ? notice : otherNotice}`;
 for (const [file, contents] of [
-  [publicNotice, notice],
+  [fragment, notice],
+  [publicNotice, combined],
   [path.join(root, 'LICENSE-NOTICE.txt'), notice],
   [path.join(root, 'SOURCE-NOTICE.txt'), sourceNotice],
   [path.join(root, 'manifest.json'), metadata],

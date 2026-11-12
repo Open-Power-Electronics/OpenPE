@@ -1,19 +1,26 @@
-import { spawn, execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { resolveAgent } from './agents.mjs';
 import { validModelId } from './model-id.mjs';
 import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
-import { agentIntegrationError, verifyPiIsolation } from './agent-provider-runtime.mjs';
+import { verifyPiIsolation } from './agent-provider-runtime.mjs';
+import { listCursorModels, loadCursorSdk, readCursorApiKey } from './agent-cursor.mjs';
 import { listPiModels } from './agent-pi.mjs';
+import { stopOwnedProcess } from './owned-process.mjs';
 
-// Model discovery starts no inference and never reads credential files. Claude
-// initializes its bounded control protocol; ACP creates an empty session. Both
-// close without submitting a prompt, returning only public model metadata.
+// Model discovery starts no inference. Cursor receives only the key returned by
+// the host reader; discovery never reads another tool's credential files.
+// Claude initializes its bounded control protocol; ACP creates an empty session.
+// Both close without submitting a prompt, returning only public model metadata.
 export async function listAgentModels(provider, cwd, signal, options = {}) {
   if (!isAgentProvider(provider)) throw new Error('Unknown agent.');
-  if (provider === 'deepseek' || provider === 'cursor') {
-    const integrationError = agentIntegrationError(provider);
-    if (integrationError) throw new Error(integrationError);
+  if (provider === 'cursor') {
+    const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
+    const apiKey = await readCursorApiKey(options.cursorCredential);
+    if (signal.aborted) throw new Error('Model loading cancelled.');
+    return listCursorModels(apiKey, sdk, signal);
+  }
+  if (provider === 'deepseek') {
     const launch = await (options.resolve || resolveAgent)(provider);
     if (signal.aborted) throw new Error('Model loading cancelled.');
     const { listACPModels } = await import('./agent-acp.mjs');
@@ -49,6 +56,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       env: launch.env,
       windowsHide: true,
       shell: false,
+      detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const decoder = new StringDecoder('utf8');
@@ -69,16 +77,11 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
       // helper after exit, and share one stop attempt with the EOF grace timer.
       if (closed || stopping || proc.exitCode !== null || proc.signalCode !== null) return;
       stopping = true;
-      if (proc.pid && process.platform === 'win32')
-        execFile(
-          'taskkill.exe',
-          ['/pid', String(proc.pid), '/t', '/f'],
-          { windowsHide: true, timeout: 1000 },
-          () => {
-            if (!closed) proc.kill('SIGTERM');
-          },
-        );
-      else proc.kill('SIGTERM');
+      stopOwnedProcess(proc, {
+        closed: () => closed,
+        signal: 'SIGTERM',
+        timeoutMs: 1000,
+      });
     };
     const finish = (error) => {
       if (settled) return;

@@ -5499,12 +5499,12 @@
         "schematic": {
           "path": "tests/fixtures/reference-retired/upstream/lm2611-sot235-cuk/input.kicad_sch",
           "upstreamPath": "data/test/lm2611_sot235_cuk/input.kicad_sch",
-          "sha256": "1a9b3bf17458b26ec4b995bef2233f7cc824ec4516240401d44737de59d2fcc7"
+          "sha256": "cb590604cd65fe3f98e122e1832db23380728b31a66ef9475a9e763a5f564c8b"
         },
         "pcb": {
           "path": "tests/fixtures/reference-retired/upstream/lm2611-sot235-cuk/expert.kicad_pcb",
           "upstreamPath": "data/test/lm2611_sot235_cuk/expert.kicad_pcb",
-          "sha256": "e575c29efe20c95cc061e5c473eebabc54855a92b85d9d9eae30840dddb060df"
+          "sha256": "c1e47b267085f9cdd0da231f3cba3e21229908ac46efa8745301c8674c1a1406"
         }
       },
       "topology": "Cuk",

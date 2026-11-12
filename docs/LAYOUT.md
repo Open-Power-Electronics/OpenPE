@@ -1121,7 +1121,10 @@ and operation counts, not arbitrary executable CAD programs.
 
 Advanced draft meshes come from authenticated `/api/model-cad/preview`: the host
 validates parameters, generates fixed Gmsh/OpenCASCADE operations, creates STEP
-and tessellates that STEP through the bundled parser. STEP export uses the same
+and tessellates that STEP through the bundled parser. The kernel is the same
+hash-pinned Gmsh 4.15.2 used by Layout Thermal: the official Windows x64 build
+or, on darwin-arm64, the official MacOSARM SDK whose `gmsh -info` reports
+OpenCASCADE 7.8.1. STEP export uses the same
 shape construction. An empty, invalid or failed rim/Boolean result remains
 retryable and cannot commit an earlier mesh. The pure Core accepts changed
 advanced geometry only after the host prepares its exact canonical shape key;

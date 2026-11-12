@@ -138,6 +138,32 @@ test('packaging keeps pinned manufacturer models and notices beside their shared
   );
 });
 
+test('ngspice packaging matches each platform lock and keeps Windows files on win', async () => {
+  const configuration = JSON.parse(await readFile('package.json', 'utf8'));
+  const lock = JSON.parse(await readFile('resources/ngspice-lock.json', 'utf8'));
+  const ngspiceFilter = (entries: { from: string; to: string; filter: string[] }[]) =>
+    entries.find((entry) => entry.from === 'resources/ngspice/47' && entry.to === 'ngspice/47')!
+      .filter;
+  assert.deepEqual(
+    ngspiceFilter(configuration.build.win.extraResources),
+    Object.keys(lock.platforms['win32-x64'].files),
+  );
+  assert.deepEqual(
+    ngspiceFilter(configuration.build.mac.extraResources),
+    Object.keys(lock.platforms['darwin-arm64'].files),
+  );
+  assert.deepEqual(ngspiceFilter(configuration.build.extraResources), [
+    'manifest.json',
+    'SOURCE-NOTICE.txt',
+  ]);
+  assert.equal(
+    configuration.build.extraResources.some((entry: { filter?: string[] }) =>
+      entry.filter?.includes('Spice64/bin/ngspice_con.exe'),
+    ),
+    false,
+  );
+});
+
 test('build verification requires every pinned footprint/model asset and matching hashes', async (t) => {
   assert.equal(await verifyExampleFootprints(), 50);
   const directory = await temporary(t);

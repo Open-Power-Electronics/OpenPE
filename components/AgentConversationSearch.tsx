@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { Message } from '@/lib/chat-sessions';
 import Dialog from './Dialog';
 import { conversationSearchPattern, searchableConversationText } from './agent-search-match';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 const repeatSearchHint =
   'After opening a result, use F3 for the next match or Shift+F3 for the previous one.';
@@ -9,7 +10,7 @@ const repeatSearchHint =
 export function isConversationFindShortcut(event: KeyboardEvent) {
   return (
     event.key.toLowerCase() === 'f' &&
-    event.ctrlKey !== event.metaKey &&
+    isCommandModifier(event) &&
     !event.altKey &&
     !event.shiftKey
   );

@@ -8,6 +8,7 @@ import {
   publishAnalysisFiles,
   withAnalysisFiles,
 } from './flat-analysis-files.mjs';
+import { logicalSuffixOfCanonical } from './host-path.cjs';
 import {
   thermalFingerprint,
   validateThermalConfig,
@@ -197,7 +198,7 @@ async function directory(parent, name, create = false) {
   if (
     !info.isDirectory() ||
     info.isSymbolicLink() ||
-    normalize(await realpath(file)) !== normalize(file)
+    !logicalSuffixOfCanonical(path.resolve(file), await realpath(file))
   )
     throw new Error('Layout Thermal folders must be real directories without links.');
   return file;

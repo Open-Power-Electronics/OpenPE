@@ -1,7 +1,8 @@
+import { isCommandModifier } from '@/lib/command-modifier';
 export function isGoToCodeLineShortcut(event: KeyboardEvent) {
   return (
     event.key.toLowerCase() === 'g' &&
-    event.ctrlKey !== event.metaKey &&
+    isCommandModifier(event) &&
     !event.altKey &&
     !event.shiftKey
   );

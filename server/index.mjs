@@ -21,6 +21,7 @@ import {
 } from './workbench-plugins.mjs';
 import { createPcbDesignGuidance, registerPcbDesignGuidance } from './pcb-design.mjs';
 import { validModelId } from './model-id.mjs';
+import { validCursorRequestParameters } from './agent-cursor.mjs';
 import { createLibraryService } from './libraries.mjs';
 import { registerAppearance } from './appearance.mjs';
 import { registerAgentSettings } from './agent-settings.mjs';
@@ -59,6 +60,7 @@ export async function startServer({
   thermalResultFiles = /** @type {{ forProject(fileId: string): ReturnType<typeof import('./project-thermal-files.mjs').createProjectThermalStore> | null } | undefined} */ (
     undefined
   ),
+  cursorCredential = undefined,
 }) {
   await mkdir(dataDir, { recursive: true });
   const cwd = path.join(dataDir, 'agent-workspace');
@@ -219,7 +221,9 @@ export async function startServer({
       if (!res.destroyed) res.status(422).json({ error: e.message });
     }
   });
-  app.get('/api/agents', async (req, res) => res.json(await detectAgents()));
+  app.get('/api/agents', async (_req, res) =>
+    res.json(await detectAgents({ cursorCredential })),
+  );
   app.post('/api/model-cad/preview', async (req, res) => {
     if (
       !req.body ||
@@ -244,7 +248,9 @@ export async function startServer({
     const control = new AbortController();
     res.on('close', () => control.abort());
     try {
-      res.json(await modelLister(req.query.provider, cwd, control.signal));
+      res.json(
+        await modelLister(req.query.provider, cwd, control.signal, { cursorCredential }),
+      );
     } catch (e) {
       if (!res.destroyed) res.status(502).json({ error: e.message });
     }
@@ -317,6 +323,8 @@ export async function startServer({
       !b.prompt.trim() ||
       b.prompt.length > 16000 ||
       (b.effort !== undefined && !isProviderReasoningEffort(b.provider, b.effort)) ||
+      (b.parameters !== undefined &&
+        (b.provider !== 'cursor' || !validCursorRequestParameters(b.parameters))) ||
       (b.model !== undefined && !validModelId(b.model)) ||
       (b.capabilities !== undefined && typeof b.capabilities !== 'boolean') ||
       (b.requestTitle !== undefined && typeof b.requestTitle !== 'boolean') ||
@@ -386,7 +394,7 @@ export async function startServer({
       // The service owns plugin instructions; never trust a renderer-supplied copy.
       pcbDesignTurns.add(control);
       const pcbDesignInstructions = await pcbDesign.instructions(
-        !!bridge && ['codex', 'claude'].includes(b.provider),
+        !!bridge && ['codex', 'claude', 'cursor'].includes(b.provider),
         control.signal,
       );
       if (!pcbDesignInstructions) pcbDesignTurns.delete(control);
@@ -395,6 +403,7 @@ export async function startServer({
         input: inputBridge,
         questions: { ...questions, url: `${base}/api/agent-questions/${questions.id}` },
         pcbDesignInstructions,
+        cursorCredential,
         ...(bridge
           ? {
               capabilities: {

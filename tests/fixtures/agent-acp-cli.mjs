@@ -1,6 +1,6 @@
 // Synthetic ACP server. It never invokes a provider, model, tool, or network.
 import assert from 'node:assert/strict';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createInterface } from 'node:readline';
@@ -132,7 +132,7 @@ input.on('line', (line) => {
   }
   if (request.method === 'session/new') {
     assert.equal(initialized, true);
-    assert.equal(request.params.cwd, process.cwd());
+    assert.equal(realpathSync(request.params.cwd), realpathSync(process.cwd()));
     assert.deepEqual(request.params.mcpServers, []);
     sessionReady = true;
     return reply(request, {

@@ -1,29 +1,8 @@
 {
   "version": 1,
-  "platform": "win32-x64",
   "gmshVersion": "4.15.2",
   "elmerVersion": "26.1",
-  "executables": {
-    "gmsh": "gmsh/gmsh.exe",
-    "elmerGrid": "elmer/bin/ElmerGrid.exe",
-    "elmer": "elmer/bin/ElmerSolver.exe"
-  },
-  "archives": [
-    {
-      "name": "gmsh-4.15.2-Windows64.zip",
-      "url": "https://gmsh.info/bin/Windows/gmsh-4.15.2-Windows64.zip",
-      "size": 39178263,
-      "sha256": "a8208b56aedee3434907a893e303422acacd9003140766e09f2abbc664ba7157",
-      "prefix": "gmsh-4.15.2-Windows64/"
-    },
-    {
-      "name": "ElmerFEM-nogui-nompi-Windows-AMD64-rel26.1.zip",
-      "url": "https://www.nic.funet.fi/index/elmer/bin/windows/rel26.1/ElmerFEM-nogui-nompi-Windows-AMD64-rel26.1.zip",
-      "size": 129530276,
-      "sha256": "8ce866cc6ff16a842f01edc1dc56c9a801cdd758210ec02cf1353398e6839455",
-      "prefix": "ElmerFEM-nogui-nompi-Windows-AMD64/"
-    }
-  ],
+  "openBlasVersion": "0.3.13",
   "sources": [
     {
       "name": "gmsh-4.15.2-source.tgz",
@@ -38,18 +17,6 @@
       "sha256": "3a0f14947b5fa83d72506e45d041b54e401a1253ce454afdc188a13c05428990"
     },
     {
-      "name": "fltk-1.3.11-source.tar.gz",
-      "url": "https://github.com/fltk/fltk/releases/download/release-1.3.11/fltk-1.3.11-source.tar.gz",
-      "size": 5575411,
-      "sha256": "92805abc84505e3e7e27aec775ab0754ecb4182fe2d8ff2a9d568ccdcb2811ac"
-    },
-    {
-      "name": "petsc-3.15.0.tar.gz",
-      "url": "https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-3.15.0.tar.gz",
-      "size": 15976488,
-      "sha256": "ac46db6bfcaaec8cd28335231076815bd5438f401a4a05e33736b4f9ff12e59a"
-    },
-    {
       "name": "OpenBLAS-0.3.13.tar.gz",
       "url": "https://github.com/OpenMathLib/OpenBLAS/archive/refs/tags/v0.3.13.tar.gz",
       "size": 12437434,
@@ -60,237 +27,9 @@
       "url": "https://github.com/Open-Cascade-SAS/OCCT/archive/refs/tags/V7_8_1.tar.gz",
       "size": 48432051,
       "sha256": "7321af48c34dc253bf8aae3f0430e8cb10976961d534d8509e72516978aa82f5"
-    },
-    {
-      "name": "gcc-10.2.0.tar.xz",
-      "url": "https://ftp.gnu.org/gnu/gcc/gcc-10.2.0/gcc-10.2.0.tar.xz",
-      "size": 75004144,
-      "sha256": "b8dd4368bb9c7f0b98188317ee0254dd8cc99d1e3a18d0ff146c855fe16c1d8c",
-      "ranges": true
-    },
-    {
-      "name": "med-4.1.0.tar.gz",
-      "url": "https://files.salome-platform.org/Salome/medfile/med-4.1.0.tar.gz",
-      "size": 50375039,
-      "sha256": "847db5d6fbc9ce6924cb4aea86362812c9a5ef6b9684377e4dd6879627651fce",
-      "userAgent": "Mozilla/5.0",
-      "ranges": true
-    }
-  ],
-  "files": {
-    "gmsh/gmsh.exe": "317c43391e5b1fab3a1dd80dc5245dad6e2d087910f4b8ebc234bd6d4b8f41a1",
-    "gmsh/LICENSE.txt": "7fefa67a6c607068a33ba27e0a18aaf8596aa051f7cf2abcca094a3a484c5870",
-    "gmsh/CREDITS.txt": "424b87009450302d59eda4d29a9e6f960f6c2e94d434c639c29bcfd80b7ca36f",
-    "elmer/bin/ElmerSolver.exe": "d79ad418b15db3bcb353ec19be6ce76cd7c44211134fc4f43cebbaf3b80cefe0",
-    "elmer/bin/ElmerGrid.exe": "3de1a91d8020dbfd6cc79001f9590585b9caaa52660cd6415c748bf190ea47cb",
-    "elmer/bin/libelmersolver.dll": "0193f9d84c2fc69d0bbb011fe2c3710f6554f1efc0ed65c9e8cb80280c533f32",
-    "elmer/bin/libfhuti.dll": "24641e48a6ee0995ab0fc8323a593da42064bb3bdb3e5de35f1bf5ce792b62c9",
-    "elmer/bin/libmatc.dll": "3b6ec84aa3f61c1328a74bad02b98cc2aeb26986656e48ecfb4b35e827818740",
-    "elmer/bin/libarpack.dll": "4ebdb565954a7e1103ecb54efba9036e6d33926f94a4d6b632bbbcf9c616599f",
-    "elmer/bin/libgcc_s_seh-1.dll": "2c8d6743e68da2ceb87643346820ab640aeefc81189b9544ea4995498ec3ce7d",
-    "elmer/bin/libgfortran-5.dll": "ebdc5ff6a21c9ffa252fcbf130ce1d6f0ab9cf2d3ed38a8f72907cb787ac65ca",
-    "elmer/bin/libquadmath-0.dll": "c9778b85f1c3c3b679b17849b35d6d05f791b26ff0c03d3f20085e9de4e849da",
-    "elmer/bin/libopenblas.dll": "ac6fbe60646c9039b5d12d01822a233f656225b8e0ae438601c92194bb0c3827",
-    "elmer/bin/libmpi_stubs.dll": "aada23a123c5dada26fa7f8a2217b9882b429828ef781a0ba1796ce60ff5b158",
-    "elmer/bin/libwinpthread-1.dll": "d480c28d0bc6116a9d3aec81e852a9cddaffe13363e4a644cd5858f2df891bdb",
-    "elmer/share/elmersolver/lib/HeatSolve.dll": "82df8991d4864a63f36ab3c3b82c0499d4d38e8289d97a8b67680078d7513f4e",
-    "elmer/share/elmersolver/lib/ResultOutputSolve.dll": "fe497638fb0482c7a3146c12f37d99871e938875d2647f7f8af3ae1034a1f831",
-    "elmer/share/elmersolver/license_texts/GPL-2.txt": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670",
-    "elmer/share/elmersolver/license_texts/LGPL-2.1.txt": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
-    "elmer/share/elmersolver/license_texts/LICENSES": "1b6dd02c460368851deb733b83b2a6df639d61a260b73f567ca0b8e6e74d72b4",
-    "elmer/share/elmersolver/license_texts/fem/LICENSES": "c513619e013cce2c533ffabb4d294a55a7a025dc2e82eccb6566929a9204675c",
-    "elmer/licenses/gcc/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
-    "elmer/licenses/gcc/COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
-    "elmer/licenses/gcc/COPYING.LIB": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
-    "elmer/share/elmersolver/lib/elements.def": "fd7797060c26856026a246dc986c3a8e1e0b56e9de0843b99c81f1176609edbd",
-    "elmer/share/elmersolver/lib/SOLVER.KEYWORDS": "a3940f36400a23e32a24466ba195eb2ca9200c57c5ebde288ccd8ed44db1f277",
-    "elmer/share/elmersolver/lua-scripts/defaults.lua": "8ccca42ce4feeba42c427ed896e684ba3000dd6a104f9f5c05198cb277431644"
-  },
-  "sourceFiles": [
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0002-Relocate-libintl.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0002-Relocate-libintl.patch",
-      "size": 23671,
-      "sha256": "1247e81571c908548b4d9aaa3df1ad8fd73aad7b81e7eafea12d53bbada70e94",
-      "gitBlob": "ecf4ba26c51f1108c451283c93d6f7f454739c22"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0003-Windows-Follow-Posix-dir-exists-semantics-more-close.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0003-Windows-Follow-Posix-dir-exists-semantics-more-close.patch",
-      "size": 4102,
-      "sha256": "5b8ab5a54ebdd10c9802ea431b935ff4ba225eec6ca92824cfddfcf2ee8ac910",
-      "gitBlob": "2cbe21f58dcf047e6b335cd278eb58015d360d1b"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0004-Windows-Use-not-in-progpath-and-leave-case-as-is.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0004-Windows-Use-not-in-progpath-and-leave-case-as-is.patch",
-      "size": 2172,
-      "sha256": "388f423a67e4be6f547ca7e340ff8ee4c78b1ed83f3fd698daa409e309911807",
-      "gitBlob": "7b6a6be8d62132402046afd9dead6d5f4ecb2d4f"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0005-Windows-Don-t-ignore-native-system-header-dir.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0005-Windows-Don-t-ignore-native-system-header-dir.patch",
-      "size": 931,
-      "sha256": "bd1c201febdf292570b0da9dcc066a237916ab3166dce3610487814f131517e5",
-      "gitBlob": "79118da2b609ffd22959df8a4bab3a7b6f4de19c"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0006-Windows-New-feature-to-allow-overriding.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0006-Windows-New-feature-to-allow-overriding.patch",
-      "size": 1398,
-      "sha256": "7f5fc74961ec0face6c4c56d3fc3613c38c5133bb68648191065bbf597f3e906",
-      "gitBlob": "b1516b4dba46d237cd20783dad6175155ea74da6"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0007-Build-EXTRA_GNATTOOLS-for-Ada.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0007-Build-EXTRA_GNATTOOLS-for-Ada.patch",
-      "size": 1261,
-      "sha256": "3629446c0039d9061cfedcb6d7a7589279588bb4601c7ce233546d357bd4be34",
-      "gitBlob": "a7468b93135225aa9cccc01a6dc445063e7062df"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0008-Prettify-linking-no-undefined.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0008-Prettify-linking-no-undefined.patch",
-      "size": 1704,
-      "sha256": "2e4f7d0ef739aec8986eb06a2baadee552ebc2e8be661c39a448e93515179eb5",
-      "gitBlob": "9277fe7c2c34ef0378c70ef62edca21b840af15e"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0009-gcc-make-xmmintrin-header-cplusplus-compatible-depre.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0009-gcc-make-xmmintrin-header-cplusplus-compatible-depre.patch",
-      "size": 1167,
-      "sha256": "513a824ee500d063f09ec920a9ad317a3a117e5468bf201aaf3f70dd0000e769",
-      "gitBlob": "f49c933879db736bf980fc98865b4c78b0281920"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0010-Fix-using-large-PCH.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0010-Fix-using-large-PCH.patch",
-      "size": 5858,
-      "sha256": "ec58aafba0174313451c282339bbd67ed0b11bca034c29023e0138b61441cf71",
-      "gitBlob": "1a7a43c98bef328a7b8a40c6e3bbc199583bfbd2"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0011-Enable-shared-gnat-implib.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0011-Enable-shared-gnat-implib.patch",
-      "size": 1548,
-      "sha256": "3402f11c3edb3a2b0f27f7159c476879e1e6cddb05ac0327968d89ea245044c7",
-      "gitBlob": "215053fdb3e3335f8dd52bb9234400eece305168"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0012-Handle-spaces-in-path-for-default-manifest.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0012-Handle-spaces-in-path-for-default-manifest.patch",
-      "size": 1696,
-      "sha256": "11dd5388a1e1c0a2bc8bc3824726598784b9b9e0896a3d77950ba6a4569f1128",
-      "gitBlob": "b5305a5b0a8b59881992bc1d007b1343b75fb3ba"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0014-gcc-9-branch-clone_function_name_1-Retain-any-stdcall-suffix.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0014-gcc-9-branch-clone_function_name_1-Retain-any-stdcall-suffix.patch",
-      "size": 3726,
-      "sha256": "21e31addcf13bc6fa6650b02ed0f2e195a1226260ae48c536840cc9230de2cfc",
-      "gitBlob": "7e2f33acdb1cb468b6b6f7f2086bccc88e292c45"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0015-makedeps-properly-handle-win-paths.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0015-makedeps-properly-handle-win-paths.patch",
-      "size": 276,
-      "sha256": "4233a8d893787413b316de3ac320fd65c46844d463b98c0a98fdc17100cca505",
-      "gitBlob": "f8f376fa75c4f0991ee2a7bb24c7da9b36856250"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0020-libgomp-Don-t-hard-code-MS-printf-attributes.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0020-libgomp-Don-t-hard-code-MS-printf-attributes.patch",
-      "size": 1620,
-      "sha256": "276ecc392c777d4b17d771a987e80dca50ff25d8f65671d5de139be73997064b",
-      "gitBlob": "fc60b546641ff32554c5161e81c16f44dddf5905"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0021-gcc-config-i386-mingw32.h-Ensure-lmsvcrt-precede-lke.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0021-gcc-config-i386-mingw32.h-Ensure-lmsvcrt-precede-lke.patch",
-      "size": 928,
-      "sha256": "c7359f4c7015bc1fb02bc13449fa9826669273bd1f0663ba898decb67e8487fc",
-      "gitBlob": "cfc1a9021f9fb03635ed3c472605997b4f317c86"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0022-jit-port-libgccjit-to-Windows.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0022-jit-port-libgccjit-to-Windows.patch",
-      "size": 27077,
-      "sha256": "61554e1ace26a7638a029c87ca360de9d8efbbe258f2fe84c0635a6c446d19a9",
-      "gitBlob": "101066c00111985a6c17cb9f5e2260e61dfeff82"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0023-gcc-jit-Rename-libgccjit.dll-to-libgccjit-0.dll.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0023-gcc-jit-Rename-libgccjit.dll-to-libgccjit-0.dll.patch",
-      "size": 2341,
-      "sha256": "35715ec552eb262dc9d7cb8ee70215bacce47e7281ee4f45bd959fdeadac56e1",
-      "gitBlob": "3b1303e75d50a82571ff56a90ddecd76cfcbba1c"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0130-libstdc++-in-out.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0130-libstdc++-in-out.patch",
-      "size": 137890,
-      "sha256": "055289699c4222ef0b8125abdc8c9ceeff0712876c86e6d552a056fbacc14284",
-      "gitBlob": "8789318c0495423092ac7f4af3c893380bf8d933"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0140-gcc-8.2.0-diagnostic-color.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0140-gcc-8.2.0-diagnostic-color.patch",
-      "size": 1914,
-      "sha256": "5240a9e731b45c17a164066c7eb193c1fbee9fd8d9a2a5afa2edbcde9510da47",
-      "gitBlob": "77f7961d46bd3237ad8b49332352b136e4af0545"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0150-gcc-10.2.0-libgcc-ldflags.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0150-gcc-10.2.0-libgcc-ldflags.patch",
-      "size": 628,
-      "sha256": "7f0b4e45d933e18c9d8bd2afcd83e4f52e97e2e25dd41bfa0cba755c70e591c7",
-      "gitBlob": "9df96292e0468c80ce9e2e3b146c7be467a7dde1"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0160-libbacktrace-seh.patch",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0160-libbacktrace-seh.patch",
-      "size": 819,
-      "sha256": "88c1d65e763e631ad49f9a077ed631f4acac9ef4732e2818ccddaefc883b1811",
-      "gitBlob": "7b2b5b44e3017072da765102f21da4e19c8faa79"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/gdbinit",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/gdbinit",
-      "size": 180,
-      "sha256": "bce81824fc89e5e62cca350de4c17a27e27a18a1a1ad5ca3492aec1fc5af3234",
-      "gitBlob": "5786c603704a661d158ddb4d76c8b97c9d7bdae0"
-    },
-    {
-      "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/PKGBUILD",
-      "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/PKGBUILD",
-      "size": 26215,
-      "sha256": "8416a0f0bd4440323c1842f260000fcb1d4c0d233d6d31a0b069b0748375e8f7",
-      "gitBlob": "2a06844b974feeb402d18a0db70f7fb60a32e640"
     }
   ],
   "sourceNotices": [
-    {
-      "archive": "fltk-1.3.11-source.tar.gz",
-      "entry": "fltk-1.3.11/COPYING",
-      "name": "fltk-1.3.11-LICENSE.txt",
-      "size": 27200,
-      "sha256": "57dd381e713fb309fb7dd85c3c38b274557ecb333475d0f1d65a5f06ad85c9a6"
-    },
-    {
-      "archive": "fltk-1.3.11-source.tar.gz",
-      "entry": "fltk-1.3.11/CREDITS",
-      "name": "fltk-1.3.11-CREDITS.txt",
-      "size": 1477,
-      "sha256": "d3889d90a21bab28edfb4f694b49af667167d3525baa868f7ca00868351d877f"
-    },
-    {
-      "archive": "petsc-3.15.0.tar.gz",
-      "entry": "petsc-3.15.0/LICENSE",
-      "name": "petsc-3.15.0-LICENSE.txt",
-      "size": 1525,
-      "sha256": "025a087c586f27a96891472934df6e17f151d66ec22ac03d877b28d2aa14d3b5"
-    },
     {
       "archive": "OpenBLAS-0.3.13.tar.gz",
       "entry": "OpenBLAS-0.3.13/LICENSE",
@@ -311,27 +50,341 @@
       "name": "opencascade-7.8.1-EXCEPTION.txt",
       "size": 663,
       "sha256": "04580a884ea6cea294402649ff7b5cbb167d47462d1340a4ed33e550db10a81b"
-    },
-    {
-      "archive": "med-4.1.0.tar.gz",
-      "entry": "med-4.1.0/COPYING",
-      "name": "med-4.1.0-COPYING.txt",
-      "size": 35147,
-      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
-    },
-    {
-      "archive": "med-4.1.0.tar.gz",
-      "entry": "med-4.1.0/COPYING.LESSER",
-      "name": "med-4.1.0-COPYING.LESSER.txt",
-      "size": 7637,
-      "sha256": "9ccf26cfe845e0eb8bb58053e47366e7ab6b697ae010f7650978d4b71b7d1fc1"
-    },
-    {
-      "archive": "med-4.1.0.tar.gz",
-      "entry": "med-4.1.0/AUTHORS",
-      "name": "med-4.1.0-AUTHORS.txt",
-      "size": 89,
-      "sha256": "ccd2c9ed19aec61cbe4a5da2a3b4e7121abca8706b8a337fbe78d8decd83f021"
     }
-  ]
+  ],
+  "platforms": {
+    "win32-x64": {
+      "origin": "official-binary",
+      "executables": {
+        "gmsh": "gmsh/gmsh.exe",
+        "elmerGrid": "elmer/bin/ElmerGrid.exe",
+        "elmer": "elmer/bin/ElmerSolver.exe"
+      },
+      "archives": [
+        {
+          "name": "gmsh-4.15.2-Windows64.zip",
+          "url": "https://gmsh.info/bin/Windows/gmsh-4.15.2-Windows64.zip",
+          "size": 39178263,
+          "sha256": "a8208b56aedee3434907a893e303422acacd9003140766e09f2abbc664ba7157",
+          "prefix": "gmsh-4.15.2-Windows64/"
+        },
+        {
+          "name": "ElmerFEM-nogui-nompi-Windows-AMD64-rel26.1.zip",
+          "url": "https://www.nic.funet.fi/index/elmer/bin/windows/rel26.1/ElmerFEM-nogui-nompi-Windows-AMD64-rel26.1.zip",
+          "size": 129530276,
+          "sha256": "8ce866cc6ff16a842f01edc1dc56c9a801cdd758210ec02cf1353398e6839455",
+          "prefix": "ElmerFEM-nogui-nompi-Windows-AMD64/"
+        }
+      ],
+      "files": {
+        "gmsh/gmsh.exe": "317c43391e5b1fab3a1dd80dc5245dad6e2d087910f4b8ebc234bd6d4b8f41a1",
+        "gmsh/LICENSE.txt": "7fefa67a6c607068a33ba27e0a18aaf8596aa051f7cf2abcca094a3a484c5870",
+        "gmsh/CREDITS.txt": "424b87009450302d59eda4d29a9e6f960f6c2e94d434c639c29bcfd80b7ca36f",
+        "elmer/bin/ElmerSolver.exe": "d79ad418b15db3bcb353ec19be6ce76cd7c44211134fc4f43cebbaf3b80cefe0",
+        "elmer/bin/ElmerGrid.exe": "3de1a91d8020dbfd6cc79001f9590585b9caaa52660cd6415c748bf190ea47cb",
+        "elmer/bin/libelmersolver.dll": "0193f9d84c2fc69d0bbb011fe2c3710f6554f1efc0ed65c9e8cb80280c533f32",
+        "elmer/bin/libfhuti.dll": "24641e48a6ee0995ab0fc8323a593da42064bb3bdb3e5de35f1bf5ce792b62c9",
+        "elmer/bin/libmatc.dll": "3b6ec84aa3f61c1328a74bad02b98cc2aeb26986656e48ecfb4b35e827818740",
+        "elmer/bin/libarpack.dll": "4ebdb565954a7e1103ecb54efba9036e6d33926f94a4d6b632bbbcf9c616599f",
+        "elmer/bin/libgcc_s_seh-1.dll": "2c8d6743e68da2ceb87643346820ab640aeefc81189b9544ea4995498ec3ce7d",
+        "elmer/bin/libgfortran-5.dll": "ebdc5ff6a21c9ffa252fcbf130ce1d6f0ab9cf2d3ed38a8f72907cb787ac65ca",
+        "elmer/bin/libquadmath-0.dll": "c9778b85f1c3c3b679b17849b35d6d05f791b26ff0c03d3f20085e9de4e849da",
+        "elmer/bin/libopenblas.dll": "ac6fbe60646c9039b5d12d01822a233f656225b8e0ae438601c92194bb0c3827",
+        "elmer/bin/libmpi_stubs.dll": "aada23a123c5dada26fa7f8a2217b9882b429828ef781a0ba1796ce60ff5b158",
+        "elmer/bin/libwinpthread-1.dll": "d480c28d0bc6116a9d3aec81e852a9cddaffe13363e4a644cd5858f2df891bdb",
+        "elmer/share/elmersolver/lib/HeatSolve.dll": "82df8991d4864a63f36ab3c3b82c0499d4d38e8289d97a8b67680078d7513f4e",
+        "elmer/share/elmersolver/lib/ResultOutputSolve.dll": "fe497638fb0482c7a3146c12f37d99871e938875d2647f7f8af3ae1034a1f831",
+        "elmer/share/elmersolver/license_texts/GPL-2.txt": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670",
+        "elmer/share/elmersolver/license_texts/LGPL-2.1.txt": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+        "elmer/share/elmersolver/license_texts/LICENSES": "1b6dd02c460368851deb733b83b2a6df639d61a260b73f567ca0b8e6e74d72b4",
+        "elmer/share/elmersolver/license_texts/fem/LICENSES": "c513619e013cce2c533ffabb4d294a55a7a025dc2e82eccb6566929a9204675c",
+        "elmer/licenses/gcc/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+        "elmer/licenses/gcc/COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+        "elmer/licenses/gcc/COPYING.LIB": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
+        "elmer/share/elmersolver/lib/elements.def": "fd7797060c26856026a246dc986c3a8e1e0b56e9de0843b99c81f1176609edbd",
+        "elmer/share/elmersolver/lib/SOLVER.KEYWORDS": "a3940f36400a23e32a24466ba195eb2ca9200c57c5ebde288ccd8ed44db1f277",
+        "elmer/share/elmersolver/lua-scripts/defaults.lua": "8ccca42ce4feeba42c427ed896e684ba3000dd6a104f9f5c05198cb277431644"
+      },
+      "sources": [
+        {
+          "name": "fltk-1.3.11-source.tar.gz",
+          "url": "https://github.com/fltk/fltk/releases/download/release-1.3.11/fltk-1.3.11-source.tar.gz",
+          "size": 5575411,
+          "sha256": "92805abc84505e3e7e27aec775ab0754ecb4182fe2d8ff2a9d568ccdcb2811ac"
+        },
+        {
+          "name": "petsc-3.15.0.tar.gz",
+          "url": "https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-3.15.0.tar.gz",
+          "size": 15976488,
+          "sha256": "ac46db6bfcaaec8cd28335231076815bd5438f401a4a05e33736b4f9ff12e59a"
+        },
+        {
+          "name": "gcc-10.2.0.tar.xz",
+          "url": "https://ftp.gnu.org/gnu/gcc/gcc-10.2.0/gcc-10.2.0.tar.xz",
+          "size": 75004144,
+          "sha256": "b8dd4368bb9c7f0b98188317ee0254dd8cc99d1e3a18d0ff146c855fe16c1d8c",
+          "ranges": true
+        },
+        {
+          "name": "med-4.1.0.tar.gz",
+          "url": "https://files.salome-platform.org/Salome/medfile/med-4.1.0.tar.gz",
+          "size": 50375039,
+          "sha256": "847db5d6fbc9ce6924cb4aea86362812c9a5ef6b9684377e4dd6879627651fce",
+          "userAgent": "Mozilla/5.0",
+          "ranges": true
+        }
+      ],
+      "sourceFiles": [
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0002-Relocate-libintl.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0002-Relocate-libintl.patch",
+          "size": 23671,
+          "sha256": "1247e81571c908548b4d9aaa3df1ad8fd73aad7b81e7eafea12d53bbada70e94",
+          "gitBlob": "ecf4ba26c51f1108c451283c93d6f7f454739c22"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0003-Windows-Follow-Posix-dir-exists-semantics-more-close.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0003-Windows-Follow-Posix-dir-exists-semantics-more-close.patch",
+          "size": 4102,
+          "sha256": "5b8ab5a54ebdd10c9802ea431b935ff4ba225eec6ca92824cfddfcf2ee8ac910",
+          "gitBlob": "2cbe21f58dcf047e6b335cd278eb58015d360d1b"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0004-Windows-Use-not-in-progpath-and-leave-case-as-is.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0004-Windows-Use-not-in-progpath-and-leave-case-as-is.patch",
+          "size": 2172,
+          "sha256": "388f423a67e4be6f547ca7e340ff8ee4c78b1ed83f3fd698daa409e309911807",
+          "gitBlob": "7b6a6be8d62132402046afd9dead6d5f4ecb2d4f"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0005-Windows-Don-t-ignore-native-system-header-dir.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0005-Windows-Don-t-ignore-native-system-header-dir.patch",
+          "size": 931,
+          "sha256": "bd1c201febdf292570b0da9dcc066a237916ab3166dce3610487814f131517e5",
+          "gitBlob": "79118da2b609ffd22959df8a4bab3a7b6f4de19c"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0006-Windows-New-feature-to-allow-overriding.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0006-Windows-New-feature-to-allow-overriding.patch",
+          "size": 1398,
+          "sha256": "7f5fc74961ec0face6c4c56d3fc3613c38c5133bb68648191065bbf597f3e906",
+          "gitBlob": "b1516b4dba46d237cd20783dad6175155ea74da6"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0007-Build-EXTRA_GNATTOOLS-for-Ada.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0007-Build-EXTRA_GNATTOOLS-for-Ada.patch",
+          "size": 1261,
+          "sha256": "3629446c0039d9061cfedcb6d7a7589279588bb4601c7ce233546d357bd4be34",
+          "gitBlob": "a7468b93135225aa9cccc01a6dc445063e7062df"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0008-Prettify-linking-no-undefined.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0008-Prettify-linking-no-undefined.patch",
+          "size": 1704,
+          "sha256": "2e4f7d0ef739aec8986eb06a2baadee552ebc2e8be661c39a448e93515179eb5",
+          "gitBlob": "9277fe7c2c34ef0378c70ef62edca21b840af15e"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0009-gcc-make-xmmintrin-header-cplusplus-compatible-depre.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0009-gcc-make-xmmintrin-header-cplusplus-compatible-depre.patch",
+          "size": 1167,
+          "sha256": "513a824ee500d063f09ec920a9ad317a3a117e5468bf201aaf3f70dd0000e769",
+          "gitBlob": "f49c933879db736bf980fc98865b4c78b0281920"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0010-Fix-using-large-PCH.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0010-Fix-using-large-PCH.patch",
+          "size": 5858,
+          "sha256": "ec58aafba0174313451c282339bbd67ed0b11bca034c29023e0138b61441cf71",
+          "gitBlob": "1a7a43c98bef328a7b8a40c6e3bbc199583bfbd2"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0011-Enable-shared-gnat-implib.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0011-Enable-shared-gnat-implib.patch",
+          "size": 1548,
+          "sha256": "3402f11c3edb3a2b0f27f7159c476879e1e6cddb05ac0327968d89ea245044c7",
+          "gitBlob": "215053fdb3e3335f8dd52bb9234400eece305168"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0012-Handle-spaces-in-path-for-default-manifest.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0012-Handle-spaces-in-path-for-default-manifest.patch",
+          "size": 1696,
+          "sha256": "11dd5388a1e1c0a2bc8bc3824726598784b9b9e0896a3d77950ba6a4569f1128",
+          "gitBlob": "b5305a5b0a8b59881992bc1d007b1343b75fb3ba"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0014-gcc-9-branch-clone_function_name_1-Retain-any-stdcall-suffix.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0014-gcc-9-branch-clone_function_name_1-Retain-any-stdcall-suffix.patch",
+          "size": 3726,
+          "sha256": "21e31addcf13bc6fa6650b02ed0f2e195a1226260ae48c536840cc9230de2cfc",
+          "gitBlob": "7e2f33acdb1cb468b6b6f7f2086bccc88e292c45"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0015-makedeps-properly-handle-win-paths.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0015-makedeps-properly-handle-win-paths.patch",
+          "size": 276,
+          "sha256": "4233a8d893787413b316de3ac320fd65c46844d463b98c0a98fdc17100cca505",
+          "gitBlob": "f8f376fa75c4f0991ee2a7bb24c7da9b36856250"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0020-libgomp-Don-t-hard-code-MS-printf-attributes.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0020-libgomp-Don-t-hard-code-MS-printf-attributes.patch",
+          "size": 1620,
+          "sha256": "276ecc392c777d4b17d771a987e80dca50ff25d8f65671d5de139be73997064b",
+          "gitBlob": "fc60b546641ff32554c5161e81c16f44dddf5905"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0021-gcc-config-i386-mingw32.h-Ensure-lmsvcrt-precede-lke.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0021-gcc-config-i386-mingw32.h-Ensure-lmsvcrt-precede-lke.patch",
+          "size": 928,
+          "sha256": "c7359f4c7015bc1fb02bc13449fa9826669273bd1f0663ba898decb67e8487fc",
+          "gitBlob": "cfc1a9021f9fb03635ed3c472605997b4f317c86"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0022-jit-port-libgccjit-to-Windows.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0022-jit-port-libgccjit-to-Windows.patch",
+          "size": 27077,
+          "sha256": "61554e1ace26a7638a029c87ca360de9d8efbbe258f2fe84c0635a6c446d19a9",
+          "gitBlob": "101066c00111985a6c17cb9f5e2260e61dfeff82"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0023-gcc-jit-Rename-libgccjit.dll-to-libgccjit-0.dll.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0023-gcc-jit-Rename-libgccjit.dll-to-libgccjit-0.dll.patch",
+          "size": 2341,
+          "sha256": "35715ec552eb262dc9d7cb8ee70215bacce47e7281ee4f45bd959fdeadac56e1",
+          "gitBlob": "3b1303e75d50a82571ff56a90ddecd76cfcbba1c"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0130-libstdc++-in-out.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0130-libstdc++-in-out.patch",
+          "size": 137890,
+          "sha256": "055289699c4222ef0b8125abdc8c9ceeff0712876c86e6d552a056fbacc14284",
+          "gitBlob": "8789318c0495423092ac7f4af3c893380bf8d933"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0140-gcc-8.2.0-diagnostic-color.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0140-gcc-8.2.0-diagnostic-color.patch",
+          "size": 1914,
+          "sha256": "5240a9e731b45c17a164066c7eb193c1fbee9fd8d9a2a5afa2edbcde9510da47",
+          "gitBlob": "77f7961d46bd3237ad8b49332352b136e4af0545"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0150-gcc-10.2.0-libgcc-ldflags.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0150-gcc-10.2.0-libgcc-ldflags.patch",
+          "size": 628,
+          "sha256": "7f0b4e45d933e18c9d8bd2afcd83e4f52e97e2e25dd41bfa0cba755c70e591c7",
+          "gitBlob": "9df96292e0468c80ce9e2e3b146c7be467a7dde1"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/0160-libbacktrace-seh.patch",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/0160-libbacktrace-seh.patch",
+          "size": 819,
+          "sha256": "88c1d65e763e631ad49f9a077ed631f4acac9ef4732e2818ccddaefc883b1811",
+          "gitBlob": "7b2b5b44e3017072da765102f21da4e19c8faa79"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/gdbinit",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/gdbinit",
+          "size": 180,
+          "sha256": "bce81824fc89e5e62cca350de4c17a27e27a18a1a1ad5ca3492aec1fc5af3234",
+          "gitBlob": "5786c603704a661d158ddb4d76c8b97c9d7bdae0"
+        },
+        {
+          "name": "msys2-gcc-10.2.0-9-5d82e17a56a3216a54dbb5924b92c96284ae5c97/PKGBUILD",
+          "url": "https://raw.githubusercontent.com/msys2/MINGW-packages/5d82e17a56a3216a54dbb5924b92c96284ae5c97/mingw-w64-gcc/PKGBUILD",
+          "size": 26215,
+          "sha256": "8416a0f0bd4440323c1842f260000fcb1d4c0d233d6d31a0b069b0748375e8f7",
+          "gitBlob": "2a06844b974feeb402d18a0db70f7fb60a32e640"
+        }
+      ],
+      "sourceNotices": [
+        {
+          "archive": "fltk-1.3.11-source.tar.gz",
+          "entry": "fltk-1.3.11/COPYING",
+          "name": "fltk-1.3.11-LICENSE.txt",
+          "size": 27200,
+          "sha256": "57dd381e713fb309fb7dd85c3c38b274557ecb333475d0f1d65a5f06ad85c9a6"
+        },
+        {
+          "archive": "fltk-1.3.11-source.tar.gz",
+          "entry": "fltk-1.3.11/CREDITS",
+          "name": "fltk-1.3.11-CREDITS.txt",
+          "size": 1477,
+          "sha256": "d3889d90a21bab28edfb4f694b49af667167d3525baa868f7ca00868351d877f"
+        },
+        {
+          "archive": "petsc-3.15.0.tar.gz",
+          "entry": "petsc-3.15.0/LICENSE",
+          "name": "petsc-3.15.0-LICENSE.txt",
+          "size": 1525,
+          "sha256": "025a087c586f27a96891472934df6e17f151d66ec22ac03d877b28d2aa14d3b5"
+        },
+        {
+          "archive": "med-4.1.0.tar.gz",
+          "entry": "med-4.1.0/COPYING",
+          "name": "med-4.1.0-COPYING.txt",
+          "size": 35147,
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+        },
+        {
+          "archive": "med-4.1.0.tar.gz",
+          "entry": "med-4.1.0/COPYING.LESSER",
+          "name": "med-4.1.0-COPYING.LESSER.txt",
+          "size": 7637,
+          "sha256": "9ccf26cfe845e0eb8bb58053e47366e7ab6b697ae010f7650978d4b71b7d1fc1"
+        },
+        {
+          "archive": "med-4.1.0.tar.gz",
+          "entry": "med-4.1.0/AUTHORS",
+          "name": "med-4.1.0-AUTHORS.txt",
+          "size": 89,
+          "sha256": "ccd2c9ed19aec61cbe4a5da2a3b4e7121abca8706b8a337fbe78d8decd83f021"
+        }
+      ]
+    },
+    "darwin-arm64": {
+      "origin": "github-release",
+      "executables": {
+        "gmsh": "gmsh/bin/gmsh",
+        "elmerGrid": "elmer/bin/ElmerGrid",
+        "elmer": "elmer/bin/ElmerSolver"
+      },
+      "archive": {
+        "tag": "solvers-thermal-1-darwin-arm64-1",
+        "name": "thermal-1-darwin-arm64-1.tar.gz",
+        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-thermal-1-darwin-arm64-1/thermal-1-darwin-arm64-1.tar.gz",
+        "size": 43880655,
+        "sha256": "8ae32d18a566b640a7e7b5cb919f5fbfc5d997ca7c849598e7b124d79ffa150c"
+      },
+      "files": {
+        "gmsh/CREDITS.txt": "533ee9363d1bb9522812de1a68655f17752b75577414245c9ba4ca1d80bcebf1",
+        "gmsh/LICENSE.txt": "32085d8c954e2e22dc667c089f360049e8f1af955f946fb0a18f29d70390276a",
+        "gmsh/bin/gmsh": "b658523efcd1a04a667914c1beaf08c9ec4e9a4e182bdcf6f57c7beecea1542e",
+        "gmsh/lib/libgmsh.4.15.dylib": "6646790a542b807f1f7c94fb996bc657fed0c7b7581e145ca32e6d5911e31c37",
+        "elmer/bin/ElmerGrid": "81cafcb8e7c91d6dc39961bbc7f4ab672980798a4fc158771f3c9d5ba151f8bb",
+        "elmer/bin/ElmerSolver": "67eadf14abe9f9212e8fc04a2ce3acfc29e7de6753ecc478391d7bf4c93a6ea8",
+        "elmer/lib/libarpack.dylib": "4e08555b5466a61d5b47a24a4d91696998397e7fa645bc8b0cdc241306003a9a",
+        "elmer/lib/libelmersolver.dylib": "de098432e7be4e970ad393d9be69f576d55b744ed38497da2deb3daadfab3747",
+        "elmer/lib/libfhuti.dylib": "d28bd1e9e4fa2c8169d762216ec866aaf57d0dc0cb61e56c4022c6e5bd78cd94",
+        "elmer/lib/libgcc_s.1.1.dylib": "c6cd5e62fb8aadc5b3669183933ced7abda31130982da8ec8b4e65fc07a308f6",
+        "elmer/lib/libgfortran.5.dylib": "836489ab96390040c2c4857874badb436053d753c784627a6001e58f43bf4a03",
+        "elmer/lib/libmatc.dylib": "fa88549d2a017a0aa113cbda8e44cc32c52132681cd996ce6ce1f846a687fca4",
+        "elmer/lib/libmpi_stubs.dylib": "90b60800c979611cf1804a48b072fd39b35cf9b330a742ebbba4afcddd5de729",
+        "elmer/lib/libopenblas.0.dylib": "e911bf90e48b368c6c1df1abfd948db3689527c3f6f8edf7ad309ad66c29e539",
+        "elmer/lib/libquadmath.0.dylib": "f570146ce5706fb3ec4c8acd3ce271c7c9ffb77b0abb28286ca060ee83e8815b",
+        "elmer/licenses/OpenBLAS/LICENSE": "190b5a9c8d9723fe958ad33916bd7346d96fab3c5ea90832bb02d854f620fcff",
+        "elmer/licenses/gcc/COPYING": "231f7edcc7352d7734a96eef0b8030f77982678c516876fcb81e25b32d68564c",
+        "elmer/licenses/gcc/COPYING.LIB": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
+        "elmer/licenses/gcc/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+        "elmer/share/elmersolver/lib/HeatSolve.dylib": "306c557e0c2707b88203467ac7dc2536ecd4b182386be6e7799db8597a458f71",
+        "elmer/share/elmersolver/lib/ResultOutputSolve.dylib": "177aaa4689bb4db6f391372ac1987c05de360aa12d84d1e6a4cbb84d08a76d71",
+        "elmer/share/elmersolver/lib/SOLVER.KEYWORDS": "a3940f36400a23e32a24466ba195eb2ca9200c57c5ebde288ccd8ed44db1f277",
+        "elmer/share/elmersolver/lib/elements.def": "fd7797060c26856026a246dc986c3a8e1e0b56e9de0843b99c81f1176609edbd",
+        "elmer/share/elmersolver/license_texts/GPL-2.txt": "32b1062f7da84967e7019d01ab805935caa7ab7321a7ced0e30ebe75e5df1670",
+        "elmer/share/elmersolver/license_texts/LGPL-2.1.txt": "dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551",
+        "elmer/share/elmersolver/license_texts/LICENSES": "1b6dd02c460368851deb733b83b2a6df639d61a260b73f567ca0b8e6e74d72b4",
+        "elmer/share/elmersolver/license_texts/fem/LICENSES": "c513619e013cce2c533ffabb4d294a55a7a025dc2e82eccb6566929a9204675c"
+      }
+    }
+  }
 }

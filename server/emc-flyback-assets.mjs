@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import manifest from '../resources/example-catalog/emc-flyback-assets.json' with { type: 'json' };
+import analyticalPin from '../resources/example-catalog/footprints/emc-flyback/manifest.json' with { type: 'json' };
 import {
   parseSExpr,
   children,
@@ -13,6 +14,7 @@ import {
   modelReferenceKey,
   resolveExampleModelRelative,
 } from './library-format.mjs';
+import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
 
 const root = fileURLToPath(
   new URL('../resources/example-catalog/sources/emc-flyback/', import.meta.url),
@@ -26,15 +28,18 @@ const kicadLicenseRoot = fileURLToPath(
 const prefix = '${KIPRJMOD}/models/';
 const models = new Map(Object.entries(manifest.models));
 const footprints = new Map(manifest.footprints.map((entry) => [entry.id, entry]));
-const supplementalLicenses =
-  manifest.supplementalLicenses === undefined ? [] : manifest.supplementalLicenses;
-const legacyMissingModels = new Set([
-  'emc-flyback-demo/Bourns_SRN8040TA.step',
-  'emc-flyback-demo/WE_750311591_EFD25-SMD_070-4476.step',
-  'emc-flyback-demo/WE-CMB_744822222.step',
-]);
+const supplementalLicenses = manifest.supplementalLicenses;
+function catalogRoot(entry) {
+  return entry.supplemental === true || entry.analytical === true ? supplementalRoot : root;
+}
+function analyticalReplacement(filename) {
+  if (!analyticalPin.analyticalModels || Array.isArray(analyticalPin.analyticalModels))
+    throw new Error('Invalid pinned EMC Flyback analytical models.');
+  for (const [relative, entry] of Object.entries(analyticalPin.analyticalModels))
+    if (entry.replaces === filename) return { relative, entry };
+  return null;
+}
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
-const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
 
 if (
   manifest.version !== 1 ||
@@ -62,20 +67,21 @@ if (
   [...models].some(
     ([relative, entry]) =>
       !/^emc-flyback-demo\/[\w.()+-]+\.step$/i.test(relative) ||
-      (entry.missing === true
-        ? !legacyMissingModels.has(relative) || Object.keys(entry).some((key) => key !== 'missing')
-        : entry.missing !== undefined ||
-          (entry.supplemental !== undefined && entry.supplemental !== true) ||
-          (entry.supplemental && entry.file !== `models/${relative.split('/').at(-1)}`) ||
-          !/^[a-f0-9]{64}$/.test(entry.sha256) ||
-          !Number.isSafeInteger(entry.size) ||
-          entry.size < 1 ||
-          entry.size > 30000000),
+      entry.missing !== undefined ||
+      (entry.supplemental !== undefined && entry.supplemental !== true) ||
+      (entry.analytical !== undefined && entry.analytical !== true) ||
+      (entry.supplemental === true && entry.analytical === true) ||
+      ((entry.supplemental === true || entry.analytical === true) &&
+        entry.file !== `models/${relative.split('/').at(-1)}`) ||
+      !/^[a-f0-9]{64}$/.test(entry.sha256) ||
+      !Number.isSafeInteger(entry.size) ||
+      entry.size < 1 ||
+      entry.size > 30000000,
   )
 )
   throw new Error('Invalid pinned EMC Flyback asset manifest. Repair the OpenPE installation.');
 
-async function readAsset(entry, assetRoot = entry.supplemental ? supplementalRoot : root) {
+async function readAsset(entry, assetRoot = catalogRoot(entry)) {
   const missing = (error) => {
     if (error.code !== 'ENOENT') throw error;
     throw new Error(
@@ -89,16 +95,23 @@ async function readAsset(entry, assetRoot = entry.supplemental ? supplementalRoo
     segments.some((part) => !part || part === '..' || part === '.' || part.includes('\\'))
   )
     throw new Error('Invalid pinned EMC Flyback asset path.');
+  const rooted = await canonicalDirectory(assetRoot, {
+    message: 'Pinned EMC Flyback assets must not use linked paths.',
+  }).catch((error) => {
+    if (error.code === 'ENOENT') missing(error);
+    throw error;
+  });
   let target = assetRoot;
   for (const segment of segments) {
     target = path.join(target, segment);
     const info = await lstat(target).catch(missing);
-    if (
-      info.isSymbolicLink() ||
-      normalize(await realpath(target)) !== normalize(path.resolve(target))
-    )
+    if (info.isSymbolicLink())
       throw new Error('Pinned EMC Flyback assets must not use linked paths.');
   }
+  await assertContainedPath(rooted, target, {
+    message: 'Pinned EMC Flyback assets must not use linked paths.',
+    kind: 'file',
+  });
   const info = await lstat(target).catch(missing);
   if (!info.isFile() || info.size > 30000000)
     throw new Error('Invalid pinned EMC Flyback asset file.');
@@ -114,14 +127,17 @@ export async function verifyEmcFlybackAssets(
   assetRoot = root,
   manufacturerRoot = supplementalRoot,
 ) {
-  const entries = [...models.values()].filter((entry) => !entry.missing);
+  const entries = [...models.values()];
   entries.push(
     ...manifest.footprints.filter((entry) => entry.file),
     ...manifest.mechanicalSources,
     ...manifest.licenses,
   );
   for (const entry of entries)
-    await readAsset(entry, entry.supplemental ? manufacturerRoot : assetRoot);
+    await readAsset(
+      entry,
+      entry.supplemental || entry.analytical ? manufacturerRoot : assetRoot,
+    );
   for (const entry of supplementalLicenses) await readAsset(entry, manufacturerRoot);
   await readAsset(manifest.kicadLicense, kicadLicenseRoot);
   return entries.length + supplementalLicenses.length + 1;
@@ -144,13 +160,29 @@ export async function emcFootprintDetail(id) {
   if (!entry?.file) return null;
   const footprint = parseSExpr((await readAsset(entry)).toString('utf8'));
   const visit = (node) => {
-    if (node[0] === 'model')
+    if (node[0] === 'model') {
+      const prefix = '${KIPRJMOD}/EMC_Demo.3dshapes/';
+      const original = val(node);
+      if (!original.startsWith(prefix)) throw new Error('Unexpected EMC footprint model.');
+      const name = original.slice(prefix.length);
+      const replacement = analyticalReplacement(name);
       node[1] = quote(
         '${KIPRJMOD}/' +
-          exampleModelPath(
-            'emc-flyback-demo/' + val(node).slice('${KIPRJMOD}/EMC_Demo.3dshapes/'.length),
-          ),
+          exampleModelPath(replacement ? replacement.relative : `emc-flyback-demo/${name}`),
       );
+      if (replacement)
+        for (const [key, values] of [
+          ['offset', replacement.entry.offset],
+          ['scale', replacement.entry.scale],
+          ['rotate', replacement.entry.rotate],
+        ]) {
+          const xyz = child(child(node, key), 'xyz');
+          if (!xyz || xyz.length !== 4) throw new Error(`EMC model ${name} is missing ${key}.`);
+          values.forEach((value, index) => {
+            xyz[index + 1] = String(value);
+          });
+        }
+    }
     if (node[0] === 'version') node[1] = '20260206';
     if (node[0] === 'tstamp') node[0] = 'uuid';
     for (const value of node) if (Array.isArray(value)) visit(value);
@@ -207,7 +239,6 @@ export async function emcProjectAssets(project) {
         continue;
       const relative = resolveExampleModelRelative([...models.keys()], model.path);
       const pinned = models.get(relative);
-      if (pinned?.missing === true && legacyMissingModels.has(relative)) continue;
       if (!pinned || pinned.missing)
         throw new Error(`Missing pinned EMC Flyback model: ${relative}`);
       selected.set(model.path.slice('${KIPRJMOD}/'.length), relative);
@@ -246,24 +277,11 @@ export async function emcProjectAssets(project) {
     file: 'licenses/emc-flyback-demo/KICAD-LICENSE.md',
     bytes: await readAsset(manifest.kicadLicense, kicadLicenseRoot),
   });
-  const noticeHeader =
-    'EMC Flyback demonstration, pinned from ChengminLi/AI-PCB-layout.\nSource commit: e1b9a64ac9ac306647fa30094932fb792d17e373\nSource: https://github.com/ChengminLi/AI-PCB-layout/tree/main/examples/emc-flyback-demo\nOriginal STEP bytes are copied without substitution. Project models use CC BY 4.0; copied KiCad models use CC BY-SA 4.0 with the KiCad library exception. See LICENSE and MODEL-SOURCES.md.\n';
   const notice =
-    noticeHeader +
-    ([...models.values()].some((entry) => entry.missing)
-      ? `${[...models.values()].filter((entry) => entry.missing).length} unavailable manufacturer STEP references remain in the native project.\n`
-      : 'The original manufacturer model references resolve to separately pinned official STEP bytes. Their sources and terms accompany copied manufacturer assets in manufacturer/.\n');
+    'EMC Flyback demonstration, pinned from ChengminLi/AI-PCB-layout.\nSource commit: e1b9a64ac9ac306647fa30094932fb792d17e373\nSource: https://github.com/ChengminLi/AI-PCB-layout/tree/main/examples/emc-flyback-demo\nUpstream STEP bytes are copied unchanged. L2 and T1 are OpenPE analytical bodies L_8040_Shielded.step and T_EFD25_SMD.step; no third-party license applies to those two files. Project models use CC BY 4.0. Copied KiCad library models use CC BY-SA 4.0 with the KiCad library exception. See LICENSE, MODEL-SOURCES.md and KICAD-LICENSE.md.\nThe remaining manufacturer reference is the marked WE-CMB derivative. Its terms accompany that model in manufacturer/.\n';
   assets.push({
     file: 'licenses/emc-flyback-demo/NOTICE.txt',
     bytes: Buffer.from(notice),
-    // Only this exact app-generated predecessor may be refreshed. Edited
-    // notices, licenses and model bytes retain the destination conflict guard.
-    previousBytes: [
-      Buffer.from(
-        noticeHeader +
-          'The three unavailable manufacturer STEP references remain in the native project.\n',
-      ),
-    ],
   });
   return assets;
 }

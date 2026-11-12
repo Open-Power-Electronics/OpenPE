@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeImage, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeImage, net, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { sourceRoots } = require('../resources/example-catalog/home-manifest.json');
@@ -13,6 +13,7 @@ const { registerWorkspaceRecovery } = require('./workspace-recovery.cjs');
 const { registerProjectDirectory } = require('./project-directory.cjs');
 const { registerComponentModelPicker } = require('./component-model-picker.cjs');
 const { registerSpiceModelPicker } = require('./spice-model-picker.cjs');
+const { createCursorCredentialStore, registerCursorCredential } = require('./cursor-credential.cjs');
 const fileGrants = new FileGrants();
 let win,
   service,
@@ -24,6 +25,55 @@ const inTest = process.env.OPENPE_TEST === '1';
 // Set the application data root before Electron applies the product display name.
 app.setPath('userData', process.env.OPENPE_DATA_DIR || path.join(app.getPath('appData'), 'OpenPE'));
 app.setName('OpenPE');
+function desktopWindowChrome() {
+  if (process.platform === 'win32')
+    return {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: '#202020', symbolColor: '#fafafa', height: 30 },
+    };
+  if (process.platform === 'darwin')
+    return {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 12, y: 8 },
+    };
+  throw new Error(`Unsupported desktop platform ${process.platform}.`);
+}
+function installDesktopMenu() {
+  if (process.platform === 'win32') {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+  if (process.platform !== 'darwin')
+    throw new Error(`Unsupported desktop platform ${process.platform}.`);
+  // Edit roles keep text-field editing. Renderer command shortcuts use the same
+  // keys when the event reaches the page; Quit uses the window close review.
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit' },
+        ],
+      },
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' },
+        ],
+      },
+    ]),
+  );
+}
 function trusted(event) {
   if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame)
     throw new Error('Unauthorized window.');
@@ -71,6 +121,10 @@ app.whenReady().then(async () => {
   history = new ProjectHistory(app.getPath('userData'), fileGrants);
   const exampleProjects = new ExampleProjects(examplesRoot, fileGrants, history, projectRoot);
   const recentProjects = new RecentProjects(app.getPath('userData'), atomicWrite);
+  const cursorCredentials = createCursorCredentialStore({
+    directory: app.getPath('userData'),
+    safeStorage,
+  });
   let examplePreparation;
   // Example opens join one bounded preparation before granting a file.
   // Home performs no example Git/model checks.
@@ -105,6 +159,7 @@ app.whenReady().then(async () => {
       forProject: (fileId) =>
         fileGrants.get(fileId) ? createProjectThermalStore(() => fileGrants.get(fileId)) : null,
     },
+    cursorCredential: { read: () => cursorCredentials.read() },
   });
   win = new BrowserWindow({
     width: 1480,
@@ -113,12 +168,7 @@ app.whenReady().then(async () => {
     minHeight: 740,
     title: 'OpenPE · Electrical Engineering Studio',
     icon: path.join(__dirname, '../out/brand/openpe-window.ico'),
-    ...(process.platform === 'win32'
-      ? {
-          titleBarStyle: 'hidden',
-          titleBarOverlay: { color: '#202020', symbolColor: '#fafafa', height: 30 },
-        }
-      : {}),
+    ...desktopWindowChrome(),
     backgroundColor: '#ffffff',
     show: !inTest,
     autoHideMenuBar: true,
@@ -130,11 +180,12 @@ app.whenReady().then(async () => {
       backgroundThrottling: !inTest,
     },
   });
-  Menu.setApplicationMenu(null);
+  installDesktopMenu();
   ipcMain.handle('openpe:connection', (event) => {
     trusted(event);
     return { base: service.base, token: service.token };
   });
+  registerCursorCredential({ ipcMain, authorize: trusted, store: cursorCredentials });
   registerWorkspaceRecovery({
     ipcMain,
     authorize: trusted,
@@ -430,8 +481,10 @@ app.whenReady().then(async () => {
   });
   await win.loadURL(url);
 });
+// One window owns the service, grants and history. The traffic-light close and
+// Command+Q both reach this window's close review; the last window then quits
+// so a windowless process is not left running.
 app.on('window-all-closed', () => app.quit());
-// before-quit may be cancelled by the renderer's unsaved-changes dialog.
 app.on('will-quit', () => {
   history?.close();
   service?.close();

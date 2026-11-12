@@ -75,6 +75,7 @@ test('desktop Recent uses accepted native files, reactivates grants and rejects 
     './project-directory.cjs': { registerProjectDirectory: () => ({ clear() {}, release() {} }) },
     './component-model-picker.cjs': { registerComponentModelPicker() {} },
     './spice-model-picker.cjs': { registerSpiceModelPicker() {} },
+    './cursor-credential.cjs': require('../electron/cursor-credential.cjs'),
   };
   const modules: Record<string, unknown> = {
     '../server/index.mjs': { startServer: async () => ({ base: 'http://127.0.0.1:12345' }) },

@@ -1,6 +1,7 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { createComponentModelStore } from '../server/component-models.mjs';
 const data = Buffer.from('ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n');
@@ -78,4 +79,34 @@ test('component model selection rejects parser failures, binary files and linked
     throw error;
   }
   await assert.rejects(store.importFile(link, new AbortController().signal), /without links/);
+});
+
+test('component model import allows a /var ancestor and rejects a replaced directory', async (t) => {
+  const storeDir = await mkdtemp(path.join(os.tmpdir(), 'openpe-model-store-'));
+  t.after(() => rm(storeDir, { recursive: true, force: true }));
+  const file = path.join(storeDir, 'part.step');
+  await writeFile(file, data);
+  if (process.platform === 'darwin') {
+    const canonical = await realpath(file);
+    assert.notEqual(path.resolve(file), canonical);
+    assert.match(path.resolve(file), /^\/var\//);
+    assert.match(canonical, /^\/private\/var\//);
+  }
+  const store = createComponentModelStore(path.join(storeDir, 'private'), async () => ({ meshes: [] }));
+  const selected = await store.importFile(file, new AbortController().signal);
+  assert.match(selected.path, /^\$\{KIPRJMOD\}\/models\/[a-f0-9]{64}\.step$/);
+  const real = path.join(storeDir, 'real');
+  await mkdir(real);
+  await writeFile(path.join(real, 'linked.step'), data);
+  const link = path.join(storeDir, 'link');
+  try {
+    await symlink(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (['EPERM', 'EACCES'].includes((error as NodeJS.ErrnoException).code!)) return;
+    throw error;
+  }
+  await assert.rejects(
+    store.importFile(path.join(link, 'linked.step'), new AbortController().signal),
+    /without links/,
+  );
 });

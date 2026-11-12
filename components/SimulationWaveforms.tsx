@@ -52,6 +52,7 @@ import {
   type WaveformView,
   type WaveformHistory,
 } from '@/lib/waveform-view';
+import { isCommandModifier } from '@/lib/command-modifier';
 const formatted = (v: number) => Number(v.toPrecision(5)).toString();
 type CursorPair = [number | null, number | null];
 
@@ -372,7 +373,7 @@ function Waveform({
     const svg = svgRef.current;
     if (!svg) return;
     const wheel = (event: WheelEvent) => {
-      if (!active || !event.ctrlKey || drag.current || zoom.current || pan.current) return;
+      if (!active || !isCommandModifier(event) || drag.current || zoom.current || pan.current) return;
       event.preventDefault();
       event.stopPropagation();
       const anchor = Math.max(
@@ -1156,7 +1157,7 @@ export default function SimulationWaveforms({
                         key={trace.vector}
                         onKeyDown={(event) => {
                           if (
-                            (event.ctrlKey || event.metaKey) &&
+                            (isCommandModifier(event)) &&
                             ['z', 'y'].includes(event.key.toLowerCase())
                           ) {
                             event.preventDefault();

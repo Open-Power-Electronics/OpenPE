@@ -219,11 +219,15 @@ test('authenticated Agent routes dispatch only catalog IDs to the selected provi
 
 test('chat admission preserves every provider-native effort and rejects foreign or invalid values', async () => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'openpe-agent-efforts-'));
-  const calls: { provider: string; effort: unknown }[] = [];
+  const calls: { provider: string; effort: unknown; parameters?: unknown }[] = [];
   const service = await startServer({
     dataDir,
     agentRunner: async (provider, request) => {
-      calls.push({ provider, effort: request.effort });
+      calls.push({
+        provider,
+        effort: request.effort,
+        ...(request.parameters ? { parameters: request.parameters } : {}),
+      });
       return { outcome: 'completed' };
     },
   });
@@ -251,6 +255,35 @@ test('chat admission preserves every provider-native effort and rejects foreign 
         if (accepted) assert.deepEqual(calls.at(-1), { provider, effort });
       }
     }
+    const parameters = [{ id: 'context', value: '500k' }];
+    for (const [provider, body, status] of [
+      ['cursor', { parameters }, 200],
+      ['cursor', { parameters: [{ id: 'context', value: '500k', extra: true }] }, 400],
+      ['cursor', { parameters: [] }, 400],
+      ['codex', { parameters }, 400],
+    ] as const) {
+      const before = calls.length;
+      const response = await fetch(`${service.base}/api/chat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          provider,
+          prompt: 'Fixture',
+          context: {},
+          history: [],
+          sessionId: 'parameter-admission',
+          ...body,
+        }),
+      });
+      assert.equal(response.status, status, `${provider} parameters`);
+      await response.text();
+      assert.equal(calls.length, before + Number(status === 200));
+    }
+    assert.deepEqual(calls.at(-1), {
+      provider: 'cursor',
+      effort: undefined,
+      parameters,
+    });
   } finally {
     service.close();
     await rm(dataDir, { recursive: true, force: true });

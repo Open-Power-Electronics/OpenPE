@@ -64,6 +64,8 @@ test('production build verifies solvers concurrently and checks architecture aft
   const result = runBuild({ spawnProcess: build.spawnProcess, output: build.sink });
   await build.finish('build-format.mjs');
   await build.finish('check-architecture.mjs');
+  await build.finish('prepare-emc-analytical-models.ts');
+  await build.finish('download-manufacturer-models.mjs');
   await build.finish('download-example-models.ts');
   await build.finish('prepare-ngspice.mjs');
   await build.finish('prepare-default-examples.ts');
@@ -111,6 +113,8 @@ for (const failing of [
     if (failing !== 'build-format.mjs')
       for (const step of [
         'check-architecture.mjs',
+        'prepare-emc-analytical-models.ts',
+        'download-manufacturer-models.mjs',
         'download-example-models.ts',
         'prepare-default-examples.ts',
       ])
@@ -119,6 +123,8 @@ for (const failing of [
     assert.ok(!build.events.includes('start next'));
     if (failing === 'build-format.mjs') {
       assert.ok(!build.events.includes('start check-architecture.mjs'));
+      assert.ok(!build.events.includes('start prepare-emc-analytical-models.ts'));
+      assert.ok(!build.events.includes('start download-manufacturer-models.mjs'));
       assert.ok(!build.events.includes('start download-example-models.ts'));
     }
     assert.equal(build.pending.size, 0);
@@ -132,6 +138,8 @@ test('example preparation runs only formats and Home projects', async () => {
     output: build.sink,
   });
   await build.finish('build-format.mjs');
+  await build.finish('prepare-emc-analytical-models.ts');
+  await build.finish('download-manufacturer-models.mjs');
   await build.finish('download-example-models.ts');
   await build.finish('prepare-default-examples.ts');
   assert.equal(await result, 0);
@@ -139,6 +147,8 @@ test('example preparation runs only formats and Home projects', async () => {
     build.events.filter((event) => event.startsWith('start')),
     [
       'start build-format.mjs',
+      'start prepare-emc-analytical-models.ts',
+      'start download-manufacturer-models.mjs',
       'start download-example-models.ts',
       'start prepare-default-examples.ts',
     ],

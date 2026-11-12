@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
-import { lstat, open, realpath } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
+import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
 import { Worker } from 'node:worker_threads';
 import { datasheetRecord } from './datasheet-format.mjs';
-
-const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
 
 function verify(bytes, record) {
   const expected = record.datasheet;
@@ -31,10 +30,16 @@ async function localPdf(file, record) {
     !before.isFile() ||
     before.isSymbolicLink() ||
     before.nlink !== 1 ||
-    before.size !== record.datasheet.bytes ||
-    normalize(await realpath(file)) !== normalize(path.resolve(file))
+    before.size !== record.datasheet.bytes
   )
     throw new Error('The local datasheet must be the reviewed regular PDF without links.');
+  const rooted = await canonicalDirectory(path.dirname(file), {
+    message: 'The local datasheet must be the reviewed regular PDF without links.',
+  });
+  await assertContainedPath(rooted, file, {
+    message: 'The local datasheet must be the reviewed regular PDF without links.',
+    kind: 'file',
+  });
   const handle = await open(file, 'r');
   try {
     const bytes = Buffer.alloc(before.size + 1);

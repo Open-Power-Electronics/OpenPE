@@ -24,7 +24,11 @@ declare global {
   interface Window {
     openpe?: {
       readonly titleBarOverlay: boolean;
+      readonly titleBarInset: boolean;
       connection(): Promise<{ base: string; token: string }>;
+      cursorCredentialStatus(): Promise<{ configured: boolean; suffix?: string }>;
+      cursorCredentialStore(key: string): Promise<{ configured: boolean; suffix?: string }>;
+      cursorCredentialRemove(): Promise<{ configured: false }>;
       writeWorkspaceRecovery(content: string | null): Promise<void>;
       open(): Promise<
         | { source: string; name: string; native: boolean; openId: number }

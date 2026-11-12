@@ -5761,12 +5761,12 @@
         "schematic": {
           "path": "tests/fixtures/reference-retired/upstream/lt1054-pdip8-pump/input.kicad_sch",
           "upstreamPath": "data/val/lt1054_pdip8_pump/input.kicad_sch",
-          "sha256": "580ded2059808e2746578753f230c7c4766ffab7ac560869954bf80dd1dfdf4a"
+          "sha256": "d5d8652f7a54d537fccfe09cd6988f80e8fe30b43ccf3aebdae94c98c8baeeb4"
         },
         "pcb": {
           "path": "tests/fixtures/reference-retired/upstream/lt1054-pdip8-pump/expert.kicad_pcb",
           "upstreamPath": "data/val/lt1054_pdip8_pump/expert.kicad_pcb",
-          "sha256": "f6304d112a34a98078a85a0416445dd3eaa1e7423ae362be429c434711f47184"
+          "sha256": "b2f2d73e76551e2e21e7a677c588862269a072397c89701bf9aad69a6cda4678"
         }
       },
       "topology": "Charge pump",

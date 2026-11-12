@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 export default function EditorDisplayDrawer({
   label,
@@ -73,7 +74,7 @@ export default function EditorDisplayDrawer({
         const isComposing =
           composing.current || event.nativeEvent.isComposing || event.keyCode === 229;
         const saveShortcut =
-          (event.ctrlKey || event.metaKey) &&
+          (isCommandModifier(event)) &&
           event.key.toLowerCase() === 's' &&
           !event.defaultPrevented &&
           !isComposing;

@@ -128,13 +128,22 @@ geometry; network failures remain retryable. Custom unsupported pad previews
 report limits rather than inventing geometry.
 
 The reference examples bundle 46 hash-verified STEP files and the source-extracted WE-DD-7345straight
-footprint under `resources/example-catalog/footprints/`. The subset contains 42 official KiCad 10 models and four pinned source models absent from that release. The custom footprint retains the LM25017 expert board's local pad geometry. EMC separately pins 31 files (29 current component models and two static enclosure source models outside the footprint catalog) in
-`resources/example-catalog/emc-flyback-assets.json`: 28 upstream and three
-[manufacturer supplements](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md).
-T1/L2 retain original official bytes; L1 has a marked reproducible rigid
-assembly-frame alignment, retaining topology/colours. The 29 component models
-serve 83 EMC instances. Five mounting holes have no separate component model.
-Preparation verifies fixed hashes and notices. Example previews never download. Build preparation, native
+footprint under `resources/example-catalog/footprints/`. The subset contains 42 official KiCad 10 models and four pinned source models absent from that release. The custom footprint retains the LM25017 expert board's local pad geometry. EMC separately pins 31 files in
+`resources/example-catalog/emc-flyback-assets.json`: 26 upstream component
+models, two OpenPE analytical bodies, one manufacturer supplement, and
+two static enclosure source models outside the footprint catalog. See
+[MODEL-SOURCES](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md).
+L2 and T1 are `L_8040_Shielded.step` and `T_EFD25_SMD.step`. Their bytes are
+OpenPE analytical solids, so no third-party license applies to them. L1 has a marked reproducible rigid assembly-frame
+alignment, retaining topology/colours. The 29 component models serve 83 EMC
+instances. Five mounting holes have no separate component model. Preparation
+verifies fixed hashes and notices. `npm run examples:prepare` first runs
+`scripts/prepare-emc-analytical-models.ts`, which generates only those two
+OpenPE bodies when they are missing and rejects a different existing file, then
+`scripts/download-manufacturer-models.mjs`, which fetches only the WE-CMB
+manifest URL, follows redirects solely to that entry's `approvedHosts`, and
+rejects every other host. The WE-CMB file stored for the project is the pinned
+derivative, not the raw download. Example previews never download. Build preparation, native
 Save and PCB export copy required model files beside the destination using
 `${KIPRJMOD}/models/<model>.step`. LM25017 and EMC custom libraries/tables are
 native Source files under `footprints/<stem>.pretty/` and `symbols/<stem>.kicad_sym`,
@@ -182,6 +191,13 @@ attribution/share-alike obligations. OpenPE is not endorsed by KiCad.
 About OpenPE displays packaged `public/licenses/` notices. Three.js uses MIT;
 `occt-import-js` uses LGPL-2.1, and Open Cascade has its LGPL-2.1 exception.
 OpenPE permits modification and reverse engineering needed to debug changes.
+Bundled ngspice, Gmsh, Elmer and OpenBLAS notices are `public/licenses/ngspice.txt`
+and `public/licenses/thermal.txt`. Their locks are per platform (`win32-x64`,
+`darwin-arm64`). Windows preparation downloads the official archives. macOS
+preparation downloads the pinned GitHub release archives and does not compile.
+[Simulation](SIMULATION.md#portable-models-and-bundled-solver) and
+[Layout Thermal](THERMAL.md#runtime-and-lifecycle) own those downloads, the
+maintainer build and the source archives.
 
 Full datasheet pages use pinned `pdfjs-dist` 6.5.438 (Apache-2.0) and
 `@napi-rs/canvas` 1.1.0 (MIT) in a host worker. About OpenPE includes

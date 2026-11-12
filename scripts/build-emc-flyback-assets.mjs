@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseSExpr, child, children, val, exampleModelPath } from '../server/library-format.mjs';
+import { parseSExpr, child, children, val, quote, exampleModelPath } from '../server/library-format.mjs';
+import { emcAnalyticalReplacement } from './emc-flyback-analytical-models.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const root = path.join(repository, 'resources/example-catalog/sources/emc-flyback');
@@ -39,15 +40,35 @@ const descriptor = (model) => {
   if (!original.startsWith(sourcePrefix)) throw new Error('Unexpected EMC model reference.');
   const name = original.slice(sourcePrefix.length);
   if (!/^[\w().+-]+\.step$/i.test(name)) throw new Error('Unexpected EMC model reference name.');
-  const relative = `emc-flyback-demo/${name}`;
+  const replacement = emcAnalyticalReplacement(name);
+  const relative = replacement ? replacement.relative : `emc-flyback-demo/${name}`;
+  const placed = replacement ? placeAnalyticalModel(model, replacement.entry) : model;
   models[relative] ??= { missing: true };
   return {
-    path: '${KIPRJMOD}/' + exampleModelPath(relative),
-    offset: child(model, 'offset'),
-    scale: child(model, 'scale'),
-    rotate: child(model, 'rotate'),
+    path: replacement
+      ? `\${KIPRJMOD}/${replacement.entry.file}`
+      : '${KIPRJMOD}/' + exampleModelPath(relative),
+    offset: child(placed, 'offset'),
+    scale: child(placed, 'scale'),
+    rotate: child(placed, 'rotate'),
   };
 };
+function placeAnalyticalModel(model, entry) {
+  const placed = structuredClone(model);
+  placed[1] = quote(`\${KIPRJMOD}/${entry.file}`);
+  for (const [key, values] of [
+    ['offset', entry.offset],
+    ['scale', entry.scale],
+    ['rotate', entry.rotate],
+  ]) {
+    const xyz = child(child(placed, key), 'xyz');
+    if (!xyz || xyz.length !== 4) throw new Error(`EMC model ${entry.replaces} is missing ${key}.`);
+    values.forEach((value, index) => {
+      xyz[index + 1] = String(value);
+    });
+  }
+  return placed;
+}
 const board = parseSExpr(await readFile(path.join(root, 'design/emc_flyback.kicad_pcb'), 'utf8'));
 for (const footprint of children(board, 'footprint')) {
   const id = val(footprint);
@@ -88,6 +109,8 @@ if (
   supplemental.version !== 1 ||
   !supplemental.models ||
   Array.isArray(supplemental.models) ||
+  !supplemental.analyticalModels ||
+  Array.isArray(supplemental.analyticalModels) ||
   !Array.isArray(supplemental.licenses) ||
   !supplemental.licenses.length
 )
@@ -141,6 +164,35 @@ for (const [relative, entry] of Object.entries(supplemental.models)) {
   )
     throw new Error(`Invalid EMC manufacturer STEP content: ${entry.file}`);
   models[relative] = { ...entry, supplemental: true };
+}
+for (const [relative, entry] of Object.entries(supplemental.analyticalModels)) {
+  if (
+    !models[relative]?.missing ||
+    entry.file !== `models/${relative.split('/').at(-1)}` ||
+    !/^[\w().+-]+\.step$/i.test(entry.replaces) ||
+    !Array.isArray(entry.offset) ||
+    entry.offset.length !== 3 ||
+    !Array.isArray(entry.rotate) ||
+    entry.rotate.length !== 3 ||
+    !Array.isArray(entry.scale) ||
+    entry.scale.length !== 3 ||
+    !Number.isSafeInteger(entry.size) ||
+    entry.size < 1 ||
+    entry.size > 30000000
+  )
+    throw new Error(`Invalid EMC analytical model: ${relative}`);
+  const bytes = await verifiedSupplement(entry);
+  if (
+    !bytes.subarray(0, 100).toString('ascii').trimStart().startsWith('ISO-10303-21;') ||
+    !bytes.subarray(-100).toString('ascii').trimEnd().endsWith('END-ISO-10303-21;')
+  )
+    throw new Error(`Invalid EMC analytical STEP content: ${entry.file}`);
+  models[relative] = {
+    file: entry.file,
+    sha256: entry.sha256,
+    size: entry.size,
+    analytical: true,
+  };
 }
 const missing = Object.entries(models).filter(([, entry]) => entry.missing);
 if (missing.length)

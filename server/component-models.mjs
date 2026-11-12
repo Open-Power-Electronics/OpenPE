@@ -2,8 +2,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { lstat, realpath, readFile, mkdir, open } from 'node:fs/promises';
 import { atomicWrite } from './atomic-write.mjs';
+import { logicalSuffixOfCanonical } from './host-path.cjs';
 import { parseProject } from './project-format.mjs';
-const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const local = /^\$\{KIPRJMOD\}\/models\/([a-f0-9]{64})\.step$/;
 const relative = /^\$\{KIPRJMOD\}\/((?:[\w .()+,-]+\/)*[\w .()+,-]+\.(?:step|stp))$/i;
@@ -14,7 +14,7 @@ async function bytesAt(file) {
     before.isSymbolicLink() ||
     before.nlink > 1 ||
     before.size > 32 * 1024 * 1024 ||
-    normalize(await realpath(file)) !== normalize(path.resolve(file))
+    !logicalSuffixOfCanonical(path.resolve(file), await realpath(file))
   )
     throw new Error('Choose a regular STEP file up to 32 MiB without links.');
   const handle = await open(file, 'r');
@@ -56,11 +56,14 @@ async function directory(file) {
       await mkdir(current);
       info = await lstat(current);
     }
-    if (
-      !info.isDirectory() ||
-      info.isSymbolicLink() ||
-      normalize(await realpath(current)) !== normalize(current)
-    )
+    const canonical = await realpath(current);
+    if (info.isSymbolicLink()) {
+      const target = await lstat(canonical);
+      if (!target.isDirectory() || !logicalSuffixOfCanonical(path.resolve(current), canonical))
+        throw new Error('Model folders cannot contain links.');
+      continue;
+    }
+    if (!info.isDirectory() || !logicalSuffixOfCanonical(path.resolve(current), canonical))
       throw new Error('Model folders cannot contain links.');
   }
 }

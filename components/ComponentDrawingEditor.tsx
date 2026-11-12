@@ -40,6 +40,7 @@ import PCBGraphic from './PCBGraphic';
 import { FootprintIcon, SymbolIcon } from './EditorIcons';
 import { drawingBounds, translateDrawingSelection } from './component-drawing-geometry';
 import styles from './ComponentDrawingEditor.module.css';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 type Tab = 'symbol' | 'footprint';
 type Tool = 'select' | 'rectangle' | 'circle' | 'line' | 'pin' | 'pad';
@@ -1009,7 +1010,7 @@ export default function ComponentDrawingEditor({
             else if (tool !== 'select') setTool('select');
             else setSelection(null);
           }
-          if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+          if ((isCommandModifier(event)) && ['z', 'y'].includes(event.key.toLowerCase())) {
             event.preventDefault();
             event.stopPropagation();
             undoDrawing(event.key.toLowerCase() === 'y' || event.shiftKey);
@@ -1373,7 +1374,7 @@ export default function ComponentDrawingEditor({
                       event.preventDefault();
                       remove();
                     }
-                    if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+                    if (isCommandModifier(event) || event.altKey || event.repeat) return;
                     if (event.key === 'Home' || event.key === ' ') {
                       event.preventDefault();
                       fit();

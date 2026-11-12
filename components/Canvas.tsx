@@ -90,6 +90,7 @@ import {
   selectableSchematicIds,
   type SchematicSelectionFilters,
 } from '@/lib/schematic-selection-filters';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 export type SchematicMoveRequest = { id: number; schematicId: string; connected: boolean };
 export type SchematicNavigationRequest = {
@@ -1578,8 +1579,8 @@ export default function Canvas({
               return;
             }
             if (['v', 'h', 'w', 'a', 'e', 'delete', 'backspace'].includes(key)) cancelGesture();
-            if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'd', 'v'].includes(key)) cancelGesture();
-            if ((e.ctrlKey || e.metaKey) && key === 'z') {
+            if ((isCommandModifier(e)) && ['a', 'c', 'd', 'v'].includes(key)) cancelGesture();
+            if ((isCommandModifier(e)) && key === 'z') {
               e.preventDefault();
               e.stopPropagation();
               cancelGesture();
@@ -1597,7 +1598,7 @@ export default function Canvas({
             return;
           }
           if (
-            (e.ctrlKey || e.metaKey) &&
+            (isCommandModifier(e)) &&
             !e.altKey &&
             key === 'z' &&
             tool === 'wire' &&
@@ -1647,7 +1648,7 @@ export default function Canvas({
             return;
           }
           if (
-            (e.ctrlKey || e.metaKey) &&
+            (isCommandModifier(e)) &&
             !e.altKey &&
             e.key.toLowerCase() === 'a' &&
             (editable || tool === 'annotate')

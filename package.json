@@ -18,9 +18,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/test.mjs",
     "test:e2e": "node scripts/e2e.mjs && node scripts/e2e-project.mjs && node scripts/e2e-sessions.mjs && node scripts/e2e-permissions.mjs && node scripts/e2e-libraries.mjs && node scripts/e2e-workspace.mjs",
-    "package": "npm run build && electron-builder --win dir",
-    "examples": "node scripts/build-emc-flyback-assets.mjs && node --import tsx scripts/build-reference-examples.ts && node --import tsx scripts/build-emc-flyback-example.ts",
-    "examples:emc-flyback": "node scripts/build-emc-flyback-assets.mjs && node --import tsx scripts/build-emc-flyback-example.ts",
+    "package": "node scripts/package-desktop.mjs",
+    "examples": "node --import tsx scripts/prepare-emc-analytical-models.ts && node scripts/build-emc-flyback-assets.mjs && node --import tsx scripts/build-reference-examples.ts && node --import tsx scripts/build-emc-flyback-example.ts",
+    "examples:emc-flyback": "node --import tsx scripts/prepare-emc-analytical-models.ts && node scripts/build-emc-flyback-assets.mjs && node --import tsx scripts/build-emc-flyback-example.ts",
     "examples:prepare": "node scripts/build.mjs --examples",
     "fixtures:generate": "node --import tsx scripts/build-kicad-examples.ts && node --import tsx scripts/examples.ts && node --import tsx scripts/build-ti-examples.ts",
     "examples:check-models": "node scripts/check-reference-models.mjs",
@@ -45,13 +45,18 @@
     "thermal:check-example": "node --import tsx scripts/check-thermal-example.ts",
     "thermal:check-emc-flyback": "node --import tsx scripts/check-emc-flyback-thermal.ts",
     "thermal:check-emc-flyback-ui": "node scripts/check-emc-flyback-thermal-ui.mjs",
-    "cad:check-model": "node --import tsx scripts/check-model-cad.ts"
+    "cad:check-model": "node --import tsx scripts/check-model-cad.ts",
+    "agent:check-cursor": "electron scripts/check-cursor-agent.cjs",
+    "solvers:build-macos": "node scripts/build-macos-solvers.mjs",
+    "solvers:publish": "node scripts/publish-solver-releases.mjs"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.3.1",
     "@napi-rs/canvas": "1.1.0",
     "express": "^5.1.0",
     "occt-import-js": "0.0.23",
-    "pdfjs-dist": "6.5.438"
+    "pdfjs-dist": "6.5.438",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -114,10 +119,93 @@
       "package.json"
     ],
     "win": {
-      "target": "dir",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/openpe.ico",
       "signAndEditExecutable": true,
-      "signExecutable": false
+      "signExecutable": false,
+      "extraResources": [
+        {
+          "from": "resources/ngspice/47",
+          "to": "ngspice/47",
+          "filter": [
+            "Spice64/bin/ngspice_con.exe",
+            "Spice64/bin/libomp140.x86_64.dll",
+            "Spice64/bin/sndfile.dll",
+            "Spice64/bin/samplerate.dll",
+            "Spice64/lib/ngspice/analog.cm",
+            "Spice64/lib/ngspice/digital.cm",
+            "Spice64/lib/ngspice/spice2poly.cm",
+            "Spice64/lib/ngspice/table.cm",
+            "Spice64/lib/ngspice/tlines.cm",
+            "Spice64/lib/ngspice/xtradev.cm",
+            "Spice64/lib/ngspice/xtraevt.cm",
+            "Spice64/docs/COPYING",
+            "Spice64/docs/AUTHORS",
+            "Spice64/share/ngspice/scripts/spinit"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/openpe.icns",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "hardenedRuntime": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extraResources": [
+        {
+          "from": "resources/ngspice/47",
+          "to": "ngspice/47",
+          "filter": [
+            "Spice64/bin/ngspice",
+            "Spice64/bin/libomp.dylib",
+            "Spice64/bin/libsndfile.1.dylib",
+            "Spice64/bin/libsamplerate.0.dylib",
+            "Spice64/lib/ngspice/analog.cm",
+            "Spice64/lib/ngspice/digital.cm",
+            "Spice64/lib/ngspice/spice2poly.cm",
+            "Spice64/lib/ngspice/table.cm",
+            "Spice64/lib/ngspice/tlines.cm",
+            "Spice64/lib/ngspice/xtradev.cm",
+            "Spice64/lib/ngspice/xtraevt.cm",
+            "Spice64/docs/COPYING",
+            "Spice64/docs/AUTHORS",
+            "Spice64/share/ngspice/scripts/spinit"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false
     },
     "extraResources": [
       {
@@ -208,20 +296,6 @@
         "from": "resources/ngspice/47",
         "to": "ngspice/47",
         "filter": [
-          "Spice64/bin/ngspice_con.exe",
-          "Spice64/bin/libomp140.x86_64.dll",
-          "Spice64/bin/sndfile.dll",
-          "Spice64/bin/samplerate.dll",
-          "Spice64/lib/ngspice/analog.cm",
-          "Spice64/lib/ngspice/digital.cm",
-          "Spice64/lib/ngspice/spice2poly.cm",
-          "Spice64/lib/ngspice/table.cm",
-          "Spice64/lib/ngspice/tlines.cm",
-          "Spice64/lib/ngspice/xtradev.cm",
-          "Spice64/lib/ngspice/xtraevt.cm",
-          "Spice64/docs/COPYING",
-          "Spice64/docs/AUTHORS",
-          "Spice64/share/ngspice/scripts/spinit",
           "manifest.json",
           "SOURCE-NOTICE.txt"
         ]
@@ -229,7 +303,9 @@
     ],
     "asarUnpack": [
       "node_modules/occt-import-js/**/*",
-      "node_modules/@napi-rs/**/*"
+      "node_modules/@napi-rs/**/*",
+      "node_modules/@cursor/sdk-darwin-arm64/**/*",
+      "node_modules/@cursor/sdk-win32-x64/**/*"
     ]
   }
 }

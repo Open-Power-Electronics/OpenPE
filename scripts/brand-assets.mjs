@@ -65,6 +65,28 @@ async function writeIcon(svg, file) {
 const windowIcon = master.replace('viewBox="0 0 64 64"', 'viewBox="4 4 56 56"');
 await writeIcon(windowIcon, 'build/openpe.ico');
 await writeIcon(windowIcon, 'public/brand/openpe-window.ico');
+const icnsTypes = [
+  [16, 'icp4'],
+  [32, 'icp5'],
+  [64, 'icp6'],
+  [128, 'ic07'],
+  [256, 'ic08'],
+  [512, 'ic09'],
+  [1024, 'ic10'],
+];
+const icnsChunks = [];
+for (const [size, type] of icnsTypes) {
+  const png = await sharp(Buffer.from(windowIcon)).resize(size, size).png().toBuffer();
+  const header = Buffer.alloc(8);
+  header.write(type, 0, 'ascii');
+  header.writeUInt32BE(png.length + 8, 4);
+  icnsChunks.push(header, png);
+}
+const icnsBody = Buffer.concat(icnsChunks);
+const icnsHeader = Buffer.alloc(8);
+icnsHeader.write('icns', 0, 'ascii');
+icnsHeader.writeUInt32BE(icnsBody.length + 8, 4);
+await writeFile(at('build/openpe.icns'), Buffer.concat([icnsHeader, icnsBody]));
 
 await mkdir(at('references'), { recursive: true });
 const actualSizes = [16, 24, 32, 48];
@@ -110,4 +132,4 @@ const titlebarPreview = `<svg xmlns="http://www.w3.org/2000/svg" width="880" hei
 </svg>
 `;
 await sharp(Buffer.from(titlebarPreview)).png().toFile(at('references/openpe-titlebar-preview.png'));
-console.log('Generated OpenPE Signal E variants, transparent PNGs, Windows icons and identity previews.');
+console.log('Generated OpenPE Signal E variants, transparent PNGs, Windows and macOS icons and identity previews.');

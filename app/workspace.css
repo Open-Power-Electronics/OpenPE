@@ -76,15 +76,25 @@ body:has(.desktop-titlebar):has(.surface-dialog:modal:not(.surface-dialog-anchor
   clip-path: inset(0);
 }
 
+.desktop-titlebar[data-chrome='inset'] {
+  pointer-events: none;
+}
 .desktop-titlebar-content {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: env(titlebar-area-x, 0px);
-  width: env(titlebar-area-width, calc(100% - 138px));
   height: 100%;
   padding: 0 6px;
   -webkit-app-region: drag;
+}
+.desktop-titlebar[data-chrome='overlay'] .desktop-titlebar-content {
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, calc(100% - 138px));
+}
+.desktop-titlebar[data-chrome='inset'] .desktop-titlebar-content {
+  margin-left: 78px;
+  width: calc(100% - 78px);
+  pointer-events: auto;
 }
 .caption-navigation,
 .caption-menus {
@@ -1098,6 +1108,7 @@ body[data-workspace-resizing='true'] * {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 2px;
   min-width: 0;
   flex: 1;
@@ -1109,6 +1120,30 @@ body[data-workspace-resizing='true'] * {
   white-space: nowrap;
   margin-left: 6px;
   color: var(--soft);
+}
+
+.composer-boolean {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  color: var(--text);
+  font-size: var(--font-caption);
+  white-space: nowrap;
+}
+
+.composer-boolean .appearance-toggle {
+  width: 32px;
+  height: 20px;
+}
+
+.composer-boolean .appearance-toggle span {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-boolean .appearance-toggle[aria-checked='true'] span {
+  transform: translateX(12px);
 }
 
 .send-button {
@@ -5905,6 +5940,27 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   font: var(--font-small) / 1.5 var(--ui-font);
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.cursor-key {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.cursor-key input {
+  width: 100%;
+  min-height: var(--control-height);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-surface);
+  padding: 0 8px;
+}
+
+.cursor-key-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .connection-icon {

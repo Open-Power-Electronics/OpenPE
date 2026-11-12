@@ -85,6 +85,7 @@ type QueuedMessage = {
   provider: string;
   model: string;
   effort: ReasoningEffort | undefined;
+  parameters?: { id: string; value: string }[];
   approvalMode: 'review' | 'auto';
 };
 
@@ -894,11 +895,14 @@ export default function Chat({
     }
   }
 
-  async function submit(resolvedEffort: ReasoningEffort | undefined) {
+  async function submit(
+    resolvedEffort: ReasoningEffort | undefined,
+    parameters?: { id: string; value: string }[],
+  ) {
     if (steeringPending.current) return;
     if (!controller.current && !busy && !queue.current.length) {
       pauseQueue(false);
-      return send(resolvedEffort);
+      return send(resolvedEffort, undefined, parameters);
     }
     if (!input.trim() && !annotations.length) return;
     if (input.length > maxDraftLength)
@@ -930,6 +934,7 @@ export default function Chat({
         provider,
         model,
         effort: resolvedEffort,
+        ...(parameters?.length ? { parameters } : {}),
         approvalMode,
       },
     ]);
@@ -938,12 +943,17 @@ export default function Chat({
     setSendError('');
   }
 
-  async function send(resolvedEffort: ReasoningEffort | undefined, pending?: QueuedMessage) {
+  async function send(
+    resolvedEffort: ReasoningEffort | undefined,
+    pending?: QueuedMessage,
+    parameters?: { id: string; value: string }[],
+  ) {
     const submittedText = pending?.text ?? input.trim();
     const sentAnnotations = pending?.annotations ?? annotations;
     const turnProvider = pending?.provider ?? provider;
     const turnModel = pending?.model ?? model;
     const turnApproval = pending?.approvalMode ?? approvalMode;
+    const turnParameters = pending ? pending.parameters : parameters;
     if ((!submittedText && !sentAnnotations.length) || busy || controller.current) return;
     if (!agents.find((item) => item.id === turnProvider)?.available) {
       if (pending) {
@@ -1167,6 +1177,7 @@ export default function Chat({
           prompt,
           annotations: sentAnnotations,
           effort: resolvedEffort,
+          ...(turnParameters?.length ? { parameters: turnParameters } : {}),
           model: turnModel || undefined,
           context: {
             title: submittedDoc.title,
@@ -2055,7 +2066,7 @@ export default function Chat({
               ? stepDraftHistory
               : undefined
           }
-          onSubmit={(resolvedEffort) => void submit(resolvedEffort)}
+          onSubmit={(resolvedEffort, parameters) => void submit(resolvedEffort, parameters)}
           onStop={stopGeneration}
         />
       </div>

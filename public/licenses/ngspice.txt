@@ -1,6 +1,7 @@
-OpenPE bundled solver: ngspice 47 (Windows x64)
-Official archive: https://sourceforge.net/projects/ngspice/files/ng-spice-rework/47/
-The official console and DLLs are unmodified. Runtime binaries are replaceable. Corresponding ngspice, libsndfile 1.2.2 and libsamplerate 0.2.2 sources ship in resources/third-party-source.
+OpenPE bundled solver: ngspice 47 (win32-x64 official console, or the pinned darwin-arm64 release archive)
+
+Windows uses the unmodified official archive: https://sourceforge.net/projects/ngspice/files/ng-spice-rework/47/
+macOS downloads the pinned GitHub release archive `ngspice-47-darwin-arm64-1.tar.gz` from tag `solvers-ngspice-47-darwin-arm64-1` and verifies the archive and every file. `npm run simulation:prepare` does not compile. Maintainers rebuild that archive with `npm run solvers:build-macos`. The feature set matches the Windows Visual C configuration: XSPICE, OSDI, OpenMP, CIDER, KLU, libsndfile and libsamplerate, without X11 or the separate fftw build. Runtime binaries are replaceable. Corresponding sources ship in resources/third-party-source. The GCC/LLVM runtime pieces copied into the macOS bundle stay under their own licenses; ngspice itself remains the license below.
 
 Ngspice Licensing
 

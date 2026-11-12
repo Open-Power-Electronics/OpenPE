@@ -127,6 +127,14 @@ test('desktop Home skips example preparation while explicit opens share its chec
     './project-directory.cjs': { registerProjectDirectory: () => ({}) },
     './component-model-picker.cjs': { registerComponentModelPicker: () => {} },
     './spice-model-picker.cjs': { registerSpiceModelPicker: () => {} },
+    './cursor-credential.cjs': {
+      createCursorCredentialStore: () => ({
+        read: async () => {
+          throw new Error('Cursor API key is not configured.');
+        },
+      }),
+      registerCursorCredential: () => {},
+    },
   };
   // Redirect the bootstrap's module loading to isolated host adapters. Execute
   // its real window events and IPC handlers without Electron, disk or network I/O.

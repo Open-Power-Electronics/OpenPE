@@ -11,6 +11,10 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
+const solverPlatform = `${process.platform}-${process.arch}`;
+const ngspiceExecutable =
+  solverPlatform === 'win32-x64' ? 'ngspice_con.exe' : solverPlatform === 'darwin-arm64' ? 'ngspice' : '';
+
 const deck: SpiceDeck = {
   netlist: '',
   stop: 1,
@@ -82,14 +86,14 @@ test('unmeasured dissipative terminal voltages fail instead of deriving heat fro
 });
 test(
   'heat integration metadata changes saved cache keys without colliding with display-only records',
-  { skip: process.platform !== 'win32' || process.arch !== 'x64' },
+  { skip: !ngspiceExecutable },
   async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-heat-identity-'));
     const solverBytes = 'heat cache identity fixture';
     const original = childProcess.execFile;
     try {
       await mkdir(path.join(directory, 'bin'));
-      await writeFile(path.join(directory, 'bin', 'ngspice_con.exe'), solverBytes);
+      await writeFile(path.join(directory, 'bin', ngspiceExecutable), solverBytes);
       childProcess.execFile = Object.assign(
         () => {
           throw new Error('Fixture detection only.');

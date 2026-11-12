@@ -405,15 +405,6 @@ var models = {
 
 // resources/example-catalog/emc-flyback-assets.json
 var models2 = {
-  "emc-flyback-demo/Bourns_SRN8040TA.step": {
-    file: "models/Bourns_SRN8040TA.step",
-    sha256: "915d682b3bc724d7ca0c2cbbe8608230dfcf46322e3c925712565a2211455e5c",
-    size: 297015,
-    sourceUrl: "https://www.bourns.com/engineering/SRN8040TA/SRN8040TA.stp",
-    manufacturer: "Bourns",
-    partNumber: "SRN8040TA",
-    supplemental: true
-  },
   "emc-flyback-demo/C_0603_1608Metric.step": {
     file: "design/EMC_Demo.3dshapes/C_0603_1608Metric.step",
     sha256: "4857b3dc717675bf1fb22edda622ac3b3ae03cf44d81eefaf3fa3ba3a86d84c1",
@@ -473,6 +464,12 @@ var models2 = {
     file: "design/EMC_Demo.3dshapes/Jack_4mm_RA_red.step",
     sha256: "e4edf50ea7f39bf72bec2bc9ab993e6d1b0df1563533e1eaaa62a8cf038a707f",
     size: 77193
+  },
+  "emc-flyback-demo/L_8040_Shielded.step": {
+    file: "models/L_8040_Shielded.step",
+    sha256: "a79d7f0f5d2a4540d531948e4500618988eaba1aa22d6e556719ffe997626658",
+    size: 57013,
+    analytical: true
   },
   "emc-flyback-demo/LED_0805_2012Metric.step": {
     file: "design/EMC_Demo.3dshapes/LED_0805_2012Metric.step",
@@ -539,6 +536,12 @@ var models2 = {
     sha256: "844c0bb504d0c383535d9845c6376fe7a4053241a2ede8d8ef694df3fcfc37c8",
     size: 58399
   },
+  "emc-flyback-demo/T_EFD25_SMD.step": {
+    file: "models/T_EFD25_SMD.step",
+    sha256: "ee6f921dcec24f2ca957b7bf55ec2213188fbd8e8e7d7c5338e2d3d8ad11b81f",
+    size: 187441,
+    analytical: true
+  },
   "emc-flyback-demo/TestPoint_Keystone_5001_black.step": {
     file: "design/EMC_Demo.3dshapes/TestPoint_Keystone_5001_black.step",
     sha256: "262a4fdddfa830f63da3840a407e9b3782c20550f727e63cd5ad03c13896921b",
@@ -554,20 +557,15 @@ var models2 = {
     sha256: "e4185133f57c6d15a1f1cd1e9d1443f29b7cec6466d92367fd9085000f128ab6",
     size: 154511
   },
-  "emc-flyback-demo/WE_750311591_EFD25-SMD_070-4476.step": {
-    file: "models/WE_750311591_EFD25-SMD_070-4476.step",
-    sha256: "af62b6c74479aaf47336ecfe752373571c17944ddc6f585023a1835661f6824e",
-    size: 1562231,
-    sourceUrl: "https://www.we-online.com/components/products/download/Download_STP_070-4476_0178_clip%20%28rev1%29.STEP",
-    manufacturer: "Wurth Elektronik",
-    partNumber: "750311591",
-    supplemental: true
-  },
   "emc-flyback-demo/WE-CMB_744822222.step": {
     file: "models/WE-CMB_744822222.step",
     sha256: "89ff66fe9bc52b2ba95d24578985e15e193869fc959bb01234f5a388fa484999",
     size: 3177842,
     sourceUrl: "https://raw.githubusercontent.com/WurthElektronik/KiCad-Library/df5afb528e92371b558431a7dd41d654e09330ca/3dmodels/Inductor_THT_Wurth.3dshapes/L_Wurth_WE-CMB-S.step",
+    approvedHosts: [
+      "raw.githubusercontent.com"
+    ],
+    license: "WURTH-KICAD-LICENSE.txt",
     manufacturer: "Wurth Elektronik",
     partNumber: "744822222",
     sourceCommit: "df5afb528e92371b558431a7dd41d654e09330ca",

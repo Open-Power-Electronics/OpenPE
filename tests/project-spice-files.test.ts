@@ -9,6 +9,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  realpath,
   rename,
   rm,
   symlink,
@@ -134,7 +135,7 @@ test('saved SPICE reads reject files replaced between inspection and opening', a
     const bytes = await readFile(manifest);
     let replaced = false;
     context.mock.method(fileSystem, 'open', async (...args: Parameters<typeof fileSystem.open>) => {
-      if (!replaced && String(args[0]) === manifest) {
+      if (!replaced && (await realpath(String(args[0]))) === (await realpath(manifest))) {
         replaced = true;
         await rename(manifest, `${manifest}.previous`);
         await writeFile(manifest, bytes);
@@ -726,6 +727,38 @@ test('simulation API binds result storage to opaque grants and rejects missing g
     assert.equal(calls, 1);
   } finally {
     server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('SPICE storage allows a /var ancestor and rejects a replaced path component', async () => {
+  const { root, source } = await fixture();
+  const alias = path.join(path.dirname(root), `${path.basename(root)}-alias`);
+  try {
+    if (process.platform === 'darwin') {
+      const canonical = await realpath(root);
+      assert.notEqual(path.resolve(root), canonical);
+      assert.match(path.resolve(root), /^\/var\//);
+      assert.match(canonical, /^\/private\/var\//);
+    }
+    const file = path.join(root, 'buck.kicad_pro');
+    await writeFile(file, 'native bytes');
+    const store = createProjectSpiceStore(() => file);
+    await store.write(
+      key,
+      source,
+      result,
+      signal(),
+      deck,
+      { ...defaultTransient(switchingStageFixture()), stop: deck.stop },
+      { identityVersion: 2, solverSha256: 'f'.repeat(64) },
+    );
+    assert.equal((await store.read(key, deck, signal()))?.log, 'completed');
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const linked = createProjectSpiceStore(() => path.join(alias, 'buck.kicad_pro'));
+    await assert.rejects(linked.read(key, deck, signal()), /without links/);
+  } finally {
+    await rm(alias, { force: true });
     await rm(root, { recursive: true, force: true });
   }
 });

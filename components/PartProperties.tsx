@@ -50,6 +50,7 @@ import {
 
 import { prepareSourceConversion } from '@/lib/simulation-source-conversion';
 import type { SimulationSourceType } from '@/lib/simulation-source-parameters';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 
@@ -903,7 +904,7 @@ function PartProperties({
           if (
             onRequestSave &&
             event.target instanceof HTMLInputElement &&
-            (event.ctrlKey || event.metaKey) &&
+            (isCommandModifier(event)) &&
             event.key.toLowerCase() === 's'
           ) {
             event.preventDefault();

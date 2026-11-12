@@ -13,13 +13,14 @@ import { ArrowUp, Maximize2, Minimize2, Square, ShieldCheck, ShieldAlert } from 
 import type { ReasoningEffort } from '@/lib/chat-stream';
 import { smartPunctuationEdit } from '@/lib/appearance';
 import Select from './Select';
-import ModelSelect, { useAgentModelCatalog } from './ModelSelect';
+import ModelSelect, { useAgentModelCatalog, type AgentModelParameter } from './ModelSelect';
 import useRetiringConversationControl from './useRetiringConversationControl';
 import {
   agentName,
   defaultReasoningEffort,
   isProviderReasoningEffort,
 } from '@/lib/agent-providers';
+import { isCursorBooleanParameter } from '@/lib/cursor-catalog';
 
 const effortLabels: Record<ReasoningEffort, string> = {
   none: 'None',
@@ -46,7 +47,7 @@ export type AgentComposerProps = {
   setModel: (value: string) => void;
   input: string;
   setInput: (value: string) => void;
-  onSubmit: (effort: ReasoningEffort | undefined) => void;
+  onSubmit: (effort: ReasoningEffort | undefined, parameters?: { id: string; value: string }[]) => void;
   onStop?: () => void;
   onAgentSettings?: () => void;
   onRecall?: (direction: -1 | 1) => boolean;
@@ -138,12 +139,29 @@ export default function AgentComposer({
     onStop?.();
   }
   const catalog = useAgentModelCatalog({ provider, available, value: model, observedModel });
-  const modelEfforts = catalog.selected?.efforts ?? null;
+  const selected = catalog.selected;
+  const modelEfforts = selected?.efforts ?? null;
+  const cursorParameters = provider === 'cursor' && selected ? selected.parameters : undefined;
   const supportsEffort =
     modelEfforts === null ? provider === 'codex' || agentSupportsEffort : modelEfforts.length > 0;
+  const [parameterChoices, setParameterChoices] = useState<Record<string, Record<string, string>>>(
+    {},
+  );
+  function chosenParameter(parameter: AgentModelParameter) {
+    if (!selected) return undefined;
+    const chosen = parameterChoices[selected.id]?.[parameter.id];
+    if (chosen === undefined) return parameter.default;
+    return parameter.values.some((entry) => entry.value === chosen) ? chosen : undefined;
+  }
+  const genericParameters = (cursorParameters ?? []).filter(
+    (parameter) => parameter.id !== selected?.effortParameter,
+  );
+  const unresolvedParameter = genericParameters.find((parameter) => !chosenParameter(parameter));
   const submissionBlocked =
     requiresAgent &&
-    (!available || (['codex', 'claude', 'pi'].includes(provider) && modelEfforts === null));
+    (!available ||
+      (['codex', 'claude', 'pi', 'cursor'].includes(provider) && modelEfforts === null) ||
+      Boolean(unresolvedParameter));
   const effectiveEffort = modelEfforts?.length
     ? modelEfforts.includes(effort)
       ? effort
@@ -174,6 +192,8 @@ export default function AgentComposer({
       }
     } else if (catalog.loading) {
       if (submissionBlocked) availabilityText = 'Loading models…';
+    } else if (unresolvedParameter) {
+      availabilityText = `Choose a catalog value for ${unresolvedParameter.label}.`;
     } else if (catalog.error || !catalog.models.length || (submissionBlocked && catalog.selected)) {
       availabilityText = catalog.error
         ? 'Could not load models.'
@@ -197,7 +217,15 @@ export default function AgentComposer({
       return;
     // Focus before dispatch so a synchronous dialog or navigation keeps its own focus.
     focusDraft();
-    onSubmit(supportsEffort ? effectiveEffort : undefined);
+    onSubmit(
+      supportsEffort ? effectiveEffort : undefined,
+      genericParameters.length
+        ? genericParameters.map((parameter) => ({
+            id: parameter.id,
+            value: chosenParameter(parameter)!,
+          }))
+        : undefined,
+    );
   }
   return (
     <div className={`composer-stack ${className}`}>
@@ -349,7 +377,89 @@ export default function AgentComposer({
               onChange={setModel}
               disabled={busy || !available || catalog.loading}
             />
-            {supportsEffort ? (
+            {cursorParameters ? (
+              <>
+                {cursorParameters.map((parameter) =>
+                  parameter.id === selected?.effortParameter ? (
+                    <Select
+                      key={parameter.id}
+                      label="Reasoning effort"
+                      value={effectiveEffort}
+                      disabled={busy || !available || !modelEfforts?.length}
+                      compact
+                      placeholder={effortLabels[effectiveEffort]}
+                      onChange={(value) => setEffort(value as ReasoningEffort)}
+                      options={(modelEfforts || []).map((value) => ({
+                        value,
+                        label: effortLabels[value],
+                      }))}
+                    />
+                  ) : isCursorBooleanParameter(parameter) ? (
+                    <span key={parameter.id} className="composer-boolean">
+                      <span>{parameter.label}</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        className="appearance-toggle"
+                        aria-label={parameter.label}
+                        aria-checked={chosenParameter(parameter) === 'true'}
+                        disabled={
+                          busy ||
+                          !available ||
+                          (chosenParameter(parameter) !== 'true' &&
+                            chosenParameter(parameter) !== 'false')
+                        }
+                        onPointerDown={(event) => {
+                          if (composing.current) event.preventDefault();
+                        }}
+                        onKeyDown={guardComposition}
+                        onClick={() => {
+                          if (composing.current) return;
+                          const chosen = chosenParameter(parameter);
+                          if (chosen !== 'true' && chosen !== 'false') return;
+                          setParameterChoices((choices) => ({
+                            ...choices,
+                            [selected!.id]: {
+                              ...choices[selected!.id],
+                              [parameter.id]: chosen === 'true' ? 'false' : 'true',
+                            },
+                          }));
+                        }}
+                      >
+                        <span />
+                      </button>
+                    </span>
+                  ) : (
+                    <Select
+                      key={parameter.id}
+                      label={parameter.label}
+                      value={chosenParameter(parameter) ?? ''}
+                      disabled={busy || !available}
+                      compact
+                      placeholder={parameter.label}
+                      onChange={(value) =>
+                        setParameterChoices((choices) => ({
+                          ...choices,
+                          [selected!.id]: { ...choices[selected!.id], [parameter.id]: value },
+                        }))
+                      }
+                      options={parameter.values.map((entry) => ({
+                        value: entry.value,
+                        label: entry.label,
+                      }))}
+                    />
+                  ),
+                )}
+                {!supportsEffort && (
+                  <span
+                    className="composer-effort-default"
+                    aria-description="This model does not expose a reasoning effort."
+                  >
+                    No reasoning effort
+                  </span>
+                )}
+              </>
+            ) : supportsEffort ? (
               <Select
                 label="Reasoning effort"
                 value={effectiveEffort}
@@ -362,7 +472,7 @@ export default function AgentComposer({
                   label: effortLabels[value],
                 }))}
               />
-            ) : (
+            ) : provider === 'cursor' ? null : (
               <span
                 className="composer-effort-default"
                 aria-description={

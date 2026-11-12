@@ -254,6 +254,7 @@ try {
         window.homeEditingDirtyWrites = [];
         window.openpe = {
           titleBarOverlay: true,
+          titleBarInset: false,
           writeWorkspaceRecovery: async (content) => {
             await fetch('http://localhost/api/state', {
               method: content === null ? 'DELETE' : 'POST',

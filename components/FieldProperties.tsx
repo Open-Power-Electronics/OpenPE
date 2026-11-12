@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { fmt, snap, type Point } from '@/lib/circuit';
 import type { SelectableField } from '@/lib/schematic-edit';
 import QuantityInput from './QuantityInput';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 export default function FieldProperties({
   field,
@@ -106,14 +107,14 @@ export default function FieldProperties({
               event.nativeEvent.isComposing ||
               event.nativeEvent.keyCode === 229
             ) {
-              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')
+              if ((isCommandModifier(event)) && event.key.toLowerCase() === 's')
                 event.preventDefault();
               event.stopPropagation();
               return;
             }
             if (
               onRequestSave &&
-              (event.ctrlKey || event.metaKey) &&
+              (isCommandModifier(event)) &&
               event.key.toLowerCase() === 's'
             ) {
               event.preventDefault();
@@ -156,7 +157,7 @@ export default function FieldProperties({
                 }
                 if (
                   onRequestSave &&
-                  (event.ctrlKey || event.metaKey) &&
+                  (isCommandModifier(event)) &&
                   event.key.toLowerCase() === 's'
                 ) {
                   event.preventDefault();

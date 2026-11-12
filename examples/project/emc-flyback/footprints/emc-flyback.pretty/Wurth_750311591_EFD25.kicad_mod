@@ -118,10 +118,10 @@
       (font
         (size 1.2 1.2)
         (thickness 0.18))))
-  (model "${KIPRJMOD}/models/WE_750311591_EFD25-SMD_070-4476.step"
+  (model "${KIPRJMOD}/models/T_EFD25_SMD.step"
     (offset
-      (xyz 0 0 0))
+      (xyz 0 0 6.845))
     (scale
       (xyz 1 1 1))
     (rotate
-      (xyz -90 0 0))))
+      (xyz 0 0 0))))

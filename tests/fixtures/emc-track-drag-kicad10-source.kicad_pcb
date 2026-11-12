@@ -8523,13 +8523,13 @@
       (net "VBUS")
       (uuid "502dfe16-9b1a-4712-956c-16378410f51a"))
     (embedded_fonts no)
-    (model "${KIPRJMOD}/models/Bourns_SRN8040TA.step"
+    (model "${KIPRJMOD}/models/L_8040_Shielded.step"
       (offset
-        (xyz 0 0 0))
+        (xyz 0 0 2))
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz 0 0 90)))
+        (xyz 0 0 0)))
     (property "Specifications" "3.3A"
       (uuid "2bccd9df-0a61-5252-aafe-4173bfff55d4")
       (at 0 0 0)
@@ -10817,13 +10817,13 @@
       (net "SGND")
       (uuid "2ef7092d-13d8-4254-9326-e215ea0ce95f"))
     (embedded_fonts no)
-    (model "${KIPRJMOD}/models/WE_750311591_EFD25-SMD_070-4476.step"
+    (model "${KIPRJMOD}/models/T_EFD25_SMD.step"
       (offset
-        (xyz 0 0 0))
+        (xyz 0 0 6.845))
       (scale
         (xyz 1 1 1))
       (rotate
-        (xyz -90 0 0))))
+        (xyz 0 0 0))))
   (footprint "Package_DIP:SMDIP-4_W9.53mm"
     (layer "F.Cu")
     (uuid "b0e0ee7f-21f0-4eda-a134-a0d1b418519d")

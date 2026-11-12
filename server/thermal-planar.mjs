@@ -2,6 +2,9 @@
  * This is bounded geometry preparation, not a finite-element equation solver. */
 const precision = 1e9;
 const epsilon = 1e-8;
+// lib/pcb-polygons.ts quantizes contours to 0.0001 mm. A vertex rounded onto a
+// diagonal can sit up to half a cell diagonal off the edge it was clipped to.
+export const thermalContourSnapTolerance = 0.0001 / Math.SQRT2;
 const cross = (a, b) => a.x * b.y - a.y * b.x;
 const delta = (a, b) => ({ x: b.x - a.x, y: b.y - a.y });
 const coordinate = (value) => Math.round(value * precision) / precision;
@@ -10,11 +13,45 @@ export function thermalPlanarGraph(model) {
   const points = [],
     pointIds = new Map(),
     edges = [],
-    edgeIds = new Map();
+    edgeIds = new Map(),
+    boardEdgeIds = [],
+    boardBuckets = new Map();
+  let boardContoursReady = false;
+  let vertexWelded = false;
+  const projectToBoard = (x, y) => {
+    let best = null;
+    const seen = new Set();
+    for (let ix = Math.floor(x) - 1; ix <= Math.floor(x) + 1; ix++)
+      for (let iy = Math.floor(y) - 1; iy <= Math.floor(y) + 1; iy++)
+        for (const id of boardBuckets.get(`${ix},${iy}`) ?? []) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const edge = edges[id],
+            a = points[edge.a],
+            b = points[edge.b],
+            r = delta(a, b),
+            length = Math.hypot(r.x, r.y);
+          if (!(length > 0)) continue;
+          const along = ((x - a.x) * r.x + (y - a.y) * r.y) / length;
+          const clamped = Math.min(length, Math.max(0, along));
+          const qx = a.x + (r.x / length) * clamped,
+            qy = a.y + (r.y / length) * clamped,
+            distance = Math.hypot(x - qx, y - qy);
+          if (distance === 0 || distance > thermalContourSnapTolerance) continue;
+          if (!best || distance < best.distance || (distance === best.distance && id < best.id))
+            best = { distance, id, x: coordinate(qx), y: coordinate(qy) };
+        }
+    return best;
+  };
   const point = (p) => {
-    const x = coordinate(p.x),
-      y = coordinate(p.y),
-      key = `${x},${y}`;
+    vertexWelded = false;
+    const rawX = coordinate(p.x),
+      rawY = coordinate(p.y);
+    const snapped = boardContoursReady ? projectToBoard(rawX, rawY) : null;
+    const x = snapped ? snapped.x : rawX,
+      y = snapped ? snapped.y : rawY;
+    if (x !== rawX || y !== rawY) vertexWelded = true;
+    const key = `${x},${y}`;
     let id = pointIds.get(key);
     if (id === undefined) {
       id = points.length;
@@ -22,6 +59,17 @@ export function thermalPlanarGraph(model) {
       pointIds.set(key, id);
     }
     return id;
+  };
+  const indexBoardEdge = (id) => {
+    const edge = edges[id],
+      pad = thermalContourSnapTolerance;
+    for (let x = Math.floor(edge.xmin - pad); x <= Math.floor(edge.xmax + pad); x++)
+      for (let y = Math.floor(edge.ymin - pad); y <= Math.floor(edge.ymax + pad); y++) {
+        const key = `${x},${y}`;
+        const bucket = boardBuckets.get(key);
+        if (bucket) bucket.push(id);
+        else boardBuckets.set(key, [id]);
+      }
   };
   const edge = (a, b) => {
     if (a === b) throw new Error('Thermal contour contains a zero-length edge.');
@@ -46,15 +94,37 @@ export function thermalPlanarGraph(model) {
     }
     return { id, forward: a === start };
   };
-  const ring = (vertices) => {
+  const ring = (vertices, boardEdge = false) => {
     if (vertices.length < 3) throw new Error('Thermal polygon has fewer than three vertices.');
-    const ids = vertices.map(point);
-    return ids.map((id, i) => edge(id, ids[(i + 1) % ids.length]));
+    const ids = [],
+      welded = [];
+    for (const vertex of vertices) {
+      const id = point(vertex);
+      if (ids.length && ids.at(-1) === id) {
+        if (!vertexWelded) throw new Error('Thermal contour contains a zero-length edge.');
+        continue;
+      }
+      ids.push(id);
+      welded.push(vertexWelded);
+    }
+    if (ids.length > 1 && ids[0] === ids.at(-1)) {
+      if (!welded[0] && !welded.at(-1))
+        throw new Error('Thermal contour contains a zero-length edge.');
+      ids.pop();
+    }
+    if (ids.length < 3) throw new Error('Thermal polygon has fewer than three vertices.');
+    return ids.map((id, i) => {
+      const created = edge(id, ids[(i + 1) % ids.length]);
+      if (boardEdge) boardEdgeIds.push(created.id);
+      return created;
+    });
   };
   const boardLoops = model.board.map((polygon) => [
-    ring(polygon.outer),
-    ...(polygon.holes ?? []).map(ring),
+    ring(polygon.outer, true),
+    ...(polygon.holes ?? []).map((hole) => ring(hole, true)),
   ]);
+  for (const id of new Set(boardEdgeIds)) indexBoardEdge(id);
+  boardContoursReady = true;
   for (const region of [...model.layers, ...model.sources, ...model.barrels])
     for (const polygon of region.polygons) {
       ring(polygon.outer);

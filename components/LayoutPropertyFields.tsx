@@ -2,6 +2,7 @@ import QuantityInput from './QuantityInput';
 import { quantityUnitFromLabel, quantityLabel } from './quantity-units';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Select from './Select';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 export function PropertySelect({
   className,
@@ -112,7 +113,7 @@ export function NumberField({
         }}
         onBlur={commit}
         onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+          if ((isCommandModifier(e)) && e.key.toLowerCase() === 's') {
             if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || !commit()) {
               e.preventDefault();
               e.stopPropagation();
@@ -204,7 +205,7 @@ export function TextField({
     },
     onBlur: commit,
     onKeyDown: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      if ((isCommandModifier(event)) && event.key.toLowerCase() === 's') {
         if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || !commit()) {
           event.preventDefault();
           event.stopPropagation();
@@ -223,7 +224,7 @@ export function TextField({
         event.stopPropagation();
         setDraft(value);
         setInvalid(false);
-      } else if (event.key === 'Enter' && (!multiline || event.ctrlKey || event.metaKey)) {
+      } else if (event.key === 'Enter' && (!multiline || isCommandModifier(event))) {
         event.preventDefault();
         event.stopPropagation();
         commit();

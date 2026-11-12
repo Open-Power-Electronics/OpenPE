@@ -178,7 +178,14 @@ Generated project `spice/` and `thermal/` directories are excluded from native d
 ## Native access and writes
 
 Electron pickers grant bounded file sets through opaque IDs. The renderer cannot
-choose arbitrary paths, commands, executables or URLs. Validation rejects
+choose arbitrary paths, commands, executables or URLs. A host-established directory
+is canonicalized with `realpath` before containment checks, so an ancestor symlink
+such as macOS `/var` → `/private/var` is not a link inside the granted tree. A
+symbolic link at that directory or anywhere inside it is rejected. Open project
+grants compare those canonical paths. Windows grant identity stays case-folded.
+On any other platform, `realpath.native` supplies the stored case; a case-insensitive
+volume also folds a missing final component, and a case-sensitive volume does not.
+Validation rejects
 traversal, links, nonregular/oversized files, case-insensitive duplicate names,
 file/directory overlap and invalid entry membership. The aggregate file-set
 limit is 96 MB. Cached local validation applies only to exact internally owned

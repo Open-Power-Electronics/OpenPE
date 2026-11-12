@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { MAX_MODEL_BYTES, spiceModelDeclarations } = require('./spice-model-declarations.cjs');
 const { createProjectDirectoryReader } = require('./project-directory.cjs');
+const { assertContainedPath, canonicalDirectory } = require('../server/host-path.cjs');
 
 const extensions = ['lib', 'mod', 'cir', 'sp', 'spice'];
 const normalize = (file) =>
@@ -40,12 +41,15 @@ const sameFile = (before, after) =>
 
 async function readSpiceModelFile(file, fileSystem = fs) {
   const before = await fileSystem.lstat(file, { bigint: true });
-  if (
-    !before.isFile() ||
-    before.isSymbolicLink() ||
-    normalize(await fileSystem.realpath(file)) !== normalize(file)
-  )
+  if (!before.isFile() || before.isSymbolicLink())
     throw new Error('Choose a regular SPICE model file without links.');
+  const rooted = await canonicalDirectory(path.dirname(file), {
+    message: 'Choose a regular SPICE model file without links.',
+  });
+  await assertContainedPath(rooted, file, {
+    message: 'Choose a regular SPICE model file without links.',
+    kind: 'file',
+  });
   if (!before.size || before.size > BigInt(MAX_MODEL_BYTES))
     throw new Error('Choose a nonempty SPICE library up to 2 MiB.');
   const handle = await fileSystem.open(file, 'r');
@@ -76,7 +80,8 @@ async function readSpiceModelFile(file, fileSystem = fs) {
       !sameFile(before, after) ||
       !sameFile(before, pathAfter) ||
       pathAfter.isSymbolicLink() ||
-      normalize(await fileSystem.realpath(file)) !== normalize(file)
+      normalize(await fileSystem.realpath(file)) !==
+        normalize(path.join(rooted.canonical, path.basename(file)))
     )
       throw new Error('The model file changed. Choose it again.');
     return spiceModelDeclarations(first.subarray(0, length));

@@ -92,6 +92,7 @@ async function mount(titleBarOverlay, atLimit = false) {
       window.exampleMenuCalls = { opens: [], saves: [], allocations: 0, releases: [] };
       window.openpe = {
         titleBarOverlay,
+        titleBarInset: false,
         writeWorkspaceRecovery: async (content) => {
           await fetch('http://localhost/api/state', {
             method: content === null ? 'DELETE' : 'POST',

@@ -9,6 +9,7 @@ import {
   publishAnalysisFiles,
   withAnalysisFiles,
 } from './flat-analysis-files.mjs';
+import { logicalSuffixOfCanonical } from './host-path.cjs';
 
 const normalize = (file) => (process.platform === 'win32' ? file.toLowerCase() : file);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -118,7 +119,7 @@ async function directory(parent, name, create) {
   if (
     !info.isDirectory() ||
     info.isSymbolicLink() ||
-    normalize(await realpath(file)) !== normalize(file)
+    !logicalSuffixOfCanonical(path.resolve(file), await realpath(file))
   )
     throw new Error('The project spice folders must be real directories without links.');
   return file;
@@ -188,9 +189,12 @@ export function createProjectSpiceStore(resolveFile) {
       throw new Error(
         'The simulation project destination changed. Run again for this destination.',
       );
-    const parent = await realpath(path.dirname(projectFile));
+    const logical = path.resolve(path.dirname(projectFile));
+    const parent = await realpath(logical);
     if (nativeParent && normalize(parent) !== normalize(nativeParent))
       throw new Error('The simulation project directory changed. Save and retry.');
+    if (!logicalSuffixOfCanonical(logical, parent))
+      throw new Error('The project spice folders must be real directories without links.');
     nativeParent = parent;
     return directory(parent, 'spice', create);
   }

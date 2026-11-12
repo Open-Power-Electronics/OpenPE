@@ -39,12 +39,10 @@ const nativeName = (name) =>
 
 async function regularDirectory(directory) {
   const info = await fs.lstat(directory);
-  if (!info.isDirectory() || info.isSymbolicLink())
-    throw new Error('The KiCad project location must be a regular folder.');
-  const resolved = await fs.realpath(directory);
-  const normalize = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
-  if (normalize(resolved) !== normalize(path.resolve(directory)))
+  // Ancestor symlinks are outside this folder. A link at the folder itself is rejected.
+  if (info.isSymbolicLink())
     throw new Error('Linked KiCad project folders are not supported.');
+  if (!info.isDirectory()) throw new Error('The KiCad project location must be a regular folder.');
 }
 
 function validateNativeFiles(bundle) {

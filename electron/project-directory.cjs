@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { isUtf8 } = require('node:buffer');
 const { nativeName } = require('./native-project.cjs');
+const { assertContainedPath, canonicalDirectory } = require('../server/host-path.cjs');
 const { MAX_MODEL_BYTES, spiceModelDeclarations } = require('./spice-model-declarations.cjs');
 
 const maxEntries = 4096;
@@ -23,11 +24,7 @@ function createProjectDirectoryReader(grants) {
   const location = (fileId) => grants.location(fileId);
   async function regular(directory) {
     const stat = await fs.lstat(directory);
-    if (
-      !stat.isDirectory() ||
-      stat.isSymbolicLink() ||
-      normalize(await fs.realpath(directory)) !== normalize(path.resolve(directory))
-    )
+    if (!stat.isDirectory() || stat.isSymbolicLink())
       throw new Error('Project folders must be regular directories without links.');
   }
   async function list(fileId) {
@@ -129,8 +126,13 @@ function createProjectDirectoryReader(grants) {
     if (!before.isFile() || before.isSymbolicLink() || !sameFile(before, entry.stat))
       throw new Error('The file changed. Refresh project files and select it again.');
     if (complete && before.size > limit) throw new Error(limitError);
-    if (normalize(await fs.realpath(target)) !== normalize(target))
-      throw new Error('Linked project files cannot be previewed.');
+    const rooted = await canonicalDirectory(root, {
+      message: 'Project folders must be regular directories without links.',
+    });
+    await assertContainedPath(rooted, target, {
+      message: 'Linked project files cannot be previewed.',
+      kind: 'file',
+    });
     const handle = await fs.open(target, 'r');
     let bytes;
     try {

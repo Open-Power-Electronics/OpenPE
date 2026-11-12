@@ -7,6 +7,49 @@ import {
   agentCapabilityContent,
 } from './agent-capabilities.mjs';
 
+export const cursorQuestionTool = {
+  name: 'openpe_ask_user',
+  description:
+    'Ask the user a clarification question and wait for the explicit answer. The answer grants no file, shell, or host permission.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['questions'],
+    properties: {
+      questions: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 4,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'question'],
+          properties: {
+            id: { type: 'string' },
+            question: { type: 'string' },
+            header: { type: 'string' },
+            detail: { type: 'string' },
+            multiSelect: { type: 'boolean' },
+            options: {
+              type: 'array',
+              maxItems: 8,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['label'],
+                properties: {
+                  label: { type: 'string' },
+                  description: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
 /** The helper can contact only its one ephemeral loopback capability endpoint.
  * @param {Record<string,string|undefined>} env
  */
@@ -27,6 +70,39 @@ export function agentMCPConnection(env = process.env) {
   return { url: url.href, token: env.OPENPE_AGENT_BRIDGE_TOKEN };
 }
 
+/** Question calls use a separate per-turn token. A partial environment fails closed.
+ * @param {Record<string,string|undefined>} env
+ */
+export function agentQuestionConnection(env = process.env) {
+  const url = new URL(env.OPENPE_QUESTIONS_URL || 'about:blank');
+  if (
+    url.protocol !== 'http:' ||
+    url.hostname !== '127.0.0.1' ||
+    !url.port ||
+    !/^\/api\/agent-questions\/[0-9a-f-]{36}$/.test(url.pathname) ||
+    url.search ||
+    url.hash ||
+    url.username ||
+    url.password ||
+    !/^[0-9a-f]{64}$/.test(env.OPENPE_QUESTIONS_TOKEN || '')
+  )
+    throw new Error('OpenPE question connection is unavailable.');
+  return { url: url.href, token: env.OPENPE_QUESTIONS_TOKEN };
+}
+
+/** Capability tools, plus the question tool only when its bridge is fully configured.
+ * @param {Record<string,string|undefined>} env
+ */
+export function agentMcpTools(env = process.env) {
+  const url = env.OPENPE_QUESTIONS_URL;
+  const token = env.OPENPE_QUESTIONS_TOKEN;
+  if ((url === undefined) !== (token === undefined))
+    throw new Error('OpenPE question connection is unavailable.');
+  if (url === undefined) return agentCapabilityTools;
+  agentQuestionConnection(env);
+  return [...agentCapabilityTools, cursorQuestionTool];
+}
+
 /** @param {{input?:import('node:stream').Readable, output?:import('node:stream').Writable, env?:Record<string,string|undefined>, request?:typeof fetch}} options */
 export function startAgentMCP({
   input = process.stdin,
@@ -35,6 +111,10 @@ export function startAgentMCP({
   request = fetch,
 } = {}) {
   const connection = agentMCPConnection(env);
+  const tools = agentMcpTools(env);
+  const questions = tools.some((tool) => tool.name === cursorQuestionTool.name)
+    ? agentQuestionConnection(env)
+    : null;
   const lines = createInterface({ input, crlfDelay: Infinity });
   const controls = new Set();
   const send = (message) => output.write(JSON.stringify(message) + '\n');
@@ -64,7 +144,7 @@ export function startAgentMCP({
         serverInfo: { name: 'openpe', version: '1.0.0' },
       });
     if (message.method === 'ping') return reply({});
-    if (message.method === 'tools/list') return reply({ tools: agentCapabilityTools });
+    if (message.method === 'tools/list') return reply({ tools });
     if (message.method !== 'tools/call')
       return send({
         jsonrpc: '2.0',
@@ -74,6 +154,32 @@ export function startAgentMCP({
     let control;
     try {
       const { name, arguments: args = {} } = message.params || {};
+      if (name === cursorQuestionTool.name) {
+        if (!questions) throw new Error('OpenPE question connection is unavailable.');
+        if (pending >= agentCapabilityLimits.pending)
+          throw new Error('Too many pending capability requests.');
+        control = new AbortController();
+        controls.add(control);
+        pending++;
+        const response = await request(questions.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-OpenPE-Agent-Token': questions.token,
+          },
+          body: JSON.stringify({ questions: args.questions }),
+          signal: control.signal,
+          redirect: 'error',
+        });
+        const text = await response.text();
+        if (Buffer.byteLength(text) > 256 * 1024)
+          throw new Error('Agent question result exceeds the adapter budget.');
+        const result = JSON.parse(text);
+        if (!response.ok || result.error)
+          throw new Error(result.error || 'OpenPE rejected the question.');
+        reply({ content: [{ type: 'text', text: JSON.stringify({ answers: result.answers }) }] });
+        return;
+      }
       validateAgentCapabilityCall(name, args);
       if (pending >= agentCapabilityLimits.pending)
         throw new Error('Too many pending capability requests.');

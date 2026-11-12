@@ -161,14 +161,40 @@ npm run simulation:prepare
 npm run simulation:download-examples
 ```
 
-`npm run examples:prepare` generates service formats, prepares simulation and
+`npm run examples:prepare` generates the two OpenPE analytical STEP bodies
+for EMC Flyback L2 and T1, downloads the WE-CMB manufacturer model and shared
+simulation libraries, generates service formats, prepares simulation and
 portable model sidecars, and verifies the original native file sets, pinned
-footprint/STEP assets and notices. Both build and development startup run this
-step before the renderer starts. Runtime opening reads those original files
-without generating, downloading or copying Home content. Missing or corrupt
-resources require preparation or installation repair. Packaging copies the
-original native projects and existing PDFs into their respective resource
-directories described under [Original project directories and portable assets](#original-project-directories-and-portable-assets).
+footprint/STEP assets and notices.
+`scripts/prepare-emc-analytical-models.ts` reads the `analyticalModels` entries
+in [the EMC manifest](../resources/example-catalog/footprints/emc-flyback/manifest.json).
+L2 (`L_8040_Shielded.step`) is an 8.0 × 8.0 × 4.0 mm shielded body with two
+terminals on the existing pads. T1 (`T_EFD25_SMD.step`) is the Würth 750311591
+datasheet envelope, revision IKK 007.001 (32.31 × 27.03 × 13.69 mm), with twelve
+terminals on the existing pads. Both use the bundled Gmsh/OpenCASCADE analytical
+STEP path. A missing file is generated and must match the pinned SHA-256 and
+size. An existing different file is preserved and preparation fails. No
+third-party license applies to these two files. The published placement is Z-up,
+with model +Y opposite footprint +Y.
+`scripts/download-manufacturer-models.mjs` fetches only Würth WE-CMB, the
+pinned rigid alignment of the official KiCad-library source produced by
+`scripts/prepare-emc-cmb-model.mjs`. That download allows only the recorded
+`approvedHosts`, rejects any other redirect, and must match the pinned SHA-256
+and size. An existing different file is preserved and preparation fails.
+[MODEL-SOURCES](../resources/example-catalog/footprints/emc-flyback/MODEL-SOURCES.md)
+records the substitution and the WE-CMB terms. The Würth KiCad-library terms
+allow sharing the marked WE-CMB derivative with attribution. End users do not
+download manufacturer models.
+Project copies, including `examples/project/emc-flyback/models/D_SMA.step`, are
+written from those pinned bytes and are not downloaded again.
+`scripts/download-example-models.ts` writes shared Home libraries such as
+`resources/example-catalog/simulation/models/lm2596-5-<sha256>.lib` from the
+official TI and KiCad URLs already pinned for those models. Both build and
+development startup run this step before the renderer starts. Runtime opening
+reads those original files without generating, downloading or copying Home
+content. Missing or corrupt resources require preparation or installation
+repair. Packaging copies the original native projects and existing PDFs into
+their respective resource directories described under [Original project directories and portable assets](#original-project-directories-and-portable-assets).
 Private destination-bound Git history is initialized on example opening.
 
 Model preparation also updates canonical model references. Vendor model bytes

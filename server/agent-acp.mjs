@@ -1,4 +1,4 @@
-import { spawn, execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,6 +6,8 @@ import { StringDecoder } from 'node:string_decoder';
 import { performance } from 'node:perf_hooks';
 import { agentName } from './agent-provider-format.mjs';
 import { validModelId } from './model-id.mjs';
+import { canonicalDirectory } from './host-path.cjs';
+import { stopOwnedProcess } from './owned-process.mjs';
 
 // All paths/configuration here are service-owned, temporary and never renderer
 // inputs. The installed CLI retains responsibility for its own authentication.
@@ -37,7 +39,10 @@ export async function prepareACPWorkspace(provider, questions = undefined) {
     const patchFile = path.join(directory, 'openpe.patch.yml');
     // JSON is a YAML subset, avoiding interpolation of paths or config text.
     await writeFile(patchFile, JSON.stringify(patch));
-    return { directory, args: ['--profile', 'acp', '--patch', patchFile] };
+    const rooted = await canonicalDirectory(directory, {
+      message: 'The ACP workspace must be a real directory.',
+    });
+    return { directory: rooted.canonical, args: ['--profile', 'acp', '--patch', patchFile] };
   } catch (error) {
     await rm(directory, { recursive: true, force: true });
     throw error;
@@ -97,6 +102,7 @@ async function withACPSession(provider, signal, options, task) {
       },
       shell: false,
       windowsHide: true,
+      detached: process.platform !== 'win32',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const pending = new Map();
@@ -120,16 +126,11 @@ async function withACPSession(provider, signal, options, task) {
     function kill() {
       if (closed || stopping) return;
       stopping = true;
-      if (process.platform === 'win32' && proc.pid)
-        execFile(
-          'taskkill.exe',
-          ['/pid', String(proc.pid), '/t', '/f'],
-          { windowsHide: true, timeout: 3000 },
-          () => {
-            if (!closed) proc.kill('SIGTERM');
-          },
-        );
-      else proc.kill('SIGTERM');
+      stopOwnedProcess(proc, {
+        closed: () => closed,
+        signal: 'SIGTERM',
+        timeoutMs: 3000,
+      });
     }
     function abort() {
       rejectAll(new Error('Agent request cancelled.'));

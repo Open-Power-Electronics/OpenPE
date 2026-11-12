@@ -264,13 +264,13 @@ test('Cursor run and model discovery fail closed before resolving or launching i
     runAgent('cursor', request, '.', () => {}, new AbortController().signal, {
       resolve,
     }),
-    /tool-isolated/,
+    /API key/,
   );
   await assert.rejects(
     listAgentModels('cursor', '.', new AbortController().signal, {
       resolve,
     }),
-    /tool-isolated/,
+    /API key/,
   );
   assert.equal(resolutions, 0);
 });

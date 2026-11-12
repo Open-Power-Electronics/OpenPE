@@ -20,6 +20,7 @@ import ProjectFileComparison from './ProjectFileComparison';
 import { compareProjectFiles, type HistoryEntry, type HistoryPage } from '@/lib/project-history';
 import type { CapabilityHost } from '@/api/capabilities';
 import { parseProject, projectNativeFiles } from '@/lib/project';
+import { isCommandModifier } from '@/lib/command-modifier';
 
 const SchematicComparison = lazy(() => import('./SchematicComparison'));
 const LayoutComparison = lazy(() => import('./LayoutComparison'));
@@ -269,12 +270,12 @@ export default function ProjectHistoryView({
                         if (
                           event.key === 'Escape' ||
                           event.key === 'Enter' ||
-                          ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')
+                          ((isCommandModifier(event)) && event.key.toLowerCase() === 's')
                         )
                           event.preventDefault();
                         return;
                       }
-                      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                      if ((isCommandModifier(event)) && event.key === 'Enter') {
                         event.preventDefault();
                         createVersion();
                       }

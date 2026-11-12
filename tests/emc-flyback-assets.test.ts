@@ -1,7 +1,7 @@
 import { exampleModelPath, resolveExampleModelRelative } from '../lib/example-model-paths';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -157,6 +157,15 @@ test('EMC verification rejects missing or changed manufacturer assets', async ()
   const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-emc-incomplete-'));
   try {
     await assert.rejects(verifyEmcFlybackAssets(undefined, directory), /missing|ENOENT/i);
+    for (const entry of Object.values(emcManifest.models)) {
+      if (!('analytical' in entry) || !entry.analytical) continue;
+      const target = path.join(directory, entry.file);
+      await mkdir(path.dirname(target), { recursive: true });
+      await copyFile(
+        path.join('resources/example-catalog/footprints/emc-flyback', entry.file),
+        target,
+      );
+    }
     const first = Object.values(emcManifest.models).find(
       (entry) => 'supplemental' in entry && entry.supplemental,
     )!;

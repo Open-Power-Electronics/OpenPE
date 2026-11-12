@@ -29,6 +29,64 @@ const catalogs = {
       },
     ],
   },
+  cursor: {
+    defaultModel: 'grok-4.7',
+    models: [
+      {
+        id: 'grok-4.7',
+        label: 'Grok 4.7',
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+        effortParameter: 'reasoning_effort',
+        parameters: [
+          {
+            id: 'context',
+            label: 'Context',
+            values: [
+              { value: '256k', label: '256K' },
+              { value: '500k', label: '500K' },
+            ],
+            default: '500k',
+          },
+          {
+            id: 'reasoning_effort',
+            label: 'Effort',
+            values: [
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'xhigh', label: 'Extra High' },
+            ],
+            default: 'high',
+          },
+          {
+            id: 'fast',
+            label: 'Fast',
+            values: [
+              { value: 'false', label: 'false' },
+              { value: 'true', label: 'Fast' },
+            ],
+            default: 'true',
+          },
+        ],
+      },
+      {
+        id: 'plain-cursor',
+        label: 'Plain',
+        efforts: [],
+        parameters: [
+          {
+            id: 'fast',
+            label: 'Fast',
+            values: [
+              { value: 'false', label: 'false' },
+              { value: 'true', label: 'Fast' },
+            ],
+            default: 'false',
+          },
+        ],
+      },
+    ],
+  },
 };
 const bundle = await build({
   stdin: {
@@ -47,7 +105,7 @@ const bundle = await build({
         return <main><AgentComposer {...state}
           setEffort={effort=>patch({effort})} setModel={model=>patch({model})}
           setInput={input=>patch({input})} approvalMode="review" setApprovalMode={()=>{}}
-          onSubmit={effort=>submissions.push({effort:effort ?? null})} onStop={()=>{}}
+          onSubmit={(effort, parameters) => submissions.push({ effort: effort ?? null, parameters: parameters ?? null })} onStop={()=>{}}
           onAgentSettings={()=>settingsOpens.push(state.provider)}/>
         </main>;
       }
@@ -380,6 +438,81 @@ try {
   await patch({ requiresAgent: false });
   await page.getByRole('status', { name: 'Model list unavailable', exact: true }).waitFor();
   await submitEffort('medium');
+  await patch({
+    provider: 'cursor',
+    model: '',
+    available: true,
+    requiresAgent: true,
+    effort: 'off',
+  });
+  const contextPicker = page.getByRole('combobox', { name: 'Context', exact: true });
+  const fastSwitch = page.getByRole('switch', { name: 'Fast', exact: true });
+  await contextPicker.waitFor();
+  await waitEffort('Medium');
+  assert.equal(await page.getByText('No reasoning effort', { exact: true }).count(), 0);
+  assert.equal((await contextPicker.textContent())?.trim(), '500K');
+  assert.equal(await fastSwitch.getAttribute('aria-checked'), 'true');
+  await effort.click();
+  assert.deepEqual(await page.getByRole('option').allTextContents(), [
+    'Low',
+    'Medium',
+    'High',
+    'Extra high',
+  ]);
+  await page.keyboard.press('Escape');
+  const beforeCursor = (await submissions()).length;
+  await send.click();
+  await waitForAsync(
+    page,
+    (count) => window.effortFixture.submissions.length === count + 1,
+    beforeCursor,
+  );
+  assert.deepEqual((await submissions()).at(-1), {
+    effort: 'medium',
+    parameters: [
+      { id: 'context', value: '500k' },
+      { id: 'fast', value: 'true' },
+    ],
+  });
+  assert.equal((await snapshot()).effort, 'off');
+  await choose(contextPicker, '256K');
+  await fastSwitch.click();
+  assert.equal(await fastSwitch.getAttribute('aria-checked'), 'false');
+  await choose(effort, 'High');
+  await send.click();
+  await waitForAsync(
+    page,
+    (count) => window.effortFixture.submissions.length === count + 1,
+    beforeCursor + 1,
+  );
+  assert.deepEqual((await submissions()).at(-1), {
+    effort: 'high',
+    parameters: [
+      { id: 'context', value: '256k' },
+      { id: 'fast', value: 'false' },
+    ],
+  });
+  await choose(model, 'Plain');
+  await page.getByText('No reasoning effort', { exact: true }).waitFor();
+  await assertNoEffortChoices();
+  assert.equal(
+    await page.getByRole('switch', { name: 'Fast', exact: true }).getAttribute('aria-checked'),
+    'false',
+  );
+  await send.click();
+  await waitForAsync(
+    page,
+    (count) => window.effortFixture.submissions.length === count + 1,
+    beforeCursor + 2,
+  );
+  assert.deepEqual((await submissions()).at(-1), {
+    effort: null,
+    parameters: [{ id: 'fast', value: 'false' }],
+  });
+  await choose(model, 'Grok 4.7');
+  await waitEffort('High');
+  assert.equal(await fastSwitch.getAttribute('aria-checked'), 'false');
+  assert.equal(await page.getByText('No reasoning effort', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(
     'PASS: medium default, full model-advertised efforts, exact submitted values, model/provider changes, discovery and refresh gates, offline Home submission, unavailable/busy guards and keyboard/IME behavior.',

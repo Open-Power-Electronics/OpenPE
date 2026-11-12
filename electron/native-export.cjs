@@ -1,23 +1,10 @@
 const path = require('node:path');
-const fs = require('node:fs/promises');
+const { assertContainedPath, canonicalDirectory } = require('../server/host-path.cjs');
 
 async function checkDestination(file) {
-  let cursor = path.resolve(file);
-  while (true) {
-    const info = await fs.lstat(cursor).catch((error) => {
-      if (error.code === 'ENOENT' && cursor === file) return null;
-      throw error;
-    });
-    if (
-      info?.isSymbolicLink() ||
-      (cursor === file && info && !info.isFile()) ||
-      (cursor !== file && !info?.isDirectory())
-    )
-      throw new Error('Choose a regular export file without linked directories.');
-    const parent = path.dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
-  }
+  const message = 'Choose a regular export file without linked directories.';
+  const rooted = await canonicalDirectory(path.dirname(file), { message });
+  await assertContainedPath(rooted, file, { message, kind: 'file', allowMissing: true });
 }
 
 function createNativeExport({

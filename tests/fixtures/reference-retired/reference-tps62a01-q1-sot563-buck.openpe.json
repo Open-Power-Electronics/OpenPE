@@ -4067,12 +4067,12 @@
         "schematic": {
           "path": "tests/fixtures/reference-retired/upstream/tps62a01-q1-sot563-buck/input.kicad_sch",
           "upstreamPath": "data/train/tps62a01-q1_sot563_buck/input.kicad_sch",
-          "sha256": "d5fb11e55f339f3368497e51a2a92c7ca5da82ba3656d31f790453e7f29f8d72"
+          "sha256": "2a0910c3d8d0d63038cc6596c897bdd5bc418ff3652d284688bffeb51a4892ae"
         },
         "pcb": {
           "path": "tests/fixtures/reference-retired/upstream/tps62a01-q1-sot563-buck/expert.kicad_pcb",
           "upstreamPath": "data/train/tps62a01-q1_sot563_buck/expert.kicad_pcb",
-          "sha256": "0d5d1b142eb786bd57b2b80ae90262dfd68853b03e587e95a5107edcb10dccb2"
+          "sha256": "05b172534673da1ec2b20eff919641b3897c697eca189df4343188ee00590f53"
         }
       },
       "topology": "Buck",

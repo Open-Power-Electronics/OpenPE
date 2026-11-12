@@ -201,6 +201,7 @@ import EditorDisplayDrawer from './EditorDisplayDrawer';
 import InspectorResize, { type InspectorSize } from './InspectorResize';
 import { hasOpenOverlay } from './Dialog';
 import type { CapabilityHost } from '@/api/capabilities';
+import { isCommandModifier } from '@/lib/command-modifier';
 const pixelsPerMM = 96 / 25.4;
 const outlineWidth = 0.05;
 const regionMinThickness = 0.2;
@@ -235,7 +236,7 @@ type LayoutSelectionChoice = {
   basis: PCB;
 };
 function mergeSelectionMode(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
-  return e.ctrlKey || e.metaKey
+  return isCommandModifier(e)
     ? e.shiftKey
       ? ('subtract' as const)
       : ('toggle' as const)
@@ -1693,7 +1694,7 @@ function LayoutEditor({
       handle,
       start,
       current: start,
-      step: e.ctrlKey || e.metaKey ? 0 : gridSpacing,
+      step: isCommandModifier(e) ? 0 : gridSpacing,
     });
     setError('');
   }
@@ -1831,7 +1832,7 @@ function LayoutEditor({
   }) {
     return {
       raw: canvasPoint(e, false),
-      gridDisabled: e.ctrlKey || e.metaKey,
+      gridDisabled: isCommandModifier(e),
       objectSnap: !e.shiftKey,
     };
   }
@@ -1861,7 +1862,7 @@ function LayoutEditor({
       (current) =>
         current && {
           ...current,
-          gridDisabled: e.ctrlKey || e.metaKey,
+          gridDisabled: isCommandModifier(e),
           objectSnap: !e.shiftKey,
         },
     );
@@ -2695,7 +2696,7 @@ function LayoutEditor({
   }) {
     const raw = canvasPoint(event, false);
     const snapped =
-      event.ctrlKey || event.metaKey ? { x: raw.x, y: raw.y } : { x: snap(raw.x), y: snap(raw.y) };
+      isCommandModifier(event) ? { x: raw.x, y: raw.y } : { x: snap(raw.x), y: snap(raw.y) };
     if (event.shiftKey) return snapped;
     const radius = (view.width / size.width) * 8;
     let distance = radius;
@@ -2850,7 +2851,7 @@ function LayoutEditor({
     if (analysisProbing || (analysisComponentDetail && tool === 'select' && !annotationDisabled))
       return;
     const p =
-      (tool === 'route' || trackDrag) && (e.ctrlKey || e.metaKey)
+      (tool === 'route' || trackDrag) && (isCommandModifier(e))
         ? routeFreePoint(canvasPoint(e, false))
         : canvasPoint(e);
     if (trackDrag) {
@@ -3094,7 +3095,7 @@ function LayoutEditor({
       : (tool === 'route' ||
             trackDrag ||
             (drag?.mode === 'pointer' && connectedPCBDragKind(drag.ids))) &&
-          (e.ctrlKey || e.metaKey)
+          (isCommandModifier(e))
         ? routeFreePoint(raw)
         : { x: snap(raw.x), y: snap(raw.y) };
     const overlayOpen = hasOpenOverlay();
@@ -3140,7 +3141,7 @@ function LayoutEditor({
       setOutlineResize({
         ...outlineResize,
         current: canvasPoint(e, false),
-        step: e.ctrlKey || e.metaKey ? 0 : gridSpacing,
+        step: isCommandModifier(e) ? 0 : gridSpacing,
       });
       return;
     }
@@ -3297,7 +3298,7 @@ function LayoutEditor({
           outlineResize.rectangle,
           outlineResize.handle,
           { x: at.x - outlineResize.start.x, y: at.y - outlineResize.start.y },
-          e.ctrlKey || e.metaKey ? 0 : gridSpacing,
+          isCommandModifier(e) ? 0 : gridSpacing,
         );
         const next = resizePCBRectangle(pcb, outlineResize.rectangle, bounds);
         if (next !== pcb)
@@ -3335,7 +3336,7 @@ function LayoutEditor({
     }
     if (trackDrag?.pointer)
       finishTrackDrag(
-        e.ctrlKey || e.metaKey ? routeFreePoint(canvasPoint(e, false)) : canvasPoint(e),
+        isCommandModifier(e) ? routeFreePoint(canvasPoint(e, false)) : canvasPoint(e),
       );
     if (drag?.mode === 'pointer') {
       if (!moved || connectedPCBDragKind(drag.ids)) setDrag(null);
@@ -3492,12 +3493,12 @@ function LayoutEditor({
           if (parasiticsProbe) parasiticsProbe.onPick(null);
           else onAnalysisProbe?.(null);
         }
-        else if (key === 'home') fit(e.ctrlKey || e.metaKey ? 'all' : 'board');
+        else if (key === 'home') fit(isCommandModifier(e) ? 'all' : 'board');
         else if (!e.ctrlKey && !e.metaKey) fit('board');
       }
       return;
     }
-    if (e.ctrlKey || e.metaKey) {
+    if (isCommandModifier(e)) {
       if (key === 'h' && !e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();

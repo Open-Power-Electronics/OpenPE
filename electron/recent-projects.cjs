@@ -32,11 +32,8 @@ class RecentProjects {
 
   async check() {
     const directory = await fs.lstat(this.directory);
-    if (
-      !directory.isDirectory() ||
-      directory.isSymbolicLink() ||
-      normalize(await fs.realpath(this.directory)) !== normalize(this.directory)
-    )
+    // The data directory may live under an ancestor symlink. A link at the directory itself is rejected.
+    if (!directory.isDirectory() || directory.isSymbolicLink())
       throw new Error('Recent projects require an unlinked application data directory.');
     try {
       const info = await fs.lstat(this.file);
