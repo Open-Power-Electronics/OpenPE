@@ -890,7 +890,7 @@ export default function ComponentDrawingEditor({
       onClose={close}
       footer={
         <div
-          className={styles.footer}
+          className="dialog-footer-toolbar"
           onCompositionStartCapture={() => setComposing(true)}
           onCompositionEndCapture={() => setComposing(false)}
           onKeyDownCapture={(event) => {
@@ -934,33 +934,33 @@ export default function ComponentDrawingEditor({
                   if (busy || composing || gesture.current) event.preventDefault();
                 }}
               >
-                <Crosshair size={16} aria-hidden="true" />
+                <Crosshair size={18} aria-hidden="true" />
               </summary>
               <div className={styles.placementFields}>{xy('Placement', position, setPosition)}</div>
             </details>
           )}
-          <div className={styles.actions}>
+          <div className="dialog-footer-actions">
             <button
-              className="icon-button"
+              className="icon-button dialog-footer-icon"
               aria-label="Reset drawing"
               title="Reset drawing"
               disabled={(!dirty && !fieldsInvalid) || busy || composing}
               onClick={resetDrawing}
             >
-              <RotateCcw size={16} aria-hidden="true" />
+              <RotateCcw size={18} aria-hidden="true" />
             </button>
             <button
-              className="icon-button"
+              className="icon-button dialog-footer-icon"
               aria-label="Cancel"
               title="Cancel"
               disabled={busy || composing}
               onClick={close}
             >
-              <X size={16} aria-hidden="true" />
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
           <button
-            className="icon-button property-apply-action"
+            className="dialog-button primary dialog-footer-icon"
             aria-label="Apply drawing"
             title="Apply drawing"
             aria-busy={busy}
@@ -968,9 +968,9 @@ export default function ComponentDrawingEditor({
             onClick={() => void apply()}
           >
             {busy ? (
-              <LoaderCircle size={17} className={styles.preparing} aria-hidden="true" />
+              <LoaderCircle size={18} className={styles.preparing} aria-hidden="true" />
             ) : (
-              <Check size={17} aria-hidden="true" />
+              <Check size={18} aria-hidden="true" />
             )}
           </button>
         </div>
@@ -1010,7 +1010,7 @@ export default function ComponentDrawingEditor({
             else if (tool !== 'select') setTool('select');
             else setSelection(null);
           }
-          if ((isCommandModifier(event)) && ['z', 'y'].includes(event.key.toLowerCase())) {
+          if (isCommandModifier(event) && ['z', 'y'].includes(event.key.toLowerCase())) {
             event.preventDefault();
             event.stopPropagation();
             undoDrawing(event.key.toLowerCase() === 'y' || event.shiftKey);

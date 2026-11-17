@@ -9,6 +9,7 @@ import {
 import { unitGraphics } from './library';
 import { documentPinKey, documentPhysicalPinKey, projectNetGroups } from './project-net-groups';
 import { child, children, val } from './sexpr';
+import { parasiticPhysicalModels } from './parasitic-model';
 
 const pinTypes = new Set([
   'input',
@@ -76,6 +77,9 @@ export function runSchematicERC(
 ): RuleCheckResult {
   if (circuit.parts.length > 2000 || circuit.wires.length > 10000)
     throw new Error('ERC supports at most 2,000 components and 10,000 wires per schematic.');
+  const conductorAliases = new Set(
+    parasiticPhysicalModels(circuit).flatMap((model) => [model.startLabel, model.endLabel]),
+  );
   const checkedRules = schematicRuleIds.filter((id) => severities[id] !== 'ignore');
   const result: RuleCheckResult = {
     kind: 'erc',
@@ -397,10 +401,12 @@ export function runSchematicERC(
         );
     }
     const explicitNames = [
-      ...group.labels.map((label) => ({
-        name: circuit.labels[label].text,
-        id: circuit.labels[label].id,
-      })),
+      ...group.labels
+        .filter((label) => !conductorAliases.has(circuit.labels[label].text))
+        .map((label) => ({
+          name: circuit.labels[label].text,
+          id: circuit.labels[label].id,
+        })),
       ...members.flatMap((pin) =>
         pin.marker && pin.name !== undefined ? [{ name: pin.name, id: pin.part.id }] : [],
       ),

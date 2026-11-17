@@ -10,6 +10,18 @@ Copper thickness is provided for each copper layer. The remaining board thicknes
 
 Defaults are ambient 25 °C; front/back convection 10 W/(m²·K), edge convection 5 W/(m²·K); copper conductivity 400 W/(m·K), dielectric conductivity 0.3 W/(m·K); copper 0.035 mm per layer and plating 0.025 mm. These are editable assumptions. With SPICE enabled, the panel initially selects SPICE heat input; Run loads and verifies the current completed electrical record before solving. No power is invented: absent or stale electrical results require completing SPICE first. With SPICE disabled, Manual starts with zero powers and requires explicit heat inputs. Restoring a verified thermal result restores its original input mode and settings. Current settings and probes are session data. A completed desktop run saves its original configuration with the verified result beside the native project; thermal data never changes native source, Core revisions, undo, recovery or dirty state.
 
+### Mesh resolution
+
+The Mesh section offers Coarse (4 mm), Standard (2 mm, the default), Fine
+(1 mm) and Very fine (0.5 mm) presets. Each sets the existing `meshSizeMm`
+configuration through `thermal.configure`; the Mesh size quantity field remains
+editable for custom values. The selector derives its current label from that
+value, including settings restored from a completed result or changed by Agent.
+Changing resolution does not start a solve. Smaller sizes increase spatial
+resolution and computation cost; they do not guarantee temperature accuracy.
+Check convergence by comparing completed runs at successively smaller sizes.
+The existing node/element budgets still apply and reject oversized meshes.
+
 ### SPICE heat inputs
 
 Browser development uses manual heat input and transient results. SPICE heat

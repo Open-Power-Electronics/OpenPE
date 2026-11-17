@@ -208,6 +208,9 @@ try {
     );
   }
   let defaultBox;
+  let defaultHeader;
+  let defaultFooter;
+  await render({ open: false });
   for (const kind of [
     'standard',
     'compact',
@@ -219,6 +222,7 @@ try {
     'near',
     'controlled',
   ]) {
+    await page.locator('#anchor').focus();
     await render({
       kind,
       open: true,
@@ -229,6 +233,50 @@ try {
     await assertCorner();
     const initial = await dialog.boundingBox();
     if (kind === 'standard') defaultBox = initial;
+    if (!['below', 'above', 'near', 'controlled'].includes(kind)) {
+      if (kind === 'compact') {
+        near(initial.width, 360, 'Functional compact dialogs retain their initial width');
+        assert.ok(initial.height < 720, 'Functional compact dialogs fit their short content');
+        near(initial.x, (1800 - 360) / 2, 'Compact dialogs stay centered horizontally');
+        near(initial.y, (1200 - initial.height) / 2, 'Compact dialogs stay centered vertically');
+      } else {
+        near(initial.width, 1000, `${kind}: shared initial width`);
+        near(initial.height, 720, `${kind}: shared initial height`);
+        near(initial.x, (1800 - 1000) / 2, `${kind}: shared horizontal centering`);
+        near(initial.y, (1200 - 720) / 2, `${kind}: shared vertical centering`);
+      }
+      const headerBox = await header.boundingBox();
+      const footerBox = await dialog.locator('.dialog-footer').boundingBox();
+      if (kind === 'standard') {
+        defaultHeader = headerBox.height;
+        defaultFooter = footerBox.height;
+      }
+      near(headerBox.height, defaultHeader, `${kind}: shared header height`);
+      near(footerBox.height, defaultFooter, `${kind}: shared footer height`);
+    }
+    if (kind === 'compact') {
+      await render({ large: true });
+      const expanded = await dialog.boundingBox();
+      near(expanded.width, 360, 'Compact content growth retains its preferred width');
+      assert.ok(
+        expanded.height > initial.height,
+        'Unresized compact height grows with its content',
+      );
+      await assertInViewport();
+      await render({ large: false });
+      sameBox(await dialog.boundingBox(), initial, 'Compact height shrinks with its content');
+    }
+    if (kind === 'below' || kind === 'above')
+      near(initial.width, 520, `${kind}: anchored panels retain their original width`);
+    if (kind === 'near')
+      near(initial.width, 232, 'The anchored waveform popup retains its specialized width');
+    assert.equal(
+      await dialog
+        .getByRole('textbox', { name: 'Dialog draft', exact: true })
+        .evaluate((element) => element === document.activeElement),
+      true,
+      `${kind}: opening focuses the editable draft`,
+    );
     const defaultSize = kind === 'controlled' ? defaultBox : initial;
     if (kind === 'above' || kind === 'near') {
       await handle.press('Home');
@@ -349,6 +397,12 @@ try {
       );
     }
     await render({ open: false });
+    if (!['below', 'above', 'near'].includes(kind))
+      assert.equal(
+        await page.locator('#anchor').evaluate((element) => element === document.activeElement),
+        true,
+        `${kind}: closing returns focus to its opener`,
+      );
   }
   await render({ kind: 'edges', open: true, large: false, controlled: false, size: {} });
   const defaultEdges = await dialog.boundingBox();
@@ -576,12 +630,14 @@ try {
   await assertMaximized();
   await restore.click();
   await frame();
+  await assertInViewport();
+  await page.setViewportSize({ width: 1800, height: 1200 });
+  await frame();
   sameBox(
     await dialog.boundingBox(),
     beforeMaximize,
-    'Restore preserves the pre-maximized window after viewport resize',
+    'Restore retains the prior dimensions after viewport space returns',
   );
-  await page.setViewportSize({ width: 1800, height: 1200 });
   await page.evaluate(() => document.body.style.removeProperty('--desktop-titlebar-height'));
   await render({ kind: 'fresh', open: true, large: false, controlled: false, size: {} });
   await render({ kind: 'standard', open: true, large: false, controlled: false, size: {} });
@@ -599,7 +655,7 @@ try {
     'Escape cancels resizing before closing the dialog.',
   );
   sameBox(await dialog.boundingBox(), initial, 'Escape restores original size and position');
-  await drag(-1000, -1000);
+  await drag(-5000, -5000);
   const minimum = await dialog.boundingBox();
   near(minimum.width, 224, 'Default minimum width');
   near(minimum.height, 160, 'Default minimum height');
@@ -622,6 +678,12 @@ try {
   await frame();
   await assertInViewport();
   await assertCorner();
+  await render({ kind: 'small-centered', open: true, large: false, controlled: false, size: {} });
+  const clamped = await dialog.boundingBox();
+  near(clamped.width, 852, 'Small viewport clamps the shared width');
+  near(clamped.height, 572, 'Small viewport clamps the shared height');
+  near(clamped.x, 24, 'Clamped centered dialog keeps its horizontal margin');
+  near(clamped.y, 24, 'Clamped centered dialog keeps its vertical margin');
   await page.screenshot({ path: 'test-results/dialog-resize-viewport.png' });
   assert.deepEqual(errors, []);
   console.log(

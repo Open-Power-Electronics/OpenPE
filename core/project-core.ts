@@ -36,7 +36,7 @@ import {
 import { commitWireRoute, commitWireRoutes } from '../lib/wiring';
 import { schematicDrafting } from '../lib/schematic-drafting';
 import { previewSchematicMove } from '../lib/schematic-move';
-import { val } from '../lib/sexpr';
+import { child, val } from '../lib/sexpr';
 import {
   prepareSymbolDrawing,
   readSymbolDrawing,
@@ -50,6 +50,7 @@ import {
 } from '../lib/footprint-drawing';
 import layoutPropertySchemas from './layout-property-schemas.json';
 import { schematicTexts } from '../lib/schematic-text';
+import { prepareSchematicSection } from '../lib/schematic-section';
 import { displayName, MAX_DISPLAY_NAME_LENGTH } from '../lib/display-name';
 import { ownProject } from '../lib/immutable-project';
 import {
@@ -127,7 +128,7 @@ export type ProjectCoreOptions = {
   draft?: string | null;
   nativeEntryName?: string;
   /** Pure preparation of a validated immutable snapshot. Library I/O belongs to the host adapter. */
-  prepare?: (project: Project) => Project;
+  prepare?: (project: Project, previousProject: Project | null) => Project;
 };
 
 const text = { type: 'string', minLength: 1, maxLength: 4096 };
@@ -423,6 +424,7 @@ export const coreCommandDefinitions: CoreDefinition[] = [
                   x: { type: 'number', minimum: -1000, maximum: 1000 },
                   y: { type: 'number', minimum: -1000, maximum: 1000 },
                   value: { type: 'string', maxLength: 200 },
+                  section: { enum: ['hardware', 'simulation'] },
                 },
                 ['type', 'kind', 'x', 'y'],
               ),
@@ -584,6 +586,15 @@ export const coreCommandDefinitions: CoreDefinition[] = [
       },
       ['schematicId', 'partId'],
     ),
+  ),
+  objectCommand(
+    'part.section',
+    'Set native board inclusion for a component and its shared units. Real (hardware) also requires an assigned Footprint; Virtual (simulation) includes every unassigned component. SPICE participation and model binding stay independent.',
+    object({ ...sheet, partId: identity, section: { enum: ['hardware', 'simulation'] } }, [
+      'schematicId',
+      'partId',
+      'section',
+    ]),
   ),
   objectCommand(
     'part.participation',
@@ -788,7 +799,7 @@ export class ProjectCore {
     this.requireEditing();
     next = ownProject(next, this.project);
     serializeProject(next);
-    const prepared = this.options.prepare?.(next) ?? next;
+    const prepared = this.options.prepare?.(next, this.project) ?? next;
     next = ownProject(prepared, next);
     serializeProject(next);
     // Geometry and its current copper are one edit for every editor/Agent path.
@@ -846,6 +857,7 @@ export class ProjectCore {
           next.parts.find((part) => part.id === footprint.symbolId) ??
           (old && next.parts.find((part) => part.ref === old.ref && part.libId === old.libId));
         if (!part) return [];
+        if (val(child(part.raw ?? [], 'on_board')) === 'no') return [];
         if (Object.hasOwn(partFields(part), 'Footprint') && !partFields(part).Footprint.trim())
           return [];
         return part.id === footprint.symbolId ? [footprint] : [{ ...footprint, symbolId: part.id }];
@@ -1420,6 +1432,9 @@ export class ProjectCore {
         break;
       case 'schematic.simplify':
         next = simplifyWires(schematic);
+        break;
+      case 'part.section':
+        next = prepareSchematicSection(schematic, [args.partId], args.section);
         break;
       case 'part.properties':
       case 'part.participation': {

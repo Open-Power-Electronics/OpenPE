@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { tsImport } from 'tsx/esm/api';
 import { waitForAsync } from './async-browser-test-helpers.mjs';
@@ -10,26 +10,45 @@ import { bundledWorkbenchCatalog } from '../server/workbench-plugins.mjs';
 
 const { parseProject, projectNativeFiles, projectSchematics, projectFromNativeFiles } =
   await tsImport('../lib/project.ts', import.meta.url);
-const { circuitFingerprint } = await tsImport('../lib/circuit.ts', import.meta.url);
+const { circuitFingerprint, pinPositions } = await tsImport('../lib/circuit.ts', import.meta.url);
 const { schematicTexts } = await tsImport('../lib/schematic-text.ts', import.meta.url);
-const { schematicPCBNets, pcbPinKey } = await tsImport('../lib/pcb-sync.ts', import.meta.url);
-const { partFields } = await tsImport('../lib/library.ts', import.meta.url);
+const { buildSpiceDeck, defaultTransient, spiceNets } = await tsImport(
+  '../plugins/spice-simulation/domain/spice.ts',
+  import.meta.url,
+);
+const { partFields, unitGraphics } = await tsImport('../lib/library.ts', import.meta.url);
 const { child, children, val } = await tsImport('../lib/sexpr.ts', import.meta.url);
 const { prepareThermalModel } = await tsImport(
   '../plugins/layout-thermal/domain/thermal.ts',
   import.meta.url,
 );
 const { defaultAgentPreferences } = await tsImport('../lib/workspace-state.ts', import.meta.url);
-const { defaultAppearance } = await tsImport('../lib/appearance.ts', import.meta.url);
+const { defaultAppearance, appearanceVariables } = await tsImport(
+  '../lib/appearance.ts',
+  import.meta.url,
+);
 const { validateAgentWorkspaceContext } = await tsImport(
   '../context/agent-workspace-context.ts',
   import.meta.url,
 );
 const sources = JSON.parse(await readFile('lib/reference-examples.json', 'utf8'));
-const exampleId = Object.keys(sources).find((id) => /lm2596/i.test(id));
-assert.ok(exampleId, 'The curated LM2596 example is present.');
+const contactCheck = process.argv.includes('--parasitics-contact');
+const exampleId = contactCheck
+  ? 'reference-lm25017-wson8-flybuck'
+  : Object.keys(sources).find((id) => /lm2596/i.test(id));
+assert.ok(exampleId && sources[exampleId], 'The selected curated example is present.');
 const source = sources[exampleId];
 const project = parseProject(source);
+const placementLibraryId = project.schematic.parts.find((part) => part.ref === 'V1').libId;
+const placementDetail = {
+  id: placementLibraryId,
+  name: placementLibraryId.split(':').at(-1),
+  library: placementLibraryId.split(':')[0],
+  description: 'Native example symbol used by the isolated section placement check.',
+  keywords: 'voltage source',
+  symbol: project.schematic.libraries[placementLibraryId],
+  units: 1,
+};
 const documentId = randomUUID(),
   sessionId = randomUUID(),
   fileId = randomUUID();
@@ -89,6 +108,25 @@ async function runChecks() {
   page.setDefaultTimeout(30000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  const setTheme = async (mode) => {
+    await page.evaluate(
+      ({ mode, variables }) => {
+        document.documentElement.dataset.theme = mode;
+        for (const [name, value] of Object.entries(variables))
+          document.documentElement.style.setProperty(name, value);
+      },
+      { mode, variables: appearanceVariables(defaultAppearance, mode) },
+    );
+    await page.evaluate(async () => {
+      await new Promise(requestAnimationFrame);
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().iterations))
+          .map((animation) => animation.finished.catch(() => {})),
+      );
+    });
+  };
   await page.addInitScript((fileId) => {
     window.thermalExports = [];
     window.openpe = {
@@ -151,6 +189,18 @@ async function runChecks() {
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });
+    if (process.argv.includes('--schematic-sections') && url.pathname === '/api/libraries/symbols')
+      return route.fulfill({
+        json: url.searchParams.has('categories')
+          ? {
+              categories: [
+                { id: placementDetail.library, name: placementDetail.library, children: [] },
+              ],
+            }
+          : url.searchParams.has('id')
+            ? placementDetail
+            : { entries: [placementDetail], libraries: [placementDetail.library], total: 1 },
+      });
     if (url.pathname === '/api/thermal/status') {
       statusRequests++;
       return route.fulfill({
@@ -252,6 +302,578 @@ async function runChecks() {
     project.schematic.id,
     circuitFingerprint(project.schematic),
   );
+  if (process.argv.includes('--schematic-sections')) {
+    const canvas = page.getByTestId('schematic-canvas');
+    const section = page.locator('.schematic-section-switch');
+    const sectionTrigger = section.getByRole('combobox', {
+      name: 'Schematic section',
+      exact: true,
+    });
+    const sectionLabels = { hardware: 'Real', simulation: 'Virtual', all: 'All' };
+    const settledCamera = () =>
+      canvas.evaluate(async (svg) => {
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        return svg.getAttribute('viewBox');
+      });
+    const sectionMenu = () => page.getByRole('listbox', { name: 'Schematic section', exact: true });
+    const chooseSection = async (value) => {
+      const viewport = await settledCamera();
+      await sectionTrigger.click();
+      await sectionMenu().getByRole('option', { name: sectionLabels[value], exact: true }).click();
+      await assertSection(value);
+      assert.equal(await settledCamera(), viewport, 'Changing emphasis retains the sheet camera.');
+    };
+    const readDesign = () =>
+      page.evaluate(async () => {
+        const host = window.thermalWorkbenchHost();
+        return {
+          source: await host.query('project.source'),
+          history: await host.query('history.get'),
+          workspace: await host.query('workbench.state'),
+        };
+      });
+    const sourcePart = project.schematic.parts.find((part) => part.ref === 'V1');
+    const membershipPart = project.schematic.parts.find((part) => part.ref === 'R1');
+    const hardwarePart = project.schematic.parts.find((part) => part.ref === 'U1');
+    assert.ok(sourcePart && membershipPart && hardwarePart);
+    const sourcePins = pinPositions(sourcePart, project.schematic.libraries[sourcePart.libId]);
+    const touches = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 0.00001;
+    const sourceWires = project.schematic.wires.filter((wire) =>
+      sourcePins.some((pin) => touches(pin, wire.a) || touches(pin, wire.b)),
+    );
+    assert.equal(sourceWires.length, 2, 'The fixture has two isolated source leads.');
+    const sourceLabels = project.schematic.labels.filter((label) =>
+      sourceWires.some((wire) => touches(label, wire.a) || touches(label, wire.b)),
+    );
+    assert.equal(sourceLabels.length, 2);
+    const hardwarePins = pinPositions(
+      hardwarePart,
+      project.schematic.libraries[hardwarePart.libId],
+    );
+    const markerPins = project.schematic.parts
+      .filter((part) => part.ref.startsWith('#'))
+      .flatMap((part) => pinPositions(part, project.schematic.libraries[part.libId]));
+    const mixedWire = project.schematic.wires.find(
+      (wire) =>
+        hardwarePins.some((pin) => touches(pin, wire.a) || touches(pin, wire.b)) &&
+        markerPins.some((pin) => touches(pin, wire.a) || touches(pin, wire.b)),
+    );
+    assert.ok(
+      mixedWire,
+      'The fixture contains a Real component lead attached to a Virtual power marker.',
+    );
+    const assertSection = async (value) => {
+      await waitForAsync(
+        page,
+        async (expected) =>
+          (await window.thermalWorkbenchHost().query('workbench.state')).ui.schematicSection ===
+          expected,
+        value,
+      );
+      assert.equal(await sectionTrigger.textContent(), sectionLabels[value]);
+    };
+    const assertOpacity = async (id, expected) => {
+      const target = canvas.locator(`[data-selection-id="${id}"]`).first();
+      assert.equal(await target.count(), 1, 'Inactive geometry remains drawn.');
+      const opacity = await target.evaluate((element) => {
+        let opacity = 1;
+        for (
+          let node = element;
+          node && node.tagName.toLowerCase() !== 'svg';
+          node = node.parentElement
+        )
+          opacity *= Number(getComputedStyle(node).opacity);
+        return opacity;
+      });
+      assert.ok(
+        Math.abs(opacity - expected) < 0.001,
+        `${id} should have ${expected} opacity, got ${opacity}.`,
+      );
+    };
+    await section.waitFor();
+    await page.locator('.toast').waitFor({ state: 'hidden' });
+    await sectionTrigger.click();
+    assert.deepEqual(await sectionMenu().getByRole('option').allTextContents(), [
+      'All',
+      'Real',
+      'Virtual',
+    ]);
+    const sectionFieldBounds = await sectionTrigger.boundingBox();
+    const sectionPopupBounds = await sectionMenu().boundingBox();
+    assert.ok(sectionFieldBounds.width < 100, 'The current-mode trigger stays compact.');
+    assert.ok(
+      sectionPopupBounds.width >= 127 && sectionPopupBounds.width > sectionFieldBounds.width,
+      'The status menu has enough independent width for complete mode names.',
+    );
+    assert.ok(sectionPopupBounds.y + sectionPopupBounds.height <= sectionFieldBounds.y);
+    for (const option of await sectionMenu().getByRole('option').all())
+      assert.equal(
+        await option.locator('strong').evaluate((label) => {
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          return range.getClientRects().length;
+        }),
+        1,
+        'Each section label stays on one readable line inside the content-sized popup.',
+      );
+    await page.screenshot({ path: 'test-results/schematic-sections-control-ui.png' });
+    await setTheme('dark');
+    const darkControl = await sectionTrigger.evaluate((button) => {
+      const style = getComputedStyle(button);
+      const root = getComputedStyle(document.documentElement);
+      const pixel = document.createElement('canvas').getContext('2d');
+      const luminance = (color) => {
+        pixel.fillStyle = color;
+        pixel.fillRect(0, 0, 1, 1);
+        return [...pixel.getImageData(0, 0, 1, 1).data]
+          .slice(0, 3)
+          .map((channel) => channel / 255)
+          .map((channel) =>
+            channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+          )
+          .reduce((total, channel, index) => total + channel * [0.2126, 0.7152, 0.0722][index], 0);
+      };
+      const foreground = luminance(style.color);
+      const background = luminance(style.backgroundColor);
+      return {
+        color: style.color,
+        background: style.backgroundColor,
+        surface: root.getPropertyValue('--surface'),
+        statusFill: style.getPropertyValue('--status-item-fill'),
+        gridBackground: getComputedStyle(
+          button.closest('footer').querySelector('.grid-density .select-trigger'),
+        ).backgroundColor,
+        colorScheme: root.colorScheme,
+        contrast:
+          (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05),
+      };
+    });
+    assert.ok(
+      darkControl.contrast >= 4.5,
+      `The settled dark section trigger is readable: ${JSON.stringify(darkControl)}`,
+    );
+    console.log('Schematic dark control:', JSON.stringify(darkControl));
+    await page.screenshot({ path: 'test-results/schematic-sections-control-dark-ui.png' });
+    await setTheme('light');
+    await sectionTrigger.press('Escape');
+    await assertSection('all');
+    await canvas.focus();
+    await canvas.press('Space');
+    const fullFit = await settledCamera();
+    const assertFullFit = async () => {
+      const expected = fullFit.split(' ').map(Number);
+      const current = (await settledCamera()).split(' ').map(Number);
+      assert.ok(
+        current.every((value, index) => Math.abs(value - expected[index]) < 0.5),
+        'Fit retains complete-sheet bounds, allowing the existing measured-text rounding.',
+      );
+      const bounds = await canvas.evaluate((svg) => {
+        const surface = svg.getBoundingClientRect();
+        return [...svg.querySelectorAll('.part')].map((part) => {
+          const box = part.getBoundingClientRect();
+          return (
+            box.left >= surface.left &&
+            box.right <= surface.right &&
+            box.top >= surface.top &&
+            box.bottom <= surface.bottom
+          );
+        });
+      });
+      assert.equal(bounds.length, project.schematic.parts.length);
+      assert.ok(
+        bounds.every(Boolean),
+        'Fit keeps every component inside the complete-sheet canvas.',
+      );
+    };
+    await chooseSection('hardware');
+    await assertSection('hardware');
+    await canvas.focus();
+    await canvas.press('Space');
+    await assertFullFit();
+    await assertOpacity(sourcePart.id, 0.25);
+    await assertOpacity(hardwarePart.id, 1);
+    assert.notEqual(val(child(sourcePart.raw, 'on_board')), 'no');
+    const before = await readDesign();
+    const beforeProject = parseProject(before.source);
+    const nativeBefore = projectNativeFiles(beforeProject, 'project.kicad_pro');
+    const at = await canvas.evaluate((svg, part) => {
+      const point = new DOMPoint(part.x, part.y).matrixTransform(svg.getScreenCTM());
+      return { x: point.x, y: point.y };
+    }, membershipPart);
+    await page.mouse.click(at.x, at.y);
+    const membership = page.locator('.part-properties').getByRole('combobox', {
+      name: 'Schematic section',
+      exact: true,
+    });
+    await membership.waitFor();
+    await membership.click();
+    const menu = page.getByRole('listbox', { name: 'Schematic section', exact: true });
+    const fieldBounds = await membership.boundingBox();
+    const popupBounds = await menu.boundingBox();
+    assert.ok(
+      Math.abs(popupBounds.width - fieldBounds.width) <= 1,
+      'The membership popup matches the originating selection field width.',
+    );
+    await menu.getByRole('option', { name: 'Virtual', exact: true }).click();
+    await waitForAsync(
+      page,
+      async (expectedUndoDepth) =>
+        (await window.thermalWorkbenchHost().query('history.get')).undoDepth === expectedUndoDepth,
+      before.history.undoDepth + 1,
+    );
+    const assigned = await readDesign();
+    const assignedProject = parseProject(assigned.source);
+    const assignedSource = assignedProject.schematic.parts.find(
+      (part) => part.id === membershipPart.id,
+    );
+    assert.equal(val(child(assignedSource.raw, 'on_board')), 'no');
+    assert.equal(assignedSource.excludeFromSimulation, membershipPart.excludeFromSimulation);
+    assert.deepEqual(partFields(assignedSource), partFields(membershipPart));
+    assert.equal(assigned.history.undoDepth, before.history.undoDepth + 1);
+    const nativeAssigned = projectNativeFiles(assignedProject, 'project.kicad_pro');
+    const reopened = projectFromNativeFiles(nativeAssigned);
+    assert.equal(
+      val(
+        child(
+          reopened.schematic.parts.find((part) => part.id === membershipPart.id).raw,
+          'on_board',
+        ),
+      ),
+      'no',
+    );
+    assert.ok(beforeProject.pcb.footprints.some((part) => part.symbolId === membershipPart.id));
+    assert.deepEqual(
+      assignedProject.pcb.footprints,
+      beforeProject.pcb.footprints.filter((part) => part.symbolId !== membershipPart.id),
+      'Moving a packaged part to Virtual removes only its linked package.',
+    );
+    for (const key of ['tracks', 'vias', 'graphics'])
+      assert.deepEqual(
+        assignedProject.pcb[key],
+        beforeProject.pcb[key],
+        `PCB ${key} are retained.`,
+      );
+    const zoneIdentity = ({ id, layer, outline, holes, netId, fillEnabled }) => ({
+      id,
+      layer,
+      outline,
+      holes,
+      netId,
+      fillEnabled,
+    });
+    assert.deepEqual(
+      assignedProject.pcb.zones.map(zoneIdentity),
+      beforeProject.pcb.zones.map(zoneIdentity),
+      'Package removal retains zone identities and outlines while refreshing enabled fills.',
+    );
+    await assertSection('simulation');
+    await chooseSection('hardware');
+    await assertSection('hardware');
+    await assertOpacity(sourcePart.id, 0.25);
+    await assertOpacity(membershipPart.id, 0.25);
+    await assertOpacity(hardwarePart.id, 1);
+    for (const item of [...sourceWires, ...sourceLabels]) await assertOpacity(item.id, 0.25);
+    await assertOpacity(mixedWire.id, 0.25);
+    const mixedPosition = await canvas.evaluate((svg, wire) => {
+      const point = new DOMPoint(
+        (wire.a.x + wire.b.x) / 2,
+        (wire.a.y + wire.b.y) / 2,
+      ).matrixTransform(svg.getScreenCTM());
+      return { x: point.x, y: point.y };
+    }, mixedWire);
+    await page.mouse.click(mixedPosition.x, mixedPosition.y);
+    assert.ok(
+      (await readDesign()).workspace.ui.selection.includes(mixedWire.id),
+      'A dimmed wire shared by Real and Virtual remains selectable.',
+    );
+    await page.screenshot({ path: 'test-results/schematic-sections-hardware-ui.png' });
+    const viewBaseline = await readDesign();
+    await chooseSection('simulation');
+    await assertSection('simulation');
+    await assertOpacity(sourcePart.id, 1);
+    await assertOpacity(membershipPart.id, 1);
+    await assertOpacity(hardwarePart.id, 0.25);
+    for (const item of [...sourceWires, ...sourceLabels]) await assertOpacity(item.id, 1);
+    await assertOpacity(mixedWire.id, 0.25);
+    await canvas.focus();
+    await canvas.press('Space');
+    await assertFullFit();
+    const inactivePosition = await canvas.evaluate((svg, part) => {
+      const point = new DOMPoint(part.x, part.y).matrixTransform(svg.getScreenCTM());
+      return { x: point.x, y: point.y };
+    }, hardwarePart);
+    await page.mouse.click(inactivePosition.x, inactivePosition.y);
+    assert.ok(
+      !(await readDesign()).workspace.ui.selection.includes(hardwarePart.id),
+      'Dimmed inactive symbols do not accept pointer selection.',
+    );
+    await canvas.focus();
+    await canvas.press('ControlOrMeta+a');
+    const selected = (await readDesign()).workspace.ui.selection;
+    assert.ok(selected.includes(sourcePart.id));
+    assert.ok(
+      !selected.includes(hardwarePart.id) && !selected.some((id) => id.includes(hardwarePart.id)),
+      'Select all cannot select an inactive object or field dimmed by the active section.',
+    );
+    const rejected = await page.evaluate(async (id) => {
+      try {
+        await window.thermalWorkbenchHost().execute('workbench.selection', { ids: [id] });
+        return '';
+      } catch (error) {
+        return error.message;
+      }
+    }, hardwarePart.id);
+    assert.match(rejected, /visible/);
+    await canvas.press('Escape');
+    const imePrevented = await sectionTrigger.evaluate((button) => {
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        bubbles: true,
+        cancelable: true,
+      });
+      button.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    assert.equal(imePrevented, true);
+    await assertSection('simulation');
+    await sectionTrigger.dispatchEvent('compositionstart');
+    await sectionTrigger.click();
+    await assertSection('simulation');
+    assert.equal(await sectionMenu().count(), 0);
+    await sectionTrigger.dispatchEvent('compositionend');
+    await sectionTrigger.focus();
+    await sectionTrigger.press('Enter');
+    await sectionMenu().getByRole('option', { name: 'All', exact: true }).click();
+    await assertSection('all');
+    await assertOpacity(sourcePart.id, 1);
+    await assertOpacity(membershipPart.id, 1);
+    await assertOpacity(hardwarePart.id, 1);
+    await assertOpacity(mixedWire.id, 1);
+    assert.equal(await canvas.locator('.part').count(), project.schematic.parts.length);
+    const viewed = await readDesign();
+    assert.equal(viewed.source, viewBaseline.source);
+    assert.deepEqual(viewed.history, viewBaseline.history);
+    assert.equal(viewed.workspace.ui.revision, viewBaseline.workspace.ui.revision);
+    assert.equal(viewed.workspace.ui.dirty, viewBaseline.workspace.ui.dirty);
+    await page.screenshot({ path: 'test-results/schematic-sections-all-ui.png' });
+    const sourceMarker = project.schematic.parts.find(
+      (part) =>
+        part.value === 'GND' &&
+        pinPositions(part, project.schematic.libraries[part.libId]).some((pin) =>
+          sourceWires.some((wire) => touches(pin, wire.a) || touches(pin, wire.b)),
+        ),
+    );
+    assert.ok(sourceMarker);
+    await page.evaluate(
+      (id) => window.thermalWorkbenchHost().execute('workbench.selection', { ids: [id] }),
+      sourceMarker.id,
+    );
+    await page.locator('.part-properties').waitFor();
+    await waitForAsync(
+      page,
+      (reference) =>
+        document.querySelector('.part-properties input[aria-label="Component reference"]')
+          ?.value === reference,
+      sourceMarker.ref,
+    );
+    assert.equal(
+      await page
+        .locator('.part-properties')
+        .getByRole('combobox', { name: 'Schematic section', exact: true })
+        .count(),
+      0,
+      'A power marker without a Footprint remains Virtual without a misleading membership field.',
+    );
+    await page.evaluate(
+      (id) => window.thermalWorkbenchHost().execute('workbench.selection', { ids: [id] }),
+      sourcePart.id,
+    );
+    await waitForAsync(
+      page,
+      (reference) =>
+        document.querySelector('.part-properties input[aria-label="Component reference"]')
+          ?.value === reference,
+      sourcePart.ref,
+    );
+    await membership.click();
+    assert.equal(
+      await menu.getByRole('option', { name: 'Real', exact: true }).getAttribute('aria-disabled'),
+      'true',
+      'Real cannot be selected in Properties without a Footprint.',
+    );
+    await membership.press('Escape');
+    const xPosition = page.getByRole('spinbutton', { name: 'Component X position', exact: true });
+    await xPosition.fill('100001');
+    await sectionTrigger.click();
+    await assertSection('all');
+    assert.equal(await sectionMenu().count(), 0);
+    assert.equal(await xPosition.inputValue(), '100001');
+    assert.equal((await readDesign()).source, viewBaseline.source);
+    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+    await xPosition.press('Escape');
+    await chooseSection('simulation');
+    await assertSection('simulation');
+    await chooseSection('all');
+    await assertSection('all');
+    await canvas.focus();
+    await canvas.press('w');
+    const drawingBounds = await canvas.boundingBox();
+    await page.mouse.click(
+      drawingBounds.x + drawingBounds.width * 0.48,
+      drawingBounds.y + drawingBounds.height * 0.88,
+    );
+    await canvas.getByTestId('schematic-wire-preview').waitFor({ state: 'attached' });
+    await chooseSection('simulation');
+    await assertSection('simulation');
+    await canvas.getByTestId('schematic-wire-preview').waitFor({ state: 'detached' });
+    assert.equal(
+      (await readDesign()).source,
+      viewBaseline.source,
+      'A section switch cancels a provisional wire without accepting geometry.',
+    );
+    await page.setViewportSize({ width: 1120, height: 780 });
+    const position = await section.evaluate((element) => {
+      const b = element.getBoundingClientRect();
+      const controls = element.parentElement.getBoundingClientRect();
+      const footer = element.closest('footer').getBoundingClientRect();
+      return {
+        right: footer.right - controls.right,
+        bottom: footer.bottom - controls.bottom,
+        inBounds:
+          b.left >= footer.left &&
+          b.right <= footer.right &&
+          b.top >= footer.top &&
+          b.bottom <= footer.bottom,
+      };
+    });
+    assert.ok(
+      position.inBounds && position.right <= 12 && position.bottom <= 10,
+      'The section switch remains in the drawing footer bottom-right at a compact viewport.',
+    );
+    await page.setViewportSize({ width: 1480, height: 920 });
+    await page.screenshot({ path: 'test-results/schematic-sections-simulation-ui.png' });
+    await setTheme('dark');
+    await page.screenshot({ path: 'test-results/schematic-sections-simulation-dark-ui.png' });
+    await setTheme('light');
+    await page.evaluate(() =>
+      window.thermalWorkbenchHost().execute('source.update', { draft: 'Pending section fixture' }),
+    );
+    assert.equal(await sectionTrigger.isDisabled(), true);
+    await page.evaluate(() => window.thermalWorkbenchHost().execute('source.discard'));
+    await page.evaluate(() => window.thermalWorkbenchHost().execute('history.undo'));
+    await waitForAsync(
+      page,
+      async (expected) =>
+        (await window.thermalWorkbenchHost().query('project.source')) === expected,
+      before.source,
+    );
+    await chooseSection('hardware');
+    await assertSection('hardware');
+    await assertOpacity(sourcePart.id, 0.25);
+    await assertOpacity(membershipPart.id, 1);
+    const restored = await readDesign();
+    assert.equal(restored.history.undoDepth, before.history.undoDepth);
+    const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    assert.equal(
+      digest(projectNativeFiles(parseProject(restored.source), 'project.kicad_pro')),
+      digest(nativeBefore),
+      'Undo restores the complete native file set byte for byte.',
+    );
+    for (const originSection of ['hardware', 'all', 'simulation']) {
+      await chooseSection(originSection);
+      await assertSection(originSection);
+      const placementBaseline = await readDesign();
+      const viewport = await canvas.getAttribute('viewBox');
+      await page.getByRole('button', { name: 'Add component', exact: true }).click();
+      const chooser = page.getByRole('dialog', { name: 'Components', exact: true });
+      await chooser.locator('.library-results button').first().click();
+      await waitForAsync(page, () => {
+        const place = document.querySelector('dialog[open] button[aria-label="Place"]');
+        return place && !place.disabled;
+      });
+      await chooser.getByRole('button', { name: 'Place', exact: true }).click();
+      await chooser.waitFor({ state: 'detached' });
+      const placementBounds = await canvas.boundingBox();
+      await page.mouse.click(
+        placementBounds.x + placementBounds.width * 0.55,
+        placementBounds.y + placementBounds.height * 0.7,
+      );
+      await waitForAsync(
+        page,
+        async (depth) =>
+          (await window.thermalWorkbenchHost().query('history.get')).undoDepth === depth,
+        placementBaseline.history.undoDepth + 1,
+      );
+      const placed = await readDesign();
+      const placedProject = parseProject(placed.source);
+      const added = placedProject.schematic.parts.find(
+        (part) => !beforeProject.schematic.parts.some((previous) => previous.id === part.id),
+      );
+      assert.ok(added);
+      assert.equal(partFields(added).Footprint || '', '');
+      const boardFlag = val(child(added.raw, 'on_board'));
+      if (originSection === 'simulation') assert.equal(boardFlag, 'no');
+      else assert.notEqual(boardFlag, 'no', 'Real intent retains native board inclusion/default.');
+      await assertSection(originSection === 'all' ? 'all' : 'simulation');
+      assert.ok(placed.workspace.ui.selection.includes(added.id));
+      assert.equal(await canvas.getByTestId(`part-${added.ref}`).isVisible(), true);
+      assert.equal(await canvas.getAttribute('viewBox'), viewport, 'Placement retains the camera.');
+      assert.equal(
+        digest(placedProject.pcb),
+        digest(beforeProject.pcb),
+        'No-Footprint placement preserves PCB data.',
+      );
+      await canvas.press('Escape');
+      await page.evaluate(() => window.thermalWorkbenchHost().execute('history.undo'));
+      await waitForAsync(
+        page,
+        async (expected) =>
+          (await window.thermalWorkbenchHost().query('project.source')) === expected,
+        placementBaseline.source,
+      );
+    }
+    const layoutBaseline = await readDesign();
+    await page.getByRole('button', { name: 'Layout', exact: true }).click();
+    const nonactive = page.getByRole('combobox', { name: 'Non-active layers', exact: true });
+    await nonactive.click();
+    const layerMenu = page.getByRole('listbox', { name: 'Non-active layers', exact: true });
+    assert.deepEqual(await layerMenu.getByRole('option').allTextContents(), ['All', 'Dim', 'Solo']);
+    const layerFieldBounds = await nonactive.boundingBox();
+    const layerPopupBounds = await layerMenu.boundingBox();
+    assert.ok(
+      layerPopupBounds.width >= 127 && layerPopupBounds.width > layerFieldBounds.width,
+      'Layout status modes use a readable content-sized popup.',
+    );
+    for (const option of await layerMenu.getByRole('option').all())
+      assert.equal(
+        await option.locator('strong').evaluate((label) => {
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          return range.getClientRects().length;
+        }),
+        1,
+        'Every Layout status mode name stays complete on one line.',
+      );
+    await page.screenshot({ path: 'test-results/schematic-sections-layout-menu-ui.png' });
+    await setTheme('dark');
+    await page.screenshot({ path: 'test-results/schematic-sections-layout-menu-dark-ui.png' });
+    await setTheme('light');
+    await layerMenu.getByRole('option', { name: 'Dim', exact: true }).click();
+    const layoutViewed = await readDesign();
+    assert.equal(layoutViewed.source, layoutBaseline.source);
+    assert.deepEqual(layoutViewed.history, layoutBaseline.history);
+    assert.equal(layoutViewed.workspace.ui.revision, layoutBaseline.workspace.ui.revision);
+    assert.equal(layoutViewed.workspace.ui.dirty, layoutBaseline.workspace.ui.dirty);
+    assert.equal(statusRequests, 0);
+    assert.equal(runRequests, 0);
+    assert.deepEqual(errors, []);
+    console.log(
+      'Schematic sections passed: All default, Real/Virtual Footprint membership and dimming, shared Fit/camera, native section/package edit and exact undo, new placements, local wire/label isolation, inactive selection gates, IME/draft cancellation, readable compact Schematic/Layout menus, responsive themes and retained PCB copper. No Electron, provider or solver was run.',
+    );
+    return;
+  }
   await page.getByRole('button', { name: 'Layout', exact: true }).click();
   const nativeSidebar = page.getByRole('complementary', { name: 'Layout sidebar', exact: true });
   const sidebarResize = nativeSidebar.locator('..').getByRole('button', {
@@ -262,7 +884,11 @@ async function runChecks() {
   const nativeWidth = (await nativeSidebar.boundingBox()).width;
   assert.ok(Math.abs(nativeWidth - 280) <= 1, 'The native Layout sidebar starts at 280 px.');
   const nativeDrawingWidth = (await drawing.boundingBox()).width;
-  if (process.argv.includes('--parasitics-dock') || process.argv.includes('--parasitics-study')) {
+  if (
+    contactCheck ||
+    process.argv.includes('--parasitics-dock') ||
+    process.argv.includes('--parasitics-study')
+  ) {
     const readDesign = () =>
       page.evaluate(async () => {
         const host = window.thermalWorkbenchHost();
@@ -312,8 +938,21 @@ async function runChecks() {
     for (const name of ['Net', 'Start terminal', 'End terminal'])
       assert.equal(await parasitics.getByRole('combobox', { name, exact: true }).count(), 0);
     const pads = project.pcb.footprints.flatMap((footprint) => footprint.pads);
-    const net = project.pcb.nets.find(({ name }) => name === 'Net-(D1-K)');
-    const [start, end] = pads.filter((pad) => pad.netId === net.id);
+    const net = project.pcb.nets.find(
+      ({ name }) => name === (contactCheck ? '/VOUT1' : 'Net-(D1-K)'),
+    );
+    assert.ok(net);
+    const terminalPad = (reference, number) => {
+      const component = project.schematic.parts.find((part) => part.ref === reference);
+      const footprint = project.pcb.footprints.find((item) => item.symbolId === component?.id);
+      const pad = footprint?.pads.find((pad) => pad.number === number);
+      assert.ok(pad, `The fixture contains ${reference} pad ${number}.`);
+      assert.equal(pad.netId, net.id);
+      return pad;
+    };
+    const [start, end] = contactCheck
+      ? [terminalPad('D1', '2'), terminalPad('C8', '1')]
+      : pads.filter((pad) => pad.netId === net.id);
     const padLabel = (pad) => {
       const owner = project.pcb.footprints.find(({ pads }) => pads.includes(pad));
       const reference = project.schematic.parts.find(({ id }) => id === owner.symbolId)?.ref;
@@ -352,6 +991,126 @@ async function runChecks() {
     assert.deepEqual(await terminals.locator('dd').allTextContents(), ['—', '—', '—']);
     assert.deepEqual(await results.locator('dd').allTextContents(), ['—', '—', '—']);
     const thickness = parasitics.getByRole('textbox', { name: 'Copper thickness', exact: true });
+    if (contactCheck) {
+      assert.equal(start.id, '07849834-bb34-42e2-80ef-179e1baaa6fc');
+      assert.equal(end.id, '3ee753a3-1ca6-42ee-95dd-df02a6a91f4d');
+      const create = parasitics.getByRole('button', {
+        name: 'Add parasitic components',
+        exact: true,
+      });
+      assert.equal(await create.isDisabled(), true);
+      await layout.focus();
+      await layout.press('Space');
+      await layout.evaluate(async () => {
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+      });
+      await clickPad(start);
+      await first.waitFor();
+      await clickPad(end);
+      await second.waitFor();
+      await measuredResistance.waitFor();
+      assert.deepEqual(await terminals.locator('dd').allTextContents(), [
+        padLabel(start),
+        padLabel(end),
+        '/VOUT1',
+      ]);
+      for (const pad of [start, end])
+        await layout.locator(`[data-pad-id="${pad.id}"] [data-selection-only]`).waitFor();
+      assert.equal(await parasitics.getByRole('alert').count(), 0);
+      assert.equal(
+        await create.isEnabled(),
+        true,
+        'A valid finite endpoint measurement enables schematic addition.',
+      );
+      const measureContact = (copperThicknessMm, viaPlatingMm = 0.025) =>
+        page.evaluate((input) => window.thermalWorkbenchHost().query('parasitics.measure', input), {
+          boardId: project.pcb.id,
+          startId: start.id,
+          endId: end.id,
+          copperThicknessMm,
+          viaPlatingMm,
+        });
+      const firstMeasurement = await measureContact(0.035);
+      assert.equal(firstMeasurement.netId, net.id);
+      assert.equal(firstMeasurement.netName, '/VOUT1');
+      for (const key of [
+        'shortestLengthMm',
+        'shortestResistanceOhm',
+        'equivalentResistanceOhm',
+        'shortestPartialInductanceNh',
+      ])
+        assert.ok(
+          Number.isFinite(firstMeasurement[key]) && firstMeasurement[key] > 0,
+          `${key} is finite and positive.`,
+        );
+      const shownResistance = () => results.locator('dd').nth(1);
+      const numberFormat = new Intl.NumberFormat('en', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+      });
+      assert.equal(
+        await shownResistance().textContent(),
+        `${numberFormat.format(firstMeasurement.equivalentResistanceOhm * 1000)} mΩ`,
+      );
+      const firstDisplayed = await shownResistance().textContent();
+      await thickness.fill('0.07');
+      await waitForAsync(
+        page,
+        (previous) => {
+          const value = document.querySelector(
+            '.layout-parasitics-results div:nth-child(2) dd',
+          )?.textContent;
+          return value && value !== '—' && value !== previous;
+        },
+        firstDisplayed,
+      );
+      const thicker = await measureContact(0.07);
+      assert.ok(
+        thicker.equivalentResistanceOhm > 0 &&
+          thicker.equivalentResistanceOhm < firstMeasurement.equivalentResistanceOhm,
+      );
+      assert.equal(thicker.shortestLengthMm, firstMeasurement.shortestLengthMm);
+      assert.equal(
+        await shownResistance().textContent(),
+        `${numberFormat.format(thicker.equivalentResistanceOhm * 1000)} mΩ`,
+      );
+      assert.equal(await create.isEnabled(), true);
+      await thickness.fill('0.035');
+      await waitForAsync(
+        page,
+        (expected) =>
+          document.querySelector('.layout-parasitics-results div:nth-child(2) dd')?.textContent ===
+          expected,
+        firstDisplayed,
+      );
+      const after = await readDesign();
+      const digest = (value) => createHash('sha256').update(value).digest('hex');
+      assert.equal(
+        digest(after.source),
+        digest(originalDesign.source),
+        'Measurement never changes project Source.',
+      );
+      assert.deepEqual(after.history, originalDesign.history);
+      const beforeFiles = projectNativeFiles(
+        parseProject(originalDesign.source),
+        'project.kicad_pro',
+      );
+      const afterFiles = projectNativeFiles(parseProject(after.source), 'project.kicad_pro');
+      assert.equal(
+        digest(JSON.stringify(afterFiles)),
+        digest(JSON.stringify(beforeFiles)),
+        'Measurement and geometry settings preserve every native byte, including the PCB.',
+      );
+      await page.screenshot({ path: 'test-results/layout-parasitics-contact-ui.png' });
+      assert.equal(statusRequests, 0);
+      assert.equal(runRequests, 0);
+      assert.deepEqual(errors, []);
+      console.log(
+        `Layout Parasitics contacts passed: actual LM25017 D1.2→C8.1 /VOUT1 picks, R=${firstMeasurement.equivalentResistanceOhm}Ω, L=${firstMeasurement.shortestPartialInductanceNh}nH, thickness reactivity, correct selected IDs, Add availability and unchanged complete native files. No Electron, provider or solver was run.`,
+      );
+      return;
+    }
     await thickness.focus();
     await thickness.dispatchEvent('compositionstart');
     await clickPad(start);
@@ -469,9 +1228,14 @@ async function runChecks() {
         originalSheet.title,
       );
       assert.equal(created.workspace.ui.view, 'canvas');
+      assert.equal(
+        created.workspace.ui.schematicSection,
+        'simulation',
+        'Adding parasitic components reveals their native Simulation section.',
+      );
       assert.equal(created.workspace.ui.activeSchematicId, targetId);
       assert.equal(created.history.undoDepth, beforeStudy.history.undoDepth + 1);
-      for (const kind of ['parts', 'wires', 'junctions', 'labels', 'noConnects'])
+      for (const kind of ['parts', 'junctions', 'labels', 'noConnects'])
         for (const original of originalSheet[kind] ?? [])
           assert.deepEqual(
             study[kind]?.find((item) => item.id === original.id),
@@ -500,9 +1264,29 @@ async function runChecks() {
         `${measurement.shortestPartialInductanceNh.toFixed(2)}nH`,
         'The native inductor Value uses nanohenries with two decimal places.',
       );
-      assert.equal(addedLabels.length, 2);
-      assert.notEqual(addedLabels[0].text, addedLabels[1].text);
-      const endpointName = (pad) => {
+      assert.equal(
+        addedLabels.length,
+        5,
+        'Two block labels and three exact circuit-anchor copies are added.',
+      );
+      const changedWires = originalSheet.wires.filter(
+        (wire) =>
+          JSON.stringify(study.wires.find((item) => item.id === wire.id)) !== JSON.stringify(wire),
+      );
+      assert.equal(changedWires.length, 1, 'Exactly one original same-ID leaf lead is shortened.');
+      const originalLead = changedWires[0];
+      const shortenedLead = study.wires.find((wire) => wire.id === originalLead.id);
+      assert.equal(originalLead.id, '404f4e26-02f5-4866-a5a3-ad1ae0199c59');
+      assert.deepEqual(
+        { ...shortenedLead, raw: originalLead.raw },
+        { ...originalLead, a: { x: 87.63, y: 50.8 } },
+      );
+      assert.deepEqual(
+        shortenedLead.raw.filter((item) => !Array.isArray(item) || item[0] !== 'pts'),
+        originalLead.raw.filter((item) => !Array.isArray(item) || item[0] !== 'pts'),
+        'The shortened wire retains its native identity and non-coordinate metadata.',
+      );
+      const endpointSource = (pad) => {
         const footprint = beforeProject.pcb.footprints.find((item) =>
           item.pads.some((item) => item.id === pad.id),
         );
@@ -514,19 +1298,99 @@ async function runChecks() {
           reference && pad.number,
           'The fixture terminal has an actual reference and pad number.',
         );
-        return `${reference}.${pad.number}`;
+        const part = originalSheet.parts.find((part) => part.id === footprint.symbolId);
+        assert.ok(part, 'The selected pad has an exact symbol in the target schematic.');
+        const library = originalSheet.libraries[part.libId];
+        const positions = pinPositions(part, library);
+        const pins = unitGraphics(library, part.unit || 1)
+          .flatMap((unit) => children(unit, 'pin'))
+          .map((pin, index) => ({ number: val(child(pin, 'number')), ...positions[index] }))
+          .filter((pin) => pin.number === pad.number);
+        assert.equal(pins.length, 1, 'The selected PCB pad maps to one exact schematic pin.');
+        return { name: `${reference}.${pad.number}`, point: pins[0] };
       };
-      const endpointNames = [endpointName(start), endpointName(end)];
-      const orderedLabels = [...addedLabels].sort((a, b) => a.x - b.x);
+      const endpointSources = [endpointSource(start), endpointSource(end)];
+      const endpointNames = endpointSources.map(({ name }) => name);
+      assert.deepEqual(
+        endpointSources.map(({ name, point }) => ({ name, x: point.x, y: point.y })),
+        [
+          { name: 'U1.2', x: 74.93, y: 50.8 },
+          { name: 'L1.1', x: 88.9, y: 50.8 },
+        ],
+      );
+      const sourceCenter = {
+        x: (endpointSources[0].point.x + endpointSources[1].point.x) / 2,
+        y: (endpointSources[0].point.y + endpointSources[1].point.y) / 2,
+      };
+      const assertNearSource = (parts, wires, labels) => {
+        const points = [...parts, ...labels, ...wires.flatMap((wire) => [wire.a, wire.b])];
+        const center = {
+          x:
+            (Math.min(...points.map((point) => point.x)) +
+              Math.max(...points.map((point) => point.x))) /
+            2,
+          y:
+            (Math.min(...points.map((point) => point.y)) +
+              Math.max(...points.map((point) => point.y))) /
+            2,
+        };
+        assert.ok(
+          Math.hypot(center.x - sourceCenter.x, center.y - sourceCenter.y) <= 40,
+          `The compact study stays near the exact U1.2–L1.1 pin pair, got center (${center.x}, ${center.y}).`,
+        );
+      };
+      const row = addedParts[0].y;
+      const blockLabels = addedLabels.filter((label) => label.y === row);
+      const connectionLabels = addedLabels.filter((label) => label.y !== row);
+      assert.equal(blockLabels.length, 2);
+      assert.equal(connectionLabels.length, 3);
+      assertNearSource(addedParts, addedWires, blockLabels);
+      const orderedLabels = [...blockLabels].sort((a, b) => a.x - b.x);
       assert.deepEqual(
         orderedLabels.map((label) => label.text),
         endpointNames.map((name) => `LP_${name}`),
         'The two visible labels identify the selected physical endpoints in start/end order.',
       );
+      assert.deepEqual(
+        connectionLabels.map(({ text, x, y }) => ({ text, x, y })).sort((a, b) => a.x - b.x),
+        [
+          { text: orderedLabels[0].text, x: 74.93, y: 50.8 },
+          { text: orderedLabels[0].text, x: 87.63, y: 50.8 },
+          { text: orderedLabels[1].text, x: 88.9, y: 50.8 },
+        ],
+        'The circuit labels retain the exact start pin, cut anchor and isolated end pin.',
+      );
+      const resistor = addedParts.find((part) => part.libId === 'Device:R');
+      const inductor = addedParts.find((part) => part.libId === 'Device:L');
+      const nets = spiceNets(study);
+      const startNode = nets.node(
+        study.parts.find((part) => part.ref === 'U1'),
+        '2',
+      );
+      const endNode = nets.node(
+        study.parts.find((part) => part.ref === 'L1'),
+        '1',
+      );
+      const middleNode = nets.node(resistor, '2');
+      assert.equal(
+        new Set([startNode, middleNode, endNode]).size,
+        3,
+        'No ideal wire bypasses the inserted R/L.',
+      );
+      assert.equal(nets.node(resistor, '1'), startNode);
+      assert.equal(nets.node(inductor, '1'), middleNode);
+      assert.equal(nets.node(inductor, '2'), endNode);
+      const deck = buildSpiceDeck(study, defaultTransient(study));
+      for (const part of addedParts)
+        assert.ok(
+          deck.traces.some((trace) =>
+            trace.targets?.some((target) => target.kind === 'current' && target.id === part.id),
+          ),
+          `${part.ref} compiles a branch-current target.`,
+        );
       assert.equal(addedWires.length, 3, 'Only the terminal leads and series link are added.');
-      const row = addedParts[0].y;
       assert.ok(
-        [...addedParts, ...addedLabels].every((object) => object.y === row) &&
+        [...addedParts, ...blockLabels].every((object) => object.y === row) &&
           addedWires.every((wire) => wire.a.y === row && wire.b.y === row),
         'The two labelled terminals and series R/L share one straight horizontal row.',
       );
@@ -537,7 +1401,7 @@ async function runChecks() {
           45,
         'The extracted series circuit occupies at most 45 mm of wiring width.',
       );
-      const addedIds = [...addedParts, ...addedWires, ...addedLabels].map((object) => object.id);
+      const addedIds = [...addedParts, ...addedWires, ...blockLabels].map((object) => object.id);
       await waitForAsync(
         page,
         async (expected) => {
@@ -555,11 +1419,15 @@ async function runChecks() {
       assert.deepEqual(
         [...selected].sort(),
         [...addedIds].sort(),
-        'Only the newly added R/L, wires and labels are selected for a complete group move.',
+        'Only the movable compact block is selected; circuit-anchor label copies remain fixed.',
       );
       for (const label of addedLabels) {
-        assert.equal(label.scope, undefined, 'Study terminals use independent local labels.');
-        await schematic.getByTestId(`label-${label.text}`).locator('text').first().waitFor();
+        assert.equal(label.scope, undefined, 'Series connections use ordinary local labels.');
+        await schematic
+          .locator(`[data-selection-id="${label.id}"]`)
+          .locator('text')
+          .first()
+          .waitFor();
       }
       await page
         .waitForFunction(
@@ -574,10 +1442,8 @@ async function runChecks() {
                   nodes.find((node) => node.dataset.testid === `annotation-${field}-${ref}`),
                 ),
               ),
-              ...labels.map((text) =>
-                nodes
-                  .find((node) => node.dataset.testid === `label-${text}`)
-                  ?.querySelector('text'),
+              ...labels.map((id) =>
+                nodes.find((node) => node.dataset.selectionId === id)?.querySelector('text'),
               ),
             ];
             return readouts.every((node) => {
@@ -595,7 +1461,7 @@ async function runChecks() {
           },
           {
             parts: addedParts.map((part) => part.ref),
-            labels: addedLabels.map((label) => label.text),
+            labels: blockLabels.map((label) => label.id),
           },
         )
         .catch(async (error) => {
@@ -609,11 +1475,11 @@ async function runChecks() {
             name: `${part.ref} ${field}`,
             bounds: await schematic.getByTestId(`annotation-${field}-${part.ref}`).boundingBox(),
           });
-      for (const label of addedLabels)
+      for (const label of blockLabels)
         readouts.push({
           name: label.text,
           bounds: await schematic
-            .getByTestId(`label-${label.text}`)
+            .locator(`[data-selection-id="${label.id}"]`)
             .locator('text')
             .first()
             .boundingBox(),
@@ -662,10 +1528,9 @@ async function runChecks() {
       const originalTheme = await page.evaluate(
         () => document.documentElement.dataset.theme ?? null,
       );
-      await page.evaluate(() => {
-        document.documentElement.dataset.theme = 'dark';
-      });
+      await setTheme('dark');
       await page.screenshot({ path: 'test-results/layout-parasitics-study-dark-ui.png' });
+      await setTheme(originalTheme ?? 'light');
       await page.evaluate((theme) => {
         if (theme === null) delete document.documentElement.dataset.theme;
         else document.documentElement.dataset.theme = theme;
@@ -693,30 +1558,69 @@ async function runChecks() {
           );
         }
       }
-      const originalBounds = await schematic.locator('.part, .part-annotations').evaluateAll(
-        (nodes, ids) =>
-          nodes
-            .filter((node) => ids.includes(node.getAttribute('data-selection-id')))
-            .map((node) => {
-              const { x, y, width, height } = node.getBoundingClientRect();
-              return { x, y, width, height };
-            })
-            .filter((bounds) => bounds.width > 0 && bounds.height > 0),
-        [...originalPartIds],
+      const showAll = async () => {
+        await page
+          .locator('.schematic-section-switch')
+          .getByRole('combobox', { name: 'Schematic section', exact: true })
+          .click();
+        await page
+          .getByRole('listbox', { name: 'Schematic section', exact: true })
+          .getByRole('option', { name: 'All', exact: true })
+          .click();
+        await waitForAsync(
+          page,
+          async () =>
+            (await window.thermalWorkbenchHost().query('workbench.state')).ui.schematicSection ===
+            'all',
+        );
+      };
+      await showAll();
+      await schematic
+        .getByTestId(`part-${originalSheet.parts.find((part) => part.ref === 'U1').ref}`)
+        .waitFor();
+      await schematic.focus();
+      await schematic.press('Space');
+      const geometryBounds = (ids) =>
+        schematic.locator('[data-selection-id]').evaluateAll(
+          (nodes, ids) =>
+            nodes
+              .filter((node) => ids.includes(node.getAttribute('data-selection-id')))
+              .map((node) => {
+                const { x, y, width, height } = node.getBoundingClientRect();
+                return { id: node.getAttribute('data-selection-id'), x, y, width, height };
+              })
+              .filter((bounds) => bounds.width > 0 || bounds.height > 0)
+              .map((bounds) => ({
+                ...bounds,
+                x: bounds.width ? bounds.x : bounds.x - 0.5,
+                y: bounds.height ? bounds.y : bounds.y - 0.5,
+                width: Math.max(1, bounds.width),
+                height: Math.max(1, bounds.height),
+              })),
+          ids,
+        );
+      const assertGeometryApart = async (insertedIds, acceptedIds) => {
+        const inserted = await geometryBounds(insertedIds);
+        const accepted = await geometryBounds(acceptedIds);
+        assert.ok(inserted.length && accepted.length);
+        for (const added of inserted)
+          for (const original of accepted) {
+            const overlapX =
+              Math.min(added.x + added.width, original.x + original.width) -
+              Math.max(added.x, original.x);
+            const overlapY =
+              Math.min(added.y + added.height, original.y + original.height) -
+              Math.max(added.y, original.y);
+            assert.ok(
+              overlapX <= 0.5 || overlapY <= 0.5,
+              `Inserted object ${added.id} must remain separated from accepted object ${original.id}.`,
+            );
+          }
+      };
+      const originalDrawingIds = ['parts', 'wires', 'junctions', 'labels', 'noConnects'].flatMap(
+        (kind) => (originalSheet[kind] ?? []).map((object) => object.id),
       );
-      for (const readout of readouts)
-        for (const original of originalBounds) {
-          const overlapX =
-            Math.min(readout.bounds.x + readout.bounds.width, original.x + original.width) -
-            Math.max(readout.bounds.x, original.x);
-          const overlapY =
-            Math.min(readout.bounds.y + readout.bounds.height, original.y + original.height) -
-            Math.max(readout.bounds.y, original.y);
-          assert.ok(
-            overlapX <= 0.5 || overlapY <= 0.5,
-            `${readout.name} must remain separated from the existing circuit.`,
-          );
-        }
+      await assertGeometryApart(addedIds, originalDrawingIds);
       const createdNative = projectNativeFiles(createdProject, 'project.kicad_pro');
       const reopenedStudy = projectSchematics(projectFromNativeFiles(createdNative)).find(
         (sheet) => sheet.id === targetId,
@@ -730,7 +1634,19 @@ async function runChecks() {
           'OpenPE.Parasitics.BoardId': beforeProject.pcb.id,
           'OpenPE.Parasitics.StartId': start.id,
           'OpenPE.Parasitics.EndId': end.id,
+          'OpenPE.Parasitics.Connection': 'series',
+          'OpenPE.Parasitics.Role': part.libId === 'Device:R' ? 'resistor' : 'inductor',
+          'OpenPE.Parasitics.StartLabel': orderedLabels[0].text,
+          'OpenPE.Parasitics.EndLabel': orderedLabels[1].text,
         };
+        assert.match(
+          fields['OpenPE.Parasitics.GroupId'],
+          /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i,
+        );
+        assert.equal(
+          fields['OpenPE.Parasitics.GroupId'],
+          partFields(addedParts[0])['OpenPE.Parasitics.GroupId'],
+        );
         for (const [key, expected] of Object.entries(endpointFields))
           assert.equal(fields[key], expected, `${part.ref} preserves the exact ${key} identity.`);
         for (const [key, endpoint] of [
@@ -745,6 +1661,7 @@ async function runChecks() {
           ...Object.keys(endpointFields),
           'OpenPE.Parasitics.Start',
           'OpenPE.Parasitics.End',
+          'OpenPE.Parasitics.GroupId',
         ]) {
           const property = children(reopenedPart.raw, 'property').find((node) => val(node) === key);
           assert.ok(property, `${part.ref} stores ${key} as a real native property.`);
@@ -781,14 +1698,6 @@ async function runChecks() {
           `Adding components preserves the original native bytes of ${file.name}.`,
         );
       }
-      const addedView = await schematic.getAttribute('viewBox');
-      await schematic.press('Space');
-      await page.waitForFunction(
-        (previous) =>
-          document.querySelector('[data-testid="schematic-canvas"]').getAttribute('viewBox') !==
-          previous,
-        addedView,
-      );
       await page.screenshot({ path: 'test-results/layout-parasitics-study-overview-ui.png' });
       await page.getByRole('button', { name: 'Layout', exact: true }).click();
       await parasiticsButton.click();
@@ -798,84 +1707,27 @@ async function runChecks() {
       await clickPad(end);
       await measuredResistance.waitFor();
       await create.click();
-      await parasitics.waitFor({ state: 'hidden' });
+      await parasitics
+        .getByRole('alert')
+        .filter({ hasText: 'This terminal pair already has parasitic study components.' })
+        .waitFor();
       const repeated = await readDesign();
-      const repeatedProject = parseProject(repeated.source);
-      const repeatedSheet = projectSchematics(repeatedProject).find(
-        (sheet) => sheet.id === targetId,
+      assert.equal(
+        repeated.source,
+        created.source,
+        'A duplicate pair cannot add a parallel bypass or change native geometry.',
       );
       assert.deepEqual(
-        projectSchematics(repeatedProject).map((sheet) => ({ id: sheet.id, title: sheet.title })),
-        projectSchematics(beforeProject).map((sheet) => ({ id: sheet.id, title: sheet.title })),
-        'Repeated additions retain the same sheet set and titles.',
-      );
-      assert.equal(repeatedSheet.parts.length, study.parts.length + 2);
-      assert.equal(repeatedSheet.labels.length, study.labels.length + 2);
-      assert.deepEqual(
-        schematicTexts(repeatedSheet.original),
-        schematicTexts(originalSheet.original),
-      );
-      const firstAddedIds = new Set(
-        [...study.parts, ...study.wires, ...study.labels].map((object) => object.id),
-      );
-      const repeatedAddedIds = [
-        ...repeatedSheet.parts,
-        ...repeatedSheet.wires,
-        ...repeatedSheet.labels,
-      ]
-        .filter((object) => !firstAddedIds.has(object.id))
-        .map((object) => object.id);
-      const repeatedLabels = repeatedSheet.labels
-        .filter((label) => !firstAddedIds.has(label.id))
-        .sort((a, b) => a.x - b.x);
-      assert.equal(repeatedLabels.length, 2);
-      assert.deepEqual(
-        repeatedLabels.map((label) => label.text),
-        orderedLabels.map((label) => `${label.text}_S2`),
-        'The next study keeps the same endpoint identities with one paired study suffix.',
-      );
-      for (const label of addedLabels)
-        assert.deepEqual(
-          repeatedSheet.labels.find((item) => item.id === label.id),
-          label,
-          'A later insertion cannot rename the first study endpoint labels.',
-        );
-      const firstStudyPins = new Set(
-        addedParts.flatMap((part) => ['1', '2'].map((pin) => pcbPinKey(part.ref, pin))),
-      );
-      const nextStudyPins = new Set(
-        repeatedSheet.parts
-          .filter((part) => !firstAddedIds.has(part.id))
-          .flatMap((part) => ['1', '2'].map((pin) => pcbPinKey(part.ref, pin))),
-      );
-      assert.ok(
-        schematicPCBNets(repeatedSheet).every(
-          (net) =>
-            !net.pins.some((pin) => firstStudyPins.has(pin)) ||
-            !net.pins.some((pin) => nextStudyPins.has(pin)),
-        ),
-        'Repeated studies of the same endpoint pair cannot electrically join through reused labels.',
-      );
-      await waitForAsync(
-        page,
-        async (expected) => {
-          const { ui } = await window.thermalWorkbenchHost().query('workbench.state');
-          return (
-            ui.selection.length === expected.length &&
-            expected.every((id) => ui.selection.includes(id))
-          );
-        },
-        repeatedAddedIds,
+        repeated.history,
+        created.history,
+        'Rejected duplicate insertion adds no undo entry.',
       );
       assert.equal(await sheetTabs.count(), originalTabCount);
-      assert.equal(repeated.history.undoDepth, created.history.undoDepth + 1);
-      await page.getByRole('button', { name: 'Undo', exact: true }).click();
-      await waitForAsync(
-        page,
-        async (expected) =>
-          (await window.thermalWorkbenchHost().query('project.source')) === expected,
-        created.source,
-      );
+      await page.screenshot({ path: 'test-results/layout-parasitics-study-repeat-error-ui.png' });
+      await parasitics
+        .getByRole('button', { name: 'Close Layout Parasitics', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Schematic', exact: true }).click();
       await page.getByRole('button', { name: 'Undo', exact: true }).click();
       await waitForAsync(
         page,
@@ -886,13 +1738,19 @@ async function runChecks() {
       const undone = await readDesign();
       assert.equal(undone.source, beforeStudy.source);
       assert.equal(undone.history.undoDepth, beforeStudy.history.undoDepth);
-      assert.equal(undone.history.redoDepth, 2);
+      assert.equal(undone.history.redoDepth, 1);
+      const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+      assert.equal(
+        digest(projectNativeFiles(parseProject(undone.source), 'project.kicad_pro')),
+        digest(beforeNative),
+        'One GUI undo restores the complete native file set exactly.',
+      );
       assert.equal(await sheetTabs.count(), originalTabCount);
       assert.equal(statusRequests, 0, 'Adding parasitic components cannot start a thermal solver.');
       assert.equal(runRequests, 0);
       assert.deepEqual(errors, []);
       console.log(
-        'Layout Parasitics study passed: actual PCB endpoint labels and hidden native UUID provenance on compact straight series R/L with two-decimal engineering values and no fine print, complete new-block selection, current-sheet Core transaction, preserved circuit and PCB native bytes, isolated repeated additions without tabs and one GUI undo per addition. No native app, provider or solver was run.',
+        'Layout Parasitics series insertion passed: compact R/L near exact U1.2–L1.1, one same-ID 1.27 mm leaf cut, five native connection labels, distinct SPICE nodes and branch-current targets, movable-block selection, no geometry overlap, native group provenance, two-decimal values, duplicate-pair rejection, exact PCB bytes and one-undo restoration without tabs. No native app, provider or solver was run.',
       );
       return;
     }

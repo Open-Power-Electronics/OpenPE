@@ -137,6 +137,32 @@ var manifest_default4 = {
   projectDirectory: "layout-parasitics"
 };
 
+// plugins/emc-analysis/manifest.json
+var manifest_default5 = {
+  id: "emc-analysis@openpe",
+  name: "EMC Analysis",
+  description: "Review EMC layout intent, geometric findings and missing evidence.",
+  detail: "Declare critical and sensitive nets, reference copper, decoupling and connector intent. Inspect actual PCB geometry with your own review limits, locate measured findings, record manual reviews and justified exceptions, and download traceable HTML or JSON reports. Missing evidence stays unverified. No regulatory compliance or certification assessment.",
+  version: "1.1.0",
+  author: "OpenPE",
+  category: "PCB design",
+  capabilities: [
+    "Explicit PCB design intent",
+    "Geometric EMC screening",
+    "Measured findings and remediation",
+    "Board occurrence locating",
+    "Manual review and justified exceptions",
+    "HTML and JSON review reports"
+  ],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: ["emc.inspectLayout", "emc.reviewLayout"]
+  },
+  projectDirectory: "emc-analysis"
+};
+
 // plugins/runtime/manifest.mjs
 var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 var text = (value, max = 200) => typeof value === "string" && value.length > 0 && value.length <= max && !value.includes("\0");
@@ -211,11 +237,12 @@ function createPluginCatalog(manifests) {
 }
 
 // plugins/catalog.mjs
-var bundledPlugins = createPluginCatalog([manifest_default, manifest_default2, manifest_default3, manifest_default4]);
+var bundledPlugins = createPluginCatalog([manifest_default, manifest_default2, manifest_default3, manifest_default4, manifest_default5]);
 var SPICE_PLUGIN_ID = manifest_default.id;
 var THERMAL_PLUGIN_ID = manifest_default2.id;
 var PCB_DESIGN_PLUGIN_ID = manifest_default3.id;
 var LAYOUT_PARASITICS_PLUGIN_ID = manifest_default4.id;
+var EMC_PLUGIN_ID = manifest_default5.id;
 
 // plugins/runtime/project-data.mjs
 function pluginProjectDirectory(id) {

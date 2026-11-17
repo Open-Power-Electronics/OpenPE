@@ -37,26 +37,29 @@
                 <mxCell id="cad" parent="core" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Model CAD&#xa;Sketch corners / Booleans → extrusion" vertex="1">
                     <mxGeometry height="54" width="160" x="380" y="140" as="geometry"/>
                 </mxCell>
-                <mxCell id="domain" parent="core" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=14;fontColor=#5c5c5c;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Geometry · Validation · ERC / DRC · Board rule settings" vertex="1">
-                    <mxGeometry height="30" width="520" x="20" y="212" as="geometry"/>
+                <mxCell id="domain" parent="core" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=14;fontColor=#5c5c5c;fillColor=none;strokeColor=none;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Geometry · Validation · ERC / DRC · Board rule settings&#xa;Validated series: PCB equivalence / ERC aliases" vertex="1">
+                    <mxGeometry height="46" width="520" x="20" y="212" as="geometry"/>
                 </mxCell>
                 <mxCell id="plugins" parent="1" style="swimlane;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=#fafafa;strokeColor=#dbdbdb;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=left;verticalAlign=middle;horizontal=1;startSize=40;collapsible=0;container=1;swimlaneFillColor=#fafafa;spacingLeft=20;" value="plugins/ · Built-in features and local extensions" vertex="1">
                     <mxGeometry height="260" width="590" x="680" y="430" as="geometry"/>
                 </mxCell>
                 <mxCell id="spice" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="SPICE Simulation" vertex="1">
-                    <mxGeometry height="100" width="240" x="20" y="60" as="geometry"/>
+                    <mxGeometry height="60" width="240" x="20" y="60" as="geometry"/>
                 </mxCell>
                 <mxCell id="thermal" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Layout Thermal" vertex="1">
-                    <mxGeometry height="100" width="240" x="330" y="60" as="geometry"/>
+                    <mxGeometry height="60" width="240" x="330" y="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="emc" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="EMC Analysis · PCB review / findings / reports" vertex="1">
+                    <mxGeometry height="50" width="550" x="20" y="130" as="geometry"/>
                 </mxCell>
                 <mxCell id="guidance" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="PE Layout Skill · Guidance" vertex="1">
                     <mxGeometry height="50" width="260" x="310" y="190" as="geometry"/>
                 </mxCell>
-                <mxCell id="parasitics" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Layout Parasitics&#xa;PCB query · schematic R/L" vertex="1">
+                <mxCell id="parasitics" parent="plugins" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Layout Parasitics&#xa;PCB query · native series R/L" vertex="1">
                     <mxGeometry height="50" width="260" x="20" y="190" as="geometry"/>
                 </mxCell>
                 <mxCell id="plugin-runtime" parent="plugins" style="text;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=12;fontColor=#5c5c5c;align=center;verticalAlign=middle;" value="Local JS packages · QuickJS workers · Scoped queries · Project data folders" vertex="1">
-                    <mxGeometry height="24" width="550" x="20" y="163" as="geometry"/>
+                    <mxGeometry height="20" width="550" x="20" y="240" as="geometry"/>
                 </mxCell>
                 <mxCell id="host" parent="1" style="swimlane;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#202020;fillColor=#fafafa;strokeColor=#dbdbdb;strokeWidth=1;shadow=0;arcSize=8;fontStyle=1;align=left;verticalAlign=middle;horizontal=1;startSize=40;collapsible=0;container=1;swimlaneFillColor=#fafafa;spacingLeft=20;" value="Host · Windows x64 / macOS arm64 / Linux x64 · Electron / Loopback Express" vertex="1">
                     <mxGeometry height="210" width="1190" x="80" y="760" as="geometry"/>
@@ -132,7 +135,7 @@
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="parasitics-board" edge="1" parent="1" source="parasitics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#848484;strokeWidth=1.5;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" target="project-core" value="Read PCB / append components">
+                <mxCell id="parasitics-board" edge="1" parent="1" source="parasitics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;strokeColor=#848484;strokeWidth=1.5;endArrow=block;endFill=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" target="project-core" value="Read PCB / series edit">
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points">
                             <mxPoint x="670" y="645"/>

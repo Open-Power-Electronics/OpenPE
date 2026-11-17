@@ -9794,7 +9794,7 @@ function validateAgentWorkspaceContext(value, circuitId, basis) {
   finiteJSON(value);
   if (!context || context.version !== 1 || typeof context.capturedAt !== "string" || !Number.isFinite(Date.parse(context.capturedAt)) || !context.source || typeof context.source.pending !== "boolean" || !["", sourceError].includes(context.source.error) || context.source.draft !== null || !Number.isSafeInteger(context.source.draftCharacters) || context.source.draftCharacters < 0 || context.source.draftCharacters > 8 * 1024 * 1024 || !context.source.pending && context.source.draftCharacters !== 0 || Object.keys(context.source).some(
     (key) => !["pending", "draft", "error", "draftCharacters"].includes(key)
-  ) || !context.ui || Array.isArray(context.ui) || !context.simulation)
+  ) || !context.ui || Array.isArray(context.ui) || context.ui.schematicSection !== void 0 && !["hardware", "simulation", "all"].includes(context.ui.schematicSection) || !context.simulation)
     fail2();
   if (context.project && typeof context.project === "object" && Object.hasOwn(context.project, "nativeFiles"))
     fail2();

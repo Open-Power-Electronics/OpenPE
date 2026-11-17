@@ -15,9 +15,15 @@ import { createProject, serializeProject, type Project } from '../lib/project';
 import { projectFromNativeFiles } from '../lib/kicad-project';
 import { displayPartValue, partFields } from '../lib/library';
 import { PCBProjectSync, schematicPCBSourceFingerprint } from '../lib/pcb-project-sync';
-import { schematicPCBNets, updatePCBFromSchematic } from '../lib/pcb-sync';
+import {
+  schematicPCBNets,
+  schematicPCBPhysicalNets,
+  updatePCBFromSchematic,
+} from '../lib/pcb-sync';
+import { prepareParasiticsStudy } from '../plugins/layout-parasitics/domain/study';
 import { saveAnnotation } from '../lib/schematic-edit';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
+import { runSchematicERC } from '../lib/schematic-erc';
 
 const detail = {
   id: 'Test:TwoPin',
@@ -124,6 +130,52 @@ function nativeLM2596() {
     })),
   });
 }
+
+test('a native series parasitic model changes simulation topology while preserving PCB copper nets and one-step undo', () => {
+  const initial = nativeLM2596();
+  const sync = new PCBProjectSync(initial);
+  const core = new ProjectCore(initial, {
+    prepare: (next, previous) => sync.prepare(next, previous)?.project ?? next,
+  });
+  const before = core.getSnapshot().project!;
+  const originalFiles = core.getNativeFiles();
+  const result = prepareParasiticsStudy(before, {
+    boardId: before.pcb!.id,
+    schematicId: before.schematic.id,
+    startId: '4eb18015-a5ca-436c-95f8-a2e6ac45ec49',
+    endId: '6ddd3a08-31ff-42e9-bb51-3e362f1da33e',
+    copperThicknessMm: 0.035,
+    viaPlatingMm: 0.025,
+  });
+  assert.deepEqual(
+    schematicPCBPhysicalNets(result.project.schematic, result.project.pcb!),
+    schematicPCBPhysicalNets(before.schematic, before.pcb!),
+  );
+  assert.notDeepEqual(result.project.schematic.wires, before.schematic.wires);
+  assert.equal(
+    runSchematicERC(result.project.schematic).issues.filter(
+      (issue) => issue.ruleId === 'erc.net-name-conflict' && issue.message.includes('LP_'),
+    ).length,
+    0,
+    'Verified endpoint aliases do not conflict with the original rail name.',
+  );
+  assert.equal(core.commitProject(result.project), true);
+  assert.equal(core.getSnapshot().undoDepth, 1);
+  assert.equal(core.getSnapshot().project!.pcb, before.pcb);
+  assert.equal(sync.sources.size, 0);
+  const afterFiles = core.getNativeFiles();
+  for (const file of originalFiles.files.filter((file) => !file.name.endsWith('.kicad_sch')))
+    assert.equal(afterFiles.files.find((entry) => entry.name === file.name)!.source, file.source);
+  const reopened = projectFromNativeFiles(afterFiles);
+  assert.deepEqual(
+    schematicPCBPhysicalNets(reopened.schematic, reopened.pcb!),
+    schematicPCBPhysicalNets(before.schematic, before.pcb!),
+  );
+  core.undo();
+  assert.deepEqual(core.getNativeFiles(), originalFiles);
+  core.redo();
+  assert.deepEqual(core.getNativeFiles(), afterFiles);
+});
 
 function withVirtualIsland(project: Project): Project {
   let island = emptyCircuit();

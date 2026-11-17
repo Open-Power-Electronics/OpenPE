@@ -116,6 +116,7 @@ try {
   const list = page.locator('.library-results');
   const search = page.getByRole('textbox', { name: 'Search footprints' });
   const assign = page.getByRole('button', { name: 'Assign footprint', exact: true });
+  const submit = page.getByRole('button', { name: 'Search', exact: true });
   await page.waitForFunction(
     () =>
       document.querySelectorAll('.library-results button').length === 100 &&
@@ -180,7 +181,12 @@ try {
   await page.waitForFunction(() => !document.querySelector('.dialog-button.primary').disabled);
   await assign.click();
   assert.equal(await page.evaluate(() => window.chosen), entries.at(-1).id);
+  const beforeDraftSearches = offsets.length;
   await search.fill('Footprint_002');
+  assert.equal(await rows.count(), 205, 'Editing the draft retains the loaded rows.');
+  assert.equal(await page.locator('.library-detail-id').textContent(), entries.at(-1).id);
+  assert.equal(offsets.length, beforeDraftSearches, 'Draft edits do not search.');
+  await submit.click();
   await page.waitForFunction(
     () =>
       document.querySelectorAll('.library-results button').length === 1 &&
@@ -189,9 +195,12 @@ try {
   assert.equal(await rows.first().getAttribute('aria-description'), entries[2].id);
   assert.equal(offsets.at(-1).offset, 0, 'New searches reset paging.');
   await search.fill('missing');
+  await submit.click();
   await page.getByText('No matching footprints.', { exact: true }).waitFor();
   assert.equal(await assign.isEnabled(), false);
   await search.fill('');
+  assert.equal(await rows.count(), 0, 'Clearing the draft retains the committed empty results.');
+  await submit.click();
   await page.waitForFunction(
     () =>
       document.querySelectorAll('.library-results button').length === 100 &&
@@ -230,6 +239,7 @@ try {
 
   await browse.click();
   await search.fill('Footprint_002');
+  await submit.click();
   await page.waitForFunction(() => !document.querySelector('.dialog-button.primary').disabled);
   await assign.click();
   assert.equal(await footprint.inputValue(), entries[2].id);
@@ -340,13 +350,16 @@ try {
       'A fresh unassigned fixture starts with an empty query.',
     );
     await search.fill('Footprint_002');
-    await page.waitForFunction(
-      (id) =>
-        document.querySelectorAll('.library-results button').length === 1 &&
-        document.querySelector('.library-detail-id')?.textContent === id &&
-        !document.querySelector('.dialog-button.primary').disabled,
-      entries[2].id,
-    );
+    if (surface === 'result') {
+      await submit.click();
+      await page.waitForFunction(
+        (id) =>
+          document.querySelectorAll('.library-results button').length === 1 &&
+          document.querySelector('.library-detail-id')?.textContent === id &&
+          !document.querySelector('.dialog-button.primary').disabled,
+        entries[2].id,
+      );
+    }
     await (surface === 'search' ? search : rows.first()).focus();
     await page.keyboard.press('Enter');
     if (surface === 'search') {

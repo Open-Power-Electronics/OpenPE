@@ -57,6 +57,7 @@ test('invalid plugin settings and failed writes preserve bytes and never enable 
     for (const invalid of [
       '{broken',
       JSON.stringify({ version: 0, plugins: rows }),
+      JSON.stringify({ version: 1, plugins: rows.slice(0, -1) }),
       JSON.stringify({ version: 1, plugins: [rows[0], rows[0], rows[2]] }),
       JSON.stringify({ version: 1, plugins: [{ ...rows[0], id: 'unknown' }, ...rows.slice(1)] }),
       JSON.stringify({ version: 1, plugins: [{ id: rows[0].id }, ...rows.slice(1)] }),

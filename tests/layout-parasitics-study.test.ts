@@ -1,11 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPart, emptyCircuit, parseCircuit, serializeCircuit, uid } from '../lib/circuit';
+import { readFileSync } from 'node:fs';
+import {
+  createPart,
+  emptyCircuit,
+  parseCircuit,
+  pinPositions,
+  serializeCircuit,
+  uid,
+  type Circuit,
+  type Part,
+} from '../lib/circuit';
 import {
   partFields,
   partFootprint,
   symbolAnnotation,
   extraSymbolAnnotations,
+  unitGraphics,
 } from '../lib/library';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import type { Footprint } from '../lib/pcb';
@@ -19,10 +30,12 @@ import {
   projectSchematics,
   serializeProject,
 } from '../lib/project';
-import { child, children, quote, val } from '../lib/sexpr';
+import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
 import { schematicTexts } from '../lib/schematic-text';
 import { saveAnnotation } from '../lib/schematic-edit';
 import { ProjectCore } from '../core/project-core';
+import { documentPinKey, projectNetGroups } from '../lib/project-net-groups';
+import { parasiticPhysicalModels } from '../lib/parasitic-model';
 import { analyzeLayoutParasitics } from '../plugins/layout-parasitics/domain/analysis';
 import {
   parasiticsStudyValues,
@@ -33,27 +46,40 @@ import {
   buildSpiceDeck,
   defaultTransient,
   passiveValue,
-  spiceNets,
-  simulationSupportError,
 } from '../plugins/spice-simulation/domain/spice';
 import { participatesInSimulation } from '../lib/simulation-participation';
 import { basicSimulationKind } from '../lib/simulation-model-source';
+import { switchingStageFixture } from './fixtures/switching-stage';
 
-function fixture() {
-  const schematic = emptyCircuit();
-  schematic.title = 'Original design';
-  schematic.parts.push(createPart(schematic, 'R', 40.64, 20.32));
-  schematic.parts.push(createPart(schematic, 'L', 60.96, 20.32));
-  schematic.labels.push({ id: uid(), x: 0, y: 0, text: 'LP_Signal_1' });
+function pin(circuit: Circuit, part: Part, number: string) {
+  const definitions = unitGraphics(circuit.libraries[part.libId], part.unit || 1).flatMap((unit) =>
+    children(unit, 'pin'),
+  );
+  return pinPositions(part, circuit.libraries[part.libId])[
+    definitions.findIndex((pin) => val(child(pin, 'number')) === number)
+  ];
+}
+
+function fixture(schematic?: Circuit, pair: [string, string] = ['R1', 'L1']) {
+  if (!schematic) {
+    schematic = emptyCircuit();
+    schematic.title = 'Original design';
+    schematic.parts.push(createPart(schematic, 'R', 40.64, 20.32));
+    schematic.parts.push(createPart(schematic, 'L', 60.96, 20.32));
+    schematic.wires.push({
+      id: uid(),
+      a: pin(schematic, schematic.parts[0], '1'),
+      b: pin(schematic, schematic.parts[1], '1'),
+    });
+    schematic.labels.push({ id: uid(), x: 0, y: 0, text: 'LP_Signal_1' });
+  }
   const project = createProject(schematic);
-  const board = createEmptyPCB();
-  const netId = uid();
+  const board = createEmptyPCB(),
+    netId = uid();
   const terminal = (x: number, reference: string): Footprint => ({
     id: uid(),
-    symbolId: null,
+    symbolId: schematic.parts.find((part) => part.ref === reference)!.id,
     libraryId: 'Study:Terminal',
-    reference,
-    value: 'Terminal',
     x,
     y: 5,
     side: 'front',
@@ -75,7 +101,7 @@ function fixture() {
     ],
   });
   board.nets = [{ id: netId, name: 'Signal' }];
-  board.footprints = [terminal(5, 'J1'), terminal(25, 'J2')];
+  board.footprints = [terminal(5, pair[0]), terminal(25, pair[1])];
   board.tracks = [
     { id: uid(), netId, start: { x: 5, y: 5 }, end: { x: 25, y: 5 }, width: 0.35, layer: 'F.Cu' },
   ];
@@ -93,110 +119,521 @@ function fixture() {
   };
 }
 
-test('a study retains measured results with two-decimal native Values, independent labels and manufacturing exclusions', () => {
-  const { project, input } = fixture();
-  const before = serializeProject(project);
-  const beforeNative = projectNativeFiles(project, 'design.kicad_pro');
-  const measurement = analyzeLayoutParasitics(project.pcb!, input);
-  const result = prepareParasiticsStudy(project, input);
-  const study = findSchematic(result.project, result.schematicId)!;
-  assert.equal(serializeProject(project), before, 'Preparation must not mutate any source data.');
-  assert.equal(result.schematicId, project.schematic.id);
-  assert.equal(projectSchematics(result.project).length, 1);
-  assert.deepEqual(study.parts.slice(0, project.schematic.parts.length), project.schematic.parts);
+function group(circuit: Circuit, key: string) {
+  return projectNetGroups(circuit).findIndex((group) => group.pins.includes(key));
+}
+
+function nativeExample(stem: string) {
+  return projectFromNativeFiles({
+    entry: stem + '.kicad_pro',
+    files: ['kicad_pro', 'kicad_sch', 'kicad_pcb'].map((extension) => ({
+      name: stem + '.' + extension,
+      source: readFileSync(
+        new URL(`../examples/${stem}/${stem}.${extension}`, import.meta.url),
+        'utf8',
+      ),
+    })),
+  });
+}
+
+function assertSeries(
+  original: Circuit,
+  current: Circuit,
+  result: ReturnType<typeof prepareParasiticsStudy>,
+  start: Part,
+  end: Part,
+  startNumber = '1',
+  endNumber = '1',
+) {
+  const resistor = current.parts.find((part) => part.ref === result.references.resistor)!;
+  const inductor = current.parts.find((part) => part.ref === result.references.inductor);
+  const first = group(current, documentPinKey(start.id, startNumber));
+  const last = group(current, documentPinKey(end.id, endNumber));
+  assert.notEqual(first, last, 'The original ideal network is actually split.');
+  assert.equal(group(current, documentPinKey(resistor.id, '1')), first);
+  assert.equal(group(current, documentPinKey((inductor ?? resistor).id, '2')), last);
+  if (inductor) {
+    const middle = group(current, documentPinKey(resistor.id, '2'));
+    assert.equal(middle, group(current, documentPinKey(inductor.id, '1')));
+    assert.ok(middle !== first && middle !== last);
+  }
+  const changed = current.wires.filter((wire) => {
+    const previous = original.wires.find((before) => before.id === wire.id);
+    return previous && JSON.stringify(previous) !== JSON.stringify(wire);
+  });
+  assert.equal(changed.length, 1);
   assert.ok(
-    study.parts.slice(0, 2).every((part, index) => part === project.schematic.parts[index]),
+    Math.abs(
+      Math.hypot(changed[0].a.x - changed[0].b.x, changed[0].a.y - changed[0].b.y) -
+        (Math.hypot(
+          original.wires.find((wire) => wire.id === changed[0].id)!.a.x -
+            original.wires.find((wire) => wire.id === changed[0].id)!.b.x,
+          original.wires.find((wire) => wire.id === changed[0].id)!.a.y -
+            original.wires.find((wire) => wire.id === changed[0].id)!.b.y,
+        ) -
+          1.27),
+    ) < 1e-8,
   );
+  assert.deepEqual(current.parts.slice(0, original.parts.length), original.parts);
+  assert.ok(original.parts.every((part, index) => current.parts[index] === part));
+}
+
+test('one native series insertion splits only the selected End leaf, retains compact values and declares exact physical equivalence', () => {
+  const { project, input } = fixture();
+  const before = serializeProject(project),
+    nativeBefore = projectNativeFiles(project, 'design.kicad_pro');
+  const measurement = analyzeLayoutParasitics(project.pcb!, input);
+  const result = prepareParasiticsStudy(project, input),
+    sheet = result.project.schematic;
+  assert.equal(serializeProject(project), before);
   assert.equal(result.project.pcb, project.pcb);
-  assert.equal(study.title, project.schematic.title);
+  assert.equal(projectSchematics(result.project).length, 1);
+  assert.equal(result.schematicId, project.schematic.id);
+  assertSeries(
+    project.schematic,
+    sheet,
+    result,
+    project.schematic.parts[0],
+    project.schematic.parts[1],
+  );
   assert.deepEqual(result.values, {
     resistanceOhm: measurement.equivalentResistanceOhm,
     partialInductanceNh: measurement.shortestPartialInductanceNh,
   });
+  assert.deepEqual(result.labels, { start: 'LP_R1.1', end: 'LP_L1.1' });
   assert.equal(result.references.resistor, 'R2');
   assert.equal(result.references.inductor, 'L2');
-  assert.equal(result.omittedInductance, false);
-  assert.notEqual(result.labels.start, result.labels.end);
-  assert.notEqual(result.labels.start, project.schematic.labels[0].text);
-  assert.deepEqual(result.labels, { start: 'LP_J1.1', end: 'LP_J2.1' });
-  assert.equal(study.labels.length, 3);
-  assert.ok(study.labels.every((label) => label.scope === undefined));
-  assert.deepEqual(
-    new Set(study.labels.slice(1).map((label) => label.text)),
-    new Set(Object.values(result.labels)),
+  assert.equal(result.blockIds.length, 7);
+  const block = new Set(result.blockIds),
+    blockLabels = sheet.labels.filter((label) => block.has(label.id));
+  assert.equal(blockLabels.length, 2);
+  assert.ok(blockLabels[1].x - blockLabels[0].x < 42);
+  const anchored = sheet.labels.filter(
+    (label) => !block.has(label.id) && Object.values(result.labels).includes(label.text),
   );
-  const resistor = study.parts.find((part) => part.ref === result.references.resistor)!;
-  const inductor = study.parts.find((part) => part.ref === result.references.inductor)!;
-  assert.match(resistor.value, /^\d+\.\d{2}[fpnµmkMG]?Ω$/);
-  assert.match(inductor.value, /^\d+\.\d{2}[fpnµmkMG]?H$/);
+  assert.equal(
+    anchored.length,
+    3,
+    'Start pin, shortened lead and End pin retain separate exact anchored labels.',
+  );
+  assert.ok(anchored.some((label) => label.rotation === 180));
   assert.ok(
-    Math.abs(passiveValue(resistor.value, 'R') / measurement.equivalentResistanceOhm - 1) < 0.005,
+    anchored.some(
+      (label) =>
+        label.text === result.labels.start &&
+        label.x === pin(project.schematic, project.schematic.parts[0], '1').x &&
+        label.y === pin(project.schematic, project.schematic.parts[0], '1').y,
+    ),
   );
   assert.ok(
-    Math.abs(
-      passiveValue(inductor.value, 'L') / (measurement.shortestPartialInductanceNh! * 1e-9) - 1,
-    ) < 0.005,
+    anchored.some(
+      (label) =>
+        label.text === result.labels.end &&
+        label.x === pin(project.schematic, project.schematic.parts[1], '1').x &&
+        label.y === pin(project.schematic, project.schematic.parts[1], '1').y,
+    ),
   );
-  for (const part of study.parts.slice(2)) {
+  const models = parasiticPhysicalModels(sheet);
+  assert.equal(models.length, 1);
+  const groupIds = new Set<string>();
+  for (const part of sheet.parts.slice(2)) {
     assert.equal(partFootprint(part), '');
     assert.equal(participatesInSimulation(part), true);
-    assert.equal(val(child(part.raw!, 'in_bom')), 'no');
     assert.equal(val(child(part.raw!, 'on_board')), 'no');
-    const reference = symbolAnnotation(part, study.libraries[part.libId], 'Reference')!;
-    const value = symbolAnnotation(part, study.libraries[part.libId], 'Value')!;
-    assert.ok(reference.y < part.y && value.y > part.y);
-    assert.ok(study.labels.slice(1).every((label) => label.y === part.y));
-  }
-  assert.deepEqual(schematicTexts(study.original), schematicTexts(project.schematic.original));
-  assert.equal(
-    study.original,
-    project.schematic.original,
-    'Existing native notes and outlines retain their owner.',
-  );
-  const addedWires = study.wires.slice(project.schematic.wires.length);
-  assert.equal(addedWires.length, 3);
-  assert.ok(addedWires.every((wire) => wire.a.y === resistor.y && wire.b.y === resistor.y));
-  const [start, end] = study.labels.slice(1).sort((a, b) => a.x - b.x);
-  assert.ok(end.x - start.x < 42, 'The series chain uses compact horizontal leads.');
-  const native = projectNativeFiles(result.project, 'design.kicad_pro');
-  const boardFile = beforeNative.files.find((file) => file.name.endsWith('.kicad_pcb'))!;
-  assert.deepEqual(
-    native.files.find((file) => file.name === boardFile.name),
-    boardFile,
-  );
-  const reopened = projectFromNativeFiles(native);
-  const reopenedStudy = findSchematic(reopened, study.id)!;
-  assert.equal(reopenedStudy.parts.length, 4);
-  assert.equal(reopenedStudy.labels.length, 3);
-  for (const part of reopenedStudy.parts.slice(2)) {
     assert.equal(val(child(part.raw!, 'in_bom')), 'no');
-    assert.equal(val(child(part.raw!, 'on_board')), 'no');
-    const metadata = {
-      'OpenPE.Parasitics.BoardId': project.pcb!.id,
+    const fields = partFields(part);
+    groupIds.add(fields['OpenPE.Parasitics.GroupId']);
+    for (const [name, value] of Object.entries({
+      'OpenPE.Parasitics.Connection': 'series',
+      'OpenPE.Parasitics.BoardId': input.boardId,
       'OpenPE.Parasitics.StartId': input.startId,
       'OpenPE.Parasitics.EndId': input.endId,
-      'OpenPE.Parasitics.Start': 'J1.1',
-      'OpenPE.Parasitics.End': 'J2.1',
-    };
-    for (const [key, value] of Object.entries(metadata)) {
-      assert.equal(partFields(part)[key], value);
-      const property = children(part.raw!, 'property').find((field) => val(field) === key)!;
-      const effects = child(property, 'effects')!;
-      assert.ok(
-        property.includes('hide') ||
-          val(child(property, 'hide')) === 'yes' ||
-          effects.includes('hide') ||
-          val(child(effects, 'hide')) === 'yes',
-      );
-    }
+      'OpenPE.Parasitics.StartLabel': result.labels.start,
+      'OpenPE.Parasitics.EndLabel': result.labels.end,
+    }))
+      assert.equal(fields[name], value);
+    assert.equal(
+      fields['OpenPE.Parasitics.Role'],
+      part.libId === 'Device:R' ? 'resistor' : 'inductor',
+    );
     assert.ok(
       extraSymbolAnnotations(part).every((field) => !field.name.startsWith('OpenPE.Parasitics.')),
     );
+    assert.ok(symbolAnnotation(part, sheet.libraries[part.libId], 'Reference')!.y < part.y);
+    assert.ok(symbolAnnotation(part, sheet.libraries[part.libId], 'Value')!.y > part.y);
+    assert.match(
+      part.value,
+      part.libId === 'Device:R' ? /^\d+\.\d{2}[fpnµmkMG]?Ω$/ : /^\d+\.\d{2}[fpnµmkMG]?H$/,
+    );
   }
+  assert.equal(groupIds.size, 1);
+  const native = projectNativeFiles(result.project, 'design.kicad_pro');
+  assert.deepEqual(
+    native.files.find((file) => file.name.endsWith('.kicad_pcb')),
+    nativeBefore.files.find((file) => file.name.endsWith('.kicad_pcb')),
+  );
+  const reopened = projectFromNativeFiles(native);
+  assert.equal(parasiticPhysicalModels(reopened.schematic).length, 1);
+  assert.equal(reopened.schematic.labels.length, 6);
   assert.doesNotThrow(() => parseProject(serializeProject(result.project)));
 });
 
-test('two-decimal component Values preserve SI scaling and existing simulator bounds', () => {
+test('native LM2596 and LM25017 series models compile through their existing profiles and preserve PCB native bytes', () => {
+  for (const [stem, pair] of [
+    [
+      'lm2596-to220-5-buck',
+      [
+        ['U1', '2'],
+        ['L1', '1'],
+      ],
+    ],
+    [
+      'lm25017-wson8-flybuck',
+      [
+        ['D1', '2'],
+        ['C8', '1'],
+      ],
+    ],
+  ] as const) {
+    const project = nativeExample(stem);
+    const pad = (reference: string, number: string) =>
+      project
+        .pcb!.footprints.find(
+          (footprint) =>
+            footprint.symbolId ===
+            project.schematic.parts.find((part) => part.ref === reference)!.id,
+        )!
+        .pads.find((pad) => pad.number === number)!.id;
+    const input = {
+      boardId: project.pcb!.id,
+      schematicId: project.schematic.id,
+      startId: pad(pair[0][0], pair[0][1]),
+      endId: pad(pair[1][0], pair[1][1]),
+    };
+    const before = projectNativeFiles(project, 'design.kicad_pro');
+    const result = prepareParasiticsStudy(project, input);
+    assertSeries(
+      project.schematic,
+      result.project.schematic,
+      result,
+      project.schematic.parts.find((part) => part.ref === pair[0][0])!,
+      project.schematic.parts.find((part) => part.ref === pair[1][0])!,
+      pair[0][1],
+      pair[1][1],
+    );
+    const deck = buildSpiceDeck(
+      result.project.schematic,
+      defaultTransient(result.project.schematic),
+    );
+    for (const reference of [result.references.resistor, result.references.inductor])
+      assert.ok(deck.traces.some((trace) => trace.label.startsWith(`I(${reference})`)));
+    assert.equal(
+      deck.traces.filter((trace) => trace.label.startsWith('I(' + result.references.resistor + ')'))
+        .length,
+      1,
+    );
+    assert.equal(result.project.pcb, project.pcb);
+    assert.deepEqual(
+      projectNativeFiles(result.project, 'design.kicad_pro').files.find((file) =>
+        file.name.endsWith('.kicad_pcb'),
+      ),
+      before.files.find((file) => file.name.endsWith('.kicad_pcb')),
+    );
+    const added = result.project.schematic.parts.filter((part) =>
+      result.blockIds.includes(part.id),
+    );
+    const a = pin(
+      project.schematic,
+      project.schematic.parts.find((part) => part.ref === pair[0][0])!,
+      pair[0][1],
+    );
+    const b = pin(
+      project.schematic,
+      project.schematic.parts.find((part) => part.ref === pair[1][0])!,
+      pair[1][1],
+    );
+    const center = { x: (added[0].x + added[1].x) / 2, y: added[0].y };
+    assert.ok(Math.hypot(center.x - (a.x + b.x) / 2, center.y - (a.y + b.y) / 2) < 70);
+  }
+});
+
+test('the existing ideal switching stage compiles with actual series parasitics and no invented source or ground', () => {
+  const { project, input } = fixture(switchingStageFixture(), ['C2', 'R1']);
+  const before = buildSpiceDeck(project.schematic, defaultTransient(project.schematic));
+  const result = prepareParasiticsStudy(project, input);
+  const after = buildSpiceDeck(
+    result.project.schematic,
+    defaultTransient(result.project.schematic),
+  );
+  assert.equal(
+    after.netlist.match(/^VINPUT /gm)!.length,
+    before.netlist.match(/^VINPUT /gm)!.length,
+  );
+  assert.equal(after.netlist.match(/^VPWM /gm)!.length, before.netlist.match(/^VPWM /gm)!.length);
+  assert.equal(result.project.schematic.parts.length - project.schematic.parts.length, 2);
+  assertSeries(
+    project.schematic,
+    result.project.schematic,
+    result,
+    project.schematic.parts.find((part) => part.ref === 'C2')!,
+    project.schematic.parts.find((part) => part.ref === 'R1')!,
+  );
+});
+
+test('series preparation and its five labels are exactly one Core undo and survive Source, Save and reopen', () => {
+  const { project, input } = fixture();
+  const core = new ProjectCore(project);
+  const before = core.getNativeFiles();
+  const result = prepareParasiticsStudy(core.getSnapshot().project!, input);
+  core.commitProject(result.project);
+  const accepted = core.getNativeFiles();
+  assert.equal(core.getSnapshot().undoDepth, 1);
+  assert.equal(parasiticPhysicalModels(projectFromNativeFiles(accepted).schematic).length, 1);
+  core.undo();
+  assert.deepEqual(core.getNativeFiles(), before);
+  core.redo();
+  assert.deepEqual(core.getNativeFiles(), accepted);
+  core.updateSource('pending native text');
+  assert.throws(() => core.commitProject(result.project), /Apply the Source/);
+  core.discardSource();
+  core.setEditingBlocked('This project is closing.');
+  assert.throws(() => core.commitProject(result.project), /closing/);
+});
+
+test('repeated pairs, reversed pairs and old isolated pair metadata reject atomically instead of stacking or migrating', () => {
+  const { project, input } = fixture();
+  const result = prepareParasiticsStudy(project, input);
+  const before = serializeProject(result.project);
+  for (const request of [input, { ...input, startId: input.endId, endId: input.startId }])
+    assert.throws(
+      () => prepareParasiticsStudy(result.project, request),
+      /already has parasitic|already has a series/,
+    );
+  assert.equal(serializeProject(result.project), before);
+  project.schematic.parts[0].fields = {
+    ...project.schematic.parts[0].fields,
+    'OpenPE.Parasitics.BoardId': input.boardId,
+    'OpenPE.Parasitics.StartId': input.startId,
+    'OpenPE.Parasitics.EndId': input.endId,
+  };
+  const old = serializeProject(project);
+  assert.throws(() => prepareParasiticsStudy(project, input), /already has parasitic/);
+  assert.equal(serializeProject(project), old);
+});
+
+test('distinct leaf branches may share an untouched Start pin while preserving the other branch topology', () => {
+  const { project, input } = fixture();
+  const circuit = project.schematic;
+  const cap = createPart(circuit, 'C', 50.8, 40.64);
+  circuit.parts.push(cap);
+  circuit.wires.push({ id: uid(), a: pin(circuit, cap, '1'), b: { x: 50.8, y: 16.51 } });
+  const board = project.pcb!,
+    template = board.footprints[0];
+  const third = structuredClone(template);
+  third.id = uid();
+  third.symbolId = cap.id;
+  third.x = 15;
+  third.y = 15;
+  third.pads[0].id = uid();
+  board.footprints.push(third);
+  const original = board.tracks[0];
+  board.tracks = [
+    { ...original, end: { x: 15, y: 5 } },
+    { ...original, id: uid(), start: { x: 15, y: 5 } },
+    { ...original, id: uid(), start: { x: 15, y: 5 }, end: { x: 15, y: 15 } },
+  ];
+  const first = prepareParasiticsStudy(project, input);
+  const second = prepareParasiticsStudy(first.project, { ...input, endId: third.pads[0].id });
+  assert.equal(parasiticPhysicalModels(second.project.schematic).length, 2);
+  assert.equal(second.project.pcb, board);
+  assert.ok(
+    first.project.schematic.parts.every(
+      (part, index) => second.project.schematic.parts[index] === part,
+    ),
+  );
+  assert.notEqual(first.labels.start, second.labels.start);
+  assert.throws(
+    () =>
+      prepareParasiticsStudy(second.project, {
+        ...input,
+        startId: input.endId,
+        endId: third.pads[0].id,
+      }),
+    /already has a series/,
+  );
+});
+
+test('via, unmapped, independent-sheet and ambiguous pin requests fail without a partial edit', () => {
+  for (const kind of ['via', 'unmapped', 'secondary', 'duplicate pin', 'duplicate land'] as const) {
+    const f = fixture();
+    let input = f.input;
+    if (kind === 'via') {
+      const end = f.project.pcb!.footprints.pop()!;
+      const id = uid();
+      f.project.pcb!.vias.push({
+        id,
+        x: end.x,
+        y: end.y,
+        diameter: 0.6,
+        drill: 0.3,
+        netId: f.project.pcb!.nets[0].id,
+      });
+      input = { ...input, endId: id };
+    }
+    if (kind === 'unmapped') {
+      const end = f.project.pcb!.footprints[1];
+      end.symbolId = null;
+      end.reference = 'J2';
+      end.value = 'Terminal';
+    }
+    if (kind === 'secondary') {
+      const appended = appendSchematic(f.project);
+      f.project = appended.project;
+      appended.schematic.parts.push(createPart(appended.schematic, 'L', 0, 0));
+      input = { ...input, schematicId: appended.schematic.id };
+    }
+    if (kind === 'duplicate pin') {
+      const library = f.project.schematic.libraries['Device:L'];
+      const definition = unitGraphics(library, 1).flatMap((unit) => children(unit, 'pin'))[0];
+      children(library, 'symbol')
+        .find((unit) => children(unit, 'pin').length)!
+        .push(structuredClone(definition));
+    }
+    if (kind === 'duplicate land') {
+      const footprint = f.project.pcb!.footprints[1];
+      footprint.pads.push({ ...footprint.pads[0], id: uid(), x: 5 });
+    }
+    const before = JSON.stringify(f.project);
+    assert.throws(
+      () => prepareParasiticsStudy(f.project, input),
+      /requires two PCB pads|unambiguous schematic pin|several PCB lands/,
+    );
+    assert.equal(JSON.stringify(f.project), before);
+  }
+});
+
+test('branch points, wire interiors, labels, crossings and hidden power aliases cannot be detached silently', () => {
+  for (const kind of [
+    'branch',
+    'interior',
+    'label',
+    'junction',
+    'co-located pin',
+    'gap pin',
+    'gap crossing',
+    'diagonal',
+    'hidden power',
+  ] as const) {
+    const { project, input } = fixture();
+    const circuit = project.schematic,
+      end = circuit.parts[1],
+      point = pin(circuit, end, '1');
+    if (kind === 'branch')
+      circuit.wires.push({ id: uid(), a: point, b: { x: point.x, y: point.y + 10 } });
+    if (kind === 'interior') circuit.wires[0].b = { x: point.x + 10, y: point.y };
+    if (kind === 'label') circuit.labels.push({ id: uid(), ...point, text: 'EndAlias' });
+    if (kind === 'junction') circuit.junctions.push({ id: uid(), ...point });
+    if (kind === 'co-located pin' || kind === 'gap pin') {
+      const p = createPart(circuit, 'C', point.x, 20.32);
+      if (kind === 'gap pin') p.x = point.x - 0.635;
+      circuit.parts.push(p);
+    }
+    if (kind === 'gap crossing')
+      circuit.wires.push({
+        id: uid(),
+        a: { x: point.x - 1.27, y: point.y - 5 },
+        b: { x: point.x - 1.27, y: point.y + 5 },
+      });
+    if (kind === 'diagonal') {
+      end.y += 0.635;
+      circuit.wires[0].b = pin(circuit, end, '1');
+    }
+    if (kind === 'hidden power') {
+      const definition = unitGraphics(circuit.libraries[end.libId], 1).flatMap((unit) =>
+        children(unit, 'pin'),
+      )[0];
+      definition[1] = 'power_in';
+      definition.push('hide');
+    }
+    const before = JSON.stringify(project);
+    assert.throws(() => prepareParasiticsStudy(project, input), /End pin|End lead|global power/);
+    assert.equal(JSON.stringify(project), before);
+  }
+});
+
+test('a shared-unit pin number is resolved through the exact linked owner before choosing the target leaf', () => {
+  const { project, input } = fixture();
+  project.schematic.libraries['Fixture:Split'] = parseSExpr(`(symbol "Fixture:Split"
+    (symbol "Split_1_1" (pin passive line (at 0 0 0) (length 1) (name "A") (number "1")))
+    (symbol "Split_2_1" (pin passive line (at 0 0 0) (length 1) (name "B") (number "2"))))`);
+  const units = [1, 2].map((unit) => ({
+    id: uid(),
+    libId: 'Fixture:Split',
+    ref: 'U1',
+    value: 'Split',
+    x: unit === 1 ? 1000 : 200.66,
+    y: unit === 1 ? 1000 : 200.66,
+    rotation: 0,
+    unit,
+  }));
+  project.schematic.parts.push(...units);
+  project.pcb!.footprints[0].symbolId = units[0].id;
+  project.pcb!.footprints[0].pads[0].number = '2';
+  const end = pin(project.schematic, project.schematic.parts[1], '1'),
+    middle = { x: 200.66, y: end.y };
+  project.schematic.wires = [
+    { id: uid(), a: pin(project.schematic, units[1], '2'), b: middle },
+    { id: uid(), a: middle, b: end },
+  ];
+  const result = prepareParasiticsStudy(project, input);
+  assertSeries(
+    project.schematic,
+    result.project.schematic,
+    result,
+    units[1],
+    project.schematic.parts[1],
+    '2',
+    '1',
+  );
+  assert.equal(
+    partFields(
+      result.project.schematic.parts.find((part) => part.ref === result.references.resistor)!,
+    )['OpenPE.Parasitics.Start'],
+    'U1.2',
+  );
+});
+
+test('endpoint copies retain exact off-grid native pin anchors and the cut wire keeps its original UUID and style', () => {
+  const { project, input } = fixture();
+  project.schematic = parseCircuit(serializeCircuit(project.schematic));
+  for (const part of project.schematic.parts) part.x += 0.125;
+  project.schematic.wires = project.schematic.wires.map((wire) => ({
+    ...wire,
+    a: { x: wire.a.x + 0.125, y: wire.a.y },
+    b: { x: wire.b.x + 0.125, y: wire.b.y },
+  }));
+  const oldWire = project.schematic.wires[0];
+  const result = prepareParasiticsStudy(project, input);
+  const changed = result.project.schematic.wires.find((wire) => wire.id === oldWire.id)!;
+  assert.equal(changed.raw, oldWire.raw);
+  for (const [part, label] of [
+    [project.schematic.parts[0], result.labels.start],
+    [project.schematic.parts[1], result.labels.end],
+  ] as const) {
+    const at = pin(project.schematic, part, '1');
+    assert.ok(
+      result.project.schematic.labels.some(
+        (item) =>
+          !result.blockIds.includes(item.id) &&
+          item.text === label &&
+          item.x === at.x &&
+          item.y === at.y,
+      ),
+    );
+  }
+});
+
+test('two-decimal native Values retain SI scaling and reject unrepresentable values', () => {
   for (const [value, unit, expected] of [
     [0.0071416161691368836, 'Ω', '7.14mΩ'],
     [0.000000123456789012345, 'Ω', '123.46nΩ'],
@@ -210,259 +647,31 @@ test('two-decimal component Values preserve SI scaling and existing simulator bo
   ] as const) {
     const formatted = parasiticsComponentValue(value, unit);
     assert.equal(formatted, expected);
-    const kind = unit === 'Ω' ? 'R' : 'L';
     if (value >= 1e-15 && value <= 1e12)
-      assert.ok(Math.abs(passiveValue(formatted, kind) / value - 1) < 0.005);
-    else assert.throws(() => passiveValue(formatted, kind), /between/);
+      assert.ok(Math.abs(passiveValue(formatted, unit === 'Ω' ? 'R' : 'L') / value - 1) < 0.005);
   }
   for (const invalid of [0, -1, NaN, Infinity, Number.MAX_VALUE])
     assert.throws(() => parasiticsComponentValue(invalid, 'Ω'), /positive and finite/);
-});
-
-test('endpoint labels use primary schematic references and retain the captured pair after later reference edits', () => {
-  const { project, input } = fixture();
-  const primaryPart = project.schematic.parts[0];
-  project.pcb!.footprints[0].symbolId = primaryPart.id;
-  delete project.pcb!.footprints[0].reference;
-  delete project.pcb!.footprints[0].value;
-  const { project: multi, schematic: target } = appendSchematic(project);
-  const prepared = prepareParasiticsStudy(multi, { ...input, schematicId: target.id });
-  assert.deepEqual(prepared.labels, { start: `LP_${primaryPart.ref}.1`, end: 'LP_J2.1' });
-  const study = findSchematic(prepared.project, target.id)!;
-  for (const part of study.parts) {
-    assert.equal(partFields(part)['OpenPE.Parasitics.Start'], `${primaryPart.ref}.1`);
-    assert.equal(partFields(part)['OpenPE.Parasitics.StartId'], input.startId);
-  }
-  const later = structuredClone(prepared.project);
-  later.schematic.parts[0].ref = 'R99';
-  const native = projectFromNativeFiles(projectNativeFiles(later, 'design.kicad_pro'));
-  const retained = findSchematic(native, target.id)!;
-  assert.deepEqual(
-    retained.labels.map((label) => label.text),
-    Object.values(prepared.labels),
-  );
-  assert.equal(partFields(retained.parts[0])['OpenPE.Parasitics.Start'], `${primaryPart.ref}.1`);
-});
-
-test('repeated pad numbers and references identify distinct physical terminals by unique UUID prefixes', () => {
-  const { project, input } = fixture();
-  const [start, end] = project.pcb!.footprints;
-  const firstId = '12345678-0000-4000-8000-000000000001';
-  const secondId = '12345678-1000-4000-8000-000000000002';
-  start.pads[0].id = firstId;
-  end.pads[0].id = secondId;
-  end.reference = start.reference;
-  const prepared = prepareParasiticsStudy(project, { ...input, startId: firstId, endId: secondId });
-  assert.deepEqual(prepared.labels, { start: 'LP_J1.1_123456780', end: 'LP_J1.1_123456781' });
-  const duplicatePad = structuredClone(project);
-  duplicatePad.pcb!.footprints[0].pads.push({ ...end.pads[0], x: 20, y: 0 });
-  duplicatePad.pcb!.footprints.pop();
-  const samePackage = prepareParasiticsStudy(duplicatePad, {
-    ...input,
-    startId: firstId,
-    endId: secondId,
-  });
-  assert.deepEqual(samePackage.labels, prepared.labels);
-});
-
-test('via endpoints show exact native coordinates and retain their exact ID after native reopening', () => {
-  const { project, input } = fixture();
-  const viaId = uid();
-  project.pcb!.footprints.shift();
-  project.pcb!.vias.push({
-    id: viaId,
-    x: 5,
-    y: 5,
-    diameter: 0.6,
-    drill: 0.3,
-    netId: project.pcb!.nets[0].id,
-  });
-  const prepared = prepareParasiticsStudy(project, { ...input, startId: viaId });
-  assert.deepEqual(prepared.labels, { start: 'LP_Via(5,5)mm', end: 'LP_J2.1' });
-  const reopened = projectFromNativeFiles(projectNativeFiles(prepared.project, 'design.kicad_pro'));
-  const resistor = reopened.schematic.parts.find(
-    (part) => part.ref === prepared.references.resistor,
-  )!;
-  assert.equal(partFields(resistor)['OpenPE.Parasitics.StartId'], viaId);
-  assert.equal(partFields(resistor)['OpenPE.Parasitics.Start'], 'Via(5,5)mm');
-});
-
-test('unnumbered pads and normalized references retain explicit UUID-qualified endpoint identities', () => {
-  for (const change of ['unnumbered', 'reference whitespace'] as const) {
-    const { project, input } = fixture();
-    const footprint = project.pcb!.footprints[0];
-    if (change === 'unnumbered') footprint.pads[0].number = '';
-    else footprint.reference = 'J 1';
-    const prepared = prepareParasiticsStudy(project, input);
-    const tag = input.startId.replaceAll('-', '').slice(0, 8);
-    assert.equal(
-      prepared.labels.start,
-      change === 'unnumbered' ? `LP_J1.unnumbered_${tag}` : `LP_J_1.1_${tag}`,
-    );
-    const resistor = prepared.project.schematic.parts.find(
-      (part) => part.ref === prepared.references.resistor,
-    )!;
-    assert.equal(partFields(resistor)['OpenPE.Parasitics.StartId'], input.startId);
-    assert.equal(
-      partFields(resistor)['OpenPE.Parasitics.Start'],
-      change === 'unnumbered' ? 'J1.(unnumbered pad)' : 'J 1.1',
-    );
-  }
-});
-
-test('study geometry forms a series R/L chain with two distinct labelled terminals and no ideal bypass', () => {
-  const { project, input } = fixture();
-  const prepared = prepareParasiticsStudy(project, input);
-  const study = structuredClone(findSchematic(prepared.project, prepared.schematicId)!);
-  // A separate reference permits read-only node inspection, without making this
-  // deliberately incomplete extracted model into a fabricated source/testbench.
-  study.parts.push(createPart(study, 'GND', 0, 80.01));
-  const { node, probeNodes } = spiceNets(study);
-  const resistor = study.parts.find((part) => part.ref === prepared.references.resistor)!;
-  const inductor = study.parts.find((part) => part.ref === prepared.references.inductor)!;
-  const r = [node(resistor, '1'), node(resistor, '2')];
-  const l = [node(inductor, '1'), node(inductor, '2')];
-  assert.equal(new Set(r).size, 2);
-  assert.equal(new Set(l).size, 2);
-  const common = r.filter((value) => l.includes(value));
-  assert.equal(common.length, 1, 'The two elements must join at exactly one series node.');
-  const labelNode = (name: string) => probeNodes().find((probe) => probe.label === name)!.node;
-  const start = labelNode(prepared.labels.start);
-  const end = labelNode(prepared.labels.end);
-  assert.notEqual(start, end);
-  assert.ok(r.includes(start) && !l.includes(start));
-  assert.ok(l.includes(end) && !r.includes(end));
-  assert.ok(!common.includes(start) && !common.includes(end));
-});
-
-test('repeated studies append below earlier blocks on the same sheet with unique labels, references and identities', () => {
-  const { project, input } = fixture();
-  const first = prepareParasiticsStudy(project, input);
-  const firstStudy = findSchematic(first.project, first.schematicId)!;
-  const second = prepareParasiticsStudy(first.project, input);
-  const secondStudy = findSchematic(second.project, second.schematicId)!;
-  assert.equal(second.schematicId, first.schematicId);
-  assert.equal(secondStudy.title, project.schematic.title);
-  assert.ok(firstStudy.parts.every((part, index) => part === secondStudy.parts[index]));
-  assert.ok(firstStudy.wires.every((wire, index) => wire === secondStudy.wires[index]));
-  const firstValueBottom = Math.max(
-    ...firstStudy.parts.map(
-      (part) => symbolAnnotation(part, firstStudy.libraries[part.libId], 'Value')!.y,
-    ),
-  );
-  const laterParts = secondStudy.parts.filter((part) =>
-    [second.references.resistor, second.references.inductor].includes(part.ref),
-  );
-  assert.ok(
-    laterParts.every(
-      (part) =>
-        symbolAnnotation(part, secondStudy.libraries[part.libId], 'Reference')!.y >
-        firstValueBottom + 2.54,
-    ),
-  );
-  const allIds = [
-    ...secondStudy.parts,
-    ...secondStudy.wires,
-    ...secondStudy.labels,
-    ...schematicTexts(secondStudy.original),
-  ].map((object) => object.id);
-  assert.equal(new Set(allIds).size, allIds.length);
-  assert.equal(second.project.pcb, project.pcb);
-  assert.equal(second.references.resistor, 'R3');
-  assert.equal(second.references.inductor, 'L3');
-  assert.ok(
-    Object.values(second.labels).every((name) => !Object.values(first.labels).includes(name)),
-  );
-  assert.equal(projectSchematics(second.project).length, 1);
-  assert.doesNotThrow(() => parseProject(serializeProject(second.project)));
-});
-
-test('appending to a chosen existing secondary sheet preserves other native schematic and PCB bytes', () => {
-  const { project } = fixture();
-  const { project: multi, schematic: target } = appendSchematic(project);
-  const { project: three } = appendSchematic(multi);
-  const native = projectNativeFiles(three, 'design.kicad_pro');
-  for (const file of native.files)
-    if (/\.kicad_(?:pcb|sch)$/.test(file.name)) file.source = `\n\n${file.source}\n`;
-  const loaded = projectFromNativeFiles(native);
-  const board = loaded.pcb!;
-  const result = prepareParasiticsStudy(loaded, {
-    boardId: board.id,
-    schematicId: target.id,
-    startId: board.footprints[0].pads[0].id,
-    endId: board.footprints[1].pads[0].id,
-  });
-  const saved = projectNativeFiles(result.project, 'design.kicad_pro');
-  const targetFile = projectNativeFiles(multi, 'design.kicad_pro').files.find(
-    (file) => file.name.endsWith('.kicad_sch') && file.name !== 'design.kicad_sch',
-  )!;
-  for (const original of native.files.filter(
-    (file) => /\.kicad_(?:pcb|sch)$/.test(file.name) && file.name !== targetFile.name,
-  ))
-    assert.deepEqual(
-      saved.files.find((file) => file.name === original.name),
-      original,
-    );
-  assert.equal(result.project.pcb, board);
-  assert.equal(result.project.schematic, loaded.schematic);
-  assert.equal(projectSchematics(result.project).length, 3);
-  assert.equal(findSchematic(result.project, target.id)!.parts.length, 2);
-});
-
-test('Core appends a study as exactly one whole-project undo preserving prior objects and PCB state', () => {
-  const { project, input } = fixture();
-  const core = new ProjectCore(project);
-  const before = core.getSnapshot();
-  const prepared = prepareParasiticsStudy(before.project!, input);
-  core.commitProject(prepared.project);
-  const after = core.getSnapshot();
-  assert.equal(after.undoDepth, before.undoDepth + 1);
-  assert.equal(after.project!.schematic.id, before.project!.schematic.id);
-  assert.deepEqual(after.project!.schematic.parts.slice(0, 2), before.project!.schematic.parts);
-  assert.equal(after.project!.pcb, before.project!.pcb);
-  core.undo();
-  assert.equal(core.getSnapshot().source, before.source);
-  core.redo();
-  assert.ok(findSchematic(core.getSnapshot().project!, prepared.schematicId));
-  core.updateSource('pending native source');
-  assert.throws(() => core.commitProject(prepared.project), /Apply the Source edits/);
-  core.discardSource();
-  core.setEditingBlocked('This project is closing.');
-  assert.throws(() => core.commitProject(prepared.project), /closing/);
-});
-
-test('study value preparation retains tiny positive resistance and omits unavailable inductance rather than inventing zero', () => {
   assert.deepEqual(
     parasiticsStudyValues({
       equivalentResistanceOhm: 0.000000123456789012345,
       shortestPartialInductanceNh: null,
     }),
-    {
-      resistanceOhm: 0.000000123456789012345,
-      partialInductanceNh: null,
-    },
+    { resistanceOhm: 0.000000123456789012345, partialInductanceNh: null },
   );
-  for (const resistance of [0, -1, NaN, Infinity])
+  for (const r of [0, -1, NaN, Infinity])
     assert.throws(
-      () =>
-        parasiticsStudyValues({
-          equivalentResistanceOhm: resistance,
-          shortestPartialInductanceNh: 1,
-        }),
+      () => parasiticsStudyValues({ equivalentResistanceOhm: r, shortestPartialInductanceNh: 1 }),
       /resistance/,
     );
-  for (const inductance of [0, -1, NaN, Infinity, Number.MIN_VALUE])
+  for (const l of [0, -1, NaN, Infinity, Number.MIN_VALUE])
     assert.throws(
-      () =>
-        parasiticsStudyValues({
-          equivalentResistanceOhm: 1,
-          shortestPartialInductanceNh: inductance,
-        }),
+      () => parasiticsStudyValues({ equivalentResistanceOhm: 1, shortestPartialInductanceNh: l }),
       /inductance/,
     );
 });
 
-test('a route outside the partial-inductance model reports omission and adds only the resistor without a note', () => {
+test('outside-model partial inductance inserts a real resistor-only series connection, without inventing zero inductance', () => {
   const { project, input } = fixture();
   const board = project.pcb!;
   board.thickness = 0.2;
@@ -492,139 +701,25 @@ test('a route outside the partial-inductance model reports omission and adds onl
       layer: 'B.Cu',
     },
   ];
-  const request = { ...input, copperThicknessMm: 0.001 };
-  // Long opposing thin routes exhaust the bounded integral refinement rather
-  // than yielding a reliable partial-L estimate; DC resistance remains valid.
-  assert.equal(analyzeLayoutParasitics(board, request).shortestPartialInductanceNh, null);
-  const result = prepareParasiticsStudy(project, request);
-  const study = findSchematic(result.project, result.schematicId)!;
+  const result = prepareParasiticsStudy(project, { ...input, copperThicknessMm: 0.001 });
   assert.equal(result.omittedInductance, true);
   assert.equal(result.references.inductor, null);
   assert.equal(result.values.partialInductanceNh, null);
-  assert.deepEqual(
-    study.parts.slice(2).map((part) => part.libId),
-    ['Device:R'],
-  );
-  assert.equal(study.labels.length, 3);
-  assert.deepEqual(schematicTexts(study.original), schematicTexts(project.schematic.original));
-});
-
-test('preparation rejects stale PCB/schematic/terminal identities and disconnected copper without mutation', () => {
-  const { project, input } = fixture();
-  const before = serializeProject(project);
-  assert.throws(() => prepareParasiticsStudy(project, { ...input, boardId: uid() }), /no longer/);
-  assert.throws(
-    () => prepareParasiticsStudy(project, { ...input, schematicId: uid() }),
-    /no longer/,
-  );
-  assert.throws(
-    () => prepareParasiticsStudy(project, { ...input, endId: uid() }),
-    /terminal|pad|via/i,
-  );
-  assert.equal(serializeProject(project), before);
-  const disconnected = { ...project, pcb: { ...project.pcb!, tracks: [] } };
-  assert.throws(() => prepareParasiticsStudy(disconnected, input), /connect|path/i);
-  let full = project;
-  for (let index = 1; index < 12; index++) full = appendSchematic(full).project;
-  const fullBefore = serializeProject(full);
-  assert.equal(projectSchematics(prepareParasiticsStudy(full, input).project).length, 12);
-  assert.equal(serializeProject(full), fullBefore);
-});
-
-test('compatible customized embedded passive definitions are reused without replacing existing metadata', () => {
-  const { project, input } = fixture();
-  const library = project.schematic.libraries['Device:R'];
-  library.push(['property', quote('Custom provenance'), quote('Retain native definition')]);
-  const before = serializeProject(project);
-  const prepared = prepareParasiticsStudy(project, input);
-  const sheet = prepared.project.schematic;
-  assert.equal(sheet.libraries['Device:R'], library);
-  assert.equal(sheet.libraries['Device:L'], project.schematic.libraries['Device:L']);
-  assert.equal(serializeProject(project), before);
-  const resistor = sheet.parts.find((part) => part.ref === prepared.references.resistor)!;
-  const inductor = sheet.parts.find((part) => part.ref === prepared.references.inductor)!;
-  assert.equal(basicSimulationKind(resistor), 'R');
-  assert.equal(basicSimulationKind(inductor), 'L');
-  assert.equal(simulationSupportError(sheet), '');
-  assert.throws(
-    () => buildSpiceDeck(sheet, defaultTransient(sheet)),
-    /Choose a DC input terminal/,
-    'Both study elements pass compiler symbol validation; the incomplete circuit still needs a source.',
+  assert.equal(parasiticPhysicalModels(result.project.schematic)[0].parts.length, 1);
+  assertSeries(
+    project.schematic,
+    result.project.schematic,
+    result,
+    project.schematic.parts[0],
+    project.schematic.parts[1],
   );
 });
 
-test('incompatible custom passive symbols reject preparation without replacing libraries or modifying the project', () => {
-  for (const change of ['power', 'terminal', 'pin geometry', 'body'] as const) {
-    const { project, input } = fixture();
-    const library = project.schematic.libraries['Device:R'];
-    if (change === 'power') library.push(['power']);
-    if (change === 'terminal') {
-      const pin = children(library, 'symbol').flatMap((unit) => children(unit, 'pin'))[0];
-      child(pin, 'number')![1] = quote('3');
-    }
-    if (change === 'pin geometry') {
-      const pin = children(library, 'symbol').flatMap((unit) => children(unit, 'pin'))[0];
-      child(pin, 'length')![1] = '1.5';
-    }
-    if (change === 'body') {
-      const body = children(library, 'symbol').flatMap((unit) => children(unit, 'rectangle'))[0];
-      child(body, 'end')![2] = '50';
-    }
-    const before = serializeProject(project);
-    assert.throws(() => prepareParasiticsStudy(project, input), /supported study geometry/);
-    assert.equal(serializeProject(project), before);
-  }
-});
-
-test('custom library simulation defaults cannot silently change measured study primitives', () => {
-  for (const [name, value] of [
-    ['Sim.Params', 'R=100'],
-    ['Sim.Library', 'models/custom.lib'],
-    ['OpenPE.ModelSource', 'external'],
-    ['OpenPE.PassiveModel', 'C'],
-    ['OpenPE.InitialCurrent', '3'],
-  ]) {
-    const { project, input } = fixture();
-    const library = project.schematic.libraries['Device:R'];
-    library.push(['property', quote(name), quote(value)]);
-    const before = serializeProject(project);
-    assert.throws(
-      () => prepareParasiticsStudy(project, input),
-      /unsupported study simulation defaults/,
-    );
-    assert.equal(serializeProject(project), before);
-    assert.equal(project.schematic.libraries['Device:R'], library);
-  }
-});
-
-test('new study labels avoid existing power-symbol Values and hidden power-input names across sheets', () => {
+test('nearby placement ignores remote geometry and protects visible obstacles without moving original components', () => {
   const { project, input } = fixture();
-  project.schematic.labels[0].text = 'LP_J1.1';
-  const { project: multi, schematic: other } = appendSchematic(project);
-  const power = createPart(other, 'GND', 20.32, 20.32);
-  power.value = 'LP_J1.1_S2';
-  other.parts.push(power);
-  const hiddenPower = createPart(other, 'C', 40.64, 20.32);
-  other.parts.push(hiddenPower);
-  const pin = children(other.libraries['Device:C'], 'symbol').flatMap((unit) =>
-    children(unit, 'pin'),
-  )[0];
-  pin[1] = 'power_in';
-  pin.push('hide');
-  child(pin, 'name')![1] = quote('LP_J2.1_S3');
-  const before = serializeProject(multi);
-  const prepared = prepareParasiticsStudy(multi, input);
-  assert.deepEqual(prepared.labels, { start: 'LP_J1.1_S4', end: 'LP_J2.1_S4' });
-  assert.equal(findSchematic(prepared.project, other.id), other);
-  assert.equal(serializeProject(multi), before);
-});
-
-test('study placement clears existing notes, outlines, labels and hidden fields, and rejects the coordinate bound', () => {
-  const { project, input } = fixture();
-  project.schematic = parseCircuit(serializeCircuit(project.schematic));
-  project.schematic = saveAnnotation(project.schematic, 'Existing note\nSecond line', {
-    x: 12.7,
-    y: 300.99,
+  project.schematic = saveAnnotation(project.schematic, 'Remote note\nSecond line', {
+    x: 2000,
+    y: 2000,
   }).circuit;
   project.schematic.original!.push([
     'polyline',
@@ -632,48 +727,204 @@ test('study placement clears existing notes, outlines, labels and hidden fields,
     ['stroke', ['width', '2'], ['type', 'default']],
     ['uuid', quote(uid())],
   ]);
-  const field = children(project.schematic.parts[0].raw!, 'property')[0];
-  child(field, 'at')![2] = '500';
-  project.schematic.labels.push({ id: uid(), text: 'Vertical label', x: 0, y: 550, rotation: 90 });
   const before = serializeProject(project);
-  const prepared = prepareParasiticsStudy(project, input);
-  const added = prepared.project.schematic.parts.slice(2);
-  assert.ok(added.every((part) => part.y > 580));
-  assert.ok(added.every((part) => Math.abs(part.y / 1.27 - Math.round(part.y / 1.27)) < 1e-8));
+  const result = prepareParasiticsStudy(project, input);
+  const added = result.project.schematic.parts.slice(2);
+  assert.ok(added.every((part) => Math.hypot(part.x - 50.8, part.y - 16.51) < 90));
   assert.equal(serializeProject(project), before);
   assert.deepEqual(
-    schematicTexts(prepared.project.schematic.original),
+    schematicTexts(result.project.schematic.original),
     schematicTexts(project.schematic.original),
   );
-  project.schematic.labels.push({ id: uid(), text: 'Boundary', x: 0, y: 99990 });
-  const boundaryBefore = serializeProject(project);
-  assert.throws(() => prepareParasiticsStudy(project, input), /no supported space/);
-  assert.equal(serializeProject(project), boundaryBefore);
+  for (const kind of ['hidden anchor', 'global shield', 'primitive text'] as const) {
+    const next = fixture(),
+      pose = prepareParasiticsStudy(next.project, next.input).project.schematic.parts[2];
+    if (kind === 'hidden anchor') {
+      next.project.schematic = parseCircuit(serializeCircuit(next.project.schematic));
+      next.project.schematic.parts[0].raw!.push([
+        'property',
+        quote('Hidden anchor'),
+        quote('x'.repeat(200)),
+        ['at', String(pose.x), String(pose.y), '0'],
+        ['effects', ['font', ['size', '1.27', '1.27']], ['hide', 'yes']],
+      ]);
+    }
+    if (kind === 'global shield')
+      next.project.schematic.labels.push({
+        id: uid(),
+        text: 'G',
+        scope: 'global',
+        shape: 'bidirectional',
+        x: pose.x - 10,
+        y: pose.y + 4,
+      });
+    if (kind === 'primitive text') {
+      const part = createPart(next.project.schematic, 'C', pose.x + 200, pose.y + 5.08);
+      part.rotation = 90;
+      part.mirror = 'x';
+      next.project.schematic.parts.push(part);
+      children(next.project.schematic.libraries[part.libId], 'symbol')[0].push([
+        'text',
+        quote('Far upright text '.repeat(4)),
+        ['at', '0', '220', '90'],
+        ['effects', ['font', ['size', '.01', '.01']]],
+      ]);
+    }
+    const changed = prepareParasiticsStudy(next.project, next.input).project.schematic.parts.find(
+      (part) => part.ref === 'R2',
+    )!;
+    assert.ok(changed.x !== pose.x || changed.y !== pose.y, kind);
+  }
 });
 
-test('study placement clears rotated mirrored custom bodies and embedded text outside original component anchors', () => {
+test('all block coordinates stay bounded and snapped, while a full local region fails atomically', () => {
   const { project, input } = fixture();
-  const giant = createPart(project.schematic, 'C', 200.66, 30.48);
-  giant.rotation = 90;
-  giant.mirror = 'x';
-  project.schematic.parts.push(giant);
-  const library = project.schematic.libraries['Device:C'];
-  const unit = children(library, 'symbol')[0];
-  unit.push([
+  const shift = { x: 99900, y: -99900 };
+  project.schematic.parts.forEach((part) => {
+    part.x += shift.x;
+    part.y += shift.y;
+  });
+  project.schematic.wires = project.schematic.wires.map((wire) => ({
+    ...wire,
+    a: { x: wire.a.x + shift.x, y: wire.a.y + shift.y },
+    b: { x: wire.b.x + shift.x, y: wire.b.y + shift.y },
+  }));
+  const result = prepareParasiticsStudy(project, input);
+  for (const object of [
+    ...result.project.schematic.parts,
+    ...result.project.schematic.labels,
+    ...result.project.schematic.wires.flatMap((wire) => [
+      { id: wire.id, ...wire.a },
+      { id: wire.id, ...wire.b },
+    ]),
+  ].filter((item) => result.blockIds.includes(item.id))) {
+    assert.ok(Math.abs(object.x) <= 100000 && Math.abs(object.y) <= 100000);
+    assert.ok(Math.abs(object.x / 1.27 - Math.round(object.x / 1.27)) < 1e-8);
+    assert.ok(Math.abs(object.y / 1.27 - Math.round(object.y / 1.27)) < 1e-8);
+  }
+  const blocked = fixture();
+  const part = createPart(blocked.project.schematic, 'C', 50.8, 20.32);
+  blocked.project.schematic.parts.push(part);
+  children(blocked.project.schematic.libraries[part.libId], 'symbol')[0].push([
     'rectangle',
-    ['start', '-1500', '-1'],
-    ['end', '1000', '1'],
+    ['start', '-200', '-200'],
+    ['end', '200', '200'],
     ['stroke', ['width', '0'], ['type', 'default']],
-    ['fill', ['type', 'none']],
+    ['fill', ['type', 'background']],
   ]);
-  unit.push([
-    'text',
-    quote('Far text'),
-    ['at', '0', '-2000', '0'],
-    ['effects', ['font', ['size', '1.27', '1.27']]],
-  ]);
+  const before = serializeProject(blocked.project);
+  assert.throws(
+    () => prepareParasiticsStudy(blocked.project, blocked.input),
+    /no supported nearby free space/,
+  );
+  assert.equal(serializeProject(blocked.project), before);
+});
+
+test('secondary native files and PCB bytes survive a primary-sheet insertion', () => {
+  const { project } = fixture();
+  const two = appendSchematic(project).project;
+  const three = appendSchematic(two).project;
+  const packet = projectNativeFiles(three, 'design.kicad_pro');
+  for (const file of packet.files)
+    if (/\.kicad_(?:sch|pcb)$/.test(file.name)) file.source = `\n\n${file.source}\n`;
+  const loaded = projectFromNativeFiles(packet);
+  const board = loaded.pcb!;
+  const result = prepareParasiticsStudy(loaded, {
+    boardId: board.id,
+    schematicId: loaded.schematic.id,
+    startId: board.footprints[0].pads[0].id,
+    endId: board.footprints[1].pads[0].id,
+  });
+  const saved = projectNativeFiles(result.project, 'design.kicad_pro');
+  for (const file of packet.files.filter(
+    (file) => /\.kicad_(?:sch|pcb)$/.test(file.name) && file.name !== 'design.kicad_sch',
+  ))
+    assert.deepEqual(
+      saved.files.find((candidate) => candidate.name === file.name),
+      file,
+    );
+  assert.equal(projectSchematics(result.project).length, 3);
+});
+
+test('captured endpoint labels and exact IDs survive later reference edits without changing group identity', () => {
+  const { project, input } = fixture();
+  const result = prepareParasiticsStudy(project, input),
+    later = structuredClone(result.project);
+  later.schematic.parts[0].ref = 'R99';
+  const reopened = projectFromNativeFiles(projectNativeFiles(later, 'design.kicad_pro'));
+  const resistor = reopened.schematic.parts.find(
+    (part) => part.ref === result.references.resistor,
+  )!;
+  assert.equal(partFields(resistor)['OpenPE.Parasitics.Start'], 'R1.1');
+  assert.equal(partFields(resistor)['OpenPE.Parasitics.StartId'], input.startId);
+  assert.equal(parasiticPhysicalModels(reopened.schematic)[0].startLabel, result.labels.start);
+});
+
+test('fresh study labels avoid prior labels and implicit power names across sheets', () => {
+  const { project, input } = fixture();
+  project.schematic.labels[0].text = 'LP_R1.1';
+  const { project: multi, schematic: other } = appendSchematic(project);
+  const power = createPart(other, 'GND', 20.32, 20.32);
+  power.value = 'LP_R1.1_S2';
+  other.parts.push(power);
+  const hidden = createPart(other, 'C', 40.64, 20.32);
+  other.parts.push(hidden);
+  const definition = unitGraphics(other.libraries[hidden.libId], 1).flatMap((unit) =>
+    children(unit, 'pin'),
+  )[0];
+  definition[1] = 'power_in';
+  definition.push('hide');
+  child(definition, 'name')![1] = quote('LP_L1.1_S3');
+  const result = prepareParasiticsStudy(multi, input);
+  assert.deepEqual(result.labels, { start: 'LP_R1.1_S4', end: 'LP_L1.1_S4' });
+  assert.equal(findSchematic(result.project, other.id), other);
+});
+
+test('compatible embedded passives retain metadata, while incompatible geometry or simulation defaults reject the entire insertion', () => {
+  const f = fixture();
+  const library = f.project.schematic.libraries['Device:R'];
+  library.push(['property', quote('Custom provenance'), quote('Retain this definition')]);
+  const result = prepareParasiticsStudy(f.project, f.input);
+  assert.equal(result.project.schematic.libraries['Device:R'], library);
+  assert.equal(
+    basicSimulationKind(
+      result.project.schematic.parts.find((part) => part.ref === result.references.resistor)!,
+    ),
+    'R',
+  );
+  for (const kind of ['power', 'pin', 'body', 'Sim.Library', 'OpenPE.PassiveModel'] as const) {
+    const { project, input } = fixture();
+    const symbol = project.schematic.libraries['Device:R'];
+    if (kind === 'power') symbol.push(['power']);
+    else if (kind === 'pin')
+      child(unitGraphics(symbol, 1).flatMap((unit) => children(unit, 'pin'))[0], 'length')![1] =
+        '1.5';
+    else if (kind === 'body') {
+      const rectangle = children(symbol, 'symbol').flatMap((unit) =>
+        children(unit, 'rectangle'),
+      )[0];
+      child(rectangle, 'start')!.splice(1, 2, '-100', '-100');
+    } else symbol.push(['property', quote(kind), quote('custom')]);
+    const before = JSON.stringify(project);
+    assert.throws(
+      () => prepareParasiticsStudy(project, input),
+      /unsupported|supported study geometry|original schematic network/,
+    );
+    assert.equal(JSON.stringify(project), before);
+  }
+});
+
+test('stale identities and disconnected board copper reject before any native edit', () => {
+  const { project, input } = fixture();
   const before = serializeProject(project);
-  const prepared = prepareParasiticsStudy(project, input);
-  assert.ok(prepared.project.schematic.parts.slice(3).every((part) => part.y > 2040));
+  for (const change of [{ boardId: uid() }, { schematicId: uid() }, { endId: uid() }])
+    assert.throws(
+      () => prepareParasiticsStudy(project, { ...input, ...change }),
+      /no longer|same assigned|terminal/,
+    );
+  assert.throws(
+    () => prepareParasiticsStudy({ ...project, pcb: { ...project.pcb!, tracks: [] } }, input),
+    /disconnected/,
+  );
   assert.equal(serializeProject(project), before);
 });

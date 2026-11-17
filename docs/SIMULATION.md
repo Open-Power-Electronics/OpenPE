@@ -6,12 +6,25 @@ OpenPE supports bounded transient simulation of the ten native projects under `e
 [PLUGINS.md](PLUGINS.md) lifecycle, [FORMAT.md](FORMAT.md) native attributes
 and [CORE.md](CORE.md) shared validation/review.
 
-Layout Parasitics can append editable [labelled R/L study components](LAYOUT.md#parasitic-study-schematics)
-to an existing schematic. That snapshot has no automatic source, load or ground and does not expand the
-supported compiler profiles. Connect and validate a supported testbench before
-Run; its optional open-route partial inductance is not a return-loop model.
+Layout Parasitics can insert editable [labelled R/L series components](LAYOUT.md#parasitic-study-schematics)
+between exactly mapped pad endpoints in an existing schematic. The native lead
+cut and connection labels place those elements in the actual simulated path,
+without an ideal bypass or floating study branch. Run reads that native geometry;
+hidden group fields are not solver rewiring instructions. Creation supplies no
+source, load, ground or unsupported model and does not expand the supported
+compiler profiles. Its optional open-route partial inductance is not a return-loop model.
+The terminal-side approximation leaves other schematic branches on the start
+side; it does not reconstruct distributed PCB current paths.
 
 ## Plugin lifecycle and design inputs
+
+Real / Virtual / All in the Schematic footer are
+[native section views](../DESIGN.md#real-and-virtual-sections), not solver
+participation controls. Run continues to use the complete accepted circuit and
+its explicit `exclude_from_sim` settings. A component can belong to Real
+and participate in SPICE; belonging to Virtual because of a missing Footprint
+or Simulation-only board inclusion does not grant model support. Viewing retains
+existing example source flags. Layout Parasitics adds its study elements to Virtual.
 
 **SPICE Simulation** (`spice-simulation@openpe`) is preinstalled/enabled.
 Disable/uninstall cancels owned work, removes resident controls/probes and gates
@@ -332,7 +345,7 @@ Documentation edits require static content/link/format checks only. The followin
 | `node scripts/check-simulation-value-ui.mjs`                                                                    | Isolated Value binding, editable DC/PULSE sources, hidden model metadata preservation, no-op blur, undo, invalid drafts, IME and reopening                                                                                                              |
 | `node scripts/check-spice-model-chooser-ui.mjs`                                                                 | Themed model dropdown, source waveform conversion, hidden library path, current-file browse hint, declaration discovery, retained native identities, atomic edit/undo, cancellation/retry, invalid drafts, IME and stale-result guards                  |
 | `node scripts/check-simulation-properties-ui.mjs`                                                               | Isolated editable simulation parameters, shared numeric limits, invalid retry, IME/Escape, engineering units, compact themes, Core refresh/reopen and field edit/undo                                                                                   |
-| `node scripts/check-example-simulation-ui.mjs`                                                                  | Isolated Home setup and voltage-source marks                                                                                                                                                                                                      |
+| `node scripts/check-example-simulation-ui.mjs`                                                                  | Isolated Home setup and voltage-source marks                                                                                                                                                                                                            |
 | `node scripts/check-example-text-ui.mjs`                                                                        | Isolated SVG glyph, symbol, pin-text and wire overlap checks for all ten Home entries across Recent and Example; no circuit mutations                                                                                                                   |
 | `node scripts/check-agent-tools-ui.mjs`                                                                         | Mocked live Core queries, Review/Apply, stale guards, Auto edits, shared undo/dirty state and pending Source                                                                                                                                            |
 

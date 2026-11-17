@@ -134,7 +134,7 @@ test('browser plugin routes share bundled lifecycle and delegate provider operat
     const { token } = await (await post('session')).json();
     const plugin = (action: string, body = {}) => post(`plugin/${action}`, body, token);
     const catalog: WorkbenchPluginCatalog = await (await plugin('catalog')).json();
-    assert.equal(catalog.plugins.length, 4);
+    assert.equal(catalog.plugins.length, 5);
     assert.ok(catalog.plugins.every(({ installed, enabled }) => installed && enabled));
     assert.equal((await plugin('guide?document=workflow')).status, 200);
     assert.equal((await plugin('guide?document=missing')).status, 400);

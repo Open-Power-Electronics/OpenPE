@@ -86,6 +86,22 @@ nets. Pad nets are read-only. Conflicts/no-connect errors require schematic fixe
 Unambiguous net merges/renames carry copper; splits retain previous copper nets
 with a review notice. Replacement never moves track endpoints.
 
+Explicit [parasitic series groups](#parasitic-study-schematics) have a bounded
+PCB-only conductive equivalence. Core validates their native group fields,
+exact board/pad identities and actual series connection before joining the
+group's endpoint nets for physical PCB synchronization. On each PCB use, both
+declared terminals must still be assigned same-net pads linked by their exact
+symbol identities and pin numbers into the group's outer label networks.
+Moving an anchored connection label or altering endpoint metadata cannot retain
+an invalid physical short. Coordinate-only PCB movement preserves the association
+but does not recalculate the stored measurement. Generated LP label names
+do not rename the physical net. This preserves the measured board's original
+packages, pad nets, tracks, fills and native bytes. Schematic and SPICE topology
+still use the actual native wires, labels and R/L terminals; no solver-only
+rewiring is inferred from provenance. Invalid or incomplete group data cannot
+grant a conductive equivalence. This native rule remains available independently
+of the plugin lifecycle.
+
 ## Object locking
 
 Properties exposes one Locked control at the right of the object identity/title row for footprints, individual pads, tracks,
@@ -1300,13 +1316,16 @@ layer connections within a plated through-hole pad, on their enabled copper
 layers. A selected via uses its front copper layer as the terminal.
 
 The bounded network uses straight track centerlines with shared endpoints within
-1 nm. A track endpoint inside pad copper or a via annulus connects to that
-conductor on the track's layer. A rounded endpoint cap with positive overlap
-beyond the 1 nm tolerance also connects. Tracks sharing that junction share
-its contact. Two tracks with disjoint centerlines may contact the same terminal
-at different endpoints when the bounds of their copper overlap lie entirely
-within its land. A centered track also connects if its copper reaches the pad
-or annulus. Each track uses its native centerline length and contributes
+1 nm. Pad and via contacts require positive-area track-copper overlap with their
+conductive land on an enabled layer, retaining drill holes. Proven contacts
+connect through ordered, clamped projections onto the native centerline; virtual
+cuts subdivide the graph without moving or splitting the native track. Intervals
+retain native centerline lengths, without trimming to pad boundaries or guessing
+new route geometry. Returned paths name the original tracks. Tracks sharing a
+junction share its contact. Two tracks may contact the same terminal when their
+copper overlap lies entirely within that proven conductive land. A track capsule
+provably contained wholly inside one eligible drill hole contributes no physical
+copper and is omitted without creating graph edges or joins. Each track interval contributes
 `R = ρL/(wt)` for length `L`, width `w` and uniform copper thickness `t`. Each
 via interval contributes `R = ρL/[πp(d+p)]` for drill diameter `d` and barrel
 plating `p`. Use `ρ = 1.724 × 10⁻⁸ Ω·m` at 20 °C with formula dimensions in
@@ -1330,26 +1349,43 @@ distance results. The model excludes capacitance, shorts to other nets,
 frequency-dependent losses and fabrication tolerances.
 [Ruehli, 1972](https://doi.org/10.1147/rd.165.0470) describes partial inductance.
 
-Unsupported contacts, including pad or via contact without an eligible endpoint,
-track-body joins, overlapping
+Unsupported contacts, including pad/via contact without a proven eligible land,
+general track-body or parallel joins outside a proven shared land, overlapping
 same-net pads/vias, nonempty same-net saved fills and copper artwork anywhere on
 the board, reject the measurement. Unfilled zones, empty fills and keepouts
-contribute no copper. The graph is limited to 256 nodes and 512 tracks on the
-selected net, with at most 2,000,000 contact operations and 120,000 anchor contour
+contribute no copper. The graph, including projected subdivision nodes, is
+limited to 256 nodes and 512 native tracks on the selected net, with at most
+2,000,000 contact operations and 120,000 anchor contour
 vertices. Disconnected terminals also return an error. OpenPE implements the
 two-terminal workflow independently. [KiCad-Parasitics](https://github.com/Steffen-W/KiCad-Parasitics)
 
 ### Parasitic study schematics
 
 Add parasitic components captures the current terminal pair and thickness inputs
-as a study block in an existing schematic. The GUI targets the schematic selected
+as an actual series insertion in an existing schematic. The GUI targets the schematic selected
 before entering Layout; the shared command explicitly identifies that existing
 schematic. It recomputes the accepted PCB before preparing the edit, without
 importing rounded panel readouts or caller-supplied resistance/inductance values.
-The compact block is placed in free space below the target schematic's existing
-geometry, with both terminal labels and the series elements on one straight line.
-Original objects, wires, identities and embedded symbol definitions are retained;
-the command neither breaks nor reconnects the original circuit. This is one Core
+The compact block is placed in clear space near the corresponding schematic
+terminals, with both terminal labels and the series elements on one straight line.
+Both selected terminals must be PCB pads mapped through their exact linked
+native symbol identities and unique pin/pad numbers into that target. Vias, duplicate
+pad-number lands, unmapped or
+co-located pins, a nonexclusive end lead and an already inserted endpoint pair
+reject without editing. Matching a reference, net or label name alone cannot
+establish the connection. The end pin must have one eligible leaf wire; that
+wire retains its identity and is shortened by 1.27 mm at the pin. Native copies
+of the endpoint LP labels connect the separated original nets through the new
+R/L chain, with no remaining ideal bypass. Other native circuit geometry and
+embedded symbol definitions are retained.
+Nearby placement checks at most 2,401 snapped positions and two million obstacle
+comparisons. It considers accepted geometry and visible native field bounds,
+reserving hidden field anchors independently of the current view. Repeated
+additions avoid earlier blocks. If no supported clear position is available,
+preparation rejects without changing the design.
+Its native `on_board no` components belong to the Schematic Virtual section;
+GUI success switches to that section before revealing and selecting the block.
+This is one Core
 transaction and one whole-project undo, with no additional schematic, tab or
 native file. Other schematics, PCB placement, connectivity, copper and PCB native
 bytes are preserved.
@@ -1373,36 +1409,36 @@ preserving the original definitions and design.
 
 Two distinct local net labels identify the actual measured endpoints. Pad labels
 use the component reference and pad number, such as `LP_J3.1` and `LP_C7.1`, so
-the schematic shows which physical terminals the series model spans. Via labels
-use their native board coordinates, such as `LP_Via(12.7,3.81)mm`. Ambiguous or
+the schematic shows which physical terminals the series model spans. Ambiguous or
 missing reference/pad names, normalized whitespace and duplicate endpoint names
 include a terminal UUID qualifier, using the shortest unique hyphen-free prefix
 of at least eight hexadecimal characters. A shared study suffix such as `_S2`
 or `_S3` is added to both label names
 when needed to avoid existing schematic labels, power and hidden power-pin
-names, and PCB net names. Repeated studies and studies sharing one endpoint stay
-electrically separate.
-Wires join those labels through the prepared series elements. Their distinct
-local names do not connect the block to the original net or create an ideal wire
-around the extracted elements. The generated content consists of the series
-components, their fields, two labels and joining wires, without an explanatory
+names, and PCB net names. Repeated creation for the same endpoint pair rejects;
+other supported insertions receive distinct labels.
+Wires join the compact block's two labels through the prepared series elements;
+connection-label copies remain on the start pin, shortened lead's cut anchor
+and end pin.
+The generated content consists of the series
+components, their fields, labels and joining wires, without an explanatory
 text annotation. Measurement assumptions and model limits remain in the plugin
 panel and this contract.
 
-Each added R/L stores hidden native properties `OpenPE.Parasitics.BoardId`,
-`OpenPE.Parasitics.StartId` and `OpenPE.Parasitics.EndId` with the exact board and
-terminal UUIDs. `OpenPE.Parasitics.Start` and `OpenPE.Parasitics.End` retain the
-human-readable endpoint descriptions. Source, Save, reopen, recovery and undo
-preserve these ordinary symbol properties without adding canvas text or a
-private plugin file. They record the measured endpoints at creation; they grant
-no mutation authority and do not reconnect the original circuit.
+Each added R/L stores the hidden [native group and endpoint properties](FORMAT.md#document-ownership).
+Source, Save, reopen, recovery and undo preserve them without adding canvas text
+or a private plugin file. Provenance alone grants no mutation authority; the
+physical equivalence above requires a fully validated group and native topology.
 
 The resistor represents equivalent DC current sharing, while the optional
 inductor represents only the shortest route's partial inductance. Their series
-combination is an editable study snapshot, not a validated broadband or closed
+combination is a deterministic terminal-side approximation: other schematic
+branches remain on the start side. It does not reconstruct a distributed PCB
+network from the equivalent resistance and shortest-route partial inductance.
+The combination is an editable study snapshot, not a validated broadband or closed
 return-loop equivalent. It includes no capacitance, frequency-dependent loss,
-automatic excitation, load or ground. Connect the local labels to an appropriate
-supported testbench before simulation; creation does not expand the bounded
+automatic excitation, load or ground. The existing circuit must already be a
+supported simulation testbench; creation does not expand the bounded
 [SPICE compiler scope](SIMULATION.md). Later PCB changes do not update an
 existing study automatically.
 
@@ -1438,6 +1474,7 @@ Passing the bundled PCB directly compares against its saved contours.
 | `tests/layout-drag-capabilities.test.ts`                                                                                                                                                                                         | Agent discovery, picked corners, explicit constrained placement, GUI result parity, revision/Source barriers and native undo                                                                                                                      |
 | `tests/layout-parasitics.test.ts`, `tests/layout-parasitics-study.test.ts`                                                                                                                                                       | Analytical DC networks and via spans; same-schematic additions, endpoint identity and native-property preservation, precision, one-step undo and rejected inputs                                                                                  |
 | `node scripts/check-thermal-workbench-ui.mjs --parasitics-study`                                                                                                                                                                 | Real Workbench terminal picks and endpoint-labelled study, hidden native endpoint fields, unchanged PCB/other native files and one GUI undo; mocked host services, no Electron or solver                                                          |
+| `node scripts/check-thermal-workbench-ui.mjs --parasitics-contact`                                                                                                                                                               | Actual LM25017 D1.2/C8.1 /VOUT1 pad picks, finite contact measurement, thickness reactivity, Add availability and unchanged native files; mocked host services, no Electron or solver                                                             |
 | `node scripts/check-component-delete-ui.mjs`, `node scripts/check-model-cad-ui.mjs --delete-actions`                                                                                                                             | Shared upper-right actions; Model component/CAD removal, Agent parity, IME/Source/draft gates and native undo                                                                                                                                     |
 | `node scripts/check-copper-fill-ui.mjs`                                                                                                                                                                                          | Properties fill, selected-zone Core/native clearance, Source and undo                                                                                                                                                                             |
 | `tests/pcb-fill-preview.test.ts`, `tests/pcb-fill-worker.test.ts`, `tests/pcb-fill-worker-client.test.ts`, `tests/layout-copper-retention.test.ts`                                                                               | Bounded real copper preview, continuous Worker progress, stale/cancelled results, temporary gap masks and retained drawing frames                                                                                                                 |

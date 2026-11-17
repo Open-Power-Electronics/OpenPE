@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createCapabilityHost } from '../api/capabilities';
 import { createEmptyPCB } from '../lib/pcb-layout';
 import { createProject } from '../lib/project';
-import { emptyCircuit, uid } from '../lib/circuit';
+import { createPart, emptyCircuit, pinPositions, uid } from '../lib/circuit';
 import { ProjectCore } from '../core/project-core';
 import { serializePCB } from '../lib/pcb';
 import {
@@ -156,10 +156,40 @@ test('workbench plugin UI/Agent operations share refresh, lifecycle confirmation
       startId = uid(),
       endId = uid();
     pcb.nets.push({ id: netId, name: 'Signal' });
-    pcb.vias.push(
-      { id: startId, x: 0, y: 0, diameter: 0.8, drill: 0.4, netId },
-      { id: endId, x: 10, y: 0, diameter: 0.8, drill: 0.4, netId },
+    const schematic = emptyCircuit();
+    const terminals = [10.16, 40.64].map((x) => {
+      const part = createPart(schematic, 'R', x, 20.32);
+      schematic.parts.push(part);
+      return part;
+    });
+    const terminalPins = terminals.map(
+      (part) => pinPositions(part, schematic.libraries[part.libId])[0],
     );
+    schematic.wires.push({ id: uid(), a: terminalPins[0], b: terminalPins[1] });
+    pcb.footprints = terminals.map((part, index) => ({
+      id: uid(),
+      symbolId: part.id,
+      libraryId: 'Test:Terminal',
+      x: index * 10,
+      y: 0,
+      side: 'front',
+      rotation: 0,
+      graphics: [],
+      pads: [
+        {
+          id: index ? endId : startId,
+          number: '1',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          layers: ['F.Cu'],
+          netId,
+          size: { x: 0.8, y: 0.8 },
+          type: 'smd',
+          shape: 'circle',
+        },
+      ],
+    }));
     pcb.tracks.push({
       id: uid(),
       start: { x: 0, y: 0 },
@@ -170,7 +200,7 @@ test('workbench plugin UI/Agent operations share refresh, lifecycle confirmation
     });
     const basis = structuredClone(pcb);
     const state = {
-      project: { ...createProject(emptyCircuit()), pcb },
+      project: { ...createProject(schematic), pcb },
       revision: 5,
       sourceDraft: null as string | null,
       editingBlocked: null as string | null,
@@ -247,9 +277,11 @@ test('workbench plugin UI/Agent operations share refresh, lifecycle confirmation
           references: unknown;
           values: unknown;
           omittedInductance: boolean;
+          blockIds: string[];
           revision: string;
         };
         assert.equal(core.getSnapshot().undoDepth, 1);
+        assert.ok(result.blockIds.length > 0);
         const after = core.getSnapshot().project!;
         assert.equal(after.schematic.id, result.schematicId);
         assert.equal(result.schematicId, before.project!.schematic.id);

@@ -50,6 +50,7 @@ type Edge = PathItem & {
   conductor: InductanceSegment;
 };
 type Graph = Edge[][];
+type TrackContact = { t: number; point: Point; anchor: CenteredPCBTrackAnchor };
 const copperResistivityOhmMm = 1.724e-5; // Copper at 20 °C, in Ω·mm.
 const coordinateTolerance = 0.000001; // Millimetres.
 const maxNodes = 256;
@@ -86,8 +87,28 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
   const trackBounds = tracks.map(({ start, end, width }) => bounds([start, end], width / 2));
   const anchorBounds = anchors.map(({ polygon }) => bounds(polygon.outer));
   const contours = anchors.map(({ polygon }) => polygonEdges(polygon));
-  const contacts = new Map<string, Partial<Record<'start' | 'end', CenteredPCBTrackAnchor>>>();
+  const holes = anchors.map(({ polygon }) =>
+    polygon.holes.map((outer) => ({
+      polygon: { outer, holes: [] },
+      edges: polygonEdges({ outer, holes: [] }),
+    })),
+  );
+  const contacts = new Map<string, TrackContact[]>();
+  const erased = new Set<string>();
+  const project = (track: Track, point: Point) => {
+    const dx = track.end.x - track.start.x,
+      dy = track.end.y - track.start.y;
+    const length = dx * dx + dy * dy;
+    const t = length
+      ? Math.max(
+          0,
+          Math.min(1, ((point.x - track.start.x) * dx + (point.y - track.start.y) * dy) / length),
+        )
+      : 0;
+    return { t, point: { x: track.start.x + t * dx, y: track.start.y + t * dy } };
+  };
   for (const [index, track] of tracks.entries()) {
+    let containedInHole = false;
     for (const [anchorIndex, anchor] of anchors.entries()) {
       spend();
       if (!anchor.layers.includes(track.layer)) continue;
@@ -104,27 +125,69 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
             return pointSegmentDistance(track[end], a, b) < capRadius ** 2;
           }),
       );
-      if (!trackTouchesPolygon(track, anchor.polygon, spend)) {
+      // The broad collision predicate includes tangency and tolerance. A
+      // conducting contact needs a point in copper or strict swept-area overlap.
+      const actualContact =
+        insidePolygon(track.start, anchor.polygon, spend) ||
+        insidePolygon(track.end, anchor.polygon, spend) ||
+        contours[anchorIndex].some(([a, b]) => {
+          spend();
+          return segmentDistance(track.start, track.end, a, b) < capRadius ** 2;
+        });
+      if (!actualContact) {
+        const removedByDrill = holes[anchorIndex].some(({ polygon, edges }) => {
+          return (
+            insidePolygon(track.start, polygon, spend) &&
+            insidePolygon(track.end, polygon, spend) &&
+            edges.every(([a, b]) => {
+              spend();
+              return (
+                segmentDistance(track.start, track.end, a, b) >
+                (track.width / 2 + coordinateTolerance) ** 2
+              );
+            })
+          );
+        });
+        if (removedByDrill) {
+          // Drilling removes this entire capsule. It supplies no node, edge or
+          // track-to-track contact, even when a native endpoint names the center.
+          containedInHole = true;
+          continue;
+        }
+        if (trackTouchesPolygon(track, anchor.polygon, spend))
+          throw new Error('A track must have a positive-area copper contact with its pad or via.');
         if (ends.length)
           throw new Error('A track endpoint has no copper contact at its pad or via.');
         continue;
       }
-      if (!ends.length)
-        throw new Error('Track copper must connect to a pad or via through a track endpoint.');
-      const contact = contacts.get(track.id) ?? {};
-      for (const end of ends) {
-        if (contact[end]) throw new Error('A track endpoint contacts multiple pads or vias.');
-        contact[end] = anchor;
+      const contact = contacts.get(track.id) ?? [];
+      // Pads are ideal nodes in this centerline model. Preserve accepted native
+      // endpoint lengths; new body contacts use a clamped center projection only
+      // after actual copper contact was proved, including annulus-entry routes.
+      const points = ends.length
+        ? ends.map((end) => ({ t: end === 'start' ? 0 : 1, point: track[end] }))
+        : [project(track, anchor.center)];
+      for (const point of points) {
+        const same = contact.find((previous) => {
+          spend();
+          return pointsMatch(previous.point, point.point);
+        });
+        if (same && same.anchor !== anchor)
+          throw new Error('A copper junction contacts multiple pads or vias.');
+        if (!same) contact.push({ ...point, anchor });
       }
       contacts.set(track.id, contact);
     }
+    if (containedInHole && !contacts.has(track.id)) erased.add(track.id);
   }
   const trackContactMessage =
     'Track copper must join at a shared endpoint without overlapping segments.';
   for (const [index, track] of tracks.entries()) {
+    if (erased.has(track.id)) continue;
     for (let next = index + 1; next < tracks.length; next++) {
       spend();
       const other = tracks[next];
+      if (erased.has(other.id)) continue;
       const a = trackBounds[index];
       const b = trackBounds[next];
       if (track.layer !== other.layer || !mayTouch(a, b)) continue;
@@ -133,7 +196,7 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
       const sharedStart =
         pointsMatch(track.start, other.start) || pointsMatch(track.start, other.end);
       const sharedEnd = pointsMatch(track.end, other.start) || pointsMatch(track.end, other.end);
-      if (!sharedStart && !sharedEnd && distance > coordinateTolerance ** 2) {
+      if (!sharedStart && !sharedEnd) {
         const first = contacts.get(track.id);
         const second = contacts.get(other.id);
         const left = Math.max(a.left, b.left) - coordinateTolerance;
@@ -141,10 +204,17 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
         const top = Math.max(a.top, b.top) - coordinateTolerance;
         const bottom = Math.min(a.bottom, b.bottom) + coordinateTolerance;
         // The convex land contains the entire overlap bound if it contains its
-        // four corners. The accepted endpoint contacts already share its node.
+        // four corners. The accepted contacts already share its ideal node.
         if (
-          [first?.start, first?.end].some((anchor) => {
-            if (!anchor || (anchor !== second?.start && anchor !== second?.end)) return false;
+          first?.some(({ anchor }) => {
+            spend();
+            if (
+              !second?.some((contact) => {
+                spend();
+                return contact.anchor === anchor;
+              })
+            )
+              return false;
             const land = { outer: anchor.polygon.outer, holes: [] };
             return [
               { x: left, y: top },
@@ -191,7 +261,7 @@ function checkContacts(tracks: Track[], anchors: CenteredPCBTrackAnchor[]) {
         throw new Error('Overlapping pads or vias are outside the Layout Parasitics model.');
     }
   }
-  return contacts;
+  return { contacts, erased, spend };
 }
 
 function shortestPath(graph: Graph, start: number, end: number) {
@@ -304,7 +374,7 @@ export function analyzeLayoutParasitics(
   if (anchors.length > maxNodes) throw new Error(limitMessage);
   if (!anchors.some(({ id }) => id === startId) || !anchors.some(({ id }) => id === endId))
     throw new Error('Choose two pads or vias with enabled copper layers.');
-  const contacts = checkContacts(tracks, anchors);
+  const { contacts, erased, spend } = checkContacts(tracks, anchors);
 
   const graph: Graph = [];
   const nodesByLayer = new Map<string, { point: Point; node: number }[]>(
@@ -316,7 +386,10 @@ export function analyzeLayoutParasitics(
   };
   const nodeAt = (layer: string, point: Point, anchorNode?: number) => {
     const locations = nodesByLayer.get(layer)!;
-    const matches = locations.filter((entry) => pointsMatch(entry.point, point));
+    const matches = locations.filter((entry) => {
+      spend();
+      return pointsMatch(entry.point, point);
+    });
     if (
       matches.length > 1 ||
       (matches.length && anchorNode !== undefined && matches[0].node !== anchorNode)
@@ -383,28 +456,45 @@ export function analyzeLayoutParasitics(
   }
   // Every track at the same physical junction shares an accepted pad contact,
   // including a narrower track whose own cap stops short of the pad copper.
-  for (const { id, start, end, layer } of tracks) {
-    const contact = contacts.get(id);
-    if (contact?.start) nodeAt(layer, start, nodeAt(layer, contact.start.center));
-    if (contact?.end) nodeAt(layer, end, nodeAt(layer, contact.end.center));
+  for (const { id, layer } of tracks) {
+    if (erased.has(id)) continue;
+    for (const contact of contacts.get(id) ?? [])
+      nodeAt(layer, contact.point, nodeAt(layer, contact.anchor.center));
   }
   for (const { id, start, end, width, layer } of tracks) {
-    const from = nodeAt(layer, start);
-    const to = nodeAt(layer, end);
-    // An ideal pad or annulus already connects both ends of this track.
-    if (from === to && !pointsMatch(start, end)) continue;
-    addEdge(
-      from,
-      to,
-      Math.sqrt(squaredDistance(start, end)),
-      width * copperThicknessMm,
-      { id, kind: 'track' },
-      {
-        start: { ...start, z: layerZ(layer) },
-        end: { ...end, z: layerZ(layer) },
-        radius: Math.exp(-1.5) * (width + copperThicknessMm),
-      },
-    );
+    if (erased.has(id)) continue;
+    // Virtual graph cuts never rewrite native track geometry. Neighboring cuts
+    // are coalesced by world distance, independent of the segment's total length.
+    const cuts = [{ t: 0, point: start }, ...(contacts.get(id) ?? []), { t: 1, point: end }]
+      .sort((a, b) => {
+        spend();
+        return a.t - b.t;
+      })
+      .filter((cut, index, list) => {
+        spend();
+        return !index || !pointsMatch(cut.point, list[index - 1].point);
+      });
+    if (cuts.length < 2) throw new Error('A copper segment has unusable dimensions.');
+    for (let index = 1; index < cuts.length; index++) {
+      const start = cuts[index - 1].point,
+        end = cuts[index].point;
+      const from = nodeAt(layer, start);
+      const to = nodeAt(layer, end);
+      // An ideal pad or annulus already connects both ends of this track.
+      if (from === to && !pointsMatch(start, end)) continue;
+      addEdge(
+        from,
+        to,
+        Math.sqrt(squaredDistance(start, end)),
+        width * copperThicknessMm,
+        { id, kind: 'track' },
+        {
+          start: { ...start, z: layerZ(layer) },
+          end: { ...end, z: layerZ(layer) },
+          radius: Math.exp(-1.5) * (width + copperThicknessMm),
+        },
+      );
+    }
   }
   const start = terminals.get(startId)!;
   const end = terminals.get(endId)!;

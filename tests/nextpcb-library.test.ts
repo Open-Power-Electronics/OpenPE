@@ -339,6 +339,58 @@ test('NextPCB native symbol detail prepares its linked package before placement 
   }
 });
 
+test('NextPCB starts both native reads together and a failed footprint retains its valid schematic symbol', async () => {
+  for (const footprintFails of [false, true]) {
+    const releases = new Map<string, (response: Response) => void>();
+    let bothStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      bothStarted = resolve;
+    });
+    const { service } = fixture((url) => {
+      if (![symbolUrl, footprintUrl].includes(url)) return;
+      return new Promise<Response>((resolve) => {
+        releases.set(url, resolve);
+        if (releases.size === 2) bothStarted();
+      });
+    });
+    const pending = service.request({ action: 'detail', kind: 'symbols', id });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        started,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('Both native reads must start before either is released.')),
+            1000,
+          );
+        }),
+      ]);
+      assert.deepEqual([...releases.keys()], [symbolUrl, footprintUrl]);
+      releases.get(footprintUrl)!(
+        footprintFails ? new Response(null, { status: 404 }) : new Response(footprint),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releases.get(symbolUrl)!(new Response(symbol));
+      const result = await pending;
+      assert.equal(propertyValue(result.symbol, 'Footprint'), id);
+      if (footprintFails)
+        assert.match(result.warning, /Footprint unavailable: NextPCB request failed \(404\)/);
+      else {
+        assert.equal(result.warning, undefined);
+        assert.deepEqual(
+          (await service.request({ action: 'detail', kind: 'footprints', id })).pads,
+          ['1', '2'],
+        );
+      }
+    } finally {
+      clearTimeout(timer);
+      service.close();
+      for (const release of releases.values()) release(new Response(null, { status: 499 }));
+      await pending.catch(() => {});
+    }
+  }
+});
+
 test('NextPCB display metadata stays optional and is never inferred from keyword or description text', async () => {
   const { service } = fixture((url) => {
     if (url.endsWith('/queryPage'))

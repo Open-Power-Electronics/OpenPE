@@ -262,6 +262,7 @@ type RouteLeg = {
 type Props = {
   getComponentActions?: (id: string) => CanvasMenuAction[];
   analysisLocateRef?: RefObject<((footprintId: string) => boolean) | null>;
+  analysisObjectLocateRef?: RefObject<((objectId: string) => boolean) | null>;
   ruleFocus?: RuleCheckFocus | null;
   showRuleMarker?: boolean;
   capabilityHost?: CapabilityHost;
@@ -338,6 +339,7 @@ function fittedView(
 function LayoutEditor({
   getComponentActions,
   analysisLocateRef,
+  analysisObjectLocateRef,
   ruleFocus,
   showRuleMarker = true,
   board,
@@ -1838,6 +1840,88 @@ function LayoutEditor({
     analysisLocateRef.current = locate;
     return () => {
       if (analysisLocateRef.current === locate) analysisLocateRef.current = null;
+    };
+  });
+  useLayoutEffect(() => {
+    if (!analysisObjectLocateRef) return;
+    const locate = (id: string) => {
+      if (
+        !active ||
+        !visible ||
+        annotationDisabled ||
+        latestBoard.current !== pcb ||
+        hasOpenOverlay() ||
+        syncStatus?.pending ||
+        syncStatus?.error ||
+        propertiesPanel.current?.querySelector('[data-pending-edit="true"]')
+      )
+        return false;
+      const track = pcb.tracks.find((item) => item.id === id);
+      const via = pcb.vias.find((item) => item.id === id);
+      const footprint = pcb.footprints.find((item) => item.id === id);
+      const padOwner = !track && !via && !footprint
+        ? pcb.footprints.find((item) => item.pads.some((pad) => pad.id === id))
+        : undefined;
+      const pad = padOwner?.pads.find((item) => item.id === id);
+      let target: Selection;
+      let points: Point[];
+      let padding = 8;
+      if (track) {
+        if (!selectionLayers[track.layer]) return false;
+        target = { kind: 'track', id };
+        points = [track.start, track.end];
+        padding += track.width;
+      } else if (via) {
+        if (!(['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] as const).some((layer) => selectionLayers[layer]))
+          return false;
+        target = { kind: 'via', id };
+        points = [via];
+        padding += via.diameter;
+      } else if (pad && padOwner) {
+        if (
+          filters.pad === false ||
+          (pad.locked && filters.locked === false) ||
+          !selectionLayers.footprints ||
+          !(pad.type === 'np_thru_hole'
+            ? selectionLayers['Edge.Cuts']
+            : padCopperLayers(pcb, padOwner, pad).some((layer) => selectionLayers[layer as BoardLayer]))
+        ) return false;
+        target = { kind: 'footprint', id: padOwner.id };
+        points = [padPosition(padOwner, pad)];
+        padding += Math.hypot(pad.size.x, pad.size.y);
+      } else if (footprint) {
+        const bounds = pcbFootprintBodyBounds(pcb, footprint, selectionLayers);
+        if (!bounds) return false;
+        target = { kind: 'footprint', id };
+        points = [
+          { x: bounds.minX, y: bounds.minY }, { x: bounds.minX, y: bounds.maxY },
+          { x: bounds.maxX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY },
+        ].map((point) => footprintPoint(footprint, point));
+      } else return false;
+      if (!pcbSelectionEligible(pcb, target, filters)) return false;
+      const minX = Math.min(...points.map((point) => point.x));
+      const maxX = Math.max(...points.map((point) => point.x));
+      const minY = Math.min(...points.map((point) => point.y));
+      const maxY = Math.max(...points.map((point) => point.y));
+      // Retained hidden Properties keep their draft markers. Locating changes
+      // only the existing selection and camera after those drafts are clear.
+      activate('select');
+      setInspector(false);
+      setInspectedPadId(pad?.id ?? '');
+      setSelection([target]);
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const spanX = maxX - minX + padding;
+      const spanY = maxY - minY + padding;
+      setView((current) => {
+        const width = Math.max(8, spanX, spanY * ratio, Math.min(current.width, 50));
+        return { x: centerX - width / 2, y: centerY - width / ratio / 2, width };
+      });
+      return true;
+    };
+    analysisObjectLocateRef.current = locate;
+    return () => {
+      if (analysisObjectLocateRef.current === locate) analysisObjectLocateRef.current = null;
     };
   });
   function releasePointer() {
@@ -6036,7 +6120,8 @@ function LayoutEditor({
                   label="Non-active layers"
                   icon={<Layers2 size={14} aria-hidden="true" />}
                   showChevron={false}
-                  popupClassName="grid-density-popup"
+                  popupClassName="grid-density-popup status-mode-popup"
+                  popupMatchWidth="content"
                   popupPlacement="top-end"
                   popupBoundary=".editor-drawing-region"
                   active={active && visible}

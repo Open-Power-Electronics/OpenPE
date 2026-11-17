@@ -7,13 +7,7 @@ import styles from './AboutDialog.module.css';
 
 export default function AboutDialog({ onClose }: { onClose: () => void }) {
   return (
-    <Dialog
-      title="OpenPE"
-      label="About OpenPE"
-      icon={<Logo size={44} />}
-      className={styles.dialog}
-      onClose={onClose}
-    >
+    <Dialog title="OpenPE" label="About OpenPE" icon={<Logo size={20} />} onClose={onClose}>
       <div className={styles.introduction}>
         <p className={styles.descriptor}>Electrical Engineering Studio</p>
         <p className={styles.description}>

@@ -184,6 +184,20 @@ revision and close barriers apply.
 
 ## Schematic and component capabilities
 
+`part.section` is a Core object command with closed input
+`{schematicId,partId,section:'hardware'|'simulation'}` and `EditResult` output.
+It changes the component's native board-inclusion flag across its units through
+the same preparation as the Schematic Properties field, preserving simulation
+participation, model fields and Footprint assignment. Setting `simulation`
+removes linked PCB packages and retains copper in the same undo transaction;
+Setting `hardware` enables native board inclusion; a component without a Footprint
+still belongs to Virtual. The UI names are Real for `hardware` and Virtual for
+`simulation`. Assigned components use normal package preparation.
+Source, close,
+revision and validation gates apply. [Native section ownership](FORMAT.md#document-ownership)
+and [view behavior](../DESIGN.md#real-and-virtual-sections) are separate
+from this document edit.
+
 The following Core commands share canvas/Properties preparation. They return
 `EditResult`; creation commands additionally return the created or retained ID
 in `selection`. All require `schematicId` and share the normal revision, Source,
@@ -726,6 +740,7 @@ Owner is `host`, level is absent. All commands have optional review. Mutation is
 | `project.datasheet.page`                                            | query / false                          | `{page:integer,image?:boolean}`                      | One complete pinned PDF page: `{exampleId,projectId,bindings,document,page,pageCount,text,image?:{mimeType:'image/png',data,width,height}}`. One-based page ≤ 1,000 and actual page count; image defaults to true. No URL/path/selectors.                         |
 | `project.datasheet`                                                 | query / false                          | `{}`                                                 | `ProjectDatasheetContext` for the current example controller, including reviewed parameter JSON and source locators. No paths, URLs or example selectors are accepted.                                                                                            |
 | `workbench.view`                                                    | command / document                     | `{view:'canvas'/'source'/'layout'/'3d'}`             | `{view}`; GUI navigation validates/applies pending Source. Agent navigation has review none; leaving Source requires pending edits to be applied separately, while viewing Source retains drafts. UI names are Schematic, Source, Layout and Model.               |
+| `workbench.schematicSection`                                        | command / session                      | `{section:'hardware'/'simulation'/'all'}`            | `{section}`; selects the active schematic's presentation section. Requires Schematic view with applied Source and no conflicting Properties draft or IME composition. Native data, dirty state and undo are unchanged.                                            |
 | `workbench.sheet`                                                   | command / session                      | `{id:string}`                                        | `{id}`; selects an existing schematic. Pending Source blocks it.                                                                                                                                                                                                  |
 | `workbench.selection`                                               | command / session                      | `{ids:string[]}`                                     | `{ids}`; selects visible schematic objects allowed by current selection filters. Unique IDs, at most 30,000.                                                                                                                                                      |
 | `workbench.panel`                                                   | command / session                      | `{panel:'parts'/'layers'/'history'/'settings'/null}` | `{panel}`. `history` opens Git without switching editor mode. `layers` enters Schematic and opens Visualization. The GUI validates pending Source first. Agent calls for either panel require applied Source.                                                     |
@@ -833,13 +848,13 @@ Mutations require a fresh read token and fully loaded editable text. Native file
 
 Owner is `host`. Queries have mutation `false`; placement/assignment are object-level commands with mutation `document` and optional review.
 
-| ID                   | Kind    | Input                                                                                              | Result and behaviour                                                                                                                                                            |
-| -------------------- | ------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `library.categories` | query   | `{kind:'symbols'/'footprints', source:'KiCad'/'NextPCB'}`                                          | `{categories:[{id,name,children:Category[]}]}`; KiCad namespace categories or the nested NextPCB category tree.                                                                 |
-| `library.search`     | query   | `{kind:'symbols'/'footprints', query?:string, library?:string, category?:string, offset?:integer}` | `{entries,total,libraries}`; up to 100 entries/page. Defaults: empty query/library/category, offset 0. Offset ≤999,999; query/library ≤200 characters; category ≤10 characters. |
-| `library.detail`     | query   | `{kind:'symbols'/'footprints', id:string}`                                                         | Validated KiCad or NextPCB detail; symbols include `symbol`, `units` and optional package `warning`. ID length 1–500.                                                           |
-| `schematic.place`    | command | `{schematicId, libraryId, x, y, unit?:integer, rotation?:number}`                                  | `{id,reference,revision}`; unit defaults to 1, rotation to 0. Unit 1–100, coordinates ±100,000 mm, rotation ±360°.                                                              |
-| `part.footprint`     | command | `{schematicId, partId, libraryId:string}`                                                          | `RevisionResult`; empty `libraryId` clears assignment and the linked package while retaining copper.                                                                            |
+| ID                   | Kind    | Input                                                                                               | Result and behaviour                                                                                                                                                                                                  |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library.categories` | query   | `{kind:'symbols'/'footprints', source:'KiCad'/'NextPCB'}`                                           | `{categories:[{id,name,children:Category[]}]}`; KiCad namespace categories or the nested NextPCB category tree.                                                                                                       |
+| `library.search`     | query   | `{kind:'symbols'/'footprints', query?:string, library?:string, category?:string, offset?:integer}`  | `{entries,total,libraries}`; up to 100 entries/page. Defaults: empty query/library/category, offset 0. Offset ≤999,999; query/library ≤200 characters; category ≤10 characters.                                       |
+| `library.detail`     | query   | `{kind:'symbols'/'footprints', id:string}`                                                          | Validated KiCad or NextPCB detail; symbols include `symbol`, `units` and optional package `warning`. ID length 1–500.                                                                                                 |
+| `schematic.place`    | command | `{schematicId, libraryId, x, y, unit?:integer, rotation?:number, section?:'hardware'/'simulation'}` | `{id,reference,revision}`; unit defaults to 1, rotation to 0, requested section to `hardware` (Real). Unit 1–100, coordinates ±100,000 mm, rotation ±360°. A missing Footprint still places the component in Virtual. |
+| `part.footprint`     | command | `{schematicId, partId, libraryId:string}`                                                           | `RevisionResult`; empty `libraryId` clears assignment and the linked package while retaining copper.                                                                                                                  |
 
 Search entries include `id`, `name`, `library`, `description`, `keywords` and optional footprint information. NextPCB entries may also include `manufacturer` and `package` strings of at most 200 characters, copied only from the provider's corresponding metadata fields; absent fields stay absent. Symbol detail is defined in [`lib/library.ts`](../lib/library.ts); footprint detail is produced by [`server/library-worker.mjs`](../server/library-worker.mjs), the pinned example adapter [`server/example-footprints.mjs`](../server/example-footprints.mjs), or [`server/nextpcb-library.mjs`](../server/nextpcb-library.mjs). Footprint detail includes `footprint` S-expression, `pads:string[]` and `models:[{path,offset,scale,rotate}]`. IDs are catalog identities, never filesystem paths. Set `library:'NextPCB'` for online search and optionally `category` to an ID from its category tree; IDs must be canonical positive decimal strings and currently available in that tree. NextPCB requires a nonblank query or a selected category; empty unfiltered requests reject before network access. An empty category with a query searches the complete provider catalog using 50-entry pages. KiCad filters use a namespace category's ID in `library` and reject nonempty `category`. NextPCB detail IDs use `NextPCB:<manufacturer_id>_<percent-encoded MPN>`. The authenticated routes accept these same IDs and cancel online requests on disconnect. [Libraries](LIBRARIES.md#nextpcb-online-catalog) owns provider endpoints, category bounds and unsupported package/model behavior. A symbol's package `warning` does not invalidate its independently validated schematic geometry or clear its Footprint field. Placement and assignment reject pending Source and stale asynchronous results; actual resolved symbol IDs, units and footprints must validate before Core commits.
 
@@ -1067,15 +1082,17 @@ schematic in the current project; board/terminal IDs and thicknesses follow the
 measurement constraints above. Callers provide no extracted values, target file
 path or prepared schematic. It requires confirmed installed/enabled plugin
 state, applied Source and an open project containing the identified PCB and
-schematic.
+schematic. Both terminals must map to exact pad pins in that target, with an
+exclusive end-pin leaf lead. Unsupported mappings, duplicate pad-number lands, vias, co-located pins,
+non-leaf leads and duplicate endpoint pairs reject without editing.
 Source, close, cancellation and supplied capability-revision gates apply before
 the accepted board is remeasured and committed through Core once. An Agent review
 rechecks the current project when applied, using the same path as the GUI button.
 
 Its result is
-`{schematicId,labels:{start,end},references:{resistor,inductor},values:{resistanceOhm,partialInductanceNh},omittedInductance,revision}`.
+`{schematicId,labels:{start,end},references:{resistor,inductor},values:{resistanceOhm,partialInductanceNh},omittedInductance,blockIds:string[],revision}`.
 The schematic ID is the existing target's ID. `labels.start` and `labels.end`
-are distinct local label names identifying the measured pad or via endpoints,
+are distinct local label names identifying the measured pad endpoints,
 with collision suffixes when needed. Component references are strings; `inductor`
 and `partialInductanceNh` are `null` when inductance is outside the model.
 `resistanceOhm` is the full-precision equivalent DC resistance, and
@@ -1086,10 +1103,12 @@ values remain independent of the generated component Values, which use the
 is the resulting Core revision string. The normal Core change observation
 reports the edit; this
 command adds no separate plugin event. Failed preparation or validation adds no
-components or undo step. [Study semantics](LAYOUT.md#parasitic-study-schematics)
-define the appended labelled series circuit, hidden native endpoint properties,
-native ownership and numerical limits. GUI success reveals the compact block in the selected existing schematic
-and selects its added symbols, wires and labels. Agent execution returns its ID
+components or undo step. `blockIds` lists the fresh compact block's parts, wires,
+labels and junctions, excluding the anchored circuit connection-label copies.
+[Series semantics](LAYOUT.md#parasitic-study-schematics)
+define the labelled series circuit, exact endpoint connection and bounded placement,
+hidden native endpoint properties, native ownership and numerical limits. GUI success reveals the compact block in the selected existing schematic
+and selects `blockIds` for movement while keeping the connection labels anchored. Agent execution returns its ID
 without requiring navigation.
 
 ## Agent tools
@@ -1286,7 +1305,7 @@ child's `CLAUDE_CODE_EFFORT_LEVEL`, without changing the parent environment or
 provider configuration. Its model-only `agent-info` does not claim an effective
 effort that the CLI has not reported.
 
-The provider prompt uses the validated workspace. With scoped tools, the initial overview includes sheet identities and counts, active view and selection, selected component identities and values, Source status, PCB and Model counts, analysis status and reviewed datasheet identity. Read the smallest current query for the task, including `core.state` for revisions, `schematic.get` for a sheet, `layout.get` or `modelCad.get` for geometry, and `workbench.state` for current presentation and analysis. Context-only prompts retain the bounded active-sheet components, simulation fields, pin definitions and geometry-derived connections, selected-object geometry, view-specific PCB/Model summaries, reduced analysis observations and reviewed controller parameters. Connection pin tuples are `[reference,pinNumber]`. Bounded collections report `total`, `items` and optional `truncated:true` at 256 entries, with selections taking priority. The layout attachment context carries the board ID, linked sheet ID and fingerprint. Project navigation lists, duplicate design summaries, native and Source draft text, artwork, copper geometry and preservation metadata stay outside both projections. The assembled text limit is 1,048,576 characters.
+The provider prompt uses the validated workspace. With scoped tools, the initial overview includes sheet identities and counts, active view and selection, selected component identities and values, Source status, PCB and Model counts, analysis status and reviewed datasheet identity. Read the smallest current query for the task, including `core.state` for revisions, `schematic.get` for a sheet, `layout.get` or `modelCad.get` for geometry, and `workbench.state` for current presentation and analysis. Its optional `ui.schematicSection` is `hardware`, `simulation` or `all` for the active schematic's emphasis mode; it does not narrow canonical sheet queries or solver input. Context-only prompts retain the bounded active-sheet components, simulation fields, pin definitions and geometry-derived connections, selected-object geometry, view-specific PCB/Model summaries, reduced analysis observations and reviewed controller parameters. Connection pin tuples are `[reference,pinNumber]`. Bounded collections report `total`, `items` and optional `truncated:true` at 256 entries, with selections taking priority. The layout attachment context carries the board ID, linked sheet ID and fingerprint. Project navigation lists, duplicate design summaries, native and Source draft text, artwork, copper geometry and preservation metadata stay outside both projections. The assembled text limit is 1,048,576 characters.
 
 When `requestTitle` is true, the existing restricted provider prompt asks for one `openpe_session` fenced JSON block containing only `{title:string}` in the same response, using the compact topic-label guidance in [Design](../DESIGN.md#agent-conversation). The renderer accepts one complete block with at most 512 payload characters and a valid single-line title of at most 60 characters, only after successful completion, then compacts the automatic name to at most 24 Unicode characters before adoption. It hides this reserved metadata during streaming and Markdown loading, preserves raw reply text and excludes metadata from subsequent provider history. Missing, malformed or duplicate blocks leave the current provisional title unchanged. No extra CLI process, new tool or naming permission is introduced. Adoption is bound to the originating session/message and cannot overwrite an existing name, including a manual rename made while the turn runs. Accepted names use the existing session `name` recovery field.
 
@@ -1567,6 +1586,58 @@ await host.execute('simulation.configure', {
 });
 // Invoke Run against the current project state after configuration.
 ```
+
+## EMC Analysis capabilities
+
+`emc.inspectLayout` and `emc.reviewLayout` are read-only queries owned by
+`emc-analysis@openpe`, registered per project through
+`plugins/emc-analysis/renderer/capabilities.ts`. They require confirmed plugin
+availability, an accepted PCB and clear Source/close barriers. Explicit expected
+revisions must match; results carry the numeric checked revision. No HTTP route,
+native bridge, solver, file write or Core transaction is added.
+
+`emc.inspectLayout` accepts `{netIds:string[],segmentBudgetMm:number}` with 1–32
+unique current board net IDs and a positive bounded segment budget. It reads only
+the accepted PCB, returning `boardId`, revision, `completeness:"partial"`, the
+budget, per-net track lengths/counts, via/pad/zone counts, missing-fill evidence,
+over-budget segments with IDs/layers/endpoints, exact evidence counts and
+truncation flags, plus `notVerified` coverage notes. It never refills copper or
+infers return paths or EMC compliance. GUI and Agent call the same pure
+domain function. Unknown fields and invalid/nonfinite budgets fail. Locating a
+reported object uses a bounded Layout camera/selection port for tracks, vias,
+footprints and pads, with current-board,
+Source/close, visibility, selection-filter and draft gates; it adds no capability
+or mutation authority. [EMC Analysis](EMC.md) owns coverage, bounds and reference use.
+
+`emc.reviewLayout` accepts exact `{nets,limits,decoupling,edgeConnectorIds}`.
+`nets` contains up to 32 unique `{netId,role,referenceNetId?,referenceLayer?}`
+records; role is `fast`, `switching`, `sensitive` or `supply`. Reference net and
+layer are explicit current native identities. `limits` requires
+`maxTrackLengthMm`, `maxVias`, `minEdgeClearanceMm`, `minNetSeparationMm`,
+`maxReferenceViaDistanceMm`, `maxDecouplingDistanceMm` and
+`maxConnectorEdgeDistanceMm`. Distances are finite positive mm; via count is a
+bounded nonnegative integer. `decoupling` holds up to 32 explicit
+`{targetPadId,capacitorFootprintId,referenceNetId}` assignments;
+`edgeConnectorIds` holds up to 32 unique current footprint IDs. At least one
+intent is required. Missing roles are not inferred. Unknown fields, stale IDs,
+invalid relationships and work bounds reject without changing data.
+
+The result is `{boardId,revision,result}`. The pure `result` contains
+`completeness:"partial"`, exact `input`, `findings`, `checks`, `summary`,
+`truncated` and `notes`. Findings retain original check/category identities,
+warning/information/not-verified severity, geometric/limited/missing confidence,
+textual evidence/remediation, exact net/object IDs and optional location,
+measurement/limit quantities. Checks retain checked/not-verified/not-applicable
+coverage. At most 500 findings return; summary counts include omitted findings.
+No regulatory pass, field solve or implicit document edit is provided.
+
+Manual decisions and justified exceptions belong to the GUI session, not these
+queries. Explicit HTML/JSON report downloads use the pure version-1
+`openpe-emc-review` contract in `plugins/emc-analysis/domain/report.ts`, including
+board/revision, unchanged automatic results, eight explicit manual states/notes
+and exceptions naming current findings with required reasons. Strict shared
+result validation, JSON bounds and HTML escaping apply. Reports create no native
+grant, project file, Source draft, dirty baseline, bridge method or HTTP route.
 
 ## Sources and maintenance
 

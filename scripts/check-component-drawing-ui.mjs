@@ -133,7 +133,8 @@ try {
     await waitForAsync(page, () => {
       const svg = document.querySelector('svg[aria-label$="drawing canvas"]');
       const box = svg.getBoundingClientRect(),
-        view = svg.viewBox.baseVal;
+        [x, y, width, height] = svg.getAttribute('viewBox').trim().split(/\s+/).map(Number),
+        view = { x, y, width, height };
       return (
         box.width > 0 &&
         box.height > 0 &&
@@ -142,7 +143,8 @@ try {
     });
     const metrics = await canvas.evaluate((svg) => {
       const box = svg.getBoundingClientRect(),
-        view = svg.viewBox.baseVal;
+        [x, y, width, height] = svg.getAttribute('viewBox').trim().split(/\s+/).map(Number),
+        view = { x, y, width, height };
       const matrix = svg.getScreenCTM();
       const project = (x, y) => {
         const point = new DOMPoint(x, y).matrixTransform(matrix);
@@ -155,7 +157,9 @@ try {
       const backgroundBox = background.getBBox();
       const scale = Math.hypot(matrix.a, matrix.b);
       const axisStart = origin.getPointAtLength(0);
-      const axisRight = origin.getPointAtLength(view.width);
+      // Stay on the horizontal subpath: browser path-length rounding can make
+      // the exact join sample jump to the next Move's vertical-axis origin.
+      const axisRight = origin.getPointAtLength(view.width * (1 - 0.00001));
       const axisBottom = origin.getPointAtLength(origin.getTotalLength());
       return {
         viewport: { x: box.x, y: box.y, width: box.width, height: box.height },

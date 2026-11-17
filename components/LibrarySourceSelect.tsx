@@ -1,18 +1,33 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CapabilityHost } from '@/api/capabilities';
 import { api } from '@/lib/bridge';
 import Select, { type SelectOption } from './Select';
 
 type Source = 'KiCad' | 'NextPCB';
 type Category = { id: string; name: string; children: Category[] };
+export type LibraryCategoryReload = { source: Source; serial: number };
+export type LibraryCategoryStatus = {
+  source: string;
+  pending: boolean;
+  error: string;
+  reloadSerial: number;
+  browseCategory?: { id: string; name: string };
+};
 
-function categoryPath(categories: Category[], id: string): string[] | undefined {
+function categoryPath(categories: Category[], id: string): Category[] | undefined {
   for (const category of categories) {
-    if (category.id === id) return [category.name];
+    if (category.id === id) return [category];
     const path = categoryPath(category.children, id);
-    if (path) return [category.name, ...path];
+    if (path) return [category, ...path];
   }
+}
+
+function finalLevelOptions(categories: Category[], parents: string[] = []): SelectOption[] {
+  return categories.flatMap((item) => {
+    const path = [...parents, item.name];
+    return [{ value: item.id, label: path.join(' / ') }, ...finalLevelOptions(item.children, path)];
+  });
 }
 
 export default function LibrarySourceSelect({
@@ -21,7 +36,8 @@ export default function LibrarySourceSelect({
   category,
   libraries,
   capabilityHost,
-  browseOnEmpty = false,
+  reload,
+  onStatus,
   onChange,
 }: {
   kind: 'symbols' | 'footprints';
@@ -29,13 +45,20 @@ export default function LibrarySourceSelect({
   category: string;
   libraries: string[];
   capabilityHost?: CapabilityHost;
-  browseOnEmpty?: boolean;
+  reload?: LibraryCategoryReload | null;
+  onStatus?: (status: LibraryCategoryStatus) => void;
   onChange: (library: string, category: string) => void;
 }) {
   const [catalogs, setCatalogs] = useState<Partial<Record<Source, Category[]>>>({});
   const [errors, setErrors] = useState<Partial<Record<Source, string>>>({});
-  const [request, setRequest] = useState<{ source: Source; serial: number } | null>(null);
+  const [request, setRequest] = useState<{
+    source: Source;
+    serial: number;
+    reloadSerial: number;
+  } | null>(null);
   const [loading, setLoading] = useState<Source | null>(null);
+  const [completedReload, setCompletedReload] = useState(0);
+  const consumedReload = useRef(0);
   const source: Source = library === 'NextPCB' ? 'NextPCB' : 'KiCad';
   const activeCategory = source === 'NextPCB' ? category : library;
   const localCategories = libraries
@@ -44,11 +67,15 @@ export default function LibrarySourceSelect({
   const categoriesFor = (provider: Source) =>
     provider === 'KiCad' && localCategories.length ? localCategories : catalogs[provider];
 
-  function load(provider: Source, retry = false) {
+  function load(provider: Source, retry = false, reloadSerial = 0) {
     if (!retry && (categoriesFor(provider) || loading === provider)) return;
     setLoading(provider);
     setErrors((current) => ({ ...current, [provider]: undefined }));
-    setRequest((current) => ({ source: provider, serial: (current?.serial ?? 0) + 1 }));
+    setRequest((current) => ({
+      source: provider,
+      serial: (current?.serial ?? 0) + 1,
+      reloadSerial,
+    }));
   }
 
   useEffect(() => {
@@ -56,6 +83,12 @@ export default function LibrarySourceSelect({
     setLoading(null);
     if (!categoriesFor(source)) load(source, true);
   }, [source, kind]);
+
+  useEffect(() => {
+    if (!reload || consumedReload.current === reload.serial) return;
+    consumedReload.current = reload.serial;
+    if (reload.source === source) load(source, true, reload.serial);
+  }, [reload, source, kind]);
 
   useEffect(() => {
     if (!request) return;
@@ -82,45 +115,45 @@ export default function LibrarySourceSelect({
           [provider]: data.categories,
         }));
         setLoading(null);
+        setCompletedReload(request.reloadSerial);
       })
       .catch((error) => {
         if (control.signal.aborted) return;
         setErrors((current) => ({ ...current, [provider]: error.message }));
         setLoading(null);
+        setCompletedReload(request.reloadSerial);
       });
     return () => control.abort();
   }, [request, kind, capabilityHost]);
 
-  function categoryOptions(categories: Category[]): SelectOption[] {
-    return categories.map((item) => ({
-      value: item.children.length ? `branch:${item.id}` : item.id,
-      label: item.name,
-      ...(item.children.length
-        ? {
-            children: [
-              { value: item.id, label: `All ${item.name}` },
-              ...categoryOptions(item.children),
-            ],
-          }
-        : {}),
-    }));
-  }
-
   const categories = categoriesFor(source);
+  const categoryPending = !categories || loading === source;
+  const categoryError = errors[source] ?? '';
+  const browseCategory = categoryPath(catalogs.NextPCB ?? [], '1737')?.at(-1);
   useEffect(() => {
-    if (
-      browseOnEmpty &&
-      source === 'NextPCB' &&
-      !category &&
-      categoryPath(categories ?? [], '1737')
-    )
-      onChange('NextPCB', '1737');
-  }, [browseOnEmpty, source, category, categories, onChange]);
+    onStatus?.({
+      source,
+      pending: categoryPending && !categoryError,
+      error: categoryError,
+      reloadSerial: completedReload,
+      ...(browseCategory
+        ? { browseCategory: { id: browseCategory.id, name: browseCategory.name } }
+        : {}),
+    });
+  }, [
+    source,
+    categoryPending,
+    categoryError,
+    completedReload,
+    browseCategory?.id,
+    browseCategory?.name,
+    onStatus,
+  ]);
   const options: SelectOption[] = [
     { value: '', label: 'All categories' },
     ...(categories
       ? categories.length
-        ? categoryOptions(categories)
+        ? categories.map((item) => ({ value: item.id, label: item.name }))
         : [{ value: 'status:empty', label: 'No categories available', disabled: true }]
       : [
           {
@@ -133,11 +166,9 @@ export default function LibrarySourceSelect({
       ? [{ value: 'action:retry', label: 'Retry categories', description: errors[source] }]
       : []),
   ];
-  const path = activeCategory
-    ? (categoryPath(categoriesFor(source) ?? [], activeCategory) ?? [activeCategory])
-    : ['All categories'];
+  const path = activeCategory ? (categoryPath(categories ?? [], activeCategory) ?? []) : [];
   return (
-    <div className="library-source-filters">
+    <div className="library-source-filters" data-source={source}>
       <Select
         label="Library source"
         value={source}
@@ -149,21 +180,65 @@ export default function LibrarySourceSelect({
           if (provider !== source) onChange(provider === 'NextPCB' ? 'NextPCB' : '', '');
         }}
       />
-      <Select
-        label="Category"
-        hint={path.join(' / ')}
-        selectedLabel={path.join(' / ')}
-        value={activeCategory}
-        options={options}
-        popupMaxHeight={280}
-        onChange={(value) => {
-          if (value === 'action:retry') {
-            load(source, true);
-            return;
-          }
-          onChange(source === 'NextPCB' ? 'NextPCB' : value, source === 'NextPCB' ? value : '');
-        }}
-      />
+      {source === 'NextPCB' ? (
+        [0, 1].map((level) => {
+          const parent = level ? path[level - 1] : undefined;
+          const children = level ? (parent?.children ?? []) : (categories ?? []);
+          const unavailable = level > 0 && !children.length;
+          const leafSelected = path.length > 0 && !path.at(-1)!.children.length;
+          const value = level === 1 && path.length > 1 ? path.at(-1)!.id : (path[level]?.id ?? '');
+          const choices: SelectOption[] =
+            level === 0
+              ? options
+              : [
+                  {
+                    value: '',
+                    label: unavailable
+                      ? parent || leafSelected
+                        ? 'No subcategories'
+                        : 'All subcategories'
+                      : 'All subcategories',
+                  },
+                  ...(level === 1
+                    ? finalLevelOptions(children)
+                    : children.map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                      }))),
+                ];
+          return (
+            <Select
+              key={level}
+              label={`Category level ${level + 1}`}
+              hint={
+                path
+                  .slice(0, level + 1)
+                  .map((item) => item.name)
+                  .join(' / ') || `Category level ${level + 1}`
+              }
+              value={value}
+              options={choices}
+              disabled={unavailable}
+              popupMaxHeight={280}
+              onChange={(next) => {
+                if (next === 'action:retry') load(source, true);
+                else onChange('NextPCB', next || parent?.id || '');
+              }}
+            />
+          );
+        })
+      ) : (
+        <Select
+          label="Category"
+          value={activeCategory}
+          options={options}
+          popupMaxHeight={280}
+          onChange={(value) => {
+            if (value === 'action:retry') load(source, true);
+            else onChange(value, '');
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -8,14 +8,17 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { Search, Library, RotateCw } from 'lucide-react';
+import { Search, Library, RotateCw, Check } from 'lucide-react';
 import { api } from '@/lib/bridge';
 import type { CapabilityHost } from '@/api/capabilities';
 import { propertyValue, unitGraphics, type LibraryEntry, type SymbolDetail } from '@/lib/library';
 import { children, val, type SExpr } from '@/lib/sexpr';
 import Dialog from './Dialog';
 import Select from './Select';
-import LibrarySourceSelect from './LibrarySourceSelect';
+import LibrarySourceSelect, {
+  type LibraryCategoryReload,
+  type LibraryCategoryStatus,
+} from './LibrarySourceSelect';
 import SymbolPreview from './SymbolPreview';
 import FootprintPreview from './FootprintPreview';
 import WorkspaceLoading from './WorkspaceLoading';
@@ -132,7 +135,7 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
 type BrowseSnapshot = {
   ready: boolean;
   query: string;
-  submittedQuery: string | null;
+  submittedQuery: string;
   library: string;
   category: string;
   entries: LibraryEntry[];
@@ -177,7 +180,7 @@ export default function LibraryChooser({
   const [query, setQuery] = useState(initialSearch),
     [library, setLibrary] = useState(initialLibrary);
   const [category, setCategory] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState<string | null>(initialSearch);
+  const [submittedQuery, setSubmittedQuery] = useState(initialSearch);
   const [entries, setEntries] = useState<LibraryEntry[]>([]),
     [libraries, setLibraries] = useState<string[]>([]);
   const [total, setTotal] = useState(0),
@@ -186,6 +189,14 @@ export default function LibraryChooser({
   const [nextOffset, setNextOffset] = useState(0);
   const [resultsError, setResultsError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [categoryStatus, setCategoryStatus] = useState<LibraryCategoryStatus>({
+    source: '',
+    pending: false,
+    error: '',
+    reloadSerial: 0,
+  });
+  const [categoryReload, setCategoryReload] = useState<LibraryCategoryReload | null>(null);
+  const categoryReloadSerial = useRef(0);
   const [detail, setDetail] = useState<Detail | null>(null),
     [unit, setUnit] = useState(1);
   const [busy, setBusy] = useState(true),
@@ -198,8 +209,31 @@ export default function LibraryChooser({
   const sourceSnapshots = useRef(new Map<string, BrowseSnapshot>());
   const restoredSearch = useRef(false);
   const restoredDetail = useRef<BrowseSnapshot | null>(null);
-  const awaitingSearch =
-    library === 'NextPCB' && (submittedQuery === null || (!submittedQuery.trim() && !category));
+  const librarySource = library === 'NextPCB' ? 'NextPCB' : 'KiCad';
+  const failedCategories = categoryStatus.source === librarySource && Boolean(categoryStatus.error);
+  const retryingCategories = categoryReload?.source === librarySource;
+  const suggestedCategory =
+    library === 'NextPCB' && !category && !submittedQuery.trim()
+      ? categoryStatus.browseCategory
+      : undefined;
+  const searchCategory = category || suggestedCategory?.id || '';
+  const awaitingSearch = library === 'NextPCB' && !submittedQuery.trim() && !searchCategory;
+  const waitingCategories =
+    library === 'NextPCB' &&
+    !submittedQuery.trim() &&
+    (categoryStatus.source !== 'NextPCB' || categoryStatus.pending);
+  const loadingInitial =
+    retryingCategories ||
+    (!error && !resultsError && ((!awaitingSearch && busy) || waitingCategories));
+  const chooseLabel = actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign footprint');
+  const refreshDisabled =
+    busy || waitingCategories || retryingCategories || (awaitingSearch && !failedCategories);
+  function blockComposingActivation(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
   function invalidate() {
     setBusy(true);
     setResultsError('');
@@ -228,7 +262,19 @@ export default function LibraryChooser({
     setOffset(0);
     setRetry((value) => value + 1);
   }
+  function refreshResults() {
+    if (composing.current || refreshDisabled) return;
+    if (failedCategories) {
+      setCategoryReload({ source: librarySource, serial: ++categoryReloadSerial.current });
+      return;
+    }
+    invalidate();
+    setOffset(0);
+    setRetry((value) => value + 1);
+  }
   function changeLibrary(nextLibrary: string, nextCategory: string) {
+    if (nextLibrary === library && nextCategory === category) return;
+    setCategoryReload(null);
     const source = library === 'NextPCB' ? 'NextPCB' : 'KiCad';
     const nextSource = nextLibrary === 'NextPCB' ? 'NextPCB' : 'KiCad';
     if (source !== nextSource)
@@ -278,13 +324,29 @@ export default function LibraryChooser({
     }
   }
   useEffect(() => {
+    if (
+      !categoryReload ||
+      categoryReload.source !== librarySource ||
+      categoryStatus.source !== librarySource ||
+      categoryStatus.reloadSerial !== categoryReload.serial ||
+      categoryStatus.pending
+    )
+      return;
+    setCategoryReload(null);
+    if (!categoryStatus.error && !awaitingSearch) {
+      invalidate();
+      setOffset(0);
+      setRetry((value) => value + 1);
+    }
+  }, [categoryReload, librarySource, categoryStatus, awaitingSearch]);
+  useEffect(() => {
     if (restoredSearch.current) {
       restoredSearch.current = false;
       return;
     }
     const control = new AbortController();
-    if (awaitingSearch) {
-      setBusy(false);
+    if (awaitingSearch || retryingCategories) {
+      if (!retryingCategories) setBusy(false);
       return () => control.abort();
     }
     setBusy(true);
@@ -297,72 +359,68 @@ export default function LibraryChooser({
       setSelected('');
       setDetail(null);
     }
-    const timer = setTimeout(
-      () =>
-        void (
-          capabilityHost
-            ? capabilityHost
-                .query(
-                  'library.search',
-                  {
-                    kind,
-                    query: library === 'NextPCB' ? submittedQuery : query,
-                    library,
-                    offset,
-                    ...(category ? { category } : {}),
-                  },
-                  { signal: control.signal },
-                )
-                .then((data) => ({ json: async () => data }))
-            : api(
-                `libraries/${kind}?q=${encodeURIComponent(library === 'NextPCB' ? (submittedQuery ?? '') : query)}&library=${encodeURIComponent(library)}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ''}`,
+    const start = () =>
+      void (
+        capabilityHost
+          ? capabilityHost
+              .query(
+                'library.search',
+                {
+                  kind,
+                  query: submittedQuery,
+                  library,
+                  offset,
+                  ...(searchCategory ? { category: searchCategory } : {}),
+                },
                 { signal: control.signal },
               )
-        )
-          .then((r) => r.json())
-          .then((data) => {
-            if (control.signal.aborted) return;
-            const incoming = data.entries as LibraryEntry[];
-            setEntries((current) => {
-              const combined: LibraryEntry[] = offset === 0 ? [] : [...current];
-              const ids = new Set(combined.map((entry) => entry.id));
-              for (const entry of incoming) {
-                if (ids.has(entry.id)) continue;
-                ids.add(entry.id);
-                combined.push(entry);
-              }
-              return combined;
-            });
-            // Remote pages can overlap. Paging follows consumed provider rows,
-            // independently of the unique entries displayed in the chooser.
-            setNextOffset(offset + incoming.length);
-            if (library !== 'NextPCB') setLibraries(data.libraries);
-            setTotal(data.entries.length ? data.total : offset);
-            if (offset === 0) setSelected(data.entries[0]?.id || '');
-            setBusy(false);
-          })
-          .catch((e) => {
-            if (!control.signal.aborted) {
-              setResultsError(e.message);
-              setBusy(false);
+              .then((data) => ({ json: async () => data }))
+          : api(
+              `libraries/${kind}?q=${encodeURIComponent(submittedQuery)}&library=${encodeURIComponent(library)}&offset=${offset}${searchCategory ? `&category=${encodeURIComponent(searchCategory)}` : ''}`,
+              { signal: control.signal },
+            )
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          if (control.signal.aborted) return;
+          const incoming = data.entries as LibraryEntry[];
+          setEntries((current) => {
+            const combined: LibraryEntry[] = offset === 0 ? [] : [...current];
+            const ids = new Set(combined.map((entry) => entry.id));
+            for (const entry of incoming) {
+              if (ids.has(entry.id)) continue;
+              ids.add(entry.id);
+              combined.push(entry);
             }
-          }),
-      180,
-    );
-    return () => {
-      clearTimeout(timer);
-      control.abort();
-    };
+            return combined;
+          });
+          // Remote pages can overlap. Paging follows consumed provider rows,
+          // independently of the unique entries displayed in the chooser.
+          setNextOffset(offset + incoming.length);
+          if (library !== 'NextPCB') setLibraries(data.libraries);
+          setTotal(data.entries.length ? data.total : offset);
+          if (offset === 0) setSelected(data.entries[0]?.id || '');
+          setBusy(false);
+        })
+        .catch((e) => {
+          if (!control.signal.aborted) {
+            setResultsError(e.message);
+            setBusy(false);
+          }
+        });
+    start();
+    return () => control.abort();
   }, [
     kind,
-    query,
     submittedQuery,
     library,
     category,
+    searchCategory,
     offset,
     retry,
     capabilityHost,
     awaitingSearch,
+    retryingCategories,
   ]);
   useEffect(() => {
     const restored = restoredDetail.current;
@@ -447,9 +505,26 @@ export default function LibraryChooser({
         onClose={onClose}
         footer={
           <>
-            <div className="library-actions">
-              <button className="dialog-button primary" disabled={!ready} onClick={choose}>
-                {actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign footprint')}
+            <div className="dialog-footer-toolbar">
+              <button
+                className="icon-button dialog-footer-icon"
+                aria-label="Refresh library"
+                title="Refresh"
+                disabled={refreshDisabled}
+                onClick={refreshResults}
+                onKeyDown={blockComposingActivation}
+              >
+                <RotateCw size={18} aria-hidden="true" />
+              </button>
+              <button
+                className="dialog-button primary dialog-footer-icon"
+                aria-label={chooseLabel}
+                title={chooseLabel}
+                disabled={!ready}
+                onClick={choose}
+                onKeyDown={blockComposingActivation}
+              >
+                <Check size={18} aria-hidden="true" />
               </button>
             </div>
           </>
@@ -463,7 +538,8 @@ export default function LibraryChooser({
             category={category}
             libraries={libraries}
             capabilityHost={capabilityHost}
-            browseOnEmpty={query.trim() === ''}
+            reload={categoryReload}
+            onStatus={setCategoryStatus}
             onChange={changeLibrary}
           />
           <span className="library-result-status" role="status">
@@ -485,16 +561,7 @@ export default function LibraryChooser({
             aria-label={kind === 'symbols' ? 'Search components' : 'Search footprints'}
             placeholder="Search by name, description or keyword…"
             value={query}
-            onChange={(e) => {
-              invalidate();
-              setQuery(e.target.value);
-              setOffset(0);
-              if (library === 'NextPCB') {
-                setSubmittedQuery(e.target.value.trim() ? null : '');
-                setBusy(false);
-                setTotal(0);
-              }
-            }}
+            onChange={(e) => setQuery(e.target.value)}
             onCompositionStart={() => {
               composing.current = true;
             }}
@@ -514,7 +581,11 @@ export default function LibraryChooser({
               } else navigate(event, false);
             }}
           />
-          <button className="dialog-button library-search-submit" onClick={submitSearch}>
+          <button
+            className="dialog-button library-search-submit"
+            onClick={submitSearch}
+            onKeyDown={blockComposingActivation}
+          >
             Search
           </button>
         </div>
@@ -552,11 +623,12 @@ export default function LibraryChooser({
               if (list.scrollHeight - list.scrollTop - list.clientHeight < 120) loadMore();
             }}
           >
+            {suggestedCategory && (
+              <p className="library-browse-scope">Browse suggestions · {suggestedCategory.name}</p>
+            )}
             {kind === 'symbols' && (
               <div className="library-result-columns" aria-hidden="true">
-                <span>
-                  {library === 'NextPCB' ? 'Model / Manufacturer' : 'Component / Library'}
-                </span>
+                <span>{library === 'NextPCB' ? 'Model' : 'Component'}</span>
                 <span>Package</span>
               </div>
             )}
@@ -576,12 +648,7 @@ export default function LibraryChooser({
               >
                 {kind === 'symbols' ? (
                   <>
-                    <span className="library-result-identity">
-                      <strong title={entry.name}>{entry.name}</strong>
-                      <small title={entry.manufacturer || entry.library}>
-                        {entry.manufacturer || entry.library}
-                      </small>
-                    </span>
+                    <strong title={entry.name}>{entry.name}</strong>
                     <span
                       className="library-result-package"
                       title={entry.package || entry.footprint || ''}
@@ -597,11 +664,24 @@ export default function LibraryChooser({
                 )}
               </button>
             ))}
-            {!busy && !entries.length && !error && !resultsError && (
-              <p>
-                {awaitingSearch ? 'Enter a model or keyword, then search.' : `No matching ${kind}.`}
-              </p>
+            {!entries.length && loadingInitial && (
+              <WorkspaceLoading panel label="Loading library" />
             )}
+            {categoryStatus.source === library && categoryStatus.error && !entries.length && (
+              <p>{categoryStatus.error}</p>
+            )}
+            {!busy &&
+              !entries.length &&
+              !error &&
+              !resultsError &&
+              !waitingCategories &&
+              !categoryStatus.error && (
+                <p>
+                  {awaitingSearch
+                    ? 'Enter a model or keyword, then search.'
+                    : `No matching ${kind}.`}
+                </p>
+              )}
           </div>
           <div className={`library-detail${kind === 'footprints' ? ' assignment-detail' : ''}`}>
             {detail ? (
@@ -676,9 +756,9 @@ export default function LibraryChooser({
                   </p>
                 )}
               </>
-            ) : selected ? (
+            ) : !error && selected ? (
               <WorkspaceLoading panel label="Loading preview" />
-            ) : (
+            ) : loadingInitial ? null : (
               <p>Select a library entry.</p>
             )}
           </div>

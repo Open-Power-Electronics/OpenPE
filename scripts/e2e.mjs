@@ -416,7 +416,10 @@ async function checkHome(page) {
   const rectifierPath = path.join(nativeFixtures, 'rectifier', 'rectifier.kicad_sch');
   await writeFile(
     rectifierPath,
-    await readFile(path.join(root, 'examples/lm2596-to220-5-buck/lm2596-to220-5-buck.kicad_sch'), 'utf8'),
+    await readFile(
+      path.join(root, 'examples/lm2596-to220-5-buck/lm2596-to220-5-buck.kicad_sch'),
+      'utf8',
+    ),
   );
   await application.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
@@ -1045,6 +1048,7 @@ async function checkDialogs(page) {
   await addComponent.click();
   const search = page.getByLabel('Search components', { exact: true });
   await search.fill('no matching symbol');
+  await search.press('Enter');
   await page.getByText('No matching symbols.', { exact: true }).waitFor();
   await page.keyboard.press('Shift+Tab');
   assert.equal(
@@ -1064,6 +1068,7 @@ async function checkDialogs(page) {
   );
   await page.keyboard.press('Tab');
   await search.fill('');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await capture('test-results/dialog-components.png');
   await search.focus();
   await page.keyboard.press('Escape');
@@ -1790,6 +1795,7 @@ async function checkCanvasNavigation(page) {
   }
   await page.getByRole('button', { name: 'Add component', exact: true }).click();
   await page.getByLabel('Search components', { exact: true }).fill('Device:R');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page
     .locator('.library-results button')
     .filter({ has: page.getByText('R', { exact: true }) })
@@ -2031,6 +2037,7 @@ try {
     await page.getByRole('button', { name: 'Schematic', exact: true }).click();
     await page.getByRole('button', { name: 'Add component', exact: true }).click();
     await page.getByLabel('Search components', { exact: true }).fill('Device:R');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
     await page
       .locator('.library-results button')
       .filter({ has: page.getByText('R', { exact: true }) })

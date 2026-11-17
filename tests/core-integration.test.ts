@@ -10,7 +10,7 @@ import { registerProjectCapabilities } from '../core/register-project';
 import { createPart, emptyCircuit, pinPositions, uid, type Circuit } from '../lib/circuit';
 import { createLibraryPart, partFields, propertyValue } from '../lib/library';
 import { child, children, parseSExpr, quote, val } from '../lib/sexpr';
-import { createProject } from '../lib/project';
+import { createProject, projectFromNativeFiles } from '../lib/project';
 import { projectNetGroups } from '../lib/project-net-groups';
 import { onWire, samePoint } from '../lib/wiring';
 import {
@@ -18,6 +18,7 @@ import {
   type WorkbenchCapabilityPorts,
 } from '../lib/workbench-capabilities';
 import { registerLibraryCapabilities } from '../lib/library-capabilities';
+import { partSchematicSection, prepareSchematicSection } from '../lib/schematic-section';
 
 test('Core catalog distinguishes object and operation commands from infrastructure', async () => {
   const core = new ProjectCore(createProject(emptyCircuit()));
@@ -407,6 +408,103 @@ test('official library placement shares grid/reference rules and rejects a docum
     assert.equal(core.getSnapshot().undoDepth, 1);
   } finally {
     unregister();
+    globalThis.fetch = previousFetch;
+    (globalThis as any).window = previousWindow;
+  }
+});
+
+test('host library placement retains native section intent and classifies unassigned symbols as Simulation for human and Agent callers', async () => {
+  let schematic = emptyCircuit();
+  const existing = createPart(schematic, 'R', 0, 0);
+  existing.excludeFromSimulation = true;
+  schematic.parts.push(existing);
+  const symbol = schematic.libraries[existing.libId];
+  children(symbol, 'property').find((node) => val(node) === 'Footprint')![2] =
+    quote('Fixture:TwoPin');
+  schematic = prepareSchematicSection(schematic, [existing.id], 'simulation');
+  const project = createProject(schematic);
+  const previousWindow = (globalThis as any).window;
+  const previousFetch = globalThis.fetch;
+  let requests = 0;
+  let loadedSymbol = symbol;
+  (globalThis as any).window = {
+    openpe: { connection: async () => ({ base: 'http://127.0.0.1:1', token: 'fixture' }) },
+  };
+  globalThis.fetch = async (url, options) => {
+    assert.match(String(url), /\/api\/libraries\/symbols\?id=Device%3AR$/);
+    assert.equal((options!.headers as Record<string, string>)['X-OpenPE-Token'], 'fixture');
+    requests++;
+    return Response.json({ id: existing.libId, symbol: loadedSymbol, units: 1 });
+  };
+  try {
+    for (const assigned of [true, false]) {
+      loadedSymbol = structuredClone(symbol);
+      children(loadedSymbol, 'property').find((node) => val(node) === 'Footprint')![2] = quote(
+        assigned ? 'Fixture:TwoPin' : '',
+      );
+      for (const actor of ['human', 'agent'] as const)
+        for (const section of [undefined, 'hardware', 'simulation'] as const) {
+          const core = new ProjectCore(project);
+          const host = createCapabilityHost({
+            revision: () => String(core.getSnapshot().revision),
+          });
+          const remove = registerLibraryCapabilities(host, core);
+          try {
+            const baseline = core.getNativeFiles();
+            const input = { schematicId: schematic.id, libraryId: existing.libId, x: 3, y: 6 };
+            const requestedBefore = requests;
+            await assert.rejects(
+              host.execute('schematic.place', { ...input, section: 'all' }, { actor }),
+              /Invalid input/,
+            );
+            assert.equal(
+              requests,
+              requestedBefore,
+              'View-only All cannot reach library transport.',
+            );
+            const result = (await host.execute(
+              'schematic.place',
+              { ...input, ...(section ? { section } : {}) },
+              { actor },
+            )) as { id: string; reference: string; revision: string };
+            const after = core.getSnapshot();
+            const placed = after.project!.schematic.parts.find((part) => part.id === result.id)!;
+            assert.equal(result.reference, 'R2');
+            assert.equal(result.revision, String(after.revision));
+            assert.equal(
+              partSchematicSection(placed),
+              !assigned || section === 'simulation' ? 'simulation' : 'hardware',
+            );
+            assert.equal(partFields(placed).Footprint ?? '', assigned ? 'Fixture:TwoPin' : '');
+            assert.equal(!!placed.excludeFromSimulation, false);
+            assert.equal(placed.x, 2.54);
+            assert.equal(placed.y, 6.35);
+            assert.equal(after.undoDepth, 1);
+            const preserved = after.project!.schematic.parts.find(
+              (part) => part.id === existing.id,
+            )!;
+            assert.equal(partSchematicSection(preserved), 'simulation');
+            assert.equal(preserved.excludeFromSimulation, true);
+            const native = core.getNativeFiles();
+            const reopened = projectFromNativeFiles(native);
+            const instance = reopened.schematic.parts.find((part) => part.id === result.id)!;
+            assert.equal(
+              val(child(instance.raw!, 'on_board')),
+              section === 'simulation' ? 'no' : 'yes',
+            );
+            assert.equal(!!instance.excludeFromSimulation, !!placed.excludeFromSimulation);
+            core.undo();
+            assert.deepEqual(core.getNativeFiles(), baseline);
+            core.redo();
+            assert.deepEqual(core.getNativeFiles(), native);
+          } finally {
+            remove();
+            host.dispose();
+          }
+        }
+    }
+    assert.equal(requests, 12);
+  } finally {
     globalThis.fetch = previousFetch;
     (globalThis as any).window = previousWindow;
   }

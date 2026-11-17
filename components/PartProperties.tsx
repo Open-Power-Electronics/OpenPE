@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { Activity, Check, FolderSearch, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { type Part, type Circuit } from '@/lib/circuit';
-import { displayPartValue, partFields } from '@/lib/library';
+import { displayPartValue, partFields, partFootprint } from '@/lib/library';
 import {
   preparePartProperties,
   simulationSourceProperties,
@@ -51,6 +51,8 @@ import {
 import { prepareSourceConversion } from '@/lib/simulation-source-conversion';
 import type { SimulationSourceType } from '@/lib/simulation-source-parameters';
 import { isCommandModifier } from '@/lib/command-modifier';
+import { partSchematicSection, type SchematicSection } from '@/lib/schematic-section';
+import { symbolRole } from '@/lib/symbol-role';
 
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 
@@ -147,6 +149,8 @@ function PartProperties({
   spiceAvailable = false,
   fileId,
   getRevision,
+  onSectionChange,
+  onDraftPendingChange,
 }: {
   part: Part;
   modelFields?: ReactNode;
@@ -159,6 +163,8 @@ function PartProperties({
   spiceAvailable?: boolean;
   fileId?: string;
   getRevision?: () => number;
+  onSectionChange?: (section: SchematicSection) => boolean;
+  onDraftPendingChange?: (pending: boolean) => void;
   onRequestSave?: (saveAs: boolean) => void;
   capabilityHost?: CapabilityHost;
   onSave: (
@@ -245,6 +251,17 @@ function PartProperties({
   const modelBrowseButton = useRef<HTMLButtonElement>(null);
   const modelBrowseRequest = useRef(0);
   const composing = useRef(false);
+  const pendingProperties = useMemo(() => {
+    try {
+      return !!preparePartProperties(part, ref, value, rows) || mapping !== null;
+    } catch {
+      return true;
+    }
+  }, [part, ref, value, rows, mapping]);
+  useLayoutEffect(() => {
+    onDraftPendingChange?.(pendingProperties);
+    return () => onDraftPendingChange?.(false);
+  }, [pendingProperties, onDraftPendingChange]);
   const geometryContainer = useRef<HTMLDivElement>(null);
   const update = (i: number, key: 'name' | 'value', text: string) =>
     active &&
@@ -878,6 +895,7 @@ function PartProperties({
     <>
       <div
         className="part-properties"
+        data-pending-edit={pendingProperties}
         onCompositionStart={(event) => {
           if (geometryContainer.current?.contains(event.target as Node)) return;
           composing.current = true;
@@ -904,7 +922,7 @@ function PartProperties({
           if (
             onRequestSave &&
             event.target instanceof HTMLInputElement &&
-            (isCommandModifier(event)) &&
+            isCommandModifier(event) &&
             event.key.toLowerCase() === 's'
           ) {
             event.preventDefault();
@@ -925,6 +943,31 @@ function PartProperties({
       >
         <PropertyTabs locked={locked} action={tabAction}>
           <PropertyTab label="General" icon={SlidersHorizontal}>
+            {onSectionChange &&
+              (!circuit || symbolRole(circuit.libraries[part.libId], part) !== 'marker') && (
+                <div className="property-field schematic-section-property">
+                  <span>Section</span>
+                  <Select
+                    label="Schematic section"
+                    value={partSchematicSection(part)}
+                    options={[
+                      { value: 'hardware', label: 'Real', disabled: !partFootprint(part) },
+                      { value: 'simulation', label: 'Virtual' },
+                    ]}
+                    disabled={!active || locked}
+                    onChange={(section) => {
+                      if (composing.current || !active || locked) return;
+                      if (pendingProperties) {
+                        setError('Apply or discard the Properties edits before changing section.');
+                        return;
+                      }
+                      if (section === 'hardware' && !partFootprint(part)) return;
+                      if (section === 'hardware' || section === 'simulation')
+                        onSectionChange(section);
+                    }}
+                  />
+                </div>
+              )}
             <div className="property-primary">
               <label>
                 Reference
@@ -1011,6 +1054,8 @@ export default memo(
   PartProperties,
   (previous, next) =>
     previous.onSave === next.onSave &&
+    previous.onSectionChange === next.onSectionChange &&
+    previous.onDraftPendingChange === next.onDraftPendingChange &&
     previous.modelFields === next.modelFields &&
     previous.tabAction === next.tabAction &&
     previous.circuit === next.circuit &&

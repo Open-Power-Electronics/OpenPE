@@ -2,9 +2,17 @@ import { createPart, catalog, type Circuit, type Kind } from './circuit';
 import { partFields } from './library';
 import { preparePartProperties } from './part-properties';
 import { removeSelection } from './schematic-edit';
+import { prepareSchematicSection, type SchematicSection } from './schematic-section';
 export type Operation =
   | { type: 'setValue'; ref: string; value: string }
-  | { type: 'addPart'; kind: Kind; x: number; y: number; value?: string }
+  | {
+      type: 'addPart';
+      kind: Kind;
+      x: number;
+      y: number;
+      value?: string;
+      section?: SchematicSection;
+    }
   | { type: 'removePart'; ref: string };
 export function extractProposal(text: string): Operation[] | null {
   const match = text.match(/```openpe(?=\s|$)\s*([\s\S]*?)```/);
@@ -30,7 +38,8 @@ export function extractProposal(text: string): Operation[] | null {
         !Number.isFinite(p.y) ||
         Math.abs(p.x) > 1000 ||
         Math.abs(p.y) > 1000 ||
-        (p.value !== undefined && (typeof p.value !== 'string' || p.value.length > 200))
+        (p.value !== undefined && (typeof p.value !== 'string' || p.value.length > 200)) ||
+        (p.section !== undefined && p.section !== 'hardware' && p.section !== 'simulation')
       )
         throw new Error('Invalid component or position.');
     } else if (p.type === 'removePart') {
@@ -46,6 +55,7 @@ export function applyProposal(doc: Circuit, ops: Operation[]): Circuit {
       const part = createPart(d, op.kind, op.x, op.y);
       if (op.value) part.value = op.value;
       d.parts.push(part);
+      d = prepareSchematicSection(d, [part.id], op.section ?? 'hardware');
     } else {
       const p = d.parts.find((p) => p.ref === op.ref);
       if (!p) throw new Error(`Cannot find ${op.ref}. Generate a fresh proposal.`);

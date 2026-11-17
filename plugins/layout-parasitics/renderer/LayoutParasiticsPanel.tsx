@@ -72,7 +72,7 @@ export default function LayoutParasiticsPanel({
   composing: RefObject<boolean>;
   onReset: () => void;
   onClose: () => void;
-  onAdded: (schematicId: string) => void;
+  onAdded: (schematicId: string, blockIds: string[]) => void;
 }) {
   const [copper, setCopper] = useState(String(PARASITICS_DEFAULTS.copperThicknessMm));
   const [plating, setPlating] = useState(String(PARASITICS_DEFAULTS.viaPlatingMm));
@@ -178,9 +178,9 @@ export default function LayoutParasiticsPanel({
         'parasitics.createStudy',
         { boardId: board.id, schematicId, startId, endId, copperThicknessMm, viaPlatingMm },
         { signal: controller.signal, expectedRevision: String(revision) },
-      )) as { schematicId: string };
+      )) as { schematicId: string; blockIds: string[] };
       if (!mounted.current || controller.signal.aborted || creation.current !== controller) return;
-      onAdded(result.schematicId);
+      onAdded(result.schematicId, result.blockIds);
     } catch (error) {
       if (mounted.current && !controller.signal.aborted)
         setCreationError(

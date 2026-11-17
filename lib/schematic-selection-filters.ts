@@ -2,6 +2,7 @@ import type { Circuit } from './circuit';
 import { selectedField } from './schematic-edit';
 import type { SchematicLayers } from './schematic-layers';
 import { visibleSchematicIds } from './schematic-view';
+import type { SchematicSectionView } from './schematic-section';
 
 export const schematicSelectionFilterOptions = [
   { id: 'symbols', label: 'Symbols' },
@@ -25,8 +26,9 @@ export function selectableSchematicIds(
   doc: Circuit,
   layers: SchematicLayers,
   filters: SchematicSelectionFilters = defaultSchematicSelectionFilters,
+  sectionView: SchematicSectionView = 'all',
 ): Set<string> {
-  const visible = visibleSchematicIds(doc, layers);
+  const visible = visibleSchematicIds(doc, layers, sectionView);
   if (schematicSelectionFilterOptions.every(({ id }) => filters[id])) return visible;
   const parts = new Set(doc.parts.map((part) => part.id));
   const wires = new Set([...doc.wires, ...doc.junctions].map((item) => item.id));

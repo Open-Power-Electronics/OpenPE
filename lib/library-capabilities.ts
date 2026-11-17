@@ -24,6 +24,7 @@ import layoutPropertySchemas from '../core/layout-property-schemas.json';
 import { agentCoreResult } from './agent-project-access';
 import { loadLibraryFootprint } from './library-package';
 import { attachNextPcbFootprint } from './library-project-assets';
+import { prepareSchematicSection } from './schematic-section';
 import type { FootprintSource } from './pcb-sync';
 
 const kind = { enum: ['symbols', 'footprints'] };
@@ -494,10 +495,14 @@ export function registerLibraryCapabilities(
           y: { type: 'number', minimum: -100000, maximum: 100000 },
           unit: { type: 'integer', minimum: 1, maximum: 100 },
           rotation: { type: 'number', minimum: -360, maximum: 360 },
+          section: { enum: ['hardware', 'simulation'] },
         },
         ['schematicId', 'libraryId', 'x', 'y'],
       ),
-      handler: async ({ schematicId, libraryId, x, y, unit = 1, rotation = 0 }, context) => {
+      handler: async (
+        { schematicId, libraryId, x, y, unit = 1, rotation = 0, section = 'hardware' },
+        context,
+      ) => {
         const snapshot = core.getSnapshot();
         if (snapshot.sourceDraft !== null)
           throw new Error('Apply Source edits before placing symbols.');
@@ -523,7 +528,7 @@ export function registerLibraryCapabilities(
         part.rotation = rotation;
         next.libraries[part.libId] = structuredClone(resolved.symbol);
         next.parts.push(part);
-        core.replaceSchematic(next);
+        core.replaceSchematic(prepareSchematicSection(next, [part.id], section));
         return { id: part.id, reference: part.ref, revision: String(core.getSnapshot().revision) };
       },
     }),

@@ -113,9 +113,9 @@
   --radius: 10px;
   --control-height: 30px;
   --menu-width: 140px;
-  --dialog-width: 520px;
-  --dialog-confirm-width: 360px;
-  --dialog-library-width: 840px;
+  --dialog-width: 1000px;
+  --dialog-height: 720px;
+  --dialog-compact-width: 360px;
   --dialog-inset: 12px;
   --hero-trace: color-mix(in srgb, var(--brand-ink) 20%, transparent);
   --hero-signal: color-mix(in srgb, var(--brand-ink) 34%, transparent);

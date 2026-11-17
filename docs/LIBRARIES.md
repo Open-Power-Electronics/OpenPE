@@ -91,34 +91,53 @@ prefixes and partial names precede keywords/descriptions, with stable ID ties.
 Empty queries browse alphabetically. Workers retain the last ranked query per
 kind so appending pages avoids repeating a search.
 
-The chooser retains search/filter/selection/preview through appends and errors;
-changes reset paging. Confirm only current loaded valid details, ignoring stale,
+Both providers search on Search or non-composing input Enter. Editing or clearing
+the draft retains accepted rows, selection, preview, count and appended pages.
+Submitting a query or changing category restarts paging. Refresh replays the
+committed query. Initial loading uses the branded indicator. The chooser retains
+search/filter/selection/preview through appends and errors. Confirm only current loaded valid details, ignoring stale,
 repeated or composing Enter. Symbols enter a canvas preview before committing;
 footprint assignment uses Core. [DESIGN.md](../DESIGN.md) owns presentation.
 
 ### NextPCB online catalog
 
-The chooser has separate **Library source** and **Category** fields, which
-precede Search. Selected details group native information into
-Basic information, Symbol details, Package, 3D models and Description; missing
-fields are omitted rather than guessed. Pin counts refer to the selected unit.
-Source contains only **KiCad** and **NextPCB**. KiCad categories are bundled library
-namespaces; NextPCB categories and subcategories come from the provider's real
-tree. Category offers **All categories** and recursive submenus, with
-`All <category>` for selecting a parent group. The selected category path stays in
-its own field. Both symbol and footprint choosers use authenticated library
-routes and the same `library.categories`, `library.search`, `library.detail`,
-placement and assignment capabilities as Agents.
+The chooser places separate library controls above Search. **Library source**
+contains only **KiCad** and **NextPCB**. KiCad retains one **Category** field with
+**All categories** and bundled library namespaces. NextPCB presents two adjacent
+cascading fields, **Category level 1** for a root category and **Category level 2**
+for its descendants, using only the provider's real hierarchy. Library source and
+the two category controls share one row. Below 600 px, the source fills the first
+row and the two category fields share the second.
+
+The selected deepest category ID determines the displayed path and lower-field
+values. Selecting an ancestor clears lower selections. **All categories** clears
+the category selection; **All subcategories** in a lower field selects its parent
+ID. A field without a selected parent or real children stays disabled, with no
+invented categories. The second category field lists all descendants beneath the
+selected root using breadcrumb labels and their actual category IDs, so the two
+category fields do not limit the host's supported hierarchy depth. Field
+descriptions expose the selected
+path. Both symbol and footprint choosers retain the same authenticated routes and
+`library.categories`, `library.search`, `library.detail`, placement and assignment
+capabilities as Agents.
+
+Selected details group native information into Basic information, Symbol details,
+Package, 3D models and Description; missing fields are omitted rather than
+guessed. Pin counts refer to the selected unit.
 
 `components/LibrarySourceSelect.tsx` owns source/category presentation and cancels
 obsolete category reads. Selecting NextPCB loads its categories; merely opening
 the default KiCad chooser performs no remote requests. Category errors have an
-explicit retry and cannot replace the current results. A source switch retains
-each source's query, category and completed browsing state for the chooser's
-lifetime. Local search is debounced. Editing online text clears stale candidates;
-Search or Enter submits keywords. With a blank query, the chooser selects the
-provider's default category 1737 once it is reachable in the loaded hierarchy.
-Clearing a query retains the current category and resumes browsing automatically.
+explicit retry and cannot replace the current results. Footer Refresh retries
+failed category loading before resuming the current search or suggestions.
+A source switch retains each source's query, category and completed browsing state for the chooser's
+lifetime, including separate draft and committed queries. Search or Enter submits
+keywords; typing alone keeps the current results. Filters initially remain at All categories.
+Blank All browsing presents suggestions scoped
+to reachable category 1737, with its provider name visibly displayed. The rows
+and count describe that suggestion category, not the complete catalog. Keyword
+searches under All omit the category filter. Explicit choices survive component
+selection, refresh, clearing and source restoration.
 Result Enter/double-click starts placement. Category
 changes restart paging, while completed source restoration retains loaded pages,
 selection and preview. Repeated identities across provider pages produce one
@@ -139,11 +158,15 @@ fallback labels. Up to 2,000 records and eight levels are accepted; malformed,
 duplicate or cyclic hierarchies reject. Search accepts only reachable category
 IDs and forwards the selected numeric `cateId`. One category tree is cached for
 five minutes independently of search pages. Manufacturer and package metadata
-remain separate bounded fields for result columns and selected-item details.
+remain separate bounded fields. Result rows show Model and Package on one line;
+manufacturer remains in the selected-item details.
 Only native `.kicad_sym` and `.kicad_mod` files from the returned HTTPS
 `file.eda.cn/web1/M00/` or `/web2/M00/` paths are read, without credentials or
 redirects. JSON and native responses each stop at 2 MB, with eight concurrent
-requests and a 20-second request deadline. Disconnect/close cancels work. Memory
+catalog operations and a 20-second operation deadline. A component's symbol and
+footprint download in parallel, bounded to at most 16 simultaneous native reads.
+Each still passes its original parser/validation; an unavailable package retains
+the independently valid symbol's warning behavior. Disconnect/close cancels work. Memory
 caches expire after five minutes and retain at most eight search pages,
 32 component records and 16 native details; errors remain retryable.
 Provider business rejection codes are reported separately from transport

@@ -18,6 +18,20 @@ Voltage-source and EMC IPULSE current-source waveform selection stores optional 
 
 ## Document ownership
 
+Schematic section membership uses Footprint assignment and the native symbol
+`on_board` attribute. Components without a Footprint and components with
+`on_board no` belong to Virtual; assigned, board-included components belong
+to Real. Power and electrical markers use the same rule. This does not replace
+`exclude_from_sim` or simulation model fields.
+Opening and switching views do not rewrite these flags or infer membership from
+a library namespace. Explicit board-inclusion edits update all units of the
+component in one Core transaction.
+Setting board inclusion without a Footprint leaves the component in Virtual.
+Moving to Virtual removes its linked PCB package while retaining copper and
+the saved Footprint assignment; returning to Real uses normal package
+preparation. [Schematic sections](../DESIGN.md#real-and-virtual-sections)
+own view behavior. Save, Source, recovery and history retain the complete sheet.
+
 Custom single-unit symbols are native embedded `.kicad_sch` definitions. Editing
 one instance forks its embedded name while preserving its original `lib_id`
 through native `lib_name` aliasing where needed. Custom footprints are native
@@ -40,10 +54,24 @@ fields, assignments, copper and model transforms survive round trips.
 
 Explicitly added [parasitic study components](LAYOUT.md#parasitic-study-schematics)
 are ordinary content in the selected existing `.kicad_sch`: embedded passive
-symbols, endpoint-identifying local labels, hidden native endpoint properties
-and wires. The edit changes that native file through
+symbols, endpoint-identifying local labels, hidden native group properties
+and wires. A series insertion shortens the end pin's exclusive leaf lead and
+adds connection-label copies as part of the same native edit. The edit changes that native file through
 Source and Save without adding a sheet, native file or private plugin
 format. Other schematics and PCB native bytes are preserved.
+
+Every inserted R/L stores `OpenPE.Parasitics.Connection` as `series`, one shared
+UUID in `OpenPE.Parasitics.GroupId`, and its `OpenPE.Parasitics.Role` as
+`resistor` or `inductor`. `OpenPE.Parasitics.StartLabel` and
+`OpenPE.Parasitics.EndLabel` store the two generated endpoint label names.
+`OpenPE.Parasitics.BoardId`, `OpenPE.Parasitics.StartId` and
+`OpenPE.Parasitics.EndId` retain the exact board and mapped pad UUIDs;
+`OpenPE.Parasitics.Start` and `OpenPE.Parasitics.End` retain readable endpoint
+descriptions. These are hidden ordinary native symbol properties retained by
+Source, Save, recovery and undo. Only a complete validated series group can
+participate in the [PCB-only conductive projection](LAYOUT.md#project-integrity-and-schematic-synchronization);
+names or provenance alone do not establish it. SPICE compiles the native
+geometry rather than interpreting these fields as an instruction to rewire.
 
 New Untitled project starts with complete empty `untitled.kicad_pro`,
 `untitled.kicad_sch` and `untitled.kicad_pcb` native texts. Its empty Model CAD

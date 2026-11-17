@@ -5,6 +5,7 @@ import {
   parseCircuit,
   pinPositions,
   serializeCircuit,
+  uid,
   type Circuit,
   type Part,
 } from '../../../lib/circuit';
@@ -15,12 +16,14 @@ import {
   serializeProject,
   type Project,
 } from '../../../lib/project';
-import { symbolAnnotation, symbolUnits, unitGraphics } from '../../../lib/library';
+import { symbolUnits, unitGraphics } from '../../../lib/library';
 import { fieldId, moveSelection, moveText, saveLabel } from '../../../lib/schematic-edit';
-import { schematicPolylines, schematicTexts } from '../../../lib/schematic-text';
-import { child, children, num, val } from '../../../lib/sexpr';
+import { child, children, val } from '../../../lib/sexpr';
 import { symbolBodyBounds } from '../../../lib/symbol-bounds';
 import { commitWireRoutes } from '../../../lib/wiring';
+import { parasiticsStudyOffset } from './study-placement';
+import { prepareStudyConnection } from './study-connection';
+import { parasiticPhysicalModels } from '../../../lib/parasitic-model';
 import {
   analyzeLayoutParasitics,
   type LayoutParasiticsResult,
@@ -39,6 +42,7 @@ export type ParasiticsStudy = {
   references: { resistor: string; inductor: string | null };
   values: ParasiticsStudyValues;
   omittedInductance: boolean;
+  blockIds: string[];
 };
 
 /** Preserve measured precision; an unavailable inductance is never replaced by zero. */
@@ -239,88 +243,7 @@ function horizontalPins(circuit: Circuit, part: Part) {
   return points as [(typeof points)[number], (typeof points)[number]];
 }
 
-/** Conservative world-space lower extent, including native text and outlines.
- * Placement never depends on the current camera or hidden presentation layers. */
-function lowerExtent(circuit: Circuit) {
-  let bottom = 0;
-  const add = (y: number) => {
-    bottom = Math.max(bottom, y);
-  };
-  const textBottom = (text: string, y: number, rotation: number, size = 1.27) => {
-    const lines = text.split('\n');
-    const width = Math.max(0, ...lines.map((line) => Array.from(line).length)) * size * 1.5;
-    const height = lines.length * size * 2;
-    const radians = (rotation * Math.PI) / 180;
-    add(y + Math.abs(Math.sin(radians)) * width + Math.abs(Math.cos(radians)) * height);
-  };
-  for (const part of circuit.parts) {
-    const library = circuit.libraries[part.libId];
-    add(part.y);
-    for (const pin of pinPositions(part, library)) add(pin.y);
-    const body = symbolBodyBounds(library, part.unit || 1);
-    if (body) {
-      // A circumscribed body is conservative for every supported rotation and
-      // mirror, including custom native symbol drawings.
-      for (const x of [body.x, body.x + body.width])
-        for (const y of [body.y, body.y + body.height]) add(part.y + Math.hypot(x, y));
-    }
-    for (const unit of unitGraphics(library, part.unit || 1)) {
-      for (const text of children(unit, 'text')) {
-        const at = child(text, 'at');
-        const size = num(child(child(child(text, 'effects') || [], 'font') || [], 'size')) || 1.27;
-        // Text primitive bounds are also circumscribed to avoid depending on
-        // renderer-only glyph measurements or transform presentation.
-        const lines = val(text).split('\n');
-        add(
-          part.y +
-            Math.hypot(num(at), num(at, 2)) +
-            size *
-              (Math.max(0, ...lines.map((line) => Array.from(line).length)) * 1.5 +
-                lines.length * 2),
-        );
-      }
-    }
-    const origin = child(part.raw || [], 'at');
-    for (const field of children(part.raw || [], 'property')) {
-      const at = child(field, 'at');
-      if (!at) continue;
-      const name = val(field);
-      textBottom(
-        name === 'Reference'
-          ? part.ref
-          : name === 'Value'
-            ? part.value
-            : (part.fields?.[name] ?? val(field, 2)),
-        num(at, 2) + part.y - num(origin, 2),
-        num(at, 3),
-        num(child(child(child(field, 'effects') || [], 'font') || [], 'size')) || 1.27,
-      );
-    }
-    if (!part.raw)
-      for (const field of ['Reference', 'Value'] as const) {
-        const at = symbolAnnotation(part, library, field);
-        if (at) textBottom(field === 'Reference' ? part.ref : part.value, at.y, 0);
-      }
-  }
-  for (const wire of circuit.wires) {
-    add(wire.a.y);
-    add(wire.b.y);
-  }
-  for (const point of [...circuit.junctions, ...(circuit.noConnects || [])]) add(point.y + 1.27);
-  for (const label of circuit.labels)
-    textBottom(
-      label.text,
-      label.y,
-      label.rotation || 0,
-      num(child(child(child(label.raw || [], 'effects') || [], 'font') || [], 'size')) || 1.27,
-    );
-  for (const text of schematicTexts(circuit.original)) textBottom(text.text, text.y, 0, text.size);
-  for (const outline of schematicPolylines(circuit.original))
-    for (const point of outline.points) add(point.y + outline.width / 2);
-  return bottom;
-}
-
-/** Append an isolated editable study to an existing schematic in one project candidate. */
+/** Insert an editable native series model at the selected End terminal in one project candidate. */
 export function prepareParasiticsStudy(
   project: Project,
   input: ParasiticsStudyInput,
@@ -333,12 +256,17 @@ export function prepareParasiticsStudy(
   const values = parasiticsStudyValues(measurement);
   const endpoints = studyEndpoints(project, input);
   const labels = terminalLabels(project, endpoints);
+  const connected = prepareStudyConnection(project, target, input.startId, input.endId, labels);
   const provenance = {
     'OpenPE.Parasitics.BoardId': project.pcb.id,
     'OpenPE.Parasitics.StartId': input.startId,
     'OpenPE.Parasitics.EndId': input.endId,
     'OpenPE.Parasitics.Start': endpoints.start.description,
     'OpenPE.Parasitics.End': endpoints.end.description,
+    'OpenPE.Parasitics.Connection': 'series',
+    'OpenPE.Parasitics.GroupId': uid(),
+    'OpenPE.Parasitics.StartLabel': labels.start,
+    'OpenPE.Parasitics.EndLabel': labels.end,
   };
   let circuit = emptyCircuit();
   circuit.id = target.id;
@@ -353,7 +281,12 @@ export function prepareParasiticsStudy(
   resistor.value = parasiticsComponentValue(values.resistanceOhm, 'Ω');
   resistor.rotation = 90;
   resistor.excludeFromSimulation = false;
-  resistor.fields = { ...resistor.fields, Footprint: '', ...provenance };
+  resistor.fields = {
+    ...resistor.fields,
+    Footprint: '',
+    ...provenance,
+    'OpenPE.Parasitics.Role': 'resistor',
+  };
   circuit.parts.push(resistor);
   let inductor: Part | null = null;
   if (values.partialInductanceNh !== null) {
@@ -362,7 +295,12 @@ export function prepareParasiticsStudy(
     inductor.value = parasiticsComponentValue(values.partialInductanceNh * 1e-9, 'H');
     inductor.rotation = 90;
     inductor.excludeFromSimulation = false;
-    inductor.fields = { ...inductor.fields, Footprint: '', ...provenance };
+    inductor.fields = {
+      ...inductor.fields,
+      Footprint: '',
+      ...provenance,
+      'OpenPE.Parasitics.Role': 'inductor',
+    };
     circuit.parts.push(inductor);
   }
   const [left, right] = horizontalPins(circuit, resistor);
@@ -378,7 +316,7 @@ export function prepareParasiticsStudy(
   circuit = saveLabel(circuit, { text: labels.end, position: end }).circuit;
 
   // Reuse normal symbol materialization before changing only native instance
-  // manufacturing flags. The simulation elements have no footprint or PCB role.
+  // manufacturing flags. These virtual elements never create PCB packages.
   circuit = parseCircuit(serializeCircuit(circuit));
   for (const part of circuit.parts) {
     for (const name of ['in_bom', 'on_board']) {
@@ -393,27 +331,31 @@ export function prepareParasiticsStudy(
     circuit = moveText(circuit, fieldId(part.id, 'Reference'), { x: part.x, y: 7.62 });
     circuit = moveText(circuit, fieldId(part.id, 'Value'), { x: part.x, y: 17.78 });
   }
-  const deltaY = Number((Math.ceil(lowerExtent(target) / 1.27) * 1.27 + 2.54).toFixed(4));
-  if (lowerExtent(circuit) + deltaY > 100000)
-    throw new Error(
-      'The schematic has no supported space below its existing geometry for this study.',
-    );
+  const offset = parasiticsStudyOffset(
+    project.pcb,
+    connected,
+    circuit,
+    input.startId,
+    input.endId,
+    measurement.netId,
+  );
   circuit = moveSelection(
     circuit,
     [...circuit.parts, ...circuit.wires, ...circuit.labels, ...circuit.junctions].map(
       (object) => object.id,
     ),
-    { x: 0, y: deltaY },
+    offset,
   );
   const merged: Circuit = {
-    ...target,
-    parts: [...target.parts, ...circuit.parts],
-    wires: [...target.wires, ...circuit.wires],
-    labels: [...target.labels, ...circuit.labels],
-    junctions: [...target.junctions, ...circuit.junctions],
+    ...connected,
+    parts: [...connected.parts, ...circuit.parts],
+    wires: [...connected.wires, ...circuit.wires],
+    labels: [...connected.labels, ...circuit.labels],
+    junctions: [...connected.junctions, ...circuit.junctions],
     libraries: { ...circuit.libraries, ...target.libraries },
   };
   const next = replaceSchematic(project, merged);
+  parasiticPhysicalModels(merged);
   serializeProject(next);
   return {
     project: next,
@@ -422,5 +364,8 @@ export function prepareParasiticsStudy(
     references: { resistor: resistor.ref, inductor: inductor?.ref ?? null },
     values,
     omittedInductance: values.partialInductanceNh === null,
+    blockIds: [...circuit.parts, ...circuit.wires, ...circuit.labels, ...circuit.junctions].map(
+      (object) => object.id,
+    ),
   };
 }

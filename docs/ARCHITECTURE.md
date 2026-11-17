@@ -4,7 +4,7 @@
 
 The separate [architecture vision](../assets/vision.drawio) retains the original Page-2 concept and an adapted future direction. Its dashed goals do not define current capabilities; [assets/README.md](../assets/README.md) explains the two sheets.
 
-OpenPE is an Electron desktop application with a Next.js/React renderer and authenticated loopback Express service. Packaged Express runs in Electron's main process. SPICE Simulation, Layout Thermal, PE Layout Skill and Layout Parasitics are bundled in the application with independent lifecycle gates. Each feature owns its directory under `plugins/`; installed local JavaScript packages extend the shared catalog through the bounded QuickJS runtime.
+OpenPE is an Electron desktop application with a Next.js/React renderer and authenticated loopback Express service. Packaged Express runs in Electron's main process. SPICE Simulation, Layout Thermal, PE Layout Skill, Layout Parasitics and EMC Analysis are bundled in the application with independent lifecycle gates. Each feature owns its directory under `plugins/`; installed local JavaScript packages extend the shared catalog through the bounded QuickJS runtime.
 
 [Core](CORE.md) owns transactions; [API](API.md) owns executable schemas/transports; [Format](FORMAT.md) owns native content; [Design](../DESIGN.md) owns visual interaction. [Development](DEVELOPMENT.md) covers setup and [AGENTS](../AGENTS.md) defines engineering/check requirements. The [documentation index](README.md) routes feature workflows to their owning contracts.
 
@@ -23,9 +23,10 @@ flowchart TB
     CopperWorker --> Domain
     API --> Plugin[Plugin: SPICE / Layout Thermal / PCB guidance]
     API --> Parasitics[Plugin: Layout Parasitics]
+    API --> EMC[Plugin: EMC Analysis · intent / geometric review / reports]
     API --> Ports[Host adapters: files / Git / libraries / CAD preparation]
     Plugin --> Ports
-    Parasitics -->|Read PCB / commit study| Core
+    Parasitics -->|Read PCB / commit native series| Core
     Ports --> Host[Electron / authenticated service]
     GUI -->|CAD preview HTTP| Host
     GUI -->|Recovery IPC / HTTP| Host
@@ -144,18 +145,19 @@ Electron bridge. [Preview transport](API.md#browser-development-preview-transpor
 
 ## Ownership
 
-| State/data                                                                                                     | Owner                                                                     |
-| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Accepted native model, Source drafts, revisions, undo and validated simulation design attributes               | ProjectCore                                                               |
-| Viewports, selection, CodeMirror history, ordinary-file drafts, local inspector/tool drafts and dirty baseline | Workbench/editor presentation                                             |
-| Open-project selection, admission and queued recovery                                                          | DesktopWorkspace                                                          |
-| Capability discovery/schemas/availability/events                                                               | Per-project capability host                                               |
-| Native destinations, grants, Save/export and Git storage                                                       | Electron/service host ports                                               |
-| Installed/enabled workbench lifecycle and provider installation receipts                                       | Separate host stores/adapters                                             |
-| Solver compilation, private execution derivatives, settings/results/probes                                     | Respective bundled simulation feature                                     |
-| Reviewed controller datasheets                                                                                 | Host reference adapter; internal resource catalog, outside document state |
-| PE Layout Skill workflow/reference loading and turn injection                                                  | Bundled plugin plus host infrastructure                                   |
-| Layout Parasitics measurement and labelled study preparation                                                   | Pure bundled domain; Core owns accepted schematic additions               |
+| State/data                                                                                                     | Owner                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Accepted native model, Source drafts, revisions, undo and validated simulation design attributes               | ProjectCore                                                                                                     |
+| Viewports, selection, CodeMirror history, ordinary-file drafts, local inspector/tool drafts and dirty baseline | Workbench/editor presentation                                                                                   |
+| Open-project selection, admission and queued recovery                                                          | DesktopWorkspace                                                                                                |
+| Capability discovery/schemas/availability/events                                                               | Per-project capability host                                                                                     |
+| Native destinations, grants, Save/export and Git storage                                                       | Electron/service host ports                                                                                     |
+| Installed/enabled workbench lifecycle and provider installation receipts                                       | Separate host stores/adapters                                                                                   |
+| Solver compilation, private execution derivatives, settings/results/probes                                     | Respective bundled simulation feature                                                                           |
+| Reviewed controller datasheets                                                                                 | Host reference adapter; internal resource catalog, outside document state                                       |
+| PE Layout Skill workflow/reference loading and turn injection                                                  | Bundled plugin plus host infrastructure                                                                         |
+| Layout Parasitics measurement and native series preparation                                                    | Pure bundled domain; Core owns accepted topology and PCB-only projection                                        |
+| EMC geometric checks, intent, manual review and reports                                                        | Pure bundled domain; GUI owns session decisions, downloads and camera/selection, no Core mutation or native I/O |
 
 Simulation participation, model mappings and portable model references remain native data editable through Source/Core commands, undoable and exportable while SPICE is unavailable. The Schematic SPICE Simulation action, Properties parameter section and settings-dock participation switches require confirmed installed/enabled plugin state; Layout has no SPICE controls. Plugin removal cannot remove document attributes or portable files. Model selection/execution belongs to SPICE; hash-checked copying/Save portability belongs to host persistence. The native model picker inspects only its explicitly selected bounded file and returns declarations/issues without bodies or include access; pure binding checks validate symbols and model ports. Active model source is Core data, while declaration catalogs remain renderer presentation.
 
@@ -200,15 +202,32 @@ Layout Parasitics uses the per-project capabilities registered in
 and revision, Source and close gates. Its measurement query reads the accepted
 PCB from `ProjectCore` through pure `domain/analysis.ts`; results remain in the
 requesting panel or Agent response. Its explicit study command recomputes that
-measurement and uses pure `domain/study.ts` to append a labelled R/L block to the
-existing schematic identified by `schematicId`, preserving its original objects
-and wires. A bounded Workbench commit port applies the prepared project through
+measurement and uses pure `domain/study.ts` to connect a labelled R/L series block
+between exact mapped pad pins in the existing schematic identified by
+`schematicId`. The native edit includes a bounded leaf-lead cut and anchored
+connection labels. A bounded Workbench commit port applies the prepared project through
 `ProjectCore.commitProject` as one validated undo transaction. Plugin code owns
-preparation, while Core owns the updated native document. No sheet or native file
+preparation, while Core owns the updated native document. Core also validates
+explicit native series-group fields and actual topology for PCB-only conductive
+equivalence, retaining the original physical board. ERC recognizes only the
+validated group's declared LP name aliases without altering native topology or
+driver checks. SPICE reads actual native
+geometry and performs no provenance-driven rewiring. No sheet or native file
 is created. Neither path adds an
 HTTP route, solver process or private store. Browser development uses the same
 renderer capabilities and bundled catalog. [Layout](LAYOUT.md#parasitic-study-schematics)
 owns the study model and its limits.
+
+EMC Analysis owns accepted-board measurements, intent-driven check geometry and
+strict report/manual-review contracts under
+`plugins/emc-analysis/domain/`, exposed through its scoped renderer queries.
+Workbench owns the Layout dock and report session. A bounded Layout presentation
+port selects and centers exact current tracks, vias, footprints and transformed
+pads through canonical visibility and selection eligibility. Session decisions
+and justified exceptions cannot change automatic findings or Core data. Explicit
+HTML/JSON downloads serialize validated current reports. The plugin has no native I/O,
+service route, solver process, project mutation or persistent result store.
+[EMC Analysis](EMC.md) defines measurements, review contracts and incomplete coverage.
 
 EMC Flyback uses the same host-owned portable-model resolution as the other SPICE projects. Its four checked-in `examples/project/emc-flyback/models/*.lib` files provide model bodies; the pure compiler emits only fixed model IDs/includes. A generated hash lock joins the shared allowlist. Electron supplies the original or packaged project resource root to the model store; neither renderer requests nor native text select a model resource root.
 
@@ -519,6 +538,7 @@ complete test set. Focused runs pass test paths after `npm test --`.
 | Architecture/Core/API       | `npm run check:architecture`; Core, capabilities, lifecycle and Agent-capability tests                                                                                                                                                                                        |
 | Native Source/save/recovery | Native-save/materialization, workspace-state/storage/recovery-store/recovery-ipc/bridge/close tests; `check-native-source-ui.mjs`                                                                                                                                             |
 | Full editing workflows      | `check-home-editing-ui.mjs`; `check-emc-editing-workflow-ui.mjs`                                                                                                                                                                                                              |
+| Schematic sections          | `tests/schematic-section.test.ts`, `tests/schematic-section-views.test.ts`, `tests/schematic-section-controls.test.ts`; `check-thermal-workbench-ui.mjs --schematic-sections` (actual Workbench/Core with mocked host services)                                               |
 | Deferred loading/retention  | `check-startup-ui.mjs`; `check-render-isolation-ui.mjs`; `check-source-retention-ui.mjs`                                                                                                                                                                                      |
 | Presentation work           | `check-canvas-render-performance-ui.mjs`; `check-layout-render-performance-ui.mjs`; `check-model-render-performance-ui.mjs`; `check-analysis-sidebar-resize-ui.mjs` (SPICE and Layout Thermal grips, shared widths and camera/native retention)                               |
 | Annotation presentation     | `check-annotation-outlines.mjs` (curved/transformed SVG geometry, zoom, capture/export); `check-annotations.mjs` (Schematic/Layout/Model workflows)                                                                                                                           |

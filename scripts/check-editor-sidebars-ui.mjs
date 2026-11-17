@@ -1174,6 +1174,7 @@ try {
     await footprintDialog
       .getByRole('textbox', { name: 'Search footprints', exact: true })
       .fill(detail.name);
+    await footprintDialog.getByRole('button', { name: 'Search', exact: true }).click();
     await footprintDialog
       .locator(`.library-results button[aria-description="${detail.id}"]`)
       .click();

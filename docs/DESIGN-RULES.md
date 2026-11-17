@@ -30,6 +30,13 @@ Clicking a component row, or pressing Enter/Space, keeps Rule open, reveals Mode
 
 ERC uses transformed embedded-library pin geometry, physical pin identity and the same net grouping as the editor. Intentional junctions, attached labels, wire endpoints and shared physical pins connect; incidental wire crossings do not. Simulation exclusion and an absent footprint never remove physical ERC participation.
 
+Only the declared LP label names of a fully validated native
+[parasitic series group](LAYOUT.md#parasitic-study-schematics) are recognized as
+aliases of that group's endpoint networks for name-conflict reporting. The
+native wire/pin topology and driver checks remain unchanged. Other conflicting
+names, malformed group declarations and ordinary LP-looking labels receive the
+usual checks; the naming pattern alone grants no exemption.
+
 | Rule                                                    | Reported condition                                                                                                |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `erc.reference-conflict`                                | Unrelated symbols or repeated units share a reference; valid units of one physical component share identity.      |

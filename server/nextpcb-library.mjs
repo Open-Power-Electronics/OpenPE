@@ -375,7 +375,14 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     if (!urls[type]) throw new Error(`This NextPCB component has no native KiCad ${type}.`);
     if (!urls.symbol)
       throw new Error('This NextPCB package has no native KiCad symbol for validation.');
-    const symbols = parseLibrary(await read(urls.symbol, {}, MAX_NATIVE_BYTES, signal));
+    const [symbolRead, footprintRead] = await Promise.allSettled([
+      read(urls.symbol, {}, MAX_NATIVE_BYTES, signal),
+      urls.footprint
+        ? read(urls.footprint, {}, MAX_NATIVE_BYTES, signal)
+        : Promise.resolve(undefined),
+    ]);
+    if (symbolRead.status === 'rejected') throw symbolRead.reason;
+    const symbols = parseLibrary(symbolRead.value);
     if (symbols.length !== 1)
       throw new Error('NextPCB symbol libraries must contain exactly one component.');
     const symbol = resolveSymbol(symbols, val(symbols[0]), 'NextPCB');
@@ -401,10 +408,8 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     // symbol retains its exact assignment when bounded PCB geometry is unavailable.
     if (urls.footprint) {
       try {
-        const footprint = parseSExpr(
-          await read(urls.footprint, {}, MAX_NATIVE_BYTES, signal),
-          MAX_NATIVE_BYTES,
-        );
+        if (footprintRead.status === 'rejected') throw footprintRead.reason;
+        const footprint = parseSExpr(footprintRead.value, MAX_NATIVE_BYTES);
         if (footprint[0] !== 'footprint' || num(child(footprint, 'version')) > 20260206)
           throw new Error('Unsupported NextPCB footprint version.');
         const modelNodes = children(footprint, 'model');

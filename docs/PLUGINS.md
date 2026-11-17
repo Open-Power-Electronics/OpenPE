@@ -17,6 +17,7 @@ Each built-in plugin has an independent root:
 | `plugins/layout-thermal/`    | Thermal model, field UI, mesh and solver adapters            |
 | `plugins/pe-layout-skill/`   | Guidance capability, verified upstream resources and service |
 | `plugins/layout-parasitics/` | Pure network analysis, labelled study preparation and panel capabilities |
+| `plugins/emc-analysis/` | Pure PCB review/check geometry, manual review/report contracts and panel queries |
 
 Each root owns `manifest.json` and its `domain/`, `renderer/`, `host/`,
 `electron/` or `resources/` directories as needed. Core native simulation fields,
@@ -42,6 +43,7 @@ named by its built-in manifest's `projectDirectory`:
 | Layout Thermal    | `layout-thermal/<native-stem>.*` for completed results                 |
 | PE Layout Skill   | `pe-layout-skill/` when project-owned data is needed; currently none   |
 | Layout Parasitics | No private project data; explicit study creation adds components to an existing native schematic |
+| EMC Analysis | No project data; intent, review, checklist and exceptions stay in the panel session; explicit report downloads are separate artifacts |
 
 The shared `plugins/runtime/project-data.mjs` maps plugin identities to these
 names. Local plugin identities use `name@publisher` to avoid publisher collisions;
@@ -67,7 +69,7 @@ In desktop Plugins, choose **Install plugin from file**, select an
 native confirmation. Installation copies the reviewed package into app data at
 `plugins/<id>/package.json`. Disable/uninstall cancels active workers. Uninstall
 removes that package; reinstall requires the original file. Replacement requires
-uninstall and a fresh permission approval. Browser development exposes the four
+uninstall and a fresh permission approval. Browser development exposes the five
 built-in features; local installation/execution requires desktop.
 
 A version-1 package is UTF-8 JSON with `format: "openpe-plugin"`, `version: 1`,
@@ -106,6 +108,7 @@ uses a native picker, never a renderer-supplied path/source or Agent tool.
 | [Layout Thermal](THERMAL.md)                     | `pcb-thermal@openpe`       | Layout Plugins toolbar group                                   | Board temperature map, probes and image export                                     |
 | [PE Layout Skill](#pe-layout-skill)              | `ai-pcb-layout@openpe`     | Plugin details and scoped Agent guidance                       | Verified bundled workflow and references                                           |
 | [Layout Parasitics](LAYOUT.md#layout-parasitics) | `layout-parasitics@openpe` | Layout Plugins toolbar group                                   | Two-terminal DC resistance, shortest-path partial inductance and labelled schematic studies |
+| [EMC Analysis](EMC.md) | `emc-analysis@openpe` | Layout Plugins toolbar group | Explicit intent, geometric findings, locating, manual review/exceptions and HTML/JSON reports |
 
 Toolbar groups appear when an installed and enabled plugin contributes an
 action. Use the shared [toolbar order and spacing](../DESIGN.md#toolbars-and-tool-settings).
@@ -154,6 +157,12 @@ footers fixed around a scrolling settings body. Layout dock replacement,
 resizing and sidebar restoration follow the
 [editor dock contract](../DESIGN.md#analysis-dock).
 
+EMC Analysis keeps its header and Check/Recheck/Retry footer fixed. Setup,
+Findings and Checklist share the scrolling body. Setup declares native intent
+and user budgets; findings group/filter with evidence, remediation and locating;
+manual decisions and justified exceptions stay bound to the current report.
+Opening can seed the single net named by current track/via selections.
+
 Use Properties surfaces, 10 px exposed corners and 8/12 px body insets for
 SPICE and Thermal. Settings rows have 4 px gaps and 64% value columns with a
 112 px minimum. Action footers have a surface background, soft top divider,
@@ -183,6 +192,8 @@ for provider transports.
 | `pcbDesign.guide`                    | Read a fixed, verified workflow/reference when enabled                                                                               |
 | `parasitics.measure`                 | [Two-terminal PCB DC resistance, route length and partial inductance](LAYOUT.md#layout-parasitics)                                   |
 | `parasitics.createStudy`             | Append labelled R/L components to an explicitly identified existing schematic through shared current-board preparation and a Core transaction |
+| `emc.inspectLayout` | Read-only selected-net routing evidence against a user segment-length budget; no regulatory assessment |
+| `emc.reviewLayout` | Read-only intent-driven geometric review with explicit evidence, confidence, remediation and per-check coverage; no regulatory assessment |
 | `simulation.*`                       | [SPICE settings, runs, probes and waveforms](SIMULATION.md#shared-simulation-capabilities)                                           |
 | `thermal.*`                          | [Layout Thermal settings, runs, probes and images](THERMAL.md#interface)                                                             |
 
@@ -202,7 +213,7 @@ entries remain in Marketplace.
 
 `plugins/catalog.mjs` validates the built-in manifests. Installed local packages
 extend the catalog without rebuilding OpenPE.
-In `dev:web`, all four bundled plugins start installed and enabled. The
+In `dev:web`, all five bundled plugins start installed and enabled. The
 development host keeps Marketplace changes in process memory and resets them
 on restart. Layout Parasitics uses the renderer, PE Layout Skill serves bundled
 guidance, and the solver plugins use the bundled runtimes. SPICE and manual
@@ -216,6 +227,10 @@ receipts. Saved state must include each built-in catalog entry
 exactly once with explicit installation and enabled flags. Missing files
 initialize the bundled defaults. Partial, obsolete or malformed files are
 preserved and fail closed.
+
+The current catalog requires an explicit `emc-analysis@openpe` row as well as the
+other four entries. A settings file missing it prevents catalog access and plugin
+execution; it is preserved without adding inferred flags or resetting choices.
 
 | Action              | Effect                                                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -235,6 +250,10 @@ Disabling or uninstalling Layout Parasitics removes its Layout action, closes
 its dock and makes its measurement query and study-creation command unavailable.
 Previously added study components remain native project content. See the
 [measurement scope](LAYOUT.md#layout-parasitics).
+
+Disabling or uninstalling EMC Analysis closes its dock and cancels its scoped
+queries. It has no project files or solver resources to remove.
+[EMC Analysis](EMC.md) owns measurements, evidence limits and reference licensing.
 
 ### PE Layout Skill
 

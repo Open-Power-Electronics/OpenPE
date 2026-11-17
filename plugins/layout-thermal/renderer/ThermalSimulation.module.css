@@ -108,6 +108,10 @@
 .field > :global(.quantity-input) {
   flex: 0 0 max(112px, var(--properties-value-width));
 }
+.field > :global(.select-trigger) {
+  flex: 0 0 max(160px, var(--properties-value-width));
+  min-width: 0;
+}
 .footer {
   display: flex;
   flex-wrap: wrap;

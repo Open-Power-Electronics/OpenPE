@@ -77,6 +77,12 @@ const fields = [
   ['viaPlatingMm', 'Via plating', 'mm'],
   ['meshSizeMm', 'Mesh size', 'mm'],
 ] as const;
+const meshPresets = [
+  { value: '4', label: 'Coarse · 4 mm' },
+  { value: '2', label: 'Standard · 2 mm' },
+  { value: '1', label: 'Fine · 1 mm' },
+  { value: '0.5', label: 'Very fine · 0.5 mm' },
+];
 const formatted = (value: number) => Number(value.toPrecision(6)).toString();
 const temperature = (value: number) => `${value.toFixed(2)} °C`;
 function draftsFor(config: ThermalConfig | null): Record<string, string> {
@@ -789,6 +795,23 @@ export default function ThermalSimulation({
       }
     }
   }
+  function changeMeshResolution(value: string) {
+    if (
+      !origin.current.visible ||
+      origin.current.sourcePending ||
+      composing.current ||
+      runControl.current ||
+      !meshPresets.some((preset) => preset.value === value)
+    )
+      return;
+    configurationEdited.current = true;
+    cancelLookup();
+    cancelSpiceImport();
+    const next = { ...draftRef.current, meshSizeMm: value };
+    draftRef.current = next;
+    setDrafts(next);
+    applyDrafts();
+  }
   function field(key: string, label: string, unit: string, collapsed = false, inputOnly = false) {
     const power = key.startsWith('power:');
     const draft = drafts[key] ?? '';
@@ -1159,10 +1182,37 @@ export default function ThermalSimulation({
           </div>
         )}
         <div className={styles.fields}>
-          {fields.map(([key, label, unit]) => field(key, label, unit))}
+          {fields
+            .filter(([key]) => key !== 'meshSizeMm')
+            .map(([key, label, unit]) => field(key, label, unit))}
           {project.pcb?.layers.map((layer, index) =>
             field(`copper:${index}`, `${layer} thickness`, 'mm'),
           )}
+        </div>
+        <h3>Mesh</h3>
+        <div className={styles.fields}>
+          <div className={styles.field}>
+            <span>Resolution</span>
+            <Select
+              label="Mesh resolution"
+              hint="Smaller mesh sizes increase resolution and computation cost; temperature accuracy requires a convergence check."
+              value={
+                meshPresets.find((preset) => Number(preset.value) === Number(drafts.meshSizeMm))
+                  ?.value ?? 'custom'
+              }
+              options={[
+                ...meshPresets,
+                ...(!meshPresets.some(
+                  (preset) => Number(preset.value) === Number(drafts.meshSizeMm),
+                )
+                  ? [{ value: 'custom', label: 'Custom', disabled: true }]
+                  : []),
+              ]}
+              disabled={!visible || sourcePending || session.status === 'running'}
+              onChange={changeMeshResolution}
+            />
+          </div>
+          {field('meshSizeMm', 'Mesh size', 'mm')}
         </div>
         <h3>Heat into board</h3>
         <div className={styles.sourceRow}>

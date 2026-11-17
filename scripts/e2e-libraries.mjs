@@ -25,8 +25,13 @@ try {
   await page.getByRole('button', { name: 'New project', exact: true }).first().click();
   await page.getByRole('button', { name: 'Add component', exact: true }).click();
   await page.getByLabel('Search components', { exact: true }).fill('Device:R');
-  await page.waitForFunction(() => !document.querySelector('.dialog-button.primary')?.disabled);
   await page.getByLabel('Search components', { exact: true }).press('Enter');
+  await page.waitForFunction(
+    () =>
+      document.querySelector('.library-detail-id')?.textContent === 'Device:R' &&
+      !document.querySelector('.dialog-button.primary')?.disabled,
+  );
+  await page.getByRole('button', { name: 'Place', exact: true }).click();
   const canvas = page.getByTestId('schematic-canvas'),
     bounds = await canvas.boundingBox();
   await page.mouse.click(bounds.x + bounds.width * 0.45, bounds.y + bounds.height * 0.45);
@@ -34,6 +39,7 @@ try {
   await page
     .getByLabel('Search footprints', { exact: true })
     .fill('Resistor_SMD:R_0805_2012Metric');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await page
     .locator('.library-results button')
     .filter({ has: page.getByText('R_0805_2012Metric', { exact: true }) })

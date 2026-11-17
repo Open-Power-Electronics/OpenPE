@@ -1,12 +1,14 @@
 import type { Project } from './project';
 import { serializeProject } from './project';
 import { isOwnedProject, ownProject } from './immutable-project';
-import { partFields } from './library';
+import { partFields, unitGraphics } from './library';
 import { toProjectDocument } from './project-document';
-import { child } from './sexpr';
+import { child, children, val } from './sexpr';
+import { partSchematicSection } from './schematic-section';
 import { attachNextPcbFootprint, projectFootprintSource } from './library-project-assets';
 import {
   pcbUpdateFootprintIds,
+  pcbPinKey,
   pcbIncludedParts,
   schematicPCBPhysicalNets,
   updatePCBFromSchematic,
@@ -59,11 +61,26 @@ export function schematicPCBSourceFingerprint(project: Project): string {
 function physicalSourceFingerprint(project: Project): string | null {
   try {
     const { schematic } = pcbSourceDocument(project);
-    const included = new Set(pcbIncludedParts(project.schematic).map((part) => part.id));
+    const primaryParts = new Map(project.schematic.parts.map((part) => [part.id, part]));
+    const assignedReferences = new Set(
+      project.schematic.parts
+        .filter((part) => (partFields(part).Footprint || '').trim())
+        .map((part) => part.ref),
+    );
+    const linkedReferences = new Set<string>();
+    for (const footprint of project.pcb?.footprints ?? []) {
+      const part = primaryParts.get(footprint.symbolId ?? '');
+      if (part) linkedReferences.add(part.ref);
+    }
+    const included = new Set(
+      pcbIncludedParts(project.schematic)
+        .filter((part) => assignedReferences.has(part.ref) || linkedReferences.has(part.ref))
+        .map((part) => part.id),
+    );
     // An imported board may retain a linked package whose symbol is excluded
     // from board output. Its source metadata must still guard loaded authority.
-    for (const footprint of project.pcb?.footprints ?? [])
-      if (footprint.symbolId) included.add(footprint.symbolId);
+    for (const part of project.schematic.parts)
+      if (linkedReferences.has(part.ref)) included.add(part.id);
     const components = schematic.components?.filter((part) => included.has(part.id));
     const libraries = [
       ...new Set(
@@ -72,12 +89,19 @@ function physicalSourceFingerprint(project: Project): string | null {
     ]
       .sort()
       .map((id) => [id, project.schematic.libraries[id]]);
-    return JSON.stringify([
-      schematic.id,
-      components,
-      libraries,
-      schematicPCBPhysicalNets(project.schematic),
-    ]);
+    const physicalPins = new Set(
+      project.schematic.parts
+        .filter((part) => included.has(part.id))
+        .flatMap((part) =>
+          unitGraphics(project.schematic.libraries[part.libId], part.unit || 1).flatMap((unit) =>
+            children(unit, 'pin').map((pin) => pcbPinKey(part.ref, val(child(pin, 'number')))),
+          ),
+        ),
+    );
+    const nets = schematicPCBPhysicalNets(project.schematic, project.pcb ?? undefined)
+      .map((net) => ({ ...net, pins: net.pins.filter((pin) => physicalPins.has(pin)) }))
+      .filter((net) => net.pins.length > 0);
+    return JSON.stringify([schematic.id, components, libraries, nets]);
   } catch {
     return null;
   }
@@ -90,6 +114,7 @@ export class PCBProjectSync {
   private snapshots = new Map<string, SyncedProject>();
   private prepared = new WeakMap<Project, SyncedProject>();
   private boardSources = new WeakMap<Project['schematic'], string>();
+  private requiredPackages = new WeakMap<Project, Set<string>>();
   private loadedSchematic?: {
     projectId: string;
     fingerprint: string;
@@ -144,16 +169,89 @@ export class PCBProjectSync {
     return sources;
   }
 
-  prepare(project: Project): SyncedProject | null {
+  private requiredPackageIds(project: Project, previous?: Project | null): Set<string> {
+    if (!previous && !this.requiredPackages.has(project)) return new Set();
+    const parts = new Map(project.schematic.parts.map((part) => [part.id, part]));
+    const linkedReferences = new Set(
+      (project.pcb?.footprints ?? []).flatMap((footprint) => {
+        const part = parts.get(footprint.symbolId ?? '');
+        return part ? [part.ref] : [];
+      }),
+    );
+    const assignedReferences = new Set(
+      project.schematic.parts
+        .filter((part) => (partFields(part).Footprint || '').trim())
+        .map((part) => part.ref),
+    );
+    const required = new Set([
+      ...(this.requiredPackages.get(project) ?? []),
+      ...(previous ? (this.requiredPackages.get(previous) ?? []) : []),
+    ]);
+    if (previous) {
+      const before = new Map(previous.schematic.parts.map((part) => [part.id, part]));
+      for (const part of project.schematic.parts) {
+        const old = before.get(part.id);
+        if (
+          old &&
+          partSchematicSection(old) === 'simulation' &&
+          partSchematicSection(part) === 'hardware'
+        )
+          required.add(part.id);
+      }
+    }
+    for (const id of required) {
+      const part = parts.get(id);
+      if (
+        !part ||
+        partSchematicSection(part) !== 'hardware' ||
+        child(project.schematic.libraries[part.libId], 'power') ||
+        !assignedReferences.has(part.ref) ||
+        linkedReferences.has(part.ref)
+      )
+        required.delete(id);
+    }
+    if (isOwnedProject(project)) {
+      if (required.size) this.requiredPackages.set(project, required);
+      else this.requiredPackages.delete(project);
+    }
+    return required;
+  }
+
+  private fulfillsPackages(project: Project, ids: ReadonlySet<string>): boolean {
+    const parts = new Map(project.schematic.parts.map((part) => [part.id, part]));
+    const linkedReferences = new Set(
+      (project.pcb?.footprints ?? []).flatMap((footprint) => {
+        const part = parts.get(footprint.symbolId ?? '');
+        return part ? [part.ref] : [];
+      }),
+    );
+    return [...ids].every((id) => {
+      const part = parts.get(id);
+      return part && linkedReferences.has(part.ref);
+    });
+  }
+
+  prepare(project: Project, previousProject?: Project | null): SyncedProject | null {
+    // Returning a native board-excluded component to Hardware is a deliberate
+    // package request. Carry it across accepted snapshots while its library is
+    // loading; an initial-board equivalence guard must not hide the missing part.
+    const required = this.requiredPackageIds(project, previousProject);
     const prepared = isOwnedProject(project) ? this.prepared.get(project) : undefined;
-    if (prepared) return prepared;
+    if (prepared && (!required.size || this.fulfillsPackages(prepared.project, required))) {
+      this.requiredPackages.delete(project);
+      return prepared;
+    }
     const source = serializeProject(project);
     const cached = this.snapshots.get(source);
-    if (cached) return this.remember(project, cached);
+    if (cached && (!required.size || this.fulfillsPackages(cached.project, required))) {
+      this.requiredPackages.delete(project);
+      return this.remember(project, cached);
+    }
     // An opened board is authoritative. Viewing, saving, board-only edits and
     // changes to other sheets must not normalize its nets or replace its packages.
     if (
       project.pcb &&
+      !required.size &&
       this.loadedSchematic?.projectId === project.id &&
       (this.loadedSchematic.fingerprint === this.boardSourceFingerprint(project) ||
         (this.loadedSchematic.physicalFingerprint !== null &&
@@ -174,6 +272,8 @@ export class PCBProjectSync {
     let candidate = result.changed ? { ...project, pcb: result.board } : project;
     for (const id of ids) candidate = attachNextPcbFootprint(candidate, sources.get(id)!);
     const next = ownProject(candidate, isOwnedProject(project) ? project : undefined);
+    this.requiredPackages.delete(project);
+    this.requiredPackages.delete(next);
     const normalized = next === project ? source : serializeProject(next);
     const value = this.remember(project, { project: next, warnings: result.warnings });
     this.prepared.set(next, value);

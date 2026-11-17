@@ -39,6 +39,12 @@ import SymbolGraphic from './SymbolGraphic';
 import SchematicDrawing from './SchematicDrawing';
 import useCanvasBrightness from './useCanvasBrightness';
 import type { SchematicLayers } from '@/lib/schematic-layers';
+import {
+  prepareSchematicSection,
+  schematicSectionEmphasisIds,
+  schematicSectionIds,
+  type SchematicSectionView,
+} from '@/lib/schematic-section';
 import { resizeDrawingView, type CanvasBounds } from '@/lib/drawing-viewport';
 import {
   fieldDragLinks,
@@ -51,6 +57,7 @@ import { type SExpr } from '@/lib/sexpr';
 import { createLibraryPart, symbolAnnotation } from '@/lib/library';
 import { commitWireRoute, onWire, samePoint } from '@/lib/wiring';
 import {
+  fieldId,
   selectedField,
   objectPosition,
   moveSelection,
@@ -171,12 +178,14 @@ type Props = {
   onAnnotationsChange: (annotations: AgentAnnotation[]) => void;
   onAnnotationAdd?: () => void;
   onCommit: (d: Circuit) => boolean;
+  onPlacePart?: (d: Circuit, id: string) => boolean;
   setTool: (t: Tool) => void;
   fitKey: number;
   onPosition: (p: Point) => void;
   grid: boolean;
   gridSpacing: number;
   layers: SchematicLayers;
+  sectionView?: SchematicSectionView;
   selectionFilters?: SchematicSelectionFilters;
   leftButtonDrag?: LeftButtonDrag;
   onNotify?: (message: string) => void;
@@ -210,12 +219,14 @@ export default function Canvas({
   onAnnotationsChange,
   onAnnotationAdd,
   onCommit,
+  onPlacePart,
   setTool,
   fitKey,
   onPosition,
   grid,
   gridSpacing,
   layers,
+  sectionView = 'all',
   selectionFilters = defaultSchematicSelectionFilters,
   leftButtonDrag = defaultLeftButtonDrag,
   onNotify,
@@ -296,9 +307,25 @@ export default function Canvas({
     mode: SelectionMode;
     clickId?: string;
   } | null>(null);
-  const visibleIds = useMemo(() => visibleSchematicIds(doc, layers), [doc, layers]);
+  const sectionIds = useMemo(
+    () => (sectionView === 'all' ? null : schematicSectionIds(doc, sectionView)),
+    [doc, sectionView],
+  );
+  const contextIdentity = useMemo(() => ({ doc, sectionView }), [doc, sectionView]);
+  const sectionRuleFocus =
+    ruleFocus &&
+    (sectionView === 'all' ||
+      !ruleFocus.objectIds.length ||
+      ruleFocus.objectIds.some((id) => sectionIds?.has(id)))
+      ? ruleFocus
+      : null;
+  const visibleIds = useMemo(
+    () => visibleSchematicIds(doc, layers, sectionView),
+    [doc, layers, sectionView],
+  );
+  const displayedIds = useMemo(() => visibleSchematicIds(doc, layers), [doc, layers]);
   const wireTargetIds = useMemo(
-    () => visibleSchematicWireTargetIds(doc, layers),
+    () => visibleSchematicWireTargetIds(doc, layers, sectionView),
     [
       doc.parts,
       doc.libraries,
@@ -308,6 +335,7 @@ export default function Canvas({
       layers.symbols,
       layers.wires,
       layers.labels,
+      sectionView,
     ],
   );
   const resolveWireTarget = useMemo(
@@ -317,28 +345,36 @@ export default function Canvas({
   const snapTargets = useMemo(
     () => [
       ...(layers.symbols
-        ? doc.parts.flatMap((part) =>
-            visibleSchematicPins(part, doc.libraries[part.libId]).map((pin) => ({
-              id: part.id,
-              point: pin.point,
-            })),
-          )
+        ? doc.parts
+            .filter((part) => visibleIds.has(part.id))
+            .flatMap((part) =>
+              visibleSchematicPins(part, doc.libraries[part.libId]).map((pin) => ({
+                id: part.id,
+                point: pin.point,
+              })),
+            )
         : []),
       ...(layers.wires
-        ? doc.wires.flatMap((wire) => [
-            { id: wire.id, point: wire.a },
-            { id: wire.id, point: wire.b },
-          ])
+        ? doc.wires
+            .filter((wire) => visibleIds.has(wire.id))
+            .flatMap((wire) => [
+              { id: wire.id, point: wire.a },
+              { id: wire.id, point: wire.b },
+            ])
         : []),
     ],
-    [doc.parts, doc.libraries, doc.wires, layers.symbols, layers.wires],
+    [doc.parts, doc.libraries, doc.wires, layers.symbols, layers.wires, visibleIds],
   );
   const selectableIds = useMemo(
-    () => selectableSchematicIds(doc, layers, selectionFilters),
-    [doc, layers, selectionFilters],
+    () => selectableSchematicIds(doc, layers, selectionFilters, sectionView),
+    [doc, layers, selectionFilters, sectionView],
   );
   const editable = tool === 'select' || tool === 'drag';
   const drawing = pickup?.preview ?? (drag?.moved && drag.connected ? (drag.preview ?? doc) : doc);
+  const drawingSectionIds = useMemo(
+    () => (sectionView === 'all' ? undefined : schematicSectionEmphasisIds(drawing, sectionView)),
+    [drawing, sectionView],
+  );
   // Geometry depends on document/preview replacements, not selection or camera state.
   const drawingJunctions = useMemo(
     () => (layers.wires ? visibleJunctions(drawing) : []),
@@ -376,6 +412,7 @@ export default function Canvas({
     [],
   );
   function pinPointerDown(event: React.PointerEvent, id: string, pin: Point) {
+    if (!visibleIds.has(id)) return;
     if (canProbe) return;
     if (event.button !== 0 || !['select', 'wire'].includes(tool)) return;
     if (tool === 'select' && selectionMode(event) !== 'replace') {
@@ -483,7 +520,11 @@ export default function Canvas({
     if (!active) pointerInside.current = false;
     pendingWire.current = null;
     updateWireDraft(null);
-  }, [doc, layers, active, editingBlocked]);
+  }, [doc, layers, active, editingBlocked, sectionView]);
+  useEffect(() => {
+    setProbeHover(null);
+    setCursor(null);
+  }, [sectionView]);
   useEffect(() => {
     cancelGesture();
   }, [selectionFilters, leftButtonDrag]);
@@ -615,8 +656,16 @@ export default function Canvas({
     cancelGesture();
   }
   const handledMoveRequest = useRef<number | null>(null);
-  const moveContext = useRef({ active, editingBlocked, doc, layers, tool, beginPickup });
-  moveContext.current = { active, editingBlocked, doc, layers, tool, beginPickup };
+  const moveContext = useRef({
+    active,
+    editingBlocked,
+    doc,
+    layers,
+    tool,
+    beginPickup,
+    sectionView,
+  });
+  moveContext.current = { active, editingBlocked, doc, layers, tool, beginPickup, sectionView };
   useEffect(() => {
     let previous: CanvasBounds | null = null;
     let windowWidth = window.innerWidth;
@@ -688,24 +737,37 @@ export default function Canvas({
       ...textBounds,
       ...(layers.symbols
         ? [
-            ...doc.parts,
-            ...doc.parts.flatMap((p) =>
-              visibleSchematicPins(p, doc.libraries[p.libId]).map((pin) => pin.point),
-            ),
+            ...doc.parts.filter((part) => displayedIds.has(part.id)),
+            ...doc.parts
+              .filter((part) => displayedIds.has(part.id))
+              .flatMap((p) =>
+                visibleSchematicPins(p, doc.libraries[p.libId]).map((pin) => pin.point),
+              ),
           ]
         : []),
-      ...(layers.wires ? [...doc.wires.flatMap((w) => [w.a, w.b]), ...doc.junctions] : []),
-      ...(layers.labels ? doc.labels : []),
-      ...(layers.noConnects ? doc.noConnects || [] : []),
+      ...(layers.wires
+        ? [
+            ...doc.wires.filter((wire) => displayedIds.has(wire.id)).flatMap((w) => [w.a, w.b]),
+            ...doc.junctions.filter((point) => displayedIds.has(point.id)),
+          ]
+        : []),
+      ...(layers.labels ? doc.labels.filter((label) => displayedIds.has(label.id)) : []),
+      ...(layers.noConnects
+        ? (doc.noConnects || []).filter((point) => displayedIds.has(point.id))
+        : []),
       ...doc.parts.flatMap((p) =>
         [
-          ...(layers.references && !p.ref.startsWith('#')
+          ...(displayedIds.has(fieldId(p.id, 'Reference'))
             ? [symbolAnnotation(p, doc.libraries[p.libId], 'Reference')]
             : []),
-          ...(layers.values ? [symbolAnnotation(p, doc.libraries[p.libId], 'Value')] : []),
+          ...(displayedIds.has(fieldId(p.id, 'Value'))
+            ? [symbolAnnotation(p, doc.libraries[p.libId], 'Value')]
+            : []),
         ].filter((p): p is NonNullable<typeof p> => !!p),
       ),
-      ...(layers.notes ? schematicTexts(doc.original) : []),
+      ...(layers.notes
+        ? schematicTexts(doc.original).filter((text) => displayedIds.has(text.id))
+        : []),
       ...(layers.notes ? schematicPolylines(doc.original).flatMap((line) => line.points) : []),
     ];
     if (!pts.length) {
@@ -744,18 +806,19 @@ export default function Canvas({
   }, [active, fitKey, ratio]);
   const handledRuleFocus = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!active || !ruleFocus || handledRuleFocus.current === ruleFocus.request) return;
-    handledRuleFocus.current = ruleFocus.request;
+    if (!active || !sectionRuleFocus || handledRuleFocus.current === sectionRuleFocus.request)
+      return;
+    handledRuleFocus.current = sectionRuleFocus.request;
     cancelGesture();
-    if (ruleFocus.location) {
+    if (sectionRuleFocus.location) {
       // Explicit navigation wins over the delayed initial whole-sheet Fit.
       fittedKey.current = fitKey;
-      const { x, y } = ruleFocus.location;
+      const { x, y } = sectionRuleFocus.location;
       setView((current) => {
         const width = Math.max(20, Math.min(current.width, 80));
         const pixels = Math.max(1, svg.current?.getBoundingClientRect().width ?? canvasWidth);
         const occluded = Math.min(
-          Math.max(0, ruleFocus.occludedWidth ?? 0),
+          Math.max(0, sectionRuleFocus.occludedWidth ?? 0),
           Math.max(0, pixels - 16),
         );
         return {
@@ -765,7 +828,7 @@ export default function Canvas({
         };
       });
     }
-  }, [active, ruleFocus, ratio, canvasWidth, fitKey]);
+  }, [active, sectionRuleFocus, ratio, canvasWidth, fitKey]);
   useEffect(() => {
     const start = tool === 'wire' ? pendingWire.current : null;
     cancelGesture();
@@ -786,6 +849,7 @@ export default function Canvas({
         live.editingBlocked ||
         live.doc !== doc ||
         live.layers !== layers ||
+        live.sectionView !== sectionView ||
         live.tool !== tool ||
         moveRequest.schematicId !== live.doc.id ||
         hasOpenOverlay()
@@ -805,9 +869,18 @@ export default function Canvas({
     doc,
     tool,
     visibleIds,
+    sectionView,
     navigationRequest,
   });
-  navigationContext.current = { active, editingBlocked, doc, tool, visibleIds, navigationRequest };
+  navigationContext.current = {
+    active,
+    editingBlocked,
+    doc,
+    tool,
+    visibleIds,
+    sectionView,
+    navigationRequest,
+  };
   useEffect(() => {
     if (!navigationRequest || handledNavigationRequest.current === navigationRequest.id) return;
     const frame = requestAnimationFrame(() => {
@@ -823,6 +896,7 @@ export default function Canvas({
         live.navigationRequest !== navigationRequest ||
         live.doc !== navigationRequest.basis ||
         live.tool !== navigationRequest.tool ||
+        live.sectionView !== sectionView ||
         pointerId.current !== null ||
         hasOpenOverlay()
       )
@@ -1024,8 +1098,17 @@ export default function Canvas({
       if (placement) d.libraries[part.libId] = structuredClone(placement.symbol);
       part.rotation = placementRotation;
       d.parts.push(part);
-      if (!onCommit(d)) return;
-      onSelect(part.id);
+      const prepared = prepareSchematicSection(
+        d,
+        [part.id],
+        sectionView === 'simulation' ? 'simulation' : 'hardware',
+      );
+      if (onPlacePart) {
+        if (!onPlacePart(prepared, part.id)) return;
+      } else {
+        if (!onCommit(prepared)) return;
+        onSelect(part.id);
+      }
       setTool('select');
     } else if (tool === 'wire') addWire(p);
     else if (tool === 'label' || tool === 'global-label') {
@@ -1195,7 +1278,7 @@ export default function Canvas({
   function probeTarget(e: React.PointerEvent): ProbeTarget | null {
     const hit = e.target as Element;
     const pin = hit.closest<SVGElement>('[data-probe-pin]');
-    if (pin && layers.symbols)
+    if (pin && layers.symbols && visibleIds.has(pin.dataset.probePart!))
       return { kind: 'voltage', id: pin.dataset.probePart!, pin: Number(pin.dataset.probePin) };
     const id = hit.closest<SVGElement>('[data-selection-id]')?.dataset.selectionId;
     if (!id || !visibleIds.has(id)) return null;
@@ -1860,6 +1943,7 @@ export default function Canvas({
         />
         <SchematicDrawing
           drawing={drawing}
+          sectionIds={drawingSectionIds}
           libraries={doc.libraries}
           junctions={drawingJunctions}
           selection={selection}
@@ -1891,7 +1975,7 @@ export default function Canvas({
             />
           ))}
         <RuleCheckMarker
-          location={showRuleMarker ? ruleFocus?.location : undefined}
+          location={showRuleMarker ? sectionRuleFocus?.location : undefined}
           radius={(view.width / canvasWidth) * 8}
         />
         {box && (
@@ -2002,7 +2086,7 @@ export default function Canvas({
       <CanvasContextMenu
         target={svg}
         active={active}
-        identity={doc}
+        identity={contextIdentity}
         onError={(message) => onNotify?.(message)}
         onOpen={(target) => {
           if (

@@ -4029,6 +4029,35 @@ body[data-workspace-resizing='true'] * {
 .status-trailing .draft-status {
   max-width: 30cqw;
 }
+.schematic-editor-status.status-bar-centered:has(.status-center > .status-coordinate) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(0, 1fr);
+  gap: 8px;
+  padding-inline: var(--status-control-inset);
+  overflow: hidden;
+}
+.schematic-editor-status > .status-trailing {
+  gap: 7px;
+}
+.schematic-editor-status .draft-status {
+  max-width: 14cqw;
+}
+.schematic-section-property {
+  margin-bottom: 8px;
+}
+@container editor-status (max-width: 580px) {
+  .schematic-editor-status > .status-center,
+  .schematic-editor-status .draft-status {
+    display: none;
+  }
+  .schematic-editor-status > .status-trailing {
+    grid-column: 2 / 4;
+  }
+}
+@container editor-status (max-width: 340px) {
+  .schematic-editor-status .grid-density {
+    display: none;
+  }
+}
 .status-center .pcb-model-status {
   position: static;
   display: block;
@@ -5277,33 +5306,18 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   backdrop-filter: none;
 }
 
-.surface-dialog-compact {
-  width: var(--dialog-confirm-width);
-}
-
-.surface-dialog-compact .dialog-header {
-  padding-block: 6px;
-  border-bottom: 0;
-  background: var(--surface);
-}
-
-.surface-dialog-compact .dialog-content {
-  padding-bottom: 8px;
-}
-
-.surface-dialog-compact .dialog-document {
-  padding-block: 2px;
-}
-
-.surface-dialog-compact .dialog-footer {
-  padding-block: 6px;
-}
-
 .surface-dialog-anchored {
+  width: 520px;
   position: fixed;
   inset: auto;
   margin: 0;
   max-width: calc(100vw - 16px);
+}
+.surface-dialog-anchored:where(.surface-dialog-compact) {
+  width: 360px;
+}
+.surface-dialog-anchored:where(.surface-dialog-wide) {
+  width: 840px;
 }
 .surface-dialog-anchored {
   border-radius: var(--radius);
@@ -5374,21 +5388,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   color: var(--text-strong);
 }
 
-.dialog-icon > svg {
-  width: 16px;
-  height: 16px;
-}
-
-.surface-dialog-compact .dialog-icon {
-  display: none;
-}
-
-.surface-dialog-compact .dialog-header h2 {
-  font-size: var(--font-body);
-}
-
-.surface-dialog-compact .dialog-button {
-  font-size: var(--font-small);
+.dialog-icon > :is(svg, img) {
+  width: 20px;
+  height: 20px;
 }
 
 .dialog-document > svg {
@@ -5426,7 +5428,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   overflow: auto;
   overscroll-behavior: contain;
   min-height: 0;
-  padding: 0 var(--dialog-inset) var(--dialog-inset);
+  padding: var(--dialog-inset);
   scrollbar-gutter: stable;
 }
 
@@ -5435,8 +5437,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  gap: 6px;
-  padding: 8px var(--dialog-inset);
+  gap: 8px;
+  padding: 6px var(--dialog-inset);
   border-top: 1px solid var(--line-soft);
   background: var(--panel);
   flex-wrap: wrap;
@@ -5445,7 +5447,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .dialog-footer-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
   min-width: 0;
@@ -5506,14 +5508,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 .select-popup.rail-menu .select-option {
   border-radius: var(--radius);
-}
-.surface-dialog.settings-dialog {
-  width: min(900px, calc(100vw - 64px));
-  height: min(680px, calc(100dvh - var(--desktop-titlebar-height, 0px) - 64px));
-}
-.settings-dialog > .dialog-header {
-  border-bottom: 1px solid var(--line-soft);
-  padding: 10px 16px;
 }
 .settings-dialog > .dialog-content {
   flex: 1;
@@ -5603,9 +5597,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 .settings-section-header .settings-section-heading {
   margin-bottom: 0;
-}
-.settings-dialog > .dialog-footer {
-  padding: 8px 16px;
 }
 @media (max-width: 760px) {
   .settings-sidebar {
@@ -6036,8 +6027,16 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   border: 1px solid var(--field-border);
   border-radius: var(--radius);
   min-height: var(--control-height);
-  padding: 4px 8px;
+  height: var(--control-height);
+  flex-shrink: 0;
+  padding: 0 8px;
   gap: 6px;
+}
+.library-search input {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
 }
 
 .library-search input:focus-visible {
@@ -6046,8 +6045,18 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 .library-search-submit {
   flex-shrink: 0;
-  min-height: 26px;
-  padding: 3px 10px;
+  min-height: 0;
+  height: calc(var(--control-height) - 2px);
+  padding: 0 10px;
+}
+.dialog-footer .dialog-footer-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0;
 }
 
 .connection-item {
@@ -6240,6 +6249,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .select-popup.grid-density-popup {
   --menu-width: 88px;
   padding: 4px;
+}
+.select-popup.status-mode-popup {
+  --menu-width: 128px;
 }
 
 .grid-density-popup .select-option {
@@ -6926,9 +6938,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   cursor: pointer;
 }
 
-.surface-dialog-wide {
-  width: var(--dialog-library-width);
-}
 .component-preview .symbol-graphic :is(path, line, circle, rect, polyline, polygon) {
   vector-effect: non-scaling-stroke;
   stroke-width: 1.5px;
@@ -6938,7 +6947,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 12px 0 10px;
+  margin: 0 0 10px;
 }
 .library-result-status {
   position: absolute;
@@ -6950,19 +6959,34 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.library-actions {
+.dialog-footer-toolbar {
   margin-left: auto;
+  width: 100%;
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
+.library-chooser > .dialog-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.library-chooser .library-browser {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
 .library-source-filters {
   display: grid;
-  grid-template-columns: minmax(96px, 0.45fr) minmax(140px, 1fr);
+  grid-template-columns: minmax(96px, 28%) minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   gap: 8px;
+}
+.library-source-filters[data-source='NextPCB'] {
+  grid-template-columns: minmax(96px, 28%) repeat(2, minmax(0, 1fr));
 }
 .library-source-filters > .select-trigger {
   min-width: 0;
@@ -7024,6 +7048,12 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   grid-template-columns: minmax(0, 1.5fr) minmax(64px, 0.85fr);
   gap: 10px;
 }
+.library-browse-scope {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
 .library-result-columns {
   position: sticky;
   top: -6px;
@@ -7033,18 +7063,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   background: var(--panel);
   color: var(--muted);
   font-size: var(--font-caption);
-}
-.library-component-results button {
-  min-height: 46px;
-}
-.library-result-identity {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.library-component-results .library-result-identity small {
-  max-width: 100%;
 }
 .library-result-package {
   min-width: 0;
@@ -7125,6 +7143,14 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   margin: 8px 0;
 }
 @media (max-width: 600px) {
+  .library-source-filters,
+  .library-source-filters[data-source='NextPCB'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .library-source-filters > .select-trigger:first-child,
+  .library-source-filters[data-source='KiCad'] > .select-trigger:last-child {
+    grid-column: 1 / -1;
+  }
   .library-chooser .library-filter {
     flex-wrap: wrap;
   }
@@ -8412,31 +8438,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .global-net-label {
   fill: var(--schematic-global-label);
 }
-/* List and Git share window chrome around their own content. */
-.independent-window > .dialog-header {
-  padding: 10px var(--dialog-inset);
-  gap: 8px;
-}
-.independent-window > .dialog-header h2 {
-  font-size: var(--font-control);
-}
-.independent-window > .dialog-header .dialog-icon {
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--muted);
-}
-.independent-window > .dialog-footer,
-.independent-window .history-footer {
-  min-height: var(--editor-footer-height);
-  padding: 2px var(--dialog-inset);
-  border-top: 1px solid var(--line-soft);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: var(--font-caption);
-}
 .parts-panel-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -8455,8 +8456,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 .surface-dialog.parts-panel {
-  width: 900px;
-  height: 680px;
   --parts-columns: calc(3.7 * var(--font-control)) minmax(0, 0.8fr) minmax(0, 1.5fr);
 }
 .parts-panel .dialog-content {
@@ -8555,10 +8554,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   width: 30px;
   height: 30px;
   padding: 0;
-}
-.surface-dialog.project-history-dialog {
-  width: min(1320px, calc(100vw - 48px));
-  height: min(860px, calc(100dvh - 48px));
 }
 .project-history-dialog > .dialog-content {
   display: flex;
@@ -8914,11 +8909,12 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .history-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  min-height: 34px;
+  gap: 8px;
+  min-height: calc(var(--control-height) + var(--dialog-inset) + 1px);
   align-items: center;
-  padding: 4px 10px;
-  border-top: 1px solid var(--line);
+  padding: 6px var(--dialog-inset);
+  border-top: 1px solid var(--line-soft);
+  background: var(--panel);
   color: var(--muted);
   font-size: var(--font-caption);
 }

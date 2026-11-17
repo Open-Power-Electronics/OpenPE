@@ -66,13 +66,23 @@ Reviewed datasheets are host references outside Core native files, drafts, undo 
 
 The PCB links to the primary schematic; commands identify sheet/board explicitly. Complete canonical replacement still validates supported bounded content. Native access resolves opaque grants in Electron; no command accepts arbitrary paths, executables or download URLs.
 
-Layout Parasitics prepares a labelled R/L study block from the current board in
+Layout Parasitics prepares a labelled R/L series insertion from the current board in
 an explicitly identified existing schematic through its pure domain helper. Its
 plugin command passes the complete prepared project to
 `ProjectCore.commitProject`, retaining Source/close gates, validation and one
-whole-project undo. Original schematic objects and PCB data remain intact under
-the same Core ownership. [Layout](LAYOUT.md#parasitic-study-schematics) owns study semantics;
+whole-project undo. The accepted edit includes the bounded end-lead cut,
+connection labels, compact block and explicit native group properties. Core's
+validated PCB-only conductive projection preserves the measured physical board;
+SPICE observes the actual native schematic topology. [Layout](LAYOUT.md#parasitic-study-schematics) owns insertion semantics;
 [API](API.md#layout-parasitics-capabilities) owns the command contract.
+
+Schematic section edits use the pure `lib/schematic-section.ts` preparation and
+shared `part.section` command. Native board-inclusion flags, Footprint assignment,
+linked package removal and complete-project undo remain Core data; Real / Virtual / All
+emphasis and interaction eligibility stay in Workbench/Canvas presentation. Filtering never submits a
+partial schematic back to Core or changes solver connectivity. [Format](FORMAT.md#document-ownership)
+owns native membership and [Design](../DESIGN.md#real-and-virtual-sections)
+owns section controls.
 
 GUI design operations and Agent commands share domain preparation, not only the
 final validator. Label placement/Properties and no-connect placement use

@@ -59,6 +59,8 @@ export default function Dialog({
   const composing = useRef(false);
   const [isMaximized, setMaximized] = useState(false);
   const maximized = maximizable && isMaximized;
+  const centered = !anchorRef && !anchorPoint;
+  const settingsWindow = centered && !compact;
   const hasContent = children !== undefined;
   const [placementRevision, setPlacementRevision] = useState(0);
   const [localSize, setLocalSize] = useState<InspectorSize>({});
@@ -299,10 +301,20 @@ export default function Dialog({
               maxWidth: 'none',
               maxHeight: 'none',
             }
-          : { width: size.width, height: size.height }
+          : centered
+            ? {
+                width:
+                  size.width ?? (compact ? 'var(--dialog-compact-width)' : 'var(--dialog-width)'),
+                height: size.height ?? (settingsWindow ? 'var(--dialog-height)' : undefined),
+                maxWidth: 'calc(100vw - 48px)',
+                maxHeight: 'calc(100dvh - var(--desktop-titlebar-height, 0px) - 48px)',
+              }
+            : { width: size.width, height: size.height }
       }
       data-maximized={maximized || undefined}
-      data-resized-height={maximized || size.height !== undefined ? true : undefined}
+      data-resized-height={
+        settingsWindow || maximized || size.height !== undefined ? true : undefined
+      }
       aria-label={label}
       aria-describedby={hasContent ? id : undefined}
       aria-modal={modal}

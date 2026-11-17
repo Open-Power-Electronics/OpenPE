@@ -29,6 +29,7 @@ Keep one owning explanation for each mechanism. Update affected contracts and th
 - Use OpenPE / `openpe` for product copy and application-owned identities (`window.openpe`, `openpe:` IPC, `X-OpenPE-Token`, `OPENPE_*`, appearance keys, `ai.openpe.desktop`, native properties and resource IDs). Establish data under `OpenPE` or explicit `OPENPE_DATA_DIR` before setting the native name; no former-brand aliases/directory fallback.
 - Designs are native `.kicad_pro`, `.kicad_sch`, `.kicad_pcb` and supporting files. Never publish private snapshots as designs, create `.openpe.json` or disguise JSON as KiCad. Use plain circuit filenames with separate provenance/licenses.
 - Follow [Design](DESIGN.md). `public/brand/openpe-mark.svg` is the sole transparent Signal E master; regenerate derivatives with `node scripts/brand-assets.mjs`.
+- Settings and editor windows must use [Design](DESIGN.md#dialogs-and-native-actions)'s shared full `Dialog` size; functional prompts use the shared compact size and content height. All modes share header/footer chrome, with no feature-specific frame overrides. Anchored contextual panels retain the documented intrinsic sizing.
 - Field dropdowns must obey [Design](DESIGN.md#typography-spacing-and-shapes)'s mandatory equal-width rule: their root popup matches the originating selection field, never its content width.
 
 ## Architecture and ownership

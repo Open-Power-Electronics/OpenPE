@@ -24,24 +24,30 @@ async function fixture(t: TestContext) {
   return { root, plugins };
 }
 
-test('a fifth built-in plugin uses the same catalog contract without changing platform IDs', () => {
-  const fifth = {
+test('an additional built-in plugin uses the same catalog contract without changing platform IDs', () => {
+  const additional = {
     ...bundledPlugins[0],
     id: 'utility@example',
     projectDirectory: 'utility',
     contributes: { capabilities: ['utility.calculate'] },
   };
-  assert.equal(createPluginCatalog([...bundledPlugins, fifth]).length, 5);
+  assert.equal(
+    createPluginCatalog([...bundledPlugins, additional]).length,
+    bundledPlugins.length + 1,
+  );
   assert.throws(
-    () => createPluginCatalog([...bundledPlugins, { ...fifth, projectDirectory: 'models' }]),
+    () => createPluginCatalog([...bundledPlugins, { ...additional, projectDirectory: 'models' }]),
     /directory/,
   );
-  assert.throws(() => createPluginCatalog([...bundledPlugins, fifth, fifth]), /Duplicate/);
+  assert.throws(
+    () => createPluginCatalog([...bundledPlugins, additional, additional]),
+    /Duplicate/,
+  );
   assert.throws(
     () =>
       createPluginCatalog([
         ...bundledPlugins,
-        { ...fifth, contributes: bundledPlugins[0].contributes },
+        { ...additional, contributes: bundledPlugins[0].contributes },
       ]),
     /Duplicate/,
   );

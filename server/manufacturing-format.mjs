@@ -5539,6 +5539,32 @@ var manifest_default4 = {
   projectDirectory: "layout-parasitics"
 };
 
+// plugins/emc-analysis/manifest.json
+var manifest_default5 = {
+  id: "emc-analysis@openpe",
+  name: "EMC Analysis",
+  description: "Review EMC layout intent, geometric findings and missing evidence.",
+  detail: "Declare critical and sensitive nets, reference copper, decoupling and connector intent. Inspect actual PCB geometry with your own review limits, locate measured findings, record manual reviews and justified exceptions, and download traceable HTML or JSON reports. Missing evidence stays unverified. No regulatory compliance or certification assessment.",
+  version: "1.1.0",
+  author: "OpenPE",
+  category: "PCB design",
+  capabilities: [
+    "Explicit PCB design intent",
+    "Geometric EMC screening",
+    "Measured findings and remediation",
+    "Board occurrence locating",
+    "Manual review and justified exceptions",
+    "HTML and JSON review reports"
+  ],
+  apiVersion: 1,
+  runtime: "builtin",
+  permissions: [],
+  contributes: {
+    capabilities: ["emc.inspectLayout", "emc.reviewLayout"]
+  },
+  projectDirectory: "emc-analysis"
+};
+
 // plugins/runtime/manifest.mjs
 var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 var text = (value, max = 200) => typeof value === "string" && value.length > 0 && value.length <= max && !value.includes("\0");
@@ -5613,11 +5639,12 @@ function createPluginCatalog(manifests) {
 }
 
 // plugins/catalog.mjs
-var bundledPlugins = createPluginCatalog([manifest_default, manifest_default2, manifest_default3, manifest_default4]);
+var bundledPlugins = createPluginCatalog([manifest_default, manifest_default2, manifest_default3, manifest_default4, manifest_default5]);
 var SPICE_PLUGIN_ID = manifest_default.id;
 var THERMAL_PLUGIN_ID = manifest_default2.id;
 var PCB_DESIGN_PLUGIN_ID = manifest_default3.id;
 var LAYOUT_PARASITICS_PLUGIN_ID = manifest_default4.id;
+var EMC_PLUGIN_ID = manifest_default5.id;
 
 // plugins/runtime/project-data.mjs
 function pluginProjectDirectory(id) {
@@ -7630,9 +7657,9 @@ function groupCircuit(circuit, joinNames = true) {
   const physical = /* @__PURE__ */ new Map();
   for (const part of circuit.parts) {
     const library = circuit.libraries[part.libId];
-    const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
+    const definitions2 = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
     const positions = pinPositions(part, library);
-    definitions.forEach((pin, i) => {
+    definitions2.forEach((pin, i) => {
       const index = add(positions[i]), number5 = val(child(pin, "number"));
       const key2 = JSON.stringify([part.ref, number5]);
       const previous = physical.get(key2);
@@ -7642,7 +7669,7 @@ function groupCircuit(circuit, joinNames = true) {
         { key: documentPinKey(part.id, number5), index },
         { key: documentPhysicalPinKey(part.ref, number5), index }
       );
-      if (child(library, "power") && definitions.length === 1 && val(pin) === "power_in")
+      if (child(library, "power") && definitions2.length === 1 && val(pin) === "power_in")
         names.push({ name: part.value, index });
       else if (val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
         names.push({ name: val(child(pin, "name")), index });
@@ -9544,7 +9571,7 @@ function nativeSchematicFingerprint(project, circuit) {
   const owned = isOwnedProject(project) && isOwnedCircuit(circuit);
   const cached = owned ? ownedNativeSchematicFingerprints.get(circuit) : void 0;
   if (cached !== void 0) return cached;
-  const { schematic, libraries } = toProjectDocument(
+  const { schematic, libraries: libraries2 } = toProjectDocument(
     { ...project, schematic: circuit, additionalSchematics: void 0, pcb: null },
     true
   );
@@ -9567,7 +9594,7 @@ function nativeSchematicFingerprint(project, circuit) {
   });
   const fingerprint = JSON.stringify([
     components ? { ...schematic, components } : schematic,
-    libraries
+    libraries2
   ]);
   if (owned && fingerprint.length <= MAX_PROJECT_BYTES)
     ownedNativeSchematicFingerprints.set(circuit, fingerprint);
@@ -10829,6 +10856,4739 @@ function exportBoardOutlineDxf(board) {
   return pairs.join("\r\n");
 }
 
+// lib/reference-simulation.json
+var reference_simulation_default = {
+  profiles: [
+    {
+      id: "reference-lm2596-to220-5-buck",
+      title: "LM2596 Buck",
+      stop: 0.01,
+      input: {
+        pin: "1",
+        minimum: 4.5,
+        maximum: 40,
+        initialLimit: 40
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "C2",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "330uF"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "3.09k"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Schottky",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Schottky"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm2596_to220_5_buck",
+          signature: '["1",["-10.16","5.08","0"],["2.54"],"power_in"]|["2",["10.16","5.08","180"],["2.54"],"power_out"]|["3",["2.54","-8.89","90"],["2.54"],"power_in"]|["4",["10.16","0","180"],["2.54"],"input"]|["5",["-10.16","0","0"],["2.54"],"input"]',
+          kind: "X",
+          terminals: [
+            "1",
+            "4",
+            "2",
+            "3",
+            "5"
+          ],
+          pinOrder: [
+            "1",
+            "4",
+            "2",
+            "3",
+            "5"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "OPENPE_DERIVED_LM2596_ADJ_TRANS",
+            "Sim.Library": "OpenPE:lm2596-adj-derived",
+            "Sim.Pins": "1=1 4=2 2=3 3=4 5=5"
+          },
+          modelId: "lm2596-5",
+          modelName: "OPENPE_DERIVED_LM2596_ADJ_TRANS",
+          value: "LM2596T-ADJ"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uF"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1.01k"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "330uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=12"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-tps61046-bga6-boost",
+      title: "TPS61046 Boost",
+      stop: 2e-3,
+      input: {
+        pin: "A1",
+        minimum: 1.8,
+        maximum: 5.5,
+        initialLimit: 28
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10.2k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "TP1",
+          libId: "Connector:TestPoint",
+          signature: '["1",["0","0","90"],["2.54"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "TestPoint"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uH"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_tps61046_bga6_boost",
+          signature: '["A1",["-7.62","2.54","0"],["2.54"],"power_in"]|["A2",["0","-11.43","90"],["2.54"],"power_in"]|["B1",["7.62","-2.54","180"],["2.54"],"input"]|["B2",["7.62","2.54","180"],["2.54"],"power_out"]|["C1",["-7.62","-2.54","0"],["2.54"],"input"]|["C2",["7.62","0","180"],["2.54"],"power_out"]',
+          kind: "X",
+          terminals: [
+            "A1",
+            "C1",
+            "A2",
+            "B1",
+            "C2",
+            "B2"
+          ],
+          pinOrder: [
+            "A1",
+            "C1",
+            "A2",
+            "B1",
+            "C2",
+            "B2"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "TPS61046_TRANS",
+            "Sim.Library": "TI:reference-tps61046",
+            "Sim.Pins": "A1=1 C1=2 A2=3 B1=4 C2=5 B2=6",
+            "Sim.Params": "STEADY=1"
+          },
+          modelId: "reference-tps61046",
+          modelName: "TPS61046_TRANS",
+          value: "TPS61046"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "232k"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=3.3"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1000"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: false
+    },
+    {
+      id: "reference-lm2735-msop8-sepic",
+      title: "LM2735 SEPIC",
+      stop: 0.01,
+      input: {
+        pin: "3",
+        minimum: 2.7,
+        maximum: 5.5,
+        initialLimit: 24
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "649k"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "60.4k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "330pF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Schottky",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Schottky"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J3",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L2",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uH"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm2735_msop8_sepic",
+          signature: '["1",["-6.35","-2.54","0"],["1.27"],"no_connect"]|["2",["0","-8.89","90"],["2.54"],"power_in"]|["3",["-7.62","2.54","0"],["2.54"],"power_in"]|["4",["-7.62","0","0"],["2.54"],"input"]|["5",["7.62","0","180"],["2.54"],"input"]|["6",["2.54","-8.89","90"],["2.54"],"power_in"]|["7",["7.62","2.54","180"],["2.54"],"power_out"]|["8",["-6.35","-5.08","0"],["1.27"],"no_connect"]|["9",["0","-8.89","90"],["2.54"],"power_in"]',
+          kind: "X",
+          terminals: [
+            "3",
+            "4",
+            "7",
+            "5",
+            "2"
+          ],
+          pinOrder: [
+            "3",
+            "4",
+            "7",
+            "5",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM2735Y_TRANS",
+            "Sim.Library": "TI:reference-lm2735y",
+            "Sim.Pins": "3=1 4=2 7=3 5=4 2=5"
+          },
+          modelId: "reference-lm2735y",
+          modelName: "LM2735Y_TRANS",
+          value: "LM2735Y"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "180k"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=5 td=0 tr=10u tf=10u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lm25017-wson8-flybuck",
+      title: "LM25017 Fly-Buck",
+      stop: 0.01,
+      input: {
+        pin: "2",
+        minimum: 4.5,
+        maximum: 48,
+        initialLimit: 48
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "C8",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7uF"
+        },
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND2"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.01uF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "124k"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "R4",
+          libId: "R_1",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "46.4k"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.47uF"
+        },
+        {
+          ref: "J3",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100k"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm25017_wson8_flybuck",
+          signature: '["1",["1.27","-13.97","90"],["2.54"],"power_in"]|["2",["-8.89","1.27","0"],["2.54"],"power_in"]|["3",["-8.89","-6.35","0"],["2.54"],"input"]|["4",["-8.89","-2.54","0"],["2.54"],"input"]|["5",["11.43","-6.35","180"],["2.54"],"input"]|["6",["11.43","-2.54","180"],["2.54"],"power_out"]|["7",["11.43","6.35","180"],["2.54"],"input"]|["8",["11.43","2.54","180"],["2.54"],"power_out"]|["9",["-1.27","-13.97","90"],["2.54"],"passive"]',
+          kind: "X",
+          terminals: [
+            "4",
+            "1",
+            "9",
+            "5",
+            "8",
+            "7",
+            "6",
+            "2",
+            "3"
+          ],
+          pinOrder: [
+            "4",
+            "1",
+            "9",
+            "5",
+            "8",
+            "7",
+            "6",
+            "2",
+            "3"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM25017",
+            "Sim.Library": "TI:reference-lm25017",
+            "Sim.Pins": "4=1 1=2 9=3 5=4 8=5 7=6 6=7 2=8 3=9"
+          },
+          modelId: "reference-lm25017",
+          modelName: "LM25017",
+          value: "LM25017"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR010",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND2"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Inductor_Wurth_WE-DD:7345straight_744877101",
+          signature: '["1",["-5.08","2.54","0"],["2.54"],"passive"]|["2",["5.08","2.54","180"],["2.54"],"passive"]|["3",["5.08","-2.54","180"],["2.54"],"passive"]|["4",["-5.08","-2.54","0"],["2.54"],"passive"]',
+          kind: "T",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uH"
+        },
+        {
+          ref: "R6",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "24.9k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "127k"
+        },
+        {
+          ref: "C7",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "C5",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10nF"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C6",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1nF"
+        },
+        {
+          ref: "D2",
+          libId: "Device:D",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "11.8k"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=24 td=0 tr=100u tf=100u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R7",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "R8",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR3",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG3",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true,
+      magnetic: {
+        ref: "L1"
+      }
+    },
+    {
+      id: "reference-lm5001-soic8-boost",
+      title: "LM5001 Boost",
+      stop: 0.01,
+      input: {
+        pin: "2",
+        minimum: 3.1,
+        maximum: 75,
+        initialLimit: 75
+      },
+      step: 1e-8,
+      parts: [
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "54.9k"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "60.4k"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1uF"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "52.3k"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm5001_soic8_boost",
+          signature: '["1",["10.16","7.62","180"],["2.54"],"open_collector"]|["2",["0","12.7","270"],["2.54"],"power_in"]|["3",["10.16","-7.62","180"],["2.54"],"passive"]|["4",["0","-12.7","90"],["2.54"],"power_in"]|["5",["-10.16","-2.54","0"],["2.54"],"passive"]|["6",["10.16","-2.54","180"],["2.54"],"input"]|["7",["10.16","2.54","180"],["2.54"],"open_collector"]|["8",["-10.16","2.54","0"],["2.54"],"input"]',
+          kind: "X",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM5001_TRANS",
+            "Sim.Library": "TI:reference-lm5001",
+            "Sim.Pins": "1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8"
+          },
+          modelId: "reference-lm5001",
+          modelName: "LM5001_TRANS",
+          value: "LM5001"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "73.2k"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R6",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1.47k"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "6.04k"
+        },
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Diode:1N4149",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "1N4149"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uH"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7uF"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=24 td=0 tr=10u tf=10u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R7",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lm27761-wson8-pump",
+      title: "LM27761 Charge Pump",
+      stop: 2e-3,
+      input: {
+        pin: "1",
+        minimum: 2.7,
+        maximum: 5.5,
+        initialLimit: 5.5
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "17.4k"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10.2k"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7uF"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_02x02_Top_Bottom",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]|["3",["7.62","0","180"],["3.81"],"passive"]|["4",["7.62","-2.54","180"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_02x02_Top_Bottom"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_02x02_Top_Bottom",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]|["3",["7.62","0","180"],["3.81"],"passive"]|["4",["7.62","-2.54","180"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_02x02_Top_Bottom"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1uF"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "2.2uF"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm27761_wson8_pump",
+          signature: '["1",["-10.16","7.62","0"],["2.54"],"power_in"]|["2",["0","-12.7","90"],["2.54"],"power_in"]|["3",["10.16","-2.54","180"],["2.54"],"power_out"]|["4",["10.16","7.62","180"],["2.54"],"power_out"]|["5",["10.16","2.54","180"],["2.54"],"input"]|["6",["-10.16","5.08","0"],["2.54"],"input"]|["7",["-10.16","-7.62","0"],["2.54"],"passive"]|["8",["-10.16","0","0"],["2.54"],"passive"]|["9",["2.54","-12.7","90"],["2.54"],"power_in"]',
+          kind: "X",
+          terminals: [
+            "7",
+            "8",
+            "6",
+            "5",
+            "3",
+            "1",
+            "4",
+            "9",
+            "2"
+          ],
+          pinOrder: [
+            "7",
+            "8",
+            "6",
+            "5",
+            "3",
+            "1",
+            "4",
+            "9",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM27761_TRANS",
+            "Sim.Library": "TI:reference-lm27761",
+            "Sim.Pins": "7=1 8=2 6=3 5=4 3=5 1=6 4=7 9=8 2=9"
+          },
+          modelId: "reference-lm27761",
+          modelName: "LM27761_TRANS",
+          value: "LM27761"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=5"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lmr12010-sot236-buck",
+      title: "LMR12010 Buck",
+      stop: 0.01,
+      input: {
+        pin: "5",
+        minimum: 3,
+        maximum: 20,
+        initialLimit: 20
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J4",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22uF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22.1k"
+        },
+        {
+          ref: "J1",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "J5",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "J2",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Filled",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Filled"
+        },
+        {
+          ref: "J3",
+          libId: "Connector:Screw_Terminal_01x01",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Screw_Terminal_01x01"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "118k"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "D2",
+          libId: "Device:D_Filled",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Filled"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lmr12010_sot236_buck",
+          signature: '["1",["12.7","5.08","180"],["2.54"],"input"]|["2",["0","-10.16","90"],["2.54"],"power_in"]|["3",["12.7","-5.08","180"],["2.54"],"input"]|["4",["-12.7","0","0"],["2.54"],"input"]|["5",["-12.7","5.08","0"],["2.54"],"power_in"]|["6",["12.7","0","180"],["2.54"],"output"]',
+          kind: "X",
+          terminals: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          pinOrder: [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LMR12010X_TRANS",
+            "Sim.Library": "TI:reference-lmr12010x",
+            "Sim.Pins": "1=1 2=2 3=3 4=4 5=5 6=6"
+          },
+          modelId: "reference-lmr12010x",
+          modelName: "LMR12010X_TRANS",
+          value: "LMR12010X"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100k"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C5",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "15uF"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "82uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VPULSE",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "PULSE",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "y1=0 y2=12 td=0 tr=10u tf=10u tw=1 per=2"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lmr70503-bga8-buckboost",
+      title: "LMR70503 Buck-Boost",
+      stop: 0.01,
+      input: {
+        pin: "D2",
+        minimum: 2.8,
+        maximum: 5.5,
+        initialLimit: 5.5
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "511k"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22uF"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {
+            "Sim.Device": "D",
+            "Sim.Pins": "1=K 2=A"
+          },
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lmr70503_bga8_buckboost",
+          signature: '["A1",["8.89","-7.62","180"],["2.54"],"output"]|["A2",["8.89","-3.81","180"],["2.54"],"input"]|["B1",["-8.89","1.27","0"],["2.54"],"input"]|["B2",["8.89","1.27","180"],["2.54"],"output"]|["C1",["-3.81","-12.7","90"],["2.54"],"power_in"]|["C2",["0","-12.7","90"],["2.54"],"power_in"]|["D1",["8.89","6.35","180"],["2.54"],"power_out"]|["D2",["-8.89","6.35","0"],["2.54"],"power_in"]',
+          kind: "X",
+          terminals: [
+            "D2",
+            "B1",
+            "C1",
+            "A1",
+            "A2",
+            "B2",
+            "D1"
+          ],
+          pinOrder: [
+            "D2",
+            "B1",
+            "C1",
+            "A1",
+            "A2",
+            "B2",
+            "D1"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LMR70503_TRANS",
+            "Sim.Library": "TI:reference-lmr70503",
+            "Sim.Pins": "D2=1 B1=2 C1=3 A1=4 A2=5 B2=6 D1=7"
+          },
+          modelId: "reference-lmr70503",
+          modelName: "LMR70503_TRANS",
+          value: "LMR70503"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "22uF"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "300k"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "91k"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "511k"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "47pF"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=5"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9"
+      },
+      initialConditions: true
+    },
+    {
+      id: "reference-lm2598-to220-7-buck",
+      title: "LM2598 Buck",
+      stop: 0.01,
+      input: {
+        pin: "2",
+        minimum: 4.5,
+        maximum: 40,
+        initialLimit: 40
+      },
+      step: 2e-7,
+      parts: [
+        {
+          ref: "C6",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "220uF"
+        },
+        {
+          ref: "#PWR05",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R3",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "1k"
+        },
+        {
+          ref: "#PWR010",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C1",
+          libId: "Device:C_Polarized",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100uF"
+        },
+        {
+          ref: "J3",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR08",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "D1",
+          libId: "Device:D_Schottky",
+          signature: '["1",["-3.81","0","0"],["2.54"],"passive"]|["2",["3.81","0","180"],["2.54"],"passive"]',
+          kind: "D",
+          terminals: [
+            "2",
+            "1"
+          ],
+          pinOrder: [
+            "2",
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "OPENPE_BOOST_D",
+          value: "D_Schottky"
+        },
+        {
+          ref: "C3",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "R1",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "4.7k"
+        },
+        {
+          ref: "#PWR06",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR03",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "R4",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "3k"
+        },
+        {
+          ref: "J1",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "J2",
+          libId: "Connector_Generic:Conn_01x02",
+          signature: '["1",["-5.08","0","0"],["3.81"],"passive"]|["2",["-5.08","-2.54","0"],["3.81"],"passive"]',
+          kind: "power",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "Conn_01x02"
+        },
+        {
+          ref: "#PWR07",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "U1",
+          libId: "Reference_lm2598_to220_7_buck",
+          signature: '["1",["10.16","5.08","180"],["2.54"],"power_out"]|["2",["-10.16","5.08","0"],["2.54"],"power_in"]|["3",["-10.16","0","0"],["2.54"],"open_collector"]|["4",["3.81","-8.89","90"],["2.54"],"power_in"]|["5",["0","-8.89","90"],["2.54"],"output"]|["6",["10.16","0","180"],["2.54"],"input"]|["7",["-3.81","-8.89","90"],["2.54"],"input"]',
+          kind: "X",
+          terminals: [
+            "2",
+            "6",
+            "1",
+            "4",
+            "5",
+            "7",
+            "3"
+          ],
+          pinOrder: [
+            "2",
+            "6",
+            "1",
+            "4",
+            "5",
+            "7",
+            "3"
+          ],
+          sim: {
+            "Sim.Device": "SUBCKT",
+            "Sim.Name": "LM2598_ADJ_TRANS",
+            "Sim.Library": "TI:reference-lm2598-adj",
+            "Sim.Pins": "2=1 6=2 1=3 4=4 5=5 7=6 3=7"
+          },
+          modelId: "reference-lm2598-adj",
+          modelName: "LM2598_ADJ_TRANS",
+          value: "LM2598_ADJ"
+        },
+        {
+          ref: "C4",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "0.1uF"
+        },
+        {
+          ref: "R2",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "7.1k"
+        },
+        {
+          ref: "C2",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "10uF"
+        },
+        {
+          ref: "#PWR09",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "C5",
+          libId: "Device:C",
+          signature: '["1",["0","3.81","270"],["2.794"],"passive"]|["2",["0","-3.81","90"],["2.794"],"passive"]',
+          kind: "C",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "3.3nF"
+        },
+        {
+          ref: "#PWR04",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR02",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR01",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "L1",
+          libId: "Device:L_Iron",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "L",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "33uH"
+        },
+        {
+          ref: "V1",
+          libId: "Simulation_SPICE:VDC",
+          signature: '["1",["0","5.08","270"],["2.54"],"passive"]|["2",["0","-5.08","90"],["2.54"],"passive"]',
+          kind: "V",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {
+            "Sim.Device": "V",
+            "Sim.Type": "DC",
+            "Sim.Pins": "1=+ 2=-",
+            "Sim.Params": "dc=24"
+          },
+          modelId: "",
+          modelName: "",
+          value: "${SIM.PARAMS}"
+        },
+        {
+          ref: "R5",
+          libId: "Device:R",
+          signature: '["1",["0","3.81","270"],["1.27"],"passive"]|["2",["0","-3.81","90"],["1.27"],"passive"]',
+          kind: "R",
+          terminals: [
+            "1",
+            "2"
+          ],
+          pinOrder: [
+            "1",
+            "2"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "100"
+        },
+        {
+          ref: "#PWR1",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#PWR2",
+          libId: "power:GND",
+          signature: '["1",["0","0","270"],["0"],"power_in"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "GND"
+        },
+        {
+          ref: "#FLG1",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        },
+        {
+          ref: "#FLG2",
+          libId: "power:PWR_FLAG",
+          signature: '["1",["0","0","90"],["0"],"power_out"]',
+          kind: "power",
+          terminals: [
+            "1"
+          ],
+          pinOrder: [
+            "1"
+          ],
+          sim: {},
+          modelId: "",
+          modelName: "",
+          value: "PWR_FLAG"
+        }
+      ],
+      directives: [],
+      options: {
+        itl4: "50",
+        reltol: "0.005",
+        method: "gear",
+        rshunt: "1e9",
+        cshunt: "2f"
+      },
+      initialConditions: true
+    }
+  ]
+};
+
+// lib/simulation-model-source.ts
+var definitions = reference_simulation_default.profiles.flatMap((profile) => profile.parts);
+
 // lib/pcb-sync.ts
 var pcbPinKey = (ref, number5) => JSON.stringify([ref, number5]);
 function fail5(message) {
@@ -10848,7 +15608,7 @@ function schematicPCBNets(circuit) {
   }
   return nets;
 }
-function computeSchematicPCBNets(circuit) {
+function computeSchematicPCBNets(circuit, conductorModels = []) {
   if (circuit.parts.length > 2e3 || circuit.wires.length > 1e4)
     fail5("PCB update supports at most 2,000 symbols and 10,000 wires.");
   const points2 = [], parents = [];
@@ -10869,6 +15629,10 @@ function computeSchematicPCBNets(circuit) {
     parents[root(a)] = root(b);
   };
   const names = [];
+  const conductorParts = new Set(conductorModels.flatMap((model) => model.parts.map((p) => p.id)));
+  const conductorAliases = new Set(
+    conductorModels.flatMap((model) => [model.startLabel, model.endLabel])
+  );
   const wires = circuit.wires.map((w) => {
     const a = add(w.a), b = add(w.b);
     join(a, b);
@@ -10878,21 +15642,24 @@ function computeSchematicPCBNets(circuit) {
   const physical = /* @__PURE__ */ new Map();
   for (const part of circuit.parts) {
     const library = circuit.libraries[part.libId];
-    const definitions = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
+    const definitions2 = unitGraphics(library, part.unit || 1).flatMap((s) => children(s, "pin"));
     const positions = pinPositions(part, library);
     const power = Boolean(child(library, "power"));
-    definitions.forEach((pin, i) => {
+    const modelPins = [];
+    definitions2.forEach((pin, i) => {
       const index = add(positions[i]), number5 = val(child(pin, "number"));
       const pinKey = pcbPinKey(part.ref, number5);
       const previous = physical.get(pinKey);
       if (previous !== void 0) join(index, previous);
       physical.set(pinKey, index);
-      pins.push({ key: pinKey, ref: part.ref, number: number5, index });
-      if (power && definitions.length === 1 && val(pin) === "power_in")
+      if (conductorParts.has(part.id)) modelPins.push(index);
+      else pins.push({ key: pinKey, ref: part.ref, number: number5, index });
+      if (power && definitions2.length === 1 && val(pin) === "power_in")
         names.push({ name: part.value, index });
       else if (!power && val(pin) === "power_in" && (pin.includes("hide") || val(child(pin, "hide")) === "yes"))
         names.push({ name: val(child(pin, "name")), index });
     });
+    if (modelPins.length === 2) join(modelPins[0], modelPins[1]);
   }
   circuit.labels.forEach((l) => names.push({ name: l.text, index: add(l) }));
   circuit.junctions.forEach(add);
@@ -10957,6 +15724,7 @@ function computeSchematicPCBNets(circuit) {
   });
   const groupNames = /* @__PURE__ */ new Map();
   names.forEach((n) => {
+    if (conductorAliases.has(n.name)) return;
     const r = root(n.index);
     if (!groupNames.has(r)) groupNames.set(r, /* @__PURE__ */ new Set());
     groupNames.get(r).add(n.name);
@@ -11050,7 +15818,7 @@ function exportSchematicNetlist(project) {
   const circuit = project.schematic;
   const components = /* @__PURE__ */ new Map();
   const references = /* @__PURE__ */ new Map();
-  const libraries = /* @__PURE__ */ new Map();
+  const libraries2 = /* @__PURE__ */ new Map();
   for (const part of circuit.parts) {
     const definition = circuit.libraries[part.libId];
     if (child(definition, "jumper_pin_groups") || val(child(definition, "duplicate_pin_numbers_are_jumpers")) === "yes" || child(definition, "pin_maps") || child(part.raw ?? [], "pin_map_override"))
@@ -11063,8 +15831,8 @@ function exportSchematicNetlist(project) {
     if (!components.has(part.ref)) components.set(part.ref, []);
     components.get(part.ref).push(part);
     const separator = part.libId.indexOf(":");
-    if (!libraries.has(part.libId))
-      libraries.set(part.libId, {
+    if (!libraries2.has(part.libId))
+      libraries2.set(part.libId, {
         lib: separator === -1 ? "" : part.libId.slice(0, separator),
         name: part.libId.slice(separator + 1),
         definition
@@ -11105,7 +15873,7 @@ function exportSchematicNetlist(project) {
   )) {
     units.sort((a, b) => (a.unit ?? 1) - (b.unit ?? 1));
     const first = units[0];
-    const { lib, name, definition } = libraries.get(first.libId);
+    const { lib, name, definition } = libraries2.get(first.libId);
     const { fields, flags } = componentData(first);
     const metadata = JSON.stringify({ fields, flags });
     if (new Set(units.map((part) => part.unit ?? 1)).size !== units.length || units.slice(1).some(
@@ -11160,7 +15928,7 @@ function exportSchematicNetlist(project) {
   write("  </components>");
   write("  <libparts>");
   for (const id of usedLibraries) {
-    const { lib, name, definition } = libraries.get(id);
+    const { lib, name, definition } = libraries2.get(id);
     write(`    <libpart lib="${xml(lib)}" part="${xml(name)}">`);
     const description = propertyValue(definition, "Description");
     const docs = propertyValue(definition, "Datasheet");

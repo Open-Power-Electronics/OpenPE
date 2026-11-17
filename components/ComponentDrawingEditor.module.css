@@ -1,6 +1,4 @@
 .dialog:global(.surface-dialog) {
-  width: min(1000px, calc(100vw - 48px));
-  height: min(800px, calc(100dvh - var(--desktop-titlebar-height, 0px) - 48px));
   container-type: inline-size;
 }
 .dialog > :global(.dialog-content) {
@@ -23,12 +21,10 @@
   gap: 12px;
   min-width: 0;
   min-height: 0;
-  padding: 0 var(--dialog-inset) var(--dialog-inset);
+  padding: var(--dialog-inset);
 }
 .tools,
-.toolGroup,
-.actions,
-.footer {
+.toolGroup {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -56,20 +52,21 @@
   gap: 5px;
   min-width: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-small);
 }
 .field > input,
 .field > select {
   width: 100%;
   min-width: 0;
-  min-height: 30px;
+  height: var(--control-height);
+  min-height: var(--control-height);
   padding: 5px 8px;
   border: 1px solid var(--field-border);
   border-radius: var(--radius);
   background: var(--field-surface);
   color: var(--text-strong);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-control);
 }
 .field :global(.quantity-input) {
   --quantity-unit-width: 34px;
@@ -193,11 +190,6 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line-soft);
 }
-.footer {
-  justify-content: flex-end;
-  width: 100%;
-  gap: 8px 12px;
-}
 .placement {
   position: relative;
   margin-right: auto;
@@ -314,11 +306,5 @@
   }
   .toolGroup + .toolGroup {
     padding-left: 6px;
-  }
-}
-@media (max-width: 600px) {
-  .dialog:global(.surface-dialog) {
-    width: calc(100vw - 24px);
-    height: calc(100dvh - var(--desktop-titlebar-height, 0px) - 24px);
   }
 }

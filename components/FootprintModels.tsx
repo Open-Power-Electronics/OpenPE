@@ -183,7 +183,7 @@ export default function FootprintModels({
           icon={<Box size={20} />}
           onClose={close}
           footer={
-            <div className="library-actions">
+            <div className="dialog-footer-toolbar">
               <button type="button" className="dialog-button primary" onClick={close}>
                 Done
               </button>

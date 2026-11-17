@@ -214,6 +214,8 @@ try {
     if (url.pathname === '/api/thermal/run') {
       requests++;
       const payload = route.request().postDataJSON();
+      if (requests === 1)
+        assert.equal(payload.config.meshSizeMm, 1, 'Run submits the selected mesh resolution.');
       assert.equal(route.request().headers()['x-openpe-token'], 'thermal-test');
       assert.equal(payload.fileId, '00000000-0000-4000-8000-000000000001');
       assert.equal(
@@ -291,6 +293,57 @@ try {
   assert.equal(requests, 0, 'Opening Thermal never runs a solver.');
   await initialLookup;
   assert.ok(resultRequests >= 1, 'Saved projects load previous results.');
+  const resolution = page.getByRole('combobox', { name: 'Mesh resolution', exact: true });
+  const meshSize = page.getByRole('textbox', { name: 'Mesh size (mm)', exact: true });
+  assert.equal(await resolution.innerText(), 'Standard · 2 mm');
+  await resolution.click();
+  const popup = page.getByRole('listbox', { name: 'Mesh resolution', exact: true });
+  const triggerBox = await resolution.boundingBox();
+  const popupBox = await popup.boundingBox();
+  assert.ok(Math.abs(triggerBox.width - popupBox.width) < 2, 'Mesh popup matches field width.');
+  await page.screenshot({ path: 'test-results/thermal-mesh-settings-ui.png' });
+  await page.getByRole('option', { name: 'Fine · 1 mm', exact: true }).click();
+  await waitForAsync(
+    page,
+    async () => (await window.thermalTest.host.query('thermal.status')).settings?.meshSizeMm === 1,
+  );
+  assert.equal(await meshSize.inputValue(), '1');
+  assert.equal(requests, 0, 'Selecting mesh resolution does not run a solver.');
+  await meshSize.fill('0.75');
+  await meshSize.blur();
+  await waitForAsync(
+    page,
+    async () =>
+      (await window.thermalTest.host.query('thermal.status')).settings?.meshSizeMm === 0.75,
+  );
+  assert.equal(await resolution.innerText(), 'Custom');
+  await page.evaluate(() =>
+    window.thermalTest.host.execute('thermal.configure', {
+      config: { meshSizeMm: 0.5 },
+    }),
+  );
+  assert.equal(await resolution.innerText(), 'Very fine · 0.5 mm');
+  await resolution.focus();
+  await resolution.press('ArrowDown');
+  await resolution.press('Home');
+  await resolution.dispatchEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true });
+  assert.equal(await meshSize.inputValue(), '0.5', 'IME Enter does not select a mesh preset.');
+  await resolution.press('Escape');
+  await page.evaluate(() => window.thermalTest.setPending(true));
+  await waitForAsync(
+    page,
+    () => document.querySelector('[aria-label="Mesh resolution"]')?.disabled,
+  );
+  await page.evaluate(() => window.thermalTest.setPending(false));
+  await waitForAsync(
+    page,
+    () => !document.querySelector('[aria-label="Mesh resolution"]')?.disabled,
+  );
+  await page.evaluate(() =>
+    window.thermalTest.host.execute('thermal.configure', {
+      config: { meshSizeMm: 1 },
+    }),
+  );
   const heatInput = page.getByRole('combobox', { name: 'Thermal heat input', exact: true });
   async function chooseHeatInput(value) {
     await heatInput.scrollIntoViewIfNeeded();
@@ -463,6 +516,11 @@ try {
   await map.waitFor();
   assert.equal(requests, completedRuns, 'Restoring a result never starts a solver.');
   assert.equal(
+    await resolution.innerText(),
+    'Fine · 1 mm',
+    'Saved mesh settings restore the preset.',
+  );
+  assert.equal(
     await page.getByRole('textbox', { name: 'Ambient (°C)', exact: true }).inputValue(),
     '40',
   );
@@ -552,6 +610,7 @@ try {
     page,
     async () => (await window.thermalTest.host.query('thermal.status')).status === 'running',
   );
+  assert.equal(await resolution.isDisabled(), true, 'Mesh settings are locked during a run.');
   await page.evaluate(() => window.thermalTest.setPending(true));
   await page.waitForFunction(() => window.thermalAborts >= 1);
   assert.equal(await map.count(), 0, 'Pending Source clears old board-temperature evidence.');
