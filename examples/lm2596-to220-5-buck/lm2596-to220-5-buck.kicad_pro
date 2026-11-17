@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lm2596-to220-5-buck.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LM2596 Buck",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM2596-5.lib\"]"
+  }
+}

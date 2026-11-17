@@ -1,0 +1,1227 @@
+{
+  "version": 1,
+  "source": "https://github.com/ChengminLi/AI-PCB-layout/tree/main/examples/emc-flyback-demo",
+  "commit": "e1b9a64ac9ac306647fa30094932fb792d17e373",
+  "footprints": [
+    {
+      "id": "Capacitor_SMD:C_0603_1608Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/C_0603_1608Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_0805_2012Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/C_0805_2012Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_1206_3216Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/C_1206_3216Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:C_1210_3225Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/C_1210_3225Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Capacitor_SMD:CP_Elec_10x10",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/CP_Elec_10x10.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/PinHeader_1x02_P2.54mm_Vertical.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Connector_PinHeader_2.54mm:PinHeader_2x02_P2.54mm_Vertical",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/PinHeader_2x02_P2.54mm_Vertical.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/PinHeader_2x03_P2.54mm_Vertical.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_SMA",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/D_SMA.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Diode_SMD:D_SMC",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/D_SMC.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EMC_Demo:Jack_4mm_RA_Cliff_FCR7350",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/Jack_4mm_RA_black.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        },
+        {
+          "path": "${KIPRJMOD}/models/Jack_4mm_RA_red.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        },
+        {
+          "path": "${KIPRJMOD}/models/Jack_4mm_RA_green.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ],
+      "file": "design/EMC_Demo.pretty/Jack_4mm_RA_Cliff_FCR7350.kicad_mod",
+      "sha256": "2a030510c0044915c3d62f5019755496c1254a441084f985d5b8dd34088fcc4e"
+    },
+    {
+      "id": "EMC_Demo:L_CommonMode_Wuerth_WE-CMB-S_744822222",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/WE-CMB_744822222.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "3.85",
+              "2.5",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ],
+      "file": "design/EMC_Demo.pretty/L_CommonMode_Wuerth_WE-CMB-S_744822222.kicad_mod",
+      "sha256": "356dc3bdf60a5e323973e38fbccec9109481a898223df800b7ae65578c39cab4"
+    },
+    {
+      "id": "EMC_Demo:TO-220-3_BottomMount_CaseHeatsink",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/TO-220-3_BottomMount_CaseHeatsink.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ],
+      "file": "design/EMC_Demo.pretty/TO-220-3_BottomMount_CaseHeatsink.kicad_mod",
+      "sha256": "7ec7eee986b8cfdfb5e1536ff154d92c50a31be6fe09f803967ad3d9303dee1b"
+    },
+    {
+      "id": "EMC_Demo:Wurth_750311591_EFD25",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/T_EFD25_SMD.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "6.845"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ],
+      "file": "design/EMC_Demo.pretty/Wurth_750311591_EFD25.kicad_mod",
+      "sha256": "c4cd2617b5de827651a236cb7713594aedbb9ee89db010f8e11b415540ee5354"
+    },
+    {
+      "id": "Fuse:Fuse_1812_4532Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/R_1812_4532Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Inductor_SMD:L_Bourns-SRN8040_8x8.15mm",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/L_8040_Shielded.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "2"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LED_SMD:LED_0805_2012Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/LED_0805_2012Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MountingHole:MountingHole_3.2mm_M3",
+      "models": []
+    },
+    {
+      "id": "MountingHole:MountingHole_3.2mm_M3_Pad_Via",
+      "models": []
+    },
+    {
+      "id": "Package_DIP:SMDIP-4_W9.53mm",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/SMDIP-4_W9.53mm.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/SOIC-8_3.9x4.9mm_P1.27mm-d9b46f6d.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Package_TO_SOT_SMD:SOT-23",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/SOT-23.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Package_TO_SOT_SMD:SOT-89-3",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/SOT-89-3.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_0603_1608Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/R_0603_1608Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_0805_2012Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/R_0805_2012Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_1206_3216Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/R_1206_3216Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Resistor_SMD:R_2512_6332Metric",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/R_2512_6332Metric.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "TestPoint:TestPoint_Keystone_5000-5004_Miniature",
+      "models": [
+        {
+          "path": "${KIPRJMOD}/models/TestPoint_Keystone_5001_black.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        },
+        {
+          "path": "${KIPRJMOD}/models/TestPoint_Keystone_5002_white.step",
+          "offset": [
+            "offset",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "scale": [
+            "scale",
+            [
+              "xyz",
+              "1",
+              "1",
+              "1"
+            ]
+          ],
+          "rotate": [
+            "rotate",
+            [
+              "xyz",
+              "0",
+              "0",
+              "0"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "mechanicalSources": [
+    {
+      "file": "design/EMC_Demo.pretty/Case_UChannel_revD.kicad_mod",
+      "sha256": "378bb94e30b63d21171610bc36c6fb0a89ffc6cc355eee3e1a2d80840f9ce1fa"
+    },
+    {
+      "file": "design/EMC_Demo.pretty/Cover_PMMA_revD.kicad_mod",
+      "sha256": "d054e66a12c8d90752fb45a278262173c714dd06d8147770487430940dd69c37"
+    }
+  ],
+  "models": {
+    "emc-flyback-demo/C_0603_1608Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/C_0603_1608Metric.step",
+      "sha256": "4857b3dc717675bf1fb22edda622ac3b3ae03cf44d81eefaf3fa3ba3a86d84c1",
+      "size": 43450
+    },
+    "emc-flyback-demo/C_0805_2012Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/C_0805_2012Metric.step",
+      "sha256": "9a669c1a2f1ea25b88b401acef6efeaa80a067bd7da9db6993de719a7fbe155c",
+      "size": 43618
+    },
+    "emc-flyback-demo/C_1206_3216Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/C_1206_3216Metric.step",
+      "sha256": "11e948c72c90e2b6322436b72745f40ff4e8ba0da64fb2a0df943dfa61e89c1a",
+      "size": 43450
+    },
+    "emc-flyback-demo/C_1210_3225Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/C_1210_3225Metric.step",
+      "sha256": "f8510481c5044113cf49b0fa6dd54ddab9224508bd6808e1afab8ef0cefdefc9",
+      "size": 43502
+    },
+    "emc-flyback-demo/Case_UChannel_revD.step": {
+      "file": "design/EMC_Demo.3dshapes/Case_UChannel_revD.step",
+      "sha256": "42e05a26369cfdd5c049b6d7eb04a8ad2258d29bb74c23d841a072c0e7bcf402",
+      "size": 589642
+    },
+    "emc-flyback-demo/Cover_PMMA_revD.step": {
+      "file": "design/EMC_Demo.3dshapes/Cover_PMMA_revD.step",
+      "sha256": "813b23490fb001aac3849f48c0a818828728e24cb6c40ca4d3f6679847cf556a",
+      "size": 103472
+    },
+    "emc-flyback-demo/CP_Elec_10x10.step": {
+      "file": "design/EMC_Demo.3dshapes/CP_Elec_10x10.step",
+      "sha256": "8af72237638a055d91e7b5db024aa87cce0ae52e62a77308a6489843773d9c38",
+      "size": 82045
+    },
+    "emc-flyback-demo/D_SMA.step": {
+      "file": "design/EMC_Demo.3dshapes/D_SMA.step",
+      "sha256": "1cfddd4e3b1bf22b8fc6ee3258c2aade882ed7b85b528e23b9db42437775a1db",
+      "size": 70794
+    },
+    "emc-flyback-demo/D_SMC.step": {
+      "file": "design/EMC_Demo.3dshapes/D_SMC.step",
+      "sha256": "30dab4c2e22239b7e3694a4d45304e04255c6b70a79d28e9c34c6072ba647991",
+      "size": 70688
+    },
+    "emc-flyback-demo/Jack_4mm_RA_black.step": {
+      "file": "design/EMC_Demo.3dshapes/Jack_4mm_RA_black.step",
+      "sha256": "394baa832d809c2f33a04f2525c191a9b5f30691ab9684b6d3d6819f4d46ac21",
+      "size": 77117
+    },
+    "emc-flyback-demo/Jack_4mm_RA_green.step": {
+      "file": "design/EMC_Demo.3dshapes/Jack_4mm_RA_green.step",
+      "sha256": "aa0c4b5d8dc046543a5f8fa38bc63105cdfacfdeef2fd7eae6f65781882f65b1",
+      "size": 77189
+    },
+    "emc-flyback-demo/Jack_4mm_RA_red.step": {
+      "file": "design/EMC_Demo.3dshapes/Jack_4mm_RA_red.step",
+      "sha256": "e4edf50ea7f39bf72bec2bc9ab993e6d1b0df1563533e1eaaa62a8cf038a707f",
+      "size": 77193
+    },
+    "emc-flyback-demo/L_8040_Shielded.step": {
+      "file": "models/L_8040_Shielded.step",
+      "sha256": "a79d7f0f5d2a4540d531948e4500618988eaba1aa22d6e556719ffe997626658",
+      "size": 57013,
+      "analytical": true
+    },
+    "emc-flyback-demo/LED_0805_2012Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/LED_0805_2012Metric.step",
+      "sha256": "0aa8b791804f5d72a2fc7d1bf231dd9959207d83df8ad801176fbc459f575b98",
+      "size": 78220
+    },
+    "emc-flyback-demo/PinHeader_1x02_P2.54mm_Vertical.step": {
+      "file": "design/EMC_Demo.3dshapes/PinHeader_1x02_P2.54mm_Vertical.step",
+      "sha256": "ea4d0799007ebdd3945072bf255d673d2fe87eb05fda85fd8d7993ad9397da41",
+      "size": 75616
+    },
+    "emc-flyback-demo/PinHeader_2x02_P2.54mm_Vertical.step": {
+      "file": "design/EMC_Demo.3dshapes/PinHeader_2x02_P2.54mm_Vertical.step",
+      "sha256": "3688725e99073c4698d895fb9d823d00b7ba0782b9840636b210a99adad9efed",
+      "size": 125561
+    },
+    "emc-flyback-demo/PinHeader_2x03_P2.54mm_Vertical.step": {
+      "file": "design/EMC_Demo.3dshapes/PinHeader_2x03_P2.54mm_Vertical.step",
+      "sha256": "30c87dd7aa515b02055124826d8c4054084971d49d819c644cd6b21295ac52c8",
+      "size": 185520
+    },
+    "emc-flyback-demo/R_0603_1608Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/R_0603_1608Metric.step",
+      "sha256": "1875571c326d0d9e96f36b4efeb8094068ef7619f0a449c781caf0b49c2e5861",
+      "size": 40618
+    },
+    "emc-flyback-demo/R_0805_2012Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/R_0805_2012Metric.step",
+      "sha256": "ded342cdb394fb45395227beaaa75cc390613cf2581b29cd6d22c12abd6103b2",
+      "size": 40592
+    },
+    "emc-flyback-demo/R_1206_3216Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/R_1206_3216Metric.step",
+      "sha256": "f5d1ea5c47935091292bd1c6c698e0df88d3d4bbf92bf66b4c97e49df5be9ebc",
+      "size": 40414
+    },
+    "emc-flyback-demo/R_1812_4532Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/R_1812_4532Metric.step",
+      "sha256": "1efc89b1825fb585a1cc77954655b8e0db16d3de91237adf42ce79142e58826d",
+      "size": 40272
+    },
+    "emc-flyback-demo/R_2512_6332Metric.step": {
+      "file": "design/EMC_Demo.3dshapes/R_2512_6332Metric.step",
+      "sha256": "76b2052a3c120193de7cdc0af99157b6f375e9a4af7721e3e3d012968c877f27",
+      "size": 40272
+    },
+    "emc-flyback-demo/SMDIP-4_W9.53mm.step": {
+      "file": "design/EMC_Demo.3dshapes/SMDIP-4_W9.53mm.step",
+      "sha256": "aacbe178b48408d7b509625775cb443b4a676cd9c0f5d27c7b12f03e8b489ec2",
+      "size": 139051
+    },
+    "emc-flyback-demo/SOIC-8_3.9x4.9mm_P1.27mm.step": {
+      "file": "design/EMC_Demo.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step",
+      "sha256": "d9b46f6dd6cf8c5e2028838eed38e2a6a7f26235856078511e5a71a594ca809e",
+      "size": 253807
+    },
+    "emc-flyback-demo/SOT-23.step": {
+      "file": "design/EMC_Demo.3dshapes/SOT-23.step",
+      "sha256": "9fe9af3cc6cf3d3bc3bd3da71731af2037c67f690245102a20e1e39a33e9ade4",
+      "size": 119867
+    },
+    "emc-flyback-demo/SOT-89-3.step": {
+      "file": "design/EMC_Demo.3dshapes/SOT-89-3.step",
+      "sha256": "844c0bb504d0c383535d9845c6376fe7a4053241a2ede8d8ef694df3fcfc37c8",
+      "size": 58399
+    },
+    "emc-flyback-demo/T_EFD25_SMD.step": {
+      "file": "models/T_EFD25_SMD.step",
+      "sha256": "ee6f921dcec24f2ca957b7bf55ec2213188fbd8e8e7d7c5338e2d3d8ad11b81f",
+      "size": 187441,
+      "analytical": true
+    },
+    "emc-flyback-demo/TestPoint_Keystone_5001_black.step": {
+      "file": "design/EMC_Demo.3dshapes/TestPoint_Keystone_5001_black.step",
+      "sha256": "262a4fdddfa830f63da3840a407e9b3782c20550f727e63cd5ad03c13896921b",
+      "size": 23769
+    },
+    "emc-flyback-demo/TestPoint_Keystone_5002_white.step": {
+      "file": "design/EMC_Demo.3dshapes/TestPoint_Keystone_5002_white.step",
+      "sha256": "947b6596e721af06b17e9287c549ff414389d964e122bfc262314fc2ec6f675c",
+      "size": 23754
+    },
+    "emc-flyback-demo/TO-220-3_BottomMount_CaseHeatsink.step": {
+      "file": "design/EMC_Demo.3dshapes/TO-220-3_BottomMount_CaseHeatsink.step",
+      "sha256": "e4185133f57c6d15a1f1cd1e9d1443f29b7cec6466d92367fd9085000f128ab6",
+      "size": 154511
+    },
+    "emc-flyback-demo/WE-CMB_744822222.step": {
+      "file": "models/WE-CMB_744822222.step",
+      "sha256": "89ff66fe9bc52b2ba95d24578985e15e193869fc959bb01234f5a388fa484999",
+      "size": 3177842,
+      "sourceUrl": "https://raw.githubusercontent.com/WurthElektronik/KiCad-Library/df5afb528e92371b558431a7dd41d654e09330ca/3dmodels/Inductor_THT_Wurth.3dshapes/L_Wurth_WE-CMB-S.step",
+      "approvedHosts": [
+        "raw.githubusercontent.com"
+      ],
+      "license": "WURTH-KICAD-LICENSE.txt",
+      "manufacturer": "Wurth Elektronik",
+      "partNumber": "744822222",
+      "sourceCommit": "df5afb528e92371b558431a7dd41d654e09330ca",
+      "sourceSha256": "ac1239404086261a577773f66d1ae66f05a3c5497ebf23ba3765c1bc8e043a6b",
+      "modification": "Rigid root assembly alignment only; original shape, topology and colours retained. See scripts/prepare-emc-cmb-model.mjs.",
+      "supplemental": true
+    }
+  },
+  "licenses": [
+    {
+      "file": "LICENSE",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+    },
+    {
+      "file": "design/EMC_Demo.3dshapes/README.md",
+      "sha256": "363819356199846af0ea81bba421c8e57c15632b7d39276a40c2ea1d94fe0f96"
+    }
+  ],
+  "supplementalLicenses": [
+    {
+      "file": "MODEL-SOURCES.md",
+      "sha256": "6a4e211d1b70d124259d9bfc4faee0a8bf8cb40048d3799e25bb097c427fc731"
+    },
+    {
+      "file": "WURTH-KICAD-LICENSE.txt",
+      "sha256": "e1523a553492b920480646abdf0c96bf3e576c438c7284075613033a8fd60297"
+    }
+  ],
+  "kicadLicense": {
+    "file": "LICENSE.md",
+    "sha256": "45d2bce75e5a4208f5afb01b8fb2c406e700371c4fe2b5f5cd5c443d46db4d8f"
+  }
+}

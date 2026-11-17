@@ -1,0 +1,916 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:openpe:ic-datasheet:1",
+  "title": "OpenPE example controller datasheet record v1",
+  "description": "Reviewed offline IC reference data; not a native design format, design-rule authority or simulation-model definition.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "./ic-datasheet.schema.json"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(reference-[a-z0-9-]+|emc-flyback-demo)$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "topology": {
+          "enum": ["Buck", "Boost", "SEPIC", "Fly-Buck", "Charge pump", "Buck-Boost", "Flyback"]
+        }
+      },
+      "required": ["id", "file", "title", "topology"]
+    },
+    "ic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manufacturer": {
+          "enum": ["Texas Instruments", "STMicroelectronics"]
+        },
+        "family": {
+          "enum": [
+            "LM2596",
+            "TPS61046",
+            "LM2735",
+            "LM25017",
+            "LM5001",
+            "LM27761",
+            "LMR12010",
+            "LMR70503",
+            "LM2598",
+            "UC3845B"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^U[1-9][0-9]*$"
+        },
+        "schematic_value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "symbol_library_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "footprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "datasheet_variant": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "manufacturer",
+        "family",
+        "reference",
+        "schematic_value",
+        "symbol_library_id",
+        "footprint",
+        "package",
+        "datasheet_variant"
+      ]
+    },
+    "datasheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_number": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^([A-Z]{4,6}[0-9]{1,3}[A-Z]?|UC3842B/3B/4B/5B)$"
+        },
+        "revision": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]$"
+        },
+        "published_month": {
+          "type": "string",
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+        },
+        "product_url": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^https://www\\.(ti\\.com/product/[A-Z0-9]+|st\\.com/en/power-management/uc3845b\\.html)$"
+        },
+        "source_url": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^https://www\\.(ti\\.com/lit/ds/symlink/[a-z0-9]+\\.pdf|st\\.com/resource/en/datasheet/uc3842b\\.pdf)$"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+\\.pdf$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 20971520
+        },
+        "page_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "downloaded_on": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      },
+      "required": [
+        "title",
+        "document_number",
+        "revision",
+        "published_month",
+        "product_url",
+        "source_url",
+        "filename",
+        "sha256",
+        "bytes",
+        "page_count",
+        "downloaded_on"
+      ]
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "const": "pdf_text_with_visual_table_review"
+        },
+        "reviewed_on": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "scope": {
+          "const": "main_controller"
+        },
+        "notes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": ["method", "reviewed_on", "scope", "notes"]
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "feedback_reference_voltage": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "input_voltage": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["recommended_operating_condition"]
+                }
+              }
+            }
+          ]
+        },
+        "input_voltage_absolute_maximum": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["absolute_maximum_rating"]
+                }
+              }
+            }
+          ]
+        },
+        "junction_temperature_absolute_maximum": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "degC"
+                },
+                "category": {
+                  "enum": ["absolute_maximum_rating"]
+                }
+              }
+            }
+          ]
+        },
+        "ldo_dropout_voltage": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "ldo_psrr": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "dB"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "maximum_duty_cycle": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "1"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "minimum_switching_frequency": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Hz"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "operating_ambient_temperature": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "degC"
+                },
+                "category": {
+                  "enum": ["recommended_operating_condition"]
+                }
+              }
+            }
+          ]
+        },
+        "operating_junction_temperature": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "degC"
+                },
+                "category": {
+                  "enum": ["recommended_operating_condition"]
+                }
+              }
+            }
+          ]
+        },
+        "output_current": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["feature", "recommended_operating_condition"]
+                }
+              }
+            }
+          ]
+        },
+        "output_current_absolute_maximum": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["absolute_maximum_rating"]
+                }
+              }
+            }
+          ]
+        },
+        "output_noise_voltage": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "output_voltage": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": [
+                    "electrical_characteristic",
+                    "feature",
+                    "recommended_operating_condition"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "output_voltage_absolute_maximum": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["absolute_maximum_rating"]
+                }
+              }
+            }
+          ]
+        },
+        "quiescent_current": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "reference_output_voltage": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "shutdown_current": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "soft_start_time": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "s"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "startup_time": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "s"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "storage_temperature": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "degC"
+                },
+                "category": {
+                  "enum": ["absolute_maximum_rating"]
+                }
+              }
+            }
+          ]
+        },
+        "switch_current_limit": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "switch_on_resistance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Ohm"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "switch_voltage_absolute_maximum": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["absolute_maximum_rating"]
+                }
+              }
+            }
+          ]
+        },
+        "switching_frequency": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Hz"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "switching_frequency_programmable_maximum": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Hz"
+                },
+                "category": {
+                  "enum": ["feature"]
+                }
+              }
+            }
+          ]
+        },
+        "synchronous_switch_on_resistance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Ohm"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "thermal_shutdown_temperature": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "degC"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "undervoltage_start_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "undervoltage_stop_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "current_sense_threshold": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "V"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "startup_current": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "A"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        },
+        "oscillator_frequency": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/parameter"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "const": "Hz"
+                },
+                "category": {
+                  "enum": ["electrical_characteristic"]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["input_voltage_absolute_maximum", "junction_temperature_absolute_maximum"],
+      "anyOf": [
+        {
+          "required": ["input_voltage", "operating_junction_temperature"],
+          "properties": {
+            "input_voltage": {},
+            "operating_junction_temperature": {}
+          }
+        },
+        {
+          "required": [
+            "operating_ambient_temperature",
+            "oscillator_frequency",
+            "undervoltage_start_threshold",
+            "undervoltage_stop_threshold"
+          ],
+          "properties": {
+            "operating_ambient_temperature": {},
+            "oscillator_frequency": {},
+            "undervoltage_start_threshold": {},
+            "undervoltage_stop_threshold": {}
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "$schema",
+    "schema_version",
+    "example",
+    "ic",
+    "datasheet",
+    "extraction",
+    "parameters"
+  ],
+  "$defs": {
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "recommended_operating_condition",
+            "absolute_maximum_rating",
+            "electrical_characteristic",
+            "feature"
+          ]
+        },
+        "unit": {
+          "enum": ["V", "A", "Hz", "Ohm", "s", "degC", "1", "dB"]
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": ["number", "null"]
+            },
+            "typ": {
+              "type": ["number", "null"]
+            },
+            "max": {
+              "type": ["number", "null"]
+            }
+          },
+          "required": ["min", "typ", "max"],
+          "anyOf": [
+            {
+              "properties": {
+                "min": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "properties": {
+                "typ": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "properties": {
+                "max": {
+                  "type": "number"
+                }
+              }
+            }
+          ]
+        },
+        "conditions": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "section": {
+              "type": "string",
+              "minLength": 1
+            },
+            "row": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["page", "section", "row"]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["category", "unit", "values", "conditions", "source"]
+    }
+  }
+}

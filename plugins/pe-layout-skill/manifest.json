@@ -1,0 +1,23 @@
+{
+  "id": "ai-pcb-layout@openpe",
+  "name": "PE Layout Skill",
+  "description": "Guide power-electronics PCB review, placement and routing with the Agent.",
+  "detail": "Use the power-pcb-design workflow by Chengmin Li and Xiao Yang, with nine engineering stages and ten offline references for switching loops, insulation, copper capability and verification. The Agent reads guidance on demand and uses available OpenPE capabilities. Engineering review gates remain part of the workflow. This plugin adds guidance, not an autorouter, new CAD support or compliance certification. Licensed under CC BY 4.0.",
+  "version": "1.0.0",
+  "author": "Chengmin Li, Xiao Yang \u00b7 OpenPE integration",
+  "category": "PCB design",
+  "capabilities": [
+    "Power PCB design workflow",
+    "Layout review",
+    "Switching and gate loops",
+    "Insulation and copper guidance",
+    "Offline reference documents"
+  ],
+  "apiVersion": 1,
+  "runtime": "builtin",
+  "permissions": [],
+  "contributes": {
+    "capabilities": ["pcbDesign.guide"]
+  },
+  "projectDirectory": "pe-layout-skill"
+}

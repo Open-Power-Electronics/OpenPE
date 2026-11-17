@@ -1,0 +1,5 @@
+* EMC Flyback approximate non-vendor model; parameters retained unchanged.
+* Chengmin Li and AI-PCB-layout contributors; CC BY 4.0.
+* Source: https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo
+* License: https://creativecommons.org/licenses/by/4.0/
+.model EMC_IRF520N VDMOS(Vto=3.6 Kp=6 lambda=0.03 Rd=0.11 Rs=0.025 Rg=2.5 Cgdmax=600p Cgdmin=25p a=0.5 Cgs=300p Cjo=260p M=0.55 Vj=0.8 Is=2e-12 Rb=0.02 N=1.1 Tt=60n)

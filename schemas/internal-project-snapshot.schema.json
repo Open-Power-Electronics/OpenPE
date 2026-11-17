@@ -1,0 +1,3242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:openpe:internal-project-snapshot:1",
+  "title": "OpenPE private IPC and recovery snapshot",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "openpe"
+    },
+    "version": {
+      "const": 1
+    },
+    "units": {
+      "const": "mm"
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "schematic": {
+      "$ref": "#/$defs/schematic"
+    },
+    "pcb": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/pcb"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "libraries": {
+      "type": "object",
+      "properties": {
+        "symbols": {
+          "type": "object",
+          "maxProperties": 2000,
+          "additionalProperties": {
+            "$ref": "#/$defs/sexpr"
+          }
+        }
+      },
+      "required": [
+        "symbols"
+      ],
+      "additionalProperties": false
+    },
+    "simulationModels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id",
+          "sha256",
+          "file"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 32
+    },
+    "nativeFiles": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "source": {
+                "type": "string",
+                "maxLength": 8000000
+              },
+              "encoding": {
+                "const": "latin1"
+              }
+            },
+            "required": [
+              "name",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "entry",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "additionalSchematics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schematic": {
+            "$ref": "#/$defs/schematic"
+          },
+          "libraries": {
+            "type": "object",
+            "properties": {
+              "symbols": {
+                "type": "object",
+                "maxProperties": 2000,
+                "additionalProperties": {
+                  "$ref": "#/$defs/sexpr"
+                }
+              }
+            },
+            "required": [
+              "symbols"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schematic"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 11
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Project-specific extension data and provenance only.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "units",
+    "project",
+    "schematic"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "nativeFiles": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "source": {
+                "type": "string",
+                "maxLength": 8000000
+              },
+              "encoding": {
+                "const": "latin1"
+              }
+            },
+            "required": [
+              "name",
+              "source"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 128
+        }
+      },
+      "required": [
+        "entry",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "point": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.0001
+        },
+        "y": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.0001
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "sexpr": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50000,
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 100000
+          },
+          {
+            "$ref": "#/$defs/sexpr"
+          }
+        ]
+      }
+    },
+    "schematic": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          },
+          "maxItems": 2000
+        },
+        "noConnects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "position": {
+                "$ref": "#/$defs/point"
+              },
+              "kicad": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/sexpr"
+                    },
+                    {
+                      "not": {
+                        "type": "array",
+                        "items": [
+                          {
+                            "enum": [
+                              "uuid",
+                              "at"
+                            ]
+                          }
+                        ],
+                        "minItems": 1
+                      }
+                    }
+                  ]
+                },
+                "maxItems": 2000
+              }
+            },
+            "required": [
+              "id",
+              "position"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "texts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "position": {
+                "$ref": "#/$defs/point"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "size": {
+                "type": "number",
+                "minimum": 0.0001,
+                "maximum": 1000,
+                "multipleOf": 0.0001
+              },
+              "anchor": {
+                "enum": [
+                  "start",
+                  "middle",
+                  "end"
+                ]
+              },
+              "vertical": {
+                "enum": [
+                  "top",
+                  "middle",
+                  "bottom"
+                ]
+              },
+              "excludeFromSimulation": {
+                "type": "boolean"
+              },
+              "bold": {
+                "type": "boolean"
+              },
+              "italic": {
+                "type": "boolean"
+              },
+              "href": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^https?://[^\\s\\u0000-\\u001f]+$"
+              },
+              "color": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "position",
+              "text",
+              "size",
+              "anchor",
+              "vertical"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "kicad": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/sexpr"
+              },
+              {
+                "not": {
+                  "type": "array",
+                  "items": [
+                    {
+                      "enum": [
+                        "paper",
+                        "version",
+                        "generator",
+                        "generator_version",
+                        "uuid",
+                        "lib_symbols",
+                        "symbol",
+                        "wire",
+                        "junction",
+                        "no_connect",
+                        "label",
+                        "global_label",
+                        "text"
+                      ]
+                    }
+                  ],
+                  "minItems": 1
+                }
+              }
+            ]
+          },
+          "maxItems": 2000
+        },
+        "nets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^schematic:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                    "maxLength": 46
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 4096,
+                "minLength": 1
+              },
+              "schematic": {
+                "type": "object",
+                "properties": {
+                  "wires": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                        },
+                        "start": {
+                          "$ref": "#/$defs/point"
+                        },
+                        "end": {
+                          "$ref": "#/$defs/point"
+                        },
+                        "kicad": {
+                          "type": "array",
+                          "items": {
+                            "allOf": [
+                              {
+                                "$ref": "#/$defs/sexpr"
+                              },
+                              {
+                                "not": {
+                                  "type": "array",
+                                  "items": [
+                                    {
+                                      "enum": [
+                                        "uuid",
+                                        "pts"
+                                      ]
+                                    }
+                                  ],
+                                  "minItems": 1
+                                }
+                              }
+                            ]
+                          },
+                          "maxItems": 2000,
+                          "description": "Saves omit the exact default stroke with width 0 and type default."
+                        },
+                        "order": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "start",
+                        "end",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10000
+                  },
+                  "junctions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                        },
+                        "position": {
+                          "$ref": "#/$defs/point"
+                        },
+                        "kicad": {
+                          "type": "array",
+                          "items": {
+                            "allOf": [
+                              {
+                                "$ref": "#/$defs/sexpr"
+                              },
+                              {
+                                "not": {
+                                  "type": "array",
+                                  "items": [
+                                    {
+                                      "enum": [
+                                        "uuid",
+                                        "at"
+                                      ]
+                                    }
+                                  ],
+                                  "minItems": 1
+                                }
+                              }
+                            ]
+                          },
+                          "maxItems": 2000,
+                          "description": "Saves omit diameter 0 and the default color 0 0 0 0."
+                        },
+                        "order": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "position",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10000
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                        },
+                        "position": {
+                          "$ref": "#/$defs/point"
+                        },
+                        "text": {
+                          "type": "string",
+                          "maxLength": 4096,
+                          "minLength": 1
+                        },
+                        "rotation": {
+                          "type": "number",
+                          "minimum": -360,
+                          "maximum": 360,
+                          "multipleOf": 0.0001
+                        },
+                        "scope": {
+                          "enum": [
+                            "local",
+                            "global"
+                          ]
+                        },
+                        "shape": {
+                          "enum": [
+                            "input",
+                            "output",
+                            "bidirectional",
+                            "tri_state",
+                            "passive"
+                          ]
+                        },
+                        "kicad": {
+                          "type": "array",
+                          "items": {
+                            "allOf": [
+                              {
+                                "$ref": "#/$defs/sexpr"
+                              },
+                              {
+                                "not": {
+                                  "type": "array",
+                                  "items": [
+                                    {
+                                      "enum": [
+                                        "uuid",
+                                        "at",
+                                        "shape"
+                                      ]
+                                    }
+                                  ],
+                                  "minItems": 1
+                                }
+                              }
+                            ]
+                          },
+                          "maxItems": 2000
+                        },
+                        "order": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "position",
+                        "text",
+                        "order"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10000
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "pcb": {
+                "$ref": "#/$defs/netBoard"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "properties": {
+                  "schematic": {}
+                },
+                "required": [
+                  "schematic"
+                ]
+              },
+              {
+                "properties": {
+                  "pcb": {}
+                },
+                "required": [
+                  "pcb"
+                ]
+              }
+            ]
+          },
+          "maxItems": 15000
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "pcb": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "thickness": {
+          "type": "number",
+          "minimum": 0.000001,
+          "maximum": 1000,
+          "multipleOf": 0.000001
+        },
+        "layers": {
+          "enum": [
+            [
+              "F.Cu",
+              "B.Cu"
+            ],
+            [
+              "F.Cu",
+              "In1.Cu",
+              "In2.Cu",
+              "B.Cu"
+            ]
+          ]
+        },
+        "footprints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/footprint"
+          },
+          "maxItems": 2000
+        },
+        "graphics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "const": true
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "start": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "end": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "layer": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "B.Cu",
+                  "F.SilkS",
+                  "B.SilkS",
+                  "F.Fab",
+                  "B.Fab",
+                  "F.CrtYd",
+                  "B.CrtYd",
+                  "Edge.Cuts",
+                  "F.Mask",
+                  "B.Mask",
+                  "F.Paste",
+                  "B.Paste",
+                  "F.Adhes",
+                  "B.Adhes",
+                  "Dwgs.User",
+                  "Cmts.User",
+                  "Eco1.User",
+                  "Eco2.User",
+                  "Margin",
+                  "User.1",
+                  "User.2",
+                  "User.3",
+                  "User.4"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "arc",
+                  "circle",
+                  "polygon",
+                  "text",
+                  "dimension"
+                ]
+              },
+              "mid": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10000
+              },
+              "fill": {
+                "type": "boolean"
+              },
+              "stroke": {
+                "enum": [
+                  "default",
+                  "solid",
+                  "dash",
+                  "dot",
+                  "dash_dot",
+                  "dash_dot_dot"
+                ]
+              },
+              "text": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "rotation": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360,
+                    "multipleOf": 0.000001
+                  },
+                  "size": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": 0.000001,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": 0.000001,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "multipleOf": 0.000001
+                  },
+                  "justify": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "left",
+                        "right",
+                        "top",
+                        "bottom",
+                        "mirror"
+                      ]
+                    },
+                    "maxItems": 3,
+                    "uniqueItems": true
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  },
+                  "italic": {
+                    "type": "boolean"
+                  },
+                  "bold": {
+                    "type": "boolean"
+                  },
+                  "property": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "value",
+                  "rotation",
+                  "size",
+                  "thickness"
+                ],
+                "additionalProperties": false
+              },
+              "dimension": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "aligned",
+                      "radial",
+                      "leader"
+                    ]
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "leaderLength": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "format": {
+                    "type": "object",
+                    "properties": {
+                      "prefix": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "suffix": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "units": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "unitsFormat": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "precision": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 6
+                      },
+                      "overrideValue": {
+                        "type": "string",
+                        "maxLength": 4096
+                      }
+                    },
+                    "required": [
+                      "prefix",
+                      "suffix",
+                      "units",
+                      "unitsFormat",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "style": {
+                    "type": "object",
+                    "properties": {
+                      "arrowLength": {
+                        "type": "number",
+                        "minimum": 0.000001,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      },
+                      "textPositionMode": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2
+                      },
+                      "arrowDirection": {
+                        "enum": [
+                          "inward",
+                          "outward"
+                        ]
+                      },
+                      "extensionHeight": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "extensionOffset": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "keepTextAligned": {
+                        "type": "boolean"
+                      },
+                      "textFrame": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      }
+                    },
+                    "required": [
+                      "arrowLength",
+                      "textPositionMode",
+                      "extensionOffset"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "caption": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "value": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "rotation": {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360,
+                        "multipleOf": 0.000001
+                      },
+                      "size": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": 0.000001,
+                            "maximum": 1000,
+                            "multipleOf": 0.000001
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": 0.000001,
+                            "maximum": 1000,
+                            "multipleOf": 0.000001
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "thickness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      },
+                      "justify": {
+                        "type": "array",
+                        "items": {
+                          "enum": [
+                            "left",
+                            "right",
+                            "top",
+                            "bottom",
+                            "mirror"
+                          ]
+                        },
+                        "maxItems": 3,
+                        "uniqueItems": true
+                      },
+                      "hidden": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "property": {
+                        "type": "string",
+                        "maxLength": 4096
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "value",
+                      "rotation",
+                      "size",
+                      "thickness"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "format",
+                  "style",
+                  "caption"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "start",
+              "end",
+              "width",
+              "layer"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "const": true
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "layer": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "B.Cu",
+                  "F.SilkS",
+                  "B.SilkS",
+                  "F.Fab",
+                  "B.Fab",
+                  "F.CrtYd",
+                  "B.CrtYd",
+                  "Edge.Cuts",
+                  "F.Mask",
+                  "B.Mask",
+                  "F.Paste",
+                  "B.Paste",
+                  "F.Adhes",
+                  "B.Adhes",
+                  "Dwgs.User",
+                  "Cmts.User",
+                  "Eco1.User",
+                  "Eco2.User",
+                  "Margin",
+                  "User.1",
+                  "User.2",
+                  "User.3",
+                  "User.4"
+                ]
+              },
+              "outline": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10000,
+                "minItems": 3
+              },
+              "holes": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 10000,
+                  "minItems": 3
+                },
+                "maxItems": 100
+              },
+              "filledPolygons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "multipleOf": 0.000001
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "multipleOf": 0.000001
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 60000,
+                      "minItems": 3
+                    },
+                    "island": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 2000
+              },
+              "clearance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "minThickness": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "thermalGap": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "thermalBridge": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "padConnection": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "thru_hole_only"
+                ]
+              },
+              "islandRemovalMode": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "fillEnabled": {
+                "type": "boolean"
+              },
+              "keepout": {
+                "type": "object",
+                "properties": {
+                  "tracks": {
+                    "type": "boolean"
+                  },
+                  "vias": {
+                    "type": "boolean"
+                  },
+                  "pads": {
+                    "type": "boolean"
+                  },
+                  "copperpour": {
+                    "type": "boolean"
+                  },
+                  "footprints": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "tracks",
+                  "vias",
+                  "pads",
+                  "copperpour",
+                  "footprints"
+                ],
+                "additionalProperties": false
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "id",
+              "layer",
+              "outline",
+              "clearance",
+              "minThickness",
+              "thermalGap",
+              "thermalBridge",
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "id",
+        "thickness",
+        "layers"
+      ],
+      "additionalProperties": false
+    },
+    "footprint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "libraryId": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        },
+        "locked": {
+          "const": true
+        },
+        "solderMaskMargin": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "solderPasteMargin": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "solderPasteMarginRatio": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "x": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "y": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "multipleOf": 0.000001
+        },
+        "side": {
+          "enum": [
+            "front",
+            "back"
+          ]
+        },
+        "pads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pad"
+          },
+          "maxItems": 2000
+        },
+        "graphics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "const": true
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "start": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "end": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "layer": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "B.Cu",
+                  "F.SilkS",
+                  "B.SilkS",
+                  "F.Fab",
+                  "B.Fab",
+                  "F.CrtYd",
+                  "B.CrtYd",
+                  "Edge.Cuts",
+                  "F.Mask",
+                  "B.Mask",
+                  "F.Paste",
+                  "B.Paste",
+                  "F.Adhes",
+                  "B.Adhes",
+                  "Dwgs.User",
+                  "Cmts.User",
+                  "Eco1.User",
+                  "Eco2.User",
+                  "Margin",
+                  "User.1",
+                  "User.2",
+                  "User.3",
+                  "User.4"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "arc",
+                  "circle",
+                  "polygon",
+                  "text",
+                  "dimension"
+                ]
+              },
+              "mid": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10000
+              },
+              "fill": {
+                "type": "boolean"
+              },
+              "stroke": {
+                "enum": [
+                  "default",
+                  "solid",
+                  "dash",
+                  "dot",
+                  "dash_dot",
+                  "dash_dot_dot"
+                ]
+              },
+              "text": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "rotation": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360,
+                    "multipleOf": 0.000001
+                  },
+                  "size": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": 0.000001,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": 0.000001,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "thickness": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1000,
+                    "multipleOf": 0.000001
+                  },
+                  "justify": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "left",
+                        "right",
+                        "top",
+                        "bottom",
+                        "mirror"
+                      ]
+                    },
+                    "maxItems": 3,
+                    "uniqueItems": true
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  },
+                  "italic": {
+                    "type": "boolean"
+                  },
+                  "bold": {
+                    "type": "boolean"
+                  },
+                  "property": {
+                    "type": "string",
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "value",
+                  "rotation",
+                  "size",
+                  "thickness"
+                ],
+                "additionalProperties": false
+              },
+              "dimension": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "aligned",
+                      "radial",
+                      "leader"
+                    ]
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "leaderLength": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "format": {
+                    "type": "object",
+                    "properties": {
+                      "prefix": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "suffix": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "units": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "unitsFormat": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "precision": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 6
+                      },
+                      "overrideValue": {
+                        "type": "string",
+                        "maxLength": 4096
+                      }
+                    },
+                    "required": [
+                      "prefix",
+                      "suffix",
+                      "units",
+                      "unitsFormat",
+                      "precision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "style": {
+                    "type": "object",
+                    "properties": {
+                      "arrowLength": {
+                        "type": "number",
+                        "minimum": 0.000001,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      },
+                      "textPositionMode": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2
+                      },
+                      "arrowDirection": {
+                        "enum": [
+                          "inward",
+                          "outward"
+                        ]
+                      },
+                      "extensionHeight": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "extensionOffset": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "keepTextAligned": {
+                        "type": "boolean"
+                      },
+                      "textFrame": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      }
+                    },
+                    "required": [
+                      "arrowLength",
+                      "textPositionMode",
+                      "extensionOffset"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "caption": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "value": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "rotation": {
+                        "type": "number",
+                        "minimum": -360,
+                        "maximum": 360,
+                        "multipleOf": 0.000001
+                      },
+                      "size": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": 0.000001,
+                            "maximum": 1000,
+                            "multipleOf": 0.000001
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": 0.000001,
+                            "maximum": 1000,
+                            "multipleOf": 0.000001
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "thickness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000,
+                        "multipleOf": 0.000001
+                      },
+                      "justify": {
+                        "type": "array",
+                        "items": {
+                          "enum": [
+                            "left",
+                            "right",
+                            "top",
+                            "bottom",
+                            "mirror"
+                          ]
+                        },
+                        "maxItems": 3,
+                        "uniqueItems": true
+                      },
+                      "hidden": {
+                        "type": "boolean"
+                      },
+                      "italic": {
+                        "type": "boolean"
+                      },
+                      "bold": {
+                        "type": "boolean"
+                      },
+                      "property": {
+                        "type": "string",
+                        "maxLength": 4096
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "value",
+                      "rotation",
+                      "size",
+                      "thickness"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "format",
+                  "style",
+                  "caption"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "start",
+              "end",
+              "width",
+              "layer"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "reference": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "const": true
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "netId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "layer": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "B.Cu",
+                  "F.SilkS",
+                  "B.SilkS",
+                  "F.Fab",
+                  "B.Fab",
+                  "F.CrtYd",
+                  "B.CrtYd",
+                  "Edge.Cuts",
+                  "F.Mask",
+                  "B.Mask",
+                  "F.Paste",
+                  "B.Paste",
+                  "F.Adhes",
+                  "B.Adhes",
+                  "Dwgs.User",
+                  "Cmts.User",
+                  "Eco1.User",
+                  "Eco2.User",
+                  "Margin",
+                  "User.1",
+                  "User.2",
+                  "User.3",
+                  "User.4"
+                ]
+              },
+              "outline": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10000,
+                "minItems": 3
+              },
+              "holes": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 10000,
+                  "minItems": 3
+                },
+                "maxItems": 100
+              },
+              "filledPolygons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "multipleOf": 0.000001
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "multipleOf": 0.000001
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 60000,
+                      "minItems": 3
+                    },
+                    "island": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 2000
+              },
+              "clearance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "minThickness": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "thermalGap": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "thermalBridge": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "padConnection": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "thru_hole_only"
+                ]
+              },
+              "islandRemovalMode": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "fillEnabled": {
+                "type": "boolean"
+              },
+              "keepout": {
+                "type": "object",
+                "properties": {
+                  "tracks": {
+                    "type": "boolean"
+                  },
+                  "vias": {
+                    "type": "boolean"
+                  },
+                  "pads": {
+                    "type": "boolean"
+                  },
+                  "copperpour": {
+                    "type": "boolean"
+                  },
+                  "footprints": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "tracks",
+                  "vias",
+                  "pads",
+                  "copperpour",
+                  "footprints"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "netId",
+              "layer",
+              "outline",
+              "clearance",
+              "minThickness",
+              "thermalGap",
+              "thermalBridge"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 1000
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "^[^\\u0000-\\u001f]+$"
+              },
+              "offset": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "z": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "scale": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000
+                  },
+                  "y": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000
+                  },
+                  "z": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "rotation": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "z": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              "hidden": {
+                "type": "boolean"
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 32
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "id",
+        "libraryId",
+        "x",
+        "y",
+        "rotation",
+        "side",
+        "pads",
+        "graphics",
+        "order"
+      ],
+      "additionalProperties": false
+    },
+    "pad": {
+      "type": "object",
+      "properties": {
+        "locked": {
+          "const": true
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "number": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "x": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "y": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "multipleOf": 0.000001
+        },
+        "type": {
+          "enum": [
+            "smd",
+            "thru_hole",
+            "np_thru_hole"
+          ]
+        },
+        "shape": {
+          "enum": [
+            "rect",
+            "circle",
+            "oval",
+            "roundrect"
+          ]
+        },
+        "size": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0.000001,
+              "maximum": 1000,
+              "multipleOf": 0.000001
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0.000001,
+              "maximum": 1000,
+              "multipleOf": 0.000001
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "drill": {
+          "type": "number",
+          "minimum": 0.000001,
+          "maximum": 1000,
+          "multipleOf": 0.000001
+        },
+        "netId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "F.Cu",
+              "In1.Cu",
+              "In2.Cu",
+              "B.Cu",
+              "F.SilkS",
+              "B.SilkS",
+              "F.Fab",
+              "B.Fab",
+              "F.CrtYd",
+              "B.CrtYd",
+              "Edge.Cuts",
+              "F.Mask",
+              "B.Mask",
+              "F.Paste",
+              "B.Paste",
+              "F.Adhes",
+              "B.Adhes",
+              "Dwgs.User",
+              "Cmts.User",
+              "Eco1.User",
+              "Eco2.User",
+              "Margin",
+              "User.1",
+              "User.2",
+              "User.3",
+              "User.4",
+              "*.Cu",
+              "*.Mask"
+            ]
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "drillOffset": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000,
+              "multipleOf": 0.000001
+            },
+            "y": {
+              "type": "number",
+              "minimum": -100000,
+              "maximum": 100000,
+              "multipleOf": 0.000001
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "roundrectRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "chamferRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "chamfer": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "top_left",
+              "top_right",
+              "bottom_left",
+              "bottom_right"
+            ]
+          },
+          "maxItems": 4,
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "solderMaskMargin": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "solderPasteMargin": {
+          "type": "number",
+          "minimum": -100000,
+          "maximum": 100000,
+          "multipleOf": 0.000001
+        },
+        "solderPasteMarginRatio": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "thermalBridgeAngle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "multipleOf": 0.000001
+        },
+        "zoneConnect": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "removeUnusedLayers": {
+          "type": "boolean"
+        },
+        "unconnected": {
+          "const": true
+        }
+      },
+      "required": [
+        "id",
+        "number",
+        "x",
+        "y",
+        "rotation",
+        "type",
+        "shape",
+        "size",
+        "netId"
+      ],
+      "additionalProperties": false
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "position": {
+          "$ref": "#/$defs/point"
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        },
+        "libraryId": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        },
+        "reference": {
+          "type": "string",
+          "maxLength": 4096,
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "simulation": {
+          "type": "object",
+          "properties": {
+            "valueFormat": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "KiCad Sim.Params derived from the component value; exactly one literal ${VALUE} binding, optionally with a single parameter name.",
+              "pattern": "^(?:\\s*[a-zA-Z][\\w.]*\\s*=\\s*)?\\$\\{VALUE\\}\\s*$"
+            },
+            "device": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "type": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "library": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "pins": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "parameters": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "seriesResistance": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "initialVoltage": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "initialCurrent": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "coupling": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "modelSource": {
+              "type": "string",
+              "enum": [
+                "basic",
+                "external"
+              ]
+            },
+            "passiveModel": {
+              "type": "string",
+              "enum": [
+                "R",
+                "C",
+                "L"
+              ]
+            },
+            "sourceType": {
+              "type": "string",
+              "enum": [
+                "DC",
+                "PULSE",
+                "SIN"
+              ]
+            },
+            "excluded": {
+              "type": "boolean"
+            },
+            "nativeOrder": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2000
+            },
+            "fields": {
+              "type": "object",
+              "maxProperties": 100,
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^Sim[.]",
+                "maxLength": 100
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 4096
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "rotation": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360,
+          "multipleOf": 0.0001
+        },
+        "unit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "mirror": {
+          "enum": [
+            "x",
+            "y"
+          ]
+        },
+        "fields": {
+          "type": "object",
+          "maxProperties": 100,
+          "propertyNames": {
+            "allOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "not": {
+                  "enum": [
+                    "Reference",
+                    "Value",
+                    "__proto__",
+                    "prototype",
+                    "constructor"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "pattern": "^Sim[.]"
+                }
+              },
+              {
+                "not": {
+                  "enum": [
+                    "OpenPE.SeriesResistance",
+                    "OpenPE.InitialVoltage",
+                    "OpenPE.InitialCurrent",
+                    "OpenPE.Coupling",
+                    "OpenPE.ModelSource",
+                    "OpenPE.PassiveModel",
+                    "OpenPE.SourceType"
+                  ]
+                }
+              }
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        },
+        "fieldLayout": {
+          "type": "object",
+          "description": "Native field placement and effects. Missing entries use a hidden 1.27 mm field at the component position. Saves omit this layout and explicit show_name/do_not_autoplace no defaults.",
+          "maxProperties": 102,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/sexpr"
+                },
+                {
+                  "not": {
+                    "type": "array",
+                    "items": [
+                      {
+                        "enum": [
+                          "property",
+                          "uuid",
+                          "lib_id",
+                          "symbol"
+                        ]
+                      }
+                    ],
+                    "minItems": 1
+                  }
+                }
+              ]
+            },
+            "maxItems": 2000
+          }
+        },
+        "kicad": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/sexpr"
+              },
+              {
+                "not": {
+                  "type": "array",
+                  "items": [
+                    {
+                      "enum": [
+                        "uuid",
+                        "at",
+                        "lib_id",
+                        "lib_name",
+                        "unit",
+                        "mirror",
+                        "property",
+                        "instances"
+                      ]
+                    }
+                  ],
+                  "minItems": 1
+                }
+              }
+            ]
+          },
+          "maxItems": 2000,
+          "description": "Complementary instance metadata. Saves omit body_style 1, exclude_from_sim no, in_bom/on_board/in_pos_files yes and dnp no; nondefault attributes and pin UUIDs are retained."
+        },
+        "fieldOrder": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "footprints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/footprint"
+          },
+          "maxItems": 2000
+        }
+      },
+      "required": [
+        "id",
+        "position",
+        "symbol",
+        "reference",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "netBoard": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "start": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "end": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": -100000,
+                    "maximum": 100000,
+                    "multipleOf": 0.000001
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "layer": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "B.Cu"
+                ]
+              },
+              "locked": {
+                "const": true
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "id",
+              "start",
+              "end",
+              "width",
+              "layer",
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "vias": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "multipleOf": 0.000001
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "multipleOf": 0.000001
+              },
+              "diameter": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "drill": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "locked": {
+                "const": true
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "id",
+              "x",
+              "y",
+              "diameter",
+              "drill",
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10000
+        },
+        "zones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locked": {
+                "const": true
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "layer": {
+                "enum": [
+                  "F.Cu",
+                  "In1.Cu",
+                  "In2.Cu",
+                  "B.Cu",
+                  "F.SilkS",
+                  "B.SilkS",
+                  "F.Fab",
+                  "B.Fab",
+                  "F.CrtYd",
+                  "B.CrtYd",
+                  "Edge.Cuts",
+                  "F.Mask",
+                  "B.Mask",
+                  "F.Paste",
+                  "B.Paste",
+                  "F.Adhes",
+                  "B.Adhes",
+                  "Dwgs.User",
+                  "Cmts.User",
+                  "Eco1.User",
+                  "Eco2.User",
+                  "Margin",
+                  "User.1",
+                  "User.2",
+                  "User.3",
+                  "User.4"
+                ]
+              },
+              "outline": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    },
+                    "y": {
+                      "type": "number",
+                      "minimum": -100000,
+                      "maximum": 100000,
+                      "multipleOf": 0.000001
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10000,
+                "minItems": 3
+              },
+              "holes": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "multipleOf": 0.000001
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 10000,
+                  "minItems": 3
+                },
+                "maxItems": 100
+              },
+              "filledPolygons": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "multipleOf": 0.000001
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": -100000,
+                            "maximum": 100000,
+                            "multipleOf": 0.000001
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 60000,
+                      "minItems": 3
+                    },
+                    "island": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 2000
+              },
+              "clearance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "minThickness": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "thermalGap": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "thermalBridge": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "padConnection": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "thru_hole_only"
+                ]
+              },
+              "islandRemovalMode": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "fillEnabled": {
+                "type": "boolean"
+              },
+              "keepout": {
+                "type": "object",
+                "properties": {
+                  "tracks": {
+                    "type": "boolean"
+                  },
+                  "vias": {
+                    "type": "boolean"
+                  },
+                  "pads": {
+                    "type": "boolean"
+                  },
+                  "copperpour": {
+                    "type": "boolean"
+                  },
+                  "footprints": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "tracks",
+                  "vias",
+                  "pads",
+                  "copperpour",
+                  "footprints"
+                ],
+                "additionalProperties": false
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "id",
+              "layer",
+              "outline",
+              "clearance",
+              "minThickness",
+              "thermalGap",
+              "thermalBridge",
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "order"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

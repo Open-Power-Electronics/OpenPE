@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lm2735-msop8-sepic.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LM2735 SEPIC",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM2735Y.lib\"]"
+  }
+}

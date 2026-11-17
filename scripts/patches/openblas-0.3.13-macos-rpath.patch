@@ -1,0 +1,19 @@
+--- a/f_check
++++ b/f_check
+@@ -322,8 +322,14 @@
+ 
+ 
+ 	if ($flags =~ /^\-rpath\@/) {
+-	    $flags =~ s/\@/\,/g;
+-	    $linker_L .= "-Wl,". $flags . " " ;
++	    # gfortran 16 emits -rpath @loader_path. Rewriting every @ to a comma
++	    # produces -Wl,-rpath,,loader_path, which Darwin ld rejects.
++	    if ($flags =~ /loader_path/) {
++		$linker_L .= '-Wl,-rpath,@loader_path ';
++	    } else {
++		$flags =~ s/\@/\,/g;
++		$linker_L .= "-Wl,". $flags . " " ;
++	    }
+ 	}
+ 
+ 	if ($flags =~ /^\-rpath-link\@/) {

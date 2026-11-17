@@ -1,0 +1,130 @@
+{
+  "version": 47,
+  "sources": [
+    {
+      "name": "ngspice-47.tar.gz",
+      "url": "https://downloads.sourceforge.net/project/ngspice/ng-spice-rework/47/ngspice-47.tar.gz",
+      "sha256": "894e649651f1838a14095e5a5439e7d3aa63e87ede14d283173fda4fcdef675f"
+    },
+    {
+      "name": "libsndfile-1.2.2.tar.gz",
+      "url": "https://codeload.github.com/libsndfile/libsndfile/tar.gz/refs/tags/1.2.2",
+      "sha256": "ffe12ef8add3eaca876f04087734e6e8e029350082f3251f565fa9da55b52121"
+    },
+    {
+      "name": "libsamplerate-0.2.2.tar.gz",
+      "url": "https://codeload.github.com/libsndfile/libsamplerate/tar.gz/refs/tags/0.2.2",
+      "sha256": "16e881487f184250deb4fcb60432d7556ab12cb58caea71ef23960aec6c0405a"
+    }
+  ],
+  "platforms": {
+    "win32-x64": {
+      "origin": "official-binary",
+      "executable": "Spice64/bin/ngspice_con.exe",
+      "archive": {
+        "name": "ngspice-47_64.7z",
+        "url": "https://downloads.sourceforge.net/project/ngspice/ng-spice-rework/47/ngspice-47_64.7z",
+        "sha256": "59225971bd68cdd1199443649aa4615a9e6d684933f205ab49006a3942518f5a"
+      },
+      "files": {
+        "Spice64/bin/ngspice_con.exe": "22d5cae2bd32b2e39157a8d27bf457122f68285b72a9ebefdf41551b628233ab",
+        "Spice64/bin/libomp140.x86_64.dll": "644c49149f8a5d9275a83e9331a0adbd14620f930190e985d30b842107123597",
+        "Spice64/bin/sndfile.dll": "4e3bd2de8e1485110eaebef8e1239471f73d608773831c323bf528e05645655e",
+        "Spice64/bin/samplerate.dll": "2e24802f94b584173de7358a5f26d3147226f417dcebeb69bee98994022483ce",
+        "Spice64/lib/ngspice/analog.cm": "ba754b0470e0962a9e14c3453cbe038e08d77937e87f8f80428ee6f2ff021a78",
+        "Spice64/lib/ngspice/digital.cm": "fb205d4c848f6616595f24cd0b8f2d9b6130694aac00798f51d6f597136d5549",
+        "Spice64/lib/ngspice/spice2poly.cm": "20c19a82c60921915f5423693def1c818d5973cd833234715c74007c5f25bb50",
+        "Spice64/lib/ngspice/table.cm": "ad6e5b6a30453d9e83692259e2f5898ae8f4cf9c35fba9209be705b6cf0ad77b",
+        "Spice64/lib/ngspice/tlines.cm": "c6acb748d815d1ebe16afd412440caaafba14f6d68bdf9a67d82b4d1255a2290",
+        "Spice64/lib/ngspice/xtradev.cm": "0c7cf30504d1bc8a3ff05ce5760fe4455d58de5d6eb1d5dd9c270f310c415087",
+        "Spice64/lib/ngspice/xtraevt.cm": "008da27af00bf5ea370ab145bedde5b4186504aca52dc51165088bfea509fe34",
+        "Spice64/docs/COPYING": "6d939001e899ede403277fb37124c2af6f1cf92926465cd8f4bf59859e06f579",
+        "Spice64/docs/AUTHORS": "06de548000b92bc878de318a5737ffcc24562ed56a1d628c97a9e7bccf9071f5",
+        "Spice64/share/ngspice/scripts/spinit": "8107a9b6a05e34da5865fe2fe467bfa11d0e3dbdabb705039de62cf19c5ff6f7"
+      }
+    },
+    "darwin-arm64": {
+      "origin": "github-release",
+      "executable": "Spice64/bin/ngspice",
+      "archive": {
+        "tag": "solvers-ngspice-47-darwin-arm64-1",
+        "name": "ngspice-47-darwin-arm64-1.tar.gz",
+        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-ngspice-47-darwin-arm64-1/ngspice-47-darwin-arm64-1.tar.gz",
+        "size": 4649430,
+        "sha256": "88bfdfc3a5804040ad9e464c44d5d2d23d0db19d5c6ff666a976890e3e20d957"
+      },
+      "files": {
+        "Spice64/bin/ngspice": "165f18c602d0a3cbe0b324f405979bf2bff48bafb2cc81dc785717ecc0c721cd",
+        "Spice64/bin/libomp.dylib": "cce5b0cc78e3d3cf3cfff4202f1121ef226cf82fdb6d7540e98668ceb8650995",
+        "Spice64/bin/libsndfile.1.dylib": "782f49d28b78ba1f2f156749d77fde70c83b7564e72c7da67c81d5aac4f10534",
+        "Spice64/bin/libsamplerate.0.dylib": "8961cdfcd1e43304d5c0b48b72a580efac89109d098c9adeea7eeb7956408062",
+        "Spice64/lib/ngspice/analog.cm": "0cd2f904b0aed591c9aab308c407d5a98d451f003dfc178d5952021c84763936",
+        "Spice64/lib/ngspice/digital.cm": "d5b5102989319618ebeafe6757ae8cdb0c0046de91341902a332c91e05007736",
+        "Spice64/lib/ngspice/spice2poly.cm": "5729ef4b65101cc307ffaae0aabefcbc4e41488e40fa10ef8bba2328e70b30a6",
+        "Spice64/lib/ngspice/table.cm": "1aec682d6ac10b79961658ec9caba681064d194d9a2f3474b45ec8b230322f70",
+        "Spice64/lib/ngspice/tlines.cm": "026c43a0769b59fdbf52f85c9623daf4004dd1465c01e28bdce3b0987d18be5e",
+        "Spice64/lib/ngspice/xtradev.cm": "ab511978c87c994f42e626b627114035628ba425d0b0853307c18edca8915e54",
+        "Spice64/lib/ngspice/xtraevt.cm": "286dbe59b74c3381e1b76fc8e3a55a75b62d3c45005ea45cf954a912938d5c17",
+        "Spice64/docs/COPYING": "6d939001e899ede403277fb37124c2af6f1cf92926465cd8f4bf59859e06f579",
+        "Spice64/docs/AUTHORS": "06de548000b92bc878de318a5737ffcc24562ed56a1d628c97a9e7bccf9071f5",
+        "Spice64/share/ngspice/scripts/spinit": "8107a9b6a05e34da5865fe2fe467bfa11d0e3dbdabb705039de62cf19c5ff6f7"
+      }
+    },
+    "linux-x64": {
+      "origin": "source-build",
+      "executable": "Spice64/bin/ngspice",
+      "toolchain": {
+        "gcc": "14.2.0",
+        "glibc": "2.41",
+        "cmake": "4.4.5"
+      },
+      "sources": [
+        {
+          "name": "gcc-14_14.2.0.orig.tar.gz",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0.orig.tar.gz",
+          "size": 94299633,
+          "sha256": "e162a5ef3f0077ecae598c6556908d2ab80841532df3398072a96a6df6e6aa29"
+        },
+        {
+          "name": "gcc-14_14.2.0-19.debian.tar.xz",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0-19.debian.tar.xz",
+          "size": 2577016,
+          "sha256": "31cbab4bafa48aa1c540497bd8098cbcf98e673778f927651ed944709f687781"
+        }
+      ],
+      "files": {
+        "Spice64/bin/libgcc_s.so.1": "047290a73c669c32ba86bf7a97672f1e5d9b8128f4f7d8c94504b0db3fb02db0",
+        "Spice64/bin/libgomp.so.1": "e5b3bf2dfefd35cb2ccdc23e870d271e1f7d6bcc701081cde3668c6095c6989b",
+        "Spice64/bin/libsamplerate.so.0": "7ca832a6fbd3f3dcec19c35695424aca68f82c1c6ba8eaf56b29b7c00f297c46",
+        "Spice64/bin/libsndfile.so.1": "d5d67108df3b89cb5fde98153cc385ae099fbbe376e38642d749d794e303f4d0",
+        "Spice64/bin/libstdc++.so.6": "9e082db3d01e6077d71a41637f72de352f0392fe88664435056727d46a568a6c",
+        "Spice64/bin/ngspice": "cdad9073e63a047531a4714397a493dadde5be002256c522635e204403ba8d01",
+        "Spice64/docs/AUTHORS": "06de548000b92bc878de318a5737ffcc24562ed56a1d628c97a9e7bccf9071f5",
+        "Spice64/docs/COPYING": "6d939001e899ede403277fb37124c2af6f1cf92926465cd8f4bf59859e06f579",
+        "Spice64/docs/build/build-ngspice-linux.sh": "47fe119cda97735d737ff9c98fef1b6b9a3cf11680b666867631950958a7752c",
+        "Spice64/docs/build/linux-bundle.sh": "f4d85afd8064b32962c425a603b493d14a54a19c2e1fcbfae73618fd821855d0",
+        "Spice64/docs/build/ngspice-47-linux-codemodel-path.patch": "2ca21ff4588ef0e4d6b0aaa9296564edf31c80b18848ae0ae067c68587153cfb",
+        "Spice64/docs/gcc/COPYING.LIB": "a9bdde5616ecdd1e980b44f360600ee8783b1f99b8cc83a2beb163a0a390e861",
+        "Spice64/docs/gcc/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+        "Spice64/docs/gcc/COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+        "Spice64/docs/libsamplerate-COPYING": "2c1f76ce2effdddb425018405d5690c0b1ab4e6976e35296b0a6db65c5e1a55d",
+        "Spice64/docs/libsndfile-COPYING": "ad01ea5cd2755f6048383c8d54c88459cd6fcb17757c5c8892f8c5ea060f6140",
+        "Spice64/lib/ngspice/analog.cm": "a41480e03b19532bf107e852fa963b9482e4ecf4242776a8c829f32ae5285429",
+        "Spice64/lib/ngspice/digital.cm": "1c220475545d58e808f77bc8d5d4fc5c8be9b167a44cc85d097961e40d6541a4",
+        "Spice64/lib/ngspice/spice2poly.cm": "22f0759f03e25e59636b03033dcfa646224e358d757784bc95553773d07caa84",
+        "Spice64/lib/ngspice/table.cm": "460141e29c9b492173096400eaff772723e13a313037bb06fe3c76282772ef89",
+        "Spice64/lib/ngspice/tlines.cm": "607d455e6f44c3b8c55be99043cabbadf1de9758666a0979c466570d90a7e07d",
+        "Spice64/lib/ngspice/xtradev.cm": "13150321629145c37bdef7ae6cf0af1e6b1571a068d0009cda1f7efb7686ea6b",
+        "Spice64/lib/ngspice/xtraevt.cm": "fc99d826ccef10f33ca908299aa7556ef7e9722e9c35cb4c231cfe9c87142d4a",
+        "Spice64/share/ngspice/scripts/spinit": "8107a9b6a05e34da5865fe2fe467bfa11d0e3dbdabb705039de62cf19c5ff6f7"
+      },
+      "archive": {
+        "name": "ngspice-47-linux-x64-1.tar.gz",
+        "tag": "solvers-ngspice-47-linux-x64-1",
+        "url": "https://github.com/fleaxiao/OpenPE/releases/download/solvers-ngspice-47-linux-x64-1/ngspice-47-linux-x64-1.tar.gz",
+        "size": 6903234,
+        "sha256": "cdc0c14cc2842185b323f3b943aafe6c945bae934f360406be876f6e0328d235"
+      }
+    }
+  }
+}

@@ -1,0 +1,297 @@
+import * as THREE from 'three';
+import type { ModelCadSketch, ModelCadSketchPlane } from './ModelCadSketchPanel';
+import { createModelGridScene } from './model-grid-scene';
+import {
+  modelCadSketchOutlines,
+  modelCadSketchContourOutline,
+  modelCadSketchVertices,
+} from '@/lib/model-cad-sketch';
+
+/** Workplanes use native PCB axes; the Model renderer reflects native Y. */
+export function modelCadSketchFrame(plane: ModelCadSketchPlane, origin: ModelCadSketch['origin']) {
+  const center = new THREE.Vector3(origin.x, -origin.y, origin.z);
+  const u = plane === 'YZ' ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(1, 0, 0);
+  const v = plane === 'XY' ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 0, 1);
+  const normal =
+    plane === 'XY'
+      ? new THREE.Vector3(0, 0, 1)
+      : plane === 'XZ'
+        ? new THREE.Vector3(0, 1, 0)
+        : new THREE.Vector3(1, 0, 0);
+  return { center, u, v, normal };
+}
+
+/** Transient sketch lines share the PCB scene/camera and never enter design data. */
+export function createModelCadSketchScene(root: THREE.Group, extent: number) {
+  const grid = createModelGridScene(root);
+  grid.lines.removeFromParent();
+  const span = Math.max(60, extent);
+  let current: ModelCadSketch | null = null;
+  let dark = false;
+  let options = { visible: true, spacing: 0.5 };
+  let view: { camera: THREE.Camera; width: number; height: number } | null = null;
+  const raycaster = new THREE.Raycaster();
+  const updateGrid = () => {
+    if (current?.phase !== 'sketch') return;
+    const { center, u, v, normal } = modelCadSketchFrame(current.plane, current.origin);
+    grid.lines.matrixAutoUpdate = false;
+    grid.lines.matrix.makeBasis(u, v, u.clone().cross(v)).setPosition(center);
+    grid.lines.matrixWorldNeedsUpdate = true;
+    let bounds = { minX: -span, maxX: span, minY: -span, maxY: span };
+    let pixelsPerUnit = 1;
+    if (view) {
+      const { camera, width, height } = view;
+      camera.updateMatrixWorld(true);
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
+      const corners: THREE.Vector2[] = [];
+      for (const [x, y] of [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ]) {
+        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+        const point = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+        if (!point) continue;
+        point.sub(center);
+        const local = new THREE.Vector2(point.dot(u), point.dot(v));
+        if (Number.isFinite(local.x) && Number.isFinite(local.y) && local.length() <= 1e7)
+          corners.push(local);
+      }
+      if (corners.length === 4)
+        bounds = {
+          minX: Math.min(...corners.map((point) => point.x)),
+          maxX: Math.max(...corners.map((point) => point.x)),
+          minY: Math.min(...corners.map((point) => point.y)),
+          maxY: Math.max(...corners.map((point) => point.y)),
+        };
+      const anchor = center
+        .clone()
+        .addScaledVector(u, (bounds.minX + bounds.maxX) / 2)
+        .addScaledVector(v, (bounds.minY + bounds.maxY) / 2);
+      const projected = anchor.clone().project(camera);
+      const screenVector = (axis: THREE.Vector3) => {
+        const point = anchor.clone().add(axis).project(camera).sub(projected);
+        return new THREE.Vector2((point.x * width) / 2, (point.y * height) / 2);
+      };
+      const screenU = screenVector(u),
+        screenV = screenVector(v);
+      // Distance between the projected parallel lines, including plane foreshortening.
+      pixelsPerUnit =
+        Math.abs(screenU.cross(screenV)) / Math.max(screenU.length(), screenV.length());
+    }
+    grid.update({ ...options, dark, pixelsPerUnit, bounds });
+  };
+  const clear = () => {
+    root.traverse((object) => {
+      if (object === grid.lines) return;
+      if (!(
+        object instanceof THREE.Line ||
+        object instanceof THREE.Points ||
+        object instanceof THREE.Mesh
+      ))
+        return;
+      object.geometry.dispose();
+      for (const material of Array.isArray(object.material) ? object.material : [object.material])
+        material.dispose();
+    });
+    root.clear();
+  };
+  return {
+    update(
+      sketch: ModelCadSketch | null,
+      nextDark: boolean,
+      nextOptions = { visible: true, spacing: 0.5 },
+    ) {
+      clear();
+      current = sketch;
+      dark = nextDark;
+      options = nextOptions;
+      if (!sketch) return;
+      const { center, u, v } = modelCadSketchFrame(sketch.plane, sketch.origin);
+      const world = (point: { x: number; y: number }) =>
+        center.clone().addScaledVector(u, point.x).addScaledVector(v, point.y);
+      const drawing = sketch.phase === 'sketch';
+      if (drawing) {
+        root.add(grid.lines);
+        updateGrid();
+      }
+      if (sketch.phase === 'plane' || drawing) {
+        const boundarySpan = drawing ? span : Math.max(10, extent * 0.6);
+        if (!drawing) {
+          const plane = new THREE.Mesh(
+            new THREE.PlaneGeometry(boundarySpan * 2, boundarySpan * 2),
+            new THREE.MeshBasicMaterial({
+              color: dark ? 0x82c1ff : 0x2684d9,
+              transparent: true,
+              opacity: 0.12,
+              side: THREE.DoubleSide,
+              depthTest: false,
+              depthWrite: false,
+            }),
+          );
+          plane.matrixAutoUpdate = false;
+          plane.matrix.makeBasis(u, v, u.clone().cross(v)).setPosition(center);
+          plane.matrixWorldNeedsUpdate = true;
+          plane.renderOrder = 20;
+          plane.userData.modelCadSketchPlane = true;
+          plane.raycast = () => {};
+          root.add(plane);
+        }
+        const boundary = new THREE.LineSegments(
+          new THREE.BufferGeometry().setFromPoints(
+            [
+              { x: -boundarySpan, y: -boundarySpan },
+              { x: boundarySpan, y: -boundarySpan },
+              { x: boundarySpan, y: -boundarySpan },
+              { x: boundarySpan, y: boundarySpan },
+              { x: boundarySpan, y: boundarySpan },
+              { x: -boundarySpan, y: boundarySpan },
+              { x: -boundarySpan, y: boundarySpan },
+              { x: -boundarySpan, y: -boundarySpan },
+              { x: -boundarySpan, y: 0 },
+              { x: boundarySpan, y: 0 },
+              { x: 0, y: -boundarySpan },
+              { x: 0, y: boundarySpan },
+            ].map(world),
+          ),
+          new THREE.LineBasicMaterial({
+            color: dark ? 0x82c1ff : 0x2684d9,
+            transparent: true,
+            opacity: drawing ? 0.4 : 0.8,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        boundary.renderOrder = 21;
+        boundary.userData.modelCadSketchPlane = true;
+        boundary.raycast = () => {};
+        root.add(boundary);
+      }
+      let points = [...sketch.points];
+      if (sketch.shape === 'rectangle' && points.length === 2) {
+        const [a, b] = points;
+        points = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }, a];
+      } else if (sketch.shape === 'circle' && points.length === 2) {
+        const [a, b] = points,
+          radius = Math.hypot(b.x - a.x, b.y - a.y);
+        points = Array.from({ length: 97 }, (_, i) => ({
+          x: a.x + radius * Math.cos((i * Math.PI) / 48),
+          y: a.y + radius * Math.sin((i * Math.PI) / 48),
+        }));
+      } else if (sketch.shape === 'polygon') {
+        if (sketch.closed && points.length > 2) points.push(points[0]);
+        else if (drawing && sketch.cursor) points.push(sketch.cursor);
+      }
+      const color = dark ? 0x82c1ff : 0x2684d9;
+      for (const outline of modelCadSketchOutlines(sketch.contours)) {
+        if (outline.length < 3) continue;
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([...outline, outline[0]].map(world)),
+          new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false }),
+        );
+        line.renderOrder = 22;
+        line.userData.modelCadSketch = true;
+        root.add(line);
+      }
+      const selectedContour =
+        drawing && sketch.selectedContour !== undefined
+          ? sketch.contours[sketch.selectedContour]
+          : null;
+      if (selectedContour) {
+        const outline = modelCadSketchContourOutline(selectedContour);
+        const highlight = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([...outline, outline[0]].map(world)),
+          new THREE.LineBasicMaterial({
+            color: dark ? 0x82d0ac : 0x26734f,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        highlight.renderOrder = 23;
+        highlight.userData.modelCadSketchSelection = true;
+        highlight.raycast = () => {};
+        root.add(highlight);
+        const corners = new THREE.Points(
+          new THREE.BufferGeometry().setFromPoints(
+            modelCadSketchVertices(selectedContour).map((point) =>
+              world({
+                x: point.x + selectedContour.position.x,
+                y: point.y + selectedContour.position.y,
+              }),
+            ),
+          ),
+          new THREE.PointsMaterial({
+            color: dark ? 0x82d0ac : 0x26734f,
+            size: 7,
+            sizeAttenuation: false,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        const vertices = modelCadSketchVertices(selectedContour);
+        const selected = new Set(sketch.selectedCorners ?? vertices.map((_, index) => index));
+        corners.geometry.setAttribute(
+          'color',
+          new THREE.Float32BufferAttribute(
+            vertices.flatMap((_, index) => {
+              const color = new THREE.Color(
+                selected.has(index) ? (dark ? 0x82d0ac : 0x26734f) : dark ? 0x777f83 : 0xa0a7a3,
+              );
+              return color.toArray();
+            }),
+            3,
+          ),
+        );
+        corners.material.color.set(0xffffff);
+        corners.material.vertexColors = true;
+        corners.renderOrder = 24;
+        corners.userData.modelCadSketchSelection = true;
+        corners.raycast = () => {};
+        root.add(corners);
+      }
+      if (points.length > 1 && !sketch.closed) {
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points.map(world)),
+          new THREE.LineBasicMaterial({ color, depthTest: false, depthWrite: false }),
+        );
+        line.renderOrder = 22;
+        line.userData.modelCadSketch = true;
+        root.add(line);
+      }
+      if (drawing && sketch.points.length) {
+        const vertices = new THREE.Points(
+          new THREE.BufferGeometry().setFromPoints(sketch.points.map(world)),
+          new THREE.PointsMaterial({
+            color,
+            size: 6,
+            sizeAttenuation: false,
+            depthTest: false,
+            depthWrite: false,
+          }),
+        );
+        vertices.renderOrder = 23;
+        vertices.userData.modelCadSketch = true;
+        root.add(vertices);
+      }
+    },
+    clippingRange(camera: THREE.Camera) {
+      if (!current || (current.phase !== 'plane' && current.phase !== 'sketch')) return null;
+      const { center, u, v } = modelCadSketchFrame(current.plane, current.origin);
+      const direction = camera.getWorldDirection(new THREE.Vector3());
+      const halfSize = current.phase === 'plane' ? Math.max(10, extent * 0.6) : span;
+      const radius = halfSize * (Math.abs(u.dot(direction)) + Math.abs(v.dot(direction)));
+      const depth = center.sub(camera.position).dot(direction);
+      if (depth + radius <= 0) return null;
+      return { near: Math.max(0.001, depth - radius - 0.05), far: depth + radius + 0.05 };
+    },
+    updateGrid(nextView: { camera: THREE.Camera; width: number; height: number }) {
+      view = nextView;
+      updateGrid();
+    },
+    dispose() {
+      clear();
+      grid.dispose();
+    },
+  };
+}

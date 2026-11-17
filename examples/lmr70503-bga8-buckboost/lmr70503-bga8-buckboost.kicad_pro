@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lmr70503-bga8-buckboost.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LMR70503 Buck-Boost",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LMR70503.lib\"]"
+  }
+}

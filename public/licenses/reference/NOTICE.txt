@@ -1,0 +1,23 @@
+Curated power-electronics reference examples
+
+Source author: fleaxiao
+Source checkout: 3e94f7eb08821dcaf3309ac433f530cb56418030
+Selected from the local data/train, data/val and data/test directories.
+The supplied checkout has no top-level dataset license. No additional license is asserted for these designs.
+Embedded KiCad library data retains its upstream terms; see kicad-libraries.txt.
+Original source files are retained in resources/example-catalog/sources/<circuit-name>; SHA-256 hashes and source paths are recorded in resources/example-catalog/manifest.json.
+Changes: editable OpenPE conversion and KiCad 10 exports; board-edge copper-zone boundaries are clipped to a 0.5 mm board inset while internal partitions and local-zone outlines are retained. TPS61046 enabled copper zones are refilled by the shared OpenPE fill operation with 0.25 mm minimum clearance; the other boards retain saved copper contours. Terminal assemblies and virtual sources/loads form evenly spaced columns spanning the lower circuit. TPS61046 uses a visible 1 kohm output load; the other virtual output resistors are 100 ohms. Virtual sources/loads have no footprints and use 2.54 mm source leads with load leads extended to matching rail-label and official triangular-GND levels, completed values, explicit ESR/DCR and initial conditions. Instance reference/value text is arranged clear of symbols and wiring. Omitted print settings.
+Ancillary PCB metadata is omitted from project JSON; pinned originals retain the source records.
+LM2596 Buck uses LM2596T-ADJ with an OpenPE-derived adjustable model based on the hash-pinned original TI 5 V model. Only the internal feedback divider/sense and derived controller name change; original model files/notices remain unchanged. R1 = 3.09 kohm, R2 = 1.01 kohm.
+LM2598 Buck uses the hash-pinned original TI LM2598_ADJ_TRANS model with a 24 V source, 100 ohm output load and editable 3 V initial voltage on the soft-start capacitor C3. R1 is completed as a 4.7 kohm FLAG pull-up. The initial condition selects an enabled-controller operating point; it does not verify a discharged soft-start startup.
+Home defaults to 2 ms for TPS61046 and LM27761 and 10 ms for the other seven projects (LM5001 maximum step 10 ns; others 0.2 us), with a 1 kohm virtual output resistor for TPS61046 and 100 ohms for the other projects. A completed default-duration run and its final-window observations describe only that exact source/model/solver configuration. The LMR70503 compatibility adapter approximates one-shot event state while retaining its original RC/reset circuit; its original TI model file, PCB placement and saved copper remain unchanged. Simulation does not qualify hardware, control-loop stability, ERC, DRC or production designs.
+
+LM2596 Buck: data/test/lm2596_to220-5_buck/input.kicad_sch; data/test/lm2596_to220-5_buck/expert.kicad_pcb
+TPS61046 Boost: data/test/tps61046_bga6_boost/input.kicad_sch; data/test/tps61046_bga6_boost/expert.kicad_pcb
+LM2735 SEPIC: data/train/lm2735_msop8_sepic/input.kicad_sch; data/train/lm2735_msop8_sepic/expert.kicad_pcb
+LM25017 Fly-Buck: data/test/lm25017_wson8_flybuck/input.kicad_sch; data/test/lm25017_wson8_flybuck/expert.kicad_pcb
+LM5001 Boost: data/val/lm5001_soic8_boost/input.kicad_sch; data/val/lm5001_soic8_boost/expert.kicad_pcb
+LM27761 Charge Pump: data/test/lm27761_wson8_pump/input.kicad_sch; data/test/lm27761_wson8_pump/expert.kicad_pcb
+LMR12010 Buck: data/test/lmr12010_sot236_buck/input.kicad_sch; data/test/lmr12010_sot236_buck/expert.kicad_pcb
+LMR70503 Buck-Boost: data/train/lmr70503_bga8_buckboost/input.kicad_sch; data/train/lmr70503_bga8_buckboost/expert.kicad_pcb
+LM2598 Buck: data/test/lm2598_to220-7_buck/input.kicad_sch; data/test/lm2598_to220-7_buck/expert.kicad_pcb

@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Inductor_SMD_Wurth")(type "KiCad")(uri "${KIPRJMOD}/footprints/lm25017-wson8-flybuck.pretty")(options "")(descr "Project custom packages"))
+)

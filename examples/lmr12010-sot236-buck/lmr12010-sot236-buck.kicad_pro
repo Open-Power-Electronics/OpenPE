@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lmr12010-sot236-buck.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LMR12010 Buck",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LMR12010X.lib\"]"
+  }
+}

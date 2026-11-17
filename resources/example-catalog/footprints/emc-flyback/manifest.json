@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "analyticalModels": {
+    "emc-flyback-demo/L_8040_Shielded.step": {
+      "file": "models/L_8040_Shielded.step",
+      "replaces": "Bourns_SRN8040TA.step",
+      "sha256": "a79d7f0f5d2a4540d531948e4500618988eaba1aa22d6e556719ffe997626658",
+      "size": 57013,
+      "offset": [0, 0, 2],
+      "rotate": [0, 0, 0],
+      "scale": [1, 1, 1]
+    },
+    "emc-flyback-demo/T_EFD25_SMD.step": {
+      "file": "models/T_EFD25_SMD.step",
+      "replaces": "WE_750311591_EFD25-SMD_070-4476.step",
+      "sha256": "ee6f921dcec24f2ca957b7bf55ec2213188fbd8e8e7d7c5338e2d3d8ad11b81f",
+      "size": 187441,
+      "offset": [0, 0, 6.845],
+      "rotate": [0, 0, 0],
+      "scale": [1, 1, 1]
+    }
+  },
+  "models": {
+    "emc-flyback-demo/WE-CMB_744822222.step": {
+      "file": "models/WE-CMB_744822222.step",
+      "sha256": "89ff66fe9bc52b2ba95d24578985e15e193869fc959bb01234f5a388fa484999",
+      "size": 3177842,
+      "sourceUrl": "https://raw.githubusercontent.com/WurthElektronik/KiCad-Library/df5afb528e92371b558431a7dd41d654e09330ca/3dmodels/Inductor_THT_Wurth.3dshapes/L_Wurth_WE-CMB-S.step",
+      "approvedHosts": ["raw.githubusercontent.com"],
+      "license": "WURTH-KICAD-LICENSE.txt",
+      "manufacturer": "Wurth Elektronik",
+      "partNumber": "744822222",
+      "sourceCommit": "df5afb528e92371b558431a7dd41d654e09330ca",
+      "sourceSha256": "ac1239404086261a577773f66d1ae66f05a3c5497ebf23ba3765c1bc8e043a6b",
+      "modification": "Rigid root assembly alignment only; original shape, topology and colours retained. See scripts/prepare-emc-cmb-model.mjs."
+    }
+  },
+  "licenses": [
+    {
+      "file": "MODEL-SOURCES.md",
+      "sha256": "6a4e211d1b70d124259d9bfc4faee0a8bf8cb40048d3799e25bb097c427fc731"
+    },
+    {
+      "file": "WURTH-KICAD-LICENSE.txt",
+      "sha256": "e1523a553492b920480646abdf0c96bf3e576c438c7284075613033a8fd60297"
+    }
+  ]
+}

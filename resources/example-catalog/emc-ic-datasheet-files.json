@@ -1,0 +1,59 @@
+[
+  {
+    "ic": {
+      "manufacturer": "STMicroelectronics",
+      "family": "L78L12",
+      "reference": "U2",
+      "schematic_value": "L78L12ACUTR",
+      "symbol_library_id": "Regulator_Linear:L78L12_SOT89",
+      "footprint": "Package_TO_SOT_SMD:SOT-89-3"
+    },
+    "datasheet": {
+      "title": "L78L - Positive voltage regulators",
+      "source_url": "https://www.st.com/resource/en/datasheet/l78l.pdf",
+      "filename": "l78l12.pdf",
+      "sha256": "59f20e0433f1da567c06ecc7ceb74409695cf385ddded970d436e0f155a2c450",
+      "bytes": 2463973,
+      "page_count": 41,
+      "downloaded_on": "2026-10-30"
+    }
+  },
+  {
+    "ic": {
+      "manufacturer": "Texas Instruments",
+      "family": "TL431",
+      "reference": "U3",
+      "schematic_value": "TL431AIDBZR",
+      "symbol_library_id": "Reference_Voltage:TL431DBZ",
+      "footprint": "Package_TO_SOT_SMD:SOT-23"
+    },
+    "datasheet": {
+      "title": "TL431, TL432 Precision Programmable Reference (Rev. S)",
+      "source_url": "https://www.ti.com/lit/ds/symlink/tl431.pdf",
+      "filename": "tl431.pdf",
+      "sha256": "ed2e90697de4e2c553195514adf1ee59cda42863716b6ef702b8304a5b921d22",
+      "bytes": 3087819,
+      "page_count": 85,
+      "downloaded_on": "2026-10-30"
+    }
+  },
+  {
+    "ic": {
+      "manufacturer": "Lite-On",
+      "family": "LTV817S",
+      "reference": "U4",
+      "schematic_value": "LTV-817S",
+      "symbol_library_id": "Isolator:LTV-817S",
+      "footprint": "Package_DIP:SMDIP-4_W9.53mm"
+    },
+    "datasheet": {
+      "title": "LTV-817/827/847 series, DS-70-96-0016, Revision O",
+      "source_url": "https://pdf.hitech-semi.com/754058/LTV-817S.pdf",
+      "filename": "ltv817s.pdf",
+      "sha256": "eead16ac62a9706d072d303eea3680bb01a738f6800e8cc4739d8ff3a88dfa3c",
+      "bytes": 719462,
+      "page_count": 18,
+      "downloaded_on": "2026-10-30"
+    }
+  }
+]

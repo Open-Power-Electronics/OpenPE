@@ -1,0 +1,356 @@
+(footprint "L_Wurth_WE-DD-7345straight"
+  (version 20260206)
+  (generator openpe)
+  (layer "F.Cu")
+  (descr "Shielded Coupled Inductor, body 7.3x7.3x4.5mm, https://www.we-online.com/en/components/products/WE-DD#/articles/WE-DD-7345")
+  (tags "SMT")
+  (property "Reference" "REF**"
+    (at 0 -5 90)
+    (unlocked yes)
+    (layer "F.SilkS")
+    (uuid "bc2c4a5c-61ae-4134-b04c-4b71680ad437")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Value" "7345straight_744877101"
+    (at 0 5 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "b4b29bf9-e31d-4be8-9ed7-748c1881f0b4")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Datasheet" "https://www.we-online.com/catalog/datasheet/744877101.pdf?ki"
+    (at 0 0 90)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "e9f7740c-f26b-4d7c-968b-48284eec8324")
+    (effects
+      (font
+        (size 1.27 1.27))))
+  (property "Description" "Shielded Coupled Inductor"
+    (at 0 0 90)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "cedeb0b3-f9a5-4b4c-b4e6-a10fd9cf796f")
+    (effects
+      (font
+        (size 1.27 1.27))))
+  (property "Manufacturer" "Wurth Elektronik"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "24d81da1-68a2-434e-8c4b-e1f9117727a7")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Manufacturer URL" "https://www.we-online.com"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "8082b629-3db8-4941-bcc2-21f727a3ee59")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Published Date" "20250312"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "690a85a6-28d4-4796-b0aa-14e42fc91c2c")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Match Code" "WE-DD"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "5e00aa9a-9f5c-498e-aec4-d3832e3b56bc")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Part Number" "744877101"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "c329bd1d-e851-4df1-9bfe-61476411c150")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Size" "7345straight"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "ee232526-f448-4d4b-95a8-7b2d184cca30")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Mounting Technology" "SMT"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "2216e107-56c1-4f96-b8a3-dcbc0484f5a4")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "L1 (µH)" "100.0"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "ced7736e-8b40-4929-bf4a-e7cae878a0b4")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "L2 (µH)" "100.0"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "cfad9e11-8a04-48fb-a7c1-50404b03155c")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "IR (A)" "0.65"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "64e3a420-0eee-4a83-8530-f4199f85dc85")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "IR 2 (A)" "0.65"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "56946efc-8b9d-4556-8700-bde9651ba268")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "ISAT (A)" "0.9"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "12953d0d-7f6c-4730-af65-be1ec956b15b")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "RDC1 typ (Ω)" "1.029"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "557fccfd-3de0-4688-a33f-8e79c72a8aae")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "RDC2 typ (Ω)" "1.029"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "225364b0-c4ec-4d8a-a4d7-4a4331e4271b")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "RDC1 max (Ω)" "1.3"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "409a2f22-e7c3-485a-8046-6d9e5e6f7100")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "RDC2 max (Ω)" "1.3"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "ca3f9dc8-22ca-4870-8a3f-addd3db1cc9f")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "fres (MHz)" "4.0"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "2eae84bb-822e-4de5-8389-5323f42768fa")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Type" "Straight"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "9d37bb79-b3ce-4bdd-a6ff-17696d25a717")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property "Critical Parameter" "100.0 µH"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (hide yes)
+    (uuid "b7212d75-955b-4002-9523-5b4f7bc5fa95")
+    (effects
+      (font
+        (size 1 1)
+        (thickness 0.15))))
+  (property ki_fp_filters "*WE-DD*7345straight*")
+  (attr smd)
+  (duplicate_pad_numbers_are_jumpers no)
+  (fp_line
+    (start 3.76 -3.76)
+    (end 1.66 -3.76)
+    (stroke
+      (width 0.12)
+      (type solid))
+    (layer "F.SilkS")
+    (uuid "25701cf5-d1e6-4c5d-8d78-8cb1b12eb641"))
+  (fp_line
+    (start 3.76 -3.76)
+    (end 3.76 3.76)
+    (stroke
+      (width 0.12)
+      (type solid))
+    (layer "F.SilkS")
+    (uuid "03debe31-b65e-41cc-9d05-cd0aaf606c2e"))
+  (fp_line
+    (start 3.76 3.76)
+    (end 1.659999 3.76)
+    (stroke
+      (width 0.12)
+      (type solid))
+    (layer "F.SilkS")
+    (uuid "159e1794-9324-4df7-b13f-e8ae3c8e1002"))
+  (fp_line
+    (start -3.76 3.76)
+    (end -3.76 0)
+    (stroke
+      (width 0.12)
+      (type solid))
+    (layer "F.SilkS")
+    (uuid "4f7b587c-3f92-427d-bba3-be9b8ee0f8d0"))
+  (fp_line
+    (start -3.76 3.76)
+    (end -1.66 3.76)
+    (stroke
+      (width 0.12)
+      (type solid))
+    (layer "F.SilkS")
+    (uuid "62e35799-2c64-414a-a4eb-61d78439bbde"))
+  (fp_rect
+    (start -3.899999 -4)
+    (end 3.899999 4)
+    (stroke
+      (width 0.05)
+      (type solid))
+    (fill no)
+    (layer "F.CrtYd")
+    (uuid "0398132a-288f-4362-b59f-2417ae191752"))
+  (fp_line
+    (start 3.65 -3.65)
+    (end -1.824999 -3.65)
+    (stroke
+      (width 0.1)
+      (type solid))
+    (layer "F.Fab")
+    (uuid "6cb5afef-551d-4317-9217-f0051d8e0f43"))
+  (fp_line
+    (start -1.824999 -3.65)
+    (end -3.65 -1.825)
+    (stroke
+      (width 0.1)
+      (type solid))
+    (layer "F.Fab")
+    (uuid "620b8ec1-1454-4dd6-bd68-8884f09147ba"))
+  (fp_line
+    (start -3.65 -1.825)
+    (end -3.65 3.65)
+    (stroke
+      (width 0.1)
+      (type solid))
+    (layer "F.Fab")
+    (uuid "c4c28cae-f517-4a82-97ad-e80c4f35ae59"))
+  (fp_line
+    (start 3.65 3.65)
+    (end 3.65 -3.65)
+    (stroke
+      (width 0.1)
+      (type solid))
+    (layer "F.Fab")
+    (uuid "1b7b5f15-dfce-4ff2-884d-7bbf1712db82"))
+  (fp_line
+    (start -3.65 3.65)
+    (end 3.65 3.65)
+    (stroke
+      (width 0.1)
+      (type solid))
+    (layer "F.Fab")
+    (uuid "01270f85-453b-46bb-9ba4-b2c01f73a55c"))
+  (fp_text user "${REFERENCE}"
+    (at 0 0 90)
+    (unlocked yes)
+    (layer "F.Fab")
+    (uuid "7f0928fd-85cc-4183-a45e-9557c3880fe6")
+    (effects
+      (font
+        (size 0.5 0.5)
+        (thickness 0.075))))
+  (pad "1" smd rect
+    (at -0.899999 -2.65 90)
+    (size 1 2.2)
+    (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "2" smd rect
+    (at -0.9 2.65 90)
+    (size 1 2.2)
+    (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "3" smd rect
+    (at 0.899999 2.65 90)
+    (size 1 2.2)
+    (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "4" smd rect
+    (at 0.9 -2.65 90)
+    (size 1 2.2)
+    (layers "F.Cu" "F.Mask" "F.Paste"))
+  (embedded_fonts no)
+  (model "${KIPRJMOD}/models/L_Wurth_WE-DD-7345straight.step"
+    (offset
+      (xyz 0 0 0))
+    (scale
+      (xyz 1 1 1))
+    (rotate
+      (xyz 0 0 0))))

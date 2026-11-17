@@ -1,0 +1,5 @@
+* EMC Flyback approximate non-vendor model; parameters retained unchanged.
+* Chengmin Li and AI-PCB-layout contributors; CC BY 4.0.
+* Source: https://github.com/ChengminLi/AI-PCB-layout/tree/e1b9a64ac9ac306647fa30094932fb792d17e373/examples/emc-flyback-demo
+* License: https://creativecommons.org/licenses/by/4.0/
+.model EMC_SS510C D(Is=5e-5 N=1.1 Rs=0.02 Cjo=300p M=0.5 BV=100 Ibv=50u)

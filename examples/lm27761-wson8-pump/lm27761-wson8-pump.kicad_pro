@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lm27761-wson8-pump.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LM27761 Charge Pump",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM27761.lib\"]"
+  }
+}

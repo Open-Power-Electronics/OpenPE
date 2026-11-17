@@ -1,0 +1,41 @@
+Texas Instruments simulation models
+
+TI PSpice model bytes are excluded from the source repository. Example preparation
+downloads the original unencrypted archives from www.ti.com into a private cache
+and saves separate verified model files beside the native Home projects. The allowlisted
+models required by Home are included as separate application resources, prepared
+before examples open; Run does not download referenced models. The original archive and model
+copyright and warranty notices are preserved. These models are not KiCad library
+data and do not use the KiCad library license.
+
+LM2596 model family: (C) Copyright 2015 Texas Instruments Incorporated.
+All rights reserved. Model version Final 1.00, released 06 July 2015.
+TI describes these models as customer design aids, supplied as-is without warranty.
+TI's Standard Terms and Conditions for Evaluation Items apply, as linked from:
+https://www.ti.com/product/LM2596
+
+Source: SNVMA62 (5 V).
+Home LM2596 Buck uses an OpenPE-derived adjustable controller based on SNVMA62.
+It is not a TI-issued ADJ model. The private OPENPE_DERIVED_LM2596_ADJ_TRANS
+removes the internal feedback divider and senses external FB directly, retaining
+the original controller, limits and 1.235 V reference. Original model files and
+all TI notices remain unchanged; the derivative is identified separately in the
+project, Home metadata and simulation assumptions.
+OpenPE verifies both archive and extracted model SHA-256 hashes. A changed or
+corrupt model is rejected. Simulation uses ngspice's PSpice compatibility mode;
+TI has not validated or endorsed these OpenPE/ngspice results.
+
+Home reference designs retain their source PCB layouts and use bounded
+official-model profiles. Symbol and footprint licenses are recorded in
+kicad-libraries.txt.
+
+Home reference model sources (original copyright/warranty notices preserved in cache):
+LM2735Y: TI SNVM840, https://www.ti.com/product/LM2735
+LM5001: TI SNVM921, https://www.ti.com/product/LM5001
+LM27761: TI SNVMAK0A, https://www.ti.com/product/LM27761
+LM25017: TI SNVMAM0, https://www.ti.com/product/LM25017
+TPS61046: TI SLVMB38A, https://www.ti.com/product/TPS61046
+LMR12010X: TI SNVM970, https://www.ti.com/product/LMR12010
+LMR70503: TI SNVM973, https://www.ti.com/product/LMR70503
+These are the original official unencrypted model downloads. OpenPE preserves
+their bytes and notices and does not claim vendor endorsement.

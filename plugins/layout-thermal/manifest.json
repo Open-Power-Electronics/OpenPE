@@ -1,0 +1,31 @@
+{
+  "id": "pcb-thermal@openpe",
+  "name": "Layout Thermal",
+  "description": "Compute steady board temperatures with Gmsh and Elmer.",
+  "detail": "Solve steady heat conduction through supported two- and four-layer PCB copper, dielectric and plated holes using bundled Gmsh and Elmer. Configure power into the board, material assumptions and cooling boundaries, inspect temperature maps and export images. Results describe board temperature under the specified assumptions; package junction temperature and airflow are outside this model.",
+  "version": "1.0.0",
+  "author": "OpenPE",
+  "category": "Simulation",
+  "capabilities": [
+    "Steady board temperature",
+    "Temperature maps",
+    "Temperature probes",
+    "PNG export",
+    "Local Gmsh and Elmer"
+  ],
+  "apiVersion": 1,
+  "runtime": "builtin",
+  "permissions": [],
+  "contributes": {
+    "capabilities": [
+      "thermal.status",
+      "thermal.configure",
+      "thermal.importSpice",
+      "thermal.run",
+      "thermal.cancel",
+      "thermal.probe",
+      "thermal.exportImage"
+    ]
+  },
+  "projectDirectory": "layout-thermal"
+}

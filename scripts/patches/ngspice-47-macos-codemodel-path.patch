@@ -1,0 +1,43 @@
+--- a/src/spicelib/devices/dev.c
++++ b/src/spicelib/devices/dev.c
+@@ -403,10 +403,28 @@
+     Evt_Udn_Info_t **udns;
+     funptr_t fetch;
+ 
+-    lib = dlopen(name, RTLD_NOW);
++#ifdef __APPLE__
++    /* Relative code-model paths match the Windows spinit and are resolved
++       from the executable directory. The process cwd is the job directory. */
++    const char *opened = name;
++    char *relocated = NULL;
++    if (name && name[0] != '/') {
++        extern char *Spice_Exec_Path;
++        if (!Spice_Exec_Path || !Spice_Exec_Path[0]) {
++            fprintf(stderr, "Error opening code model \"%s\": executable directory is unknown.\n", name);
++            return 1;
++        }
++        relocated = tprintf("%s%s", Spice_Exec_Path, name);
++        opened = relocated;
++    }
++    lib = dlopen(opened, RTLD_NOW);
++#else
++    const char *opened = name;
++    lib = dlopen(opened, RTLD_NOW);
++#endif
+ //    fprintf(stdout, "Lib %s has handle %p\n", name, lib);
+     if (!lib) {
+-        int acc = access(name, F_OK);
++        int acc = access(opened, F_OK);
+         if (acc != 0) {
+             fprintf(stderr, "Error opening code model \"%s\": No such file or directory!\n",
+                 name);
+@@ -416,6 +434,9 @@
+ 
+         return 1;
+     }
++#ifdef __APPLE__
++    tfree(relocated);
++#endif
+ 
+ 
+     /* Get code models defined by the library */

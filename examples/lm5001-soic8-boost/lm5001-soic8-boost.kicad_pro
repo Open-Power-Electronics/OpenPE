@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lm5001-soic8-boost.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LM5001 Boost",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM5001.lib\"]"
+  }
+}

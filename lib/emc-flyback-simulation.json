@@ -1,0 +1,1120 @@
+{
+  "sourceCommit": "e1b9a64ac9ac306647fa30094932fb792d17e373",
+  "license": "CC-BY-4.0",
+  "sourceSha256": "7640c819cc8e201042f8388b765b493ac25c01c0c8476d47a31edb7d4b1da011",
+  "controlSha256": "a14c4f15e04f71b14516bf0c0310a340542007455366d3027be6b347e2ffd990",
+  "parts": [
+    {
+      "ref": "J1",
+      "libId": "Connector_Generic:Conn_01x01",
+      "value": "VIN+ 24V",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "J2",
+      "libId": "Connector_Generic:Conn_01x01",
+      "value": "VIN- 0V",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "F1",
+      "libId": "Device:Polyfuse",
+      "value": "2A/30V PTC",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "D1",
+      "libId": "Device:D_Schottky",
+      "value": "SS510C",
+      "simulation": {},
+      "pins": "[\"1\",[\"-3.81\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"3.81\",\"0\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "L1",
+      "libId": "Device:Filter_EMI_CommonMode",
+      "value": "2.2mH",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"2.54\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"5.08\",\"2.54\",\"180\"],[\"2.54\"],\"passive\"]|[\"3\",[\"-5.08\",\"-2.54\",\"0\"],[\"2.54\"],\"passive\"]|[\"4\",[\"5.08\",\"-2.54\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "CM1",
+      "libId": "Connector_Generic:Conn_01x02",
+      "value": "CM bypass +",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "CM2",
+      "libId": "Connector_Generic:Conn_01x02",
+      "value": "CM bypass -",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "C1",
+      "libId": "Device:C",
+      "value": "1u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C2",
+      "libId": "Device:C",
+      "value": "10n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C3",
+      "libId": "Device:C",
+      "value": "10n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "YCAP",
+      "libId": "Connector_Generic:Conn_01x02",
+      "value": "Y-caps to chassis",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "L2",
+      "libId": "Device:L",
+      "value": "10uH",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "DM",
+      "libId": "Connector_Generic:Conn_01x02",
+      "value": "DM bypass",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "C4",
+      "libId": "Device:C_Polarized",
+      "value": "100u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C5",
+      "libId": "Device:C",
+      "value": "4.7u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C6",
+      "libId": "Device:C",
+      "value": "4.7u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "R1",
+      "libId": "Device:R",
+      "value": "10k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "D5",
+      "libId": "Device:LED",
+      "value": "RED",
+      "simulation": {},
+      "pins": "[\"1\",[\"-3.81\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"3.81\",\"0\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "U2",
+      "libId": "Regulator_Linear:L78L12_SOT89",
+      "value": "L78L12ACUTR",
+      "simulation": {},
+      "pins": "[\"1\",[\"7.62\",\"0\",\"180\"],[\"2.54\"],\"power_out\"]|[\"2\",[\"0\",\"-7.62\",\"90\"],[\"2.54\"],\"power_in\"]|[\"3\",[\"-7.62\",\"0\",\"0\"],[\"2.54\"],\"power_in\"]"
+    },
+    {
+      "ref": "C7",
+      "libId": "Device:C",
+      "value": "100n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C8",
+      "libId": "Device:C",
+      "value": "10u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C9",
+      "libId": "Device:C",
+      "value": "100n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "U1",
+      "libId": "Regulator_Controller:UC3845_SOIC8",
+      "value": "UC3845B",
+      "simulation": {
+        "Sim.Library": "models/EMC_flyback_control.lib",
+        "Sim.Name": "UC3845B",
+        "Sim.Device": "SUBCKT",
+        "Sim.Pins": "1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8"
+      },
+      "pins": "[\"1\",[\"-12.7\",\"5.08\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"-12.7\",\"2.54\",\"0\"],[\"2.54\"],\"input\"]|[\"3\",[\"12.7\",\"-5.08\",\"180\"],[\"2.54\"],\"input\"]|[\"4\",[\"-12.7\",\"-5.08\",\"0\"],[\"2.54\"],\"passive\"]|[\"5\",[\"0\",\"-10.16\",\"90\"],[\"2.54\"],\"power_in\"]|[\"6\",[\"12.7\",\"5.08\",\"180\"],[\"2.54\"],\"output\"]|[\"7\",[\"0\",\"10.16\",\"270\"],[\"2.54\"],\"power_in\"]|[\"8\",[\"-12.7\",\"-2.54\",\"0\"],[\"2.54\"],\"power_out\"]"
+    },
+    {
+      "ref": "R2",
+      "libId": "Device:R",
+      "value": "5.6k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "C10",
+      "libId": "Device:C",
+      "value": "1n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C11",
+      "libId": "Device:C",
+      "value": "100n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C12",
+      "libId": "Device:C",
+      "value": "1n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "R3",
+      "libId": "Device:R",
+      "value": "1k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "C13",
+      "libId": "Device:C",
+      "value": "220p",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "R4",
+      "libId": "Device:R",
+      "value": "0.15R",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "RG",
+      "libId": "Connector_Generic:Conn_02x03_Odd_Even",
+      "value": "Rg select",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"2.54\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"7.62\",\"2.54\",\"180\"],[\"3.81\"],\"passive\"]|[\"3\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"4\",[\"7.62\",\"0\",\"180\"],[\"3.81\"],\"passive\"]|[\"5\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]|[\"6\",[\"7.62\",\"-2.54\",\"180\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "R5",
+      "libId": "Device:R",
+      "value": "4.7R",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R6",
+      "libId": "Device:R",
+      "value": "22R",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R7",
+      "libId": "Device:R",
+      "value": "100R",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R8",
+      "libId": "Device:R",
+      "value": "10k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "Q1",
+      "libId": "Transistor_FET:IRF540N",
+      "value": "IRF520NPBF",
+      "simulation": {
+        "Sim.Library": "models/EMC_IRF520N.lib",
+        "Sim.Name": "EMC_IRF520N",
+        "Sim.Device": "NMOS",
+        "Sim.Type": "VDMOS",
+        "Sim.Pins": "2=D 1=G 3=S"
+      },
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"2.54\"],\"input\"]|[\"2\",[\"2.54\",\"5.08\",\"270\"],[\"2.54\"],\"passive\"]|[\"3\",[\"2.54\",\"-5.08\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "MH5",
+      "libId": "Mechanical:MountingHole_Pad",
+      "value": "M3 CASE",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"-2.54\",\"90\"],[\"2.54\"],\"input\"]"
+    },
+    {
+      "ref": "CASE",
+      "libId": "Connector_Generic:Conn_02x03_Odd_Even",
+      "value": "Case select",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"2.54\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"7.62\",\"2.54\",\"180\"],[\"3.81\"],\"passive\"]|[\"3\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"4\",[\"7.62\",\"0\",\"180\"],[\"3.81\"],\"passive\"]|[\"5\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]|[\"6\",[\"7.62\",\"-2.54\",\"180\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "C14",
+      "libId": "Device:C",
+      "value": "1n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "T1",
+      "libId": "EMC_Demo:Wurth_750311591",
+      "value": "750311591",
+      "simulation": {},
+      "pins": "[\"1\",[\"-10.16\",\"10.16\",\"0\"],[\"2.54\"],\"passive\"]|[\"10\",[\"10.16\",\"5.08\",\"180\"],[\"2.54\"],\"passive\"]|[\"11\",[\"10.16\",\"7.62\",\"180\"],[\"2.54\"],\"passive\"]|[\"12\",[\"10.16\",\"10.16\",\"180\"],[\"2.54\"],\"passive\"]|[\"2\",[\"-10.16\",\"7.62\",\"0\"],[\"2.54\"],\"passive\"]|[\"3\",[\"-10.16\",\"2.54\",\"0\"],[\"2.54\"],\"passive\"]|[\"4\",[\"-10.16\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"5\",[\"-10.16\",\"-5.08\",\"0\"],[\"2.54\"],\"passive\"]|[\"6\",[\"-10.16\",\"-10.16\",\"0\"],[\"2.54\"],\"passive\"]|[\"7\",[\"10.16\",\"-10.16\",\"180\"],[\"2.54\"],\"passive\"]|[\"8\",[\"10.16\",\"-7.62\",\"180\"],[\"2.54\"],\"passive\"]|[\"9\",[\"10.16\",\"-5.08\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "D2",
+      "libId": "Device:D",
+      "value": "ES2D",
+      "simulation": {
+        "Sim.Device": "D",
+        "Sim.Pins": "2=A 1=K",
+        "Sim.Library": "models/EMC_ES2D.lib",
+        "Sim.Name": "EMC_ES2D"
+      },
+      "pins": "[\"1\",[\"-3.81\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"3.81\",\"0\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "C15",
+      "libId": "Device:C",
+      "value": "22n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "R9",
+      "libId": "Device:R",
+      "value": "4.7k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R10",
+      "libId": "Device:R",
+      "value": "4.7k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R20",
+      "libId": "Device:R",
+      "value": "4.7k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "SNUB",
+      "libId": "Connector_Generic:Conn_01x02",
+      "value": "RC snubber on",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "C16",
+      "libId": "Device:C",
+      "value": "100p",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "R11",
+      "libId": "Device:R",
+      "value": "47R",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "D3",
+      "libId": "Device:D_Schottky",
+      "value": "SS510C",
+      "simulation": {
+        "Sim.Library": "models/EMC_SS510C.lib",
+        "Sim.Name": "EMC_SS510C",
+        "Sim.Device": "D",
+        "Sim.Pins": "2=A 1=K"
+      },
+      "pins": "[\"1\",[\"-3.81\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"3.81\",\"0\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "D7",
+      "libId": "Device:D_Schottky",
+      "value": "SS510C",
+      "simulation": {
+        "Sim.Library": "models/EMC_SS510C.lib",
+        "Sim.Name": "EMC_SS510C",
+        "Sim.Device": "D",
+        "Sim.Pins": "2=A 1=K"
+      },
+      "pins": "[\"1\",[\"-3.81\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"3.81\",\"0\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "R12",
+      "libId": "Device:R",
+      "value": "10R",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "C17",
+      "libId": "Device:C",
+      "value": "100p",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C18",
+      "libId": "Device:C_Polarized",
+      "value": "470u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C19",
+      "libId": "Device:C_Polarized",
+      "value": "470u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C20",
+      "libId": "Device:C",
+      "value": "22u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C21",
+      "libId": "Device:C",
+      "value": "22u",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "R13",
+      "libId": "Device:R",
+      "value": "1k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R14",
+      "libId": "Device:R",
+      "value": "4.7k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "D6",
+      "libId": "Device:LED",
+      "value": "GREEN",
+      "simulation": {},
+      "pins": "[\"1\",[\"-3.81\",\"0\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"3.81\",\"0\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "J3",
+      "libId": "Connector_Generic:Conn_01x01",
+      "value": "VOUT +12V",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "J4",
+      "libId": "Connector_Generic:Conn_01x01",
+      "value": "VOUT 0V",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "R15",
+      "libId": "Device:R",
+      "value": "39k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R16",
+      "libId": "Device:R",
+      "value": "10k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "U3",
+      "libId": "Reference_Voltage:TL431DBZ",
+      "value": "TL431AIDBZR",
+      "simulation": {
+        "Sim.Library": "models/EMC_flyback_control.lib",
+        "Sim.Name": "TL431B",
+        "Sim.Device": "SUBCKT",
+        "Sim.Pins": "1=1 3=2 2=3"
+      },
+      "pins": "[\"1\",[\"2.54\",\"0\",\"180\"],[\"2.54\"],\"passive\"]|[\"2\",[\"0\",\"2.54\",\"270\"],[\"2.54\"],\"passive\"]|[\"3\",[\"-2.54\",\"0\",\"0\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "R17",
+      "libId": "Device:R",
+      "value": "1k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R18",
+      "libId": "Device:R",
+      "value": "1k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "R19",
+      "libId": "Device:R",
+      "value": "10k",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "C22",
+      "libId": "Device:C",
+      "value": "47n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "U4",
+      "libId": "Isolator:LTV-817S",
+      "value": "LTV-817S",
+      "simulation": {
+        "Sim.Library": "models/EMC_flyback_control.lib",
+        "Sim.Name": "LTV817",
+        "Sim.Device": "SUBCKT",
+        "Sim.Pins": "1=1 2=2 4=3 3=4"
+      },
+      "pins": "[\"1\",[\"-7.62\",\"2.54\",\"0\"],[\"2.54\"],\"passive\"]|[\"2\",[\"-7.62\",\"-2.54\",\"0\"],[\"2.54\"],\"passive\"]|[\"3\",[\"7.62\",\"-2.54\",\"180\"],[\"2.54\"],\"passive\"]|[\"4\",[\"7.62\",\"2.54\",\"180\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "SGCH",
+      "libId": "Connector_Generic:Conn_01x02",
+      "value": "SGND to chassis",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "YPS",
+      "libId": "Connector_Generic:Conn_02x02_Odd_Even",
+      "value": "Pri-sec Y-cap",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]|[\"2\",[\"7.62\",\"0\",\"180\"],[\"3.81\"],\"passive\"]|[\"3\",[\"-5.08\",\"-2.54\",\"0\"],[\"3.81\"],\"passive\"]|[\"4\",[\"7.62\",\"-2.54\",\"180\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "C23",
+      "libId": "Device:C",
+      "value": "1n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "C24",
+      "libId": "Device:C",
+      "value": "10n",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"2.794\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"2.794\"],\"passive\"]"
+    },
+    {
+      "ref": "J5",
+      "libId": "Connector_Generic:Conn_01x01",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"-5.08\",\"0\",\"0\"],[\"3.81\"],\"passive\"]"
+    },
+    {
+      "ref": "MH1",
+      "libId": "Mechanical:MountingHole",
+      "value": "M3",
+      "simulation": {},
+      "pins": ""
+    },
+    {
+      "ref": "MH2",
+      "libId": "Mechanical:MountingHole",
+      "value": "M3",
+      "simulation": {},
+      "pins": ""
+    },
+    {
+      "ref": "MH3",
+      "libId": "Mechanical:MountingHole",
+      "value": "M3",
+      "simulation": {},
+      "pins": ""
+    },
+    {
+      "ref": "MH4",
+      "libId": "Mechanical:MountingHole",
+      "value": "M3",
+      "simulation": {},
+      "pins": ""
+    },
+    {
+      "ref": "DRAIN",
+      "libId": "Connector:TestPoint",
+      "value": "SW",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "GATE",
+      "libId": "Connector:TestPoint",
+      "value": "GATE",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "CS",
+      "libId": "Connector:TestPoint",
+      "value": "CSRAW",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "PGND1",
+      "libId": "Connector:TestPoint",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "PGND2",
+      "libId": "Connector:TestPoint",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "VOUT",
+      "libId": "Connector:TestPoint",
+      "value": "VOUT",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "SGND",
+      "libId": "Connector:TestPoint",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "HS",
+      "libId": "Connector:TestPoint",
+      "value": "HS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "VBUS",
+      "libId": "Connector:TestPoint",
+      "value": "VBUS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "CHAS",
+      "libId": "Connector:TestPoint",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "#PWR088",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR089",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR090",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR091",
+      "libId": "EMC_Demo:CHASSIS",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR092",
+      "libId": "EMC_Demo:VBUS",
+      "value": "VBUS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR093",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR094",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR095",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR096",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR097",
+      "libId": "EMC_Demo:VBUS",
+      "value": "VBUS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR098",
+      "libId": "EMC_Demo:VBUS",
+      "value": "VBUS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR099",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR100",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR101",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR102",
+      "libId": "EMC_Demo:CHASSIS",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR103",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR104",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR105",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR106",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR107",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR108",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR109",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR110",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR111",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR112",
+      "libId": "EMC_Demo:VOUT",
+      "value": "VOUT",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR113",
+      "libId": "EMC_Demo:VBUS",
+      "value": "VBUS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR114",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR115",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR116",
+      "libId": "EMC_Demo:VCC",
+      "value": "VCC",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR117",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR118",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR119",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR120",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR121",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR122",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR123",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR124",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR125",
+      "libId": "EMC_Demo:VOUT",
+      "value": "VOUT",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"90\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR126",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR127",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR128",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR129",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR130",
+      "libId": "EMC_Demo:CHASSIS",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR131",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR132",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR133",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR134",
+      "libId": "EMC_Demo:CHASSIS",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR135",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR136",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR137",
+      "libId": "EMC_Demo:PGND",
+      "value": "PGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR138",
+      "libId": "EMC_Demo:SGND",
+      "value": "SGND",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "#PWR139",
+      "libId": "EMC_Demo:CHASSIS",
+      "value": "CHASSIS",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"0\",\"270\"],[\"0\"],\"power_in\"]"
+    },
+    {
+      "ref": "V1",
+      "libId": "Simulation_SPICE:VDC",
+      "value": "${SIM.PARAMS}",
+      "simulation": {
+        "Sim.Pins": "1=+ 2=-",
+        "Sim.Type": "DC",
+        "Sim.Device": "V",
+        "Sim.Params": "dc=24"
+      },
+      "pins": "[\"1\",[\"0\",\"5.08\",\"270\"],[\"2.54\"],\"passive\"]|[\"2\",[\"0\",\"-5.08\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "R21",
+      "libId": "Device:R",
+      "value": "10m",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "V2",
+      "libId": "Simulation_SPICE:VDC",
+      "value": "${SIM.PARAMS}",
+      "simulation": {
+        "Sim.Pins": "1=+ 2=-",
+        "Sim.Type": "DC",
+        "Sim.Device": "V",
+        "Sim.Params": "dc=12"
+      },
+      "pins": "[\"1\",[\"0\",\"5.08\",\"270\"],[\"2.54\"],\"passive\"]|[\"2\",[\"0\",\"-5.08\",\"90\"],[\"2.54\"],\"passive\"]"
+    },
+    {
+      "ref": "R22",
+      "libId": "Device:R",
+      "value": "100",
+      "simulation": {},
+      "pins": "[\"1\",[\"0\",\"3.81\",\"270\"],[\"1.27\"],\"passive\"]|[\"2\",[\"0\",\"-3.81\",\"90\"],[\"1.27\"],\"passive\"]"
+    },
+    {
+      "ref": "I1",
+      "libId": "Simulation_SPICE:IPULSE",
+      "value": "${SIM.PARAMS}",
+      "simulation": {
+        "Sim.Pins": "1=+ 2=-",
+        "Sim.Device": "I",
+        "Sim.Type": "PULSE",
+        "Sim.Params": "y1=0.5 y2=0 td=2m tr=10u tf=10u tw=2m per=1"
+      },
+      "pins": "[\"1\",[\"0\",\"5.08\",\"270\"],[\"2.54\"],\"passive\"]|[\"2\",[\"0\",\"-5.08\",\"90\"],[\"2.54\"],\"passive\"]"
+    }
+  ],
+  "noConnectPins": [
+    "T1.5",
+    "T1.6"
+  ],
+  "groups": [
+    "#PWR088.1|#PWR089.1|#PWR090.1|#PWR093.1|#PWR094.1|#PWR095.1|#PWR096.1|#PWR099.1|#PWR100.1|#PWR101.1|#PWR103.1|#PWR104.1|#PWR105.1|#PWR106.1|#PWR107.1|#PWR108.1|#PWR109.1|#PWR110.1|#PWR111.1|#PWR114.1|#PWR115.1|#PWR117.1|#PWR118.1|#PWR119.1|#PWR120.1|#PWR121.1|#PWR122.1|#PWR123.1|#PWR124.1|#PWR126.1|#PWR127.1|#PWR128.1|#PWR129.1|#PWR131.1|#PWR132.1|#PWR133.1|#PWR135.1|#PWR136.1|#PWR137.1|#PWR138.1|C1.2|C10.2|C11.2|C12.2|C13.2|C14.2|C18.2|C19.2|C20.2|C21.2|C23.1|C24.1|C3.2|C4.2|C5.2|C6.2|C7.2|C8.2|C9.2|CASE.2|CM2.2|D5.1|D6.1|I1.2|J4.1|L1.4|PGND1.1|PGND2.1|R11.2|R13.2|R16.2|R22.2|R4.2|SGCH.1|SGND.1|T1.10|T1.11|T1.12|U1.2|U1.5|U2.2|U3.3|U4.3|V1.2|V2.2|YPS.2|YPS.4",
+    "#PWR091.1|#PWR102.1|#PWR130.1|#PWR134.1|#PWR139.1|CASE.4|CHAS.1|J5.1|SGCH.2|YCAP.2",
+    "#PWR092.1|#PWR097.1|#PWR098.1|#PWR113.1|C15.2|C4.1|C5.1|C6.1|C7.1|DM.2|L2.2|R1.1|R10.2|R20.2|R21.2|R9.2|T1.1|T1.2|U2.3|VBUS.1",
+    "#PWR112.1|#PWR125.1|C17.2|C18.1|C19.1|C20.1|C21.1|D3.1|D7.1|I1.1|J3.1|R13.1|R14.1|R15.1|R17.1|R22.1|VOUT.1",
+    "#PWR116.1|C8.1|C9.1|U1.7|U2.1|V2.1",
+    "C1.1|C2.1|CM1.2|DM.1|L1.2|L2.1",
+    "C10.1|R2.2|U1.4",
+    "C11.1|R2.1|U1.8",
+    "C12.1|U1.1|U4.4",
+    "C13.1|R3.2|U1.3",
+    "C14.1|CASE.6",
+    "C15.1|D2.1|R10.1|R20.1|R9.1",
+    "C16.1|SNUB.2",
+    "C16.2|R11.1",
+    "C17.1|R12.2",
+    "C2.2|C3.1|YCAP.1",
+    "C22.1|R19.2",
+    "C22.2|R15.2|R16.1|U3.2",
+    "C23.2|YPS.1",
+    "C24.2|YPS.3",
+    "CASE.1|CASE.3|CASE.5|HS.1|MH5.1",
+    "CM1.1|D1.1|L1.1",
+    "CM2.1|J2.1|L1.3",
+    "CS.1|Q1.3|R3.1|R4.1|R8.2",
+    "D1.2|F1.2",
+    "D2.2|DRAIN.1|Q1.2|SNUB.1|T1.3|T1.4",
+    "D3.2|D7.2|R12.1|T1.7|T1.8|T1.9",
+    "D5.2|R1.2",
+    "D6.2|R14.2",
+    "F1.1|J1.1",
+    "GATE.1|Q1.1|R5.2|R6.2|R7.2|R8.1",
+    "R17.2|R18.1|U4.1",
+    "R18.2|R19.1|U3.1|U4.2",
+    "R21.1|V1.1",
+    "R5.1|RG.2",
+    "R6.1|RG.4",
+    "R7.1|RG.6",
+    "RG.1|RG.3|RG.5|U1.6",
+    "T1.5",
+    "T1.6"
+  ]
+}

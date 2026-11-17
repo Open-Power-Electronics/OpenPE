@@ -1,0 +1,211 @@
+{
+  "repository": "https://github.com/ChengminLi/AI-PCB-layout",
+  "commit": "e1b9a64ac9ac306647fa30094932fb792d17e373",
+  "license": "CC-BY-4.0",
+  "files": [
+    {
+      "path": "design/EMC_Demo.3dshapes/C_0603_1608Metric.step",
+      "sha256": "4857b3dc717675bf1fb22edda622ac3b3ae03cf44d81eefaf3fa3ba3a86d84c1"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/C_0805_2012Metric.step",
+      "sha256": "9a669c1a2f1ea25b88b401acef6efeaa80a067bd7da9db6993de719a7fbe155c"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/C_1206_3216Metric.step",
+      "sha256": "11e948c72c90e2b6322436b72745f40ff4e8ba0da64fb2a0df943dfa61e89c1a"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/C_1210_3225Metric.step",
+      "sha256": "f8510481c5044113cf49b0fa6dd54ddab9224508bd6808e1afab8ef0cefdefc9"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/Case_UChannel_revD.step",
+      "sha256": "42e05a26369cfdd5c049b6d7eb04a8ad2258d29bb74c23d841a072c0e7bcf402"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/Cover_PMMA_revD.step",
+      "sha256": "813b23490fb001aac3849f48c0a818828728e24cb6c40ca4d3f6679847cf556a"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/CP_Elec_10x10.step",
+      "sha256": "8af72237638a055d91e7b5db024aa87cce0ae52e62a77308a6489843773d9c38"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/D_SMA.step",
+      "sha256": "1cfddd4e3b1bf22b8fc6ee3258c2aade882ed7b85b528e23b9db42437775a1db"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/D_SMC.step",
+      "sha256": "30dab4c2e22239b7e3694a4d45304e04255c6b70a79d28e9c34c6072ba647991"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/Jack_4mm_RA_black.step",
+      "sha256": "394baa832d809c2f33a04f2525c191a9b5f30691ab9684b6d3d6819f4d46ac21"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/Jack_4mm_RA_green.step",
+      "sha256": "aa0c4b5d8dc046543a5f8fa38bc63105cdfacfdeef2fd7eae6f65781882f65b1"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/Jack_4mm_RA_red.step",
+      "sha256": "e4edf50ea7f39bf72bec2bc9ab993e6d1b0df1563533e1eaaa62a8cf038a707f"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/LED_0805_2012Metric.step",
+      "sha256": "0aa8b791804f5d72a2fc7d1bf231dd9959207d83df8ad801176fbc459f575b98"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/PinHeader_1x02_P2.54mm_Vertical.step",
+      "sha256": "ea4d0799007ebdd3945072bf255d673d2fe87eb05fda85fd8d7993ad9397da41"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/PinHeader_2x02_P2.54mm_Vertical.step",
+      "sha256": "3688725e99073c4698d895fb9d823d00b7ba0782b9840636b210a99adad9efed"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/PinHeader_2x03_P2.54mm_Vertical.step",
+      "sha256": "30c87dd7aa515b02055124826d8c4054084971d49d819c644cd6b21295ac52c8"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/R_0603_1608Metric.step",
+      "sha256": "1875571c326d0d9e96f36b4efeb8094068ef7619f0a449c781caf0b49c2e5861"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/R_0805_2012Metric.step",
+      "sha256": "ded342cdb394fb45395227beaaa75cc390613cf2581b29cd6d22c12abd6103b2"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/R_1206_3216Metric.step",
+      "sha256": "f5d1ea5c47935091292bd1c6c698e0df88d3d4bbf92bf66b4c97e49df5be9ebc"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/R_1812_4532Metric.step",
+      "sha256": "1efc89b1825fb585a1cc77954655b8e0db16d3de91237adf42ce79142e58826d"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/R_2512_6332Metric.step",
+      "sha256": "76b2052a3c120193de7cdc0af99157b6f375e9a4af7721e3e3d012968c877f27"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/README.md",
+      "sha256": "363819356199846af0ea81bba421c8e57c15632b7d39276a40c2ea1d94fe0f96"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/SMDIP-4_W9.53mm.step",
+      "sha256": "aacbe178b48408d7b509625775cb443b4a676cd9c0f5d27c7b12f03e8b489ec2"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step",
+      "sha256": "d9b46f6dd6cf8c5e2028838eed38e2a6a7f26235856078511e5a71a594ca809e"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/SOT-23.step",
+      "sha256": "9fe9af3cc6cf3d3bc3bd3da71731af2037c67f690245102a20e1e39a33e9ade4"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/SOT-89-3.step",
+      "sha256": "844c0bb504d0c383535d9845c6376fe7a4053241a2ede8d8ef694df3fcfc37c8"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/TestPoint_Keystone_5001_black.step",
+      "sha256": "262a4fdddfa830f63da3840a407e9b3782c20550f727e63cd5ad03c13896921b"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/TestPoint_Keystone_5002_white.step",
+      "sha256": "947b6596e721af06b17e9287c549ff414389d964e122bfc262314fc2ec6f675c"
+    },
+    {
+      "path": "design/EMC_Demo.3dshapes/TO-220-3_BottomMount_CaseHeatsink.step",
+      "sha256": "e4185133f57c6d15a1f1cd1e9d1443f29b7cec6466d92367fd9085000f128ab6"
+    },
+    {
+      "path": "design/EMC_Demo.kicad_sym",
+      "sha256": "f0f904d8770257b8569b8a80b5909d27263af442e4120c7fcd9e4a4691966e6b"
+    },
+    {
+      "path": "design/EMC_Demo.pretty/Case_UChannel_revD.kicad_mod",
+      "sha256": "378bb94e30b63d21171610bc36c6fb0a89ffc6cc355eee3e1a2d80840f9ce1fa"
+    },
+    {
+      "path": "design/EMC_Demo.pretty/Cover_PMMA_revD.kicad_mod",
+      "sha256": "d054e66a12c8d90752fb45a278262173c714dd06d8147770487430940dd69c37"
+    },
+    {
+      "path": "design/EMC_Demo.pretty/Jack_4mm_RA_Cliff_FCR7350.kicad_mod",
+      "sha256": "2a030510c0044915c3d62f5019755496c1254a441084f985d5b8dd34088fcc4e"
+    },
+    {
+      "path": "design/EMC_Demo.pretty/L_CommonMode_Wuerth_WE-CMB-S_744822222.kicad_mod",
+      "sha256": "356dc3bdf60a5e323973e38fbccec9109481a898223df800b7ae65578c39cab4"
+    },
+    {
+      "path": "design/EMC_Demo.pretty/TO-220-3_BottomMount_CaseHeatsink.kicad_mod",
+      "sha256": "7ec7eee986b8cfdfb5e1536ff154d92c50a31be6fe09f803967ad3d9303dee1b"
+    },
+    {
+      "path": "design/EMC_Demo.pretty/Wurth_750311591_EFD25.kicad_mod",
+      "sha256": "c4cd2617b5de827651a236cb7713594aedbb9ee89db010f8e11b415540ee5354"
+    },
+    {
+      "path": "design/emc_flyback.kicad_dru",
+      "sha256": "76c38a366ca347c2f5cd011366ee0775f8e7a61e0cc6ad464a4596c293e9efab"
+    },
+    {
+      "path": "design/emc_flyback.kicad_pcb",
+      "sha256": "c1f41f3b7412a7818ea371e70fe233a1cb47501252a8ecd0eaa26d633cfcf5d9"
+    },
+    {
+      "path": "design/emc_flyback.kicad_pro",
+      "sha256": "9fe0be5080e53cd5f9a4b612df49614cc3daba6516170fa22b05452ae6df8ba5"
+    },
+    {
+      "path": "design/emc_flyback.kicad_sch",
+      "sha256": "7640c819cc8e201042f8388b765b493ac25c01c0c8476d47a31edb7d4b1da011"
+    },
+    {
+      "path": "design/fp-lib-table",
+      "sha256": "637c9e4d51d457583ec3c84c5f699b93573013dab338644b5abb92cab16bfd1e"
+    },
+    {
+      "path": "design/sym-lib-table",
+      "sha256": "e5c445b10016a4b3622027828a6b8b68515fbee35d7504624cd4bb82485c7718"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411"
+    },
+    {
+      "path": "README.md",
+      "sha256": "efd9f94b1417a01ae601f427894d74d3e4696cfce38b0e1f410cdaa51861c370"
+    },
+    {
+      "path": "simulation/EMC_flyback_closed_loop.asc",
+      "sha256": "fb648b8ea6686c163304d75e763070d77f8cae415a69c6eac84659f1b46d8bf5"
+    },
+    {
+      "path": "simulation/EMC_flyback_control.lib",
+      "sha256": "a14c4f15e04f71b14516bf0c0310a340542007455366d3027be6b347e2ffd990"
+    },
+    {
+      "path": "simulation/EMC_flyback_power_stage.asc",
+      "sha256": "cd50d878ac8b309768793d0589852c67c47e7815e5d8c90ae6ecf1b44670ca68"
+    },
+    {
+      "path": "simulation/LTV817_beh.asy",
+      "sha256": "cf2dcad633b70ce6c1056d76729cf675aac9963c058f47823acc5d9c88f87193"
+    },
+    {
+      "path": "simulation/README.md",
+      "sha256": "43b9287fb185920633e9066260f555850de8cf666e71e29bf20272b796628684"
+    },
+    {
+      "path": "simulation/TL431_beh.asy",
+      "sha256": "9497fb3687c24b2b270f5ec83a6e575436ea6c8bb87f1ef337e9dd36e9381676"
+    },
+    {
+      "path": "simulation/UC3845B_beh.asy",
+      "sha256": "efa3aa849eda1281a791ee04252c3b38286eff72958197c60d50a4fb08dcf4f8"
+    }
+  ]
+}

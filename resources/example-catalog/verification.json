@@ -1,0 +1,141 @@
+{
+  "kicadVersion": "10.0.1",
+  "checks": [
+    "Source KiCad physical pin network partitions match exported KiCad schematic netlists.",
+    "KiCad PCB copper layers, pads, drill geometry, tracks and vias match pinned source boards.",
+    "Board and footprint artwork, ordinary text and caption styles match; rectangles normalize to exact polygons.",
+    "Copper-zone outer boundaries follow the 0.5 mm board inset; internal partitions, holes and unrelated rules retain source geometry.",
+    "Eight boards retain exact source fills. TPS61046 retains copper-object UUIDs and uses a 0.25 mm zone clearance. All three zones match an independent KiCad 10.0.1 refill exactly by layer, contour and island flag. Saved copper stays within its owner and avoids foreign-pad and zone overlap.",
+    "Schematic and PCB SVG exports completed with KiCad 10."
+  ],
+  "scope": "Structural and connectivity verification only; not ERC, DRC, simulation or production qualification.",
+  "examples": [
+    {
+      "id": "reference-lm2596-to220-5-buck",
+      "physicalPins": 21,
+      "nets": 5,
+      "footprints": 9,
+      "copperLayers": 2,
+      "pads": 25,
+      "tracksAndVias": 29,
+      "zones": 2,
+      "graphics": 225
+    },
+    {
+      "id": "reference-tps61046-bga6-boost",
+      "physicalPins": 23,
+      "nets": 5,
+      "footprints": 10,
+      "copperLayers": 2,
+      "pads": 23,
+      "tracksAndVias": 46,
+      "zones": 3,
+      "graphics": 95,
+      "curatedFill": {
+        "zones": 3,
+        "minimumClearanceMm": 0.25,
+        "exactKiCadRefill": true,
+        "zonePolygons": [
+          {
+            "uuid": "85dbabd2-9c9c-4b32-9649-6178224f36aa",
+            "net": "/VIN",
+            "layer": "F.Cu",
+            "polygons": 0
+          },
+          {
+            "uuid": "ad65a479-9a23-496d-bf52-71cbf27116a6",
+            "net": "GND",
+            "layer": "F.Cu",
+            "polygons": 2
+          },
+          {
+            "uuid": "49081fa0-1f6a-43f1-94e2-793ea732967f",
+            "net": "GND",
+            "layer": "B.Cu",
+            "polygons": 1
+          }
+        ],
+        "filledAreaMm2": 371.986466474674,
+        "ownerAndCutoutsVerified": true,
+        "foreignPadAndZoneOverlapVerified": true
+      }
+    },
+    {
+      "id": "reference-lm2735-msop8-sepic",
+      "physicalPins": 35,
+      "nets": 9,
+      "footprints": 14,
+      "copperLayers": 2,
+      "pads": 39,
+      "tracksAndVias": 59,
+      "zones": 2,
+      "graphics": 197
+    },
+    {
+      "id": "reference-lm25017-wson8-flybuck",
+      "physicalPins": 51,
+      "nets": 13,
+      "footprints": 21,
+      "copperLayers": 2,
+      "pads": 59,
+      "tracksAndVias": 106,
+      "zones": 6,
+      "graphics": 333
+    },
+    {
+      "id": "reference-lm5001-soic8-boost",
+      "physicalPins": 36,
+      "nets": 10,
+      "footprints": 15,
+      "copperLayers": 2,
+      "pads": 36,
+      "tracksAndVias": 55,
+      "zones": 2,
+      "graphics": 173
+    },
+    {
+      "id": "reference-lm27761-wson8-pump",
+      "physicalPins": 29,
+      "nets": 7,
+      "footprints": 9,
+      "copperLayers": 2,
+      "pads": 39,
+      "tracksAndVias": 53,
+      "zones": 5,
+      "graphics": 98
+    },
+    {
+      "id": "reference-lmr12010-sot236-buck",
+      "physicalPins": 34,
+      "nets": 7,
+      "footprints": 17,
+      "copperLayers": 2,
+      "pads": 62,
+      "tracksAndVias": 60,
+      "zones": 4,
+      "graphics": 259
+    },
+    {
+      "id": "reference-lmr70503-bga8-buckboost",
+      "physicalPins": 32,
+      "nets": 7,
+      "footprints": 13,
+      "copperLayers": 2,
+      "pads": 40,
+      "tracksAndVias": 64,
+      "zones": 2,
+      "graphics": 151
+    },
+    {
+      "id": "reference-lm2598-to220-7-buck",
+      "physicalPins": 37,
+      "nets": 9,
+      "footprints": 16,
+      "copperLayers": 2,
+      "pads": 37,
+      "tracksAndVias": 62,
+      "zones": 2,
+      "graphics": 282
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+# Layout Thermal
+
+Layout Thermal (`pcb-thermal@openpe`) is a bundled, independently enabled workbench plugin. It computes steady board temperatures from supported two- and four-layer PCB geometry with Gmsh and Elmer. Heat entering the board can be entered manually or imported from supported dissipative paths in a completed SPICE transient. It does not model package junctions, airflow, radiation, heatsinks or transient heating. Its temperatures describe the stated model and assumptions, not hardware qualification.
+
+## Geometry and inputs
+
+`plugins/layout-thermal/domain/thermal.ts` validates the analysis configuration with the bounded interpreted API schema subset. `plugins/layout-thermal/domain/thermal-geometry.ts` compiles a detached model using closed board contours/cutouts, actual saved copper fills, tracks, pads, copper artwork and hollow plated-through-hole barrels. Copper text/dimensions and unsupported geometry fail visibly. Enabled copper zones without saved fills block Run; their outlines never substitute for copper. No model preparation edits or refills the PCB.
+
+Copper thickness is provided for each copper layer. The remaining board thickness is divided into equal dielectric gaps; this is an explicit analysis assumption, not an interpretation of a native manufacturing stackup. Materials use constant isotropic conductivity. Plating thickness is specified independently of drill size. Each heat source references a stable footprint ID and applies W into its actual pads on the footprint's board side. Positive source power and at least one positive convection coefficient are required.
+
+Defaults are ambient 25 °C; front/back convection 10 W/(m²·K), edge convection 5 W/(m²·K); copper conductivity 400 W/(m·K), dielectric conductivity 0.3 W/(m·K); copper 0.035 mm per layer and plating 0.025 mm. These are editable assumptions. With SPICE enabled, the panel initially selects SPICE heat input; Run loads and verifies the current completed electrical record before solving. No power is invented: absent or stale electrical results require completing SPICE first. With SPICE disabled, Manual starts with zero powers and requires explicit heat inputs. Restoring a verified thermal result restores its original input mode and settings. Current settings and probes are session data. A completed desktop run saves its original configuration with the verified result beside the native project; thermal data never changes native source, Core revisions, undo, recovery or dirty state.
+
+### SPICE heat inputs
+
+Browser development uses manual heat input and transient results. SPICE heat
+import requires the saved electrical record available through the desktop host.
+
+The **SPICE** heat-source option loads a verified completed result for the PCB-linked primary schematic through the same host port used by saved SPICE lookup. Both plugins must be enabled and the native project must be saved. Each Run refreshes these inputs; the separate Load control permits inspection without starting a Layout Thermal solve. Opening the panel does not import or solve. Loading never starts an electrical solver or downloads a model. It requires current-source compilation, verified model/solver identities and the saved finite samples to match. Cancellation, changed source/destination, hidden Layout or disabled SPICE during import prevents the following thermal solve. Heat inputs use the final 20% of the completed transient. This interval does not establish steady electrical operation automatically.
+
+Only compiler-declared resistor, diode, switch and MOSFET drain-to-source paths with one stable linked footprint are imported. The SPICE adapter multiplies signed terminal voltage difference by signed branch current and integrates every original accepted binary `waveforms.raw` sample with elapsed-time trapezoidal weighting. Linearized text/display curves never supply heat inputs. The thermal adapter requires this completed summary and its current cache identity; a result without a matching summary requires another SPICE Run. It rejects invalid, incomplete or negative average dissipation instead of rectifying waveforms. Ideal capacitors, inductors, transformer windings, independent sources and unsupported controller losses contribute no inferred heat. MOSFET gate-drive and unmodelled package losses are excluded; narrow switching peaks between native output samples remain unresolved.
+
+Imported watts assume that all supported path power enters the PCB uniformly through its footprint pads. Package-to-air heat division and junction/case temperature remain outside the model. The configuration records the transient settings, averaging interval and a host SHA-256 identity of the verified deck and complete samples. Run and saved-field lookup revalidate the electrical input and imported powers; changed samples or source require reloading the heat sources. Manual mode retains the watts and clears this electrical provenance. Explicit `heatSources` edits without `spiceSource` do the same through the shared command adapter.
+
+## Numerical path
+
+The service recompiles the validated private project snapshot; it accepts neither renderer meshes nor solver inputs. `plugins/layout-thermal/host/thermal-planar.mjs` constructs a bounded shared planar graph: duplicate contour edges are reused, intersections and collinear overlaps are split, and board-hole loops remain distinct. Coordinates are retained to 1e-9 mm with a 1e-8 mm intersection tolerance. A non-board vertex within half a diagonal of the 0.0001 mm clipping cell of a board edge is welded onto that edge before intersection, so a quantized pad or cutout contour cannot leave the board surface. Gmsh's built-in kernel compares endpoints with `Geometry.Tolerance` times the model diagonal; that scaled tolerance is not a second snap. `plugins/layout-thermal/host/thermal-mesh.mjs` embeds these material/source/barrel edges into one connected board surface through Gmsh's built-in geometry kernel, including holes and cutouts. Disconnected boards fail visibly. Gmsh generates a conforming triangular mesh. The host assigns material regions and extrudes shared nodes into layered prisms, then ElmerGrid converts the generated mesh with 17 significant coordinate digits. The prepared volume is bounded to 200,000 nodes and 250,000 elements. `ElmerSolver` assembles and solves the steady heat equation from the generated SIF. This adapter prepares a mesh; it does not implement a heat-equation solver.
+
+Top/bottom source flux is normalized by the actual selected mesh area to retain the requested W. Board, copper, barrel and source areas are checked against the prepared geometry; embedded contours must be mesh edges, and internal seams cannot become cooling boundaries. Convection applies on the specified exterior surfaces. Elmer writes raw appended Float64 VTU arrays so close, distinct contour nodes retain their identity. The reader validates array offsets, lengths, types, byte order and finite values; every output node must uniquely match the prepared mesh. ASCII VTU fields are rejected; only the configured raw appended Float64 output is accepted. Output includes actual finite-element nodes/boundary triangles, board temperatures, extrema, node/element counts and integrated heat removal. Results are checked for finite values, valid triangle indices, consistent statistics and energy imbalance. Incomplete fields are discarded. Geometry, materials, power, boundaries and mesh settings participate in the result freshness basis; runtime tools are recorded with their versions.
+
+## Runtime and lifecycle
+
+`scripts/prepare-thermal.mjs` prepares pinned Gmsh 4.15.2 and Elmer 26.1 resources for the host platform and the corresponding source archives. `resources/thermal-lock.json` records shared sources plus explicit `win32-x64`, `darwin-arm64` and `linux-x64` manifests. An unknown or missing platform is an error. Runtime files live in ignored `resources/thermal/1/`, packaged as `thermal/1`; notices are available in About OpenPE. The host-owned `server/engineering-resources.mjs` validates these shared engineering executables and files; thermal detection/execution remains gated by its plugin lifecycle. It does not search PATH or accept executable/environment overrides. Missing/changed resources report repair guidance. Run never downloads resources.
+
+Windows uses official Gmsh and Elmer nogui/nompi archives. macOS and Linux use pinned release archives; shared access, verification, rebuild toolchains and publication rules are in [solver bundle maintenance](DEVELOPMENT.md#solver-release-access).
+
+macOS/Linux builds use source-built OpenBLAS 0.3.13 and Elmer 26.1 with MPI, ElmerGUI, OpenMP and Mumps disabled and UMFPACK enabled. macOS Gmsh uses the official 4.15.2 MacOSARM SDK with OpenCASCADE 7.8.1. Linux uses the pinned official PyPI native library through `scripts/gmsh-linux.c`, disabling configuration-file reads; Python is only a build dependency. Mach-O/ELF solver dependencies use bundle-relative loader paths; Linux glibc and graphics/font libraries remain host prerequisites.
+
+Elmer retains GPL/LGPL licensing, and libgfortran uses the GCC Runtime Library Exception. Corresponding sources, build materials and notices ship under `resources/thermal/1`; About OpenPE displays the notices.
+
+Compare macOS, Linux and Windows temperatures from the same opt-in mesh and inputs. A node passes when the absolute difference is at most 0.01 K or the relative difference is at most 1e-6. No Windows temperature field is checked in as a reference; record `test-results` reports for each compared platform before treating a difference as a solver defect.
+
+The authenticated loopback service checks plugin installation/enabled state before detection, compilation, saved-result lookup and execution. Only one thermal run is active per service. A request disconnect, source/project invalidation, hidden/inactive Layout, project close, disable/uninstall or shutdown cancels work. A successful desktop run archives its complete artifacts before removing the private working directory; cancellation, failure and incomplete fields never replace a saved successful result. Layout Thermal and SPICE cancel their own work independently.
+
+Lifecycle persistence follows [Plugins](PLUGINS.md#bundled-workbench-lifecycle).
+Saved records require the complete current catalog with explicit flags; partial,
+obsolete, malformed, unknown or duplicate entries are preserved and fail closed.
+
+## Completed desktop records
+
+Desktop Run requires a saved native project. An unsaved desktop project is blocked with Save guidance; Electron resolves its opaque file ID through a live grant. Requests cannot provide a destination path. A successful run writes retained artifacts directly under `layout-thermal/`, prefixing each basename with the native project stem, including `<stem>.mesh.nodes`, `<stem>.thermal_t0001.vtu` and `<stem>.manifest.json`. Saved output has no project, run or mesh subdirectories; the solver's private working layout uses its own `mesh/` directory. The prefix isolates native projects sharing a directory. Explicit Run performs a new solve; saved-result lookup only restores a verified field. Standalone service runs without the native adapter do not persist results.
+
+| Saved artifact                                                                                  | Content                                                                                              |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `<stem>.input.json`                                                                             | Validated private thermal model and original configuration; not native design                        |
+| `<stem>.board.geo`                                                                              | Actual Gmsh geometry script                                                                          |
+| `<stem>.planar.msh`, `<stem>.board.msh`                                                         | Conforming planar and layered volume meshes                                                          |
+| `<stem>.mesh.header`, `.mesh.nodes`, `.mesh.elements`, `.mesh.boundary`, optional `.mesh.names` | Elmer mesh files saved directly under `layout-thermal/` with the same stem prefix                    |
+| `<stem>.case.sif`                                                                               | Actual materials, equation, heat flux and convection configuration                                   |
+| `<stem>.thermal*.vtu`                                                                           | Completed raw three-dimensional temperature field, with original bytes retained                      |
+| `<stem>.gmsh.log`, `.gmsh-output.log`, `.elmer-grid.log`, `.solver.log`                         | Bounded stage diagnostics, each with the same stem prefix                                            |
+| `<stem>.result.json`                                                                            | Validated real-node display field, statistics and energy balance                                     |
+| `<stem>.manifest.json`                                                                          | Project binding, completion/runtime identity and logical-to-physical file mappings, sizes and hashes |
+
+The `openpe-thermal-v2` manifest binds `project` to the native basename and records each artifact as `{name,file,size,sha256}`. `name` retains its logical working path, while `file` is `<stem>.` plus that path's basename. The run key hashes prepared input, verified runtime and logical artifact names/hashes. Only the current successful flat record is replaced. Shared `server/flat-analysis-files.mjs` queues reads/publications across store instances for each directory, stages files in private `.pending-<uuid>-backups` / `.previous-<uuid>-backups` folders inside `layout-thermal/` and atomically replaces individual files with the manifest last. It rechecks the live grant and file identities, briefly retries sharing errors and restores written siblings on failure/cancellation. If restoration is blocked by external changes, remaining backups are preserved with an actionable failure. This does not provide filesystem-wide crash atomicity. Unknown sidecars, other projects' prefixes, linked/damaged files and unexpected same-name conflicts remain protected. Retired `layout-thermal/<stem>/<run-hash>/` records and latest pointers are ignored and preserved without loading or migration. PNG remains an explicit export.
+
+`POST /api/thermal/result` is an authenticated, load-only lookup. It validates stored file identities, recompiles the current PCB with the saved configuration and requires the complete prepared model and verified runtime identity to match. An optional caller configuration must match too. A match returns the result and its configuration; a miss returns `{result:null}`. Lookup never launches a solve, downloads resources or edits the document. Saved settings are restored only with a matching verified field.
+
+On the first panel opening for a saved project, the renderer looks up the latest matching field and original settings. An indeterminate progress bar and separate reading/preparing messages appear in the settings footer immediately to the left of Run. It paints before request serialization and before parsing/validating the saved field; completion, misses, failure and cancellation clear it. Source/board changes, configuration edits, Run, hiding/deactivation, project close or plugin teardown cancel or discard stale lookup responses. Reopening the panel retains a completed session field. The generated project `layout-thermal/` directory is excluded from native discovery and file-set validation. Source lists these records as ordinary project files under [Format](FORMAT.md#source-transactions) rules, outside native design content, undo, recovery and dirty state; an edited artifact no longer matches its manifest hash, so lookup rejects it. Copy the directory with its native project to retain saved analysis records; Save as selects a separate destination and does not copy completed analysis history.
+
+## Interface
+
+Layout's thermometer opens the retained panel. The header omits the Completed label; completed values remain in the main-view result card. Human and Agent operations share `thermal.status`, `thermal.configure`, `thermal.importSpice`, `thermal.run`, `thermal.cancel`, `thermal.probe` and `thermal.exportImage`; host `thermal.show`/`thermal.hide` control visibility. Runtime discovery remains authoritative for registration and availability. Run requires active visible Layout, applied Source and a saved desktop destination. `thermal.run` declares an external mutation because it publishes completed analysis records; it does not save or edit native design data.
+
+Layout Thermal owns the completed field and publishes a renderer-only view to
+Layout. The board retains its native geometry and no solver state.
+[Layout Thermal controls](../DESIGN.md#layout-thermal)
+
+Each Components entry keeps its footprint ID and an independent power input,
+including board-only footprints. The solver uses canonical watts, and the
+shared quantity control can display compatible SI units. The full unchanged
+draft is available on hover. Activating the reference selects and centers an
+eligible footprint through the Layout renderer adapter while keeping Layout
+Thermal open. Selection, folding and camera changes leave the solver, native
+data, undo and dirty state untouched. Pending Source or close, inactive views,
+hidden or filtered targets, overlays and IME composition block locating.
+[Power controls and layout](../DESIGN.md#layout-thermal)
+
+The result card ranks up to five resolved heat sources by maximum PCB-pad
+temperature. Pad statistics integrate conforming surface triangles over the
+source-pad polygons on each footprint side. The tooltip includes mean pad
+temperature and PCB heat power. The result shows **Pad temperatures unavailable**
+when no source resolves. Values remain tied to the completed configuration
+while settings are edited. Activating a reference uses the same guarded Layout
+adapter as the settings list and reveals its board side. Removed heat and energy
+imbalance remain in the solver results. `thermal.exportImage` exports the
+temperature map.
+
+A completed field appears in the existing Layout camera at its actual PCB coordinates in millimetres. The Front/Back selector changes the displayed surface while retaining the camera. Both surfaces use the same complete-result temperature range, with a colour scale and a marker for the hottest real node on the selected surface. The surface raster is reused while that result and surface remain unchanged; pan, zoom and probe markers do not rebuild the temperature field. Board holes and areas outside the surface triangles remain transparent.
+
+**Show component outlines** toggles a separate native-outline layer above the temperature field, enabled by default. It uses exact Fab/SilkS geometry and footprint placement on the selected Front/Back side, respects Layout layer/footprint visibility, and stays transparent to pointer interactions. Its retained project-local state changes no design, camera, analysis settings or results.
+
+With the field visible, Interaction clicks inspect eligible component bodies on the selected side without moving the board geometry. Native visible bounds and placements determine picking; overlapping bodies prefer the smaller target. The selected footprint has a high-contrast frame above the raster, including when the outline layer is off. Its reference and temperature appear as one compact row at the bottom of the upper-left result card, without a canvas text label. Heat sources use the same maximum PCB-pad temperature as the ranking; other footprints report the nearest real surface node at their centre only when the centre lies on the solved surface. Missing pad coverage or an unsolved centre displays Unavailable. Accessible descriptions identify the temperature basis. The readout follows committed visible, eligible selection and clears with empty-space selection, surface changes, hidden results or Source/active-project gates. Left drags do not move components in this inspection mode. Pan, zoom, other tools, filters and design/undo state retain their existing contracts.
+
+**Show temperature in Layout** toggles the field without discarding the result or changing the camera. **Probe Layout temperature** enables canvas probing: a click inside a displayed surface triangle reports the nearest real finite-element node on that surface. A small crosshair/dot retains its screen size while zooming; the hottest node uses a small diamond. The probe temperature appears in a compact Probe row in the upper-left result card. Node identity and XYZ coordinates remain in accessible diagnostics and API results. The canvas has no floating temperature text. Clicks outside the solved surface or inside holes are ignored. Escape or starting another Layout tool exits probing; wheel zoom and middle/right-button camera navigation remain available. The standalone panel retains its compact temperature map; the docked panel retains that map privately for dedicated temperature PNG export through the existing bounded image export bridge.
+
+Field, colour, visibility and probe presentation stay separate from the editable board. Editing settings keeps a completed field with its previous inputs; another Run replaces it. Board/source changes invalidate it, and pending Source suppresses the field. Origin, destination and active/visible Layout guards discard stale presentations and lookup responses. Closing the panel retains completed results for reopening, while disable/uninstall releases plugin UI/capabilities. Agent observations carry bounded settings, statistics, extrema, assumptions and probes, without the full volume mesh or solver logs.
+
+Async resource, solve, saved-result and SPICE-heat failures use fixed actionable
+public diagnostics through `plugins/layout-thermal/host/thermal-errors.mjs`; native output, paths and
+exception excerpts never enter tool errors or observations. Precise preflight
+validation remains available. Private native artifacts and original errors are
+unchanged. `tests/thermal-errors.test.ts` and the service regressions verify this
+boundary with sentinel log contents.
+
+## Verification
+
+- `tests/thermal.test.ts`: geometry/material/source validation and freshness.
+- `tests/thermal-service.test.ts`: authenticated routes, lifecycle, saved-field matching and cancellation.
+- `tests/project-thermal-files.test.ts`: exact artifact/hash retention, per-file publication with the manifest last, rollback, owned-filename replacement and grant/link guards; opt-in real archive round trip.
+- `tests/thermal-planar.test.ts`: repeated/reversed edges, crossing and collinear edge splitting, shared material/hole contours and complete cutout loops.
+- `tests/thermal-runtime.test.ts`: SI units, mesh/field integrity, binary Float64 field validation and cancellation; two opt-in real slab/contour cases check energy balance.
+- `tests/thermal-capabilities.test.ts`, `tests/thermal-view.test.ts`: shared commands, bounded context, real-node probing and surface mapping.
+- `tests/thermal-spice.test.ts`: full-resolution power/provenance, stable footprint mapping, stale-input rejection and independent plugin gates.
+- `node scripts/check-thermal-ui.mjs`: isolated mocked settings/result restore and stale-lookup cancellation.
+- `node scripts/check-thermal-workbench-ui.mjs`: mocked docked fields/probes, camera retention, Source invalidation and teardown.
+- `npm run thermal:check-emc-flyback-ui`: real mounted-workbench solve with Manual powers from a prior EMC SPICE check, field/probe/export/restore/native-byte validation; `-- --restore` reuses matching saved results. Pickers and unrelated providers are isolated.
+- `npm run thermal:check-example`: real offline slab and LM2596 PCB mesh-refinement/control checks described below; no measured converter-loss or junction-temperature claim.
+
+Prepare resources with `npm run thermal:prepare`; verify offline installation with `npm run thermal:verify`. Set `OPENPE_TEST_THERMAL=1` in the test process to include all three real Gmsh/Elmer cases in `npm test`. These use the prepared pinned resources without downloads or Electron. They do not run the curated PCB mesh-refinement benchmark below. Real numerical verification is separate from mocked UI tests.
+
+### Reference case
+
+The reproducible LM2596 Buck benchmark prescribes 1 W into U1 pads at ambient 25 °C with the default material/convection assumptions. `npm run thermal:check-example` evaluates 2, 1, 0.5 and 0.4 mm meshes, checks the last temperature-rise refinement against a 5% criterion, verifies energy balance and compares a uniform-conductivity control. Its report records the exact source hashes, mesh sizes, node/element counts, temperatures and assumptions from the current mesh pipeline. The default mesh is a starting point and requires refinement before relying on a hotspot estimate.
+
+### EMC Flyback comparison
+
+`npm run simulation:check-emc-flyback`, then
+`npm run thermal:check-emc-flyback`, imports 17 final-20% dissipative paths from
+the 100 Ω resistor plus retained 0.5 A load-step bench into PCB pads using the
+default material/convection assumptions. Add
+`-- --mesh-size-mm=3` for the separate coarser comparison. Reports retain mesh,
+solver artifacts, fields and pad temperatures under `test-results/`.
+
+[EMC Flyback verification](EMC-FLYBACK.md#thermal-comparison) defines the current
+bench and report evidence. Two mesh sizes check agreement, not convergence.
+The upstream load, enclosure, package and radiation model differ from this
+board-only analysis. OpenPE pad temperatures cannot stand for its junction
+temperatures or establish agreement with its case-coupled result.

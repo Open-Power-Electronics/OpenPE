@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "filename": "lm2598-to220-7-buck.kicad_pro",
+    "version": 1
+  },
+  "text_variables": {
+    "OPENPE_PROJECT_NAME": "LM2598 Buck",
+    "OPENPE_SIMULATION_MODELS": "[\"models/LM2598-ADJ.lib\"]"
+  }
+}

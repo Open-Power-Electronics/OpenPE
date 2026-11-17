@@ -1,0 +1,564 @@
+.panel {
+  position: absolute;
+  top: 12px;
+  bottom: 64px;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-floating);
+}
+.panel[hidden] {
+  display: none;
+}
+.placement {
+  top: 8px;
+  left: 12px;
+  bottom: auto;
+  width: max-content;
+  max-width: min(720px, calc(100% - 24px));
+  max-height: calc(100% - 20px);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'title parameters actions';
+  align-items: center;
+}
+.inspector {
+  right: 12px;
+  width: 360px;
+}
+.docked {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  container-type: inline-size;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--panel);
+  flex-shrink: 0;
+  min-width: 0;
+}
+.header h2 {
+  margin: 0;
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.header > span {
+  flex: 1;
+  text-align: right;
+  font-size: var(--font-caption);
+  color: var(--muted);
+}
+.panel form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+.placement form {
+  display: contents;
+}
+.placement .header {
+  grid-area: title;
+  align-self: stretch;
+  padding: 6px;
+  border-bottom: 0;
+  min-height: 36px;
+}
+.placement .header h2 {
+  white-space: nowrap;
+  font-size: var(--font-small);
+}
+.placement .header > span {
+  display: none;
+}
+.body {
+  min-height: 0;
+  min-width: 0;
+  padding: var(--properties-inset);
+  overflow: auto;
+  flex: 1;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.placement .body {
+  grid-area: parameters;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+}
+.placement .body > .field {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+}
+.placement .body > .field:first-of-type > span:first-child {
+  display: none;
+}
+.placement .body > .field:first-of-type > input {
+  width: 100px;
+}
+.placement .section {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.placement .section > h3 {
+  margin: 0;
+  white-space: nowrap;
+}
+.placement .section[aria-label='Solid dimensions'] > h3 {
+  display: none;
+}
+.placement .fields,
+.placement .axes {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+}
+.placement .fields > label,
+.placement .axes > label {
+  flex: 0 0 auto;
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.placement label > :global(.quantity-input) {
+  flex: 0 0 auto;
+  width: max(108px, 8em);
+}
+.placement .axes label > :global(.quantity-input) {
+  width: max(100px, 7.5em);
+}
+.placement .fields > .field:has(> button) > span:first-child {
+  display: none;
+}
+.placement .fields > .field > :global(.select-trigger) {
+  width: max-content;
+}
+.sheetError {
+  flex: 0 0 240px;
+  max-height: 70px;
+  margin: 0;
+  overflow-y: auto;
+  color: var(--error-ink);
+  font-size: var(--font-small);
+  line-height: 1.4;
+}
+.field,
+.fields label,
+.axes label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--properties-label-gap);
+  font-size: var(--font-small);
+  color: var(--muted);
+  line-height: 1.4;
+}
+.panel input {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+  background: var(--field-surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+.panel input[inputmode='decimal'] {
+  font-family: var(--code-font);
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--properties-row-gap) var(--properties-column-gap);
+}
+.axes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--properties-row-gap) var(--properties-column-gap);
+}
+.section {
+  margin-top: var(--properties-group-gap);
+  padding-top: 0;
+}
+.section h3 {
+  margin: 0 0 6px;
+  font-size: var(--font-small);
+  font-weight: 600;
+  color: var(--text-strong);
+  line-height: 1.4;
+}
+.nameField {
+  display: flex;
+  align-items: center;
+  gap: var(--properties-row-gap);
+  min-width: 0;
+}
+.nameField > label {
+  flex: 1;
+}
+.nameField > button {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+}
+.draftIndicator {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-strong);
+}
+.docked .fields {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--properties-row-gap) var(--properties-column-gap);
+}
+.docked .fields > label,
+.docked .fields > .field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  align-items: center;
+  gap: var(--properties-label-gap);
+}
+.docked .fields > label > span:first-child,
+.docked .fields > .field > span:first-child {
+  white-space: normal;
+}
+.docked .fields > label:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  align-items: center;
+  gap: var(--properties-label-gap);
+}
+.docked .nameField {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--properties-value-width) - 34px)) 30px;
+  gap: var(--properties-label-gap);
+}
+.docked .nameField > .field {
+  display: contents;
+}
+.docked .nameField > .draftIndicator {
+  position: absolute;
+  top: -3px;
+  right: 34px;
+  width: 6px;
+  height: 6px;
+}
+.docked .body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--properties-group-gap);
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+.docked .body > * {
+  flex: 0 0 auto;
+}
+.docked .section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--properties-row-gap);
+  margin: 0;
+  padding: 0;
+}
+.docked .section h3 {
+  margin: 0;
+}
+.docked .transforms {
+  margin: 0;
+  padding: 0;
+}
+.docked .transforms .section {
+  margin-top: var(--properties-row-gap);
+}
+.docked .fields.dimensions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.docked .fields.dimensions > label,
+.docked .fields.dimensions > label:last-child:nth-child(odd) {
+  grid-column: auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  align-items: start;
+  gap: var(--properties-label-gap);
+}
+.docked .fields.dimensions > label:only-child {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-rows: auto;
+  align-items: center;
+}
+.docked .fields.dimensions:has(> label:nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 4px;
+}
+.fields:empty {
+  display: none;
+}
+.docked :is(.fields.dimensions, .transforms .axes) :global(.quantity-input) > input {
+  padding: 4px 2px;
+  font-size: var(--font-small);
+}
+
+.transforms {
+  margin-top: 6px;
+  padding-top: 2px;
+}
+.transforms > summary {
+  min-height: 30px;
+  padding: 5px 0;
+  border-radius: var(--radius);
+  color: var(--text-strong);
+  font-size: var(--font-small);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.transforms > summary:hover {
+  background: var(--surface-hover);
+}
+.transforms .section {
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+}
+.docked .transforms .axes {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--properties-row-gap) 4px;
+}
+.docked .transforms .axes > label {
+  gap: var(--properties-label-gap);
+}
+@container (max-width: 17em) {
+  .docked
+    :is(.fields.dimensions:has(> label:nth-child(3)), .transforms .axes)
+    :global(.quantity-input) {
+    flex-direction: column;
+  }
+  .docked
+    :is(.fields.dimensions:has(> label:nth-child(3)), .transforms .axes)
+    :global(.quantity-input.quantity-input)
+    > input {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .docked
+    :is(.fields.dimensions:has(> label:nth-child(3)), .transforms .axes)
+    :global(.quantity-input.quantity-input)
+    > :global(.select-trigger) {
+    flex: 0 0 auto;
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+    border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+  }
+}
+.placement .transforms {
+  display: contents;
+}
+.placement .transforms .section {
+  margin: 0;
+}
+.editActions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--properties-group-gap);
+  padding: var(--properties-inset);
+  padding-bottom: 0;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-soft);
+  flex-shrink: 0;
+  background: var(--panel);
+}
+.footer p,
+.error > p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--font-small);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.error > p {
+  flex: 1;
+  color: var(--error-ink);
+}
+.error > button {
+  flex-shrink: 0;
+}
+.footer .instruction {
+  flex-basis: auto;
+  flex: 1;
+  color: var(--muted);
+}
+.placement .footer {
+  grid-area: actions;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 6px 4px;
+  border-top: 0;
+  border-left: 1px solid var(--line-soft);
+}
+.placement .footer .instruction {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.placement .footer > button {
+  min-height: var(--control-height);
+  padding: 4px 8px;
+  border-radius: var(--radius);
+}
+.placement .footer > .close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.placement .footer > .close:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+.primitive {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'parameters actions';
+}
+.primitive .body {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.primitive .section {
+  flex: 1 1 auto;
+}
+.primitive .fields {
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.primitive .fields > label {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.primitive label > :global(.quantity-input) {
+  flex: 0 1 108px;
+  min-width: 0;
+  max-width: 108px;
+}
+.primitive .sheetError {
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+.primitive .footer {
+  border-left: 0;
+}
+.colorField {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  align-items: center;
+  gap: var(--properties-label-gap);
+  color: var(--muted);
+  font-size: var(--font-small);
+}
+.colorControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.colorControls input[type='color'] {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  cursor: pointer;
+}
+.colorControls input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.colorControls input::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+}
+.colorValue {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-strong);
+  font-family: var(--code-font);
+}
+.colorControls > button {
+  flex-shrink: 0;
+}
+.empty {
+  margin: 0;
+  padding: 24px 12px;
+  font-size: var(--font-small);
+  color: var(--muted);
+  line-height: 1.6;
+  text-align: center;
+}
