@@ -472,9 +472,10 @@ are scoped to `examples/` and `tests/fixtures/`; source directories named
 `spice` or `thermal` remain eligible for version control. Native designs,
 lockfiles, notices, pinned inputs, required generated service/schema files and
 brand assets remain tracked. Next.js manages and regenerates `next-env.d.ts`,
-which is ignored rather than versioned. The entire `promotion/` authoring
-workspace, including its project/media files and capture outputs, is excluded
-from this repository by the root `.gitignore`. Ignoring a path does not authorize its deletion.
+which is ignored rather than versioned. The [promotion project](../promotion/README.md)
+versions its Remotion source, active video clips and selected provenance records.
+Its separate ignore rules keep local captures, profiles, soundtrack files,
+reference media and exports out of Git. Ignoring a path does not authorize its deletion.
 
 ## Verification
 

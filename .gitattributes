@@ -14,3 +14,4 @@ resources/example-catalog/footprints/models/** -text
 plugins/pe-layout-skill/resources/SKILL.md -text
 plugins/pe-layout-skill/resources/references/** -text
 plugins/pe-layout-skill/resources/LICENSE -text
+promotion/tools/media/UPSTREAM-README.txt -text -whitespace
