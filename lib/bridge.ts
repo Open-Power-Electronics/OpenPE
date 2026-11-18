@@ -27,6 +27,7 @@ declare global {
       readonly titleBarInset: boolean;
       installPlugin(): Promise<{ id: string } | null>;
       connection(): Promise<{ base: string; token: string }>;
+      openLibraryHomepage(site: 'jlceda' | 'easyeda'): Promise<void>;
       cursorCredentialStatus(): Promise<{ configured: boolean; suffix?: string }>;
       cursorCredentialStore(key: string): Promise<{ configured: boolean; suffix?: string }>;
       cursorCredentialRemove(): Promise<{ configured: false }>;

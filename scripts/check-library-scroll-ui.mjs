@@ -197,6 +197,7 @@ try {
   await search.fill('missing');
   await submit.click();
   await page.getByText('No matching footprints.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.library-detail').isVisible(), false);
   assert.equal(await assign.isEnabled(), false);
   await search.fill('');
   assert.equal(await rows.count(), 0, 'Clearing the draft retains the committed empty results.');

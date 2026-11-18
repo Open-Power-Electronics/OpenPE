@@ -92,6 +92,7 @@ try {
       newFile: async () => crypto.randomUUID(),
       listExamples: async () => ({ entries: [], warnings: [] }),
       listRecent: async () => ({ initialized: true, entries: [], warnings: [] }),
+      cursorCredentialStatus: async () => ({ configured: false }),
       onRecentChanged: () => () => {},
       releaseFile: async () => {},
       setDirty: async () => {},
@@ -125,9 +126,9 @@ try {
               }
             : {
                 id,
-                installed: false,
+                installed: id === 'cursor',
                 available: false,
-                error: `${id} CLI was not detected.`,
+                error: id === 'cursor' ? 'API key not configured' : `${id} CLI was not detected.`,
                 auth: 'unknown',
               },
         ),
@@ -187,7 +188,10 @@ try {
     assert.equal(await option.getAttribute('aria-disabled'), null);
     if (['deepseek', 'pi', 'cursor'].includes(provider.id)) {
       assert.match(await option.getAttribute('class'), /muted/);
-      assert.match(await option.innerText(), /CLI not detected/);
+      assert.match(
+        await option.innerText(),
+        provider.id === 'cursor' ? /CLI detected · unavailable/ : /CLI not detected/,
+      );
     }
     await option.click();
     await page.waitForFunction(
@@ -208,7 +212,7 @@ try {
   });
   assert.equal(await picker.getAttribute('aria-description'), 'DeepSeek Harness');
   assert.equal(await composer.getAttribute('placeholder'), 'Work with DeepSeek Harness');
-  assert.equal(await modelPicker.innerText(), originalModels.deepseek);
+  assert.equal(await modelPicker.innerText(), 'Choose model');
   await waitUntil(() => detections === 1, 'Initial Agent detection did not start.');
   for (const [session, draft] of [
     ['second-session', 'Second draft'],
@@ -244,6 +248,8 @@ try {
           .count(),
         1,
       );
+    } else if (provider.id === 'cursor') {
+      await row.getByText('API key not configured', { exact: true }).waitFor();
     } else {
       await row.getByText('Not installed', { exact: true }).waitFor();
     }
@@ -279,10 +285,11 @@ try {
     ['deepseek', 'pi', 'cursor'].includes(provider.id),
   )) {
     await selectProvider(provider);
-    assert.equal(await modelPicker.innerText(), originalModels[provider.id]);
+    assert.equal(await modelPicker.innerText(), 'Choose model');
     assert.deepEqual(state.models, originalModels);
   }
   await selectProvider(agentProviders.find((provider) => provider.id === 'codex'));
+  await waitUntil(() => modelRequests.length === 1, 'First Codex selection should load its catalog.');
   await modelPicker.click();
   await page.getByRole('option', { name: 'Codex alternate', exact: true }).click();
   await waitUntil(
@@ -291,13 +298,14 @@ try {
   );
   const expectedModels = { ...originalModels, codex: 'fixture/codex-other' };
   await selectProvider(agentProviders.find((provider) => provider.id === 'pi'));
-  assert.equal(await modelPicker.innerText(), originalModels.pi);
+  assert.equal(await modelPicker.innerText(), 'Choose model');
   assert.deepEqual(state.models, expectedModels);
+  assert.deepEqual(modelRequests, ['codex']);
 
   // Reload through actual workspace recovery, then return to another provider.
   await mount();
   assert.equal(await picker.getAttribute('aria-description'), 'Pi');
-  assert.equal(await modelPicker.innerText(), originalModels.pi);
+  assert.equal(await modelPicker.innerText(), 'Choose model');
   await selectProvider(agentProviders.find((provider) => provider.id === 'codex'));
   await modelPicker.getByText('Codex alternate', { exact: true }).waitFor();
   assert.deepEqual(state.models, expectedModels);
@@ -307,7 +315,7 @@ try {
   await composer.press('Enter');
   assert.equal(await composer.inputValue(), 'Retain this draft while the CLI is missing');
   assert.equal(chats, 0, 'Missing Agents never send provider requests.');
-  assert.ok(modelRequests.every((provider) => provider === 'codex'));
+  assert.deepEqual(modelRequests, ['codex', 'codex']);
   assert.equal(state.documents[0].source, source);
   assert.equal(state.documents[0].dirty, false);
 

@@ -26,6 +26,7 @@ import {
 } from '../server/annotation-format.mjs';
 import { runAgent, makePrompt } from '../server/agents.mjs';
 import { startServer } from '../server/index.mjs';
+import { layoutCanvasPoint } from '../components/LayoutCamera';
 
 test('annotation selection captures immutable identities and properties without editing project data', () => {
   const project = exampleProject();
@@ -376,6 +377,85 @@ test('area and freehand annotations are bounded conversation snapshots, includin
   bounds.x = 99;
   assert.equal(snapshot.markup?.kind === 'rectangle' && snapshot.markup.bounds.x, -10);
   assert.deepEqual(project, before);
+});
+
+test('Layout coordinate capture strips browser point serialization before freehand attachment transport', () => {
+  class BrowserPoint {
+    constructor(
+      private readonly horizontal: number,
+      private readonly vertical: number,
+    ) {}
+    get x() {
+      return this.horizontal;
+    }
+    get y() {
+      return this.vertical;
+    }
+    matrixTransform(matrix: DOMMatrix) {
+      return new BrowserPoint(
+        matrix.a * this.x + matrix.c * this.y + matrix.e,
+        matrix.b * this.x + matrix.d * this.y + matrix.f,
+      );
+    }
+    toJSON() {
+      return { x: this.x, y: this.y, z: 0, w: 1 };
+    }
+  }
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'DOMPoint');
+  Object.defineProperty(globalThis, 'DOMPoint', { configurable: true, value: BrowserPoint });
+  try {
+    const transform = {
+      inverse: () => ({ a: 0.5, b: 0, c: 0, d: 0.5, e: 1, f: 2 }),
+    } as unknown as DOMMatrix;
+    const view = { x: -10, y: 20, width: 100 };
+    const events = [
+      { clientX: 101.25, clientY: 202.5 },
+      { clientX: 105.75, clientY: 208.5 },
+    ];
+    const fallback = new BrowserPoint(7.125, 9.875);
+    const project = exampleProject();
+    for (const presented of [undefined, null, view]) {
+      const points = events.map((event) =>
+        layoutCanvasPoint(event, transform, fallback, presented, view),
+      );
+      assert.deepEqual(points, [
+        { x: 51.625, y: 103.25 },
+        { x: 53.875, y: 106.25 },
+      ]);
+      const annotation = {
+        ...annotationFixture(),
+        ...capturePCBAnnotationSelection(project.pcb!, project.schematic, [], {
+          kind: 'freehand',
+          points,
+        }),
+        bounds: { x: 51.625, y: 103.25, width: 2.25, height: 3 },
+      };
+      const transported = JSON.parse(JSON.stringify([annotation]));
+      assert.doesNotThrow(() => validateAnnotations(transported));
+      assert.doesNotThrow(() => validateServiceAnnotations(transported));
+      assert.deepEqual(Object.keys(transported[0].markup.points[0]), ['x', 'y']);
+      // The service remains strict; callers cannot broaden the point protocol.
+      transported[0].markup.points[0].z = 0;
+      transported[0].markup.points[0].w = 1;
+      assert.throws(() => validateServiceAnnotations(transported), /Unsupported annotation field/);
+    }
+    assert.deepEqual(layoutCanvasPoint(events[0], null, fallback, view, view), {
+      x: 7.125,
+      y: 9.875,
+    });
+    const snap = (value: number) => Math.round(value * 2) / 2;
+    assert.deepEqual(layoutCanvasPoint(events[0], transform, fallback, view, view, snap), {
+      x: 51.5,
+      y: 103.5,
+    });
+    assert.deepEqual(
+      layoutCanvasPoint(events[0], transform, fallback, view, { x: 0, y: 10, width: 200 }),
+      { x: 123.25, y: 176.5 },
+    );
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'DOMPoint', original);
+    else Reflect.deleteProperty(globalThis, 'DOMPoint');
+  }
 });
 
 test('HTTP rejects invalid attachments before starting any agent and forwards valid snapshots', async () => {

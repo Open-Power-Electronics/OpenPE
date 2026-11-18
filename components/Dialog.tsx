@@ -61,6 +61,11 @@ export default function Dialog({
   const maximized = maximizable && isMaximized;
   const centered = !anchorRef && !anchorPoint;
   const settingsWindow = centered && !compact;
+  const defaultWidth = compact
+    ? wide
+      ? 'var(--dialog-compact-wide-width)'
+      : 'var(--dialog-compact-width)'
+    : 'var(--dialog-width)';
   const hasContent = children !== undefined;
   const [placementRevision, setPlacementRevision] = useState(0);
   const [localSize, setLocalSize] = useState<InspectorSize>({});
@@ -303,8 +308,7 @@ export default function Dialog({
             }
           : centered
             ? {
-                width:
-                  size.width ?? (compact ? 'var(--dialog-compact-width)' : 'var(--dialog-width)'),
+                width: size.width ?? defaultWidth,
                 height: size.height ?? (settingsWindow ? 'var(--dialog-height)' : undefined),
                 maxWidth: 'calc(100vw - 48px)',
                 maxHeight: 'calc(100dvh - var(--desktop-titlebar-height, 0px) - 48px)',

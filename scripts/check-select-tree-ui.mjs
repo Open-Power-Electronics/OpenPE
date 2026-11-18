@@ -33,6 +33,7 @@ const bundle = await build({
         const [disabled,setDisabled] = useState(false);
         const [flat,setFlat] = useState(false);
         const [long,setLong] = useState(false);
+        const [actionLabel,setActionLabel] = useState('');
         window.configure = config => {
           if ('lazy' in config) {setLazy(config.lazy);setLoaded(false);}
           if ('loaded' in config) setLoaded(config.loaded);
@@ -41,6 +42,7 @@ const bundle = await build({
           if ('disabled' in config) setDisabled(config.disabled);
           if ('flat' in config) setFlat(config.flat);
           if ('long' in config) setLong(config.long);
+          if ('actionLabel' in config) setActionLabel(config.actionLabel);
         };
         const options = flat ? [
           {value:'first',label:'First'},
@@ -63,6 +65,12 @@ const bundle = await build({
           onChange={next=>{window.fixture.changes.push(next);setValue(next);}}
           onExpand={next=>window.fixture.expands.push(next)}
           onClosedEscape={()=>window.fixture.closedEscapes++}/>
+          {actionLabel && <>
+            <Select label="Length unit" value="mm" showChevron={false}
+              options={[{value:'mm',label:'mm'},{value:'mil',label:'mil'}]} onChange={()=>{}}/>
+            <Select label="Actions" value="" popupMatchWidth="content"
+              options={[{value:'action',label:actionLabel}]} onChange={()=>{}}/>
+          </>}
           <button id="outside">Outside</button></>;
       }
       createRoot(document.getElementById('root')).render(<App/>);
@@ -284,6 +292,30 @@ try {
   await trigger.press('End');
   await trigger.press('Enter');
   assert.equal(await trigger.textContent(), 'Last');
+
+  await page.setViewportSize({ width: 1120, height: 760 });
+  const longAction = 'Restore archived conversation '.repeat(12).trim();
+  await configure({ actionLabel: longAction });
+  const unit = page.getByRole('combobox', { name: 'Length unit', exact: true });
+  await unit.evaluate((element) => (element.style.width = '30px'));
+  await unit.click();
+  assert.equal((await popup('Length unit').boundingBox()).width, 30);
+  const unitLabel = row('Length unit', 'mm').locator('strong');
+  assert.ok(await unitLabel.evaluate((label) => label.scrollWidth <= label.clientWidth));
+  assert.equal(await row('Length unit', 'mm').getAttribute('aria-selected'), 'true');
+  await unit.press('Escape');
+  const actions = page.getByRole('combobox', { name: 'Actions', exact: true });
+  await actions.click();
+  const actionLabel = row('Actions', longAction).locator('strong');
+  assert.equal(await actionLabel.getAttribute('title'), longAction);
+  assert.ok(await actionLabel.evaluate((label) => label.scrollWidth > label.clientWidth));
+  assert.equal(await actionLabel.evaluate((label) => getComputedStyle(label).whiteSpace), 'nowrap');
+  assert.ok((await popup('Actions').boundingBox()).width <= 352);
+  await actions.press('Escape');
+  await configure({ actionLabel: 'Find' });
+  await actions.click();
+  assert.equal((await popup('Actions').boundingBox()).width, 140);
+  await actions.press('Escape');
   assert.deepEqual(errors, []);
   console.log(
     'PASS: recursive Select pointer/keyboard menus, lazy expansion, descendant labels, IME, disabled branches, viewport bounds and flat controls.',

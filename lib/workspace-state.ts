@@ -7,6 +7,7 @@ import {
   defaultReasoningEffort,
   isAgentProvider,
   isReasoningEffort,
+  validAgentModelId,
 } from './agent-providers';
 
 export const maxOpenProjects = 12;
@@ -207,7 +208,7 @@ export function restoreWorkspace(value: unknown): WorkspaceState {
   for (const id of agentProviderIds)
     if (
       typeof models[id] !== 'string' ||
-      (models[id] !== '' && !/^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(models[id]))
+      (models[id] !== '' && !validAgentModelId(id, models[id]))
     )
       throw new Error('Invalid saved Agent model.');
   return {

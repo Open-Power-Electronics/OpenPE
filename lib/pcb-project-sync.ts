@@ -1,11 +1,11 @@
 import type { Project } from './project';
 import { serializeProject } from './project';
 import { isOwnedProject, ownProject } from './immutable-project';
-import { partFields, unitGraphics } from './library';
+import { onlineFootprintLibrary, partFields, unitGraphics } from './library';
 import { toProjectDocument } from './project-document';
 import { child, children, val } from './sexpr';
 import { partSchematicSection } from './schematic-section';
-import { attachNextPcbFootprint, projectFootprintSource } from './library-project-assets';
+import { attachOnlineFootprint, projectFootprintSource } from './library-project-assets';
 import {
   pcbUpdateFootprintIds,
   pcbPinKey,
@@ -161,7 +161,7 @@ export class PCBProjectSync {
   private footprintSources(project: Project, ids: readonly string[]) {
     const sources = new Map(this.sources);
     for (const id of ids) {
-      if (!id.startsWith('NextPCB:')) continue;
+      if (!onlineFootprintLibrary(id)) continue;
       const local = projectFootprintSource(project, id);
       if (local) sources.set(id, local);
       else if (sources.get(id)?.projectAssets !== true) sources.delete(id);
@@ -270,7 +270,7 @@ export class PCBProjectSync {
       this.embedded,
     );
     let candidate = result.changed ? { ...project, pcb: result.board } : project;
-    for (const id of ids) candidate = attachNextPcbFootprint(candidate, sources.get(id)!);
+    for (const id of ids) candidate = attachOnlineFootprint(candidate, sources.get(id)!);
     const next = ownProject(candidate, isOwnedProject(project) ? project : undefined);
     this.requiredPackages.delete(project);
     this.requiredPackages.delete(next);
@@ -312,8 +312,9 @@ export class PCBProjectSync {
           signal.throwIfAborted();
           if (detail.id !== id || !Array.isArray(detail.footprint))
             throw new Error(`${id}: invalid footprint library response.`);
-          if (id.startsWith('NextPCB:') && detail.projectAssets !== true)
-            throw new Error(`${id}: prepare the NextPCB project package before placement.`);
+          const library = onlineFootprintLibrary(id);
+          if (library && detail.projectAssets !== true)
+            throw new Error(`${id}: prepare the ${library} project package before placement.`);
           this.sources.set(id, detail);
         }
       }),

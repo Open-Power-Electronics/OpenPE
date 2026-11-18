@@ -43,6 +43,26 @@ export function rebaseLayoutCameraPoint(
   };
 }
 
+/** Convert browser coordinates to plain 2D canvas data before gestures retain
+ * them. DOMPoint's z/w and serialization hooks must not enter annotations. */
+export function layoutCanvasPoint(
+  event: { clientX: number; clientY: number },
+  transform: DOMMatrix | null,
+  fallback: { x: number; y: number },
+  presented: LayoutView | null | undefined,
+  current: LayoutView,
+  snap?: (value: number) => number,
+): { x: number; y: number } {
+  const mapped = transform
+    ? new DOMPoint(event.clientX, event.clientY).matrixTransform(transform.inverse())
+    : fallback;
+  // Navigation can be newer than its DOM presentation. Preserve its exact pose
+  // without another layout read, including under an outer CSS affine transform.
+  const point =
+    transform && presented ? rebaseLayoutCameraPoint(mapped, presented, current) : mapped;
+  return { x: snap ? snap(point.x) : point.x, y: snap ? snap(point.y) : point.y };
+}
+
 /** Camera state is presentation-only. Drawing events read the latest values;
  * only small overlays and readouts subscribe to camera changes. */
 export function createLayoutCamera(initial: LayoutView) {

@@ -532,6 +532,18 @@ function portableExampleModelSource(source) {
 }
 
 // lib/library.ts
+var librarySources = ["KiCad", "NextPCB", "JLCPCB"];
+function isOnlineLibrary(source) {
+  return source === "NextPCB" || source === "JLCPCB";
+}
+function catalogSource(library) {
+  return isOnlineLibrary(library) ? library : "KiCad";
+}
+function onlineFootprintLibrary(id) {
+  const separator = id.indexOf(":");
+  const library = id.slice(0, separator);
+  return separator > 0 && isOnlineLibrary(library) ? library : void 0;
+}
 function searchLibrary(entries, query, library = "") {
   const phrase = query.trim().toLowerCase().replace(/\s+/g, " ");
   if (!phrase)
@@ -779,6 +791,7 @@ function parseLibrary(source) {
   return children(root, "symbol");
 }
 export {
+  catalogSource,
   child,
   children,
   createLibraryPart,
@@ -786,8 +799,11 @@ export {
   displayPartValue,
   exampleModelPath,
   extraSymbolAnnotations,
+  isOnlineLibrary,
+  librarySources,
   modelReferenceKey,
   num,
+  onlineFootprintLibrary,
   parseLibrary,
   parseSExpr,
   partFields,

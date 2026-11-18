@@ -335,6 +335,14 @@ function isReasoningEffort(value) {
 function isAgentProvider(value) {
   return agentProviders.some(({ id }) => id === value);
 }
+function validModelId(value) {
+  return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(value);
+}
+function validAgentModelId(provider, value) {
+  if (provider === "deepseek")
+    return typeof value === "string" && value.length <= 512 && Boolean(value.trim()) && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
+  return validModelId(value);
+}
 
 // lib/workspace-state.ts
 var maxOpenProjects = 12;
@@ -463,7 +471,7 @@ function restoreWorkspace(value) {
   if (Object.keys(models).length !== agentProviderIds.length)
     throw new Error("Invalid saved Agent model list.");
   for (const id of agentProviderIds)
-    if (typeof models[id] !== "string" || models[id] !== "" && !/^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(models[id]))
+    if (typeof models[id] !== "string" || models[id] !== "" && !validAgentModelId(id, models[id]))
       throw new Error("Invalid saved Agent model.");
   return {
     version: 2,

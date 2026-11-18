@@ -154,7 +154,7 @@ import { type PCB, type Footprint } from '@/lib/pcb';
 import { findPCBGraphic } from '@/lib/pcb-layout';
 import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
 import { loadLibraryFootprint } from '@/lib/library-package';
-import { attachNextPcbFootprint } from '@/lib/library-project-assets';
+import { attachOnlineFootprint } from '@/lib/library-project-assets';
 import type { FootprintSource } from '@/lib/pcb-sync';
 import SchematicLayers from './SchematicLayers';
 import { visibleSchematicIds } from '@/lib/schematic-view';
@@ -180,8 +180,16 @@ import DeferredDialog from './DeferredDialog';
 import DesktopTitlebar, {
   titlebarMenuOptions,
   runTitlebarMenuAction,
+  type EditTarget,
   type TitlebarMenu,
 } from './DesktopTitlebar';
+import {
+  dispatchEditKey,
+  runTextEdit,
+  textEditTarget,
+  visibleEditTarget,
+  writableText,
+} from './edit-commands';
 import WorkspaceDivider from './WorkspaceDivider';
 import type { useAppearance } from './AppearanceSettings';
 import PartsList from './PartsList';
@@ -211,7 +219,7 @@ import { useWorkbenchPlugins, registerWorkbenchPluginCapabilities } from '@/lib/
 import { registerLayoutParasiticsCapability } from '../plugins/layout-parasitics/renderer/capabilities';
 import { registerEmcCapabilities } from '../plugins/emc-analysis/renderer/capabilities';
 import { schematicTexts } from '@/lib/schematic-text';
-import { displayPartValue, partFields } from '@/lib/library';
+import { displayPartValue, onlineFootprintLibrary, partFields } from '@/lib/library';
 import { preparePartGeometry, preparePartProperties } from '@/lib/part-properties';
 import { val, type SExpr } from '@/lib/sexpr';
 import ProjectNavigation, {
@@ -485,6 +493,7 @@ export default function Workbench({
   const schematicSectionRef = useRef(schematicSection);
   schematicSectionRef.current = schematicSection;
   const schematicComposing = useRef(false);
+  const editComposing = useRef(false);
   const propertiesPending = useRef(false);
   const onPropertiesPendingChange = useCallback((pending: boolean) => {
     propertiesPending.current = pending;
@@ -1708,7 +1717,7 @@ export default function Workbench({
         const snapshot = core.getSnapshot();
         if (!snapshot.project) return false;
         const packaged = source
-          ? attachNextPcbFootprint({ ...snapshot.project, pcb: board }, source)
+          ? attachOnlineFootprint({ ...snapshot.project, pcb: board }, source)
           : snapshot.project;
         return core.replaceBoard(board, packaged.nativeFiles);
       } catch (error) {
@@ -2001,16 +2010,19 @@ export default function Workbench({
     }
   }, [core, setSelected, notify]);
   function remove(targets: string[] = selection) {
-    if (!doc || sourcePending || !targets.length) return;
+    if (!doc || sourcePending || !targets.length) return false;
     const ids = targets.filter((id) => !selectedField(id));
     if (!ids.length) {
       notify('Component text fields cannot be deleted.');
-      return;
+      return false;
     }
     try {
-      if (commit(removeSelection(doc, ids))) setSelected(null);
+      if (!commit(removeSelection(doc, ids))) return false;
+      setSelected(null);
+      return true;
     } catch (error) {
       notify((error as Error).message);
+      return false;
     }
   }
   function rotate() {
@@ -2026,16 +2038,18 @@ export default function Workbench({
     const result = duplicateSelection(doc, selection);
     if (result.selection.length && commit(result.circuit)) setSelection(result.selection);
   }
-  function copySelection() {
-    if (!doc || !selection.some((id) => !selectedField(id))) return;
-    clipboard.current = {
-      doc: structuredClone(doc),
-      ids: selection.filter((id) => !selectedField(id)),
-    };
-    notify('Selection copied.');
+  function copySelection(cut = false) {
+    const snapshot = core.getSnapshot();
+    if (!doc || snapshot.sourceDraft !== null || snapshot.editingBlocked) return;
+    const ids = selection.filter((id) => !selectedField(id));
+    if (!ids.length || (cut && (tool === 'annotate' || propertiesDraftPending()))) return;
+    const clip = { doc: structuredClone(doc), ids };
+    if (cut && !remove(ids)) return;
+    clipboard.current = clip;
+    notify(cut ? 'Selection cut.' : 'Selection copied.');
   }
   function pasteSelection() {
-    if (!doc || !clipboard.current) return;
+    if (!doc || !clipboard.current || propertiesDraftPending()) return;
     const clip = clipboard.current;
     try {
       const result = pasteSchematicSelection(doc, clip.doc, clip.ids);
@@ -2406,7 +2420,7 @@ export default function Workbench({
     };
     if (
       footprintDetail &&
-      !assignment.startsWith('NextPCB:') &&
+      !onlineFootprintLibrary(assignment) &&
       assignment !== previousAssignment
     ) {
       const latest = core.getSnapshot().project;
@@ -2479,11 +2493,72 @@ export default function Workbench({
       return false;
     }
   }
+  const canUseEditCommands = useEditorAction(
+    () =>
+      active &&
+      !editComposing.current &&
+      !modal &&
+      !confirmation &&
+      !core.getSnapshot().editingBlocked &&
+      !hasOpenOverlay(),
+  );
+  const showSettings = useEditorAction(() => {
+    if (canUseEditCommands()) setModal('settings');
+  });
+  useEffect(() => {
+    if (!active) return;
+    const start = () => {
+      editComposing.current = true;
+    };
+    const end = () => {
+      editComposing.current = false;
+    };
+    const commandKey = (event: KeyboardEvent) => {
+      if (!isCommandModifier(event)) return;
+      if (
+        (editComposing.current || event.isComposing || event.keyCode === 229) &&
+        ['a', 'c', 'f', 'v', 'x', 'y', 'z', ','].includes(event.key.toLowerCase())
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (
+        event.key !== ',' ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.shiftKey ||
+        !canUseEditCommands()
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) showSettings();
+    };
+    window.addEventListener('compositionstart', start, true);
+    window.addEventListener('compositionend', end, true);
+    window.addEventListener('blur', end);
+    window.addEventListener('keydown', commandKey, true);
+    return () => {
+      end();
+      window.removeEventListener('compositionstart', start, true);
+      window.removeEventListener('compositionend', end, true);
+      window.removeEventListener('blur', end);
+      window.removeEventListener('keydown', commandKey, true);
+    };
+  }, [active, canUseEditCommands, showSettings]);
   useEffect(() => {
     function key(e: KeyboardEvent) {
       const el = e.target as HTMLElement;
       const input = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
-      if (!active || e.defaultPrevented || e.isComposing || e.keyCode === 229 || hasOpenOverlay())
+      if (
+        !active ||
+        e.defaultPrevented ||
+        e.isComposing ||
+        e.keyCode === 229 ||
+        editComposing.current ||
+        hasOpenOverlay()
+      )
         return;
       if (isCommandModifier(e) && e.key.toLowerCase() === 's') {
         e.preventDefault();
@@ -2505,15 +2580,19 @@ export default function Workbench({
           e.preventDefault();
           return;
         }
-        if (view === 'canvas' && screen === 'workspace' && el.matches('.canvas-wrap > svg')) {
-          if (k === 'c') {
+        if (
+          view === 'canvas' &&
+          screen === 'workspace' &&
+          el.matches('[data-testid="schematic-canvas"]')
+        ) {
+          if (!e.shiftKey && (k === 'c' || k === 'x')) {
             e.preventDefault();
-            copySelection();
+            if (!e.repeat) copySelection(k === 'x');
             return;
           }
-          if (k === 'v') {
+          if (!e.shiftKey && k === 'v') {
             e.preventDefault();
-            pasteSelection();
+            if (!e.repeat) pasteSelection();
             return;
           }
           if (k === 'd') {
@@ -2533,9 +2612,12 @@ export default function Workbench({
             return;
           }
         }
-        if (k === 'z' && screen === 'workspace') {
+        if ((k === 'z' || (k === 'y' && !e.shiftKey)) && screen === 'workspace') {
           e.preventDefault();
-          e.shiftKey ? redoStep() : undoStep();
+          if (!e.repeat && canUseEditCommands()) {
+            if (k === 'y' || e.shiftKey) redoStep();
+            else undoStep();
+          }
         }
         if (k === 'o') {
           e.preventDefault();
@@ -3080,6 +3162,134 @@ export default function Workbench({
   const canAddSchematicFile = Boolean(doc && schematicFiles.length < MAX_SCHEMATIC_FILES);
   const canExportBoard = Boolean(project?.pcb);
   const canExportModel = Boolean(modelCad?.objects.length);
+  function editMenu(origin: EditTarget | null, mac: boolean) {
+    if (
+      !active ||
+      modal ||
+      confirmation ||
+      core.getSnapshot().editingBlocked ||
+      editComposing.current
+    )
+      return [];
+    const target = visibleEditTarget(origin) ? origin : null;
+    const text = textEditTarget(target);
+    const writable = Boolean(text && writableText(text));
+    const inConversation = Boolean(target?.closest('.chat-panel'));
+    const design = screen === 'workspace' && Boolean(doc) && !text && !inConversation;
+    const snapshot = core.getSnapshot();
+    const canEditDesign = design && snapshot.sourceDraft === null;
+    const schematic = canEditDesign && view === 'canvas' && tool !== 'annotate';
+    const picked = schematic && selection.some((id) => !selectedField(id));
+    const mutableSelection = picked && !propertiesDraftPending();
+    const drawing = canEditDesign
+      ? (workspaceElement.current?.querySelector<EditTarget>(
+          '.file-editor-surface:not([hidden]) :is([data-testid="schematic-canvas"], [data-testid="layout-canvas"], .pcb-model-canvas)',
+        ) ?? null)
+      : null;
+    const layoutSelect = view === 'layout' && drawing?.dataset.layoutEdit === 'select';
+    const drawingDelete = layoutSelect
+      ? Number(drawing?.dataset.layoutSelectionCount) > 0
+      : view === '3d' && drawing?.dataset.cadDeleteAvailable === 'true';
+    const modifier = mac ? 'Meta' : 'Control';
+    function runText(command: Parameters<typeof runTextEdit>[1]) {
+      if (!text) return;
+      void runTextEdit(text, command, mac, canUseEditCommands).catch(() => {
+        if (canUseEditCommands() && document.activeElement === text)
+          notify('Could not access the clipboard.');
+      });
+    }
+    function runDesign(action: () => void) {
+      if (!canUseEditCommands() || core.getSnapshot().sourceDraft !== null) return;
+      if (visibleEditTarget(drawing)) drawing.focus({ preventScroll: true });
+      action();
+    }
+    function runHistory(redo: boolean) {
+      runDesign(() => {
+        if (drawing) dispatchEditKey(drawing, redo ? (mac ? 'Z' : 'y') : 'z', mac, mac && redo);
+        else if (redo) redoStep();
+        else undoStep();
+      });
+    }
+    return [
+      {
+        label: 'Undo',
+        keyShortcuts: `${modifier}+Z`,
+        disabled: !writable && !(canEditDesign && (snapshot.canUndo || drawing?.dataset.wireUndo)),
+        run: () => (text ? runText('undo') : runHistory(false)),
+      },
+      {
+        label: 'Redo',
+        keyShortcuts: mac ? 'Meta+Shift+Z' : 'Control+Y',
+        disabled: !writable && !(canEditDesign && (snapshot.canRedo || drawing?.dataset.wireRedo)),
+        run: () => (text ? runText('redo') : runHistory(true)),
+      },
+      {
+        label: 'Cut',
+        keyShortcuts: `${modifier}+X`,
+        separatorBefore: true,
+        disabled: !writable && !mutableSelection,
+        run: () => (text ? runText('cut') : runDesign(() => copySelection(true))),
+      },
+      {
+        label: 'Copy',
+        keyShortcuts: `${modifier}+C`,
+        disabled: !text && !picked,
+        run: () => (text ? runText('copy') : runDesign(copySelection)),
+      },
+      {
+        label: 'Paste',
+        keyShortcuts: `${modifier}+V`,
+        disabled: !writable && !(schematic && clipboard.current && !propertiesDraftPending()),
+        run: () => (text ? runText('paste') : runDesign(pasteSelection)),
+      },
+      {
+        label: 'Delete',
+        keyShortcuts: 'Delete',
+        disabled: !writable && !mutableSelection && !drawingDelete,
+        run: () =>
+          text
+            ? runText('forwardDelete')
+            : runDesign(() => {
+                if (view === 'canvas') remove();
+                else if (drawing) dispatchEditKey(drawing, 'Delete');
+              }),
+      },
+      {
+        label: 'Select all',
+        keyShortcuts: `${modifier}+A`,
+        separatorBefore: true,
+        disabled: !text && !(layoutSelect || (schematic && selectableIds?.size)),
+        run: () =>
+          text
+            ? runText('selectAll')
+            : runDesign(() => {
+                if (drawing) dispatchEditKey(drawing, 'a', mac);
+              }),
+      },
+      ...(schematic && selection.length
+        ? [
+            { label: 'Duplicate', separatorBefore: true, run: () => runDesign(duplicate) },
+            { label: 'Move', run: () => runDesign(() => requestSchematicMove(false)) },
+            { label: 'Drag connected', run: () => runDesign(() => requestSchematicMove(true)) },
+          ]
+        : []),
+      ...(screen === 'workspace' && doc
+        ? [
+            {
+              label: 'Find',
+              keyShortcuts: `${modifier}+F`,
+              separatorBefore: true,
+              run: () => {
+                if (!canUseEditCommands()) return;
+                if (target && target !== document.body) target.focus({ preventScroll: true });
+                openPanelFind();
+              },
+            },
+          ]
+        : []),
+      { label: 'Settings', keyShortcuts: `${modifier}+,`, separatorBefore: true, run: showSettings },
+    ];
+  }
   const titlebarMenus: TitlebarMenu[] = [
     {
       label: 'File',
@@ -3144,35 +3354,6 @@ export default function Workbench({
               { label: 'Close project', run: requestProjectClose, separatorBefore: true },
             ]
           : []),
-      ],
-    },
-    {
-      label: 'Edit',
-      items: [
-        ...(screen === 'workspace' && doc && !sourcePending
-          ? [
-              ...(coreSnapshot.canUndo ? [{ label: 'Undo', run: undoStep }] : []),
-              ...(coreSnapshot.canRedo ? [{ label: 'Redo', run: redoStep }] : []),
-              ...(view === 'canvas' && selection.length
-                ? [{ label: 'Copy', run: copySelection, separatorBefore: true }]
-                : []),
-              ...(view === 'canvas' && clipboard.current
-                ? [{ label: 'Paste', run: pasteSelection, separatorBefore: !selection.length }]
-                : []),
-              ...(view === 'canvas' && selection.length
-                ? [
-                    { label: 'Duplicate', run: duplicate },
-                    { label: 'Move', run: () => requestSchematicMove(false) },
-                    { label: 'Drag connected', run: () => requestSchematicMove(true) },
-                    { label: 'Delete', run: remove },
-                  ]
-                : []),
-            ]
-          : []),
-        ...(screen === 'workspace' && doc
-          ? [{ label: 'Find in current panel', run: openPanelFind, separatorBefore: true }]
-          : []),
-        { label: 'Settings', run: () => setModal('settings'), separatorBefore: true },
       ],
     },
     {
@@ -4539,6 +4720,8 @@ export default function Workbench({
       />
       <DesktopTitlebar
         menus={titlebarMenus}
+        editMenu={editMenu}
+        composing={editComposing}
         onBack={navigation.index > 0 ? () => navigateHistory(-1) : undefined}
         onForward={
           navigation.index < navigation.entries.length - 1 ? () => navigateHistory(1) : undefined
@@ -5920,7 +6103,7 @@ export default function Workbench({
           </Suspense>
         )}
         {modal === 'about' && (
-          <DeferredDialog title="About OpenPE" onClose={() => setModal(null)}>
+          <DeferredDialog title="About OpenPE" onClose={() => setModal(null)} compact wide>
             <AboutDialog onClose={() => setModal(null)} />
           </DeferredDialog>
         )}

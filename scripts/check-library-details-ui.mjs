@@ -56,6 +56,34 @@ const entries = {
     ],
   },
 };
+const copyright = 'Preserve the supplied English copyright attribution.';
+const links = 'Visit https://lceda.cn/ and https://easyeda.com for official terms.';
+const notice = [
+  `【版权归属/Copyright】示例：嘉立创EDA官方库。中文说明。 ${copyright}`,
+  `【链接要求/Link】请访问官方网站。 ${links}`,
+  'English terms remain available below.',
+  ...Array(20).fill('Preserve the wording of the English notice.'),
+].join('\n');
+const jlcEntries = Object.fromEntries(
+  Object.entries(entries).map(([kind, entry]) => {
+    const id = 'JLCPCB:C7593';
+    const detail = {
+      ...structuredClone(entry),
+      id,
+      library: 'JLCPCB',
+      attribution: {
+        source: 'JLCEDA/EasyEDA Official Library',
+        homepages: ['https://lceda.cn/', 'https://easyeda.com', 'https://invalid.example/'],
+        notice,
+      },
+    };
+    if (detail.symbol) {
+      detail.symbol[1] = JSON.stringify(id);
+      detail.footprint = id;
+    } else detail.models = [{ path: 'JLCPCB:fixture.step' }];
+    return [kind, detail];
+  }),
+);
 const bundle = await build({
   stdin: {
     contents: `import React,{useState}from'react';
@@ -63,8 +91,9 @@ const bundle = await build({
   import{defaultAppearance,appearanceVariables}from'./lib/appearance';
   window.setTheme=value=>{document.documentElement.dataset.theme=value;
     for(const[key,color]of Object.entries(appearanceVariables(defaultAppearance,value)))document.documentElement.style.setProperty(key,color)};
-  function App(){const[kind,setKind]=useState('symbols');window.setKind=setKind;return <Chooser key={kind}
-    kind={kind} initialLibrary="NextPCB" initialSearch="Fixture" onClose={()=>{}} onChoose={()=>{window.placements=(window.placements||0)+1}}/>}createRoot(document.getElementById('root')).render(<App/>);`,
+  function App(){const[kind,setKind]=useState('symbols');window.setKind=setKind;
+    const[source,setSource]=useState('NextPCB');window.setSource=setSource;return <Chooser key={source+kind}
+    kind={kind} initialLibrary={source} initialSearch="Fixture" onClose={()=>{}} onChoose={()=>{window.placements=(window.placements||0)+1}}/>}createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -86,9 +115,14 @@ try {
     releaseDetails,
     refreshHeld = false,
     releaseRefresh,
-    searches = 0;
+    searches = 0,
+    modelReads = 0;
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === '/api/library-model') {
+      modelReads++;
+      return route.fulfill({ json: { meshes: [] } });
+    }
     if (url.pathname.startsWith('/api/libraries/')) {
       const kind = url.pathname.split('/').at(-1);
       if (url.searchParams.has('categories'))
@@ -120,10 +154,14 @@ try {
             releaseRefresh = resolve;
           });
       }
+      const jlc =
+        url.searchParams.get('library') === 'JLCPCB' ||
+        url.searchParams.get('id')?.startsWith('JLCPCB:');
+      const entry = (jlc ? jlcEntries : entries)[kind];
       return route.fulfill({
         json: url.searchParams.has('id')
-          ? entries[kind]
-          : { entries: [entries[kind]], libraries: ['NextPCB'], total: 1 },
+          ? entry
+          : { entries: [entry], libraries: [entry.library], total: 1, nextOffset: null },
       });
     }
     return route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
@@ -132,12 +170,21 @@ try {
   for (const file of ['app/globals.css', 'app/workspace.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
   await page.evaluate(() => {
-    window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'test' }) };
+    window.openedHomepages = [];
+    window.openpe = {
+      connection: async () => ({ base: 'http://localhost', token: 'test' }),
+      openLibraryHomepage: async (site) => {
+        if (window.failHomepage) throw new Error('Fixture browser failure.');
+        window.openedHomepages.push(site);
+      },
+    };
   });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const place = page.getByRole('button', { name: 'Place', exact: true });
+  const requestPreview = () => page.getByRole('button', { name: 'Preview', exact: true }).click();
   await place.waitFor();
   assert.equal(await place.isDisabled(), true);
+  await requestPreview();
   await page.getByRole('status', { name: 'Loading preview', exact: true }).waitFor();
   detailsHeld = false;
   releaseDetails();
@@ -189,7 +236,10 @@ try {
     );
   }
   for (const kind of ['symbols', 'footprints']) {
-    if (kind === 'footprints') await page.evaluate(() => window.setKind('footprints'));
+    if (kind === 'footprints') {
+      await page.evaluate(() => window.setKind('footprints'));
+      await requestPreview();
+    }
     await page.waitForFunction(
       (expected) => document.querySelector('.library-detail-id')?.textContent === expected,
       entries[kind].id,
@@ -214,6 +264,7 @@ try {
         ),
       );
     assert.equal(pairs.Source, 'NextPCB');
+    assert.equal(await page.getByRole('region', { name: 'CAD source', exact: true }).count(), 0);
     assert.equal(pairs.Manufacturer, 'Example Semiconductor');
     assert.equal(pairs.Package, 'SOP-8');
     if (kind === 'symbols') {
@@ -252,6 +303,8 @@ try {
       await page.waitForFunction(
         () => document.querySelector('.library-detail-id')?.textContent === 'NextPCB:123_component',
       );
+      await requestPreview();
+      await section('Symbol details').waitFor();
       assert.equal(await section('Symbol details').count(), 1);
       assert.equal(pairs.Units, '1');
       assert.equal(pairs['Reference prefix'], 'R');
@@ -333,9 +386,102 @@ try {
     await page.screenshot({ path: `test-results/library-chooser-ui/${kind}-maximized-short.png` });
     await page.getByRole('button', { name: 'Restore dialog' }).click();
   }
+  await page.evaluate(() => window.setSource('JLCPCB'));
+  for (const [kind, width] of [
+    ['footprints', 1120],
+    ['symbols', 360],
+  ]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.evaluate((value) => window.setKind(value), kind);
+    await page.evaluate((theme) => window.setTheme(theme), width > 600 ? 'light' : 'dark');
+    await requestPreview();
+    const source = page.getByRole('region', { name: 'CAD source', exact: true });
+    await source
+      .getByRole('heading', { name: 'JLCEDA/EasyEDA Official Library', exact: true })
+      .waitFor();
+    assert.equal(
+      await source.evaluate((node) => node === node.parentElement.lastElementChild),
+      true,
+    );
+    const jlc = source.getByRole('link', { name: 'JLCEDA official website', exact: true });
+    const easyeda = source.getByRole('link', { name: 'EasyEDA official website', exact: true });
+    assert.equal(await jlc.getAttribute('href'), 'https://lceda.cn/');
+    assert.equal(await easyeda.getAttribute('href'), 'https://easyeda.com/');
+    assert.equal(await source.getByRole('link').count(), 2);
+    const summary = source.locator('summary[aria-label="Library terms"]');
+    const text = source.locator('.library-cad-source-terms');
+    assert.equal(await summary.textContent(), '');
+    assert.equal(await text.isVisible(), false);
+    assert.ok((await source.boundingBox()).height < 100);
+    const packageCard = page.getByRole('region', { name: 'Package', exact: true });
+    const cardStyle = (node) => {
+      const style = getComputedStyle(node);
+      return [style.border, style.borderRadius, style.padding];
+    };
+    assert.deepEqual(await source.evaluate(cardStyle), await packageCard.evaluate(cardStyle));
+    assert.equal(
+      await summary.evaluate((node) => {
+        const arrow = node.getBoundingClientRect();
+        const card = node.closest('.library-cad-source').getBoundingClientRect();
+        return card.right - arrow.right <= 10 && card.right > arrow.right && arrow.top > card.top;
+      }),
+      true,
+    );
+    await source.screenshot({ path: `test-results/library-chooser-ui/${kind}-attribution.png` });
+    assert.equal(
+      await summary.evaluate((node) => {
+        const key = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+          isComposing: true,
+        });
+        return node.dispatchEvent(key);
+      }),
+      false,
+    );
+    await summary.press('Enter');
+    assert.equal(await text.isVisible(), true);
+    assert.deepEqual(await text.locator('strong').allTextContents(), ['Copyright', 'Link']);
+    const displayedNotice = await text.textContent();
+    assert.ok(displayedNotice.includes(copyright) && displayedNotice.includes(links));
+    assert.doesNotMatch(displayedNotice, /\p{Script=Han}/u);
+    assert.equal(await text.evaluate((node) => node.scrollHeight > node.clientHeight), true);
+    assert.equal(await text.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
+    await summary.press('Enter');
+    assert.equal(await text.isVisible(), false);
+    await jlc.click();
+    await easyeda.press('Enter');
+    await page.evaluate(() => (window.failHomepage = true));
+    await jlc.click();
+    const failure = source.getByRole('status');
+    await failure.waitFor();
+    await page.evaluate(() => (window.failHomepage = false));
+    await jlc.click();
+    await failure.waitFor({ state: 'detached' });
+  }
+  assert.equal(modelReads, 0, 'Search and 2D previews do not fetch STEP meshes.');
+  await page.getByRole('button', { name: 'Footprint', exact: true }).click();
+  await page.locator('svg.footprint-preview').waitFor();
+  assert.equal(modelReads, 0);
+  const modelRequest = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === '/api/library-model',
+  );
+  await page.getByRole('button', { name: '3D model', exact: true }).click();
+  assert.equal(new URL((await modelRequest).url()).searchParams.get('id'), 'JLCPCB:C7593');
+  assert.deepEqual(await page.evaluate(() => window.openedHomepages), [
+    'jlceda',
+    'easyeda',
+    'jlceda',
+    'jlceda',
+    'easyeda',
+    'jlceda',
+  ]);
+  assert.equal(await page.evaluate(() => window.placements), 1);
+  assert.equal(page.context().pages().length, 1);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: categorized symbol and footprint details, real values and responsive filter/search order.',
+    'PASS: categorized details, responsive filters, official links and collapsed copyright for symbols and footprints.',
   );
 } finally {
   await browser.close();

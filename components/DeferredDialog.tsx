@@ -8,16 +8,20 @@ import WorkspaceLoading from './WorkspaceLoading';
 export default function DeferredDialog({
   title,
   onClose,
+  compact = false,
+  wide = false,
   children,
 }: {
   title: string;
   onClose: () => void;
+  compact?: boolean;
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
     <Suspense
       fallback={
-        <Dialog title={title} onClose={onClose}>
+        <Dialog title={title} onClose={onClose} compact={compact} wide={wide}>
           <WorkspaceLoading panel label={`Loading ${title}`} />
         </Dialog>
       }

@@ -1558,6 +1558,8 @@ export default function Canvas({
       <svg
         ref={svg}
         data-testid="schematic-canvas"
+        data-wire-undo={tool === 'wire' && wireDraft ? true : undefined}
+        data-wire-redo={tool === 'wire' && wireDraftRedo.current.length ? true : undefined}
         data-pointer-focus={pointerFocused || undefined}
         data-move-preview={pickup ? (pickup.connected ? 'drag' : 'move') : undefined}
         aria-label="Schematic canvas"
@@ -1624,7 +1626,8 @@ export default function Canvas({
           if (id && selectableIds.has(id)) onProperties?.(id);
         }}
         onKeyDown={(e) => {
-          if (!active || hasOpenOverlay() || e.nativeEvent.isComposing) return;
+          if (!active || hasOpenOverlay() || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229)
+            return;
           const key = e.key.toLowerCase();
           const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
           const currentPickup = pickupRef.current;
@@ -1707,8 +1710,8 @@ export default function Canvas({
               return;
             }
             if (['v', 'h', 'w', 'a', 'e', 'delete', 'backspace'].includes(key)) cancelGesture();
-            if (isCommandModifier(e) && ['a', 'c', 'd', 'v'].includes(key)) cancelGesture();
-            if (isCommandModifier(e) && key === 'z') {
+            if (isCommandModifier(e) && ['a', 'c', 'd', 'v', 'x'].includes(key)) cancelGesture();
+            if (isCommandModifier(e) && (key === 'z' || key === 'y')) {
               e.preventDefault();
               e.stopPropagation();
               cancelGesture();
@@ -1728,14 +1731,14 @@ export default function Canvas({
           if (
             isCommandModifier(e) &&
             !e.altKey &&
-            key === 'z' &&
+            (key === 'z' || (key === 'y' && !e.shiftKey)) &&
             tool === 'wire' &&
             (wireDraftRef.current || wireDraftRedo.current.length)
           ) {
             e.preventDefault();
             e.stopPropagation();
             if (editingBlocked || e.repeat) return;
-            if (e.shiftKey) {
+            if (e.shiftKey || key === 'y') {
               const next = wireDraftRedo.current.pop();
               if (next) {
                 updateWireDraft(next, true);

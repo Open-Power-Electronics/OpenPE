@@ -22,6 +22,11 @@ const bundle = await build({
       }));
       const resistor = {id:'NextPCB:1003',name:'Online resistor',library:'NextPCB',description:'Online resistor',keywords:'resistor',manufacturer:'Fixture Passives',package:'0603',category:'201'};
       const regulator = {...resistor,id:'NextPCB:1004',name:'Online regulator',keywords:'regulator',category:'302'};
+      const jlc = {id:'JLCPCB:C7593',name:'NE555DR',library:'JLCPCB',description:'Timer',keywords:'timer',package:'SOIC-8'};
+      const jlcRows = [jlc,...Array.from({length:124},(_,index)=>({
+        ...jlc,id:'JLCPCB:C'+(9000+index),name:'Timer '+(index+1),
+      }))];
+      const jlcAllRows = [{...jlc,id:'JLCPCB:C8000',name:'Unfiltered catalog part'},...jlcRows];
       const paged = Array.from({length:120},(_,index)=>({
         ...online[0],id:'NextPCB:'+(2000+index),name:'Paged amplifier '+String(index+1).padStart(3,'0'),
         description:'Paged fixture amplifier',
@@ -31,9 +36,10 @@ const bundle = await build({
         description:'Overlapping-page fixture amplifier',
       }));
       const searchable = [local,ground,...online,resistor,regulator,...paged];
-      const entries = [...searchable,...overlapping];
+      const entries = [...searchable,...overlapping,...jlcAllRows];
       const fixture = window.fixture = {
         requests:[], chosen:[], closed:0, failNextSearch:false, failNextAppend:false, failNextCategories:true,
+        blockedCad:false,
         holdSearch:false, holdCategories:true, releaseCategories:null, editedAt:0,
         heldDetails:new Set(), pendingDetails:new Map(), pendingSearch:[],
         releaseDetail(id) {
@@ -51,6 +57,8 @@ const bundle = await build({
         fixture.requests.push(request);
         signal.addEventListener('abort',()=>{request.aborted=true;},{once:true});
         if(action==='library.categories') {
+          if(input.source==='JLCPCB')
+            return {categories:[{id:'20',name:'Clock/Timing',children:[{id:'228',name:'555 Timers / Counters',children:[]}]}]};
           if(input.source==='NextPCB'&&fixture.holdCategories) {
             await new Promise(resolve=>{fixture.releaseCategories=resolve;});
           }
@@ -71,6 +79,15 @@ const bundle = await build({
               ]};
         }
         if (action === 'library.search') {
+          if (input.library === 'JLCPCB') {
+            const matches = !input.category ? jlcAllRows : ['20','228'].includes(input.category) ? jlcRows : [];
+            if (input.query === 'blocked') return {entries:[jlc],total:1,nextOffset:null,libraries:['JLCPCB']};
+            if (input.query === 'sparse') {
+              if (input.offset === 0) return {entries:[],total:13,nextOffset:12,libraries:['JLCPCB']};
+              return {entries:[jlc],total:13,nextOffset:null,libraries:['JLCPCB']};
+            }
+            return {entries:matches.slice(input.offset,input.offset+100),total:matches.length,nextOffset:input.offset+100<matches.length?input.offset+100:null,libraries:['JLCPCB']};
+          }
           if (input.library === 'NextPCB' && input.offset > 0 && fixture.failNextAppend) {
             fixture.failNextAppend = false;
             throw new Error('NextPCB fixture page is temporarily unavailable.');
@@ -89,15 +106,16 @@ const bundle = await build({
             };
             if (!Object.hasOwn(pages,input.offset))
               throw new Error('Unexpected overlapping-page offset: '+input.offset);
-            return {entries:pages[input.offset],total:130,libraries:['NextPCB']};
+            return {entries:pages[input.offset],total:130,nextOffset:({0:100,100:120,120:null})[input.offset],libraries:['NextPCB']};
           }
           const matches = searchable.filter(entry =>
             (input.library === 'NextPCB' ? entry.library === 'NextPCB' : entry.library !== 'NextPCB'&&(!input.library||entry.library===input.library)) &&
             (!input.category || entry.category===input.category || input.category==='100'&&['1737','102'].includes(entry.category) || input.category==='200'&&entry.category==='201' || ['300','301'].includes(input.category)&&entry.category==='302') &&
             (!input.query || [entry.name,entry.description,entry.keywords,entry.manufacturer].join(' ').toLowerCase().includes(input.query.toLowerCase())));
-          return {entries:matches.slice(input.offset,input.offset+100),total:!input.library&&!input.query?22712:matches.length,libraries:input.library==='NextPCB'?['NextPCB']:['Device','power']};
+          return {entries:matches.slice(input.offset,input.offset+100),total:!input.library&&!input.query?22712:matches.length,nextOffset:input.offset+100<matches.length?input.offset+100:null,libraries:input.library==='NextPCB'?['NextPCB']:['Device','power']};
         }
         if (action === 'library.detail') {
+          if (input.id === jlc.id && fixture.blockedCad) throw new Error('EasyEDA denied the request (HTTP 403).');
           if (fixture.heldDetails.has(input.id))
             await new Promise(resolve => {
               const pending = fixture.pendingDetails.get(input.id) || [];
@@ -154,7 +172,7 @@ try {
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const chooser = page.getByRole('dialog', { name: 'Components', exact: true });
-  const rows = page.locator('.library-results button');
+  const rows = page.locator('.library-results button[data-index]');
   const place = page.getByRole('button', { name: 'Place', exact: true });
   const search = page.getByRole('textbox', { name: 'Search components', exact: true });
   const submit = page.getByRole('button', { name: 'Search', exact: true });
@@ -181,7 +199,7 @@ try {
     );
   const browseState = () =>
     page.evaluate(() => ({
-      rows: [...document.querySelectorAll('.library-results button')].map((node) => ({
+      rows: [...document.querySelectorAll('.library-results button[data-index]')].map((node) => ({
         id: node.getAttribute('aria-description'),
         selected: node.getAttribute('aria-pressed'),
       })),
@@ -189,13 +207,20 @@ try {
       count: document.querySelector('.library-result-status')?.textContent,
       requests: fixture.requests.filter((request) => request.action === 'library.search').length,
     }));
-  const waitForDetail = (id) =>
-    page.waitForFunction(
+  const waitForDetail = async (id) => {
+    await page.waitForFunction(
+      (expected) => document.querySelector('.library-detail-id')?.textContent === expected,
+      id,
+    );
+    const preview = chooser.getByRole('button', { name: 'Preview', exact: true });
+    if (await preview.isVisible()) await preview.click();
+    await page.waitForFunction(
       (expected) =>
         document.querySelector('.library-detail-id')?.textContent === expected &&
         !document.querySelector('.dialog-button.primary')?.disabled,
       id,
     );
+  };
 
   async function chooseSource(name) {
     await source.click();
@@ -242,6 +267,7 @@ try {
   assert.deepEqual(await listbox('Library source').getByRole('option').allTextContents(), [
     'KiCad',
     'NextPCB',
+    'JLCPCB',
   ]);
   assert.equal(
     await listbox('Library source')
@@ -337,15 +363,11 @@ try {
   assert.equal(await rows.count(), 0);
   assert.equal(await page.locator('.library-detail-id').count(), 0);
   assert.equal(await place.isDisabled(), true);
-  await footerRefresh.click();
+  await chooser.getByRole('button', { name: 'Retry loading results' }).click();
   await waitForDetail('NextPCB:1001');
-  assert.equal(await resultCount.textContent(), '122 results');
+  assert.equal(await resultCount.textContent(), '100 results loaded');
 
-  // Suggestions show their real scope while the filters remain at All.
-  await page
-    .locator('.library-browse-scope')
-    .filter({ hasText: 'Operational amplifiers' })
-    .waitFor();
+  assert.equal(await chooser.getByText(/^Browse suggestions ·/).count(), 0);
   await rows.nth(1).click();
   await waitForDetail('NextPCB:1002');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
@@ -369,7 +391,7 @@ try {
   assert.equal(await rows.count(), 1);
   await chooseSource('NextPCB');
   await waitForDetail('NextPCB:1001');
-  assert.equal(await resultCount.textContent(), '122 results');
+  assert.equal(await resultCount.textContent(), '100 results loaded');
 
   // Online edits do not search until Search or non-composing input Enter.
   const onlineBrowse = await browseState();
@@ -418,7 +440,7 @@ try {
   assert.deepEqual(await browseState(), beforeClear);
   await submit.click();
   await waitForDetail('NextPCB:1001');
-  assert.equal(await resultCount.textContent(), '122 results');
+  assert.equal(await resultCount.textContent(), '100 results loaded');
   const defaultSearch = await page.evaluate(
     () =>
       window.fixture.requests.filter((request) => request.action === 'library.search').at(-1).input,
@@ -588,7 +610,7 @@ try {
     .filter({ hasText: 'NextPCB fixture page is temporarily unavailable.' })
     .waitFor();
   assert.equal(await rows.count(), 100);
-  assert.equal(await resultCount.textContent(), '120 results');
+  assert.equal(await resultCount.textContent(), '100 results loaded');
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:2000');
   assert.equal(await place.isDisabled(), false);
   await page.getByRole('button', { name: 'Retry loading results', exact: true }).click();
@@ -598,7 +620,7 @@ try {
     ),
   );
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button').length === 120,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 120,
   );
   const pagedBrowse = await browseState();
   await search.fill('unsent pagination draft');
@@ -648,13 +670,13 @@ try {
   await waitForDetail('NextPCB:4000');
   assert.equal(await rows.count(), 100);
   await search.fill('Unsubmitted page draft');
-  assert.equal(await resultCount.textContent(), '130 results');
+  assert.equal(await resultCount.textContent(), '100 results loaded');
   await page.locator('.library-results').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
     node.dispatchEvent(new Event('scroll'));
   });
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button').length === 110,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 110,
   );
   const uniqueIds = async () =>
     new Set(
@@ -690,11 +712,11 @@ try {
     .filter({ hasText: 'NextPCB fixture page is temporarily unavailable.' })
     .waitFor();
   assert.equal(await rows.count(), 110);
-  assert.equal(await resultCount.textContent(), '130 results');
+  assert.equal(await resultCount.textContent(), '110 results loaded');
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:4000');
   await page.getByRole('button', { name: 'Retry loading results', exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button').length === 120,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 120,
   );
   assert.equal(await uniqueIds(), 120);
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:4000');
@@ -744,10 +766,13 @@ try {
   await search.fill('');
   await submit.click();
   await waitForDetail('NextPCB:1001');
-  await page
-    .locator('.library-browse-scope')
-    .filter({ hasText: 'Operational amplifiers' })
-    .waitFor();
+  assert.equal(
+    await page.evaluate(
+      () =>
+        fixture.requests.findLast((request) => request.action === 'library.search').input.category,
+    ),
+    '1737',
+  );
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   const beforeSuggestionRestore = await searchCount();
   await chooseSource('KiCad');
@@ -806,7 +831,115 @@ try {
   await page.evaluate(() => {
     fixture.holdCategories = false;
     fixture.releaseCategories();
+    window.reopenChooser();
   });
+  await waitForDetail('Device:R');
+  await chooseSource('JLCPCB');
+  await waitForDetail('JLCPCB:C8000');
+  assert.equal(await categoryLevel(1).textContent(), 'All categories');
+  assert.equal(await search.inputValue(), '');
+  assert.equal(await rows.count(), 100);
+  await page.locator('.library-results').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+    node.dispatchEvent(new Event('scroll'));
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll('.library-results button[data-index]').length === 126,
+  );
+  assert.equal(await uniqueIds(), 126);
+  await categoryLevel(1).click();
+  await option('Category level 1', 'Clock/Timing').click();
+  await waitForDetail('JLCPCB:C7593');
+  await categoryLevel(2).click();
+  await option('Category level 2', '555 Timers / Counters').click();
+  await waitForDetail('JLCPCB:C7593');
+  assert.equal(await categoryPath(), 'Clock/Timing / 555 Timers / Counters');
+  assert.equal(await rows.count(), 100);
+  await page.locator('.library-results').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+    node.dispatchEvent(new Event('scroll'));
+  });
+  await page.waitForFunction(
+    () => document.querySelectorAll('.library-results button[data-index]').length === 125,
+  );
+  assert.equal(await uniqueIds(), 125);
+  assert.deepEqual(
+    await page.evaluate(() =>
+      fixture.requests
+        .filter(
+          (request) => request.action === 'library.search' && request.input.library === 'JLCPCB',
+        )
+        .map((request) => [request.input.category, request.input.query, request.input.offset]),
+    ),
+    [
+      [undefined, '', 0],
+      [undefined, '', 100],
+      ['20', '', 0],
+      ['228', '', 0],
+      ['228', '', 100],
+    ],
+  );
+  await chooseSource('KiCad');
+  await waitForDetail('Device:R');
+  await chooseSource('JLCPCB');
+  await waitForDetail('JLCPCB:C7593');
+  assert.equal(await categoryPath(), 'Clock/Timing / 555 Timers / Counters');
+  assert.equal(await rows.count(), 125);
+  await categoryLevel(1).click();
+  await option('Category level 1', 'All categories').click();
+  await waitForDetail('JLCPCB:C8000');
+  await search.fill('sparse');
+  await submit.click();
+  await chooser.getByText('No matching footprints in this batch.').waitFor();
+  assert.equal(await rows.count(), 0);
+  assert.equal(await chooser.locator('.library-result-columns').count(), 0);
+  assert.equal(await chooser.locator('.library-detail').isVisible(), false);
+  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
+  await waitForDetail('JLCPCB:C7593');
+  assert.equal(await resultCount.textContent(), '1 result loaded');
+  assert.equal(await chooser.getByRole('button', { name: 'Load more', exact: true }).count(), 0);
+
+  const footer = chooser.locator('.dialog-footer');
+  await page.evaluate(() => (window.fixture.blockedCad = true));
+  const detailRequests = () =>
+    page.evaluate(
+      () => window.fixture.requests.filter((request) => request.action === 'library.detail').length,
+    );
+  const beforeSearchOnly = await detailRequests();
+  await search.fill('blocked');
+  await submit.click();
+  const preview = chooser.getByRole('button', { name: 'Preview', exact: true });
+  await preview.waitFor();
+  assert.equal(await detailRequests(), beforeSearchOnly);
+  await preview.click();
+  await footer
+    .getByRole('alert')
+    .filter({ hasText: 'EasyEDA denied the request (HTTP 403).' })
+    .waitFor();
+  assert.equal(await chooser.locator('.dialog-content').getByRole('alert').count(), 0);
+  assert.equal(await rows.count(), 1);
+  assert.equal(await footer.locator('button').count(), 2, 'Retry shares the refresh control.');
+  assert.equal(await chooser.evaluate((node) => getComputedStyle(node).boxShadow), 'none');
+  await page.evaluate(() => (window.fixture.blockedCad = false));
+  await footer.getByRole('button', { name: 'Retry loading preview' }).click();
+  await waitForDetail('JLCPCB:C7593');
+  await footer.getByRole('alert').waitFor({ state: 'detached' });
+
+  await chooseSource('NextPCB');
+  await search.fill('Missing model');
+  await submit.click();
+  const empty = chooser.getByRole('heading', { name: 'No matching symbols.', exact: true });
+  await empty.waitFor();
+  assert.equal(await chooser.locator('.library-result-columns').count(), 0);
+  assert.equal(await chooser.locator('.library-detail').isVisible(), false);
+  assert.equal(await place.isEnabled(), false);
+  for (const width of [1120, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    const frame = await chooser.locator('.library-browser').boundingBox();
+    const state = await chooser.locator('.library-empty-state').boundingBox();
+    assert.ok(Math.abs(frame.x + frame.width / 2 - (state.x + state.width / 2)) < 2);
+    assert.ok(Math.abs(frame.y + frame.height / 2 - (state.y + state.height / 2)) < 2);
+  }
   assert.deepEqual(errors, []);
   console.log(
     'PASS: default online browsing, overlapping-page deduplication/raw cursor/restoration/retry, failed-search count reset, append-error retention, source/category hierarchy, explicit search, metadata, native single placement, stale preview, IME and cancellation (mocked isolated browser).',

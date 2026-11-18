@@ -15,6 +15,7 @@ import { scrollMovesAnchor } from '@/lib/popup-scroll';
 export type SelectOption = {
   value: string;
   label: string;
+  keyShortcuts?: string;
   description?: ReactNode;
   icon?: ReactNode;
   muted?: boolean;
@@ -40,6 +41,7 @@ export default function Select({
   value,
   options,
   onChange,
+  onBeforeOpen,
   onExpand,
   onClosedEscape,
   disabled = false,
@@ -51,8 +53,12 @@ export default function Select({
   showChevron = true,
   placeholder = 'Choose an option',
   selectedLabel,
+  fitLabels,
+  triggerClassName = '',
+  popupStatus,
   popupClassName = '',
   popupMaxHeight,
+  popupMaxOptions,
   popupPlacement = 'bottom',
   popupAnchor,
   popupBoundary,
@@ -63,6 +69,7 @@ export default function Select({
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
+  onBeforeOpen?: () => boolean;
   onExpand?: (value: string) => void;
   onClosedEscape?: () => void;
   disabled?: boolean;
@@ -74,8 +81,12 @@ export default function Select({
   showChevron?: boolean;
   placeholder?: string;
   selectedLabel?: string;
+  fitLabels?: readonly string[];
+  triggerClassName?: string;
+  popupStatus?: string;
   popupClassName?: string;
   popupMaxHeight?: number;
+  popupMaxOptions?: number;
   popupPlacement?: 'bottom' | 'right' | 'top-end';
   popupAnchor?: string;
   popupBoundary?: string;
@@ -87,6 +98,7 @@ export default function Select({
   const [open, setOpen] = useState(false);
   const [activeIndices, setActiveIndices] = useState<number[]>([0]);
   const [path, setPath] = useState<number[]>([]);
+  const hadPopupStatus = useRef(false);
   const [position, setPosition] = useState({
     left: 0,
     top: 0,
@@ -107,7 +119,7 @@ export default function Select({
     }
   }
   const selectionLabel = selectedLabel ?? (selected?.label || placeholder);
-  const levels = [options];
+  const levels = [popupStatus ? [] : options];
   for (const index of path) {
     const option = levels.at(-1)?.[index];
     if (!option?.children?.length || option.disabled) break;
@@ -117,6 +129,15 @@ export default function Select({
   const activeIndex = activeIndices[depth] ?? 0;
   const menuId = (level: number) => (level ? `${id}-submenu-${level}` : id);
   const search = useRef({ text: '', at: 0 });
+  const chosenIndex = chosenPath?.[0] ?? 0;
+  useLayoutEffect(() => {
+    if (open && !popupStatus && hadPopupStatus.current) {
+      setActiveIndices([chosenIndex]);
+      setPath([]);
+      search.current = { text: '', at: 0 };
+    }
+    hadPopupStatus.current = open && Boolean(popupStatus);
+  }, [chosenIndex, open, popupStatus]);
   function activate(level: number, index: number) {
     setActiveIndices((current) => {
       const next = [...current.slice(0, level), index];
@@ -141,7 +162,7 @@ export default function Select({
     }
   }
   function show() {
-    if (disabled || !enabled) return;
+    if (disabled || !enabled || onBeforeOpen?.() === false) return;
     const rect = (
       popupMatchWidth === 'parent' ? trigger.current!.parentElement! : trigger.current!
     ).getBoundingClientRect();
@@ -161,7 +182,7 @@ export default function Select({
             )
           : undefined,
     });
-    setActiveIndices([chosenPath?.[0] ?? 0]);
+    setActiveIndices([chosenIndex]);
     setPath([]);
     search.current = { text: '', at: 0 };
     setOpen(true);
@@ -205,9 +226,22 @@ export default function Select({
           : undefined;
       const measuredWidth = matchedWidth ?? menu.getBoundingClientRect().width;
       const width = Math.min(measuredWidth, maxWidth ?? Infinity);
+      const lastVisibleOption =
+        popupMaxOptions !== undefined && menu.children.length > popupMaxOptions
+          ? menu.children.item(popupMaxOptions - 1)
+          : null;
+      const heightLimit = Math.min(
+        popupMaxHeight ?? Infinity,
+        lastVisibleOption
+          ? lastVisibleOption.getBoundingClientRect().bottom -
+              menu.getBoundingClientRect().top +
+              menu.scrollTop +
+              menu.clientTop
+          : Infinity,
+      );
       const height = Math.min(
         menu.scrollHeight + menu.offsetHeight - menu.clientHeight,
-        popupMaxHeight ?? Infinity,
+        heightLimit,
       );
       const below = Math.max(0, bottomEdge - rect.bottom - gap);
       const above = Math.max(0, rect.top - topEdge - gap);
@@ -215,7 +249,7 @@ export default function Select({
       const right = popupPlacement === 'right';
       const maxHeight = Math.min(
         right ? bottomEdge - topEdge : flip ? above : below,
-        popupMaxHeight ?? Infinity,
+        heightLimit,
       );
       const top = right
         ? Math.max(topEdge, Math.min(rect.bottom - height, bottomEdge - height))
@@ -251,6 +285,7 @@ export default function Select({
     enabled,
     options,
     popupMaxHeight,
+    popupMaxOptions,
     popupPlacement,
     popupAnchor,
     popupBoundary,
@@ -360,6 +395,7 @@ export default function Select({
         role="option"
         aria-selected={value === option.value}
         aria-disabled={option.disabled || undefined}
+        aria-keyshortcuts={option.keyShortcuts}
         aria-haspopup={nested ? 'listbox' : undefined}
         aria-expanded={nested ? expanded : undefined}
         aria-controls={expanded ? menuId(level + 1) : undefined}
@@ -376,7 +412,7 @@ export default function Select({
       >
         {option.icon}
         <span>
-          <strong>{option.label}</strong>
+          <strong title={option.label}>{option.label}</strong>
           {option.description && <small>{option.description}</small>}
         </span>
         {nested ? (
@@ -395,7 +431,7 @@ export default function Select({
     <>
       <button
         ref={trigger}
-        className={`select-trigger ${compact ? 'select-compact' : ''}`}
+        className={`select-trigger ${compact ? 'select-compact' : ''} ${triggerClassName}`}
         type="button"
         role="combobox"
         aria-label={label}
@@ -406,7 +442,9 @@ export default function Select({
           open && enabled ? levels.map((_, level) => menuId(level)).join(' ') : undefined
         }
         aria-haspopup="listbox"
-        aria-activedescendant={open && enabled ? `${menuId(depth)}-${activeIndex}` : undefined}
+        aria-activedescendant={
+          open && enabled && levels[depth].length ? `${menuId(depth)}-${activeIndex}` : undefined
+        }
         disabled={disabled || !enabled}
         onClick={() => (open ? setOpen(false) : show())}
         onBlur={() => setOpen(false)}
@@ -481,7 +519,21 @@ export default function Select({
         }}
       >
         {icon}
-        {!iconOnly && <span className="select-value">{selectionLabel}</span>}
+        {!iconOnly &&
+          (fitLabels ? (
+            <span className="select-sized-value">
+              <span className="select-value">{selectionLabel}</span>
+              {fitLabels.length > 0 && (
+                <span className="select-size-samples" aria-hidden="true">
+                  {fitLabels.map((label, index) => (
+                    <span key={index} data-label={label} />
+                  ))}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="select-value">{selectionLabel}</span>
+          ))}
         {suffix}
         {showChevron && <ChevronDown size={14} />}
       </button>
@@ -497,6 +549,10 @@ export default function Select({
               role="listbox"
               aria-label={level ? levels[level - 1][path[level - 1]].label : label}
               className={`select-popup ${level ? 'select-submenu ' : ''}${popupClassName}`}
+              data-match-width={level === 0 && position.width !== undefined ? true : undefined}
+              data-narrow-field={
+                level === 0 && position.width !== undefined && position.width < 72 ? true : undefined
+              }
               style={
                 (level
                   ? (childPositions[level - 1] ?? { left: 8, top: 8, maxHeight: 300 })
@@ -509,7 +565,21 @@ export default function Select({
               }
               onPointerDown={(event) => event.preventDefault()}
             >
-              {items.map((option, index) => optionElement(option, index, level))}
+              {popupStatus ? (
+                <div
+                  className="select-option"
+                  role="option"
+                  aria-label={popupStatus}
+                  aria-disabled="true"
+                  aria-selected="false"
+                >
+                  <span role="status">
+                    <strong title={popupStatus}>{popupStatus}</strong>
+                  </span>
+                </div>
+              ) : (
+                items.map((option, index) => optionElement(option, index, level))
+              )}
             </div>,
             trigger.current?.closest('dialog') ?? document.body,
             String(level),

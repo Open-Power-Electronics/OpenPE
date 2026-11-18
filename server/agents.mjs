@@ -18,16 +18,19 @@ import {
   agentSimulationGuidance,
   agentCapabilityContent,
 } from './agent-capabilities.mjs';
-import { validModelId } from './model-id.mjs';
 import { validateAnnotations, annotationContext } from './annotation-format.mjs';
 import {
   agentProviderIds,
   agentName,
   isAgentProvider,
   isProviderReasoningEffort,
-  defaultReasoningEffort,
+  validAgentModelId,
 } from './agent-provider-format.mjs';
-import { agentLaunchers, verifyPiIsolation } from './agent-provider-runtime.mjs';
+import {
+  agentLaunchers,
+  verifyPiIsolation,
+  windowsCodexNpmLaunch,
+} from './agent-provider-runtime.mjs';
 import {
   loadCursorSdk,
   readCursorApiKey,
@@ -88,7 +91,12 @@ export async function resolveAgent(id, options = {}) {
     throw new Error('Cursor runs in the OpenPE service through the Cursor SDK and has no CLI launcher.');
   const run = options.exec ?? exec;
   const exists = options.exists ?? existsSync;
-  let candidates = [];
+  const candidates = [];
+  const roaming = process.env.APPDATA;
+  const npmBin = roaming && path.isAbsolute(roaming) ? path.join(roaming, 'npm') : null;
+  // An already running desktop app can inherit a PATH that predates a Codex CLI install.
+  if (process.platform === 'win32' && id === 'codex' && npmBin)
+    candidates.push(path.join(npmBin, 'codex.cmd'));
   for (const command of agentLaunchers[id].commands) {
     try {
       candidates.push(
@@ -104,12 +112,12 @@ export async function resolveAgent(id, options = {}) {
     } catch {}
   }
   if (process.platform === 'win32') {
-    const local = process.env.LOCALAPPDATA || '';
-    const roaming = process.env.APPDATA || '';
-    if (id === 'codex')
+    const local = process.env.LOCALAPPDATA;
+    if (id === 'codex' && local && path.isAbsolute(local))
       candidates.push(path.join(local, 'Programs', 'OpenAI', 'Codex', 'bin', 'codex.exe'));
-    for (const command of agentLaunchers[id].commands)
-      candidates.push(path.join(roaming, 'npm', `${command}.cmd`));
+    if (id !== 'codex')
+      for (const command of agentLaunchers[id].commands)
+        candidates.push(path.join(roaming || '', 'npm', `${command}.cmd`));
     if (id === 'pi' && process.env.USERPROFILE)
       candidates.push(path.join(process.env.USERPROFILE, '.pi', 'agent', 'bin', 'pi.cmd'));
   } else candidates.push(...posixInstallCandidates(id, options.home ?? os.homedir()));
@@ -118,6 +126,11 @@ export async function resolveAgent(id, options = {}) {
     // npm also creates a POSIX shim without an extension; Windows cannot spawn it.
     if (process.platform === 'win32' && !/\.(exe|com|cmd)$/i.test(candidate)) continue;
     if (/\.cmd$/i.test(candidate)) {
+      if (id === 'codex') {
+        const launch = windowsCodexNpmLaunch(candidate, exists);
+        if (launch) return launch;
+        continue;
+      }
       if (id === 'pi') {
         const managedLauncher = path.join(path.dirname(candidate), 'pi-launcher.js');
         if (exists(managedLauncher))
@@ -324,7 +337,7 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
     !validCursorRequestParameters(request.parameters)
   )
     throw new Error('Invalid Cursor model parameters.');
-  if (request.model !== undefined && !validModelId(request.model))
+  if (request.model !== undefined && !validAgentModelId(provider, request.model))
     throw new Error('Invalid model ID.');
   // Prepare once, before launching a provider. Oversized input must fail through
   // the ordinary request error path, never throw inside a child-process callback.
@@ -807,9 +820,7 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
               ...(request.model ? { model: request.model } : {}),
               config: {
                 'features.default_mode_request_user_input': true,
-                ...(request.effort || !request.model
-                  ? { model_reasoning_effort: request.effort || defaultReasoningEffort }
-                  : {}),
+                ...(request.effort && { model_reasoning_effort: request.effort }),
               },
               developerInstructions: `${toolBoundary} ${capabilityEnabled ? 'Use the scoped OpenPE dynamic tools for workbench access.' : 'Use the supplied design context and return edits only as OpenPE proposals.'}${questionTool ? ` Use ${questionTool} for clarification.` : ''}`,
             },

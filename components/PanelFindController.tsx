@@ -96,7 +96,11 @@ export default memo(function PanelFindController({
   }, [active, scopeKey]);
   useEffect(() => {
     const move = (event: PointerEvent) => {
-      if (active) pointer.current = { x: event.clientX, y: event.clientY };
+      if (!active) return;
+      pointer.current =
+        event.target instanceof Element && event.target.closest('.desktop-titlebar, .application-menu')
+          ? null
+          : { x: event.clientX, y: event.clientY };
     };
     const start = () => {
       if (active) composing.current = true;

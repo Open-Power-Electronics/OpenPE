@@ -17,11 +17,10 @@ Prerequisites: Node.js 24 and Git. macOS also needs Xcode Command Line Tools (`x
 ```sh
 npm ci
 npm run libraries:download
-npm run thermal:prepare
 npm run dev
 ```
 
-If dependency installation skipped scripts, run `npm run postinstall` before starting Electron. Prepare thermal resources before first startup: generating missing analytical example STEP bodies needs the bundled Gmsh.
+If dependency installation skipped scripts, run `npm run postinstall` before starting Electron.
 
 `npm run dev` prepares formats, Home projects and portable assets, verifies or downloads solver resources, then starts Electron with renderer hot reload. `npm run dev -- --verbose` includes preparation logs. An already verified local bundle is reused. To prepare ngspice separately, use `npm run simulation:prepare`.
 

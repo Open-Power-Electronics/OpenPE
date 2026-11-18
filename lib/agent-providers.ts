@@ -71,6 +71,22 @@ export function isAgentProvider(value: unknown): value is AgentProviderId {
   return agentProviders.some(({ id }) => id === value);
 }
 
+export function validModelId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:/@\[\]-]{0,199}$/.test(value);
+}
+
+export function validAgentModelId(provider: string, value: unknown): value is string {
+  // ACP select values are opaque and travel only in JSON, never CLI arguments.
+  if (provider === 'deepseek')
+    return (
+      typeof value === 'string' &&
+      value.length <= 512 &&
+      Boolean(value.trim()) &&
+      !/[\u0000-\u001f\u007f-\u009f]/.test(value)
+    );
+  return validModelId(value);
+}
+
 export function agentName(value: string): string {
   return agentProviders.find(({ id }) => id === value)?.name ?? 'Agent';
 }

@@ -68,7 +68,7 @@ try {
         return route.fulfill({
           json: url.searchParams.has('id')
             ? detail
-            : { entries: [detail], libraries: ['NextPCB'], total: 1 },
+            : { entries: [detail], libraries: ['NextPCB'], total: 1, nextOffset: null },
         });
       if (url.pathname === '/api/library-package') {
         requests++;

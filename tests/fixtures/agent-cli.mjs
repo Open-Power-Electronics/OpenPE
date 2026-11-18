@@ -91,15 +91,20 @@ if (mode.startsWith('claude-catalog')) {
   input.on('close', () => process.exit(0));
 } else if (mode.startsWith('claude')) {
   assert.ok(process.argv.includes('--include-partial-messages'));
-  assert.equal(
-    process.env.CLAUDE_CODE_EFFORT_LEVEL,
-    process.argv[process.argv.indexOf('--effort') + 1],
-  );
-  assert.equal(
-    process.argv[process.argv.indexOf('--effort') + 1],
-    mode.startsWith('claude-effort-') ? mode.slice('claude-effort-'.length) : 'high',
-  );
-  assert.equal(process.argv[process.argv.indexOf('--model') + 1], 'fixture-model');
+  if (mode === 'claude-native-default') {
+    assert.ok(!process.argv.includes('--effort'));
+    assert.equal(process.argv[process.argv.indexOf('--model') + 1], 'default');
+  } else {
+    assert.equal(
+      process.env.CLAUDE_CODE_EFFORT_LEVEL,
+      process.argv[process.argv.indexOf('--effort') + 1],
+    );
+    assert.equal(
+      process.argv[process.argv.indexOf('--effort') + 1],
+      mode.startsWith('claude-effort-') ? mode.slice('claude-effort-'.length) : 'high',
+    );
+    assert.equal(process.argv[process.argv.indexOf('--model') + 1], 'fixture-model');
+  }
   const input = createInterface({ input: process.stdin });
   input.on('line', async (received) => {
     if (JSON.parse(received).type !== 'user') return;
@@ -149,13 +154,17 @@ if (mode.startsWith('claude-catalog')) {
           : {
               id: e.id,
               result: {
-                config: { model: mode === 'catalog-no-default' ? null : 'configured-model' },
+                config: {
+                  model: ['catalog-no-default', 'catalog-recommended'].includes(mode)
+                    ? null
+                    : 'configured-model',
+                },
               },
             },
       );
     }
     if (e.method === 'model/list') {
-      assert.equal(e.params.includeHidden, false);
+      assert.equal(e.params.includeHidden, true);
       if (mode === 'catalog-hang') return;
       if (mode === 'catalog-error')
         return send({ id: e.id, error: { message: 'Fixture catalog error' } });
@@ -168,7 +177,7 @@ if (mode.startsWith('claude-catalog')) {
             data: [
               {
                 model: 'fixture-model',
-                isDefault: true,
+                isDefault: mode !== 'catalog-no-default',
                 displayName: 'Fixture Model',
                 supportedReasoningEfforts: [
                   { reasoningEffort: 'low' },
@@ -182,7 +191,8 @@ if (mode.startsWith('claude-catalog')) {
                 ],
               },
               null,
-              { model: 'hidden', hidden: true },
+              { model: 'gpt-6.2-astra', hidden: true, displayName: 'GPT-6.2 Astra' },
+              { model: 'image-input', inputModalities: ['image'] },
               { model: '--bad' },
             ],
             nextCursor: 'page2',
@@ -193,7 +203,12 @@ if (mode.startsWith('claude-catalog')) {
         id: e.id,
         result: {
           data: [
-            { model: 'fixture-second', displayName: 'Second Model', supportedReasoningEfforts: [] },
+            {
+              model: 'gpt-6.2-sol',
+              displayName: 'GPT-6.2 Sol',
+              inputModalities: ['text'],
+              supportedReasoningEfforts: [{ reasoningEffort: 'future-level' }],
+            },
           ],
           nextCursor: null,
         },
@@ -204,7 +219,7 @@ if (mode.startsWith('claude-catalog')) {
       assert.equal(e.params.approvalPolicy, 'untrusted');
       assert.equal(
         e.params.config.model_reasoning_effort,
-        mode === 'codex-model-default'
+        mode === 'codex-model-default' || mode === 'default-effort'
           ? undefined
           : mode === 'codex-clamped'
             ? 'xhigh'
@@ -212,7 +227,7 @@ if (mode.startsWith('claude-catalog')) {
               ? mode.slice('codex-effort-'.length)
               : mode.startsWith('codex')
                 ? 'high'
-                : 'medium',
+                : undefined,
       );
       assert.equal(e.params.model, mode.startsWith('codex') ? 'fixture-model' : undefined);
       send({
@@ -221,7 +236,9 @@ if (mode.startsWith('claude-catalog')) {
           thread: { id: 'thread' },
           model: 'fixture',
           reasoningEffort:
-            mode === 'codex-clamped' ? 'high' : e.params.config.model_reasoning_effort,
+            ['codex-clamped', 'default-effort', 'codex-model-default'].includes(mode)
+              ? 'high'
+              : e.params.config.model_reasoning_effort,
         },
       });
     }

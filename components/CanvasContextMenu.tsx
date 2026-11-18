@@ -218,7 +218,7 @@ export default function CanvasContextMenu({
           role="menuitem"
           className="select-option"
           disabled={disabled}
-          title={description}
+          title={description || label}
           aria-description={description}
           data-separated={separated || undefined}
           data-destructive={destructive || undefined}

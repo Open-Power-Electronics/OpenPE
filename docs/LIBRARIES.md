@@ -1,7 +1,8 @@
 # KiCad libraries and model delivery
 
 OpenPE uses bundled official KiCad libraries and the explicitly selected NextPCB
-online catalog, without installed KiCad resource discovery or runtime CLI conversion.
+and JLCPCB online catalogs. It uses bundled resources and host adapters without
+installed KiCad resource discovery or runtime CLI conversion.
 Catalog availability does not imply support
 for every feature or simulation model. [FORMAT.md](FORMAT.md) defines native
 data, [LAYOUT.md](LAYOUT.md) defines synchronization/Model editing, and
@@ -91,7 +92,7 @@ prefixes and partial names precede keywords/descriptions, with stable ID ties.
 Empty queries browse alphabetically. Workers retain the last ranked query per
 kind so appending pages avoids repeating a search.
 
-Both providers search on Search or non-composing input Enter. Editing or clearing
+Submit from any source with Search or non-composing input Enter. Editing or clearing
 the draft retains accepted rows, selection, preview, count and appended pages.
 Submitting a query or changing category restarts paging. Refresh replays the
 committed query. Initial loading uses the branded indicator. The chooser retains
@@ -102,7 +103,7 @@ footprint assignment uses Core. [DESIGN.md](../DESIGN.md) owns presentation.
 ### NextPCB online catalog
 
 The chooser places separate library controls above Search. **Library source**
-contains only **KiCad** and **NextPCB**. KiCad retains one **Category** field with
+contains **KiCad**, **NextPCB** and **JLCPCB**. KiCad retains one **Category** field with
 **All categories** and bundled library namespaces. NextPCB presents two adjacent
 cascading fields, **Category level 1** for a root category and **Category level 2**
 for its descendants, using only the provider's real hierarchy. Library source and
@@ -133,23 +134,25 @@ failed category loading before resuming the current search or suggestions.
 A source switch retains each source's query, category and completed browsing state for the chooser's
 lifetime, including separate draft and committed queries. Search or Enter submits
 keywords; typing alone keeps the current results. Filters initially remain at All categories.
-Blank All browsing presents suggestions scoped
-to reachable category 1737, with its provider name visibly displayed. The rows
-and count describe that suggestion category, not the complete catalog. Keyword
+Blank All browsing presents suggestions scoped to reachable category 1737.
+The rows show eligible results loaded from that suggestion category. Keyword
 searches under All omit the category filter. Explicit choices survive component
 selection, refresh, clearing and source restoration.
 Result Enter/double-click starts placement. Category
 changes restart paging, while completed source restoration retains loaded pages,
 selection and preview. Repeated identities across provider pages produce one
-visible row per ID. Pagination advances by consumed provider rows, including
-repeats, rather than the number of unique visible rows; displayed totals remain
-the provider's reported matches. These are session presentation, never native project data.
+visible row per ID. Online pagination follows the next offset returned by the service, even when a
+batch has no eligible entries. The chooser announces its loaded count of unique
+results and preserves active rows and previews while appending. This state is
+local to the chooser.
 
 `server/nextpcb-library.mjs` posts bounded searches to
 `https://library.nextpcb.com/api/chiplet/products/kicad/queryPage` and component
 identities to `/api/chiplet/kicad/productDetail` on that same origin. Results retain
-the provider's ranking and fixed 50-entry pages. Native page numbers are derived
-from the requested offset using that same page size. IDs are
+the provider's ranking. Native pages contain up to 50 catalog rows, and both
+chooser kinds share the same cached pages. Search includes only rows that supply
+an allowlisted native `.kicad_mod` link. Native files are fetched and checked
+when opening an entry. IDs are
 `NextPCB:<manufacturer_id>_<percent-encoded MPN>`; callers supply no asset URLs.
 Category discovery posts `{}` to `/api/chiplet/products/cateTree`. Its flat
 `cateId`/`parentId` records become the same reachable hierarchy used by the
@@ -219,13 +222,80 @@ NextPCB files are fetched on demand, not bundled or relabeled as official KiCad
 library content. Provider metadata is untrusted data. Catalog access adds no
 general downloader, external-page embedding, login or executable authority.
 
+### JLCPCB online catalog
+
+JLCPCB is available in the symbol and footprint choosers and through the shared
+library queries. On selection, the chooser loads an unfiltered catalog page
+and the provider's root and child categories. Scrolling appends more catalog
+results, including when All categories is selected and the query is blank.
+Choose a root to include its descendants or a child to narrow the search.
+Categories can be browsed without a keyword. A model, keyword or `C` part
+number can search across all categories or within the selected category.
+The host returns up to 100 catalog rows per page in provider order. A row needs a
+declared package. An earlier detail check can establish that a part lacks a usable
+footprint and exclude it from later searches. Search reads catalog metadata. A
+separate detail request verifies and converts the exact EasyEDA CAD identity.
+
+`server/jlcpcb-library.mjs` reads the public JLCPCB assembly catalog at
+`jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList/v2`.
+The same endpoint supplies the two-level category tree. Category IDs are the
+provider's canonical decimal `componentSortKeyId` values. The host validates
+each selected ID against the current tree and sends its source name and parent
+name when needed. Repeated identical leaf entries appear once.
+Selected details read `easyeda.com/api/products/<code>/components`. Up to eight
+CAD reads can run across requests. A five-minute cache retains 16 catalog pages,
+1,024 known availability results and 16 converted details. Preview reuses cached
+catalog metadata and CAD. A direct ID without a cached catalog
+entry requires an exact catalog lookup first. Each response is capped at 2 MB.
+Requests time out at 20 seconds and cancel on disconnect. Desktop requests to
+JLCPCB and EasyEDA use Electron's system-network transport. The service names
+the upstream provider that rejected a request. A failed preview retains the
+catalog results and can be retried. Only validated metadata and converted
+geometry reach the renderer or Agent.
+
+`server/jlcpcb-cad.mjs` converts a bounded subset of EasyEDA Standard 5/6 library
+records, including Standard 6 editor versions with a fourth numeric field.
+It preserves physical pin numbers and anchors. Unfilled circular symbol arcs
+use native arcs. Axis-aligned elliptical symbol arcs use bounded native
+polylines with at most 0.001 mm geometric error. EasyEDA's directionless Power
+classification maps to KiCad unspecified.
+
+Packages retain front SMD pads, plated circular drills with quarter-turn pad
+rotations, supported silkscreen and assembly graphics, and explicit pad mask
+and paste margins. A single closed convex contour on the front paste layer
+becomes a filled native footprint polygon without a stroke. The shared package
+reader accepts these paste polygons on either side, and stencil export plots
+them independently of pad apertures. Shape coordinates retain OpenPE's native
+precision. Unsupported geometry, including curved paste regions, custom pad
+shapes and slotted drills, fails footprint detail. An independently valid symbol
+retains its linked assignment and shows the package warning. Document and 3D
+preview layers are omitted. A single centred EasyEDA model with identity pose
+can reference a STEP model from the fixed EasyEDA model host. The host limits
+STEP reads to 32 MiB and validates the geometry with the shared STEP parser.
+Opening 3D reads the model for preview. Placement prepares a portable STEP
+reference and writes the bytes only through the project Save path. A missing
+STEP file (HTTP 404) leaves the prepared 2D package usable. Other EasyEDA model
+poses and simulation models are outside the supported subset.
+
+Accepted footprints use the shared package transaction and persist in
+`footprints/JLCPCB.pretty/` with their `fp-lib-table` mapping for offline reuse.
+Browse and detail leave project files alone. The catalog does not bundle vendor
+geometry. Each converted symbol and footprint preserves its supplied notice and
+identifies the **JLCEDA/EasyEDA Official Library** in detail and native metadata.
+The final chooser card shows the source name and both official website links.
+Its collapsed chevron opens the English terms from the supplied notice.
+The links open in the system browser on desktop.
+See the [JLCPCB Assembly Parts Library](https://jlcpcb.com/Parts), the
+[EasyEDA Standard format](https://docs.easyeda.com/en/DocumentFormat/EasyEDA-Format-Standard/),
+and the [JLCEDA](https://lceda.cn/) and [EasyEDA](https://easyeda.com/) homepages.
+
 ### Shared library capabilities
 
 | Capability           | Contract                                                                      |
 | -------------------- | ----------------------------------------------------------------------------- |
 | `library.search`     | Bounded symbol/footprint catalog search                                       |
-| `library.categories` | Read source-specific categories and nested NextPCB groups                     |
-| `library.detail`     | Validated bundled or NextPCB symbol/footprint                                 |
+| `library.categories` | Read bundled namespaces or the NextPCB and JLCPCB category trees                     |
+| `library.detail`     | Validated KiCad, NextPCB or JLCPCB symbol/footprint                                 |
 | `schematic.place`    | Load/validate a symbol unit and place on an explicit sheet                    |
 | `part.footprint`     | Verify/assign a catalog footprint or clear an explicit component's assignment |
 
@@ -247,7 +317,8 @@ the board.
 
 Official reads prefer bundled resources, then the private
 `OpenPE/library-models/10.0.0/` cache. A miss may download only the STEP linked by
-the bundled versioned footprint or validated NextPCB official reference: 30 MB limit, no redirects, STEP validation,
+the bundled versioned footprint or a validated NextPCB or EasyEDA reference. STEP
+reads use the owning provider's byte limit, fixed source, redirect rejection and STEP validation,
 coalesced requests and atomic verified cache writes. A 404 retains usable 2D
 geometry; network failures remain retryable. Custom unsupported pad previews
 report limits rather than inventing geometry.
@@ -375,6 +446,7 @@ unpacked to support replacement. Do not package missing notices/source.
 | `npm run examples:check-models -- --render`                                                                         | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 83 visible EMC model instances, five mounting-hole notices               |
 | `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts`                           | Catalog/access boundaries, placement/assignment and atomic synchronization                                                                       |
 | `tests/nextpcb-library.test.ts`, `node scripts/check-nextpcb-library-ui.mjs`                                        | Mocked online catalog boundaries, native validation, retry/cancellation and chooser/IME behavior                                                 |
+| `tests/jlcpcb-library.test.ts`, `node scripts/check-library-details-ui.mjs` | Catalog transport, EasyEDA conversion, GUI/Agent queries, portable adoption and the attribution disclosure/links in an isolated browser |
 | `tests/library-footprint-geometry.test.ts`, `tests/nextpcb-project-assets.test.ts`, `tests/library-package.test.ts` | Exact vendor geometry, native package sidecars, portable STEP adoption, offline reuse and shared undo                                            |
 | `node scripts/check-model-sync-ui.mjs`                                                                              | Isolated Workbench Model synchronization status/retry, Source/close/IME gates and retained scene/camera; mocked host, no Electron                |
 | `node scripts/check-layout-package-ui.mjs`                                                                          | Isolated Layout package preparation/placement, sidecars, undo and cancelled/stale/Source/close/IME rejection; mocked host, no Electron           |

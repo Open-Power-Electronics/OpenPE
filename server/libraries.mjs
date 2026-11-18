@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { exampleFootprintDetail, exampleModelBytes } from './example-footprints.mjs';
 import { appendEmcFootprintModels } from './emc-flyback-assets.mjs';
 import { createNextPcbLibrary } from './nextpcb-library.mjs';
+import { createJlcpcbLibrary } from './jlcpcb-library.mjs';
+import { isOnlineLibrary, librarySources, onlineFootprintLibrary } from './library-format.mjs';
 import {
   officialModelRelativePath,
   validateOfficialModelPath,
@@ -115,7 +117,7 @@ export function createStepParserPool({
 
 /** @param {{root?: string, dataDir?: string, allowModelDownloads?: boolean,
  * stepParserPool?: ReturnType<typeof createStepParserPool>, nextpcbFetcher?: typeof fetch,
- * modelFetcher?: typeof fetch}} options */
+ * modelFetcher?: typeof fetch, jlcpcbFetcher?: typeof fetch}} options */
 export function createLibraryService({
   root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -126,6 +128,7 @@ export function createLibraryService({
   allowModelDownloads = true,
   stepParserPool,
   nextpcbFetcher,
+  jlcpcbFetcher,
   modelFetcher = fetch,
 }) {
   let worker,
@@ -137,29 +140,32 @@ export function createLibraryService({
   const stepParsers = stepParserPool ?? createStepParserPool();
   const shutdown = new AbortController();
   const nextpcb = createNextPcbLibrary({ fetcher: nextpcbFetcher });
+  const jlcpcb = createJlcpcbLibrary({ fetcher: jlcpcbFetcher });
+  const online = { NextPCB: nextpcb, JLCPCB: jlcpcb };
   /** @param {{signal?: AbortSignal, [key: string]: any}} input */
   function request({ signal, ...message }) {
     if (closed) return Promise.reject(new Error('Library service closed.'));
     if (message.action === 'categories') {
       if (
-        !['KiCad', 'NextPCB'].includes(message.source) ||
+        !librarySources.includes(message.source) ||
         !['symbols', 'footprints'].includes(message.kind)
       )
         return Promise.reject(new Error('Choose a supported library source and kind.'));
-      if (message.source === 'NextPCB') return nextpcb.request({ ...message, signal });
+      if (isOnlineLibrary(message.source))
+        return online[message.source].request({ ...message, signal });
       return workerRequest({ action: 'search', kind: message.kind }).then(({ libraries }) => ({
         categories: [...libraries]
           .sort((a, b) => a.localeCompare(b))
           .map((name) => ({ id: name, name, children: [] })),
       }));
     }
-    if (message.category && message.library !== 'NextPCB')
-      return Promise.reject(new Error('Category IDs apply only to NextPCB searches.'));
-    if (
-      (message.action === 'search' && message.library === 'NextPCB') ||
-      (message.action === 'detail' && message.id?.startsWith('NextPCB:'))
-    )
-      return nextpcb.request({ ...message, signal });
+    if (message.category && !isOnlineLibrary(message.library))
+      return Promise.reject(new Error('Category IDs apply only to online library searches.'));
+    const provider =
+      message.action === 'detail'
+        ? onlineFootprintLibrary(message.id ?? '')
+        : message.action === 'search' && isOnlineLibrary(message.library) && message.library;
+    if (provider) return online[provider].request({ ...message, signal });
     if (message.action === 'detail' && message.kind === 'footprints')
       return exampleFootprintDetail(message.id).then(async (detail) =>
         appendEmcFootprintModels(message.id, detail ?? (await workerRequest(message))),
@@ -280,6 +286,10 @@ export function createLibraryService({
     const detail = await request({ action: 'detail', kind: 'footprints', id, signal });
     const model = detail.models[index];
     if (!model) throw new Error('No model is assigned to this footprint.');
+    if (id.startsWith('JLCPCB:')) {
+      if (!allowModelDownloads) throw new Error('EasyEDA model downloads are disabled.');
+      return jlcpcb.modelBytes(model.path, signal);
+    }
     if (id.startsWith('NextPCB:') && allowModelDownloads) {
       const vendor = await nextpcb.modelBytes(id, index, signal);
       if (vendor) return vendor;
@@ -318,7 +328,7 @@ export function createLibraryService({
     close() {
       closed = true;
       shutdown.abort();
-      nextpcb.close();
+      for (const library of Object.values(online)) library.close();
       void worker?.terminate();
       for (const p of pending.values()) {
         clearTimeout(p.timer);

@@ -170,6 +170,38 @@ test('NextPCB requires a model or category and permits explicit category-only br
   }
 });
 
+test('NextPCB only lists native footprint links and shares raw result paging between chooser kinds', async () => {
+  const { service, calls } = fixture((url, options) => {
+    if (!url.endsWith('/queryPage')) return;
+    const { pageNum } = JSON.parse(String(options.body));
+    if (pageNum === 2) return json([{ ...row, mpn: 'Other model' }], { total: 51 });
+    return json(
+      [
+        { ...row, mpn: 'No CAD', footprintFileUrl: null },
+        { ...row, mpn: 'Foreign CAD', footprintFileUrl: 'https://example.org/foreign.kicad_mod' },
+        row,
+      ],
+      { total: 51 },
+    );
+  });
+  try {
+    const search = { action: 'search', kind: 'symbols', query: 'LM358' };
+    const first = await service.request(search);
+    assert.deepEqual(
+      first.entries.map((entry: { id: string }) => entry.id),
+      [id],
+    );
+    assert.equal(first.nextOffset, 50);
+    assert.deepEqual(await service.request({ ...search, kind: 'footprints' }), first);
+    assert.equal(calls.length, 1, 'Both kinds share the catalog without downloading native files.');
+    const second = await service.request({ ...search, offset: first.nextOffset });
+    assert.equal(second.entries[0].name, 'Other model');
+    assert.equal(second.nextOffset, null);
+  } finally {
+    service.close();
+  }
+});
+
 test('NextPCB categories retain native English hierarchy and category-filtered pages stay independent', async () => {
   const { service, calls } = fixture();
   try {

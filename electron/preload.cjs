@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('openpe', {
   titleBarInset: chrome.titleBarInset,
   installPlugin: () => ipcRenderer.invoke('openpe:install-plugin'),
   connection: () => ipcRenderer.invoke('openpe:connection'),
+  openLibraryHomepage: (site) => ipcRenderer.invoke('openpe:open-library-homepage', site),
   cursorCredentialStatus: () => ipcRenderer.invoke('openpe:cursor-credential-status'),
   cursorCredentialStore: (key) => {
     if (typeof key !== 'string' || key.length > 512)

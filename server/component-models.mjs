@@ -4,7 +4,8 @@ import { lstat, realpath, readFile, mkdir, open } from 'node:fs/promises';
 import { atomicWrite } from './atomic-write.mjs';
 import { logicalSuffixOfCanonical } from './host-path.cjs';
 import { parseProject } from './project-format.mjs';
-import { children, quote, val } from './library-format.mjs';
+import { children, onlineFootprintLibrary, quote, val } from './library-format.mjs';
+import { CatalogHttpError } from './online-library-fetch.mjs';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const local = /^\$\{KIPRJMOD\}\/models\/([a-f0-9]{64})\.step$/;
 const relative = /^\$\{KIPRJMOD\}\/((?:[\w .()+,-]+\/)*[\w .()+,-]+\.(?:step|stp))$/i;
@@ -170,24 +171,37 @@ export function createComponentModelStore(dataDir, parse) {
 }
 /** Prepare an adopted online package; project publication remains a Core/Save operation. */
 export async function prepareLibraryPackage(libraries, store, id, signal) {
-  if (
-    typeof id !== 'string' ||
-    !id.startsWith('NextPCB:') ||
-    id.length <= 'NextPCB:'.length ||
-    id.slice('NextPCB:'.length).length > 150
-  )
-    throw new Error('Choose a NextPCB package with a supported native filename.');
+  const library = typeof id === 'string' && onlineFootprintLibrary(id);
+  const name = library && id.slice(library.length + 1);
+  if (!name || name.length > 150)
+    throw new Error('Choose a NextPCB or JLCPCB package with a supported native filename.');
   signal.throwIfAborted();
   const detail = await libraries.request({ action: 'detail', kind: 'footprints', id, signal });
   signal.throwIfAborted();
   const prepared = structuredClone(detail);
   const models = children(prepared.footprint, 'model');
-  if (detail.id !== id || val(prepared.footprint) !== id.slice('NextPCB:'.length))
+  if (detail.id !== id || val(prepared.footprint) !== name)
     throw new Error('The prepared package does not match the selected component.');
   if (models.length !== detail.models.length)
     throw new Error('The package model records do not match its native footprint.');
   for (let index = 0; index < models.length; index++) {
-    const bytes = await libraries.componentModelBytes(id, index, signal);
+    let bytes;
+    try {
+      bytes = await libraries.componentModelBytes(id, index, signal);
+    } catch (error) {
+      signal.throwIfAborted();
+      if (
+        id.startsWith('JLCPCB:') &&
+        error instanceof CatalogHttpError &&
+        error.status === 404 &&
+        models.length === 1
+      ) {
+        prepared.footprint = prepared.footprint.filter((node) => node !== models[index]);
+        prepared.models = [];
+        break;
+      }
+      throw error;
+    }
     signal.throwIfAborted();
     const selected = await store.importBytes(bytes, signal);
     signal.throwIfAborted();
@@ -212,7 +226,7 @@ export function registerComponentModels(app, store, libraries, files) {
       typeof body.id !== 'string' ||
       body.id.length > 500
     )
-      return res.status(422).json({ error: 'Send one NextPCB component identity.' });
+      return res.status(422).json({ error: 'Send one NextPCB or JLCPCB component identity.' });
     if (packageRequests >= 8)
       return res
         .status(422)

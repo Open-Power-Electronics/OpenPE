@@ -440,11 +440,11 @@ async function observeInputReads(t: TestContext, root: string, shouldFail = () =
       );
       return originalStat();
     }) as typeof handle.stat;
-    const originalStream = handle.createReadStream.bind(handle);
-    handle.createReadStream = (options) => {
-      if (shouldFail()) throw new Error('Fixture streaming failure.');
-      return originalStream(options);
-    };
+    const originalRead = handle.read.bind(handle);
+    handle.read = ((...readArgs: unknown[]) => {
+      if (shouldFail()) throw new Error('Fixture input read failure.');
+      return Reflect.apply(originalRead, handle, readArgs);
+    }) as typeof handle.read;
     return handle;
   });
   syncBuiltinESMExports();
@@ -465,7 +465,7 @@ test('parallel fingerprints bound input handles and retain cache identity across
   assert.equal(await f.run({ paths: paths.toReversed() }), true);
   assert.equal(await readFile(f.cache, 'utf8'), cached);
   assert.equal(f.count(), 1);
-  assert.ok(reads.peak() > 1 && reads.peak() <= 4, 'At most four file streams overlap.');
+  assert.ok(reads.peak() > 1 && reads.peak() <= 4, 'At most four input files are open.');
   assert.equal(reads.active.size, 0);
 });
 
@@ -474,7 +474,7 @@ test('failed parallel fingerprints drain input handles and leave preparation ret
   let failing = true;
   const reads = await observeInputReads(t, f.root, () => failing);
   const paths = ['inputs', 'generated.txt'];
-  await assert.rejects(f.run({ paths }), /Fixture streaming failure/);
+  await assert.rejects(f.run({ paths }), /Fixture input read failure/);
   assert.equal(reads.active.size, 0, 'Every in-flight file is closed before failure returns.');
   assert.equal(f.count(), 0);
   await assert.rejects(readFile(f.cache), { code: 'ENOENT' });
@@ -483,4 +483,21 @@ test('failed parallel fingerprints drain input handles and leave preparation ret
   assert.equal(await f.run({ paths }), true);
   assert.equal(reads.active.size, 0);
   assert.ok(reads.peak() <= 4);
+});
+
+test('cancelling a fingerprint drains in-flight reads without starting new work', async (t) => {
+  const f = await fixture(t);
+  let started = 0;
+  const reads = await observeInputReads(t, f.root, () => {
+    started++;
+    return false;
+  });
+  assert.equal(
+    await f.run({ paths: ['inputs', 'generated.txt'], cancelled: () => started > 0 }),
+    false,
+  );
+  assert.ok(started > 0 && started <= 4);
+  assert.equal(reads.active.size, 0);
+  assert.equal(f.count(), 0);
+  await assert.rejects(readFile(f.cache), { code: 'ENOENT' });
 });

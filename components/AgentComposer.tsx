@@ -47,7 +47,11 @@ export type AgentComposerProps = {
   setModel: (value: string) => void;
   input: string;
   setInput: (value: string) => void;
-  onSubmit: (effort: ReasoningEffort | undefined, parameters?: { id: string; value: string }[]) => void;
+  onSubmit: (
+    effort: ReasoningEffort | undefined,
+    parameters?: { id: string; value: string }[],
+    model?: string,
+  ) => void;
   onStop?: () => void;
   onAgentSettings?: () => void;
   onRecall?: (direction: -1 | 1) => boolean;
@@ -141,9 +145,13 @@ export default function AgentComposer({
   const catalog = useAgentModelCatalog({ provider, available, value: model, observedModel });
   const selected = catalog.selected;
   const modelEfforts = selected?.efforts ?? null;
+  const effortOptions = (modelEfforts ?? []).map((value) => ({ value, label: effortLabels[value] }));
+  const effortFitLabels = effortOptions.map(({ label }) => label);
   const cursorParameters = provider === 'cursor' && selected ? selected.parameters : undefined;
   const supportsEffort =
-    modelEfforts === null ? provider === 'codex' || agentSupportsEffort : modelEfforts.length > 0;
+    modelEfforts === null
+      ? !selected && (provider === 'codex' || agentSupportsEffort)
+      : modelEfforts.length > 0;
   const [parameterChoices, setParameterChoices] = useState<Record<string, Record<string, string>>>(
     {},
   );
@@ -157,10 +165,14 @@ export default function AgentComposer({
     (parameter) => parameter.id !== selected?.effortParameter,
   );
   const unresolvedParameter = genericParameters.find((parameter) => !chosenParameter(parameter));
+  const usesNativeModel =
+    provider === 'deepseek' && !model && !catalog.error && catalog.models.length === 0;
   const submissionBlocked =
     requiresAgent &&
     (!available ||
-      (['codex', 'claude', 'pi', 'cursor'].includes(provider) && modelEfforts === null) ||
+      catalog.loading ||
+      (!selected && !usesNativeModel) ||
+      selected?.textInput === false ||
       Boolean(unresolvedParameter));
   const effectiveEffort = modelEfforts?.length
     ? modelEfforts.includes(effort)
@@ -182,30 +194,36 @@ export default function AgentComposer({
         ? 'Steer current run'
         : 'Queue message'
       : submitLabel;
+  const loadingModels = requiresAgent && catalog.loading && submissionBlocked;
+  let placeholderStatus = loadingModels ? 'Loading models…' : '';
   let availabilityText = '';
   let availabilityAction: { label: string; run: () => void } | undefined;
-  if (requiresAgent) {
+  if (requiresAgent && !catalog.loading) {
     if (!available) {
       if (agentAvailabilityKnown) {
         availabilityText = `${name} is unavailable.`;
         if (onAgentSettings) availabilityAction = { label: 'Agent settings', run: onAgentSettings };
       }
-    } else if (catalog.loading) {
-      if (submissionBlocked) availabilityText = 'Loading models…';
     } else if (unresolvedParameter) {
       availabilityText = `Choose a catalog value for ${unresolvedParameter.label}.`;
-    } else if (catalog.error || !catalog.models.length || (submissionBlocked && catalog.selected)) {
-      availabilityText = catalog.error
-        ? 'Could not load models.'
-        : catalog.models.length
-          ? 'Reasoning options unavailable for this model.'
-          : 'No models available.';
-      if (!busy) availabilityAction = { label: 'Retry models', run: catalog.retry };
+    } else if (catalog.error || (!usesNativeModel && !catalog.models.length)) {
+      availabilityText = catalog.error ? 'Could not load models.' : 'No models available.';
     } else if (submissionBlocked) {
-      availabilityText = 'Choose an available model to send.';
+      placeholderStatus = 'Choose an available model to send.';
     }
   }
   const availabilityId = `${inputId}-availability`;
+  const statusText = placeholderStatus || availabilityText;
+  const availabilityStatus = statusText && (
+    <span
+      className={placeholderStatus ? 'composer-placeholder-status' : undefined}
+      id={availabilityId}
+      role="status"
+      aria-description={catalog.error}
+    >
+      {statusText}
+    </span>
+  );
   const unavailableText = catalog.unavailable.length
     ? `Unavailable models: ${catalog.unavailable
         .map((model) => `${model.id} — ${model.reason}`)
@@ -223,13 +241,14 @@ export default function AgentComposer({
     // Focus before dispatch so a synchronous dialog or navigation keeps its own focus.
     focusDraft();
     onSubmit(
-      supportsEffort ? effectiveEffort : undefined,
+      modelEfforts?.length ? effectiveEffort : undefined,
       genericParameters.length
         ? genericParameters.map((parameter) => ({
             id: parameter.id,
             value: chosenParameter(parameter)!,
           }))
         : undefined,
+      selected?.id,
     );
   }
   return (
@@ -241,10 +260,10 @@ export default function AgentComposer({
           id={inputId}
           autoFocus={autoFocus}
           aria-label={inputLabel}
-          aria-describedby={availabilityText ? availabilityId : undefined}
+          aria-describedby={statusText ? availabilityId : undefined}
           aria-keyshortcuts={onRecall ? 'ArrowUp ArrowDown' : undefined}
           maxLength={maxLength}
-          placeholder={`Work with ${name}`}
+          placeholder={placeholderStatus || `Work with ${name}`}
           value={input}
           onCompositionStart={() => {
             composing.current = true;
@@ -306,6 +325,7 @@ export default function AgentComposer({
             }
           }}
         />
+        {placeholderStatus && availabilityStatus}
         {expandableDraft && (draftOverflows || draftExpanded) && (
           <button
             ref={retainExpandControl}
@@ -372,16 +392,26 @@ export default function AgentComposer({
               ]}
             />
           </div>
-          <div className="composer-settings">
+          <div
+            className="composer-settings"
+            data-single-effort={supportsEffort && !cursorParameters ? true : undefined}
+          >
             <ModelSelect
               key={provider}
               models={catalog.models}
               unavailable={catalog.unavailable}
               currentModel={catalog.currentModel}
-              loading={catalog.loading && !availabilityText}
-              error={requiresAgent ? undefined : catalog.error}
+              loading={catalog.loading}
+              placeholder={
+                catalog.loading && (!loadingModels || Boolean(input))
+                  ? 'Loading model…'
+                  : 'Choose model'
+              }
+              error={catalog.error}
+              showErrorIcon={!requiresAgent}
+              composing={composing}
               onChange={setModel}
-              disabled={busy || !available || catalog.loading}
+              disabled={busy || !available}
             />
             {cursorParameters ? (
               <>
@@ -391,14 +421,15 @@ export default function AgentComposer({
                       key={parameter.id}
                       label="Reasoning effort"
                       value={effectiveEffort}
-                      disabled={busy || !available || !modelEfforts?.length}
+                      disabled={busy || !available || catalog.loading || !modelEfforts?.length}
                       compact
+                      showChevron={false}
+                      fitLabels={effortFitLabels}
+                      triggerClassName="composer-effort-trigger"
+                      popupClassName="composer-choice-menu composer-inline-menu composer-effort-menu"
                       placeholder={effortLabels[effectiveEffort]}
                       onChange={(value) => setEffort(value as ReasoningEffort)}
-                      options={(modelEfforts || []).map((value) => ({
-                        value,
-                        label: effortLabels[value],
-                      }))}
+                      options={effortOptions}
                     />
                   ) : isCursorBooleanParameter(parameter) ? (
                     <span key={parameter.id} className="composer-boolean">
@@ -412,6 +443,7 @@ export default function AgentComposer({
                         disabled={
                           busy ||
                           !available ||
+                          catalog.loading ||
                           (chosenParameter(parameter) !== 'true' &&
                             chosenParameter(parameter) !== 'false')
                         }
@@ -440,8 +472,11 @@ export default function AgentComposer({
                       key={parameter.id}
                       label={parameter.label}
                       value={chosenParameter(parameter) ?? ''}
-                      disabled={busy || !available}
+                      disabled={busy || !available || catalog.loading}
                       compact
+                      showChevron={false}
+                      fitLabels={parameter.values.map(({ label }) => label)}
+                      popupClassName="composer-choice-menu composer-inline-menu"
                       placeholder={parameter.label}
                       onChange={(value) =>
                         setParameterChoices((choices) => ({
@@ -469,14 +504,15 @@ export default function AgentComposer({
               <Select
                 label="Reasoning effort"
                 value={effectiveEffort}
-                disabled={busy || !available || !modelEfforts?.length}
+                disabled={busy || !available || catalog.loading || !modelEfforts?.length}
                 compact
+                showChevron={false}
+                fitLabels={effortFitLabels}
+                triggerClassName="composer-effort-trigger"
+                popupClassName="composer-choice-menu composer-inline-menu composer-effort-menu"
                 placeholder={effortLabels[effectiveEffort]}
                 onChange={(value) => setEffort(value as ReasoningEffort)}
-                options={(modelEfforts || []).map((value) => ({
-                  value,
-                  label: effortLabels[value],
-                }))}
+                options={effortOptions}
               />
             ) : provider === 'cursor' ? null : (
               <span
@@ -510,7 +546,7 @@ export default function AgentComposer({
             className={`send-button ${isStop ? 'stop' : ''}`}
             aria-label={actionLabel}
             title={actionLabel}
-            aria-describedby={availabilityText && !isStop ? availabilityId : undefined}
+            aria-describedby={statusText && !isStop ? availabilityId : undefined}
             type="button"
             onPointerDown={(event) => {
               if (composing.current) event.preventDefault();
@@ -524,11 +560,7 @@ export default function AgentComposer({
         </div>
         {(availabilityText || unavailableText) && (
           <div className="composer-availability">
-            {availabilityText && (
-              <span id={availabilityId} role="status" aria-description={catalog.error}>
-                {availabilityText}
-              </span>
-            )}
+            {availabilityText && availabilityStatus}
             {unavailableText && (
               <span className="composer-unavailable-models" role="note">
                 {unavailableText}

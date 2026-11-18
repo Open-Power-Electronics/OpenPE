@@ -3,6 +3,7 @@ import PropertyDeleteButton from './PropertyDeleteButton';
 import usePanelFindCanvas, { panelFindCanvasView } from './usePanelFindCanvas';
 import { resizeDrawingView } from '@/lib/drawing-viewport';
 import { loadLibraryFootprint } from '@/lib/library-package';
+import { onlineFootprintLibrary } from '@/lib/library';
 import type { FootprintSource } from '@/lib/pcb-sync';
 
 import {
@@ -188,6 +189,7 @@ import {
   zoomLayoutView,
   LayoutCameraRender,
   LayoutCameraScaleRender,
+  layoutCanvasPoint,
   rebaseLayoutCameraPoint,
   type LayoutCameraPanLease,
 } from './LayoutCamera';
@@ -2045,15 +2047,14 @@ function LayoutEditor({
     snapped = true,
     transform = svg.current!.getScreenCTM(),
   ): Point {
-    const p = transform
-      ? new DOMPoint(e.clientX, e.clientY).matrixTransform(transform.inverse())
-      : cursorPosition.current;
-    const presented = committedCameraBinding.current?.getPresentedView();
-    // Navigation state is synchronous even when its DOM presentation waits
-    // for the next frame. Rebase the displayed CTM to that exact latest pose.
-    const current =
-      transform && presented ? rebaseLayoutCameraPoint(p, presented, camera.getSnapshot()) : p;
-    return snapped ? { x: snap(current.x), y: snap(current.y) } : current;
+    return layoutCanvasPoint(
+      e,
+      transform,
+      cursorPosition.current,
+      committedCameraBinding.current?.getPresentedView(),
+      camera.getSnapshot(),
+      snapped ? snap : undefined,
+    );
   }
   function measurementPoint(e: { clientX: number; clientY: number; altKey?: boolean }) {
     const raw = canvasPoint(e, false);
@@ -2204,7 +2205,7 @@ function LayoutEditor({
     packageRequest.current = control;
     const revision = getRevision?.();
     try {
-      const resolved = detail.id.startsWith('NextPCB:')
+      const resolved = onlineFootprintLibrary(detail.id)
         ? await loadLibraryFootprint(detail.id, control.signal)
         : detail;
       control.signal.throwIfAborted();
@@ -5256,6 +5257,12 @@ function LayoutEditor({
               aria-label="PCB layout editor"
               data-testid="layout-canvas"
               data-layout-active={active ? 'true' : 'false'}
+              data-layout-edit={
+                tool === 'select' && !analysisProbing && !drag && !trackDrag && !marquee
+                  ? 'select'
+                  : undefined
+              }
+              data-layout-selection-count={selection.length}
               onPointerDown={start}
               onPointerMove={move}
               onPointerUp={end}

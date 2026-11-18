@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { performance } from 'node:perf_hooks';
-import { agentName } from './agent-provider-format.mjs';
-import { validModelId } from './model-id.mjs';
+import { agentName, validAgentModelId } from './agent-provider-format.mjs';
 import { canonicalDirectory } from './host-path.cjs';
 import { stopOwnedProcess } from './owned-process.mjs';
 
@@ -69,16 +68,20 @@ function modelCatalog(session) {
     }
     return result;
   }
-  const entries = flatten(options?.options).map((entry) => ({
-    id: entry.value,
-    label: entry.name,
-    description: entry.description,
-  }));
+  const models = new Map();
+  for (const { value, name, description } of flatten(options?.options)) {
+    if (!validAgentModelId('deepseek', value) || models.has(value)) continue;
+    models.set(value, {
+      id: value,
+      label: typeof name === 'string' && name.trim() ? name.slice(0, 100) : value,
+      ...(typeof description === 'string' && { description: description.slice(0, 300) }),
+    });
+  }
   return {
-    models: entries
-      .filter((entry) => validModelId(entry.id) && typeof entry.label === 'string')
-      .slice(0, 500),
-    defaultModel: validModelId(options?.currentValue) ? options.currentValue : undefined,
+    models: [...models.values()],
+    defaultModel: validAgentModelId('deepseek', options?.currentValue)
+      ? options.currentValue
+      : undefined,
   };
 }
 
@@ -281,14 +284,21 @@ export async function runACPAgent(provider, request, emit, signal, options) {
       async ({ call, session, sessionId, initialized, listen }) => {
         if (request.effort)
           throw new Error(`${agentName(provider)} uses its configured reasoning effort.`);
+        const catalog = modelCatalog(session);
+        let model = catalog.defaultModel;
         if (request.model) {
-          if (!modelCatalog(session).models.some(({ id }) => id === request.model))
+          if (!catalog.models.some(({ id }) => id === request.model))
             throw new Error('The selected model is not advertised by this Agent.');
-          await call('session/set_config_option', {
-            sessionId,
-            configId: 'model',
-            value: request.model,
-          });
+          if (model !== request.model) {
+            const configured = await call('session/set_config_option', {
+              sessionId,
+              configId: 'model',
+              value: request.model,
+            });
+            model = modelCatalog(configured ?? {}).defaultModel;
+            if (model !== request.model)
+              throw new Error('The Agent did not apply the selected model.');
+          }
         }
         const images =
           options.images ??
@@ -345,8 +355,7 @@ export async function runACPAgent(provider, request, emit, signal, options) {
             `${agentName(provider)} stopped before completing the response (${result?.stopReason || 'unknown'}).`,
           );
         if (!hasText) throw new Error('The Agent returned no response content.');
-        const model = request.model || modelCatalog(session).defaultModel;
-        if (validModelId(model)) emit({ type: 'agent-info', model });
+        if (model !== undefined) emit({ type: 'agent-info', model });
         return { outcome: 'completed' };
       },
     );

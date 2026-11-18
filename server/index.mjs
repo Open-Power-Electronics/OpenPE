@@ -13,7 +13,7 @@ import { createWorkspaceRecoveryStore } from './workspace-storage.mjs';
 import { validateAnnotations, validateLayoutAnnotationContext } from './annotation-format.mjs';
 import { validateAgentWorkspaceContext } from './agent-context-format.mjs';
 import { detectAgents, runAgent } from './agents.mjs';
-import { isAgentProvider, isProviderReasoningEffort } from './agent-provider-format.mjs';
+import { isAgentProvider, isProviderReasoningEffort, validAgentModelId } from './agent-provider-format.mjs';
 import { createAgentCapabilityBridge } from './agent-capabilities.mjs';
 import { agentQuestions, createAgentQuestionBridge } from './agent-questions.mjs';
 import { createAgentInputBridge } from './agent-input.mjs';
@@ -25,9 +25,9 @@ import {
   createPcbDesignGuidance,
   registerPcbDesignGuidance,
 } from '../plugins/pe-layout-skill/host/guidance.mjs';
-import { validModelId } from './model-id.mjs';
 import { validCursorRequestParameters } from './agent-cursor.mjs';
 import { createLibraryService } from './libraries.mjs';
+import { isOnlineLibrary, librarySources } from './library-format.mjs';
 import { registerAppearance } from './appearance.mjs';
 import { registerAgentSettings } from './agent-settings.mjs';
 import {
@@ -53,6 +53,7 @@ export async function startServer({
   pluginServiceFactory = createPluginService,
   libraryRoot = '',
   nextpcbFetcher = fetch,
+  jlcpcbFetcher = fetch,
   libraryModelFetcher = fetch,
   simulationRunner = runSimulation,
   simulationDetector = detectSpice,
@@ -86,6 +87,7 @@ export async function startServer({
     root: libraryRoot || undefined,
     dataDir,
     nextpcbFetcher,
+    jlcpcbFetcher,
     modelFetcher: libraryModelFetcher,
   });
   const modelCadPreviews = modelCadPreviewFactory({ resourceRoot: thermalRoot });
@@ -213,10 +215,10 @@ export async function startServer({
       typeof library !== 'string' ||
       library.length > 200 ||
       typeof category !== 'string' ||
-      (category !== '' && (!/^[1-9]\d{0,9}$/.test(category) || library !== 'NextPCB')) ||
+      (category !== '' && (!/^[1-9]\d{0,9}$/.test(category) || !isOnlineLibrary(library))) ||
       (id !== undefined && !!category) ||
       (categories !== undefined &&
-        (!['KiCad', 'NextPCB'].includes(categories) ||
+        (!librarySources.includes(categories) ||
           !!q ||
           !!library ||
           id !== undefined ||
@@ -365,7 +367,7 @@ export async function startServer({
       (b.effort !== undefined && !isProviderReasoningEffort(b.provider, b.effort)) ||
       (b.parameters !== undefined &&
         (b.provider !== 'cursor' || !validCursorRequestParameters(b.parameters))) ||
-      (b.model !== undefined && !validModelId(b.model)) ||
+      (b.model !== undefined && !validAgentModelId(b.provider, b.model)) ||
       (b.capabilities !== undefined && typeof b.capabilities !== 'boolean') ||
       (b.requestTitle !== undefined && typeof b.requestTitle !== 'boolean') ||
       typeof b.sessionId !== 'string' ||

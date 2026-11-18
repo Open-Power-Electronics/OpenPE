@@ -69,6 +69,7 @@ test('desktop preload forwards every operation to a registered main channel and 
   const options = { fileId: 'opaque-project-id', source: 'validated native source' };
   const operations: Array<[string, string, unknown[]]> = [
     ['connection', 'connection', []],
+    ['openLibraryHomepage', 'open-library-homepage', ['jlceda']],
     ['cursorCredentialStatus', 'cursor-credential-status', []],
     ['cursorCredentialStore', 'cursor-credential-store', ['cursor_test_key_value_0001']],
     ['cursorCredentialRemove', 'cursor-credential-remove', []],

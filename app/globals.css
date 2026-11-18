@@ -7,6 +7,7 @@
   --font-step: 0px;
   --font-caption: max(12px, calc(12px + var(--font-step)));
   --font-small: max(12px, calc(13px + var(--font-step)));
+  --font-menu-label: var(--font-small);
   --font-control: calc(14px + var(--font-step));
   --font-body: calc(15px + var(--font-step));
   --font-heading: calc(16px + var(--font-step));
@@ -47,7 +48,6 @@
   --field-border: var(--line);
   --shadow-panel: 0 1px 2px rgb(32 32 32 / 3%), 0 4px 12px rgb(32 32 32 / 2%);
   --shadow-floating: 0 8px 28px rgb(32 32 32 / 9%), 0 2px 6px rgb(32 32 32 / 4%);
-  --shadow-dialog: 0 24px 80px rgb(32 32 32 / 16%), 0 4px 16px rgb(32 32 32 / 6%);
   --brand: #87ea5c;
   --brand-soft: #ebffde;
   --brand-ink: #007106;
@@ -116,6 +116,7 @@
   --dialog-width: 1000px;
   --dialog-height: 720px;
   --dialog-compact-width: 360px;
+  --dialog-compact-wide-width: 560px;
   --dialog-inset: 12px;
   --hero-trace: color-mix(in srgb, var(--brand-ink) 20%, transparent);
   --hero-signal: color-mix(in srgb, var(--brand-ink) 34%, transparent);
@@ -154,7 +155,6 @@
   --tint: #353535;
   --shadow-panel: 0 1px 2px rgb(0 0 0 / 16%), 0 4px 12px rgb(0 0 0 / 10%);
   --shadow-floating: 0 8px 28px rgb(0 0 0 / 30%), 0 2px 6px rgb(0 0 0 / 18%);
-  --shadow-dialog: 0 24px 80px rgb(0 0 0 / 46%), 0 4px 16px rgb(0 0 0 / 24%);
   --brand-soft: #243421;
   --brand-ink: #87ea5c;
   --brand-surface: #253222;

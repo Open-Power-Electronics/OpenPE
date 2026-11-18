@@ -17,6 +17,7 @@ import type { ProjectAction, ProjectFileAction, ProjectNavigationItem } from './
 import { useAppearance } from './AppearanceSettings';
 import DesktopTitlebar from './DesktopTitlebar';
 import WorkspaceLoading from './WorkspaceLoading';
+import { loadAgentModelCatalog, resetAgentModelCatalogs } from './ModelSelect';
 import { api, writeWorkspaceRecovery } from '@/lib/bridge';
 import { importDocument, projectFilename, type Project } from '@/lib/project';
 import { createProjectAdmissions } from '@/lib/project-admission';
@@ -129,13 +130,14 @@ export default function DesktopWorkspace() {
   const [detecting, setDetecting] = useState(false);
   const [agentError, setAgentError] = useState('');
   const detectionInFlight = useRef(false);
-  const detectAgents = useCallback(async () => {
+  const detectAgents = useCallback(async (redetect = true) => {
     if (!window.openpe || detectionInFlight.current) return;
     detectionInFlight.current = true;
     setDetecting(true);
     setAgentError('');
     try {
       setAgents(await (await api('agents')).json());
+      if (redetect) resetAgentModelCatalogs();
     } catch (error) {
       setAgentError((error as Error).message);
     } finally {
@@ -143,10 +145,14 @@ export default function DesktopWorkspace() {
       setDetecting(false);
     }
   }, []);
-  useEffect(() => void detectAgents(), [detectAgents]);
+  useEffect(() => void detectAgents(false), [detectAgents]);
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
   const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (loaded && agents.some((agent) => agent.id === preferences.provider && agent.available))
+      loadAgentModelCatalog(preferences.provider);
+  }, [agents, loaded, preferences.provider]);
   const [error, setError] = useState('');
   const [draftStatus, setDraftStatus] = useState('');
   const [presentation, setPresentation] = useState(createWorkspacePresentation);

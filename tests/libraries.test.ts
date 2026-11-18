@@ -281,6 +281,7 @@ test('authenticated NextPCB HTTP reads use the injected vendor transport and rej
           manufacturer_id: '9728',
           mpn: 'LM358',
           manufacturer: 'Fixture Components',
+          footprintFileUrl: 'https://file.eda.cn/web1/M00/vendor.kicad_mod',
         },
       ],
     });
@@ -302,6 +303,7 @@ test('authenticated NextPCB HTTP reads use the injected vendor transport and rej
     assert.equal(response.status, 200);
     const page = await response.json();
     assert.equal(page.total, 1);
+    assert.equal(page.nextOffset, null);
     assert.equal(page.entries[0].id, 'NextPCB:9728_LM358');
     assert.equal(requests.length, 1);
   } finally {
@@ -575,7 +577,7 @@ test('library category discovery separates local namespaces and the authenticate
     );
     await assert.rejects(
       service.request({ action: 'search', kind: 'symbols', library: 'Device', category: '1737' }),
-      /only to NextPCB/,
+      /only to online library searches/,
     );
     assert.equal(
       (await fetch(`${server.base}/api/libraries/symbols?categories=NextPCB`)).status,

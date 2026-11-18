@@ -4,6 +4,7 @@ import { api, type SpiceModelDeclaration } from './bridge';
 import { uid } from './circuit';
 import {
   createLibraryPart,
+  librarySources,
   symbolUnits,
   partFields,
   type SymbolDetail,
@@ -23,7 +24,7 @@ import { prepareSourceConversion } from './simulation-source-conversion';
 import layoutPropertySchemas from '../core/layout-property-schemas.json';
 import { agentCoreResult } from './agent-project-access';
 import { loadLibraryFootprint } from './library-package';
-import { attachNextPcbFootprint } from './library-project-assets';
+import { attachOnlineFootprint } from './library-project-assets';
 import { prepareSchematicSection } from './schematic-section';
 import type { FootprintSource } from './pcb-sync';
 
@@ -434,9 +435,8 @@ export function registerLibraryCapabilities(
       owner: 'host',
       id: 'library.categories',
       kind: 'query',
-      description:
-        'Read the KiCad library namespaces or nested NextPCB component categories for a selected source.',
-      inputSchema: object({ kind, source: { enum: ['KiCad', 'NextPCB'] } }, ['kind', 'source']),
+      description: 'Read KiCad library namespaces or the NextPCB and JLCPCB category trees.',
+      inputSchema: object({ kind, source: { enum: [...librarySources] } }, ['kind', 'source']),
       handler: async ({ kind, source }, { signal }) =>
         (
           await api(`libraries/${kind}?categories=${encodeURIComponent(source)}`, { signal })
@@ -447,7 +447,7 @@ export function registerLibraryCapabilities(
       id: 'library.search',
       kind: 'query',
       description:
-        'Search bundled KiCad symbols or footprints, or select library NextPCB for online components, with bounded pagination.',
+        'Search KiCad symbols and footprints or online parts with linked footprints. For online search, use a keyword or a category ID from library.categories. Empty filters browse JLCPCB. Use the returned nextOffset to continue an online search, including after an empty batch. Null ends the scan.',
       inputSchema: object(
         {
           kind,
@@ -474,7 +474,8 @@ export function registerLibraryCapabilities(
       owner: 'host',
       id: 'library.detail',
       kind: 'query',
-      description: 'Read a validated KiCad or NextPCB symbol or footprint by its catalog identity.',
+      description:
+        'Read a validated KiCad, NextPCB or JLCPCB symbol or footprint by its catalog identity.',
       inputSchema: object({ kind, id: identity }, ['kind', 'id']),
       handler: ({ kind, id }, { signal }) => detail(kind, id, signal),
     }),
@@ -486,7 +487,7 @@ export function registerLibraryCapabilities(
       mutation: 'document',
       review: 'optional',
       description:
-        'Place a unit of a validated KiCad or NextPCB symbol in an explicitly selected schematic, using the same reference, grid and participation rules as the chooser.',
+        'Place a unit of a validated KiCad, NextPCB or JLCPCB symbol in an explicitly selected schematic, using the same reference, grid and participation rules as the chooser.',
       inputSchema: object(
         {
           schematicId: identity,
@@ -540,7 +541,7 @@ export function registerLibraryCapabilities(
       mutation: 'document',
       review: 'optional',
       description:
-        'Assign a validated KiCad or NextPCB footprint or clear the assignment, sharing Properties and Layout package synchronization.',
+        'Assign a validated KiCad, NextPCB or JLCPCB footprint or clear the assignment, sharing Properties and Layout package synchronization.',
       inputSchema: object(
         { schematicId: identity, partId: identity, libraryId: { type: 'string', maxLength: 500 } },
         ['schematicId', 'partId', 'libraryId'],
@@ -590,7 +591,7 @@ export function registerLibraryCapabilities(
       mutation: 'document',
       review: 'optional',
       description:
-        'Place a validated KiCad or NextPCB footprint for an unplaced primary-schematic component, sharing the Layout chooser preparation and assignment transaction.',
+        'Place a validated KiCad, NextPCB or JLCPCB footprint for an unplaced primary-schematic component, sharing the Layout chooser preparation and assignment transaction.',
       inputSchema: object(
         {
           boardId: identity,
@@ -639,7 +640,7 @@ export function registerLibraryCapabilities(
         footprint.rotation = rotation;
         if (side === 'back') footprint = flipPCBFootprint(footprint);
         const boardNext = { ...board, footprints: [...board.footprints, footprint] };
-        const packaged = attachNextPcbFootprint({ ...snapshot.project!, pcb: boardNext }, resolved);
+        const packaged = attachOnlineFootprint({ ...snapshot.project!, pcb: boardNext }, resolved);
         core.replaceBoard(boardNext, packaged.nativeFiles);
         return { id: footprint.id, revision: String(core.getSnapshot().revision) };
       },

@@ -2985,6 +2985,16 @@ function PCBModelPreview({
               data-cad-tool={cad.tool ?? 'select'}
               data-cad-selected-edges={cad.edgeSelection?.ids.length ?? 0}
               data-cad-selection-count={cad.selection.length}
+              data-cad-delete-available={
+                !readOnly &&
+                !sourcePending &&
+                !measuring &&
+                !cad.tool &&
+                !cad.selectionBlocked &&
+                cad.selectedBodyIds.length === 1
+                  ? 'true'
+                  : undefined
+              }
               data-sketch-plane={cad.sketch?.plane}
               data-sketch-phase={cad.sketchPhase ?? undefined}
               style={{

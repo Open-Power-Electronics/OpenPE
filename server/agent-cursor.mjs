@@ -6,8 +6,7 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { isProviderReasoningEffort } from './agent-provider-format.mjs';
-import { validModelId } from './model-id.mjs';
+import { isProviderReasoningEffort, validModelId } from './agent-provider-format.mjs';
 import { startAgentMCP, agentMcpTools } from './agent-mcp.mjs';
 
 const require = createRequire(import.meta.url);

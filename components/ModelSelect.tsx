@@ -1,10 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore, type RefObject } from 'react';
 import { api } from '@/lib/bridge';
 import Select from './Select';
 import { AlertCircle } from 'lucide-react';
 import type { ReasoningEffort } from '@/lib/chat-stream';
-import { isProviderReasoningEffort } from '@/lib/agent-providers';
+import { isProviderReasoningEffort, validAgentModelId } from '@/lib/agent-providers';
 import {
   readCursorUnavailableModels,
   type CursorUnavailableModel,
@@ -12,6 +12,7 @@ import {
 
 const parameterIdPattern = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const parameterValuePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const hiddenCodexModelIds = new Set(['gpt-reserve', 'codex-auto-review']);
 
 export type AgentModelParameter = {
   id: string;
@@ -23,6 +24,7 @@ type ModelOption = {
   id: string;
   label: string;
   description?: string;
+  textInput?: false;
   efforts?: ReasoningEffort[];
   effortParameter?: string;
   parameters?: AgentModelParameter[];
@@ -32,13 +34,34 @@ type ModelCatalog = {
   unavailable: CursorUnavailableModel[];
   defaultModel?: string | null;
 };
+type CatalogRequest = {
+  control: AbortController;
+  catalog?: ModelCatalog;
+  error?: string;
+};
+
+const catalogRequests = new Map<string, CatalogRequest>();
+const catalogListeners = new Set<() => void>();
+
+function subscribeToCatalogs(listener: () => void) {
+  catalogListeners.add(listener);
+  return () => {
+    catalogListeners.delete(listener);
+  };
+}
+
+function notifyCatalogListeners() {
+  for (const listener of catalogListeners) listener();
+}
 
 function validParameterText(value: unknown) {
   return typeof value === 'string' && value.length > 0 && value.length <= 100 && !/[\u0000-\u001F\u007F]/.test(value);
 }
 
 function validModelOption(provider: string, item: ModelOption) {
-  if (!item || typeof item.id !== 'string' || typeof item.label !== 'string') return false;
+  if (!item || !validAgentModelId(provider, item.id) || typeof item.label !== 'string') return false;
+  if (item.textInput !== undefined && (!['codex', 'pi'].includes(provider) || item.textInput !== false))
+    return false;
   if (
     item.efforts !== undefined &&
     (!Array.isArray(item.efforts) ||
@@ -84,6 +107,49 @@ function validModelOption(provider: string, item: ModelOption) {
   );
 }
 
+export function loadAgentModelCatalog(provider: string) {
+  if (catalogRequests.has(provider)) return;
+  const control = new AbortController();
+  const request: CatalogRequest = { control };
+  catalogRequests.set(provider, request);
+  notifyCatalogListeners();
+  function settle(result: Omit<CatalogRequest, 'control'>) {
+    if (control.signal.aborted) return;
+    catalogRequests.set(provider, { control, ...result });
+    notifyCatalogListeners();
+  }
+  void api(`models?provider=${encodeURIComponent(provider)}`, {
+    signal: control.signal,
+    cache: 'no-store',
+  })
+    .then((response) => response.json())
+    .then((result) => {
+      if (
+        !Array.isArray(result.models) ||
+        result.models.some((item: ModelOption) => !validModelOption(provider, item)) ||
+        (provider === 'cursor' && result.models.length === 0)
+      )
+        throw new Error('The agent returned an invalid model catalog.');
+      settle({
+        catalog: {
+          models:
+            provider === 'codex'
+              ? result.models.filter((model: ModelOption) => !hiddenCodexModelIds.has(model.id))
+              : result.models,
+          unavailable: provider === 'cursor' ? readCursorUnavailableModels(result.unavailable) : [],
+          defaultModel: result.defaultModel,
+        },
+      });
+    })
+    .catch((error) => settle({ error: error.message || 'Model discovery failed.' }));
+}
+
+export function resetAgentModelCatalogs() {
+  for (const request of catalogRequests.values()) request.control.abort();
+  catalogRequests.clear();
+  notifyCatalogListeners();
+}
+
 export function useAgentModelCatalog({
   provider,
   available,
@@ -95,48 +161,15 @@ export function useAgentModelCatalog({
   value: string;
   observedModel?: string;
 }) {
-  const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{
-    provider: string;
-    attempt: number;
-    catalog?: ModelCatalog;
-    error?: string;
-  } | null>(null);
+  const current = useSyncExternalStore(
+    subscribeToCatalogs,
+    () => (available ? catalogRequests.get(provider) : undefined),
+    () => undefined,
+  );
   useEffect(() => {
-    const control = new AbortController();
-    setResult(null);
-    if (!available) return;
-    void api(`models?provider=${encodeURIComponent(provider)}`, { signal: control.signal })
-      .then((r) => r.json())
-      .then((result) => {
-        if (
-          !Array.isArray(result.models) ||
-          result.models.some((item: ModelOption) => !validModelOption(provider, item))
-        )
-          throw new Error('The agent returned an invalid model catalog.');
-        const unavailable =
-          provider === 'cursor' ? readCursorUnavailableModels(result.unavailable) : [];
-        if (provider === 'cursor' && result.models.length === 0)
-          throw new Error('The agent returned an invalid model catalog.');
-        if (!control.signal.aborted)
-          setResult({
-            provider,
-            attempt,
-            catalog: {
-              models: result.models,
-              unavailable,
-              defaultModel: result.defaultModel,
-            },
-          });
-      })
-      .catch((e) => {
-        if (!control.signal.aborted)
-          setResult({ provider, attempt, error: e.message || 'Model discovery failed.' });
-      });
-    return () => control.abort();
-  }, [provider, available, attempt]);
-  const current =
-    available && result?.provider === provider && result.attempt === attempt ? result : null;
+    if (available && !current) loadAgentModelCatalog(provider);
+  }, [provider, available, current]);
+  const loading = available && !current?.catalog && !current?.error;
   const models = current?.catalog?.models ?? [];
   const unavailable = current?.catalog?.unavailable ?? [];
   const currentModel = value || current?.catalog?.defaultModel || observedModel;
@@ -145,9 +178,8 @@ export function useAgentModelCatalog({
     unavailable,
     currentModel,
     selected: models.find((model) => model.id === currentModel),
-    loading: available && !current,
+    loading,
     error: current?.error,
-    retry: () => setAttempt((value) => value + 1),
   };
 }
 
@@ -177,7 +209,10 @@ export default function ModelSelect({
   unavailable,
   currentModel,
   loading,
+  placeholder,
   error,
+  showErrorIcon,
+  composing,
   onChange,
   disabled,
 }: {
@@ -185,40 +220,53 @@ export default function ModelSelect({
   unavailable: CursorUnavailableModel[];
   currentModel: string;
   loading: boolean;
+  placeholder: string;
   error?: string;
+  showErrorIcon: boolean;
+  composing: RefObject<boolean>;
   onChange: (value: string) => void;
   disabled: boolean;
 }) {
   const selected = models.some((model) => model.id === currentModel);
-  const blocked = new Set(unavailable.map((model) => model.id));
+  const popupStatus = loading
+    ? 'Loading models…'
+    : error
+      ? 'Could not load models.'
+      : !models.length
+        ? 'No models available.'
+        : undefined;
   return (
-    <div className="composer-model-picker">
+    <div
+      className="composer-model-picker"
+      onPointerDownCapture={(event) => {
+        if (composing.current) event.preventDefault();
+      }}
+    >
       <Select
         label="Choose model"
-        popupClassName="model-menu"
-        value={currentModel}
-        placeholder={loading ? 'Loading model…' : 'Choose model'}
-        disabled={disabled || (!models.length && !currentModel)}
+        popupStatus={popupStatus}
+        popupClassName="model-menu composer-choice-menu"
+        popupMaxOptions={5}
+        value={selected ? currentModel : ''}
+        placeholder={placeholder}
+        disabled={disabled}
         compact
         showChevron={false}
         options={[
           ...models.map((model) => ({
             value: model.id,
             label: model.label,
+            ...(model.textInput === false && {
+              disabled: true,
+              description: 'This model does not accept text input.',
+            }),
           })),
           ...unavailableOptions(models, unavailable),
-          ...(currentModel && !selected && !blocked.has(currentModel)
-            ? [
-                {
-                  value: currentModel,
-                  label: currentModel,
-                },
-              ]
-            : []),
         ]}
+        onBeforeOpen={() => !composing.current}
         onChange={onChange}
       />
-      {error && (
+      {showErrorIcon && error && (
         <span
           className="model-list-error"
           role="status"

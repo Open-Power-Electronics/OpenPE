@@ -8,10 +8,17 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { Search, Library, RotateCw, Check } from 'lucide-react';
+import { Search, SearchX, Library, RotateCw, Check, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/bridge';
 import type { CapabilityHost } from '@/api/capabilities';
-import { propertyValue, unitGraphics, type LibraryEntry, type SymbolDetail } from '@/lib/library';
+import {
+  catalogSource,
+  isOnlineLibrary,
+  propertyValue,
+  unitGraphics,
+  type LibraryEntry,
+  type SymbolDetail,
+} from '@/lib/library';
 import { children, val, type SExpr } from '@/lib/sexpr';
 import Dialog from './Dialog';
 import Select from './Select';
@@ -29,6 +36,172 @@ export type FootprintDetail = LibraryEntry & {
   models: { path: string }[];
 };
 type Detail = SymbolDetail | FootprintDetail;
+function readLibraryDetail(
+  kind: 'symbols' | 'footprints',
+  id: string,
+  signal: AbortSignal,
+  host?: CapabilityHost,
+) {
+  return (
+    host
+      ? host.query('library.detail', { kind, id }, { signal })
+      : api(`libraries/${kind}?id=${encodeURIComponent(id)}`, { signal }).then((r) => r.json())
+  ) as Promise<Detail>;
+}
+
+function OnlineSymbolPreview({
+  detail,
+  unit,
+  host,
+  error,
+  onError,
+  retry,
+}: {
+  detail: SymbolDetail;
+  unit: number;
+  host?: CapabilityHost;
+  error: string;
+  onError: (message: string) => void;
+  retry: number;
+}) {
+  const [tab, setTab] = useState<'symbol' | 'footprint' | '3d'>('symbol');
+  const [footprint, setFootprint] = useState<FootprintDetail | null>(null);
+  const showPackage = tab !== 'symbol';
+  const identity = detail.footprint;
+  useEffect(() => {
+    if (!showPackage || !identity || footprint) return;
+    const control = new AbortController();
+    onError('');
+    void readLibraryDetail('footprints', identity, control.signal, host)
+      .then((loaded) => {
+        if (!('pads' in loaded) || loaded.id !== identity)
+          throw new Error('The footprint preview is unavailable.');
+        if (!control.signal.aborted) setFootprint(loaded);
+      })
+      .catch((error) => {
+        if (!control.signal.aborted) onError(error.message);
+      });
+    return () => control.abort();
+  }, [showPackage, identity, footprint, retry, host, onError]);
+  return (
+    <>
+      {identity && (
+        <div className="preview-tabs">
+          <button
+            aria-pressed={tab === 'symbol'}
+            onClick={() => {
+              onError('');
+              setTab('symbol');
+            }}
+          >
+            Symbol
+          </button>
+          <button aria-pressed={tab === 'footprint'} onClick={() => setTab('footprint')}>
+            Footprint
+          </button>
+          <button
+            aria-pressed={tab === '3d'}
+            disabled={footprint?.models.length === 0}
+            onClick={() => setTab('3d')}
+          >
+            3D model
+          </button>
+        </div>
+      )}
+      <div className="symbol-detail-preview">
+        {!showPackage ? (
+          <SymbolPreview library={detail.symbol} unit={unit} />
+        ) : error ? null : !footprint ? (
+          <WorkspaceLoading panel label="Loading footprint preview" />
+        ) : tab === 'footprint' ? (
+          <FootprintPreview footprint={footprint.footprint} />
+        ) : footprint.models.length ? (
+          <Suspense fallback={<WorkspaceLoading panel label="Loading 3D model" />}>
+            <ModelPreview id={footprint.id} />
+          </Suspense>
+        ) : (
+          <p>This footprint has no 3D model.</p>
+        )}
+      </div>
+    </>
+  );
+}
+const libraryHomepages = [
+  { id: 'jlceda', label: 'JLCEDA', domain: 'lceda.cn', href: 'https://lceda.cn/' },
+  { id: 'easyeda', label: 'EasyEDA', domain: 'easyeda.com', href: 'https://easyeda.com/' },
+] as const;
+
+function englishNoticeSections(notice: string) {
+  const [intro, ...sections] = notice.split(/【[^】/]+\/([A-Za-z][A-Za-z ]*)】/u);
+  const parts = [{ heading: '', text: intro }];
+  for (let i = 0; i < sections.length; i += 2)
+    parts.push({ heading: sections[i], text: sections[i + 1] });
+  const han = /\p{Script=Han}/u;
+  return parts
+    .map(({ heading, text }) => ({
+      heading,
+      text: han.test(text)
+        ? text
+            .split(/[\r\n。！？]+/u)
+            .map((line) => line.trim())
+            .filter((line) => /[A-Za-z]/.test(line) && !han.test(line))
+            .join('\n')
+        : text.trim(),
+    }))
+    .filter(({ text }) => text);
+}
+
+function JlcpcbAttribution({ notice }: { notice: string }) {
+  const [linkError, setLinkError] = useState(false);
+  const sections = englishNoticeSections(notice);
+  function guardActivation(event: KeyboardEvent<HTMLElement>) {
+    if (event.repeat || event.nativeEvent.isComposing || event.keyCode === 229)
+      event.preventDefault();
+  }
+  return (
+    <section className="library-info-section library-cad-source" aria-label="CAD source">
+      <h3>JLCEDA/EasyEDA Official Library</h3>
+      <div className="library-cad-source-links">
+        {libraryHomepages.map(({ id, label, domain, href }) => (
+          <a
+            key={id}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${label} official website`}
+            onKeyDown={guardActivation}
+            onClick={(event) => {
+              const desktop = window.openpe;
+              if (!desktop) return;
+              event.preventDefault();
+              setLinkError(false);
+              void desktop.openLibraryHomepage(id).catch(() => setLinkError(true));
+            }}
+          >
+            {domain}
+          </a>
+        ))}
+      </div>
+      {sections.length > 0 && (
+        <details className="library-cad-source-notice">
+          <summary aria-label="Library terms" onKeyDown={guardActivation}>
+            <ChevronRight size={16} aria-hidden="true" />
+          </summary>
+          <div className="library-cad-source-terms" lang="en" tabIndex={0}>
+            {sections.map(({ heading, text }, index) => (
+              <p key={index}>
+                {heading && <strong>{heading}</strong>}
+                {text}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
+      {linkError && <p role="status">Could not open the official website.</p>}
+    </section>
+  );
+}
+
 function LibraryInfoSection({
   title,
   children,
@@ -82,7 +255,7 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
       <LibraryInfoSection title="Basic information">
         <LibraryInfoRows
           rows={[
-            ['Source', detail.library === 'NextPCB' ? 'NextPCB' : 'KiCad'],
+            ['Source', catalogSource(detail.library)],
             ['Library', detail.library],
             ...(detail.manufacturer
               ? [['Manufacturer', detail.manufacturer] as [string, ReactNode]]
@@ -141,7 +314,8 @@ type BrowseSnapshot = {
   entries: LibraryEntry[];
   total: number;
   offset: number;
-  nextOffset: number;
+  nextOffset: number | null;
+  previewRequested: boolean;
   selected: string;
   detail: Detail | null;
   unit: number;
@@ -186,8 +360,12 @@ export default function LibraryChooser({
   const [total, setTotal] = useState(0),
     [offset, setOffset] = useState(0),
     [selected, setSelected] = useState('');
-  const [nextOffset, setNextOffset] = useState(0);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [resultsError, setResultsError] = useState('');
+  const [previewRequested, setPreviewRequested] = useState(false);
+  const [previewRetry, setPreviewRetry] = useState(0);
+  const [packagePreviewError, setPackagePreviewError] = useState('');
+  const [packagePreviewRetry, setPackagePreviewRetry] = useState(0);
   const [retry, setRetry] = useState(0);
   const [categoryStatus, setCategoryStatus] = useState<LibraryCategoryStatus>({
     source: '',
@@ -209,22 +387,28 @@ export default function LibraryChooser({
   const sourceSnapshots = useRef(new Map<string, BrowseSnapshot>());
   const restoredSearch = useRef(false);
   const restoredDetail = useRef<BrowseSnapshot | null>(null);
-  const librarySource = library === 'NextPCB' ? 'NextPCB' : 'KiCad';
+  const librarySource = catalogSource(library);
+  const online = isOnlineLibrary(library);
+  const previewEntry =
+    online && !previewRequested ? entries.find((entry) => entry.id === selected) : undefined;
   const failedCategories = categoryStatus.source === librarySource && Boolean(categoryStatus.error);
   const retryingCategories = categoryReload?.source === librarySource;
-  const suggestedCategory =
+  const suggestedCategoryId =
     library === 'NextPCB' && !category && !submittedQuery.trim()
-      ? categoryStatus.browseCategory
+      ? categoryStatus.browseCategoryId
       : undefined;
-  const searchCategory = category || suggestedCategory?.id || '';
-  const awaitingSearch = library === 'NextPCB' && !submittedQuery.trim() && !searchCategory;
+  const searchCategory = category || suggestedCategoryId || '';
+  const awaitingSearch = librarySource === 'NextPCB' && !submittedQuery.trim() && !searchCategory;
   const waitingCategories =
-    library === 'NextPCB' &&
+    librarySource === 'NextPCB' &&
     !submittedQuery.trim() &&
-    (categoryStatus.source !== 'NextPCB' || categoryStatus.pending);
+    (categoryStatus.source !== librarySource || categoryStatus.pending);
   const loadingInitial =
     retryingCategories ||
     (!error && !resultsError && ((!awaitingSearch && busy) || waitingCategories));
+  const hasEntries = entries.length > 0;
+  const canLoadMore = isOnlineLibrary(library) && nextOffset !== null && !resultsError;
+  const EmptyIcon = awaitingSearch ? Search : SearchX;
   const chooseLabel = actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign footprint');
   const refreshDisabled =
     busy || waitingCategories || retryingCategories || (awaitingSearch && !failedCategories);
@@ -237,20 +421,24 @@ export default function LibraryChooser({
   function invalidate() {
     setBusy(true);
     setResultsError('');
+    setPreviewRequested(false);
+    setPackagePreviewError('');
     setEntries([]);
     setTotal(0);
-    setNextOffset(0);
+    setNextOffset(null);
     setSelected('');
     setDetail(null);
     chosen.current = false;
   }
   function loadMore() {
-    if (busy || resultsError || nextOffset >= total) return;
+    if (busy || resultsError || nextOffset === null) return;
     setBusy(true);
     setOffset(nextOffset);
   }
   function selectEntry(id: string) {
+    if (online) setPreviewRequested(true);
     if (id === selected) return;
+    setPackagePreviewError('');
     setDetail(null);
     setSelected(id);
     chosen.current = false;
@@ -264,6 +452,20 @@ export default function LibraryChooser({
   }
   function refreshResults() {
     if (composing.current || refreshDisabled) return;
+    if (resultsError) {
+      setResultsError('');
+      setBusy(true);
+      setRetry((value) => value + 1);
+      return;
+    }
+    if (error && selected) {
+      setPreviewRetry((value) => value + 1);
+      return;
+    }
+    if (packagePreviewError) {
+      setPackagePreviewRetry((value) => value + 1);
+      return;
+    }
     if (failedCategories) {
       setCategoryReload({ source: librarySource, serial: ++categoryReloadSerial.current });
       return;
@@ -275,8 +477,8 @@ export default function LibraryChooser({
   function changeLibrary(nextLibrary: string, nextCategory: string) {
     if (nextLibrary === library && nextCategory === category) return;
     setCategoryReload(null);
-    const source = library === 'NextPCB' ? 'NextPCB' : 'KiCad';
-    const nextSource = nextLibrary === 'NextPCB' ? 'NextPCB' : 'KiCad';
+    const source = librarySource;
+    const nextSource = catalogSource(nextLibrary);
     if (source !== nextSource)
       sourceSnapshots.current.set(source, {
         ready: !busy && !resultsError,
@@ -288,6 +490,7 @@ export default function LibraryChooser({
         total,
         offset,
         nextOffset,
+        previewRequested,
         selected,
         detail,
         unit,
@@ -315,6 +518,7 @@ export default function LibraryChooser({
       setTotal(previous.total);
       setOffset(previous.offset);
       setNextOffset(previous.nextOffset);
+      setPreviewRequested(previous.previewRequested);
       setSelected(previous.selected);
       setDetail(previous.detail);
       setUnit(previous.unit);
@@ -353,9 +557,10 @@ export default function LibraryChooser({
     setResultsError('');
     if (offset === 0) {
       setError('');
+      setPreviewRequested(false);
       setEntries([]);
       setTotal(0);
-      setNextOffset(0);
+      setNextOffset(null);
       setSelected('');
       setDetail(null);
     }
@@ -394,12 +599,15 @@ export default function LibraryChooser({
             }
             return combined;
           });
-          // Remote pages can overlap. Paging follows consumed provider rows,
-          // independently of the unique entries displayed in the chooser.
-          setNextOffset(offset + incoming.length);
-          if (library !== 'NextPCB') setLibraries(data.libraries);
-          setTotal(data.entries.length ? data.total : offset);
-          if (offset === 0) setSelected(data.entries[0]?.id || '');
+          if (isOnlineLibrary(library)) {
+            setNextOffset(data.nextOffset);
+          } else {
+            const consumed = offset + incoming.length;
+            setNextOffset(incoming.length && consumed < data.total ? consumed : null);
+            setLibraries(data.libraries);
+            setTotal(data.total);
+          }
+          if (incoming.length) setSelected((current) => current || incoming[0].id);
           setBusy(false);
         })
         .catch((e) => {
@@ -432,17 +640,11 @@ export default function LibraryChooser({
     setDetail(null);
     setError('');
     setUnit(1);
-    setTab(initialPreview);
+    setTab(online ? '2d' : initialPreview);
     setModel(0);
-    if (!selected) return;
+    if (!selected || (online && !previewRequested)) return;
     const control = new AbortController();
-    void (
-      capabilityHost
-        ? capabilityHost.query('library.detail', { kind, id: selected }, { signal: control.signal })
-        : api(`libraries/${kind}?id=${encodeURIComponent(selected)}`, {
-            signal: control.signal,
-          }).then((r) => r.json())
-    )
+    void readLibraryDetail(kind, selected, control.signal, capabilityHost)
       .then((value) => {
         const data = value as Detail;
         if (!control.signal.aborted) setDetail(data);
@@ -451,7 +653,7 @@ export default function LibraryChooser({
         if (!control.signal.aborted) setError(e.message);
       });
     return () => control.abort();
-  }, [kind, selected, capabilityHost, initialPreview]);
+  }, [kind, selected, capabilityHost, initialPreview, online, previewRequested, previewRetry]);
   const invalid =
     detail && 'error' in detail && detail.error
       ? detail.error
@@ -459,6 +661,12 @@ export default function LibraryChooser({
         ? 'This footprint has no 3D model.'
         : '';
   const ready = canChoose && !busy && !error && detail?.id === selected && !!detail && !invalid;
+  const footerError =
+    resultsError ||
+    error ||
+    packagePreviewError ||
+    invalid ||
+    (failedCategories && categoryStatus.error);
   const choose = () => {
     if (ready && detail && !chosen.current) {
       chosen.current = true;
@@ -505,11 +713,22 @@ export default function LibraryChooser({
         onClose={onClose}
         footer={
           <>
+            {footerError && (
+              <p className="library-footer-feedback" role="alert">
+                {footerError}
+              </p>
+            )}
             <div className="dialog-footer-toolbar">
               <button
                 className="icon-button dialog-footer-icon"
-                aria-label="Refresh library"
-                title="Refresh"
+                aria-label={
+                  resultsError
+                    ? 'Retry loading results'
+                    : error || packagePreviewError
+                      ? 'Retry loading preview'
+                      : 'Refresh library'
+                }
+                title={resultsError || error || packagePreviewError ? 'Retry' : 'Refresh'}
                 disabled={refreshDisabled}
                 onClick={refreshResults}
                 onKeyDown={blockComposingActivation}
@@ -551,7 +770,9 @@ export default function LibraryChooser({
                   : 'Searching…'
                 : resultsError && !entries.length
                   ? 'Unavailable'
-                  : `${total.toLocaleString()} results`}
+                  : isOnlineLibrary(library)
+                    ? `${entries.length.toLocaleString()} ${entries.length === 1 ? 'result' : 'results'} loaded`
+                    : `${total.toLocaleString()} results`}
           </span>
         </div>
         <div className="library-search">
@@ -559,7 +780,11 @@ export default function LibraryChooser({
           <input
             autoFocus
             aria-label={kind === 'symbols' ? 'Search components' : 'Search footprints'}
-            placeholder="Search by name, description or keyword…"
+            placeholder={
+              librarySource === 'JLCPCB'
+                ? 'Search by model, keyword or part number…'
+                : 'Search by name, description or keyword…'
+            }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onCompositionStart={() => {
@@ -589,29 +814,9 @@ export default function LibraryChooser({
             Search
           </button>
         </div>
-        {error && (
-          <p className="dialog-error" role="alert">
-            {error}
-          </p>
-        )}
-        {resultsError && (
-          <div className="library-results-error" role="alert">
-            <span>{resultsError}</span>
-            <button
-              className="icon-button"
-              aria-label="Retry loading results"
-              title="Retry"
-              onClick={() => {
-                setResultsError('');
-                setBusy(true);
-                setRetry((value) => value + 1);
-              }}
-            >
-              <RotateCw size={16} aria-hidden="true" />
-            </button>
-          </div>
-        )}
-        <div className={`library-browser${kind === 'footprints' ? ' assignment-browser' : ''}`}>
+        <div
+          className={`library-browser${kind === 'footprints' ? ' assignment-browser' : ''}${hasEntries ? '' : ' library-browser-empty'}`}
+        >
           <div
             ref={results}
             className={`library-results${kind === 'symbols' ? ' library-component-results' : ''}`}
@@ -623,12 +828,9 @@ export default function LibraryChooser({
               if (list.scrollHeight - list.scrollTop - list.clientHeight < 120) loadMore();
             }}
           >
-            {suggestedCategory && (
-              <p className="library-browse-scope">Browse suggestions · {suggestedCategory.name}</p>
-            )}
-            {kind === 'symbols' && (
+            {hasEntries && kind === 'symbols' && (
               <div className="library-result-columns" aria-hidden="true">
-                <span>{library === 'NextPCB' ? 'Model' : 'Component'}</span>
+                <span>{isOnlineLibrary(library) ? 'Model' : 'Component'}</span>
                 <span>Package</span>
               </div>
             )}
@@ -664,24 +866,47 @@ export default function LibraryChooser({
                 )}
               </button>
             ))}
-            {!entries.length && loadingInitial && (
-              <WorkspaceLoading panel label="Loading library" />
-            )}
-            {categoryStatus.source === library && categoryStatus.error && !entries.length && (
-              <p>{categoryStatus.error}</p>
-            )}
+            {!hasEntries && loadingInitial && <WorkspaceLoading panel label="Loading library" />}
             {!busy &&
-              !entries.length &&
+              !hasEntries &&
               !error &&
               !resultsError &&
-              !waitingCategories &&
+              !loadingInitial &&
               !categoryStatus.error && (
-                <p>
-                  {awaitingSearch
-                    ? 'Enter a model or keyword, then search.'
-                    : `No matching ${kind}.`}
-                </p>
+                <div className="library-empty-state">
+                  <span className="library-empty-icon">
+                    <EmptyIcon size={20} aria-hidden="true" />
+                  </span>
+                  <h3>
+                    {awaitingSearch
+                      ? 'Search the library'
+                      : canLoadMore
+                        ? 'No matching footprints in this batch.'
+                        : `No matching ${kind}.`}
+                  </h3>
+                  {awaitingSearch ? (
+                    <p>Enter a model or keyword, then search.</p>
+                  ) : (
+                    !canLoadMore && <p>Try another keyword or category.</p>
+                  )}
+                </div>
               )}
+            {canLoadMore && (
+              <button
+                className={`library-load-more${hasEntries ? '' : ' dialog-button secondary'}`}
+                disabled={busy}
+                onClick={loadMore}
+                onKeyDown={(event) => {
+                  blockComposingActivation(event);
+                  if (event.key === 'Enter') {
+                    event.stopPropagation();
+                    if (event.repeat || composing.current) event.preventDefault();
+                  }
+                }}
+              >
+                Load more
+              </button>
+            )}
           </div>
           <div className={`library-detail${kind === 'footprints' ? ' assignment-detail' : ''}`}>
             {detail ? (
@@ -694,9 +919,21 @@ export default function LibraryChooser({
                 </div>
                 {'symbol' in detail ? (
                   <>
-                    <div className="symbol-detail-preview">
-                      <SymbolPreview library={detail.symbol} unit={unit} />
-                    </div>
+                    {online ? (
+                      <OnlineSymbolPreview
+                        key={detail.id}
+                        detail={detail}
+                        unit={unit}
+                        host={capabilityHost}
+                        error={packagePreviewError}
+                        onError={setPackagePreviewError}
+                        retry={packagePreviewRetry}
+                      />
+                    ) : (
+                      <div className="symbol-detail-preview">
+                        <SymbolPreview library={detail.symbol} unit={unit} />
+                      </div>
+                    )}
                     {detail.units > 1 && (
                       <Select
                         label="Symbol unit"
@@ -750,17 +987,47 @@ export default function LibraryChooser({
                   </>
                 )}
                 <LibraryInformation detail={detail} unit={unit} />
-                {invalid && (
-                  <p className="dialog-error" role="alert">
-                    {invalid}
-                  </p>
+                {detail.library === 'JLCPCB' && detail.attribution && (
+                  <JlcpcbAttribution key={detail.id} notice={detail.attribution.notice} />
                 )}
+              </>
+            ) : previewEntry ? (
+              <>
+                <div className="library-detail-heading">
+                  <strong className="library-detail-title">{previewEntry.name}</strong>
+                  <small className="library-detail-id">{previewEntry.id}</small>
+                </div>
+                <div className="library-detail-sections">
+                  <LibraryInfoSection title="Basic information" wide>
+                    <LibraryInfoRows
+                      rows={[
+                        ['Source', librarySource],
+                        ...(previewEntry.manufacturer
+                          ? [['Manufacturer', previewEntry.manufacturer] as [string, ReactNode]]
+                          : []),
+                        ...(previewEntry.package
+                          ? [['Package', previewEntry.package] as [string, ReactNode]]
+                          : []),
+                      ]}
+                    />
+                  </LibraryInfoSection>
+                  {previewEntry.description && (
+                    <LibraryInfoSection title="Description" wide>
+                      <p>{previewEntry.description}</p>
+                    </LibraryInfoSection>
+                  )}
+                </div>
+                <button
+                  className="dialog-button secondary library-preview-action"
+                  onClick={() => selectEntry(previewEntry.id)}
+                  onKeyDown={blockComposingActivation}
+                >
+                  Preview
+                </button>
               </>
             ) : !error && selected ? (
               <WorkspaceLoading panel label="Loading preview" />
-            ) : loadingInitial ? null : (
-              <p>Select a library entry.</p>
-            )}
+            ) : null}
           </div>
         </div>
       </Dialog>

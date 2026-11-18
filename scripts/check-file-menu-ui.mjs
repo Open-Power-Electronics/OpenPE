@@ -4,12 +4,157 @@ import { chromium } from 'playwright';
 import { mkdir, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { fileMenuAction } from './file-menu-test-helpers.mjs';
-import { fillSource, fillNativeProject, readNativeFiles } from './source-editor-test-helpers.mjs';
+import {
+  fillSource,
+  fillNativeProject,
+  readNativeFiles,
+  readSource,
+} from './source-editor-test-helpers.mjs';
+import { waitForAsync } from './async-browser-test-helpers.mjs';
 import { parseProject, projectNativeFiles } from '../server/project-format.mjs';
 const orderedNativeFiles = (bundle) => ({
   ...bundle,
   files: bundle.files.toSorted((a, b) => a.name.localeCompare(b.name)),
 });
+const editOnly = process.argv.includes('--edit');
+
+async function checkEditMenu(page) {
+  const edit = page.getByRole('combobox', { name: 'Edit', exact: true });
+  const menu = page.getByRole('listbox', { name: 'Edit', exact: true });
+  const action = (name) => menu.getByRole('option', { name, exact: true });
+  const choose = async (name) => {
+    await edit.click();
+    await action(name).click();
+    await menu.waitFor({ state: 'hidden' });
+  };
+  const canvas = page.getByTestId('schematic-canvas');
+  const sourceTab = page.getByRole('button', { name: 'Source', exact: true });
+  const schematicTab = page.getByRole('button', { name: 'Schematic', exact: true });
+  await sourceTab.click();
+  const nativeBaseline = await readNativeFiles(page);
+  await schematicTab.click();
+  await canvas.focus();
+  const initialCount = await canvas.locator('[data-selection-id]').count();
+  assert.ok(initialCount > 0);
+  const count = (expected) =>
+    waitForAsync(
+      page,
+      (expected) =>
+        document.querySelectorAll('[data-testid="schematic-canvas"] [data-selection-id]').length ===
+        expected,
+      expected,
+    );
+  const menuTypography = (row) =>
+    row.locator('strong').evaluate((label) => {
+      const { fontFamily, fontSize, fontWeight, lineHeight } = getComputedStyle(label);
+      return { fontFamily, fontSize, fontWeight, lineHeight };
+    });
+  const file = page.getByRole('combobox', { name: 'File', exact: true });
+  await file.click();
+  const fileLabel = await menuTypography(
+    page.getByRole('option', { name: 'New project', exact: true }),
+  );
+  await file.press('Escape');
+  await edit.click();
+  assert.equal(await action('Find').getAttribute('aria-keyshortcuts'), 'Control+F');
+  assert.doesNotMatch(await menu.textContent(), /\b(?:Ctrl|Cmd|Control|Meta)\+/);
+  const label = await menuTypography(action('Find'));
+  assert.deepEqual(label, fileLabel, 'Edit and File use the same menu typography.');
+  await page.evaluate(() => document.documentElement.style.setProperty('--font-step', '2px'));
+  const largerLabel = await menuTypography(action('Find'));
+  assert.equal(parseFloat(largerLabel.fontSize), parseFloat(label.fontSize) + 2);
+  await page.evaluate(() => document.documentElement.style.removeProperty('--font-step'));
+  assert.equal(await action('Cut').getAttribute('aria-disabled'), 'true');
+  assert.equal(await action('Select all').getAttribute('aria-keyshortcuts'), 'Control+A');
+  await action('Select all').click();
+  await waitForAsync(
+    page,
+    () => document.activeElement?.getAttribute('data-testid') === 'schematic-canvas',
+  );
+  await canvas.press('Control+x');
+  await waitForAsync(
+    page,
+    (count) =>
+      document.querySelectorAll('[data-testid="schematic-canvas"] [data-selection-id]').length <
+      count,
+    initialCount,
+  );
+  const cutCount = await canvas.locator('[data-selection-id]').count();
+  await canvas.press('Control+z');
+  await count(initialCount);
+  await choose('Redo');
+  await count(cutCount);
+  await choose('Paste');
+  await count(initialCount);
+  await canvas.press('Control+z');
+  await count(cutCount);
+  await canvas.press('Control+z');
+  await count(initialCount);
+  await canvas.press('Control+y');
+  await count(cutCount);
+  await choose('Undo');
+  await count(initialCount);
+  await choose('Find');
+  const previewFind = page.getByRole('search', { name: 'Find in Preview', exact: true });
+  await previewFind.getByRole('searchbox').press('Escape');
+  await previewFind.waitFor({ state: 'hidden' });
+
+  const draft = page.getByRole('textbox', { name: 'Message your agent', exact: true });
+  await draft.fill('Draft');
+  await draft.dispatchEvent('compositionstart');
+  await page.keyboard.press('Control+,');
+  await edit.click();
+  assert.equal(await menu.count(), 0);
+  assert.equal(await draft.evaluate((element) => document.activeElement === element), true);
+  await draft.dispatchEvent('compositionend');
+  await choose('Find');
+  const find = page.getByRole('search', { name: 'Find in Agent', exact: true });
+  await find.waitFor();
+  await find.getByRole('searchbox').press('Escape');
+  assert.equal(await draft.evaluate((element) => document.activeElement === element), true);
+  await choose('Select all');
+  await waitForAsync(page, () => document.activeElement?.selectionEnd === 5);
+  await draft.evaluate((element) => {
+    if (element.selectionStart !== 0) throw Error('The draft was not selected.');
+    navigator.clipboard.readText = async () => 'Pasted draft';
+  });
+  await choose('Paste');
+  await waitForAsync(page, () => document.activeElement?.value === 'Pasted draft');
+  await choose('Undo');
+  await waitForAsync(page, () => document.activeElement?.value === 'Draft');
+  await choose('Redo');
+  await waitForAsync(page, () => document.activeElement?.value === 'Pasted draft');
+  await choose('Select all');
+  await waitForAsync(page, () => document.activeElement?.selectionEnd === 12);
+  await choose('Delete');
+  await waitForAsync(page, () => document.activeElement?.value === '');
+  assert.equal(await canvas.locator('[data-selection-id]').count(), initialCount);
+  await page.keyboard.press('Control+,');
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await settings.waitFor();
+  await page.keyboard.press('Escape');
+  await settings.waitFor({ state: 'hidden' });
+
+  await sourceTab.click();
+  assert.deepEqual(
+    orderedNativeFiles(await readNativeFiles(page)),
+    orderedNativeFiles(nativeBaseline),
+  );
+  const source = page.getByRole('textbox', { name: 'Project file source', exact: true });
+  const baseline = await readSource(page);
+  await source.press('Control+End');
+  await source.press('Enter');
+  await choose('Undo');
+  await waitForAsync(page, () => document.activeElement?.classList.contains('cm-content'));
+  assert.equal(await readSource(page), baseline);
+  await source.focus();
+  await choose('Redo');
+  await waitForAsync(page, () => document.activeElement?.classList.contains('cm-content'));
+  assert.equal(await readSource(page), `${baseline}\n`);
+  await source.press('Control+z');
+  await schematicTab.click();
+  await canvas.waitFor();
+}
 
 // Isolated renderer: native save/export boundaries are mocked; no Electron or file writes.
 await mkdir('test-results', { recursive: true });
@@ -33,7 +178,7 @@ const browser = await chromium.launch({
   headless: true,
 });
 try {
-  for (const titleBarOverlay of [true, false]) {
+  for (const titleBarOverlay of editOnly ? [true] : [true, false]) {
     const page = await browser.newPage({ viewport: { width: 1120, height: 760 } });
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -131,6 +276,12 @@ try {
       throw error;
     });
     assert.equal(await fileMenu.count(), 1, 'File is available with or without a native caption.');
+    if (editOnly) {
+      await checkEditMenu(page);
+      assert.deepEqual(errors, []);
+      await page.close();
+      continue;
+    }
     for (const name of ['Save', 'Save as', 'Export'])
       assert.equal(
         await page.locator('.app-header').getByRole('button', { name, exact: true }).count(),
@@ -262,7 +413,9 @@ try {
     await page.close();
   }
   console.log(
-    'File menus: Save, Save as, export, Source protection, focus and caption/fallback access passed.',
+    editOnly
+      ? 'Edit menu: drawing and text commands, shortcuts, focus, Find and Source history passed.'
+      : 'File menus: Save, Save as, export, Source protection, focus and caption/fallback access passed.',
   );
 } finally {
   await browser.close();

@@ -15,6 +15,7 @@ const licensePaths = new Set([
     'emc-flyback/LICENSE',
     'ti-models',
     'ngspice',
+    'quickjs',
     'thermal',
     'ai-pcb-layout',
     'occt-import-js',
@@ -54,7 +55,15 @@ await mkdir('test-results', { recursive: true });
 const bundle = await build({
   stdin: {
     contents: aboutOnly
-      ? "import React,{useState} from 'react';import{createRoot}from'react-dom/client';import AboutDialog from './components/AboutDialog';function Fixture(){const[open,setOpen]=useState(false);return <main><button onClick={()=>setOpen(true)}>Open About</button>{open&&<AboutDialog onClose={()=>setOpen(false)}/>}</main>};createRoot(document.getElementById('root')).render(<Fixture/>);"
+      ? `import React,{lazy,useState} from 'react';import{createRoot}from'react-dom/client';
+        import AboutDialog from './components/AboutDialog';import DeferredDialog from './components/DeferredDialog';
+        const About = lazy(() => new Promise((resolve) => {
+          window.finishAboutLoading = () => resolve({default: AboutDialog});
+        }));
+        function Fixture(){const[open,setOpen]=useState(false);const close=()=>setOpen(false);
+          return <main><button onClick={()=>setOpen(true)}>Open About</button>{open&&
+            <DeferredDialog title="About OpenPE" onClose={close} compact wide><About onClose={close}/></DeferredDialog>
+          }</main>};createRoot(document.getElementById('root')).render(<Fixture/>);`
       : "import React from 'react'; import {createRoot} from 'react-dom/client'; import Workspace from './components/DesktopWorkspace'; createRoot(document.getElementById('root')).render(<Workspace/>);",
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -106,7 +115,8 @@ try {
   }, exampleSources);
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/agent-settings') return route.fulfill({json:{followUpMode:'queue'}});
+    if (url.pathname === '/api/agent-settings')
+      return route.fulfill({ json: { followUpMode: 'queue' } });
     if (licensePaths.has(url.pathname)) {
       licenseRequests.push(url.pathname);
       const body = await readFile('public' + url.pathname, 'utf8');
@@ -352,14 +362,24 @@ async function checkAbout(page, errors) {
     assert.ok(box.x + box.width <= viewport.width - 23);
     assert.ok(box.y + box.height <= viewport.height - 23);
     assert.ok(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+    return box;
   };
+  await opener.click();
+  await dialog.getByRole('status', { name: 'Loading About OpenPE' }).waitFor();
+  assert.ok((await checkBounds()).height < 320, 'The loading dialog starts compact.');
+  await page.evaluate(() => window.finishAboutLoading());
+  await dialog.getByRole('heading', { name: 'OpenPE', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
   for (const theme of ['light', 'dark']) {
     await page.evaluate((value) => {
       document.documentElement.dataset.theme = value;
     }, theme);
     await opener.click();
     await dialog.getByRole('heading', { name: 'OpenPE', exact: true }).waitFor();
-    await dialog.getByText('Electrical Engineering Studio', { exact: true }).waitFor();
+    await dialog
+      .getByText('AI-Native Workbench for Power Electronic Engineer', { exact: true })
+      .waitFor();
     await waitForAsync(page, () =>
       [...document.querySelectorAll('dialog img')].every(
         (image) => image.complete && image.naturalWidth > 0,
@@ -368,7 +388,12 @@ async function checkAbout(page, errors) {
     assert.equal(await dialog.getByRole('button', { name: 'Done', exact: true }).count(), 0);
     assert.equal(await dialog.locator('details[open]').count(), 0);
     assert.equal(licenseRequests.length, 0, 'Collapsed licenses perform no file requests.');
-    await checkBounds();
+    const compact = await checkBounds();
+    assert.ok(compact.height < 240, 'The collapsed About dialog fits its contents.');
+    await dialog.getByRole('button', { name: 'Maximize dialog', exact: true }).click();
+    assert.equal((await dialog.boundingBox()).width, page.viewportSize().width);
+    await dialog.getByRole('button', { name: 'Restore dialog', exact: true }).click();
+    assert.equal((await checkBounds()).height, compact.height);
     await dialog.screenshot({ path: `test-results/about-${theme}.png` });
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'detached' });
@@ -394,8 +419,8 @@ async function checkAbout(page, errors) {
   const names = await dialog.locator('details[data-license] > summary').allTextContents();
   assert.deepEqual(names.slice(0, 3), [
     'KiCad libraries',
-    'KiCad demo notices',
-    'KiCad libraries',
+    'Reference circuit notices',
+    'EMC Flyback notices',
   ]);
   assert.deepEqual(names.slice(-3), ['Agent product marks', 'DeepSeek Harness icon', 'Pi icon']);
   for (const entry of await dialog.locator('details[data-license]').all()) {
@@ -409,6 +434,12 @@ async function checkAbout(page, errors) {
     assert.equal(await entry.locator('pre').textContent(), licenseBodies.get(pathname));
   }
   const first = dialog.locator('details[data-license]').first();
+  await checkBounds();
+  assert.ok(
+    await dialog
+      .locator('.dialog-content')
+      .evaluate((element) => element.scrollHeight > element.clientHeight),
+  );
   await first.locator('summary').click();
   await first.locator('pre').waitFor({ state: 'visible' });
   await dialog.screenshot({ path: 'test-results/about-licenses.png' });

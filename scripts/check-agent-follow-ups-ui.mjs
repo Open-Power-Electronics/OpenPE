@@ -15,12 +15,12 @@ const bundle = await build({
   import {emptyCircuit} from './lib/circuit';import {defaultAppearance} from './lib/appearance';
   const doc=emptyCircuit(), agents=[{id:'codex',available:true,supportsEffort:true}], noop=()=>{};
   function Fixture(){const [sessions,setSessions]=useState([{id:'first',messages:[],draft:''},{id:'second',messages:[],draft:''}]);
-    const [active,setActive]=useState('first'),[settings,setSettings]=useState(false);
+    const [active,setActive]=useState('first'),[settings,setSettings]=useState(false),[model,setModel]=useState('fixture-model');
     const update=(id,key,value)=>setSessions(items=>items.map(item=>item.id!==id?item:{...item,[key]:typeof value==='function'?value(item[key]):value}));
     window.sessions=sessions;
     return <><nav><button onClick={()=>setSettings(true)}>Settings</button><button onClick={()=>setActive(active==='first'?'second':'first')}>Switch session</button></nav>
       <main>{sessions.map(session=><Chat key={session.id} doc={doc} agents={agents} provider="codex" effort="low" setEffort={noop}
-        approvalMode="review" setApprovalMode={noop} model="fixture-model" setModel={noop} messages={session.messages} setMessages={v=>update(session.id,'messages',v)}
+        approvalMode="review" setApprovalMode={noop} model={model} setModel={setModel} messages={session.messages} setMessages={v=>update(session.id,'messages',v)}
         input={session.draft} setInput={v=>update(session.id,'draft',v)} annotations={[]} setAnnotations={noop}
         onSettings={()=>setSettings(true)} onApply={()=>false} active={session.id===active} sessionId={session.id} conversationTitle={session.id} onRunningChange={noop}/>)}</main>
       {settings&&<Settings appearance={{appearance:defaultAppearance,update:noop,error:'',ready:true,resolvedTheme:'light'}} agents={agents}
@@ -30,6 +30,7 @@ const bundle = await build({
   },
   bundle: true,
   write: false,
+  outdir: 'test-results/agent-follow-ups-ui-bundle',
   platform: 'browser',
   jsx: 'automatic',
   define: { 'process.env.NODE_ENV': '"development"' },
@@ -116,7 +117,10 @@ try {
     if (pathname === '/api/models')
       return route.fulfill({
         json: {
-          models: [{ id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium'] }],
+          models: [
+            { id: 'fixture-model', label: 'Fixture model', efforts: ['low', 'medium'] },
+            { id: 'fixture/gpt-6-astra', label: 'GPT-6-Astra', efforts: ['low', 'medium'] },
+          ],
           defaultModel: 'fixture-model',
         },
       });
@@ -131,6 +135,7 @@ try {
   await page.goto('http://localhost');
   for (const file of ['app/globals.css', 'app/workspace.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
+  await page.addStyleTag({ content: bundle.outputFiles.find((file) => file.path.endsWith('.css')).text });
   await page.addStyleTag({
     content:
       'body{overflow:auto}nav{display:flex;gap:16px;padding:12px}main{width:448px;height:800px;margin:0 auto}main>.chat-panel{height:100%}',
@@ -168,12 +173,15 @@ try {
     'Suggestions never auto-send.',
   );
   await input.fill('Initial task');
+  await chat.getByRole('combobox', { name: 'Choose model', exact: true }).click();
+  await page.getByRole('option', { name: 'GPT-6-Astra', exact: true }).click();
   await button('Send message').click();
   await assertInputFocus('Pointer Send returns focus to the composer for a follow-up.');
   await page.keyboard.type('Immediate next draft');
   assert.equal(await input.inputValue(), 'Immediate next draft');
   await input.fill('');
   await waitRequests(1);
+  assert.equal(await page.evaluate(() => window.requests[0].body.model), 'fixture/gpt-6-astra');
   await button('Settings').focus();
   await page.evaluate(() => window.ready(0));
   const collapsedInputHeight = (await input.boundingBox()).height;
@@ -674,6 +682,7 @@ try {
   await page.evaluate(() => window.complete(0));
   await waitRequests(2);
   assert.equal(await page.evaluate(() => window.requests[1].body.prompt), 'Second queued');
+  assert.equal(await page.evaluate(() => window.requests[1].body.model), 'fixture/gpt-6-astra');
   assert.ok(
     await page.evaluate(() =>
       window.requests[1].body.history.some((m) => m.text === 'First queued'),

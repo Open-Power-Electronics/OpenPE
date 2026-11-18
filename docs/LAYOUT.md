@@ -66,9 +66,9 @@ and mutable inputs retry/revalidate.
 Layout and Model expose pending/failed package synchronization. Entering either
 view retries a failed preparation, and Model offers explicit Retry without
 replacing its retained scene or camera. Pending Source and close gates block
-retry. NextPCB package preparation joins its native footprint library and
-portable model references to the originating edit; resource delivery and offline
-local package reuse follow [Libraries](LIBRARIES.md#nextpcb-online-catalog).
+retry. Online package preparation adds its native footprint library and any
+portable model references to the originating edit. [Libraries](LIBRARIES.md#catalog-service-and-chooser)
+owns resource delivery and offline local package reuse.
 
 A nonblank assigned Footprint makes an instance physical. Unassigned instances
 create no package or missing-package warning. Clearing assignment or deleting a

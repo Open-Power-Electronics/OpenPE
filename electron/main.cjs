@@ -172,6 +172,7 @@ app.whenReady().then(async () => {
     simulationModelFetcher: modelFetcher,
     datasheetFetcher: modelFetcher,
     nextpcbFetcher: modelFetcher,
+    jlcpcbFetcher: modelFetcher,
     libraryModelFetcher: modelFetcher,
     datasheetRoots: { examples: examplesRoot, project: projectRoot },
     simulationProjectRoot: projectRoot,
@@ -213,6 +214,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('openpe:connection', (event) => {
     trusted(event);
     return { base: service.base, token: service.token };
+  });
+  ipcMain.handle('openpe:open-library-homepage', async (event, site) => {
+    trusted(event);
+    if (site === 'jlceda') return shell.openExternal('https://lceda.cn/');
+    if (site === 'easyeda') return shell.openExternal('https://easyeda.com/');
+    throw new Error('Unknown library homepage.');
   });
   registerPluginInstaller({ ipcMain, dialog, authorize: trusted, getWindow: () => win, service });
   registerCursorCredential({ ipcMain, authorize: trusted, store: cursorCredentials });

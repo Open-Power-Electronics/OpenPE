@@ -2,9 +2,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CapabilityHost } from '@/api/capabilities';
 import { api } from '@/lib/bridge';
+import {
+  catalogSource,
+  isOnlineLibrary,
+  librarySources,
+  type LibrarySource as Source,
+} from '@/lib/library';
 import Select, { type SelectOption } from './Select';
 
-type Source = 'KiCad' | 'NextPCB';
 type Category = { id: string; name: string; children: Category[] };
 export type LibraryCategoryReload = { source: Source; serial: number };
 export type LibraryCategoryStatus = {
@@ -12,7 +17,7 @@ export type LibraryCategoryStatus = {
   pending: boolean;
   error: string;
   reloadSerial: number;
-  browseCategory?: { id: string; name: string };
+  browseCategoryId?: string;
 };
 
 function categoryPath(categories: Category[], id: string): Category[] | undefined {
@@ -59,10 +64,11 @@ export default function LibrarySourceSelect({
   const [loading, setLoading] = useState<Source | null>(null);
   const [completedReload, setCompletedReload] = useState(0);
   const consumedReload = useRef(0);
-  const source: Source = library === 'NextPCB' ? 'NextPCB' : 'KiCad';
-  const activeCategory = source === 'NextPCB' ? category : library;
+  const source = catalogSource(library);
+  const online = isOnlineLibrary(source);
+  const activeCategory = online ? category : library;
   const localCategories = libraries
-    .filter((name) => name !== 'NextPCB')
+    .filter((name) => catalogSource(name) === 'KiCad')
     .map((name) => ({ id: name, name, children: [] }));
   const categoriesFor = (provider: Source) =>
     provider === 'KiCad' && localCategories.length ? localCategories : catalogs[provider];
@@ -127,28 +133,21 @@ export default function LibrarySourceSelect({
   }, [request, kind, capabilityHost]);
 
   const categories = categoriesFor(source);
+  const cascading =
+    source === 'NextPCB' ||
+    (online && (!categories || categories.some((item) => item.children.length)));
   const categoryPending = !categories || loading === source;
   const categoryError = errors[source] ?? '';
-  const browseCategory = categoryPath(catalogs.NextPCB ?? [], '1737')?.at(-1);
+  const browseCategoryId = categoryPath(catalogs.NextPCB ?? [], '1737')?.at(-1)?.id;
   useEffect(() => {
     onStatus?.({
       source,
       pending: categoryPending && !categoryError,
       error: categoryError,
       reloadSerial: completedReload,
-      ...(browseCategory
-        ? { browseCategory: { id: browseCategory.id, name: browseCategory.name } }
-        : {}),
+      browseCategoryId,
     });
-  }, [
-    source,
-    categoryPending,
-    categoryError,
-    completedReload,
-    browseCategory?.id,
-    browseCategory?.name,
-    onStatus,
-  ]);
+  }, [source, categoryPending, categoryError, completedReload, browseCategoryId, onStatus]);
   const options: SelectOption[] = [
     { value: '', label: 'All categories' },
     ...(categories
@@ -168,19 +167,20 @@ export default function LibrarySourceSelect({
   ];
   const path = activeCategory ? (categoryPath(categories ?? [], activeCategory) ?? []) : [];
   return (
-    <div className="library-source-filters" data-source={source}>
+    <div
+      className="library-source-filters"
+      data-source={source}
+      data-category-levels={cascading ? 2 : 1}
+    >
       <Select
         label="Library source"
         value={source}
-        options={[
-          { value: 'KiCad', label: 'KiCad' },
-          { value: 'NextPCB', label: 'NextPCB' },
-        ]}
+        options={librarySources.map((value) => ({ value, label: value }))}
         onChange={(provider) => {
-          if (provider !== source) onChange(provider === 'NextPCB' ? 'NextPCB' : '', '');
+          if (provider !== source) onChange(provider === 'KiCad' ? '' : provider, '');
         }}
       />
-      {source === 'NextPCB' ? (
+      {cascading ? (
         [0, 1].map((level) => {
           const parent = level ? path[level - 1] : undefined;
           const children = level ? (parent?.children ?? []) : (categories ?? []);
@@ -222,7 +222,7 @@ export default function LibrarySourceSelect({
               popupMaxHeight={280}
               onChange={(next) => {
                 if (next === 'action:retry') load(source, true);
-                else onChange('NextPCB', next || parent?.id || '');
+                else onChange(source, next || parent?.id || '');
               }}
             />
           );
@@ -235,6 +235,7 @@ export default function LibrarySourceSelect({
           popupMaxHeight={280}
           onChange={(value) => {
             if (value === 'action:retry') load(source, true);
+            else if (online) onChange(source, value);
             else onChange(value, '');
           }}
         />

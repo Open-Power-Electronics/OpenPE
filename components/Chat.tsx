@@ -833,11 +833,12 @@ export default function Chat({
   async function submit(
     resolvedEffort: ReasoningEffort | undefined,
     parameters?: { id: string; value: string }[],
+    resolvedModel = '',
   ) {
     if (steeringPending.current) return;
     if (!controller.current && !busy && !queue.current.length) {
       pauseQueue(false);
-      return send(resolvedEffort, undefined, parameters);
+      return send(resolvedEffort, undefined, parameters, resolvedModel);
     }
     if (!input.trim() && !annotations.length) return;
     if (input.length > maxDraftLength)
@@ -867,7 +868,7 @@ export default function Chat({
         text: input.trim(),
         annotations: structuredClone(annotations),
         provider,
-        model,
+        model: resolvedModel,
         effort: resolvedEffort,
         ...(parameters?.length ? { parameters } : {}),
         approvalMode,
@@ -882,11 +883,12 @@ export default function Chat({
     resolvedEffort: ReasoningEffort | undefined,
     pending?: QueuedMessage,
     parameters?: { id: string; value: string }[],
+    resolvedModel = '',
   ) {
     const submittedText = pending?.text ?? input.trim();
     const sentAnnotations = pending?.annotations ?? annotations;
     const turnProvider = pending?.provider ?? provider;
-    const turnModel = pending?.model ?? model;
+    const turnModel = pending?.model ?? resolvedModel;
     const turnApproval = pending?.approvalMode ?? approvalMode;
     const turnParameters = pending ? pending.parameters : parameters;
     if ((!submittedText && !sentAnnotations.length) || busy || controller.current) return;
@@ -1943,7 +1945,9 @@ export default function Chat({
               ? stepDraftHistory
               : undefined
           }
-          onSubmit={(resolvedEffort, parameters) => void submit(resolvedEffort, parameters)}
+          onSubmit={(resolvedEffort, parameters, resolvedModel) =>
+            void submit(resolvedEffort, parameters, resolvedModel)
+          }
           onStop={stopGeneration}
         />
       </div>

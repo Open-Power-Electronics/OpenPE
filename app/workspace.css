@@ -938,6 +938,14 @@ body[data-workspace-resizing='true'] * {
   color: var(--soft);
 }
 
+.composer-placeholder-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 :root[data-theme='dark'] .composer {
   background: var(--tint);
 }
@@ -945,6 +953,7 @@ body[data-workspace-resizing='true'] * {
 .composer-bottom {
   gap: 6px;
   flex-wrap: wrap;
+  margin-inline-end: -4px;
 }
 
 .composer-availability {
@@ -1114,6 +1123,10 @@ body[data-workspace-resizing='true'] * {
   min-width: 0;
   flex: 1;
   margin-left: auto;
+}
+
+.composer-settings[data-single-effort] {
+  flex-wrap: nowrap;
 }
 
 .composer-effort-default {
@@ -5216,7 +5229,6 @@ body[data-workspace-resizing='true'] * {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--shadow-dialog);
   font-size: var(--font-control);
 }
 
@@ -6142,6 +6154,38 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   color: var(--text-strong);
 }
 
+.select-sized-value,
+.select-size-samples {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.select-sized-value {
+  flex: 1;
+}
+
+.select-sized-value > span,
+.select-size-samples > span {
+  grid-area: 1 / 1;
+}
+
+.select-size-samples {
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  /* Allow for the compact popup's thin scrollbar. */
+  padding-inline-end: 8px;
+  font: inherit;
+  font-size: var(--font-menu-label);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.select-size-samples > span::before {
+  content: attr(data-label);
+}
+
 .select-compact {
   min-height: 30px;
   width: 94px;
@@ -6168,22 +6212,46 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 2px;
+  width: clamp(8rem, 62%, 11rem);
   min-width: 0;
+  max-width: 100%;
 }
 
 .composer-model-picker .select-trigger {
-  max-width: 100%;
+  flex: 1;
+  padding-inline-end: 4px;
 }
 
 .composer-settings .composer-model-picker .select-value {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: end;
   color: var(--text-strong);
 }
 
 .composer-settings > .select-trigger {
   flex-shrink: 0;
+  max-width: min(100%, 12rem);
+}
+
+.composer-settings > .select-trigger:has(> .select-sized-value) {
+  padding-inline: 4px;
+  text-align: end;
+}
+
+.composer-settings[data-single-effort] > .select-trigger {
+  padding-inline-start: 2px;
+  text-align: start;
+}
+
+.composer-settings > .composer-effort-trigger {
+  min-width: min(100%, 100px);
+}
+
+.composer-effort-trigger .select-size-samples {
+  /* Reserve room for wider option padding and the popup scrollbar. */
+  padding-inline-end: 30px;
 }
 
 .model-list-error {
@@ -6196,10 +6264,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .composer-unavailable-models {
   flex: 1 1 100%;
   overflow-wrap: anywhere;
-}
-
-.select-popup.model-menu {
-  --menu-width: 280px;
 }
 
 .model-menu .select-option[aria-disabled='true'] {
@@ -6231,10 +6295,11 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 .select-popup {
+  --menu-available-width: min(var(--select-popup-width-limit, 100vw), calc(100vw - 16px));
   position: fixed;
   width: max-content;
-  min-width: min(var(--menu-width), var(--select-popup-width-limit, calc(100vw - 16px)));
-  max-width: min(var(--select-popup-width-limit, calc(100vw - 16px)), calc(100vw - 16px));
+  min-width: min(var(--menu-width), var(--menu-available-width));
+  max-width: min(22rem, var(--menu-available-width));
   z-index: 60;
   overflow: auto;
   overscroll-behavior: contain;
@@ -6244,6 +6309,40 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-floating);
+}
+
+.select-popup[data-match-width] {
+  max-width: var(--menu-available-width);
+}
+
+.composer-choice-menu {
+  padding: 4px;
+  scrollbar-width: thin;
+}
+
+.composer-choice-menu .select-option {
+  gap: 6px;
+  padding-inline: 6px;
+}
+
+.composer-inline-menu {
+  padding-inline: 2px;
+}
+
+.composer-inline-menu .select-option {
+  padding-inline: 2px;
+}
+
+.composer-effort-menu {
+  padding-inline: 4px;
+}
+
+.composer-effort-menu .select-option {
+  padding-inline: 8px;
+}
+
+.composer-inline-menu .select-option-check {
+  display: none;
 }
 
 .select-popup.grid-density-popup {
@@ -6321,11 +6420,15 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .select-option > span {
   flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .select-option > span,
-.select-option strong,
+.select-option strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .select-option small {
   white-space: normal;
   overflow-wrap: anywhere;
@@ -6361,8 +6464,33 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   visibility: hidden;
 }
 
+.select-popup[data-narrow-field] {
+  padding: 3px 1px;
+}
+
+.select-popup[data-narrow-field] .select-option {
+  gap: 2px;
+  padding-inline: 1px;
+}
+
+.select-popup[data-narrow-field] .select-option-check {
+  display: none;
+}
+
 .application-menu .select-check-hidden {
   display: none;
+}
+
+.application-menu .select-option {
+  font-size: var(--font-small);
+}
+
+.application-menu .select-option[aria-disabled='true'] {
+  cursor: default;
+}
+
+.application-menu .select-option[aria-disabled='true'] strong {
+  color: var(--soft);
 }
 
 .agent-menu {
@@ -6985,7 +7113,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   min-width: 0;
   gap: 8px;
 }
-.library-source-filters[data-source='NextPCB'] {
+.library-source-filters[data-category-levels='2'] {
   grid-template-columns: minmax(96px, 28%) repeat(2, minmax(0, 1fr));
 }
 .library-source-filters > .select-trigger {
@@ -7048,11 +7176,67 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   grid-template-columns: minmax(0, 1.5fr) minmax(64px, 0.85fr);
   gap: 10px;
 }
-.library-browse-scope {
-  margin: 0;
-  padding: 6px 8px;
+.library-results button.library-load-more {
+  display: flex;
+  justify-content: center;
   color: var(--muted);
   font-size: var(--font-caption);
+}
+.library-chooser .library-browser.library-browser-empty {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.library-browser.library-browser-empty > .library-detail {
+  display: none;
+}
+.library-browser.library-browser-empty > .library-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  gap: 14px;
+  max-height: none;
+  border: 0;
+  padding: 16px;
+  scrollbar-gutter: auto;
+}
+.library-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 0 auto;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.library-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+}
+.library-empty-state h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--font-control);
+  font-weight: 600;
+}
+.library-empty-state p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+}
+.library-browser-empty .library-results button.library-load-more {
+  width: auto;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 6px 12px;
+  color: var(--text);
 }
 .library-result-columns {
   position: sticky;
@@ -7116,6 +7300,84 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .library-info-section p + .library-detail-attributes {
   margin-top: 10px;
 }
+.library-cad-source {
+  position: relative;
+  margin-top: 10px;
+}
+.library-cad-source h3 {
+  margin-bottom: 5px;
+  padding-inline-end: 26px;
+  overflow-wrap: anywhere;
+}
+.library-cad-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: var(--font-caption);
+}
+.library-cad-source-links a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--soft);
+  text-underline-offset: 2px;
+}
+.library-cad-source-notice > summary {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+.library-cad-source-notice > summary::-webkit-details-marker {
+  display: none;
+}
+.library-cad-source-links a:hover,
+.library-cad-source-notice > summary:hover {
+  color: var(--text-strong);
+}
+.library-cad-source-notice > summary:hover {
+  background: var(--surface-hover);
+}
+.library-cad-source :is(a, summary, .library-cad-source-terms):focus-visible {
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
+}
+.library-cad-source-notice[open] > summary svg {
+  transform: rotate(90deg);
+}
+.library-cad-source-terms {
+  max-block-size: min(12rem, 30vh);
+  margin-top: 10px;
+  padding: 8px 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--font-caption);
+  line-height: 1.6;
+}
+.library-cad-source-terms p {
+  white-space: pre-wrap;
+}
+.library-cad-source-terms p + p {
+  margin-top: 8px;
+}
+.library-cad-source-terms strong {
+  display: block;
+  color: var(--text-strong);
+}
+.library-cad-source > p[role='status'] {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: var(--font-caption);
+}
 .library-detail {
   padding: 12px;
   min-width: 0;
@@ -7142,13 +7404,16 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   background: var(--canvas);
   margin: 8px 0;
 }
+.library-preview-action {
+  margin-top: 10px;
+}
 @media (max-width: 600px) {
   .library-source-filters,
-  .library-source-filters[data-source='NextPCB'] {
+  .library-source-filters[data-category-levels='2'] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .library-source-filters > .select-trigger:first-child,
-  .library-source-filters[data-source='KiCad'] > .select-trigger:last-child {
+  .library-source-filters[data-category-levels='1'] > .select-trigger:last-child {
     grid-column: 1 / -1;
   }
   .library-chooser .library-filter {
@@ -7312,10 +7577,20 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .preview-tabs > button {
   flex: 0 1 auto;
 }
-.library-results-error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.library-chooser .dialog-footer-toolbar {
+  width: auto;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+.library-footer-feedback {
+  margin: 0;
+  flex: 1 1 140px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+  overflow-wrap: anywhere;
+}
+.library-footer-feedback[role='alert'] {
   color: var(--error-ink);
 }
 .part-inspector {

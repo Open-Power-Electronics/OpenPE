@@ -17,6 +17,22 @@ const catalogs = {
       },
       { id: 'fixture/three', label: 'Three levels', efforts: ['low', 'medium', 'high'] },
       { id: 'fixture/plain', label: 'No effort', efforts: [] },
+      { id: 'fixture/gpt-6-astra', label: 'GPT-6-Astra', efforts: ['medium', 'high'] },
+      { id: 'gpt-reserve', label: 'GPT-Reserve' },
+      { id: 'codex-auto-review', label: 'Codex Auto Review' },
+    ],
+  },
+  claude: {
+    models: [
+      { id: 'default', label: 'Default' },
+      { id: 'fixture/claude-custom', label: 'Claude custom' },
+    ],
+  },
+  deepseek: {
+    defaultModel: '["deepseek-official","deepseek-v4-flash"]',
+    models: [
+      { id: '["deepseek-official","deepseek-v4-flash"]', label: 'DeepSeek Flash' },
+      { id: '["configured-provider","vendor/model:v2"]', label: 'Configured model' },
     ],
   },
   pi: {
@@ -99,19 +115,20 @@ const bundle = await build({
     contents: `import React, {useState} from 'react';
       import {createRoot} from 'react-dom/client';
       import AgentComposer from './components/AgentComposer';
+      import {resetAgentModelCatalogs} from './components/ModelSelect';
       import {defaultAgentPreferences} from './lib/workspace-state';
       const submissions = [], settingsOpens = [];
       function Fixture() {
         const [state,setState] = useState({
           provider:'codex', available:true, agentSupportsEffort:true,
-          effort:defaultAgentPreferences.effort, model:'', input:'Explain ripple', busy:false,
+          effort:defaultAgentPreferences.effort, model:'', input:'', busy:false,
         });
         const patch = next => setState(previous=>({...previous,...next}));
-        window.effortFixture = {state,submissions,settingsOpens,patch};
-        return <main><AgentComposer {...state}
+        window.effortFixture = {state,submissions,settingsOpens,patch,resetAgentModelCatalogs};
+        return <main className="chat-panel"><AgentComposer key={state.composerKey} {...state}
           setEffort={effort=>patch({effort})} setModel={model=>patch({model})}
           setInput={input=>patch({input})} approvalMode="review" setApprovalMode={()=>{}}
-          onSubmit={(effort, parameters) => submissions.push({ effort: effort ?? null, parameters: parameters ?? null })} onStop={()=>{}}
+          onSubmit={(effort, parameters, model) => submissions.push({ model: model ?? '', effort: effort ?? null, parameters: parameters ?? null })} onStop={()=>{}}
           onAgentSettings={()=>settingsOpens.push(state.provider)}/>
         </main>;
       }
@@ -138,8 +155,9 @@ try {
   let initialCodex = true;
   let releasePi;
   let failCodex = false;
-  let holdCodexRetry = false;
-  let releaseCodexRetry;
+  let updatedCodex = false;
+  let holdCodexList = false;
+  let releaseCodexList;
   let codexRequests = 0;
   await page.addInitScript(() => {
     window.openpe = { connection: async () => ({ base: 'http://localhost', token: 'fixture' }) };
@@ -154,11 +172,23 @@ try {
         await new Promise((resolve) => (releaseCodex = resolve));
       }
       if (provider === 'pi') await new Promise((resolve) => (releasePi = resolve));
-      if (provider === 'codex' && holdCodexRetry)
-        await new Promise((resolve) => (releaseCodexRetry = resolve));
+      if (provider === 'codex' && holdCodexList)
+        await new Promise((resolve) => (releaseCodexList = resolve));
       if (provider === 'codex' && failCodex)
         return route.fulfill({ status: 502, json: { error: 'Fixture discovery unavailable.' } });
       assert.ok(catalogs[provider], `Unexpected provider: ${provider}`);
+      if (provider === 'codex' && updatedCodex)
+        return route.fulfill({
+          json: {
+            ...catalogs.codex,
+            models: [
+              ...catalogs.codex.models,
+              { id: 'gpt-6.2-astra', label: 'GPT-6.2 Astra' },
+              { id: 'gpt-6.2-sol', label: 'GPT-6.2 Sol', efforts: [] },
+              { id: 'fixture/image', label: 'Image input model', textInput: false },
+            ],
+          },
+        });
       return route.fulfill({ json: catalogs[provider] });
     }
     assert.ok(!url.pathname.startsWith('/api/'), `Unexpected API request: ${url.pathname}`);
@@ -174,8 +204,24 @@ try {
   const model = page.getByRole('combobox', { name: 'Choose model', exact: true });
   const input = page.getByRole('textbox', { name: 'Message your agent', exact: true });
   const send = page.getByRole('button', { name: 'Send message', exact: true });
+  const main = page.locator('main');
+  const composer = main.locator('.composer');
+  const composerHeight = () =>
+    composer.evaluate((element) => element.getBoundingClientRect().height);
   const availability = page.locator('.composer-availability');
-  const retryModels = availability.getByRole('button', { name: 'Retry models', exact: true });
+  const modelList = page.getByRole('listbox', { name: 'Choose model', exact: true });
+  const loadingOption = modelList.getByRole('option', { name: 'Loading models…', exact: true });
+  const releaseModelList = async () => {
+    const deadline = Date.now() + 10000;
+    while (!releaseCodexList) {
+      assert.ok(Date.now() < deadline, 'Catalog detection did not start.');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    holdCodexList = false;
+    releaseCodexList();
+    releaseCodexList = undefined;
+  };
+  const redetect = () => page.evaluate(() => window.effortFixture.resetAgentModelCatalogs());
   const snapshot = () => page.evaluate(() => window.effortFixture.state);
   const submissions = () => page.evaluate(() => window.effortFixture.submissions);
   const patch = async (next) => {
@@ -227,7 +273,17 @@ try {
   };
 
   await waitEffort('Medium');
-  await availability.getByText('Loading models…', { exact: true }).waitFor();
+  await page.getByPlaceholder('Loading models…', { exact: true }).waitFor();
+  await main.evaluate((element) => (element.style.width = '328px'));
+  const loadingHeight = await composerHeight();
+  assert.equal(await availability.count(), 0);
+  assert.equal(
+    await input.getAttribute('aria-describedby'),
+    await composer.getByRole('status').getAttribute('id'),
+  );
+  await input.fill('Explain ripple');
+  assert.equal((await model.textContent()).trim(), 'Loading model…');
+  assert.equal(await composerHeight(), loadingHeight);
   assert.equal((await snapshot()).effort, 'medium', 'New preferences default to medium.');
   await assertNoEffortChoices();
   await assertSendBlocked();
@@ -237,8 +293,19 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   releaseCodex();
+  await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
+  assert.equal(await composerHeight(), loadingHeight, 'Model loading preserves composer height.');
+  assert.equal(await effort.locator('svg').count(), 0, 'The inline effort field is text-only.');
+  assert.equal(
+    await effort.locator('.select-value').evaluate((label) => getComputedStyle(label).textAlign),
+    'start',
+  );
+  const effortBox = await effort.boundingBox();
+  const gapToSend = (await send.boundingBox()).x - (effortBox.x + effortBox.width);
+  assert.ok(gapToSend >= 0 && gapToSend <= 6, 'The effort button sits near the Send button.');
   await effort.click();
-  assert.deepEqual(await page.getByRole('option').allTextContents(), [
+  const effortMenu = page.getByRole('listbox', { name: 'Reasoning effort', exact: true });
+  assert.deepEqual(await effortMenu.getByRole('option').allTextContents(), [
     'None',
     'Minimal',
     'Low',
@@ -248,8 +315,32 @@ try {
     'Max',
     'Ultra',
   ]);
+  const checkEffortWidth = async () => {
+    const menuWidth = (await effortMenu.boundingBox()).width;
+    assert.equal(menuWidth, (await effort.boundingBox()).width);
+    assert.ok(menuWidth >= 100, 'The effort menu has room for comfortably padded options.');
+    const remaining = await effortMenu.locator('strong').evaluateAll((labels) =>
+      labels.map((label) => {
+        const text = document.createRange();
+        text.selectNodeContents(label);
+        return label.getBoundingClientRect().width - text.getBoundingClientRect().width;
+      }),
+    );
+    assert.ok(
+      remaining.every((space) => space >= -1),
+      `Every effort fits on one line: ${remaining}`,
+    );
+  };
+  await checkEffortWidth();
   await page.keyboard.press('Escape');
+  await page.evaluate(() => document.documentElement.style.setProperty('--font-step', '4px'));
+  await effort.click();
+  await checkEffortWidth();
+  await page.evaluate(() => document.documentElement.style.removeProperty('--font-step'));
+  await page.keyboard.press('Escape');
+  await main.evaluate((element) => (element.style.width = ''));
   await submitEffort('medium');
+  assert.equal((await submissions()).at(-1).model, 'fixture/full');
   for (const [label, value] of [
     ['Max', 'max'],
     ['Ultra', 'ultra'],
@@ -323,7 +414,7 @@ try {
   // without any installed or connected Agent.
   await patch({ requiresAgent: false });
   assert.equal(await availability.count(), 0);
-  await submitEffort('ultra');
+  await submitEffort(null);
   await patch({ requiresAgent: true });
   await assertSendBlocked();
   await patch({ available: true, busy: true });
@@ -359,12 +450,32 @@ try {
   await page.keyboard.press('Escape');
   await choose(effort, 'Off');
   await submitEffort('off');
+  assert.equal((await submissions()).at(-1).model, 'fixture/pi');
+  await patch({ provider: 'claude', model: '', agentSupportsEffort: true });
+  await choose(model, 'Claude custom');
+  await assertNoEffortChoices();
+  await submitEffort(null);
+  assert.equal((await submissions()).at(-1).model, 'fixture/claude-custom');
+  await choose(model, 'Default');
+  await submitEffort(null);
+  assert.equal((await submissions()).at(-1).model, 'default');
+  await patch({ provider: 'deepseek', model: '', agentSupportsEffort: false });
+  await model.getByText('DeepSeek Flash', { exact: true }).waitFor();
+  await submitEffort(null);
+  assert.equal((await submissions()).at(-1).model, catalogs.deepseek.defaultModel);
+  await choose(model, 'Configured model');
+  await submitEffort(null);
+  assert.equal((await submissions()).at(-1).model, catalogs.deepseek.models[1].id);
   failCodex = true;
   await patch({ provider: 'codex', model: '' });
+  await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
+  await patch({ composerKey: 1 });
+  await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
+  assert.equal(codexRequests, 1, 'Provider changes and new composers share the startup catalog.');
+  await redetect();
   await availability.getByText('Could not load models.', { exact: true }).waitFor();
   await assertNoEffortChoices();
   await assertSendBlocked();
-  const main = page.locator('main');
   await main.evaluate((element) => {
     element.style.width = '328px';
   });
@@ -385,17 +496,28 @@ try {
   const beforeDraft = await input.inputValue();
   await input.evaluate((field) => field.setSelectionRange(2, 8, 'backward'));
   await input.dispatchEvent('compositionstart');
-  await retryModels.click();
+  await model.click();
   assert.equal(codexRequests, beforeRetry);
+  assert.equal(await modelList.count(), 0);
   assert.ok(await input.evaluate((field) => document.activeElement === field));
   await input.dispatchEvent('compositionend');
-  await retryModels.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  await model.dispatchEvent('keydown', { key: 'ArrowDown', keyCode: 229 });
   assert.equal(codexRequests, beforeRetry);
+  await model.press('ArrowDown');
+  await modelList.getByRole('option', { name: 'Could not load models.', exact: true }).waitFor();
+  assert.equal(codexRequests, beforeRetry);
+  await model.press('Escape');
   failCodex = false;
-  holdCodexRetry = true;
-  await retryModels.press('Enter');
-  await availability.getByText('Loading models…', { exact: true }).waitFor();
-  assert.equal(await retryModels.count(), 0);
+  holdCodexList = true;
+  await redetect();
+  await model.press('ArrowDown');
+  await loadingOption.waitFor();
+  await page.getByPlaceholder('Loading models…', { exact: true }).waitFor();
+  assert.equal(await loadingOption.getAttribute('aria-disabled'), 'true');
+  assert.equal(await model.getAttribute('aria-activedescendant'), null);
+  await model.press('Enter');
+  assert.ok(await modelList.isVisible());
+  assert.equal((await snapshot()).model, '');
   assert.equal(await input.inputValue(), beforeDraft);
   assert.deepEqual(
     await input.evaluate((field) => [
@@ -406,44 +528,157 @@ try {
     [2, 8, 'backward'],
   );
   await assertSendBlocked();
-  const retryDeadline = Date.now() + 10000;
-  while (!releaseCodexRetry) {
-    assert.ok(Date.now() < retryDeadline, 'Explicit model discovery retry did not start.');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  assert.equal(codexRequests, beforeRetry + 1);
-  holdCodexRetry = false;
-  await model.evaluate((control) => {
-    if (!control.disabled) throw Error('Loading model choice should be disabled.');
-  });
   await page.locator('main').evaluate((element) => {
     element.tabIndex = -1;
     element.focus();
   });
-  releaseCodexRetry();
+  await releaseModelList();
+  await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
   await waitEffort('Medium');
+  assert.equal(codexRequests, beforeRetry + 1);
   assert.equal(await availability.count(), 0);
+  assert.equal(await modelList.count(), 0);
   assert.ok(await page.locator('main').evaluate((element) => document.activeElement === element));
   await submitEffort('medium');
   assert.equal((await snapshot()).effort, 'off');
+  const filledHeight = await composerHeight();
+  const draftBeforeChoice = await input.inputValue();
   await patch({ model: 'fixture/retired' });
-  await availability.getByText('Choose an available model to send.', { exact: true }).waitFor();
+  const chooseModelPrompt = 'Choose an available model to send.';
+  await page.getByPlaceholder(chooseModelPrompt, { exact: true }).waitFor();
+  assert.equal(await composer.getByRole('status').textContent(), chooseModelPrompt);
+  assert.equal(await availability.count(), 0);
+  assert.equal(await composerHeight(), filledHeight);
+  assert.equal(await input.inputValue(), draftBeforeChoice);
   await assertSendBlocked();
   assert.equal((await snapshot()).model, 'fixture/retired');
-  await choose(model, 'Full reasoning');
-  await availability.waitFor({ state: 'detached' });
+  assert.equal((await model.textContent()).trim(), 'Choose model');
+  const modelLabelGap = await model.evaluate((field) => {
+    const modelLabel = document.createRange();
+    modelLabel.selectNodeContents(field.querySelector('.select-value'));
+    const effortLabel = document.createRange();
+    effortLabel.selectNodeContents(
+      document.querySelector('[aria-label="Reasoning effort"] .select-value'),
+    );
+    return effortLabel.getBoundingClientRect().left - modelLabel.getBoundingClientRect().right;
+  });
+  assert.ok(modelLabelGap >= 0 && modelLabelGap <= 10, 'Model and effort labels sit together.');
+  await model.click();
+  assert.equal(await modelList.getByRole('option', { name: 'fixture/retired' }).count(), 0);
+  assert.equal(
+    await modelList.getByRole('option', { name: /^(GPT-Reserve|Codex Auto Review)$/ }).count(),
+    0,
+  );
+  const wideModelWidth = (await model.boundingBox()).width;
+  assert.equal((await modelList.boundingBox()).width, wideModelWidth);
+  await main.evaluate((element) => (element.style.width = '328px'));
+  await waitForAsync(
+    page,
+    (wideWidth) => {
+      const fieldWidth = document
+        .querySelector('[role="combobox"][aria-label="Choose model"]')
+        .getBoundingClientRect().width;
+      const menuWidth = document.querySelector('.model-menu').getBoundingClientRect().width;
+      return fieldWidth < wideWidth && fieldWidth === menuWidth;
+    },
+    wideModelWidth,
+  );
+  const astra = modelList.getByRole('option', { name: 'GPT-6-Astra', exact: true });
+  assert.equal(
+    await astra.locator('strong').evaluate((label) => {
+      const text = document.createRange();
+      text.selectNodeContents(label);
+      return text.getClientRects().length;
+    }),
+    1,
+    'A narrow composer still shows the model name on one line.',
+  );
+  await model.press('Escape');
+  await input.fill('');
+  const emptyHeight = await composerHeight();
+  assert.equal(await input.getAttribute('placeholder'), chooseModelPrompt);
+  await model.click();
+  await astra.click();
+  await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
+  assert.equal(await composerHeight(), emptyHeight);
+  assert.equal((await model.textContent()).trim(), 'GPT-6-Astra');
+  await input.fill(draftBeforeChoice);
+  await submitEffort('medium');
+  assert.equal((await submissions()).at(-1).model, 'fixture/gpt-6-astra');
+  await main.evaluate((element) => (element.style.width = ''));
 
-  // Refresh failure for the same provider must revoke the previously loaded
-  // catalog, rather than restoring stale efforts when availability returns.
+  const refreshRequests = codexRequests;
+  updatedCodex = true;
+  await model.click();
+  await astra.waitFor();
+  assert.equal(codexRequests, refreshRequests);
+  assert.equal(await modelList.getByRole('option', { name: 'GPT-6.2 Astra', exact: true }).count(), 0);
+  await model.press('Escape');
+  holdCodexList = true;
+  await redetect();
+  await model.click();
+  await loadingOption.waitFor();
+  assert.equal(await modelList.getByRole('option').count(), 1);
+  assert.equal((await snapshot()).model, 'fixture/gpt-6-astra');
+  assert.equal(await input.inputValue(), draftBeforeChoice);
+  assert.equal(await send.isDisabled(), true);
+  await releaseModelList();
+  await modelList.getByRole('option', { name: 'GPT-6.2 Astra', exact: true }).waitFor();
+  assert.equal(codexRequests, refreshRequests + 1);
+  assert.equal(await modelList.getByRole('option', { name: /refresh|retry/i }).count(), 0);
+  const savedModelOption = modelList.getByRole('option', { name: 'GPT-6-Astra', exact: true });
+  assert.equal(
+    await model.getAttribute('aria-activedescendant'),
+    await savedModelOption.getAttribute('id'),
+  );
+  assert.equal(
+    await modelList.evaluate((menu) => {
+      const viewportBottom = menu.getBoundingClientRect().top + menu.clientTop + menu.clientHeight;
+      const boxes = [...menu.children].map((option) => option.getBoundingClientRect());
+      return (
+        menu.scrollTop === 0 &&
+        boxes[4].bottom <= viewportBottom + 1 &&
+        boxes[5].top >= viewportBottom - 1 &&
+        menu.scrollHeight > menu.clientHeight
+      );
+    }),
+    true,
+    'The model popup opens with room for five rows and scrolls to show the rest.',
+  );
+  await modelList.hover();
+  await page.mouse.wheel(0, 120);
+  await waitForAsync(page, () => {
+    const menu = document.querySelector('.model-menu');
+    return menu && menu.scrollTop > 0;
+  });
+  assert.equal(
+    await modelList
+      .getByRole('option', { name: /^Image input model/ })
+      .getAttribute('aria-disabled'),
+    'true',
+  );
+  await modelList.getByRole('option', { name: 'GPT-6.2 Astra', exact: true }).click();
+  await assertNoEffortChoices();
+  await submitEffort(null);
+  assert.equal((await submissions()).at(-1).model, 'gpt-6.2-astra');
+  await choose(model, 'GPT-6.2 Sol');
+  assert.equal(codexRequests, refreshRequests + 1);
+  await submitEffort(null);
+  assert.equal((await submissions()).at(-1).model, 'gpt-6.2-sol');
+
+  // Explicit redetection replaces the previous catalog, while opening never requests it.
   failCodex = true;
-  await patch({ available: false });
-  await patch({ available: true });
+  await redetect();
+  await model.click();
+  await modelList.getByRole('option', { name: 'Could not load models.', exact: true }).waitFor();
+  assert.equal(await modelList.getByRole('option').count(), 1);
+  await model.press('Escape');
   await availability.getByText('Could not load models.', { exact: true }).waitFor();
   await assertNoEffortChoices();
   await assertSendBlocked();
   await patch({ requiresAgent: false });
   await page.getByRole('status', { name: 'Model list unavailable', exact: true }).waitFor();
-  await submitEffort('medium');
+  await submitEffort(null);
   await patch({
     provider: 'cursor',
     model: '',
@@ -454,12 +689,12 @@ try {
   const contextPicker = page.getByRole('combobox', { name: 'Context', exact: true });
   const fastSwitch = page.getByRole('switch', { name: 'Fast', exact: true });
   await contextPicker.waitFor();
-  await page
-    .getByRole('note', {
-      name: 'Unavailable models: claude-opus-5-5 — Cursor model claude-opus-5-5 variant uses unknown parameter cyber.',
-      exact: true,
-    })
-    .waitFor();
+  const unavailableModels = page.getByRole('note');
+  await unavailableModels.waitFor();
+  assert.equal(
+    await unavailableModels.textContent(),
+    'Unavailable models: claude-opus-5-5 — Cursor model claude-opus-5-5 variant uses unknown parameter cyber.',
+  );
   await model.click();
   const excluded = page.getByRole('option', { name: /claude-opus-5-5/ });
   assert.equal(await excluded.getAttribute('aria-disabled'), 'true');
@@ -486,6 +721,7 @@ try {
     beforeCursor,
   );
   assert.deepEqual((await submissions()).at(-1), {
+    model: 'grok-4.7',
     effort: 'medium',
     parameters: [
       { id: 'context', value: '500k' },
@@ -504,6 +740,7 @@ try {
     beforeCursor + 1,
   );
   assert.deepEqual((await submissions()).at(-1), {
+    model: 'grok-4.7',
     effort: 'high',
     parameters: [
       { id: 'context', value: '256k' },
@@ -524,6 +761,7 @@ try {
     beforeCursor + 2,
   );
   assert.deepEqual((await submissions()).at(-1), {
+    model: 'plain-cursor',
     effort: null,
     parameters: [{ id: 'fast', value: 'false' }],
   });
@@ -533,7 +771,7 @@ try {
   assert.equal(await page.getByText('No reasoning effort', { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: medium default, full model-advertised efforts, exact submitted values, model/provider changes, discovery and refresh gates, offline Home submission, unavailable/busy guards and keyboard/IME behavior.',
+    'PASS: startup catalog sharing, request-free model selection, matched popup width, exact submitted values, explicit redetection, offline Home submission and keyboard/IME behavior.',
   );
 } finally {
   await browser.close();

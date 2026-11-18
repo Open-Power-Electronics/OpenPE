@@ -880,7 +880,9 @@ function createPCBFootprint(detail, circuit, symbolId, at) {
       );
       tuple(child(node, "layer"), 1, 1, "Graphic layer");
       const layer = val(child(node, "layer"));
-      if (!graphicLayers.includes(layer)) fail(`Footprint graphics on ${layer} are not supported.`);
+      const pasteLayer = layer === "F.Paste" || layer === "B.Paste";
+      if (!pasteLayer && !graphicLayers.includes(layer))
+        fail(`Footprint graphics on ${layer} are not supported.`);
       const fillNode = child(node, "fill");
       if (fillNode) tuple(fillNode, 1, 1, "Graphic fill");
       const fill = val(fillNode);
@@ -907,6 +909,8 @@ function createPCBFootprint(detail, circuit, symbolId, at) {
       tuple(widthNode, 1, 1, "Graphic width");
       const width = kind === "fp_line" || kind === "fp_rect" ? sourcePositive(widthNode, 1, "Graphic width") : sourceNumber(widthNode, 1, "Graphic width");
       if (width < 0 || width > 1e3) fail("Graphic width must be between 0 and 1000 mm.");
+      if (pasteLayer && (kind !== "fp_poly" || !filled || width !== 0))
+        fail("Footprint paste graphics must be filled polygons without a stroke.");
       const common = {
         id: uid(),
         width,

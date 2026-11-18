@@ -56,6 +56,21 @@ record({ type: 'launch', provider, mode, args, cwd: process.cwd(), pid: process.
 let initialized = false;
 let sessionReady = false;
 let modelSet = false;
+const firstModel = '["deepseek-official","deepseek-v4-flash"]';
+const secondModel = '["fixture-provider","vendor/second:v2"]';
+function configOptions(currentValue) {
+  return [
+    {
+      id: 'model',
+      currentValue,
+      options: [
+        { value: firstModel, name: 'First' },
+        { name: 'Grouped', options: [{ value: secondModel, name: 'Second' }] },
+        { value: '\u0000', name: 'Reject control characters' },
+      ],
+    },
+  ];
+}
 let promptRequest;
 const pendingTools = new Map();
 const finishPrompt = () => {
@@ -137,24 +152,14 @@ input.on('line', (line) => {
     sessionReady = true;
     return reply(request, {
       sessionId,
-      configOptions: [
-        {
-          id: 'model',
-          currentValue: 'fixture-first',
-          options: [
-            { value: 'fixture-first', name: 'First' },
-            { name: 'Grouped', options: [{ value: 'fixture-second', name: 'Second' }] },
-            { value: '--unsafe', name: 'Reject invalid ID' },
-          ],
-        },
-      ],
+      configOptions: configOptions(firstModel),
     });
   }
   if (request.method === 'session/set_config_option') {
     assert.equal(sessionReady, true);
-    assert.deepEqual(request.params, { sessionId, configId: 'model', value: 'fixture-second' });
+    assert.deepEqual(request.params, { sessionId, configId: 'model', value: secondModel });
     modelSet = true;
-    return reply(request, {});
+    return reply(request, { configOptions: configOptions(mode === 'rejected-model' ? firstModel : secondModel) });
   }
   if (request.method === 'session/prompt') {
     assert.equal(sessionReady, true);

@@ -12,7 +12,7 @@ import { registerLibraryCapabilities } from '../lib/library-capabilities';
 import { loadLibraryFootprint } from '../lib/library-package';
 import { parseSExpr } from '../lib/sexpr';
 import { projectFromNativeFiles, projectNativeFiles } from '../lib/kicad-project';
-import { attachNextPcbFootprint } from '../lib/library-project-assets';
+import { attachOnlineFootprint } from '../lib/library-project-assets';
 import { PCBProjectSync } from '../lib/pcb-project-sync';
 import { parseProject, serializeProject } from '../lib/project';
 import { createComponentModelStore, prepareLibraryPackage } from '../server/component-models.mjs';
@@ -246,7 +246,7 @@ test('adopted package files and STEP survive native Save, Source reopening and o
   core.commitProject(candidate);
   assert.equal(core.getSnapshot().undoDepth, 1);
   assert.equal(
-    attachNextPcbFootprint(core.getSnapshot().project!, source),
+    attachOnlineFootprint(core.getSnapshot().project!, source),
     core.getSnapshot().project,
   );
   const packageName = 'footprints/NextPCB.pretty/123_fixture.kicad_mod';

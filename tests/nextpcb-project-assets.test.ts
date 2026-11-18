@@ -4,7 +4,7 @@ import { ProjectCore } from '../core/project-core';
 import { createPart } from '../lib/circuit';
 import { createBlankProject } from '../lib/create-blank-project';
 import { projectFromNativeFiles, projectNativeFiles } from '../lib/kicad-project';
-import { attachNextPcbFootprint, projectFootprintSource } from '../lib/library-project-assets';
+import { attachOnlineFootprint, projectFootprintSource } from '../lib/library-project-assets';
 import { PCBProjectSync } from '../lib/pcb-project-sync';
 import type { FootprintSource } from '../lib/pcb-sync';
 import { parseProject, serializeProject, validateProject, type Project } from '../lib/project';
@@ -64,7 +64,7 @@ test('prepared NextPCB packages add native files without changing IDs or existin
   const project = withTable(fixture(), originalTable);
   const input = detail();
   const unchanged = serializeProject(project);
-  const attached = attachNextPcbFootprint(project, input);
+  const attached = attachOnlineFootprint(project, input);
   validateProject(attached);
   assert.equal(attached.id, project.id);
   assert.equal(attached.schematic, project.schematic);
@@ -84,7 +84,7 @@ test('prepared NextPCB packages add native files without changing IDs or existin
   const asset = files.files.find((file) => file.name === filename)!;
   assert.equal(asset.source, writeSExpr(input.footprint) + '\n');
   assert.equal(val(child(parseSExpr(asset.source), 'model')), modelPath);
-  assert.equal(attachNextPcbFootprint(attached, input), attached);
+  assert.equal(attachOnlineFootprint(attached, input), attached);
   child(input.footprint, 'descr')![1] = '"Caller mutation"';
   assert.equal(
     projectNativeFiles(attached).files.find((file) => file.name === filename)!.source,
@@ -137,7 +137,7 @@ test('symbol, package and native sidecars share one Core transaction, undo and r
 });
 
 test('local downloaded packages resolve offline and remain authoritative over cached remote details', async () => {
-  const original = attachNextPcbFootprint(fixture(), detail());
+  const original = attachOnlineFootprint(fixture(), detail());
   const changed = {
     ...original,
     nativeFiles: {
@@ -210,11 +210,11 @@ test('raw preview details cannot bypass package preparation and failed downloads
 
 test('new packages reject conflicting local files, mappings, identities and unprepared model references', () => {
   const project = fixture();
-  const attached = attachNextPcbFootprint(project, detail());
+  const attached = attachOnlineFootprint(project, detail());
   const before = serializeProject(attached);
   const modified = detail();
   child(child(modified.footprint, 'fp_circle')!, 'center')![1] = '-3';
-  assert.throws(() => attachNextPcbFootprint(attached, modified), /existing changed footprint/);
+  assert.throws(() => attachOnlineFootprint(attached, modified), /existing changed footprint/);
   assert.equal(serializeProject(attached), before);
   for (const table of [
     '(not_a_library_table)',
@@ -224,7 +224,7 @@ test('new packages reject conflicting local files, mappings, identities and unpr
     '(fp_lib_table (lib (name "NextPCB") (type "KiCad") (uri "${KIPRJMOD}/footprints/NextPCB.pretty") (uri "elsewhere")))',
   ])
     assert.throws(
-      () => attachNextPcbFootprint(withTable(project, table), detail()),
+      () => attachOnlineFootprint(withTable(project, table), detail()),
       /NextPCB project library/,
     );
   for (const invalid of [
@@ -234,16 +234,16 @@ test('new packages reject conflicting local files, mappings, identities and unpr
     'NextPCB:CON',
   ])
     assert.throws(
-      () => attachNextPcbFootprint(project, { ...detail(), id: invalid }),
+      () => attachOnlineFootprint(project, { ...detail(), id: invalid }),
       /native footprint filename/,
     );
   const mismatched = detail();
   mismatched.footprint[1] = '"Other"';
-  assert.throws(() => attachNextPcbFootprint(project, mismatched), /component identity/);
+  assert.throws(() => attachOnlineFootprint(project, mismatched), /component identity/);
   const unprepared = detail();
   child(unprepared.footprint, 'model')![1] = '"${KICAD10_3DMODEL_DIR}/Test/Package.step"';
-  assert.throws(() => attachNextPcbFootprint(project, unprepared), /project-relative STEP assets/);
-  assert.equal(attachNextPcbFootprint(project, { ...detail(), projectAssets: undefined }), project);
+  assert.throws(() => attachOnlineFootprint(project, unprepared), /project-relative STEP assets/);
+  assert.equal(attachOnlineFootprint(project, { ...detail(), projectAssets: undefined }), project);
 });
 
 test('supporting asset additions retain native file-set limits and reject unsupported local geometry atomically', () => {
@@ -254,8 +254,8 @@ test('supporting asset additions retain native file-set limits and reject unsupp
       source: '(footprint "Unused")',
     })),
   );
-  assert.throws(() => attachNextPcbFootprint(project, detail()), /1–128 text files/);
-  const valid = attachNextPcbFootprint(fixture(), detail());
+  assert.throws(() => attachOnlineFootprint(project, detail()), /1–128 text files/);
+  const valid = attachOnlineFootprint(fixture(), detail());
   const unsupported = {
     ...valid,
     nativeFiles: {

@@ -8,6 +8,23 @@ import {
 export { child, children, num, val, quote, parseSExpr } from './sexpr';
 export { createProject, validateProject } from './project';
 
+export const librarySources = ['KiCad', 'NextPCB', 'JLCPCB'] as const;
+export type LibrarySource = (typeof librarySources)[number];
+
+export function isOnlineLibrary(source: string): source is 'NextPCB' | 'JLCPCB' {
+  return source === 'NextPCB' || source === 'JLCPCB';
+}
+
+export function catalogSource(library: string): LibrarySource {
+  return isOnlineLibrary(library) ? library : 'KiCad';
+}
+
+export function onlineFootprintLibrary(id: string) {
+  const separator = id.indexOf(':');
+  const library = id.slice(0, separator);
+  return separator > 0 && isOnlineLibrary(library) ? library : undefined;
+}
+
 export type LibraryEntry = {
   id: string;
   name: string;
@@ -17,6 +34,7 @@ export type LibraryEntry = {
   footprint?: string;
   manufacturer?: string;
   package?: string;
+  attribution?: { source: string; homepages: string[]; notice: string };
 };
 export type SymbolDetail = LibraryEntry & {
   symbol: SExpr;

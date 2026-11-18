@@ -15,6 +15,9 @@ test('desktop Home skips example preparation while explicit opens share its chec
   const saveRoots: string[] = [];
   const recent: string[] = [];
   const changed: string[] = [];
+  const external: string[] = [];
+  const vendorRequests: { url: string; options: RequestInit }[] = [];
+  let jlcpcbFetcher!: typeof fetch;
   let preparations = 0,
     grants = 0,
     bootstrap: Promise<void> | undefined,
@@ -41,7 +44,12 @@ test('desktop Home skips example preparation while explicit opens share its chec
     }
   }
   const modules: Record<string, unknown> = {
-    '../server/index.mjs': { startServer: async () => ({ base: 'http://127.0.0.1:12345' }) },
+    '../server/index.mjs': {
+      startServer: async (options: { jlcpcbFetcher: typeof fetch }) => {
+        jlcpcbFetcher = options.jlcpcbFetcher;
+        return { base: 'http://127.0.0.1:12345' };
+      },
+    },
     '../server/atomic-write.mjs': {},
     '../server/project-model-files.mjs': {
       prepareProjectModelFiles: async (...args: unknown[]) => {
@@ -90,6 +98,17 @@ test('desktop Home skips example preparation while explicit opens share its chec
           handlers.set(name, handler),
       },
       Menu: { setApplicationMenu: () => {} },
+      net: {
+        fetch: async (url: string, options: RequestInit) => {
+          vendorRequests.push({ url, options: { ...options } });
+          return Response.json({});
+        },
+      },
+      shell: {
+        openExternal: async (url: string) => {
+          external.push(url);
+        },
+      },
     },
     'node:path': path,
     'node:fs/promises': {},
@@ -157,6 +176,11 @@ test('desktop Home skips example preparation while explicit opens share its chec
     },
   });
   await bootstrap;
+  const cadUrl = 'https://easyeda.com/api/products/C1523/components?version=6.4.19.5';
+  await jlcpcbFetcher(cadUrl, { redirect: 'error' });
+  assert.deepEqual(vendorRequests, [
+    { url: cadUrl, options: { redirect: 'error', credentials: 'omit', cache: 'no-store' } },
+  ]);
   assert.equal(modelPreparations.length, 0, 'Home does not read prepared model resources.');
   assert.deepEqual(exampleRoots, [path.resolve('examples'), path.resolve('examples/project')]);
   assert.deepEqual(saveRoots, exampleRoots);
@@ -164,6 +188,18 @@ test('desktop Home skips example preparation while explicit opens share its chec
   assert.deepEqual(recent, [], 'Loading Home never records example preparation as recent use.');
   assert.equal(handlers.has('openpe:example-preparation'), false);
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+  const openHomepage = handlers.get('openpe:open-library-homepage')! as (
+    event: unknown,
+    site: unknown,
+  ) => Promise<void>;
+  await assert.rejects(openHomepage({ ...event, senderFrame: {} }, 'jlceda'), /Unauthorized/);
+  await assert.rejects(openHomepage({ ...event, sender: {} }, 'easyeda'), /Unauthorized/);
+  await assert.rejects(openHomepage(event, 'https://lceda.cn/'), /Unknown library homepage/);
+  await assert.rejects(openHomepage(event, 'file:///outside'), /Unknown library homepage/);
+  assert.deepEqual(external, []);
+  await openHomepage(event, 'jlceda');
+  await openHomepage(event, 'easyeda');
+  assert.deepEqual(external, ['https://lceda.cn/', 'https://easyeda.com/']);
   assert.equal(await handlers.get('openpe:new')!(event), 'grant-1');
   assert.equal(preparations, 0, 'Creating an ordinary project does not check example assets.');
 
