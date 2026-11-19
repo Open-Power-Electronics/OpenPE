@@ -28,7 +28,7 @@ test('desktop preload forwards every operation to a registered main channel and 
         readFileSync(new URL('../electron/cursor-credential.cjs', import.meta.url), 'utf8'),
       ]
         .join('\n')
-        .matchAll(/ipcMain\.handle\(\s*'([^']+)'/g),
+        .matchAll(/(?:ipcMain|workbenchIpc)\.handle\(\s*'([^']+)'/g),
     ].map((match) => match[1]),
   );
   const closeChannels = [...mainSource.matchAll(/win\.webContents\.send\(\s*'([^']+)'/g)].map(
@@ -69,6 +69,8 @@ test('desktop preload forwards every operation to a registered main channel and 
   const options = { fileId: 'opaque-project-id', source: 'validated native source' };
   const operations: Array<[string, string, unknown[]]> = [
     ['connection', 'connection', []],
+    ['setRawKiCadMode', 'set-raw-kicad-mode', [true]],
+    ['chooseRawKiCadFiles', 'choose-raw-kicad-files', []],
     ['openLibraryHomepage', 'open-library-homepage', ['jlceda']],
     ['cursorCredentialStatus', 'cursor-credential-status', []],
     ['cursorCredentialStore', 'cursor-credential-store', ['cursor_test_key_value_0001']],

@@ -101,7 +101,8 @@ Changes identify their layer, update the owning contract and regenerate formats 
 - `server/datasheets.mjs` owns read-only pinned PDF page access through `/api/datasheets/page`. It verifies original bundled PDFs or fixed vendor downloads and retains two verified buffers in memory. `server/datasheet-worker.mjs` parses or rasterizes the requested page. Workbench binds live reads to the validated controller and rejects stale results. `context/agent-prompt-context.ts` derives the reference identity or reviewed parameter excerpt from the validated submission. [Datasheets](DATASHEETS.md#submission-and-on-demand-context) owns access and bounds.
 - `server/component-models.mjs` owns approved immutable local STEP bytes, bounded online package adoption, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. Preview requests identify a validated project component/model index and share the bounded STEP worker pool. `lib/library-package.ts` shares renderer preparation across GUI/Agent, while pure `lib/library-project-assets.ts` adds native package sidecars and library tables through Core. Shared component Properties commits native PCB model records through Core.
 - Provider CLIs and solvers use restricted child-process adapters. Library indexing and STEP conversion use bounded workers. These are implementation mechanisms, not independent plugin processes.
-- `server/nextpcb-library.mjs` is a read-only host adapter behind the existing authenticated library service. Explicit NextPCB selection reads fixed HTTPS catalog endpoints and allowlisted native assets; shared validators and generated PCB preparation retain Core document authority. `server/jlcpcb-library.mjs` reads JLCPCB search metadata and resolves exact EasyEDA CAD and supported STEP identities on demand over fixed HTTPS. `server/jlcpcb-cad.mjs` converts the supported subset and uses the same generated project and PCB validation entry points. Both online sources share the authenticated library routes, bounded response reader and Electron system-network adapter on desktop. Provider pages never run in the renderer. [Libraries](LIBRARIES.md#catalog-service-and-chooser) owns access and geometry/model limits.
+- `server/nextpcb-library.mjs` is a read-only host adapter behind the existing authenticated library service. Explicit NextPCB selection reads fixed HTTPS catalog endpoints and allowlisted native assets; shared validators and generated PCB preparation retain Core document authority. `server/jlcpcb-library.mjs` reads JLCPCB search metadata and resolves exact EasyEDA CAD over fixed HTTPS. Symbol chooser search pages use the same host CAD readers to check footprint and model references before delivery; STEP remains on demand. `server/jlcpcb-cad.mjs` converts the supported subset and validates symbol and footprint records independently using the generated project and PCB validators. Both online sources share the authenticated library routes, bounded response reader and Electron system-network adapter on desktop. Provider pages never run in the renderer. [Libraries](LIBRARIES.md#catalog-service-and-chooser) owns access and geometry/model limits.
+- `server/nextpcb-prices.mjs` reads HQ Online quotes on explicit chooser refresh. The authenticated library service resolves the part and uses the existing host network adapter. [Libraries](LIBRARIES.md#nextpcb-online-catalog) owns quote matching and retention.
 - Codex, Claude, and Cursor expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools. Cursor uses `@cursor/sdk` in the service process: MCP-only built-ins, inline OpenPE MCP, one frozen empty filesystem and MCP environment for that run, no setting sources, and a private temporary directory. Its API key is `safeStorage` ciphertext at `cursor-credential.bin` in the OpenPE data directory, outside recovery, history, and Agent context. POSIX mode is 0600; Windows relies on the per-user data-directory ACL and does not call `icacls`. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the Cursor `openpe_ask_user` MCP tool, the private DeepSeek user-question patch, and the sole explicitly loaded Pi question extension. The latter three receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
 
 `server/agent-models.mjs` owns bounded provider model/effort discovery before
@@ -326,6 +327,12 @@ There is no automatic placement/router or separate Agent document owner.
 
 PE Layout Skill loads only fixed IDs from pinned resources, verifies hashes/lifecycle and injects trusted guidance before user context. Disable/uninstall cancels turns carrying it. The workflow adds no arbitrary file/process access or autorouting implementation.
 
+### Raw KiCad chat
+
+Raw KiCad mode is a desktop window mode and starts off. `DesktopWorkspace` retains the mounted workbenches, blocks Core edits, suspends capability hosts and pauses recovery writes. Chat cancels normal generation and active reviews. Electron switches the authenticated loopback service and gates normal native operations while the mode is active. A transition interrupts in-flight service requests. The mode leaves installed plugins and their settings in place for the next workbench view.
+
+Electron's native picker admits only explicitly selected files. `server/raw-kicad-chat.mjs` reads the bounded original UTF-8 text into one in-memory selection and returns an opaque ID and filenames. On Send, the separate chat route joins the user's message, bounded raw conversation history and complete file text, then calls only the selected provider's message transport. No native design parsers, integrations or project context participate. A frame replacement or mode exit cancels raw chat, revokes the selection and resumes the regular admission rules. Unsaved work still uses normal close review. [API](API.md#raw-kicad-transport) owns limits and request shapes.
+
 ### A transient run
 
 The SPICE handler validates source/settings, builds its supported execution model, resolves verified portable models through grants and uses the pinned solver. The host retries an explicit convergence failure once with a higher transient iteration ceiling, preserving circuit/timing/precision. The ordered plan participates in result identity and artifacts retain the successful deck. SSE delivers bounded native-sample previews and clears failed-attempt samples before retry. Explicit Stop retains validated partial results; failure/automatic cancellation discards previews. Only finite completed results persist and may add verified model references through Core.
@@ -466,10 +473,11 @@ Checks can write logs, screenshots, temporary profiles and reports to
 `test-results/`. Retained renderer benchmarks can also read their verified
 prior snapshots there, as described in [Layout](LAYOUT.md#examples-and-verification).
 Classify files by their consumers before cleanup. `tmp/` holds local experiments and is excluded from Git, formatting
-and typecheck. The separate `promotion/` authoring projects and generated capture
-bundles are excluded from application typecheck; the Remotion package owns its
-own TypeScript configuration. Capture bundle filenames may retain a TypeScript
-extension for URL matching. Resolve cleanup paths within the workspace and reject links.
+and typecheck. `promotion/` holds the local Remotion authoring workspace,
+including source, recordings, and renders. Git ignores the entire directory,
+and the Remotion package owns its own TypeScript configuration. Capture bundle
+filenames may retain a TypeScript extension for URL matching. Resolve cleanup
+paths within the workspace and reject links.
 Keep native projects, recovery, Git history, prepared offline resources,
 corresponding sources/notices and current builds separate from test outputs.
 
@@ -479,10 +487,7 @@ are scoped to `examples/` and `tests/fixtures/`; source directories named
 `spice` or `thermal` remain eligible for version control. Native designs,
 lockfiles, notices, pinned inputs, required generated service/schema files and
 brand assets remain tracked. Next.js manages and regenerates `next-env.d.ts`,
-which is ignored rather than versioned. The [promotion project](../promotion/README.md)
-versions its Remotion source, active video clips and selected provenance records.
-Its separate ignore rules keep local captures, profiles, soundtrack files,
-reference media and exports out of Git. Ignoring a path does not authorize its deletion.
+which is ignored rather than versioned. Ignoring a path does not authorize its deletion.
 
 ## Verification
 

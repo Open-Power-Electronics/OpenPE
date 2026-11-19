@@ -2,6 +2,7 @@ import type { Point } from './circuit';
 import type { BoardLine, Footprint, Pad } from './pcb';
 import { pcbArc } from './pcb-geometry';
 import { padPosition, padRotation } from './pcb-layout';
+import { offsetPadPolygons } from './pcb-polygons';
 import { pcbStrokeText } from './pcb-stroke-text';
 
 const decimal = (v: number) => String(Number(v.toFixed(6)));
@@ -60,6 +61,13 @@ export class GerberLayer {
     this.add('G37*');
   }
   pad(footprint: Footprint, pad: Pad, marginX = 0, marginY = marginX) {
+    if (pad.outline) {
+      if (marginX !== marginY)
+        throw new Error('Gerber export requires uniform custom pad margins.');
+      for (const aperture of offsetPadPolygons(footprint, pad, marginX))
+        this.region([aperture.outer, ...aperture.holes]);
+      return;
+    }
     const w = pad.size.x + 2 * marginX,
       h = pad.size.y + 2 * marginY;
     if (w <= 0 || h <= 0) return; // Native negative paste margins may close an aperture.
@@ -84,8 +92,13 @@ export class GerberLayer {
       );
       return;
     }
-    if (pad.chamfer?.length && (marginX || marginY))
-      throw new Error('Gerber export does not support margins on chamfered pads.');
+    if (pad.chamfer?.length && (marginX || marginY)) {
+      if (marginX !== marginY || pad.roundrectRatio)
+        throw new Error('Gerber export supports only uniform margins on straight-chamfered pads.');
+      for (const aperture of offsetPadPolygons(footprint, pad, marginX))
+        this.region([aperture.outer, ...aperture.holes]);
+      return;
+    }
     const r = pad.shape === 'roundrect' ? Math.min(w, h) * (pad.roundrectRatio ?? 0) : 0;
     const c = Math.min(w, h) * (pad.chamferRatio ?? 0);
     const corners = [

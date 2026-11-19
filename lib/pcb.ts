@@ -2,6 +2,8 @@ import { type Circuit, type Point } from './circuit';
 import { parseOwnedSExpr, parseSExpr, quote as q, type SExpr } from './sexpr';
 import { KICAD_PCB_VERSION } from './kicad-version';
 import { isOwnedPCB, isOwnedProjectNode, ownProjectData } from './immutable-project';
+import { padDrillSize } from './pcb-drill';
+import { footprintPoint } from './pcb-layout';
 
 const fmt = (n: number) => String(Number(n.toFixed(12)));
 export type CopperLayer = 'F.Cu' | 'In1.Cu' | 'In2.Cu' | 'B.Cu';
@@ -54,6 +56,8 @@ export type BoardLine = {
   fill?: boolean;
   stroke?: 'default' | 'solid' | 'dash' | 'dot' | 'dash_dot' | 'dash_dot_dot';
   text?: BoardText;
+  /** Footprint text with native free rotation. Omitted for upright text. */
+  keepUpright?: false;
   dimension?: {
     type: 'aligned' | 'radial' | 'leader';
     height?: number;
@@ -84,12 +88,19 @@ export type Pad = Point & {
   number: string;
   rotation: number;
   type: 'smd' | 'thru_hole' | 'np_thru_hole';
-  shape: 'rect' | 'circle' | 'oval' | 'roundrect';
+  shape: 'rect' | 'circle' | 'oval' | 'roundrect' | 'custom';
+  /** Size of the native anchor for a custom pad. */
   size: Point;
+  /** Native custom pad anchor shape. Omitted for the rectangular anchor. */
+  customAnchor?: 'circle';
+  /** Filled polygon in the pad-local frame, including its anchor. */
+  outline?: Point[];
   drill?: number;
   netId: string | null;
-  layers?: (BoardLayer | '*.Cu' | '*.Mask')[];
+  layers?: (BoardLayer | '*.Cu' | 'F&B.Cu' | '*.Mask')[];
   drillOffset?: Point;
+  /** Overall slot length and long axis in pad-local coordinates. Drill is the tool diameter. */
+  drillSlot?: { length: number; axis: 'x' | 'y' };
   roundrectRatio?: number;
   chamferRatio?: number;
   chamfer?: ('top_left' | 'top_right' | 'bottom_left' | 'bottom_right')[];
@@ -99,6 +110,8 @@ export type Pad = Point & {
   thermalBridgeAngle?: number;
   zoneConnect?: number;
   removeUnusedLayers?: boolean;
+  /** KiCad's native pad fabrication property. */
+  heatsink?: true;
   /** Unassigned package pad absent from the source device's pin map. */
   unconnected?: true;
 };
@@ -119,6 +132,7 @@ export type Footprint = Point & {
   side: 'front' | 'back';
   pads: Pad[];
   graphics: BoardLine[];
+  referencePoints?: (Point & { id: string; size: number; layer: 'F.Fab' | 'B.Fab' })[];
   reference?: string;
   value?: string;
   zones?: BoardZone[];
@@ -355,7 +369,8 @@ function serializePCBContent(
     const stroke = `(stroke (width ${fmt(g.width)}) (type ${g.stroke ?? 'default'}))`;
     if (g.kind === 'text') {
       const t = g.text!;
-      return `(${prefix === 'fp' && t.property ? `property ${q(t.property)}` : `${prefix}_text${prefix === 'fp' ? ' user' : ''}`} ${q(t.value)} (at ${xy(g.start)} ${fmt(t.rotation + footprintRotation)}) ${t.hidden ? '(hide yes) ' : ''}${effects(t)} ${tail}`;
+      const unlocked = prefix === 'fp' && g.keepUpright === false ? '(unlocked yes) ' : '';
+      return `(${prefix === 'fp' && t.property ? `property ${q(t.property)}` : `${prefix}_text${prefix === 'fp' ? ' user' : ''}`} ${q(t.value)} (at ${xy(g.start)} ${fmt(t.rotation + footprintRotation)}) ${unlocked}${t.hidden ? '(hide yes) ' : ''}${effects(t)} ${tail}`;
     }
     if (g.kind === 'dimension') {
       const d = g.dimension!,
@@ -464,21 +479,35 @@ function serializePCBContent(
               ? '"*.Cu" "*.Mask"'
               : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
           const extras: string[] = pad.locked ? ['(locked yes)'] : [];
+          if (pad.heatsink) extras.push('(property pad_prop_heatsink)');
+          if (pad.roundrectRatio !== undefined)
+            extras.push(`(roundrect_rratio ${pad.roundrectRatio})`);
+          if (pad.chamferRatio !== undefined) extras.push(`(chamfer_ratio ${pad.chamferRatio})`);
+          if (pad.solderPasteMarginRatio !== undefined)
+            extras.push(`(solder_paste_margin_ratio ${pad.solderPasteMarginRatio})`);
           for (const [key, native] of [
-            ['roundrectRatio', 'roundrect_rratio'],
-            ['chamferRatio', 'chamfer_ratio'],
             ['solderMaskMargin', 'solder_mask_margin'],
             ['solderPasteMargin', 'solder_paste_margin'],
-            ['solderPasteMarginRatio', 'solder_paste_margin_ratio'],
             ['thermalBridgeAngle', 'thermal_bridge_angle'],
             ['zoneConnect', 'zone_connect'],
           ] as const)
             if (pad[key] !== undefined) extras.push(`(${native} ${fmt(pad[key]!)})`);
           if (pad.chamfer) extras.push(`(chamfer ${pad.chamfer.join(' ')})`);
+          if (pad.outline)
+            extras.push(
+              `(options (clearance outline) (anchor ${pad.customAnchor ?? 'rect'}))`,
+              `(primitives (gr_poly (pts ${pad.outline.map((p) => `(xy ${fmt(p.x)} ${fmt(p.y)})`).join(' ')}) (width 0) (fill yes)))`,
+            );
           if (pad.removeUnusedLayers !== undefined)
             extras.push(`(remove_unused_layers ${pad.removeUnusedLayers ? 'yes' : 'no'})`);
+          const offset = pad.drillOffset;
+          const anchor = offset ? footprintPoint(pad, offset) : pad;
+          const drill =
+            pad.drill === undefined
+              ? ''
+              : ` (drill ${pad.drillSlot ? `oval ${xy(padDrillSize(pad))}` : fmt(pad.drill)}${offset ? ` (offset ${fmt(-offset.x)} ${fmt(-offset.y)})` : ''})`;
           lines.push(
-            `    (pad ${q(pad.number)} ${pad.type} ${pad.shape} (at ${xy(pad)} ${fmt(pad.rotation + f.rotation)}) (size ${xy(pad.size)})${pad.type !== 'smd' ? ` (drill ${fmt(pad.drill!)}${pad.drillOffset ? ` (offset ${xy(pad.drillOffset)})` : ''})` : ''} (layers ${layers})${pad.netId ? ` (net ${q(netName.get(pad.netId)!)})` : ''} ${extras.join(' ')} (uuid ${q(pad.id)}))`,
+            `    (pad ${q(pad.number)} ${pad.type} ${pad.shape} (at ${xy(anchor)} ${fmt(pad.rotation + f.rotation)}) (size ${xy(pad.size)})${drill} (layers ${layers})${pad.netId ? ` (net ${q(netName.get(pad.netId)!)})` : ''} ${extras.join(' ')} (uuid ${q(pad.id)}))`,
           );
         }
         const radians = (-f.rotation * Math.PI) / 180;
@@ -486,7 +515,14 @@ function serializePCBContent(
           x: f.x + p.x * Math.cos(radians) - p.y * Math.sin(radians),
           y: f.y + p.x * Math.sin(radians) + p.y * Math.cos(radians),
         });
-        lines.push(...(f.zones ?? []).map((z) => '    ' + zone(z, absolute)), '  )');
+        lines.push(
+          ...(f.referencePoints ?? []).map(
+            (p) =>
+              `    (point (at ${xy(footprintPoint(f, p))}) (size ${fmt(p.size)}) (layer ${q(p.layer)}) (uuid ${q(p.id)}))`,
+          ),
+          ...(f.zones ?? []).map((z) => '    ' + zone(z, absolute)),
+          '  )',
+        );
         return lines.join('\n');
       }),
     );

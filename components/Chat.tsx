@@ -233,6 +233,7 @@ export default function Chat({
   onSettings,
   onApply,
   active,
+  workbenchSuspended = false,
   sessionId,
   conversationTitle,
   requestTitle = false,
@@ -265,6 +266,7 @@ export default function Chat({
   onSettings: () => void;
   onApply: (ops: Operation[], basis?: string) => boolean;
   active: boolean;
+  workbenchSuspended?: boolean;
   sessionId: string;
   conversationTitle: string;
   requestTitle?: boolean;
@@ -762,8 +764,15 @@ export default function Chat({
   const sendLatest = useRef(send);
   sendLatest.current = send;
   useEffect(() => {
+    if (!workbenchSuspended) return;
+    if (controller.current || queue.current.length) pauseQueue(true);
+    controller.current?.abort();
+    for (const control of reviewControls.current.values()) control.abort();
+  }, [workbenchSuspended]);
+  useEffect(() => {
     if (
       mounted.current &&
+      !workbenchSuspended &&
       !busy &&
       !paused.current &&
       !queuePaused &&
@@ -771,7 +780,7 @@ export default function Chat({
       !controller.current
     )
       void sendLatest.current(queued[0].effort, queued[0]);
-  }, [busy, queuePaused, queued]);
+  }, [busy, queuePaused, queued, workbenchSuspended]);
 
   async function steerMessage(prompt: string, queuedId?: string) {
     const control = controller.current;
@@ -885,6 +894,7 @@ export default function Chat({
     parameters?: { id: string; value: string }[],
     resolvedModel = '',
   ) {
+    if (workbenchSuspended) return;
     const submittedText = pending?.text ?? input.trim();
     const sentAnnotations = pending?.annotations ?? annotations;
     const turnProvider = pending?.provider ?? provider;

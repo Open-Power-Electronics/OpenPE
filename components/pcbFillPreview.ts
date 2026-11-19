@@ -4,6 +4,7 @@ import {
   defaultCopperFillClearance,
   preparePCBFillRules,
   padPolygon,
+  padDrillPolygon,
   polygonPath,
   worldZones,
 } from '../lib/pcb-polygons';
@@ -46,8 +47,10 @@ function padGeometry(pad: Pad) {
     pad.type,
     pad.shape,
     pad.size,
+    pad.outline,
     pad.drill,
     pad.drillOffset,
+    pad.drillSlot,
     pad.netId,
     pad.layers,
     pad.roundrectRatio,
@@ -215,7 +218,8 @@ export function preparePCBFillPreview(
       pad,
       shape,
       bounds: boundsOf(shape.outer),
-      drill: pad.drill ? padDrillPosition(footprint, pad) : undefined,
+      slot: pad.drillSlot ? padDrillPolygon(footprint, pad) : undefined,
+      drill: pad.drill && !pad.drillSlot ? padDrillPosition(footprint, pad) : undefined,
     };
   });
   const changed =
@@ -271,7 +275,7 @@ export function preparePCBFillPreview(
           if (via.drill > 0 && overlaps(bounds, circleBounds(via, via.drill / 2)))
             blockers.push({ path: circlePath(via, via.drill / 2), strokeWidth: 0 });
         }
-        for (const { footprint, pad, shape, bounds: padBounds, drill } of padShapes) {
+        for (const { footprint, pad, shape, bounds: padBounds, drill, slot } of padShapes) {
           const gap =
             pad.netId !== zone.netId || pad.type === 'np_thru_hole'
               ? ruleLimits.gap(zoneOperand, ruleLimits.pad(footprint, pad), clearance)
@@ -294,6 +298,8 @@ export function preparePCBFillPreview(
               path: polygonPath([shape]),
               strokeWidth: 2 * gap,
             });
+          if (slot && overlaps(bounds, boundsOf(slot)))
+            blockers.push({ path: polygonPath([{ outer: slot, holes: [] }]), strokeWidth: 0 });
           if (
             drill &&
             pad.drill &&

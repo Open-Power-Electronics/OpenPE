@@ -4,6 +4,7 @@ import standalone from 'ajv/dist/standalone/index.js';
 import { build as compile } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { customPadVertexLimit } from '../lib/pcb-custom-pad-limits.ts';
 import { ownedValidatorSource } from './owned-validator-source.mjs';
 import { optimizeStaticMaxLength } from './ajv-length-guard.mjs';
 import { pruneValidatorSchemaSource } from './prune-validator-schema-source.mjs';
@@ -100,6 +101,7 @@ const pcbPositive = { ...pcbNumber, minimum: 0.000001, maximum: 1000 };
 const pcbNonnegative = { ...pcbPositive, minimum: 0 };
 const pcbXY = { x: pcbNumber, y: pcbNumber };
 const pcbPoint = object(pcbXY);
+const footprintPointCoordinate = { type: 'number', minimum: -100000, maximum: 100000 };
 const pcbAngle = { ...pcbNumber, minimum: -360, maximum: 360 };
 const copper = { enum: ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] };
 const graphicLayer = {
@@ -158,6 +160,7 @@ const line = object(
     fill: { type: 'boolean' },
     stroke: { enum: ['default', 'solid', 'dash', 'dot', 'dash_dot', 'dash_dot_dot'] },
     text: object(pcbTextProperties, pcbTextOptional),
+    keepUpright: { const: false },
     dimension: object(
       {
         type: { enum: ['aligned', 'radial', 'leader'] },
@@ -191,7 +194,7 @@ const line = object(
       ['height', 'leaderLength'],
     ),
   },
-  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'dimension', 'locked'],
+  ['kind', 'mid', 'points', 'fill', 'stroke', 'text', 'keepUpright', 'dimension', 'locked'],
 );
 const zone = object(
   {
@@ -375,6 +378,16 @@ const schema = {
         side: { enum: ['front', 'back'] },
         pads: array(ref('pad'), 2000),
         graphics: array(line, 10000),
+        referencePoints: array(
+          object({
+            id: uuid,
+            x: footprintPointCoordinate,
+            y: footprintPointCoordinate,
+            size: pcbPositive,
+            layer: { enum: ['F.Fab', 'B.Fab'] },
+          }),
+          256,
+        ),
         reference: text,
         value: text,
         zones: array(zone, 1000),
@@ -405,6 +418,7 @@ const schema = {
       [
         'reference',
         'value',
+        'referencePoints',
         'zones',
         'models',
         'locked',
@@ -421,16 +435,19 @@ const schema = {
         ...pcbXY,
         rotation: pcbAngle,
         type: { enum: ['smd', 'thru_hole', 'np_thru_hole'] },
-        shape: { enum: ['rect', 'circle', 'oval', 'roundrect'] },
+        shape: { enum: ['rect', 'circle', 'oval', 'roundrect', 'custom'] },
         size: object({ x: pcbPositive, y: pcbPositive }),
+        customAnchor: { const: 'circle' },
+        outline: { ...array(pcbPoint, customPadVertexLimit), minItems: 3 },
         drill: pcbPositive,
         netId: { anyOf: [uuid, { type: 'null' }] },
         layers: {
-          ...array({ enum: [...graphicLayer.enum, '*.Cu', '*.Mask'] }, 8),
+          ...array({ enum: [...graphicLayer.enum, '*.Cu', 'F&B.Cu', '*.Mask'] }, 8),
           minItems: 1,
           uniqueItems: true,
         },
         drillOffset: pcbPoint,
+        drillSlot: object({ length: pcbPositive, axis: { enum: ['x', 'y'] } }),
         roundrectRatio: { type: 'number', minimum: 0, maximum: 0.5 },
         chamferRatio: { type: 'number', minimum: 0, maximum: 0.5 },
         chamfer: {
@@ -444,13 +461,17 @@ const schema = {
         thermalBridgeAngle: pcbAngle,
         zoneConnect: { type: 'integer', minimum: 0, maximum: 3 },
         removeUnusedLayers: { type: 'boolean' },
+        heatsink: { const: true },
         unconnected: { const: true },
       },
       [
         'locked',
+        'customAnchor',
+        'outline',
         'drill',
         'layers',
         'drillOffset',
+        'drillSlot',
         'roundrectRatio',
         'chamferRatio',
         'chamfer',
@@ -460,6 +481,7 @@ const schema = {
         'thermalBridgeAngle',
         'zoneConnect',
         'removeUnusedLayers',
+        'heatsink',
         'unconnected',
       ],
     ),
@@ -603,6 +625,7 @@ docDefs.schematic = object(
           ...location,
           text,
           size: positive,
+          thickness: pcbNonnegative,
           anchor: { enum: ['start', 'middle', 'end'] },
           vertical: { enum: ['top', 'middle', 'bottom'] },
           excludeFromSimulation: { type: 'boolean' },
@@ -619,7 +642,7 @@ docDefs.schematic = object(
             ],
           },
         },
-        ['excludeFromSimulation', 'color', 'bold', 'italic', 'href'],
+        ['excludeFromSimulation', 'color', 'bold', 'italic', 'href', 'thickness'],
       ),
     ),
     kicad: native([

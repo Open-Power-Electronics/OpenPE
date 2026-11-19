@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('openpe', {
   titleBarInset: chrome.titleBarInset,
   installPlugin: () => ipcRenderer.invoke('openpe:install-plugin'),
   connection: () => ipcRenderer.invoke('openpe:connection'),
+  setRawKiCadMode: (value) => ipcRenderer.invoke('openpe:set-raw-kicad-mode', value),
+  chooseRawKiCadFiles: () => ipcRenderer.invoke('openpe:choose-raw-kicad-files'),
   openLibraryHomepage: (site) => ipcRenderer.invoke('openpe:open-library-homepage', site),
   cursorCredentialStatus: () => ipcRenderer.invoke('openpe:cursor-credential-status'),
   cursorCredentialStore: (key) => {

@@ -176,7 +176,7 @@ test('desktop Home skips example preparation while explicit opens share its chec
     },
   });
   await bootstrap;
-  const cadUrl = 'https://easyeda.com/api/products/C1523/components?version=6.4.19.5';
+  const cadUrl = 'https://easyeda.com/api/products/C1523/components';
   await jlcpcbFetcher(cadUrl, { redirect: 'error' });
   assert.deepEqual(vendorRequests, [
     { url: cadUrl, options: { redirect: 'error', credentials: 'omit', cache: 'no-store' } },

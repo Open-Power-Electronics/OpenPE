@@ -118,7 +118,7 @@ export function padCopperLayers(
   board: Pick<PCB, 'layers'>,
   footprint: Footprint,
   pad: Pad,
-): string[] {
+): PCB['layers'][number][] {
   if (pad.type === 'np_thru_hole') return [];
   return pad.layers
     ? board.layers.filter((layer) => pad.layers!.includes('*.Cu') || pad.layers!.includes(layer))
@@ -316,7 +316,11 @@ function routingNetBodies(tracks: PCB['tracks'], anchors: readonly RoutingAnchor
   return nets;
 }
 
-function publishGroups(items: IdentifiedBody[], group: (index: number) => number, partition: Map<string, string>) {
+function publishGroups(
+  items: IdentifiedBody[],
+  group: (index: number) => number,
+  partition: Map<string, string>,
+) {
   items.forEach((item, index) => partition.set(item.id, items[group(index)].id));
 }
 
@@ -350,7 +354,11 @@ export function createIncrementalPCBRoutingPartition(
   const nets = routingNetBodies(tracks, anchors, count);
   const stationary = new Map<
     string,
-    { items: IdentifiedBody[]; parents: number[]; sorted: { body: IdentifiedBody; index: number }[] }
+    {
+      items: IdentifiedBody[];
+      parents: number[];
+      sorted: { body: IdentifiedBody; index: number }[];
+    }
   >();
   for (const [netId, items] of nets) {
     const group = copperGroups(items, count);

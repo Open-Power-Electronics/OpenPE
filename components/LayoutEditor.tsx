@@ -120,10 +120,12 @@ import {
   pcbDisplayLayers,
   pcbFootprintBodyBounds,
   pcbLayerColor,
+  pcbPadDisplayLayers,
   pcbDisplayLayerPaintOrder,
   type PCBDisplay,
   type PCBInactiveLayerMode,
 } from '@/lib/pcb-display';
+import { padReach } from '@/lib/pcb-custom-pad';
 import { captureLayoutPNG, saveDrawingPNG } from '@/lib/drawing-export';
 import { preparePCBFillPreview } from './pcbFillPreview';
 import { usePCBFillWorker } from './usePCBFillWorker';
@@ -671,11 +673,7 @@ function LayoutEditor({
               pad &&
               owner &&
               visibleLayers.footprints &&
-              (pad.type === 'np_thru_hole'
-                ? visibleLayers['Edge.Cuts']
-                : padCopperLayers(pcb, owner, pad).some(
-                    (layer) => visibleLayers[layer as BoardLayer],
-                  ));
+              pcbPadDisplayLayers(pcb, owner, pad).some((layer) => visibleLayers[layer]);
             return visiblePad ? [{ kind: 'footprint' as const, id: owner.id }] : [];
           })
           .filter((target) => eligible.has(`${target.kind}:${target.id}`)),
@@ -1570,9 +1568,7 @@ function LayoutEditor({
         pad &&
         (!(owner.locked || pad.locked) || filters.locked !== false) &&
         visibleLayers.footprints &&
-        (pad.type === 'np_thru_hole'
-          ? visibleLayers['Edge.Cuts']
-          : padCopperLayers(pcb, owner, pad).some((name) => visibleLayers[name as CopperLayer]))
+        pcbPadDisplayLayers(pcb, owner, pad).some((name) => visibleLayers[name])
         ? current
         : '';
     };
@@ -1861,9 +1857,10 @@ function LayoutEditor({
       const track = pcb.tracks.find((item) => item.id === id);
       const via = pcb.vias.find((item) => item.id === id);
       const footprint = pcb.footprints.find((item) => item.id === id);
-      const padOwner = !track && !via && !footprint
-        ? pcb.footprints.find((item) => item.pads.some((pad) => pad.id === id))
-        : undefined;
+      const padOwner =
+        !track && !via && !footprint
+          ? pcb.footprints.find((item) => item.pads.some((pad) => pad.id === id))
+          : undefined;
       const pad = padOwner?.pads.find((item) => item.id === id);
       let target: Selection;
       let points: Point[];
@@ -1874,7 +1871,9 @@ function LayoutEditor({
         points = [track.start, track.end];
         padding += track.width;
       } else if (via) {
-        if (!(['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] as const).some((layer) => selectionLayers[layer]))
+        if (
+          !(['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu'] as const).some((layer) => selectionLayers[layer])
+        )
           return false;
         target = { kind: 'via', id };
         points = [via];
@@ -1884,20 +1883,21 @@ function LayoutEditor({
           filters.pad === false ||
           (pad.locked && filters.locked === false) ||
           !selectionLayers.footprints ||
-          !(pad.type === 'np_thru_hole'
-            ? selectionLayers['Edge.Cuts']
-            : padCopperLayers(pcb, padOwner, pad).some((layer) => selectionLayers[layer as BoardLayer]))
-        ) return false;
+          !pcbPadDisplayLayers(pcb, padOwner, pad).some((layer) => selectionLayers[layer])
+        )
+          return false;
         target = { kind: 'footprint', id: padOwner.id };
         points = [padPosition(padOwner, pad)];
-        padding += Math.hypot(pad.size.x, pad.size.y);
+        padding += 2 * padReach(pad);
       } else if (footprint) {
         const bounds = pcbFootprintBodyBounds(pcb, footprint, selectionLayers);
         if (!bounds) return false;
         target = { kind: 'footprint', id };
         points = [
-          { x: bounds.minX, y: bounds.minY }, { x: bounds.minX, y: bounds.maxY },
-          { x: bounds.maxX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY },
+          { x: bounds.minX, y: bounds.minY },
+          { x: bounds.minX, y: bounds.maxY },
+          { x: bounds.maxX, y: bounds.minY },
+          { x: bounds.maxX, y: bounds.maxY },
         ].map((point) => footprintPoint(footprint, point));
       } else return false;
       if (!pcbSelectionEligible(pcb, target, filters)) return false;

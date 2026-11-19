@@ -2,7 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPart, emptyCircuit } from '../lib/circuit';
 import { projectFromNativeFiles, projectNativeFiles } from '../lib/kicad-project';
-import { createEmptyPCB, createPCBFootprint } from '../lib/pcb-layout';
+import {
+  createEmptyPCB,
+  createPCBFootprint,
+  flipPCBFootprint,
+  readLibraryFootprint,
+} from '../lib/pcb-layout';
+import { padCopperLayers } from '../lib/pcb-connectivity';
+import { padHasMaskOpening } from '../lib/pcb-solder-mask';
+import { insidePolygon } from '../lib/pcb-collision';
+import { setPCBPadProperties } from '../lib/pcb-properties';
+import { pcbFootprintTextRotation } from '../lib/pcb-display';
 import { createProject, validateProject } from '../lib/project';
 import { child, children, parseSExpr, val } from '../lib/sexpr';
 
@@ -45,6 +55,252 @@ function fixture(text = source()) {
   validateProject(project);
   return { circuit, part, detail, footprint, project };
 }
+
+test('mask and paste apertures retain native geometry through linked placement, flip and reopen', () => {
+  const withApertures = (front: string) =>
+    source(
+      `(pad "" smd roundrect (at 4 2 37) (size 1.25 2.5) (layers ${front})
+        (roundrect_rratio 0.22) (solder_paste_margin -0.125))
+       (pad "" smd circle (at 4 -2) (size 0.8 0.8) (layers "B.Paste"))
+       (pad "" smd rect (at 3 -2) (size 0.9 0.75) (layers "F.Mask" "F.Paste"))`,
+    );
+  const { footprint, project } = fixture(withApertures('"F.Paste"'));
+  const [front, back, mask] = footprint.pads;
+  assert.equal(front.number, '');
+  assert.deepEqual(front.layers, ['F.Paste']);
+  assert.equal(front.rotation, 37);
+  assert.equal(front.roundrectRatio, 0.22);
+  assert.deepEqual(front.size, { x: 1.25, y: 2.5 });
+  assert.deepEqual(back.layers, ['B.Paste']);
+  assert.deepEqual(mask.layers, ['F.Mask', 'F.Paste']);
+  for (const aperture of [front, back, mask]) {
+    assert.equal(aperture.netId, null);
+    assert.deepEqual(padCopperLayers(project.pcb!, footprint, aperture), []);
+  }
+  const flipped = flipPCBFootprint(footprint);
+  assert.deepEqual(flipped.pads[0].layers, ['B.Paste']);
+  assert.deepEqual(flipped.pads[1].layers, ['F.Paste']);
+  assert.deepEqual(flipped.pads[2].layers, ['B.Mask', 'B.Paste']);
+  project.pcb!.footprints[0] = flipped;
+  const reopened = projectFromNativeFiles(projectNativeFiles(project));
+  assert.deepEqual(reopened.pcb!.footprints[0].pads.slice(0, 3), flipped.pads.slice(0, 3));
+  const invalid = structuredClone(project);
+  const netId = '87a32ef1-8c78-449c-a5ff-959cce19dcaa';
+  invalid.pcb!.nets.push({ id: netId, name: 'ApertureNet' });
+  invalid.pcb!.footprints[0].pads[0].netId = netId;
+  assert.throws(() => validateProject(invalid), /apertures cannot carry a net/);
+  for (const layers of ['"F.Paste" "B.Paste"', '"F.Mask" "B.Paste"'])
+    assert.throws(() => fixture(withApertures(layers)), /Custom pad layer sets are not supported/);
+});
+
+test('catalog copper with an empty pad number remains unassigned through linked placement and reopen', () => {
+  const blank = '(pad "" smd rect (at 4 2) (size 2 1) (layers "F.Cu" "F.Mask"))';
+  const { footprint, project, circuit, part } = fixture(source(blank));
+  const reopened = projectFromNativeFiles(projectNativeFiles(project));
+  for (const owner of [footprint, reopened.pcb!.footprints[0]]) {
+    const [pad] = owner.pads;
+    assert.equal(pad.number, '');
+    assert.equal(pad.netId, null);
+    assert.equal(pad.unconnected, true);
+    assert.deepEqual(padCopperLayers(project.pcb!, owner, pad), ['F.Cu']);
+  }
+  const detail = {
+    id: 'Test:NativeArtwork',
+    footprint: parseSExpr(`(footprint "NativeArtwork" (layer "F.Cu") ${blank})`),
+  };
+  assert.equal(readLibraryFootprint(detail).pads.length, 1);
+  assert.throws(
+    () => createPCBFootprint(detail, circuit, part.id, { x: 0, y: 0 }),
+    /footprint with numbered electrical pads/,
+  );
+  assert.throws(() => fixture(source(blank.replace('pad ""', 'pad "  "'))), /only whitespace/);
+});
+
+test('plated holes retain a one-sided mask opening and mirror it on a footprint flip', () => {
+  const { footprint, project } = fixture(
+    source(`
+    (pad "1" thru_hole circle (at 3 0) (size 1.2 1.2) (drill 0.6) (layers "*.Cu" "F.Mask"))
+    (pad "" np_thru_hole circle (at 4 0) (size 0.8 0.8) (drill 0.8) (layers "*.Cu" "*.Mask"))`),
+  );
+  const [plated, mechanical] = footprint.pads;
+  assert.equal(padHasMaskOpening(footprint, plated, 'front'), true);
+  assert.equal(padHasMaskOpening(footprint, plated, 'back'), false);
+  assert.deepEqual(padCopperLayers(project.pcb!, footprint, plated), ['F.Cu', 'B.Cu']);
+  assert.deepEqual(padCopperLayers(project.pcb!, footprint, mechanical), []);
+  const flipped = flipPCBFootprint(footprint);
+  project.pcb!.footprints[0] = flipped;
+  const reopened = projectFromNativeFiles(projectNativeFiles(project)).pcb!.footprints[0];
+  assert.deepEqual(reopened.pads[0].layers, ['*.Cu', 'B.Mask']);
+  assert.equal(padHasMaskOpening(reopened, reopened.pads[0], 'front'), false);
+  assert.equal(padHasMaskOpening(reopened, reopened.pads[0], 'back'), true);
+});
+
+test('abutting custom pad rectangles preserve their exact union with the native anchor', () => {
+  const withRectangles = (secondLeft: string) =>
+    source(`
+    (pad "1" smd custom (at 4 2) (size 2 2) (layers "F.Cu" "F.Mask")
+      (options (clearance outline) (anchor rect))
+      (primitives
+        (gr_poly (pts (xy 1 -0.8) (xy 2.000001 -0.8) (xy 2.000001 -0.2) (xy 1 -0.2)) (width 0) (fill yes))
+        (gr_poly (pts (xy ${secondLeft} 0.2) (xy 2 0.2) (xy 2 0.8) (xy ${secondLeft} 0.8)) (width 0) (fill yes))))`);
+  const { footprint, project } = fixture(withRectangles('1'));
+  const [pad] = footprint.pads;
+  const outline = { outer: pad.outline!, holes: [] };
+  assert.equal(Math.max(...outline.outer.map(({ x }) => x)), 2.000001);
+  assert.equal(insidePolygon({ x: 1.5, y: -0.5 }, outline), true);
+  assert.equal(insidePolygon({ x: 1.5, y: 0.5 }, outline), true);
+  assert.equal(insidePolygon({ x: 1.5, y: 0 }, outline), false);
+  const reopened = projectFromNativeFiles(projectNativeFiles(project)).pcb!.footprints[0];
+  assert.deepEqual(reopened.pads[0].outline, pad.outline);
+  assert.throws(() => fixture(withRectangles('1.5')), /single outline without holes/);
+});
+
+test('placement and native pad edits preserve the exact heatsink fabrication property', () => {
+  const heatsink = '(property pad_prop_heatsink)';
+  const { footprint, project } = fixture(source(circle, heatsink));
+  const [pad] = footprint.pads;
+  assert.equal(pad.heatsink, true);
+  const native = projectNativeFiles(project);
+  const board = native.files.find(({ name }) => name.endsWith('.kicad_pcb'))!;
+  assert.ok(board.source.includes(heatsink));
+  const reopened = projectFromNativeFiles(native);
+  assert.equal(reopened.pcb!.footprints[0].pads[0].heatsink, true);
+  reopened.pcb = setPCBPadProperties(reopened.pcb!, pad.id, { x: pad.x + 0.1 });
+  const edited = projectNativeFiles(reopened);
+  const editedBoard = edited.files.find(({ name }) => name.endsWith('.kicad_pcb'))!;
+  assert.ok(editedBoard.source.includes(heatsink));
+  assert.equal(projectFromNativeFiles(edited).pcb!.footprints[0].pads[0].heatsink, true);
+  assert.throws(
+    () => fixture(source(circle, '(property pad_prop_castellated)')),
+    /fabrication property/,
+  );
+  assert.throws(() => fixture(source(circle, `${heatsink} ${heatsink}`)), /repeats property/);
+});
+
+test('library placement retains package-level mask and paste margins through native Save and reopen', () => {
+  const withMargins = (settings: string) =>
+    source().replace('(layer "F.Cu")', `(layer "F.Cu") ${settings}`);
+  const native =
+    '(solder_mask_margin 0.0625) (solder_paste_margin -0.02) (solder_paste_margin_ratio 0)';
+  const { footprint, project } = fixture(withMargins(native));
+  const nativeFiles = projectNativeFiles(project);
+  const reopened = projectFromNativeFiles(nativeFiles).pcb!.footprints[0];
+  for (const item of [footprint, reopened]) {
+    assert.equal(item.solderMaskMargin, 0.0625);
+    assert.equal(item.solderPasteMargin, -0.02);
+    assert.equal(item.solderPasteMarginRatio, 0);
+    assert.equal(item.pads[0].solderMaskMargin, 0.025);
+  }
+  const board = nativeFiles.files.find(({ name }) => name.endsWith('.kicad_pcb'))!;
+  const placed = child(parseSExpr(board.source), 'footprint')!;
+  for (const key of ['solder_mask_margin', 'solder_paste_margin', 'solder_paste_margin_ratio'])
+    assert.ok(child(placed, key));
+  assert.throws(
+    () => fixture(withMargins('(solder_mask_margin 0) (solder_mask_margin 0.02)')),
+    /repeats solder_mask_margin/,
+  );
+  assert.throws(
+    () => fixture(withMargins('(solder_paste_margin 0.001 0.002)')),
+    /unsupported coordinates or dimensions/,
+  );
+});
+
+test('custom circular anchors retain their native shape, contained outline and diameter', () => {
+  const packageWithAnchor = (size: string, vertices: string) =>
+    `(footprint "NativeArtwork" (version 20240108) (layer "F.Cu")
+      (pad "1" smd custom (at 0 0) (size ${size}) (layers "F.Cu" "F.Paste" "F.Mask")
+        (options (clearance outline) (anchor circle))
+        (primitives (gr_poly (pts ${vertices}) (width 0) (fill yes)))))`;
+  const diamond = '(xy -0.8 0) (xy 0 -0.8) (xy 0.8 0) (xy 0 0.8)';
+  const { footprint, project } = fixture(packageWithAnchor('1 1', diamond));
+  const pad = footprint.pads[0];
+  assert.equal(pad.customAnchor, 'circle');
+  assert.deepEqual(pad.outline, [
+    { x: -0.8, y: 0 },
+    { x: 0, y: -0.8 },
+    { x: 0.8, y: 0 },
+    { x: 0, y: 0.8 },
+  ]);
+  project.pcb = setPCBPadProperties(project.pcb!, pad.id, { size: { x: 0.9, y: 1 } });
+  validateProject(project);
+  const files = projectNativeFiles(project);
+  assert.match(
+    files.files.find(({ name }) => name.endsWith('.kicad_pcb'))!.source,
+    /\(anchor circle\)/,
+  );
+  const restored = projectFromNativeFiles(files).pcb!.footprints[0].pads[0];
+  assert.deepEqual(restored.size, { x: 0.9, y: 0.9 });
+  assert.deepEqual(restored.outline, pad.outline);
+  assert.equal(restored.customAnchor, 'circle');
+
+  const edge = '(xy -1 -1) (xy 1 -1) (xy 1 0) (xy -1 0)';
+  assert.doesNotThrow(() => fixture(packageWithAnchor('0.000001 0.000001', edge)));
+  assert.throws(() => fixture(packageWithAnchor('0.1 0.1', edge)), /enclose its circular anchor/);
+  assert.throws(() => fixture(packageWithAnchor('0.9 1', diamond)), /equal dimensions/);
+  assert.throws(
+    () => fixture(packageWithAnchor('1.2 1.2', diamond)),
+    /enclose its circular anchor/,
+  );
+});
+
+test('filled catalog rectangles retain exact corners and technical-layer artwork through Save', () => {
+  const rect =
+    '(fp_rect (start 1 2) (end 4 6) (layer "F.Paste") (stroke (width 0) (type solid)) (fill solid))';
+  const drawing =
+    '(fp_line (start 0 0) (end 1 1) (layer "Dwgs.User") (stroke (width 0.1) (type solid)))';
+  const label = '(fp_text user "K" (at 0 0) (layer "Cmts.User") (effects (font (size 1 1))))';
+  const { footprint, project } = fixture(source([rect, drawing, label].join(' ')));
+  const [region, line, text] = footprint.graphics;
+  assert.deepEqual(
+    [region.kind, region.start, region.points, region.end, region.fill, region.width],
+    [
+      'polygon',
+      { x: 1, y: 2 },
+      [
+        { x: 4, y: 2 },
+        { x: 4, y: 6 },
+      ],
+      { x: 1, y: 6 },
+      true,
+      0,
+    ],
+  );
+  assert.deepEqual([region.layer, line.layer, text.layer], ['F.Paste', 'Dwgs.User', 'Cmts.User']);
+  const reopened = projectFromNativeFiles(projectNativeFiles(project)).pcb!.footprints[0];
+  assert.deepEqual(reopened.graphics[0], region);
+  assert.deepEqual(
+    reopened.graphics.slice(1, 3).map(({ layer }) => layer),
+    ['Dwgs.User', 'Cmts.User'],
+  );
+  assert.throws(() => fixture(source(rect.replace('(end 4 6)', '(end 1 6)'))), /positive area/);
+  assert.throws(() => fixture(source(rect.replace('F.Paste', 'Edge.Cuts'))), /unfilled contour/);
+  assert.throws(
+    () => fixture(source(rect.replace('(width 0)', '(width 0.1)'))),
+    /without a stroke/,
+  );
+});
+
+test('native pad corner and paste ratios keep their dimensionless precision through Save and reopen', () => {
+  const rounded = '0.1388888888888889';
+  const chamfer = '0.2173913043478261';
+  const paste = '-0.00000001000001';
+  const text = source()
+    .replace('(solder_paste_margin_ratio -0.1)', `(solder_paste_margin_ratio ${paste})`)
+    .replace('"1" smd oval', '"1" smd roundrect')
+    .replace(
+      '(size 0.63 1.865)',
+      `(size 0.63 1.865) (roundrect_rratio ${rounded}) (chamfer_ratio ${chamfer}) (chamfer top_left)`,
+    );
+  const { project, footprint } = fixture(text);
+  const reopened = projectFromNativeFiles(projectNativeFiles(project)).pcb!.footprints[0];
+  for (const {
+    pads: [pad],
+  } of [footprint, reopened]) {
+    assert.equal(pad.roundrectRatio, Number(rounded));
+    assert.equal(pad.chamferRatio, Number(chamfer));
+    assert.equal(pad.solderPasteMarginRatio, Number(paste));
+  }
+});
 
 test('library placement retains exact circles, arc anchors, polygon vertices, fills and pad settings', () => {
   const { footprint } = fixture();
@@ -289,6 +545,41 @@ test('native KiCad 6 vendor artwork retains width records and user polarity text
   assert.deepEqual(projectNativeFiles(reopened, files.entry), files);
 });
 
+test('free footprint text orientation survives placement, rotation and native reopen', () => {
+  const text = '(fp_text user "PIN 1" (at 1 2 30) (layer "F.SilkS") (effects (font (size 1 1))))';
+  const modern = text.replace('(at 1 2 30)', '(at 1 2 30) (unlocked yes)');
+  const legacy = text.replace('(at 1 2 30)', '(at 1 2 30 unlocked)');
+  for (const native of [modern, legacy]) {
+    const { footprint, project } = fixture(source(native));
+    const graphic = footprint.graphics[0];
+    assert.equal(graphic.keepUpright, false);
+    assert.equal(graphic.locked, undefined);
+    footprint.rotation = 180;
+    const files = projectNativeFiles(project);
+    const board = files.files.find(({ name }) => name.endsWith('.kicad_pcb'))!;
+    assert.match(board.source, /\(at 1 2 210\) \(unlocked yes\)/);
+    const reopened = projectFromNativeFiles(files);
+    const next = reopened.pcb!.footprints[0].graphics[0];
+    assert.equal(next.keepUpright, false);
+    assert.equal(pcbFootprintTextRotation(next.text!.rotation, 180, next.keepUpright), 30);
+    assert.equal(pcbFootprintTextRotation(next.text!.rotation, 180), -150);
+    delete next.keepUpright;
+    assert.equal(
+      projectFromNativeFiles(projectNativeFiles(reopened)).pcb!.footprints[0].graphics[0]
+        .keepUpright,
+      undefined,
+    );
+  }
+  assert.throws(
+    () => fixture(source(modern.replace('unlocked yes', 'unlocked other'))),
+    /orientation/,
+  );
+  assert.throws(
+    () => fixture(source(legacy.replace('(layer', '(unlocked no) (layer'))),
+    /orientation/,
+  );
+});
+
 test('native text and width syntax rejects unsupported or ambiguous source content', () => {
   const label = `(fp_text user "K" (at 0 -1.8 30) (layer "F.SilkS")
     (effects (font (size 1 1) (thickness 0.15))))`;
@@ -314,6 +605,11 @@ test('native text and width syntax rejects unsupported or ambiguous source conte
   ])
     assert.throws(() => fixture(source(graphic)), /Layout:/, graphic);
   const nativeLine = '(fp_line (start 0 0) (end 1 1) (width 0.12) (layer "F.SilkS"))';
+  assert.equal(
+    fixture(source(nativeLine).replace('(version 20240108)', '(version 20210108)')).footprint
+      .graphics[0].width,
+    0.12,
+  );
   assert.throws(() => fixture(source(nativeLine)), /native width field/);
   for (const line of [
     nativeLine.replace('(width 0.12)', '(width 0.12 extra)'),

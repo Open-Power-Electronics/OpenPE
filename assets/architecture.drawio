@@ -19,6 +19,15 @@
                 <mxCell id="agent" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Agent adapters · Queue / Steer&#xa;Model / effort · Titles · User questions&#xa;Codex / Claude / Cursor scoped tools&#xa;Cursor SDK local · MCP tools only&#xa;File/design change review · Current-state edit queue" vertex="1">
                     <mxGeometry height="108" width="340" x="930" y="190" as="geometry"/>
                 </mxCell>
+                <mxCell id="raw-kicad" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;align=center;verticalAlign=middle;spacing=6;" value="Raw KiCad chat · Workbench suspended&#xa;Native picker → original UTF-8 text → message transport" vertex="1">
+                    <mxGeometry height="60" width="460" x="810" y="93" as="geometry"/>
+                </mxCell>
+                <mxCell id="human-raw" parent="1" source="human" target="raw-kicad" edge="1" style="edgeStyle=orthogonalEdgeStyle;html=0;strokeColor=#848484;endArrow=block;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" value="Mode switch">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="raw-agent" parent="1" source="raw-kicad" target="agent" edge="1" style="edgeStyle=orthogonalEdgeStyle;html=0;strokeColor=#848484;endArrow=block;exitX=0.63;exitY=1;entryX=0.5;entryY=0;" value="Text only">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
                 <mxCell id="api" parent="1" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=16;fontColor=#fafafa;fillColor=#202020;strokeColor=#202020;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Uniform API · Compact discovery&#xa;Design · Symbol / footprint drawings · Simulation · Project files" vertex="1">
                     <mxGeometry height="60" width="1190" x="80" y="330" as="geometry"/>
                 </mxCell>
@@ -70,7 +79,7 @@
                 <mxCell id="persistence" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Persistence&#xa;Destination Git · Recovery · Recent pins · Results&#xa;Cursor key outside recovery · Publication queue" vertex="1">
                     <mxGeometry height="65" width="260" x="300" y="55" as="geometry"/>
                 </mxCell>
-                <mxCell id="resources" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Resources · KiCad / NextPCB / JLCPCB · PDFs&#xa;System network · footprint-filtered catalogs&#xa;NextPCB and EasyEDA STEP · CAD conversion&#xa;Scoped examples/ and examples/project/" vertex="1">
+                <mxCell id="resources" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Resources · KiCad / NextPCB / JLCPCB · PDFs&#xa;System network · catalog paging and status&#xa;On-demand CAD, STEP and HQ Online prices&#xa;Scoped examples/ and examples/project/" vertex="1">
                     <mxGeometry height="77" width="300" x="580" y="55" as="geometry"/>
                 </mxCell>
                 <mxCell id="execution" parent="host" style="rounded=1;html=0;whiteSpace=wrap;fontFamily=Arial;fontSize=15;fontColor=#202020;fillColor=#ffffff;strokeColor=#bdbdbd;strokeWidth=1;shadow=0;arcSize=8;fontStyle=0;align=center;verticalAlign=middle;spacing=6;" value="Execution&#xa;Solvers · Convergence retry&#xa;STEP parser workers" vertex="1">

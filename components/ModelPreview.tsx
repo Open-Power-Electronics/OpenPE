@@ -1,12 +1,21 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { Maximize2, RotateCw } from 'lucide-react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
+import { RotateCw } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { modelMeshGroup, disposeModelGroup, type MeshData } from '@/lib/model-mesh';
 import { api } from '@/lib/bridge';
+import { isLibraryAssetUnavailable } from '@/lib/library';
 import type { FootprintModel } from '@/lib/pcb';
+import { footprintModels } from '@/lib/pcb-models';
+import { quote, type SExpr } from '@/lib/sexpr';
 import WorkspaceLoading from './WorkspaceLoading';
+import LibraryPreviewFit from './LibraryPreviewFit';
+
+type LibraryMesh = {
+  meshes: MeshData[];
+  model?: { path: string; offset?: SExpr; scale?: SExpr; rotate?: SExpr };
+};
 
 function place(group: THREE.Group, model?: FootprintModel) {
   group.position.set(model?.offset.x ?? 0, model?.offset.y ?? 0, model?.offset.z ?? 0);
@@ -33,40 +42,65 @@ export default function ModelPreview({
   index = 0,
   load,
   model,
+  active = true,
+  onUnavailable,
 }: {
   id?: string;
   index?: number;
   load?: (signal: AbortSignal) => Promise<MeshData[]>;
   model?: FootprintModel;
+  active?: boolean;
+  onUnavailable?: (message: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const currentModel = useRef(model);
   currentModel.current = model;
+  const libraryPlacement = useRef<FootprintModel | undefined>(undefined);
   const groupRef = useRef<THREE.Group | null>(null);
   const fit = useRef<(() => void) | null>(null);
+  const isActive = useRef(active);
+  const setRendering = useRef<((active: boolean) => void) | null>(null);
   const [status, setStatus] = useState('Loading 3D model…');
   const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
+  const reportUnavailable = useEffectEvent((message: string) => onUnavailable?.(message));
+  useLayoutEffect(() => {
+    isActive.current = active;
+    setRendering.current?.(active);
+  }, [active]);
   useEffect(() => {
-    if (groupRef.current) place(groupRef.current, model);
+    if (groupRef.current) place(groupRef.current, model ?? libraryPlacement.current);
   }, [model]);
   useEffect(() => {
     const control = new AbortController();
     let cleanup = () => {};
+    libraryPlacement.current = undefined;
     setStatus('Loading 3D model…');
     setFailed(false);
     void (async () => {
-      const meshes: MeshData[] = load
-        ? await load(control.signal)
-        : (
-            await (
-              await api(`library-model?id=${encodeURIComponent(id)}&index=${index}`, {
-                signal: control.signal,
-              })
-            ).json()
-          ).meshes;
+      const data: LibraryMesh = load
+        ? { meshes: await load(control.signal) }
+        : await (
+            await api(`library-model?id=${encodeURIComponent(id)}&index=${index}`, {
+              signal: control.signal,
+            })
+          ).json();
+      const { meshes, model: reference } = data;
       if (control.signal.aborted || !host.current) return;
-      if (!meshes.length) throw new Error('This model has no preview geometry.');
+      if (!meshes.length) {
+        const message = 'This model has no preview geometry.';
+        reportUnavailable(message);
+        throw new Error(message);
+      }
+      if (reference) {
+        const { path, offset, scale, rotate } = reference;
+        const pose = [offset, scale, rotate].filter((node) => node !== undefined);
+        libraryPlacement.current = footprintModels([
+          'footprint',
+          '""',
+          ['model', quote(path), ...pose],
+        ])[0];
+      }
       const el = host.current;
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -76,7 +110,7 @@ export default function ModelPreview({
       const scene = new THREE.Scene(),
         group = modelMeshGroup(meshes);
       groupRef.current = group;
-      place(group, currentModel.current);
+      place(group, currentModel.current ?? libraryPlacement.current);
       scene.add(group);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x555555, 3));
       const light = new THREE.DirectionalLight(0xffffff, 3);
@@ -91,6 +125,13 @@ export default function ModelPreview({
       axes.renderOrder = 1000;
       axes.visible = !!currentModel.current;
       scene.add(axes);
+      const stopMomentum = () => {
+        orbit.saveState();
+        orbit.enableDamping = false;
+        orbit.update();
+        orbit.reset();
+        orbit.enableDamping = true;
+      };
       fit.current = () => {
         const bounds = new THREE.Box3().setFromObject(group);
         const center = bounds.getCenter(new THREE.Vector3());
@@ -101,7 +142,7 @@ export default function ModelPreview({
         camera.position.copy(center).add(new THREE.Vector3(size, -size, size * 0.8));
         orbit.target.copy(center);
         camera.updateProjectionMatrix();
-        orbit.update();
+        stopMomentum();
       };
       fit.current();
       const resize = () => {
@@ -114,12 +155,19 @@ export default function ModelPreview({
       };
       const observer = new ResizeObserver(resize);
       observer.observe(el);
-      resize();
-      renderer.setAnimationLoop(() => {
+      const render = () => {
         orbit.update();
         renderer.render(scene, camera);
-      });
+      };
+      setRendering.current = (visible) => {
+        orbit.enabled = visible;
+        if (visible) resize();
+        else stopMomentum();
+        renderer.setAnimationLoop(visible ? render : null);
+      };
+      setRendering.current(isActive.current);
       cleanup = () => {
+        setRendering.current = null;
         observer.disconnect();
         orbit.dispose();
         renderer.setAnimationLoop(null);
@@ -129,11 +177,13 @@ export default function ModelPreview({
         renderer.dispose();
         renderer.domElement.remove();
         groupRef.current = null;
+        libraryPlacement.current = undefined;
         fit.current = null;
       };
       setStatus('');
     })().catch((e) => {
       if (!control.signal.aborted) {
+        if (isLibraryAssetUnavailable(e)) reportUnavailable(e.message);
         setStatus((e as Error).message);
         setFailed(true);
       }
@@ -165,21 +215,9 @@ export default function ModelPreview({
           )}
         </div>
       ) : (
-        <button
-          type="button"
-          className="icon-button model-preview-fit"
-          aria-label="Fit model preview"
-          title="Fit model preview"
-          onClick={() => fit.current?.()}
-        >
-          <Maximize2 size={16} />
-        </button>
+        <LibraryPreviewFit kind="model" onFit={() => fit.current?.()} />
       )}
-      {!status && (
-        <span className="model-preview-hint">
-          {model?.hidden ? 'Model hidden' : 'Drag to rotate · Scroll to zoom'}
-        </span>
-      )}
+      {!status && model?.hidden && <span className="model-preview-hidden">Model hidden</span>}
     </div>
   );
 }

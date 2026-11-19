@@ -41,8 +41,8 @@ export type AgentComposerProps = {
   agentSupportsEffort?: boolean;
   effort: ReasoningEffort;
   setEffort: (value: ReasoningEffort) => void;
-  approvalMode: 'review' | 'auto';
-  setApprovalMode: (value: 'review' | 'auto') => void;
+  approvalMode?: 'review' | 'auto';
+  setApprovalMode?: (value: 'review' | 'auto') => void;
   model: string;
   setModel: (value: string) => void;
   input: string;
@@ -70,6 +70,7 @@ export type AgentComposerProps = {
   allowFollowUp?: boolean;
   canSteer?: boolean;
   submitting?: boolean;
+  allowSmartPunctuation?: boolean;
 };
 
 export default function AgentComposer({
@@ -105,6 +106,7 @@ export default function AgentComposer({
   allowFollowUp = false,
   canSteer = false,
   submitting = false,
+  allowSmartPunctuation = true,
 }: AgentComposerProps) {
   const name = agentName(provider);
   const ownInput = useRef<HTMLTextAreaElement>(null);
@@ -146,7 +148,6 @@ export default function AgentComposer({
   const selected = catalog.selected;
   const modelEfforts = selected?.efforts ?? null;
   const effortOptions = (modelEfforts ?? []).map((value) => ({ value, label: effortLabels[value] }));
-  const effortFitLabels = effortOptions.map(({ label }) => label);
   const cursorParameters = provider === 'cursor' && selected ? selected.parameters : undefined;
   const supportsEffort =
     modelEfforts === null
@@ -275,7 +276,7 @@ export default function AgentComposer({
             const input = e.currentTarget;
             const event = e.nativeEvent as InputEvent;
             if (
-              document.documentElement.dataset.smartPunctuation === 'true' &&
+              allowSmartPunctuation && document.documentElement.dataset.smartPunctuation === 'true' &&
               event.inputType === 'insertText' &&
               !composing.current &&
               !event.isComposing
@@ -352,46 +353,48 @@ export default function AgentComposer({
           </button>
         )}
         <div className="composer-bottom">
-          <div className="approval-control">
-            <Select
-              label="Agent permissions"
-              popupClassName="permission-menu"
-              value={approvalMode}
-              onChange={(value) => setApprovalMode(value as 'review' | 'auto')}
-              icon={
-                approvalMode === 'auto' ? (
-                  <ShieldAlert className="permission-auto" size={18} />
-                ) : (
-                  <ShieldCheck className="permission-review" size={18} />
-                )
-              }
-              iconOnly
-              showChevron={false}
-              compact
-              options={[
-                {
-                  value: 'review',
-                  label: 'Review changes',
-                  description: (
-                    <span aria-description="Confirm file and design changes before applying.">
-                      Confirm file and design changes before applying.
-                    </span>
-                  ),
-                  icon: <ShieldCheck className="permission-review" size={18} />,
-                },
-                {
-                  value: 'auto',
-                  label: 'Auto-approve',
-                  icon: <ShieldAlert className="permission-auto" size={18} />,
-                  description: (
-                    <span aria-description="Run supported commands automatically.">
-                      Run supported commands automatically.
-                    </span>
-                  ),
-                },
-              ]}
-            />
-          </div>
+          {approvalMode && setApprovalMode && (
+            <div className="approval-control">
+              <Select
+                label="Agent permissions"
+                popupClassName="permission-menu"
+                value={approvalMode}
+                onChange={(value) => setApprovalMode(value as 'review' | 'auto')}
+                icon={
+                  approvalMode === 'auto' ? (
+                    <ShieldAlert className="permission-auto" size={18} />
+                  ) : (
+                    <ShieldCheck className="permission-review" size={18} />
+                  )
+                }
+                iconOnly
+                showChevron={false}
+                compact
+                options={[
+                  {
+                    value: 'review',
+                    label: 'Review changes',
+                    description: (
+                      <span aria-description="Confirm file and design changes before applying.">
+                        Confirm file and design changes before applying.
+                      </span>
+                    ),
+                    icon: <ShieldCheck className="permission-review" size={18} />,
+                  },
+                  {
+                    value: 'auto',
+                    label: 'Auto-approve',
+                    icon: <ShieldAlert className="permission-auto" size={18} />,
+                    description: (
+                      <span aria-description="Run supported commands automatically.">
+                        Run supported commands automatically.
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
           <div
             className="composer-settings"
             data-single-effort={supportsEffort && !cursorParameters ? true : undefined}
@@ -424,9 +427,10 @@ export default function AgentComposer({
                       disabled={busy || !available || catalog.loading || !modelEfforts?.length}
                       compact
                       showChevron={false}
-                      fitLabels={effortFitLabels}
                       triggerClassName="composer-effort-trigger"
-                      popupClassName="composer-choice-menu composer-inline-menu composer-effort-menu"
+                      popupClassName="composer-choice-menu composer-effort-menu"
+                      popupMatchWidth="content"
+                      popupPlacement="top-end"
                       placeholder={effortLabels[effectiveEffort]}
                       onChange={(value) => setEffort(value as ReasoningEffort)}
                       options={effortOptions}
@@ -507,9 +511,10 @@ export default function AgentComposer({
                 disabled={busy || !available || catalog.loading || !modelEfforts?.length}
                 compact
                 showChevron={false}
-                fitLabels={effortFitLabels}
                 triggerClassName="composer-effort-trigger"
-                popupClassName="composer-choice-menu composer-inline-menu composer-effort-menu"
+                popupClassName="composer-choice-menu composer-effort-menu"
+                popupMatchWidth="content"
+                popupPlacement="top-end"
                 placeholder={effortLabels[effectiveEffort]}
                 onChange={(value) => setEffort(value as ReasoningEffort)}
                 options={effortOptions}

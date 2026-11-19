@@ -11,7 +11,7 @@ import {
   uid,
 } from '../lib/circuit';
 import { ownProject, isOwnedProject } from '../lib/immutable-project';
-import { createProject, serializeProject, type Project } from '../lib/project';
+import { createProject, serializeProject, validateProject, type Project } from '../lib/project';
 import { projectFromNativeFiles } from '../lib/kicad-project';
 import { displayPartValue, partFields } from '../lib/library';
 import { PCBProjectSync, schematicPCBSourceFingerprint } from '../lib/pcb-project-sync';
@@ -47,6 +47,51 @@ function fixture(withBoard = false) {
     project.pcb = updatePCBFromSchematic(circuit, undefined, new Map([[detail.id, detail]])).board;
   return project;
 }
+
+test('numbered mechanical slots stay independent of same-number electrical pads through sync and replacement', () => {
+  const project = fixture();
+  const footprint = [
+    ...detail.footprint.slice(0, 3),
+    parseSExpr(
+      '(pad "1" np_thru_hole oval (at 5 3 90) (size 1 2) (drill oval 1 1.5) (layers "*.Mask"))',
+    ),
+    parseSExpr(
+      '(pad "MH2" np_thru_hole oval (at 5 9) (size 1 2) (drill oval 1 2) (layers "*.Mask"))',
+    ),
+    ...detail.footprint.slice(3),
+  ];
+  const sources = new Map([[detail.id, { ...detail, footprint }]]);
+  project.pcb = updatePCBFromSchematic(project.schematic, undefined, sources).board;
+  validateProject(project);
+  const [mechanical, second, pin] = project.pcb.footprints[0].pads;
+  assert.equal(mechanical.number, pin.number);
+  assert.equal(mechanical.netId, null);
+  assert.equal(second.number, 'MH2');
+  assert.ok(pin.netId);
+
+  project.schematic.labels[0].text = 'VIN';
+  const id = 'Test:Replacement';
+  const replacement = [...footprint.slice(0, 3), ...footprint.slice(3).reverse()];
+  replacement[1] = '"Replacement"';
+  sources.set(id, { id, footprint: replacement });
+  project.schematic.parts[0].fields!.Footprint = id;
+  project.pcb = updatePCBFromSchematic(project.schematic, project.pcb, sources).board;
+  validateProject(project);
+  const pads = project.pcb.footprints[0].pads;
+  assert.deepEqual(
+    pads.find((pad) => pad.id === mechanical.id),
+    mechanical,
+  );
+  assert.deepEqual(
+    pads.find((pad) => pad.id === second.id),
+    second,
+  );
+  assert.equal(pads.find((pad) => pad.id === pin.id)?.netId, pin.netId);
+  assert.equal(project.pcb.nets.find((net) => net.id === pin.netId)?.name, 'VIN');
+  const invalid = structuredClone(project);
+  invalid.pcb!.footprints[0].pads.find((pad) => pad.id === mechanical.id)!.netId = pin.netId;
+  assert.throws(() => validateProject(invalid), /mechanical pads cannot carry an electrical net/);
+});
 
 test('owned loaded boards reuse preparation while board and other-sheet edits stay authoritative', () => {
   const initial = fixture(true);

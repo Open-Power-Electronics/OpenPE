@@ -1,5 +1,6 @@
 import { spawn, execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -28,6 +29,8 @@ import {
 } from './agent-provider-format.mjs';
 import {
   agentLaunchers,
+  codexIsolationArgs,
+  rawCodexIsolationArgs,
   verifyPiIsolation,
   windowsCodexNpmLaunch,
 } from './agent-provider-runtime.mjs';
@@ -319,6 +322,29 @@ User request: ${prompt}`;
  * @param {{resolve?:typeof resolveAgent, timeoutMs?:number, pcbDesignInstructions?:string, input?:ReturnType<typeof import('./agent-input.mjs').createAgentInputBridge>, questions?:{url:string, token:string}, capabilities?:{call:(tool:string,args:unknown)=>Promise<unknown>,url?:string,token?:string}, cursorCredential?:{read:()=>Promise<string>}, sdk?:object, loadCursorSdk?:()=>Promise<object>}} options
  */
 export async function runAgent(provider, request, cwd, emit, signal, options = {}) {
+  return runAgentTransport(provider, request, cwd, emit, signal, options, false);
+}
+
+/** Raw text is assembled by the native file session, before provider transport. */
+export async function runRawAgent(
+  provider,
+  request,
+  emit,
+  signal,
+  { cursorCredential, resolve, sdk, timeoutMs } = {},
+) {
+  signal.throwIfAborted();
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'openpe-raw-agent-'));
+  try {
+    return await runAgentTransport(
+      provider, request, directory, emit, signal, { cursorCredential, resolve, sdk, timeoutMs }, true,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}
+
+async function runAgentTransport(provider, request, cwd, emit, signal, options, raw) {
   if (!isAgentProvider(provider)) throw new Error('Unknown agent.');
   validateAnnotations(request.annotations);
   const annotations = request.annotations || [];
@@ -341,10 +367,9 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
     throw new Error('Invalid model ID.');
   // Prepare once, before launching a provider. Oversized input must fail through
   // the ordinary request error path, never throw inside a child-process callback.
-  const providerPrompt = makePrompt(
-    { ...request, capabilities: capabilityEnabled, questionTool },
-    options.pcbDesignInstructions,
-  );
+  const providerPrompt = raw
+    ? request.prompt
+    : makePrompt({ ...request, capabilities: capabilityEnabled, questionTool }, options.pcbDesignInstructions);
   const images = annotations.map(({ image }) => ({
     mimeType: 'image/png',
     data: image.dataUrl.slice('data:image/png;base64,'.length),
@@ -358,7 +383,7 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
     );
   if (provider === 'cursor') {
     if (signal.aborted) return { outcome: 'cancelled' };
-    return runCursorAgent(providerPrompt, request, emit, signal, options);
+    return runCursorAgent(providerPrompt, request, emit, signal, options, raw);
   }
   if (provider === 'deepseek') {
     const launch = await (options.resolve || resolveAgent)(provider);
@@ -406,12 +431,7 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
           'app-server',
           '--listen',
           'stdio://',
-          '-c',
-          'features.shell_tool=false',
-          '-c',
-          'web_search="disabled"',
-          '-c',
-          'mcp_servers={}',
+          ...(raw ? rawCodexIsolationArgs : codexIsolationArgs),
         ]
       : [
           '-p',
@@ -424,7 +444,8 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
           '--permission-prompt-tool',
           'stdio',
           '--tools',
-          'AskUserQuestion',
+          raw ? '' : 'AskUserQuestion',
+          ...(raw ? ['--safe-mode', '--no-session-persistence', '--disallowedTools', '*'] : []),
           '--strict-mcp-config',
           '--mcp-config',
           JSON.stringify({
@@ -785,8 +806,10 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
         }
         if (event.id !== undefined && event.method) {
           if (event.method === 'item/tool/requestUserInput') {
-            void askQuestion(event);
-            return;
+            if (!raw) {
+              void askQuestion(event);
+              return;
+            }
           }
           if (event.method === 'item/tool/call' && capabilityEnabled) {
             void toolCall(event);
@@ -813,16 +836,18 @@ export async function runAgent(provider, request, cwd, emit, signal, options = {
             params: {
               cwd,
               sandbox: 'read-only',
-              approvalPolicy: 'untrusted',
+              approvalPolicy: raw ? 'never' : 'untrusted',
               approvalsReviewer: 'user',
               ephemeral: true,
               ...(capabilityEnabled ? { dynamicTools: agentCapabilityTools } : {}),
               ...(request.model ? { model: request.model } : {}),
               config: {
-                'features.default_mode_request_user_input': true,
+                'features.default_mode_request_user_input': !raw,
                 ...(request.effort && { model_reasoning_effort: request.effort }),
               },
-              developerInstructions: `${toolBoundary} ${capabilityEnabled ? 'Use the scoped OpenPE dynamic tools for workbench access.' : 'Use the supplied design context and return edits only as OpenPE proposals.'}${questionTool ? ` Use ${questionTool} for clarification.` : ''}`,
+              ...(!raw && {
+                developerInstructions: `${toolBoundary} ${capabilityEnabled ? 'Use the scoped OpenPE dynamic tools for workbench access.' : 'Use the supplied design context and return edits only as OpenPE proposals.'}${questionTool ? ` Use ${questionTool} for clarification.` : ''}`,
+              }),
             },
           });
           return;

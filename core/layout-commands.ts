@@ -305,7 +305,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
   ),
   objectCommand(
     'layout.pad.properties',
-    'Edit pad geometry and fabrication overrides with the shared Properties preparation. Identity, pin nets, type and layers stay unchanged. null clears an optional override.',
+    'Edit pad geometry and fabrication overrides with the shared Properties preparation. Custom pads retain their polygon and shape; size describes their anchor. Identity, pin nets, type and layers stay unchanged. null clears an optional override.',
     {
       padId: identity,
       changes: object(
@@ -316,6 +316,7 @@ export const layoutCommandDefinitions: CoreDefinition[] = [
           'type',
           'layers',
           'unconnected',
+          'outline',
           'locked',
         ]),
       ),
@@ -378,9 +379,11 @@ function checkSelection(board: PCB, selection: PCBSelection[]) {
     zone: board.zones,
   };
   for (const selected of selection)
-    if (selected.kind === 'graphic'
-      ? !findPCBGraphic(board, selected.id)
-      : !items[selected.kind].some((item) => item.id === selected.id))
+    if (
+      selected.kind === 'graphic'
+        ? !findPCBGraphic(board, selected.id)
+        : !items[selected.kind].some((item) => item.id === selected.id)
+    )
       throw new Error(
         'A selected board object no longer exists. Query the current board and try again.',
       );
@@ -410,9 +413,10 @@ export function queryLayout(board: PCB | null | undefined, id: string, args: Rec
       graphic: board.graphics,
       zone: board.zones,
     };
-    const item = args.kind === 'graphic'
-      ? findPCBGraphic(board, args.id)?.graphic
-      : items[args.kind as keyof typeof items].find((item) => item.id === args.id);
+    const item =
+      args.kind === 'graphic'
+        ? findPCBGraphic(board, args.id)?.graphic
+        : items[args.kind as keyof typeof items].find((item) => item.id === args.id);
     if (!item) throw new Error('This board object no longer exists.');
     return structuredClone(item);
   }
@@ -496,7 +500,10 @@ export function executeLayout(
         const ownedText = item.kind === 'graphic' ? findPCBGraphic(board, item.id) : undefined;
         if (ownedText?.owner) {
           const { owner, graphic } = ownedText;
-          if (graphic.text?.property || selected.some((item) => item.kind === 'footprint' && item.id === owner.id))
+          if (
+            graphic.text?.property ||
+            selected.some((item) => item.kind === 'footprint' && item.id === owner.id)
+          )
             continue;
           const copy = freshIds(graphic);
           next.footprints = next.footprints.map((f) =>

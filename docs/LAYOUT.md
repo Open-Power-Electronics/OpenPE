@@ -20,6 +20,48 @@ resize functions as the GUI. Official footprint placement shares the chooser's
 bounded parser and one assignment/board undo transaction. [API](API.md#layout-object-properties)
 documents the direct commands and generated property schemas; these do not add
 collision checks to numerical Properties beyond their documented Core validation.
+Catalog placement accepts front or back SMD copper with explicit same-side mask
+and paste membership. Unnumbered SMD apertures on same-side mask, paste or both
+layers keep their native shape and are visible and selectable on those layers.
+They have no schematic pin, net or copper. Plated round drills and straight slots retain their
+all-copper layers with optional mask membership on either or both sides. Numbered and unnumbered
+non-plated holes retain their mask layers. Round mechanical holes that match
+their drill size may also carry KiCad's `F&B.Cu` or `*.Cu` marker and produce no
+copper flash.
+An oval opening must contain its non-plated slot, including any offset.
+Non-plated hole numbers remain mechanical identifiers through schematic
+synchronization, including when they match an electrical pad number. Blank copper
+pad numbers retain their geometry as unassigned copper. Linking a catalog
+footprint to a symbol requires at least one numbered electrical pad, and every
+numbered electrical pad must match a symbol pin.
+A plated drill must stay inside its copper outline. Pad drill offsets and slot
+axes use the unrotated pad coordinates. The slot length includes
+both round ends. Layout, clearance checks and fills use the slot's full extent.
+Catalog rounded corners, chamfers and pad paste margins retain their dimensionless ratios.
+Chamfers retain their selected corners. Copper shape
+rendering and clearance checks traverse those corners in the same order
+as the native pad outline.
+Simple custom pad polygons accept 3–128 vertices and retain their concave or
+convex edges in Layout, selection, routing clearance, copper fills and
+manufacturing output. Flipping a footprint mirrors its pad-local polygon.
+The polygon must contain its rectangular or circular anchor. Up to 16 filled,
+unstroked axis-aligned rectangular primitives can join a rectangular anchor on
+the native nanometre grid when their union forms one outline without holes. A native
+circular anchor can use a diameter down to 0.000001 mm.
+The board permits a combined sum of squared custom pad vertex counts of up to
+4,000,000.
+Supported catalog cutouts retain footprint-local Edge.Cuts contours. The
+board outline, copper fills, Model and profile export use their placed
+coordinates. Filled catalog rectangles use four exact corners in the board's
+polygon representation. Filled mask and paste artwork retains its native layer
+and requires a zero stroke. Catalog graphics and text retain supported native
+drawing, comment, ECO and numbered user layers.
+Footprint text with native free rotation keeps its angle relative to the
+footprint for display and selection. Its orientation and editing lock are
+independent.
+Catalog placement retains explicit footprint-level solder mask margin, solder
+paste margin and paste margin ratio independently of pad-level values.
+Pads retain KiCad's native `pad_prop_heatsink` fabrication property.
 
 ## Custom component drawings
 
@@ -309,8 +351,9 @@ Selection independently gates footprints, tracks, vias, pads, text,
 graphics, dimensions, zones and rule areas. These supported categories default
 checked, so All items starts checked and reports a mixed state only when their
 eligibility differs. Locked items defaults unchecked, independently gates picking
-locked footprints, pads, tracks, vias, graphics, text, dimensions, zones and rule areas without unlocking them, and is excluded from All items. Unsupported
-Points stays disabled and unchecked. Point picking works through disabled
+locked footprints, pads, tracks, vias, graphics, text, dimensions, zones and rule areas without unlocking them, and is excluded from All items.
+Points selection stays disabled and unchecked. [Native Source](FORMAT.md#document-ownership)
+retains fabrication reference points. Point picking works through disabled
 categories and footprint overlays. Explicit inspection reveals a collapsed dock.
 
 Place footprint opens an independent centered component/library chooser with

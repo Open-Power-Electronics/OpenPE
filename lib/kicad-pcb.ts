@@ -4,6 +4,11 @@ import type { Circuit, Point } from './circuit';
 import type { PCB, BoardLine, BoardText, BoardZone, Footprint, Pad, BoardLayer } from './pcb';
 import { parseSExpr, child, children, val, quote, type SExpr } from './sexpr';
 import { footprintModels } from './pcb-models';
+import { readPadDrill } from './pcb-drill';
+import { readCustomPad } from './pcb-custom-pad';
+import { footprintPoint } from './pcb-layout';
+import { footprintTextPlacement } from './pcb-text';
+import { padHasElectricalPin, readPadHeatsink } from './pcb-pad-role';
 
 const round = (n: number) => Number(n.toFixed(6));
 const angle = (n: number) => round(((n % 360) + 360) % 360);
@@ -77,7 +82,7 @@ export function expandNativeBoardZones(root: SExpr): SExpr {
     });
   return expand(root);
 }
-function textData(n: SExpr, value: string): BoardText {
+function textData(n: SExpr, value: string, at = child(n, 'at')): BoardText {
   const e = child(n, 'effects'),
     f = e && child(e, 'font');
   if (!f) fail('Text has no font geometry.');
@@ -85,7 +90,7 @@ function textData(n: SExpr, value: string): BoardText {
   allow(f!, ['size', 'thickness', 'bold', 'italic'], 'font');
   return {
     value,
-    rotation: number(child(n, 'at'), 3, 0),
+    rotation: number(at, 3, 0),
     size: point(child(f!, 'size')),
     thickness: number(child(f!, 'thickness'), 1, 0),
     ...(child(e!, 'justify')
@@ -176,7 +181,7 @@ export function parseKiCadPCBTree(
     if (!nets.has(name)) nets.set(name, stable('net:' + name));
     return nets.get(name)!;
   };
-  const graph = (n: SExpr, key: string, footprintRotation = 0): BoardLine => {
+  const graph = (n: SExpr, key: string, footprintRotation?: number): BoardLine => {
     const kind = String(n[0]).replace(/^(fp|gr)_/, '');
     const layer = val(child(n, 'layer')) as BoardLayer;
     const common = {
@@ -186,12 +191,29 @@ export function parseKiCadPCBTree(
       ...(nativeLocked(n) ? { locked: true as const } : {}),
     };
     if (kind === 'text' || kind === 'property') {
-      allow(n, ['at', 'layer', 'uuid', 'effects', 'hide', 'unlocked', 'locked'], 'text');
-      const at = point(child(n, 'at'));
-      const t = textData(n, val(n, kind === 'property' || n[0] === 'fp_text' ? 2 : 1));
-      t.rotation = angle(t.rotation - footprintRotation);
+      const inFootprint = footprintRotation !== undefined;
+      allow(
+        n,
+        ['at', 'layer', 'uuid', 'effects', 'hide', 'locked', ...(inFootprint ? ['unlocked'] : [])],
+        'text',
+      );
+      const placement = inFootprint ? footprintTextPlacement(n, fail) : { at: child(n, 'at') };
+      const at = point(placement.at);
+      const t = textData(
+        n,
+        val(n, kind === 'property' || n[0] === 'fp_text' ? 2 : 1),
+        placement.at,
+      );
+      t.rotation = angle(t.rotation - (footprintRotation ?? 0));
       if (kind === 'property') t.property = val(n);
-      return { ...common, kind: 'text', start: at, end: { ...at }, text: t };
+      return {
+        ...common,
+        kind: 'text',
+        start: at,
+        end: { ...at },
+        text: t,
+        ...('unlocked' in placement && placement.unlocked ? { keepUpright: false } : {}),
+      };
     }
     if (kind === 'dimension') {
       allow(
@@ -429,6 +451,7 @@ export function parseKiCadPCBTree(
         'fp_circle',
         'fp_poly',
         'fp_text',
+        'point',
         'pad',
         'zone',
         'embedded_fonts',
@@ -446,10 +469,8 @@ export function parseKiCadPCBTree(
           fail('Incomplete footprint unit metadata.');
       }
     }
-    const reference = val(
-        children(n, 'property').find((p) => val(p) === 'Reference'),
-        2,
-      ),
+    const referenceField = children(n, 'property').find((p) => val(p) === 'Reference');
+    const reference = val(referenceField, 2),
       value = val(
         children(n, 'property').find((p) => val(p) === 'Value'),
         2,
@@ -468,13 +489,15 @@ export function parseKiCadPCBTree(
     );
     const at = point(child(n, 'at')),
       rotation = number(child(n, 'at'), 3, 0);
-    const local = (p: Point): Point => {
-      const r = (rotation * Math.PI) / 180,
-        x = p.x - at.x,
-        y = p.y - at.y;
+    const radians = (rotation * Math.PI) / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const local = (p: Point, digits: number): Point => {
+      const x = p.x - at.x;
+      const y = p.y - at.y;
       return {
-        x: round(x * Math.cos(r) - y * Math.sin(r)),
-        y: round(x * Math.sin(r) + y * Math.cos(r)),
+        x: Number((x * cosine - y * sine).toFixed(digits)) + 0,
+        y: Number((x * sine + y * cosine).toFixed(digits)) + 0,
       };
     };
     const pads = children(n, 'pad').map((p, pi): Pad => {
@@ -495,9 +518,12 @@ export function parseKiCadPCBTree(
           'roundrect_rratio',
           'chamfer_ratio',
           'chamfer',
+          'options',
+          'primitives',
           'zone_connect',
           'pinfunction',
           'pintype',
+          'property',
           'locked',
         ],
         'pad',
@@ -510,28 +536,33 @@ export function parseKiCadPCBTree(
         )
           fail(`Pad has invalid ${key} metadata.`);
       }
-      const drill = child(p, 'drill');
-      if (drill) allow(drill, ['offset'], 'drill');
-      if (drill && val(drill) === 'oval')
-        fail('Slotted drills are not supported by the editor. The original file was not modified.');
+      const drills = children(p, 'drill');
+      if (drills.length > 1) fail('A pad repeats its drill.');
+      const drill = readPadDrill(drills[0], fail);
+      const customPad = readCustomPad(p, fail);
+      const padRotation = angle(number(child(p, 'at'), 3, 0) - rotation);
+      const anchor = point(child(p, 'at'));
+      const offset = drill.drillOffset;
+      const copper = offset
+        ? footprintPoint({ ...anchor, rotation: padRotation }, { x: -offset.x, y: -offset.y })
+        : anchor;
       const result: Pad = {
         id: id(p, `fp:${fi}:pad:${pi}`),
         ...(nativeLocked(p) ? { locked: true as const } : {}),
         number: val(p),
         type: val(p, 2) as Pad['type'],
         shape: val(p, 3) as Pad['shape'],
-        ...point(child(p, 'at')),
-        rotation: angle(number(child(p, 'at'), 3, 0) - rotation),
+        ...copper,
+        rotation: padRotation,
+        ...drill,
         size: point(child(p, 'size')),
+        ...customPad,
+        ...readPadHeatsink(p, fail),
         netId: net(p),
         layers: child(p, 'layers')!
           .slice(1)
           .map((_, i) => val(child(p, 'layers'), i + 1)) as Pad['layers'],
       };
-      if (drill) {
-        result.drill = number(drill);
-        if (child(drill, 'offset')) result.drillOffset = point(child(drill, 'offset'));
-      }
       for (const [key, native] of [
         ['roundrectRatio', 'roundrect_rratio'],
         ['chamferRatio', 'chamfer_ratio'],
@@ -552,7 +583,7 @@ export function parseKiCadPCBTree(
         part &&
         symbolPins.size &&
         !symbolPins.has(result.number) &&
-        result.type !== 'np_thru_hole'
+        padHasElectricalPin(result)
       ) {
         if (result.netId)
           fail(`${originalReference} package pad ${result.number} has a net but no source pin.`);
@@ -574,9 +605,32 @@ export function parseKiCadPCBTree(
       if (g.text?.property === 'Reference') g.text.value = '${REFERENCE}';
       if (g.text?.property === 'Value') g.text.value = '${VALUE}';
     }
+    const referencePoints = children(n, 'point').map<
+      NonNullable<Footprint['referencePoints']>[number]
+    >((record) => {
+      const position = child(record, 'at');
+      const size = child(record, 'size');
+      const layer = child(record, 'layer');
+      const uuid = child(record, 'uuid');
+      if (
+        record.length !== 5 ||
+        position?.length !== 3 ||
+        size?.length !== 2 ||
+        layer?.length !== 2 ||
+        uuid?.length !== 2
+      )
+        fail('Invalid footprint reference point.');
+      const layerName = val(layer);
+      if (layerName !== 'F.Fab' && layerName !== 'B.Fab')
+        return fail('Footprint reference points require a fabrication layer.');
+      // Keep enough precision to round-trip native board coordinates through an arbitrary angle.
+      return { ...local(point(position), 12), id: val(uuid), size: number(size), layer: layerName };
+    });
     const hasPins =
       part &&
       children(schematic.libraries[part.libId], 'symbol').some((s) => children(s, 'pin').length);
+    if (!hasPins && !originalReference && typeof referenceField?.[2] !== 'string')
+      fail('An unlinked footprint requires a native Reference property.');
     return {
       id: id(n, `footprint:${fi}`),
       symbolId: hasPins ? part!.id : null,
@@ -597,9 +651,14 @@ export function parseKiCadPCBTree(
       ...(!hasPins ? { reference: originalReference, value } : {}),
       pads,
       graphics,
+      ...(referencePoints.length ? { referencePoints } : {}),
       ...(children(n, 'model').length ? { models: footprintModels(n) } : {}),
       ...(child(n, 'zone')
-        ? { zones: children(n, 'zone').map((z, i) => zone(z, `fp:${fi}:zone:${i}`, local)) }
+        ? {
+            zones: children(n, 'zone').map((z, i) =>
+              zone(z, `fp:${fi}:zone:${i}`, (p) => local(p, 6)),
+            ),
+          }
         : {}),
     };
   });

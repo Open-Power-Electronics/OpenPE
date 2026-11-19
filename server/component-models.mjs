@@ -5,7 +5,7 @@ import { atomicWrite } from './atomic-write.mjs';
 import { logicalSuffixOfCanonical } from './host-path.cjs';
 import { parseProject } from './project-format.mjs';
 import { children, onlineFootprintLibrary, quote, val } from './library-format.mjs';
-import { CatalogHttpError } from './online-library-fetch.mjs';
+import { isOmittableJlcpcbStep } from './jlcpcb-library.mjs';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const local = /^\$\{KIPRJMOD\}\/models\/([a-f0-9]{64})\.step$/;
 const relative = /^\$\{KIPRJMOD\}\/((?:[\w .()+,-]+\/)*[\w .()+,-]+\.(?:step|stp))$/i;
@@ -184,21 +184,16 @@ export async function prepareLibraryPackage(libraries, store, id, signal) {
     throw new Error('The prepared package does not match the selected component.');
   if (models.length !== detail.models.length)
     throw new Error('The package model records do not match its native footprint.');
+  const missing = new Set();
   for (let index = 0; index < models.length; index++) {
     let bytes;
     try {
       bytes = await libraries.componentModelBytes(id, index, signal);
     } catch (error) {
       signal.throwIfAborted();
-      if (
-        id.startsWith('JLCPCB:') &&
-        error instanceof CatalogHttpError &&
-        error.status === 404 &&
-        models.length === 1
-      ) {
-        prepared.footprint = prepared.footprint.filter((node) => node !== models[index]);
-        prepared.models = [];
-        break;
+      if (library === 'JLCPCB' && isOmittableJlcpcbStep(error)) {
+        missing.add(models[index]);
+        continue;
       }
       throw error;
     }
@@ -208,6 +203,10 @@ export async function prepareLibraryPackage(libraries, store, id, signal) {
     if (!local.test(selected.path)) throw new Error('The prepared STEP reference is invalid.');
     models[index][1] = quote(selected.path);
     prepared.models[index].path = selected.path;
+  }
+  if (missing.size) {
+    prepared.footprint = prepared.footprint.filter((node) => !missing.has(node));
+    prepared.models = prepared.models.filter((_, index) => !missing.has(models[index]));
   }
   return { ...prepared, projectAssets: true };
 }

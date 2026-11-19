@@ -8,6 +8,7 @@ export type DiscoveredExample = {
   section: 'project' | 'examples';
 };
 export type RecentProject = { id: string; title: string; description: string; pinned?: boolean };
+export type RawKiCadSelection = { id: string; names: string[] };
 export type SpiceModelDeclaration = {
   name: string;
   kind: 'model' | 'subcircuit';
@@ -27,6 +28,8 @@ declare global {
       readonly titleBarInset: boolean;
       installPlugin(): Promise<{ id: string } | null>;
       connection(): Promise<{ base: string; token: string }>;
+      setRawKiCadMode(value: boolean): Promise<void>;
+      chooseRawKiCadFiles(): Promise<RawKiCadSelection | null>;
       openLibraryHomepage(site: 'jlceda' | 'easyeda'): Promise<void>;
       cursorCredentialStatus(): Promise<{ configured: boolean; suffix?: string }>;
       cursorCredentialStore(key: string): Promise<{ configured: boolean; suffix?: string }>;
@@ -137,7 +140,9 @@ async function browserPreviewRequest(route: string, options: RequestInit) {
       ? 'libraries/footprints?'
       : route.startsWith('library-model?')
         ? 'library-model?'
-        : null;
+        : route.startsWith('library-price?')
+          ? 'library-price?'
+          : null;
     if (!prefix || (options.method ?? 'GET') !== 'GET' || options.body !== undefined)
       throw unavailable();
     const query = new URLSearchParams(route.slice(prefix.length));
@@ -149,7 +154,7 @@ async function browserPreviewRequest(route: string, options: RequestInit) {
       endpoint = 'model';
       body = JSON.stringify({ id: query.get('id'), index: Number(index) });
     } else {
-      endpoint = 'footprint';
+      endpoint = prefix === 'library-price?' ? 'price' : 'footprint';
       body = JSON.stringify({ id: query.get('id') });
     }
   }

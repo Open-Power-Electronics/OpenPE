@@ -381,6 +381,8 @@ export default function Workbench({
   appearanceSettings,
   startupError,
   draftStatus,
+  rawMode = false,
+  onEnterRawMode,
 }: {
   documentId: string;
   active: boolean;
@@ -420,6 +422,8 @@ export default function Workbench({
   appearanceSettings: ReturnType<typeof useAppearance>;
   startupError: string;
   draftStatus?: string;
+  rawMode?: boolean;
+  onEnterRawMode?: () => Promise<void>;
 }) {
   // Workspace supplies a stable accessor so recovery reports do not become
   // render props or retain a second initial conversation/source snapshot.
@@ -1668,6 +1672,17 @@ export default function Workbench({
         setScreen('workspace');
       },
       snapshot: readCloseSnapshot,
+      suspendForRawKiCad: () => {
+        if (nativeFileBusy.current || directoryEditorRef.current.saving || closingDocument.current)
+          throw new Error('Wait for the project file operation to finish before switching modes.');
+        const reason = 'The workbench is paused in Raw KiCad mode.';
+        core.setEditingBlocked(reason);
+        capabilityHost.suspend(reason);
+        return () => {
+          core.setEditingBlocked(null);
+          capabilityHost.resume();
+        };
+      },
       notify,
       fileAction: (action) => fileActionRef.current(action),
       requestClose: (done, cancel) => {
@@ -1687,7 +1702,7 @@ export default function Workbench({
       },
     });
     return () => registerController(documentId, null);
-  }, [documentId, registerController, readCloseSnapshot]);
+  }, [documentId, registerController, readCloseSnapshot, core, capabilityHost]);
   useEffect(() => {
     if (initialNotice) notify(initialNotice);
     else if (recovered) notify('Recovered your previous project draft.', 'recovery');
@@ -4813,6 +4828,7 @@ export default function Workbench({
               <ConversationSession
                 key={documentKey + ':' + session.id}
                 active={active && screen === 'workspace' && session.id === activeSessionId}
+                workbenchSuspended={rawMode}
                 onRunningChange={onRunningChange}
                 session={session}
                 onFind={findAgent}
@@ -6139,6 +6155,7 @@ export default function Workbench({
               detecting={detecting}
               error={agentError}
               onDetect={detectAgents}
+              onEnterRawMode={onEnterRawMode}
               onClose={() => setModal(null)}
             />
           </DeferredDialog>

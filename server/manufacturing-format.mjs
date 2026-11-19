@@ -4220,21 +4220,21 @@ var require_clipper = __commonJS({
           }
         }
       };
-      ClipperLib.Clipper.GetBounds = function(paths) {
-        var i = 0, cnt = paths.length;
-        while (i < cnt && paths[i].length === 0) i++;
+      ClipperLib.Clipper.GetBounds = function(paths2) {
+        var i = 0, cnt = paths2.length;
+        while (i < cnt && paths2[i].length === 0) i++;
         if (i === cnt) return new ClipperLib.IntRect(0, 0, 0, 0);
         var result = new ClipperLib.IntRect();
-        result.left = paths[i][0].X;
+        result.left = paths2[i][0].X;
         result.right = result.left;
-        result.top = paths[i][0].Y;
+        result.top = paths2[i][0].Y;
         result.bottom = result.top;
         for (; i < cnt; i++)
-          for (var j = 0, jlen = paths[i].length; j < jlen; j++) {
-            if (paths[i][j].X < result.left) result.left = paths[i][j].X;
-            else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
-            if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
-            else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
+          for (var j = 0, jlen = paths2[i].length; j < jlen; j++) {
+            if (paths2[i][j].X < result.left) result.left = paths2[i][j].X;
+            else if (paths2[i][j].X > result.right) result.right = paths2[i][j].X;
+            if (paths2[i][j].Y < result.top) result.top = paths2[i][j].Y;
+            else if (paths2[i][j].Y > result.bottom) result.bottom = paths2[i][j].Y;
           }
         return result;
       };
@@ -4667,20 +4667,20 @@ var require_clipper = __commonJS({
       ClipperLib.Clipper.MinkowskiSum = function(pattern, path_or_paths, pathIsClosed) {
         if (!(path_or_paths[0] instanceof Array)) {
           var path = path_or_paths;
-          var paths = ClipperLib.Clipper.Minkowski(pattern, path, true, pathIsClosed);
+          var paths2 = ClipperLib.Clipper.Minkowski(pattern, path, true, pathIsClosed);
           var c = new ClipperLib.Clipper();
-          c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
-          c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-          return paths;
+          c.AddPaths(paths2, ClipperLib.PolyType.ptSubject, true);
+          c.Execute(ClipperLib.ClipType.ctUnion, paths2, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+          return paths2;
         } else {
-          var paths = path_or_paths;
+          var paths2 = path_or_paths;
           var solution = new ClipperLib.Paths();
           var c = new ClipperLib.Clipper();
-          for (var i = 0; i < paths.length; ++i) {
-            var tmp = ClipperLib.Clipper.Minkowski(pattern, paths[i], true, pathIsClosed);
+          for (var i = 0; i < paths2.length; ++i) {
+            var tmp = ClipperLib.Clipper.Minkowski(pattern, paths2[i], true, pathIsClosed);
             c.AddPaths(tmp, ClipperLib.PolyType.ptSubject, true);
             if (pathIsClosed) {
-              var path = ClipperLib.Clipper.TranslatePath(paths[i], pattern[0]);
+              var path = ClipperLib.Clipper.TranslatePath(paths2[i], pattern[0]);
               c.AddPath(path, ClipperLib.PolyType.ptClip, true);
             }
           }
@@ -4700,18 +4700,18 @@ var require_clipper = __commonJS({
         return outPath;
       };
       ClipperLib.Clipper.MinkowskiDiff = function(poly1, poly2) {
-        var paths = ClipperLib.Clipper.Minkowski(poly1, poly2, false, true);
+        var paths2 = ClipperLib.Clipper.Minkowski(poly1, poly2, false, true);
         var c = new ClipperLib.Clipper();
-        c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
-        c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
-        return paths;
+        c.AddPaths(paths2, ClipperLib.PolyType.ptSubject, true);
+        c.Execute(ClipperLib.ClipType.ctUnion, paths2, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+        return paths2;
       };
       ClipperLib.Clipper.PolyTreeToPaths = function(polytree) {
         var result = new Array();
         ClipperLib.Clipper.AddPolyNodeToPaths(polytree, ClipperLib.Clipper.NodeType.ntAny, result);
         return result;
       };
-      ClipperLib.Clipper.AddPolyNodeToPaths = function(polynode, nt, paths) {
+      ClipperLib.Clipper.AddPolyNodeToPaths = function(polynode, nt, paths2) {
         var match = true;
         switch (nt) {
           case ClipperLib.Clipper.NodeType.ntOpen:
@@ -4723,9 +4723,9 @@ var require_clipper = __commonJS({
             break;
         }
         if (polynode.m_polygon.length > 0 && match)
-          paths.push(polynode.m_polygon);
+          paths2.push(polynode.m_polygon);
         for (var $i3 = 0, $t3 = polynode.Childs(), $l3 = $t3.length, pn = $t3[$i3]; $i3 < $l3; $i3++, pn = $t3[$i3])
-          ClipperLib.Clipper.AddPolyNodeToPaths(pn, nt, paths);
+          ClipperLib.Clipper.AddPolyNodeToPaths(pn, nt, paths2);
       };
       ClipperLib.Clipper.OpenPathsFromPolyTree = function(polytree) {
         var result = new ClipperLib.Paths();
@@ -4802,9 +4802,9 @@ var require_clipper = __commonJS({
             this.m_lowest = new ClipperLib.IntPoint2(this.m_polyNodes.ChildCount() - 1, k);
         }
       };
-      ClipperLib.ClipperOffset.prototype.AddPaths = function(paths, joinType, endType) {
-        for (var i = 0, ilen = paths.length; i < ilen; i++)
-          this.AddPath(paths[i], joinType, endType);
+      ClipperLib.ClipperOffset.prototype.AddPaths = function(paths2, joinType, endType) {
+        for (var i = 0, ilen = paths2.length; i < ilen; i++)
+          this.AddPath(paths2[i], joinType, endType);
       };
       ClipperLib.ClipperOffset.prototype.FixOrientations = function() {
         if (this.m_lowest.X >= 0 && !ClipperLib.Clipper.Orientation(this.m_polyNodes.Childs()[this.m_lowest.X].m_polygon)) {
@@ -5124,9 +5124,9 @@ var require_clipper = __commonJS({
       ClipperLib.JS.BoundsOfPath = function(path, scale2) {
         return ClipperLib.JS.BoundsOfPaths([path], scale2);
       };
-      ClipperLib.JS.BoundsOfPaths = function(paths, scale2) {
+      ClipperLib.JS.BoundsOfPaths = function(paths2, scale2) {
         if (!scale2) scale2 = 1;
-        var bounds = ClipperLib.Clipper.GetBounds(paths);
+        var bounds = ClipperLib.Clipper.GetBounds(paths2);
         bounds.left /= scale2;
         bounds.bottom /= scale2;
         bounds.right /= scale2;
@@ -5325,11 +5325,11 @@ var require_clipper = __commonJS({
         if (closed) path.pop();
         return perimeter / scale2;
       };
-      ClipperLib.JS.PerimeterOfPaths = function(paths, closed, scale2) {
+      ClipperLib.JS.PerimeterOfPaths = function(paths2, closed, scale2) {
         if (!scale2) scale2 = 1;
         var perimeter = 0;
-        for (var i = 0; i < paths.length; i++) {
-          perimeter += ClipperLib.JS.PerimeterOfPath(paths[i], closed, scale2);
+        for (var i = 0; i < paths2.length; i++) {
+          perimeter += ClipperLib.JS.PerimeterOfPath(paths2[i], closed, scale2);
         }
         return perimeter;
       };
@@ -5343,14 +5343,14 @@ var require_clipper = __commonJS({
           p.Y = p.Y / scale2;
         }
       };
-      ClipperLib.JS.ScaleDownPaths = function(paths, scale2) {
+      ClipperLib.JS.ScaleDownPaths = function(paths2, scale2) {
         var i, j, p;
         if (!scale2) scale2 = 1;
-        i = paths.length;
+        i = paths2.length;
         while (i--) {
-          j = paths[i].length;
+          j = paths2[i].length;
           while (j--) {
-            p = paths[i][j];
+            p = paths2[i][j];
             p.X = p.X / scale2;
             p.Y = p.Y / scale2;
           }
@@ -5366,14 +5366,14 @@ var require_clipper = __commonJS({
           p.Y = round3(p.Y * scale2);
         }
       };
-      ClipperLib.JS.ScaleUpPaths = function(paths, scale2) {
+      ClipperLib.JS.ScaleUpPaths = function(paths2, scale2) {
         var i, j, p, round3 = Math.round;
         if (!scale2) scale2 = 1;
-        i = paths.length;
+        i = paths2.length;
         while (i--) {
-          j = paths[i].length;
+          j = paths2[i].length;
           while (j--) {
-            p = paths[i][j];
+            p = paths2[i][j];
             p.X = round3(p.X * scale2);
             p.Y = round3(p.Y * scale2);
           }
@@ -5405,14 +5405,14 @@ var require_clipper = __commonJS({
       };
       ClipperLib.JS.ExPolygonsToPaths = function(expolygons) {
         var a, i, alen, ilen;
-        var paths = new ClipperLib.Paths();
+        var paths2 = new ClipperLib.Paths();
         for (a = 0, alen = expolygons.length; a < alen; a++) {
-          paths.push(expolygons[a].outer);
+          paths2.push(expolygons[a].outer);
           for (i = 0, ilen = expolygons[a].holes.length; i < ilen; i++) {
-            paths.push(expolygons[a].holes[i]);
+            paths2.push(expolygons[a].holes[i]);
           }
         }
-        return paths;
+        return paths2;
       };
       ClipperLib.JS.PolyTreeToExPolygons = function(polytree) {
         var expolygons = new ClipperLib.ExPolygons();
@@ -5678,7 +5678,14 @@ function recordOwnedProjectNode(value) {
 }
 
 // lib/sexpr.ts
-var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v : "";
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
 var quote = (v) => JSON.stringify(v);
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
@@ -5713,7 +5720,7 @@ function parseSExprValue(source, maxLength, owned) {
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {
-            JSON.parse(t);
+            decodeKiCadString(t);
           } catch {
             throw new Error("Invalid string.");
           }
@@ -6393,50 +6400,159 @@ function symbolAnnotation(part, library, field) {
 }
 
 // lib/schematic-text.ts
+function readNote(node, geometry) {
+  const effects = child(node, "effects") || [];
+  const font = child(effects, "font") || [];
+  const at = child(node, "at");
+  const size = child(font, "size");
+  const thickness = child(font, "thickness");
+  const color = child(font, "color");
+  const justify = child(effects, "justify")?.slice(1) || [];
+  const known = (n, keys3) => n.slice(1).every((v) => !Array.isArray(v) || keys3.includes(String(v[0])));
+  if (!known(node, ["at", ...geometry, "effects", "uuid", "exclude_from_sim"]) || !known(effects, ["font", "justify", "href"]) || !known(font, ["size", "thickness", "color", "bold", "italic"]) || children(font, "thickness").length > 1 || thickness !== void 0 && (thickness.length !== 2 || !val(thickness) || !Number.isFinite(num(thickness)) || num(thickness) < 0 || num(thickness) > 1e3) || children(effects, "href").length > 1 || child(effects, "href") && (child(effects, "href").length !== 2 || !/^https?:\/\/[^\s\x00-\x1f]{1,2040}$/.test(val(child(effects, "href")))) || children(font, "color").length > 1 || color && (color.length !== 5 || color.slice(1).some(
+    (value, i) => typeof value !== "string" || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > (i === 3 ? 1 : 255)
+  )) || font.slice(1).some((v) => !Array.isArray(v) && !["bold", "italic"].includes(String(v))) || effects.slice(1).some((v) => !Array.isArray(v)) || justify.some((v) => !["left", "right", "top", "bottom"].includes(String(v))) || justify.includes("left") && justify.includes("right") || justify.includes("top") && justify.includes("bottom") || !at || !size || num(at, 3) !== 0 || num(size) !== num(size, 2) || ![num(at), num(at, 2), num(size)].every(Number.isFinite) || Math.abs(num(at)) > 1e5 || Math.abs(num(at, 2)) > 1e5 || num(size) <= 0 || num(size) > 1e3 || val(node).length > 4096 || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(val(child(node, "uuid"))))
+    throw new Error(
+      "Unsupported schematic text. Use horizontal, plain text with equal font dimensions in KiCad. The original file was not modified."
+    );
+  return {
+    id: val(child(node, "uuid")),
+    text: val(node),
+    x: num(at),
+    y: num(at, 2),
+    size: num(size),
+    ...thickness ? { thickness: num(thickness) } : {},
+    ...font.includes("bold") || val(child(font, "bold")) === "yes" ? { bold: true } : {},
+    ...font.includes("italic") || val(child(font, "italic")) === "yes" ? { italic: true } : {},
+    ...child(effects, "href") ? { href: val(child(effects, "href")) } : {},
+    ...color ? { color: color.slice(1).map(Number) } : {},
+    anchor: justify.includes("left") ? "start" : justify.includes("right") ? "end" : "middle",
+    vertical: justify.includes("top") ? "top" : justify.includes("bottom") ? "bottom" : "middle"
+  };
+}
 function schematicTexts(original) {
-  return children(original || [], "text").map((node) => {
-    const effects = child(node, "effects") || [];
-    const font = child(effects, "font") || [];
-    const at = child(node, "at");
-    const size = child(font, "size");
-    const color = child(font, "color");
-    const justify = child(effects, "justify")?.slice(1) || [];
-    const known = (n, keys3) => n.slice(1).every((v) => !Array.isArray(v) || keys3.includes(String(v[0])));
-    if (!known(node, ["at", "effects", "uuid", "exclude_from_sim"]) || !known(effects, ["font", "justify", "href"]) || !known(font, ["size", "color", "bold", "italic"]) || children(effects, "href").length > 1 || child(effects, "href") && (child(effects, "href").length !== 2 || !/^https?:\/\/[^\s\x00-\x1f]{1,2040}$/.test(val(child(effects, "href")))) || children(font, "color").length > 1 || color && (color.length !== 5 || color.slice(1).some(
-      (value, i) => typeof value !== "string" || !Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > (i === 3 ? 1 : 255)
-    )) || font.slice(1).some((v) => !Array.isArray(v) && !["bold", "italic"].includes(String(v))) || effects.slice(1).some((v) => !Array.isArray(v)) || justify.some((v) => !["left", "right", "top", "bottom"].includes(String(v))) || justify.includes("left") && justify.includes("right") || justify.includes("top") && justify.includes("bottom") || !at || !size || num(at, 3) !== 0 || num(size) !== num(size, 2) || ![num(at), num(at, 2), num(size)].every(Number.isFinite) || Math.abs(num(at)) > 1e5 || Math.abs(num(at, 2)) > 1e5 || num(size) <= 0 || num(size) > 1e3 || val(node).length > 4096 || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(val(child(node, "uuid"))))
+  return children(original ?? [], "text").map((node) => readNote(node, []));
+}
+function schematicTextBoxes(original) {
+  return children(original ?? [], "text_box").map((node) => {
+    const note = readNote(node, ["size", "margins", "stroke", "fill"]);
+    const size = child(node, "size");
+    const stroke = child(node, "stroke");
+    const fill = child(node, "fill");
+    const marginsRecord = child(node, "margins");
+    const width = num(size), height = num(size, 2);
+    const lineWidth = num(child(stroke ?? [], "width"));
+    const lineType = val(child(stroke ?? [], "type"));
+    const margin = Number((lineWidth / 2).toFixed(6)) + Number((note.size * 0.75).toFixed(6));
+    const margins = marginsRecord?.slice(1).map(Number) ?? [margin, margin, margin, margin];
+    const [left, top, right, bottom] = margins;
+    if (size?.length !== 3 || ![width, height].every((n) => Number.isFinite(n) && n > 0 && n <= 1e5) || Math.abs(note.x + width) > 1e5 || Math.abs(note.y + height) > 1e5 || stroke?.length !== 3 || child(stroke, "width")?.length !== 2 || child(stroke, "type")?.length !== 2 || !Number.isFinite(lineWidth) || lineWidth < 0 || lineWidth > 100 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(lineType) || fill && (fill.length !== 2 || child(fill, "type")?.length !== 2 || val(child(fill, "type")) !== "none") || margins.length !== 4 || !margins.every((n) => Number.isFinite(n) && n >= 0) || left + right >= width || top + bottom >= height)
       throw new Error(
-        "Unsupported schematic text. Use horizontal, plain text with equal font dimensions in KiCad. The original file was not modified."
+        "Unsupported schematic text box. Use finite unfilled rectangular notes. The original file was not modified."
       );
-    return {
-      id: val(child(node, "uuid")),
-      text: val(node),
-      x: num(at),
-      y: num(at, 2),
-      size: num(size),
-      ...font.includes("bold") || val(child(font, "bold")) === "yes" ? { bold: true } : {},
-      ...font.includes("italic") || val(child(font, "italic")) === "yes" ? { italic: true } : {},
-      ...child(effects, "href") ? { href: val(child(effects, "href")) } : {},
-      ...color ? { color: color.slice(1).map(Number) } : {},
-      anchor: justify.includes("left") ? "start" : justify.includes("right") ? "end" : "middle",
-      vertical: justify.includes("top") ? "top" : justify.includes("bottom") ? "bottom" : "middle"
-    };
+    return { ...note, width, height, left, top, right, bottom, lineWidth, lineType };
   });
 }
 function schematicPolylines(original) {
-  return children(original || [], "polyline").map((node) => {
-    const pts = child(node, "pts"), stroke = child(node, "stroke");
-    const points2 = children(pts || [], "xy").map((p) => ({ x: num(p), y: num(p, 2) }));
+  return (original ?? []).filter(
+    (node) => Array.isArray(node) && (node[0] === "polyline" || node[0] === "rectangle")
+  ).map((node) => {
+    const rectangle = node[0] === "rectangle";
+    const pts = child(node, "pts"), stroke = child(node, "stroke"), start = child(node, "start"), end = child(node, "end");
+    const vertices = rectangle ? [start ?? [], end ?? []] : children(pts || [], "xy");
+    const points2 = vertices.map((p) => ({ x: num(p), y: num(p, 2) }));
     const id = val(child(node, "uuid")), width = num(child(stroke || [], "width"));
     const type = val(child(stroke || [], "type"));
     const known = (n, keys3) => n.slice(1).every((v) => Array.isArray(v) && keys3.includes(String(v[0])));
     const fill = child(node, "fill");
-    if (!known(node, ["pts", "stroke", "fill", "uuid"]) || !pts || !stroke || fill && (fill.length !== 2 || !child(fill, "type") || child(fill, "type").length !== 2 || val(child(fill, "type")) !== "none") || !known(pts, ["xy"]) || !known(stroke, ["width", "type"]) || points2.length < 2 || points2.length > 4096 || children(pts, "xy").some((p) => p.length !== 3) || points2.some((p) => ![p.x, p.y].every((v) => Number.isFinite(v) && Math.abs(v) <= 1e5)) || !Number.isFinite(width) || width < 0 || width > 100 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(type) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
+    if (!known(node, [...rectangle ? ["start", "end"] : ["pts"], "stroke", "fill", "uuid"]) || !stroke || fill && (fill.length !== 2 || !child(fill, "type") || child(fill, "type").length !== 2 || val(child(fill, "type")) !== "none") || (rectangle ? points2[0].x === points2[1].x || points2[0].y === points2[1].y : !pts || !known(pts, ["xy"])) || !known(stroke, ["width", "type"]) || points2.length < 2 || points2.length > 4096 || vertices.some(
+      (p) => p.length !== 3 || typeof p[1] !== "string" || typeof p[2] !== "string"
+    ) || points2.some((p) => ![p.x, p.y].every((v) => Number.isFinite(v) && Math.abs(v) <= 1e5)) || !Number.isFinite(width) || width < 0 || width > 100 || !["default", "solid", "dash", "dot", "dash_dot", "dash_dot_dot"].includes(type) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id))
       throw new Error(
-        "Unsupported schematic polyline. Use finite unfilled native outlines. The original file was not modified."
+        `Unsupported schematic ${node[0]}. Use finite unfilled native outlines. The original file was not modified.`
       );
+    if (rectangle) {
+      const [a, b] = points2;
+      return { id, points: [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }, a], width, type };
+    }
     return { id, points: points2, width, type };
   });
+}
+
+// lib/schematic-image.ts
+var cachedImages = /* @__PURE__ */ new WeakMap();
+var invalidImage = () => {
+  throw new Error(
+    "Unsupported schematic image. Use bounded embedded PNG artwork. The original file was not modified."
+  );
+};
+function pngGeometry(data) {
+  if (!data || data.length > 1e6 || data.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data))
+    return invalidImage();
+  const bytes = atob(data);
+  if (bytes.length < 45 || !bytes.startsWith("\x89PNG\r\n\n")) return invalidImage();
+  const uint32 = (i) => bytes.charCodeAt(i) * 16777216 + bytes.charCodeAt(i + 1) * 65536 + bytes.charCodeAt(i + 2) * 256 + bytes.charCodeAt(i + 3);
+  if (uint32(8) !== 13 || bytes.slice(12, 16) !== "IHDR") return invalidImage();
+  const width = uint32(16), height = uint32(20);
+  if (!width || !height || width > 4096 || height > 4096) return invalidImage();
+  let widthPPI = 300;
+  let imageData = false;
+  let density = false;
+  for (let offset2 = 33; offset2 + 12 <= bytes.length; ) {
+    const length = uint32(offset2);
+    const kind = bytes.slice(offset2 + 4, offset2 + 8);
+    const end = offset2 + length + 12;
+    if (end > bytes.length) return invalidImage();
+    if (kind === "IEND" && !length && end === bytes.length && imageData)
+      return { width, height, widthPPI };
+    if (kind === "IDAT") imageData ||= length > 0;
+    if (kind === "pHYs") {
+      if (density || imageData || length !== 9 || bytes.charCodeAt(offset2 + 16) > 1)
+        return invalidImage();
+      density = true;
+      const ppi = Math.round(uint32(offset2 + 8) * 0.0254);
+      if (bytes.charCodeAt(offset2 + 16) === 1 && ppi > 1) widthPPI = ppi;
+    }
+    offset2 = end;
+  }
+  return invalidImage();
+}
+function readImage(node) {
+  const cached = cachedImages.get(node);
+  if (cached) return cached;
+  const at = child(node, "at"), scaleRecord = child(node, "scale");
+  const uuid = child(node, "uuid"), data = child(node, "data");
+  if (node.length !== (scaleRecord ? 5 : 4) || at?.length !== 3 || !val(at) || !val(at, 2) || uuid?.length !== 2 || !data || scaleRecord && (scaleRecord.length !== 2 || !val(scaleRecord)) || !data.slice(1).every((value) => typeof value === "string"))
+    return invalidImage();
+  const id = val(uuid);
+  const x = num(at), y = num(at, 2), scale2 = scaleRecord ? num(scaleRecord) : 1;
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) || ![x, y, scale2].every(Number.isFinite) || scale2 <= 0)
+    return invalidImage();
+  const encoded = data.slice(1).map((_, i) => val(data, i + 1)).join("");
+  const png = pngGeometry(encoded);
+  const mmPerPixel = scale2 * 25.4 / png.widthPPI;
+  const width = png.width * mmPerPixel, height = png.height * mmPerPixel;
+  if (width < 1e-6 || height < 1e-6 || Math.abs(x) + width / 2 > 1e5 || Math.abs(y) + height / 2 > 1e5)
+    return invalidImage();
+  const image = {
+    id,
+    x: x - width / 2,
+    y: y - height / 2,
+    width,
+    height,
+    pixels: png.width * png.height,
+    href: `data:image/png;base64,${encoded}`
+  };
+  if (isOwnedProjectNode(node)) cachedImages.set(node, Object.freeze(image));
+  return image;
+}
+function schematicImages(original) {
+  const records2 = children(original ?? [], "image");
+  if (records2.length > 16) return invalidImage();
+  const images = records2.map(readImage);
+  if (images.reduce((pixels, image) => pixels + image.pixels, 0) > 16e6)
+    return invalidImage();
+  return images;
 }
 
 // lib/circuit.ts
@@ -6722,7 +6838,10 @@ function parseCircuitTree(root) {
     "sheet_instances",
     "embedded_fonts",
     "text",
-    "polyline"
+    "text_box",
+    "image",
+    "polyline",
+    "rectangle"
   ];
   const unsupported = root.filter(Array.isArray).map((x) => String(x[0])).filter((k) => !allowed.includes(k));
   if (unsupported.length)
@@ -6732,6 +6851,8 @@ function parseCircuitTree(root) {
   const d = emptyCircuit();
   d.original = root.filter((node) => !Array.isArray(node) || node[0] !== "paper");
   schematicTexts(root);
+  schematicTextBoxes(root);
+  schematicImages(root);
   schematicPolylines(root);
   d.id = val(child(root, "uuid")) || uid();
   d.title = val(child(child(root, "title_block") || [], "title")) || "Imported schematic";
@@ -6921,9 +7042,274 @@ function footprintModels(root) {
   });
 }
 
-// lib/kicad-pcb.ts
-var round = (n) => Number(n.toFixed(6));
+// lib/pcb-drill.ts
+function padDrillSize({ drill = 0, drillSlot }) {
+  return {
+    x: drillSlot?.axis === "x" ? drillSlot.length : drill,
+    y: drillSlot?.axis === "y" ? drillSlot.length : drill
+  };
+}
+function localPadDrillLine({ drill = 0, drillSlot, drillOffset }) {
+  const center = drillOffset ?? { x: 0, y: 0 };
+  const halfTravel = drillSlot ? (drillSlot.length - drill) / 2 : 0;
+  const dx = drillSlot?.axis === "x" ? halfTravel : 0;
+  const dy = drillSlot?.axis === "y" ? halfTravel : 0;
+  return [
+    { x: center.x - dx, y: center.y - dy },
+    { x: center.x + dx, y: center.y + dy }
+  ];
+}
+function readPadDrill(node, fail6 = (message) => {
+  throw new Error(message);
+}) {
+  if (!node) return {};
+  const oval = val(node) === "oval";
+  const offset2 = child(node, "offset");
+  const dimensions = oval ? 4 : 2;
+  const offsetValue = (n, i) => {
+    const raw = val(n, i), value = Number(raw);
+    if (!raw || !Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - Number(value.toFixed(6))) > 1e-9)
+      fail6("Pad drill needs finite dimensions at 0.000001 mm precision.");
+    return value;
+  };
+  if (node.length !== dimensions + Number(!!offset2) || node.slice(1, dimensions).some(Array.isArray) || offset2 && (node[dimensions] !== offset2 || offset2.length !== 3 || offset2.slice(1).some(Array.isArray)))
+    fail6("Use a round or oval drill with at most one XY offset.");
+  const x = offsetValue(node, oval ? 2 : 1);
+  const y = oval ? offsetValue(node, 3) : x;
+  if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
+    fail6("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
+  const drillOffset = offset2 && {
+    x: -offsetValue(offset2, 1) || 0,
+    y: -offsetValue(offset2, 2) || 0
+  };
+  return {
+    drill: Math.min(x, y),
+    ...oval ? { drillSlot: { length: Math.max(x, y), axis: x > y ? "x" : "y" } } : {},
+    ...drillOffset ? { drillOffset } : {}
+  };
+}
+
+// lib/pcb-custom-pad.ts
+var import_clipper_lib = __toESM(require_clipper(), 1);
+
+// lib/pcb-custom-pad-limits.ts
+var customPadVertexLimit = 128;
+
+// lib/pcb-custom-pad.ts
+var nmPerMm = 1e6;
+var rectangleLimit = 16;
+function nativeNanometres(value, reject) {
+  const nm = Math.round(value * nmPerMm);
+  if (!Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - nm / nmPerMm) > 1e-9)
+    reject("Custom pad rectangles require native coordinate precision.");
+  return nm;
+}
+function readPadPolygon(polygon, reject) {
+  const points2 = child(polygon, "pts");
+  const width = child(polygon, "width");
+  const fill = child(polygon, "fill");
+  if (polygon[0] !== "gr_poly" || polygon.length !== 4 || width?.length !== 2 || !val(width) || Number(val(width)) !== 0 || fill?.length !== 2 || val(fill) !== "yes" || !points2 || points2.length < 4 || points2.length > customPadVertexLimit + 1)
+    reject(
+      `Custom pad polygons must be filled and unstroked with 3\u2013${customPadVertexLimit} vertices.`
+    );
+  return points2.slice(1).map((point2) => {
+    if (!Array.isArray(point2) || point2[0] !== "xy" || point2.length !== 3 || !val(point2) || !val(point2, 2))
+      reject("Invalid custom pad vertex.");
+    return { x: Number(val(point2)), y: Number(val(point2, 2)) };
+  });
+}
+function rectanglePath(left, top, right, bottom) {
+  return [
+    { X: left, Y: top },
+    { X: right, Y: top },
+    { X: right, Y: bottom },
+    { X: left, Y: bottom }
+  ];
+}
+function mergePadRectangles(pad, polygons, reject) {
+  const size = child(pad, "size");
+  const width = nativeNanometres(Number(val(size)), reject);
+  const height = nativeNanometres(Number(val(size, 2)), reject);
+  if (size?.length !== 3 || width <= 0 || height <= 0 || width % 2 || height % 2)
+    reject("Compound custom pads require a rectangular anchor on the native grid.");
+  const paths2 = polygons.map((polygon) => {
+    const points2 = polygon.map(({ x, y }) => ({
+      x: nativeNanometres(x, reject),
+      y: nativeNanometres(y, reject)
+    }));
+    const xs = [...new Set(points2.map(({ x }) => x))].sort((a, b) => a - b);
+    const ys = [...new Set(points2.map(({ y }) => y))].sort((a, b) => a - b);
+    if (points2.length !== 4 || xs.length !== 2 || ys.length !== 2 || points2.some((point2, i) => {
+      const next = points2[(i + 1) % points2.length];
+      return point2.x === next.x === (point2.y === next.y);
+    }) || new Set(points2.map(({ x, y }) => `${x},${y}`)).size !== 4)
+      reject("Compound custom pad primitives must be axis-aligned rectangles.");
+    return rectanglePath(xs[0], ys[0], xs[1], ys[1]);
+  });
+  paths2.unshift(rectanglePath(-width / 2, -height / 2, width / 2, height / 2));
+  const clipper = new import_clipper_lib.default.Clipper();
+  clipper.StrictlySimple = true;
+  const tree = new import_clipper_lib.default.PolyTree();
+  clipper.AddPaths(paths2, import_clipper_lib.default.PolyType.ptSubject, true);
+  clipper.Execute(
+    import_clipper_lib.default.ClipType.ctUnion,
+    tree,
+    import_clipper_lib.default.PolyFillType.pftNonZero,
+    import_clipper_lib.default.PolyFillType.pftNonZero
+  );
+  const regions = import_clipper_lib.default.JS.PolyTreeToExPolygons(tree);
+  if (regions.length !== 1 || regions[0].holes.length)
+    reject("Compound custom pads require a single outline without holes.");
+  return regions[0].outer.map(({ X, Y }) => ({ x: X / nmPerMm, y: Y / nmPerMm }));
+}
+function readCustomPad(pad, reject) {
+  const options = children(pad, "options");
+  const primitives = children(pad, "primitives");
+  if (val(pad, 3) !== "custom") {
+    if (options.length) reject("The pad uses unsupported options.");
+    if (primitives.length) reject("The pad uses unsupported primitives.");
+    return {};
+  }
+  const option = options[0];
+  const clearance = option && children(option, "clearance")[0];
+  const anchor = option && children(option, "anchor")[0];
+  const anchorShape = val(anchor);
+  if (options.length !== 1 || option.length !== 3 || clearance?.length !== 2 || val(clearance) !== "outline" || anchor?.length !== 2 || !["rect", "circle"].includes(anchorShape))
+    reject("Custom pads require outline clearance and a rectangular or circular anchor.");
+  const records2 = primitives[0]?.slice(1) ?? [];
+  if (primitives.length !== 1 || !records2.length || records2.length > rectangleLimit)
+    reject(`Custom pads require one polygon or up to ${rectangleLimit} rectangular primitives.`);
+  const polygons = records2.map((record2) => {
+    if (!Array.isArray(record2)) reject("Invalid custom pad primitive.");
+    return readPadPolygon(record2, reject);
+  });
+  if (polygons.length > 1 && anchorShape !== "rect")
+    reject("Compound custom pads require a rectangular anchor.");
+  const outline = polygons.length === 1 ? polygons[0] : mergePadRectangles(pad, polygons, reject);
+  return { outline, ...anchorShape === "circle" ? { customAnchor: "circle" } : {} };
+}
+
+// lib/pcb-geometry.ts
+function transformPCBGraphic(g, point2, angle3 = (n) => n) {
+  return {
+    ...g,
+    start: point2(g.start),
+    end: point2(g.end),
+    ...g.mid ? { mid: point2(g.mid) } : {},
+    ...g.points ? { points: g.points.map(point2) } : {},
+    ...g.text ? { text: { ...g.text, rotation: angle3(g.text.rotation) } } : {},
+    ...g.dimension ? {
+      dimension: {
+        ...g.dimension,
+        caption: {
+          ...g.dimension.caption,
+          ...point2(g.dimension.caption),
+          rotation: angle3(g.dimension.caption.rotation)
+        }
+      }
+    } : {}
+  };
+}
+function transformPCBZone(z, point2) {
+  return {
+    ...z,
+    outline: z.outline.map(point2),
+    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
+    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
+  };
+}
+function pcbArc(g) {
+  const a = g.start, b = g.mid, c = g.end;
+  if (!b) return null;
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-12) return null;
+  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
+  const center = {
+    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
+    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
+  };
+  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
+  const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
+  const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
+  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
+}
+var pcbPadCorners = [
+  { x: -1, y: -1, name: "top_left" },
+  { x: 1, y: -1, name: "top_right" },
+  { x: 1, y: 1, name: "bottom_right" },
+  { x: -1, y: 1, name: "bottom_left" }
+];
+function pcbPadChamferEndpoints({ x, y }, size, cut) {
+  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
+  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
+  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+
+// lib/pcb-text.ts
+function footprintTextPlacement(node, fail6) {
+  const at = child(node, "at");
+  const inPosition = at?.at(-1) === "unlocked";
+  const flags = children(node, "unlocked");
+  const bare = node.filter((item) => item === "unlocked").length;
+  const [flag] = flags;
+  if (flags.length + bare + Number(inPosition) > 1 || flag && (flag.length !== 2 || !["yes", "no"].includes(val(flag))))
+    fail6("Invalid footprint text orientation flag.");
+  return {
+    at: inPosition ? at.slice(0, -1) : at,
+    unlocked: inPosition || bare === 1 || val(flag) === "yes",
+    flag,
+    bare: bare === 1,
+    inPosition
+  };
+}
+
+// lib/pcb-pad-role.ts
+function isApertureLayer(layer) {
+  return layer === "F.Paste" || layer === "B.Paste" || layer === "F.Mask" || layer === "B.Mask";
+}
+function padApertureLayers(pad) {
+  const { layers } = pad;
+  if (pad.type !== "smd" || pad.number !== "" || !layers?.length || layers.length > 2) return;
+  if (!layers.every(isApertureLayer)) return;
+  const [first, second] = layers;
+  if (!second || first !== second && first[0] === second[0]) return layers;
+}
+function padHasElectricalPin(pad) {
+  return pad.type !== "np_thru_hole" && !padApertureLayers(pad);
+}
+function readPadHeatsink(node, fail6) {
+  const properties = children(node, "property");
+  if (!properties.length) return {};
+  const [property] = properties;
+  if (properties.length !== 1 || property.length !== 2 || property[1] !== "pad_prop_heatsink")
+    fail6("Unsupported pad fabrication property.");
+  return { heatsink: true };
+}
+
+// lib/pcb-layout.ts
+var round = (n) => Number(n.toFixed(6)) + 0;
 var angle = (n) => round((n % 360 + 360) % 360);
+function footprintPoint(footprint, local) {
+  const radians = -footprint.rotation * Math.PI / 180;
+  return {
+    x: round(footprint.x + local.x * Math.cos(radians) - local.y * Math.sin(radians)),
+    y: round(footprint.y + local.x * Math.sin(radians) + local.y * Math.cos(radians))
+  };
+}
+var padPosition = (footprint, pad) => footprintPoint(footprint, pad);
+var padRotation = (footprint, pad) => angle(footprint.rotation + pad.rotation);
+function padDrillPosition(footprint, pad) {
+  return footprintPoint(footprint, pad.drillOffset ? footprintPoint(pad, pad.drillOffset) : pad);
+}
+function padDrillLine(footprint, pad) {
+  const at = { ...padDrillPosition(footprint, pad), rotation: padRotation(footprint, pad) };
+  const [start, end] = localPadDrillLine({ drill: pad.drill, drillSlot: pad.drillSlot });
+  return [footprintPoint(at, start), footprintPoint(at, end)];
+}
+
+// lib/kicad-pcb.ts
+var round2 = (n) => Number(n.toFixed(6));
+var angle2 = (n) => round2((n % 360 + 360) % 360);
 var fail = (message) => {
   throw new Error(`KiCad PCB: ${message}`);
 };
@@ -6979,14 +7365,14 @@ function expandNativeBoardZones(root) {
   });
   return expand(root);
 }
-function textData(n, value) {
+function textData(n, value, at = child(n, "at")) {
   const e = child(n, "effects"), f = e && child(e, "font");
   if (!f) fail("Text has no font geometry.");
   allow(e, ["font", "justify", "hide"], "text effects");
   allow(f, ["size", "thickness", "bold", "italic"], "font");
   return {
     value,
-    rotation: number(child(n, "at"), 3, 0),
+    rotation: number(at, 3, 0),
     size: point(child(f, "size")),
     thickness: number(child(f, "thickness"), 1, 0),
     ...child(e, "justify") ? {
@@ -7049,7 +7435,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
     if (!nets.has(name)) nets.set(name, stable("net:" + name));
     return nets.get(name);
   };
-  const graph = (n, key2, footprintRotation = 0) => {
+  const graph = (n, key2, footprintRotation) => {
     const kind = String(n[0]).replace(/^(fp|gr)_/, "");
     const layer = val(child(n, "layer"));
     const common = {
@@ -7059,12 +7445,29 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       ...nativeLocked(n) ? { locked: true } : {}
     };
     if (kind === "text" || kind === "property") {
-      allow(n, ["at", "layer", "uuid", "effects", "hide", "unlocked", "locked"], "text");
-      const at = point(child(n, "at"));
-      const t = textData(n, val(n, kind === "property" || n[0] === "fp_text" ? 2 : 1));
-      t.rotation = angle(t.rotation - footprintRotation);
+      const inFootprint = footprintRotation !== void 0;
+      allow(
+        n,
+        ["at", "layer", "uuid", "effects", "hide", "locked", ...inFootprint ? ["unlocked"] : []],
+        "text"
+      );
+      const placement = inFootprint ? footprintTextPlacement(n, fail) : { at: child(n, "at") };
+      const at = point(placement.at);
+      const t = textData(
+        n,
+        val(n, kind === "property" || n[0] === "fp_text" ? 2 : 1),
+        placement.at
+      );
+      t.rotation = angle2(t.rotation - (footprintRotation ?? 0));
       if (kind === "property") t.property = val(n);
-      return { ...common, kind: "text", start: at, end: { ...at }, text: t };
+      return {
+        ...common,
+        kind: "text",
+        start: at,
+        end: { ...at },
+        text: t,
+        ..."unlocked" in placement && placement.unlocked ? { keepUpright: false } : {}
+      };
     }
     if (kind === "dimension") {
       allow(
@@ -7283,6 +7686,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         "fp_circle",
         "fp_poly",
         "fp_text",
+        "point",
         "pad",
         "zone",
         "embedded_fonts",
@@ -7300,10 +7704,8 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
           fail("Incomplete footprint unit metadata.");
       }
     }
-    const reference = val(
-      children(n, "property").find((p) => val(p) === "Reference"),
-      2
-    ), value = val(
+    const referenceField = children(n, "property").find((p) => val(p) === "Reference");
+    const reference = val(referenceField, 2), value = val(
       children(n, "property").find((p) => val(p) === "Value"),
       2
     );
@@ -7314,11 +7716,15 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       part ? children(schematic.libraries[part.libId], "symbol").flatMap((s) => children(s, "pin")).map((p) => val(child(p, "number"))) : []
     );
     const at = point(child(n, "at")), rotation = number(child(n, "at"), 3, 0);
-    const local = (p) => {
-      const r = rotation * Math.PI / 180, x = p.x - at.x, y = p.y - at.y;
+    const radians = rotation * Math.PI / 180;
+    const cosine = Math.cos(radians);
+    const sine = Math.sin(radians);
+    const local = (p, digits) => {
+      const x = p.x - at.x;
+      const y = p.y - at.y;
       return {
-        x: round(x * Math.cos(r) - y * Math.sin(r)),
-        y: round(x * Math.sin(r) + y * Math.cos(r))
+        x: Number((x * cosine - y * sine).toFixed(digits)) + 0,
+        y: Number((x * sine + y * cosine).toFixed(digits)) + 0
       };
     };
     const pads = children(n, "pad").map((p, pi) => {
@@ -7339,9 +7745,12 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
           "roundrect_rratio",
           "chamfer_ratio",
           "chamfer",
+          "options",
+          "primitives",
           "zone_connect",
           "pinfunction",
           "pintype",
+          "property",
           "locked"
         ],
         "pad"
@@ -7351,26 +7760,29 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         if (fields.length > 1 || fields.some((field) => field.length !== 2 || typeof field[1] !== "string"))
           fail(`Pad has invalid ${key2} metadata.`);
       }
-      const drill = child(p, "drill");
-      if (drill) allow(drill, ["offset"], "drill");
-      if (drill && val(drill) === "oval")
-        fail("Slotted drills are not supported by the editor. The original file was not modified.");
+      const drills = children(p, "drill");
+      if (drills.length > 1) fail("A pad repeats its drill.");
+      const drill = readPadDrill(drills[0], fail);
+      const customPad = readCustomPad(p, fail);
+      const padRotation2 = angle2(number(child(p, "at"), 3, 0) - rotation);
+      const anchor = point(child(p, "at"));
+      const offset2 = drill.drillOffset;
+      const copper = offset2 ? footprintPoint({ ...anchor, rotation: padRotation2 }, { x: -offset2.x, y: -offset2.y }) : anchor;
       const result = {
         id: id(p, `fp:${fi}:pad:${pi}`),
         ...nativeLocked(p) ? { locked: true } : {},
         number: val(p),
         type: val(p, 2),
         shape: val(p, 3),
-        ...point(child(p, "at")),
-        rotation: angle(number(child(p, "at"), 3, 0) - rotation),
+        ...copper,
+        rotation: padRotation2,
+        ...drill,
         size: point(child(p, "size")),
+        ...customPad,
+        ...readPadHeatsink(p, fail),
         netId: net(p),
         layers: child(p, "layers").slice(1).map((_, i) => val(child(p, "layers"), i + 1))
       };
-      if (drill) {
-        result.drill = number(drill);
-        if (child(drill, "offset")) result.drillOffset = point(child(drill, "offset"));
-      }
       for (const [key2, native] of [
         ["roundrectRatio", "roundrect_rratio"],
         ["chamferRatio", "chamfer_ratio"],
@@ -7385,7 +7797,7 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
         result.chamfer = child(p, "chamfer").slice(1).map((_, i) => val(child(p, "chamfer"), i + 1));
       if (child(p, "remove_unused_layers"))
         result.removeUnusedLayers = val(child(p, "remove_unused_layers")) === "yes";
-      if (part && symbolPins.size && !symbolPins.has(result.number) && result.type !== "np_thru_hole") {
+      if (part && symbolPins.size && !symbolPins.has(result.number) && padHasElectricalPin(result)) {
         if (result.netId)
           fail(`${originalReference} package pad ${result.number} has a net but no source pin.`);
         result.unconnected = true;
@@ -7401,7 +7813,21 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       if (g.text?.property === "Reference") g.text.value = "${REFERENCE}";
       if (g.text?.property === "Value") g.text.value = "${VALUE}";
     }
+    const referencePoints = children(n, "point").map((record2) => {
+      const position2 = child(record2, "at");
+      const size = child(record2, "size");
+      const layer = child(record2, "layer");
+      const uuid = child(record2, "uuid");
+      if (record2.length !== 5 || position2?.length !== 3 || size?.length !== 2 || layer?.length !== 2 || uuid?.length !== 2)
+        fail("Invalid footprint reference point.");
+      const layerName = val(layer);
+      if (layerName !== "F.Fab" && layerName !== "B.Fab")
+        return fail("Footprint reference points require a fabrication layer.");
+      return { ...local(point(position2), 12), id: val(uuid), size: number(size), layer: layerName };
+    });
     const hasPins = part && children(schematic.libraries[part.libId], "symbol").some((s) => children(s, "pin").length);
+    if (!hasPins && !originalReference && typeof referenceField?.[2] !== "string")
+      fail("An unlinked footprint requires a native Reference property.");
     return {
       id: id(n, `footprint:${fi}`),
       symbolId: hasPins ? part.id : null,
@@ -7416,8 +7842,13 @@ function parseKiCadPCBTree(tree, schematic, stableIdSeed, referenceMapping = {})
       ...!hasPins ? { reference: originalReference, value } : {},
       pads,
       graphics: graphics2,
+      ...referencePoints.length ? { referencePoints } : {},
       ...children(n, "model").length ? { models: footprintModels(n) } : {},
-      ...child(n, "zone") ? { zones: children(n, "zone").map((z, i) => zone(z, `fp:${fi}:zone:${i}`, local)) } : {}
+      ...child(n, "zone") ? {
+        zones: children(n, "zone").map(
+          (z, i) => zone(z, `fp:${fi}:zone:${i}`, (p) => local(p, 6))
+        )
+      } : {}
     };
   });
   const tracks = children(root, "segment").map((n, i) => {
@@ -7808,10 +8239,10 @@ function packFootprint(footprint, order, shareGeometry = false) {
     order,
     ...models3 ? {
       models: models3.map((model) => {
-        const { offset, scale: scale2, rotation, ...rest } = model;
+        const { offset: offset2, scale: scale2, rotation, ...rest } = model;
         return {
           ...rest,
-          ...!vector(offset, 0) ? { offset } : {},
+          ...!vector(offset2, 0) ? { offset: offset2 } : {},
           ...!vector(scale2, 1) ? { scale: scale2 } : {},
           ...!vector(rotation, 0) ? { rotation } : {}
         };
@@ -8082,8 +8513,8 @@ function groupProjectDocument(document2, project, reuseOwnedGeometry = false) {
 
 // lib/project-document.ts
 var details = (node, excluded) => {
-  const offset = node[0] === "property" ? 3 : ["label", "global_label"].includes(String(node[0])) ? 2 : 1;
-  return node.slice(offset).flatMap((v) => {
+  const offset2 = node[0] === "property" ? 3 : ["label", "global_label"].includes(String(node[0])) ? 2 : 1;
+  return node.slice(offset2).flatMap((v) => {
     if (Array.isArray(v)) return excluded.includes(String(v[0])) ? [] : [v];
     if (node[0] === "property" && v === "hide") return [["hide", "yes"]];
     throw new Error(
@@ -8513,7 +8944,8 @@ function serializePCBContent(board, schematic, parts) {
     const stroke = `(stroke (width ${fmt2(g.width)}) (type ${g.stroke ?? "default"}))`;
     if (g.kind === "text") {
       const t = g.text;
-      return `(${prefix === "fp" && t.property ? `property ${quote(t.property)}` : `${prefix}_text${prefix === "fp" ? " user" : ""}`} ${quote(t.value)} (at ${xy2(g.start)} ${fmt2(t.rotation + footprintRotation)}) ${t.hidden ? "(hide yes) " : ""}${effects(t)} ${tail}`;
+      const unlocked = prefix === "fp" && g.keepUpright === false ? "(unlocked yes) " : "";
+      return `(${prefix === "fp" && t.property ? `property ${quote(t.property)}` : `${prefix}_text${prefix === "fp" ? " user" : ""}`} ${quote(t.value)} (at ${xy2(g.start)} ${fmt2(t.rotation + footprintRotation)}) ${unlocked}${t.hidden ? "(hide yes) " : ""}${effects(t)} ${tail}`;
     }
     if (g.kind === "dimension") {
       const d = g.dimension, f = d.format, s = d.style;
@@ -8601,21 +9033,32 @@ function serializePCBContent(board, schematic, parts) {
         for (const pad of f.pads) {
           const layers = pad.layers ? pad.layers.map(quote).join(" ") : pad.type !== "smd" ? '"*.Cu" "*.Mask"' : `"${side}.Cu" "${side}.Paste" "${side}.Mask"`;
           const extras = pad.locked ? ["(locked yes)"] : [];
+          if (pad.heatsink) extras.push("(property pad_prop_heatsink)");
+          if (pad.roundrectRatio !== void 0)
+            extras.push(`(roundrect_rratio ${pad.roundrectRatio})`);
+          if (pad.chamferRatio !== void 0) extras.push(`(chamfer_ratio ${pad.chamferRatio})`);
+          if (pad.solderPasteMarginRatio !== void 0)
+            extras.push(`(solder_paste_margin_ratio ${pad.solderPasteMarginRatio})`);
           for (const [key2, native] of [
-            ["roundrectRatio", "roundrect_rratio"],
-            ["chamferRatio", "chamfer_ratio"],
             ["solderMaskMargin", "solder_mask_margin"],
             ["solderPasteMargin", "solder_paste_margin"],
-            ["solderPasteMarginRatio", "solder_paste_margin_ratio"],
             ["thermalBridgeAngle", "thermal_bridge_angle"],
             ["zoneConnect", "zone_connect"]
           ])
             if (pad[key2] !== void 0) extras.push(`(${native} ${fmt2(pad[key2])})`);
           if (pad.chamfer) extras.push(`(chamfer ${pad.chamfer.join(" ")})`);
+          if (pad.outline)
+            extras.push(
+              `(options (clearance outline) (anchor ${pad.customAnchor ?? "rect"}))`,
+              `(primitives (gr_poly (pts ${pad.outline.map((p2) => `(xy ${fmt2(p2.x)} ${fmt2(p2.y)})`).join(" ")}) (width 0) (fill yes)))`
+            );
           if (pad.removeUnusedLayers !== void 0)
             extras.push(`(remove_unused_layers ${pad.removeUnusedLayers ? "yes" : "no"})`);
+          const offset2 = pad.drillOffset;
+          const anchor = offset2 ? footprintPoint(pad, offset2) : pad;
+          const drill = pad.drill === void 0 ? "" : ` (drill ${pad.drillSlot ? `oval ${xy2(padDrillSize(pad))}` : fmt2(pad.drill)}${offset2 ? ` (offset ${fmt2(-offset2.x)} ${fmt2(-offset2.y)})` : ""})`;
           lines2.push(
-            `    (pad ${quote(pad.number)} ${pad.type} ${pad.shape} (at ${xy2(pad)} ${fmt2(pad.rotation + f.rotation)}) (size ${xy2(pad.size)})${pad.type !== "smd" ? ` (drill ${fmt2(pad.drill)}${pad.drillOffset ? ` (offset ${xy2(pad.drillOffset)})` : ""})` : ""} (layers ${layers})${pad.netId ? ` (net ${quote(netName.get(pad.netId))})` : ""} ${extras.join(" ")} (uuid ${quote(pad.id)}))`
+            `    (pad ${quote(pad.number)} ${pad.type} ${pad.shape} (at ${xy2(anchor)} ${fmt2(pad.rotation + f.rotation)}) (size ${xy2(pad.size)})${drill} (layers ${layers})${pad.netId ? ` (net ${quote(netName.get(pad.netId))})` : ""} ${extras.join(" ")} (uuid ${quote(pad.id)}))`
           );
         }
         const radians = -f.rotation * Math.PI / 180;
@@ -8623,7 +9066,13 @@ function serializePCBContent(board, schematic, parts) {
           x: f.x + p2.x * Math.cos(radians) - p2.y * Math.sin(radians),
           y: f.y + p2.x * Math.sin(radians) + p2.y * Math.cos(radians)
         });
-        lines2.push(...(f.zones ?? []).map((z) => "    " + zone(z, absolute)), "  )");
+        lines2.push(
+          ...(f.referencePoints ?? []).map(
+            (p2) => `    (point (at ${xy2(footprintPoint(f, p2))}) (size ${fmt2(p2.size)}) (layer ${quote(p2.layer)}) (uuid ${quote(p2.id)}))`
+          ),
+          ...(f.zones ?? []).map((z) => "    " + zone(z, absolute)),
+          "  )"
+        );
         return lines2.join("\n");
       })
     );
@@ -8836,51 +9285,6 @@ function compileCapabilitySchema(schema) {
   };
 }
 
-// lib/pcb-geometry.ts
-function transformPCBGraphic(g, point2, angle3 = (n) => n) {
-  return {
-    ...g,
-    start: point2(g.start),
-    end: point2(g.end),
-    ...g.mid ? { mid: point2(g.mid) } : {},
-    ...g.points ? { points: g.points.map(point2) } : {},
-    ...g.text ? { text: { ...g.text, rotation: angle3(g.text.rotation) } } : {},
-    ...g.dimension ? {
-      dimension: {
-        ...g.dimension,
-        caption: {
-          ...g.dimension.caption,
-          ...point2(g.dimension.caption),
-          rotation: angle3(g.dimension.caption.rotation)
-        }
-      }
-    } : {}
-  };
-}
-function transformPCBZone(z, point2) {
-  return {
-    ...z,
-    outline: z.outline.map(point2),
-    ...z.holes ? { holes: z.holes.map((h) => h.map(point2)) } : {},
-    ...z.filledPolygons ? { filledPolygons: z.filledPolygons.map((p) => ({ ...p, points: p.points.map(point2) })) } : {}
-  };
-}
-function pcbArc(g) {
-  const a = g.start, b = g.mid, c = g.end;
-  if (!b) return null;
-  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
-  if (Math.abs(d) < 1e-12) return null;
-  const aa = a.x * a.x + a.y * a.y, bb = b.x * b.x + b.y * b.y, cc = c.x * c.x + c.y * c.y;
-  const center = {
-    x: (aa * (b.y - c.y) + bb * (c.y - a.y) + cc * (a.y - b.y)) / d,
-    y: (aa * (c.x - b.x) + bb * (a.x - c.x) + cc * (b.x - a.x)) / d
-  };
-  const start = Math.atan2(a.y - center.y, a.x - center.x), mid = Math.atan2(b.y - center.y, b.x - center.x), end = Math.atan2(c.y - center.y, c.x - center.x);
-  const positive = (v) => (v + Math.PI * 4) % (Math.PI * 2);
-  const delta = positive(mid - start) <= positive(end - start) ? positive(end - start) : positive(end - start) - Math.PI * 2;
-  return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
-}
-
 // lib/model-cad.ts
 var MODEL_CAD_EXTENSION = "org.openpe.model-cad";
 var MODEL_CAD_NATIVE_VARIABLE = "OPENPE_MODEL_CAD";
@@ -9006,7 +9410,7 @@ var fail2 = (message) => {
 };
 var epsilon = 1e-6;
 var cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-var segmentDistance = (p, a, b) => {
+var segmentDistance2 = (p, a, b) => {
   const dx = b.x - a.x, dy = b.y - a.y;
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
   return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
@@ -9020,7 +9424,7 @@ function intersects(a, b, c, d) {
     [cdA, a, c, d],
     [cdB, b, c, d]
   ].some(
-    ([area, point2, start, end]) => Math.abs(area) <= epsilon ? segmentDistance(point2, start, end) <= epsilon : false
+    ([area, point2, start, end]) => Math.abs(area) <= epsilon ? segmentDistance2(point2, start, end) <= epsilon : false
   );
 }
 function validateModelCadProfile(input, size) {
@@ -9671,8 +10075,8 @@ function schematicProjectInstances(source, original, schematic, projectName, reu
       quote(projectName)
     ];
     if (!foreign.includes(owner)) foreign.push(owner);
-    const paths = owned.length ? structuredClone(owned) : [["path", quote(ownerPath)]];
-    for (const path of paths) {
+    const paths2 = owned.length ? structuredClone(owned) : [["path", quote(ownerPath)]];
+    for (const path of paths2) {
       path[1] = quote(ownerPath);
       for (const [key2, value] of [
         ["reference", quote(part.ref)],
@@ -9772,18 +10176,15 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
     newGeneral.push(...oldGeneral.filter((node) => Array.isArray(node) && node[0] !== "thickness"));
   const nativeLock = (node) => node.includes("locked") || val(child(node, "locked")) === "yes";
   const retain = (old, node, keys3, retainLocks = nativeLock(old) === nativeLock(node)) => {
-    for (const key2 of /* @__PURE__ */ new Set([...keys3, ...retainLocks ? ["locked", "unlocked"] : []])) {
+    for (const key2 of /* @__PURE__ */ new Set([...keys3, ...retainLocks ? ["locked"] : []])) {
       const source2 = children(old, key2);
       if (!source2.length) continue;
       for (const item of children(node, key2)) node.splice(node.indexOf(item), 1);
       node.push(...source2);
     }
-    if (retainLocks) {
-      for (const flag of ["locked", "unlocked"])
-        if (old.includes(flag)) {
-          for (const item of children(node, flag)) node.splice(node.indexOf(item), 1);
-          if (!node.includes(flag)) node.push(flag);
-        }
+    if (retainLocks && old.includes("locked")) {
+      for (const item of children(node, "locked")) node.splice(node.indexOf(item), 1);
+      if (!node.includes("locked")) node.push("locked");
     }
     const oldLayer = child(old, "layer");
     let newLayer = child(node, "layer");
@@ -9837,7 +10238,18 @@ function mergeBoardSource(original, generated, keepLayers, schematicId, schemati
       "property"
     ].includes(String(node[0])) : String(node[0]).startsWith("gr_") || node[0] === "dimension")
   );
-  const retainGraphic = (old, node) => retain(old, node, ["unlocked"]);
+  const retainGraphic = (old, node) => {
+    retain(old, node, []);
+    if (old[0] !== "fp_text" && old[0] !== "property") return;
+    const original2 = footprintTextPlacement(old, fail3);
+    const generated2 = footprintTextPlacement(node, fail3);
+    if (original2.unlocked !== generated2.unlocked) return;
+    if (generated2.flag) node.splice(node.indexOf(generated2.flag), 1);
+    if (original2.flag) node.push(original2.flag);
+    if (original2.bare) node.push("unlocked");
+    if (original2.inPosition && generated2.at)
+      node[node.indexOf(generated2.at)] = [...generated2.at, "unlocked"];
+  };
   const retainZone = (old, node) => retain(old, node, ["hatch", "placement", "name"]);
   matched(
     children(before, "segment"),
@@ -9968,7 +10380,7 @@ function projectNativeFilesSnapshot(project, entryName) {
   const renameLibraryTable = (file) => {
     if (!projectRenamed || !["fp-lib-table", "sym-lib-table"].includes(file.name))
       return file.source;
-    const paths = new Map(
+    const paths2 = new Map(
       [
         ["", ".pretty"],
         ["", ".kicad_sym"],
@@ -9985,7 +10397,7 @@ function projectNativeFilesSnapshot(project, entryName) {
     );
     return file.source.replace(
       /(\(uri\s+)("(?:[^"\\]|\\.)*"|[^\s()]+)/g,
-      (match, prefix, uri) => paths.has(uri) ? prefix + paths.get(uri) : match
+      (match, prefix, uri) => paths2.has(uri) ? prefix + paths2.get(uri) : match
     );
   };
   const nativeSchematicNames = new Set(parsed?.schematics.map((item) => item.file.name) ?? []);
@@ -10170,29 +10582,28 @@ function projectNativeFilesSnapshot(project, entryName) {
   return bundle;
 }
 
-// lib/pcb-layout.ts
-var round2 = (n) => Number(n.toFixed(6));
-var angle2 = (n) => round2((n % 360 + 360) % 360);
-function footprintPoint(footprint, local) {
-  const radians = -footprint.rotation * Math.PI / 180;
-  return {
-    x: round2(footprint.x + local.x * Math.cos(radians) - local.y * Math.sin(radians)),
-    y: round2(footprint.y + local.x * Math.sin(radians) + local.y * Math.cos(radians))
-  };
-}
-var padPosition = (footprint, pad) => footprintPoint(footprint, pad);
-var padRotation = (footprint, pad) => angle2(footprint.rotation + pad.rotation);
-function padDrillPosition(footprint, pad) {
-  const at = padPosition(footprint, pad), offset = pad.drillOffset ?? { x: 0, y: 0 };
-  return footprintPoint({ ...footprint, ...at, rotation: padRotation(footprint, pad) }, offset);
-}
-
 // lib/pcb-polygons.ts
-var import_clipper_lib = __toESM(require_clipper(), 1);
+var import_clipper_lib2 = __toESM(require_clipper(), 1);
 var polygonResolution = 1e-4;
 var scale = 1 / polygonResolution;
 var integer = (points2) => points2.map((p) => ({ X: Math.round(p.x * scale), Y: Math.round(p.y * scale) }));
 var decimal = (points2) => points2.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
+function oriented(points2, positive = true) {
+  const path = integer(points2);
+  return import_clipper_lib2.default.Clipper.Orientation(path) === positive ? path : path.reverse();
+}
+var paths = (polygons) => polygons.flatMap((p) => [oriented(p.outer), ...p.holes.map((h) => oriented(h, false))]);
+function offset(polygons, amount, arcTolerance = 0.01) {
+  if (!amount) return polygons;
+  const engine = new import_clipper_lib2.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(paths(polygons), import_clipper_lib2.default.JoinType.jtRound, import_clipper_lib2.default.EndType.etClosedPolygon);
+  engine.Execute(tree, amount * scale);
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+    outer: decimal(p.outer),
+    holes: p.holes.map(decimal)
+  }));
+}
+var offsetPolygons = offset;
 function circleSideCount(radius) {
   return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
 }
@@ -10264,21 +10675,72 @@ function closedGraphicContours(edges, context) {
   return loops;
 }
 function polygonsFromContours(loops) {
-  const engine = new import_clipper_lib.default.Clipper(), tree = new import_clipper_lib.default.PolyTree();
-  engine.AddPaths(loops.map(integer), import_clipper_lib.default.PolyType.ptSubject, true);
+  const engine = new import_clipper_lib2.default.Clipper(), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(loops.map(integer), import_clipper_lib2.default.PolyType.ptSubject, true);
   engine.Execute(
-    import_clipper_lib.default.ClipType.ctUnion,
+    import_clipper_lib2.default.ClipType.ctUnion,
     tree,
-    import_clipper_lib.default.PolyFillType.pftEvenOdd,
-    import_clipper_lib.default.PolyFillType.pftEvenOdd
+    import_clipper_lib2.default.PolyFillType.pftEvenOdd,
+    import_clipper_lib2.default.PolyFillType.pftEvenOdd
   );
-  return import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal)
   }));
 }
 var padCornerSegments = 8;
 var padCornerStep = Math.PI / 2 / padCornerSegments;
+function padCornerRadius(p) {
+  const side = Math.min(p.size.x, p.size.y);
+  if (p.shape === "oval") return side / 2;
+  if (p.shape === "roundrect") return side * (p.roundrectRatio ?? 0);
+  return 0;
+}
+function padPolygon(f, p) {
+  const w = p.size.x, h = p.size.y;
+  let local;
+  if (p.outline) local = p.outline;
+  else if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
+  else {
+    const radius = padCornerRadius(p);
+    local = pcbPadCorners.flatMap((c, i) => {
+      const cut = p.chamfer?.includes(c.name) ? Math.min(w, h) * (p.chamferRatio ?? 0) : 0;
+      const start = Math.PI + i * Math.PI / 2;
+      if (p.chamfer?.includes(c.name))
+        return cut ? pcbPadChamferEndpoints(c, p.size, cut) : [{ x: c.x * w / 2, y: c.y * h / 2 }];
+      if (!radius) return [{ x: c.x * w / 2, y: c.y * h / 2 }];
+      return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
+        x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
+        y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep)
+      }));
+    });
+    if (p.chamfer?.length)
+      local = local.filter((point2, i) => {
+        const previous = local[(i + local.length - 1) % local.length];
+        return point2.x !== previous.x || point2.y !== previous.y;
+      });
+  }
+  const at = padPosition(f, p), radians = -padRotation(f, p) * Math.PI / 180;
+  return {
+    outer: local.map((v) => ({
+      x: at.x + v.x * Math.cos(radians) - v.y * Math.sin(radians),
+      y: at.y + v.x * Math.sin(radians) + v.y * Math.cos(radians)
+    })),
+    holes: []
+  };
+}
+function offsetPadPolygons(f, pad, margin) {
+  if (pad.outline) {
+    const polygon = padPolygon(f, pad);
+    return margin ? offsetPolygons([polygon], margin, 5e-4) : [polygon];
+  }
+  const straightChamfers = pad.chamfer?.length && !pad.roundrectRatio;
+  if (straightChamfers && margin < 0) {
+    const size = { x: pad.size.x + 2 * margin, y: pad.size.y + 2 * margin };
+    return size.x > 0 && size.y > 0 ? [padPolygon(f, { ...pad, size })] : [];
+  }
+  return offsetPolygons([padPolygon(f, pad)], margin, straightChamfers ? 5e-4 : void 0);
+}
 function worldZones(board) {
   return [
     ...board.zones,
@@ -10315,7 +10777,7 @@ function pcbStrokeText(text2, origin) {
   const spacing = 1.25 * text2.size.y;
   const top = text2.justify?.includes("top") ? text2.size.y : text2.justify?.includes("bottom") ? -(lines.length - 1) * spacing : text2.size.y / 2 - (lines.length - 1) * spacing / 2;
   const advance = (glyph) => (glyph.charCodeAt(1) - glyph.charCodeAt(0)) * text2.size.x / 21;
-  const paths = [];
+  const paths2 = [];
   for (const [index, line] of lines.entries()) {
     const lineWidth = line.reduce((width, glyph) => width + advance(glyph), 0);
     let cursor = text2.justify?.includes("left") ? 0 : text2.justify?.includes("right") ? -lineWidth : -lineWidth / 2;
@@ -10324,7 +10786,7 @@ function pcbStrokeText(text2, origin) {
       const left = glyph.charCodeAt(0);
       for (let i = 2; i < glyph.length; i += 2) {
         if (glyph.slice(i, i + 2) === " R") {
-          if (path.length > 1) paths.push(path);
+          if (path.length > 1) paths2.push(path);
           path = [];
           continue;
         }
@@ -10333,12 +10795,12 @@ function pcbStrokeText(text2, origin) {
         const yy = y + top + index * spacing;
         path.push({ x: origin.x + x * cos - yy * sin, y: origin.y + x * sin + yy * cos });
       }
-      if (path.length > 1) paths.push(path);
+      if (path.length > 1) paths2.push(path);
       cursor += advance(glyph);
     }
   }
   return {
-    paths,
+    paths: paths2,
     width: text2.thickness || Math.min(text2.size.x, text2.size.y) / (text2.bold ? 5 : 8)
   };
 }
@@ -10401,6 +10863,13 @@ G01*`
     this.add("G37*");
   }
   pad(footprint, pad, marginX = 0, marginY = marginX) {
+    if (pad.outline) {
+      if (marginX !== marginY)
+        throw new Error("Gerber export requires uniform custom pad margins.");
+      for (const aperture of offsetPadPolygons(footprint, pad, marginX))
+        this.region([aperture.outer, ...aperture.holes]);
+      return;
+    }
     const w = pad.size.x + 2 * marginX, h = pad.size.y + 2 * marginY;
     if (w <= 0 || h <= 0) return;
     if (pad.shape === "circle" && Math.abs(w - h) < 1e-9) {
@@ -10423,8 +10892,13 @@ G01*`
       );
       return;
     }
-    if (pad.chamfer?.length && (marginX || marginY))
-      throw new Error("Gerber export does not support margins on chamfered pads.");
+    if (pad.chamfer?.length && (marginX || marginY)) {
+      if (marginX !== marginY || pad.roundrectRatio)
+        throw new Error("Gerber export supports only uniform margins on straight-chamfered pads.");
+      for (const aperture of offsetPadPolygons(footprint, pad, marginX))
+        this.region([aperture.outer, ...aperture.holes]);
+      return;
+    }
     const r = pad.shape === "roundrect" ? Math.min(w, h) * (pad.roundrectRatio ?? 0) : 0;
     const c = Math.min(w, h) * (pad.chamferRatio ?? 0);
     const corners = [
@@ -10794,8 +11268,8 @@ function exportBoardOutlineDxf(board) {
     pairs.push(0, name, 5, (handle++).toString(16).toUpperCase(), 330, modelSpace.record);
     pairs.push(100, "AcDbEntity", 8, outlineLayer, 100, subclass);
   };
-  const point2 = ({ x, y }, offset = 0) => {
-    pairs.push(10 + offset, x, 20 + offset, -y, 30 + offset, 0);
+  const point2 = ({ x, y }, offset2 = 0) => {
+    pairs.push(10 + offset2, x, 20 + offset2, -y, 30 + offset2, 0);
   };
   const endpointCounts = /* @__PURE__ */ new Map();
   for (const edge of edges) {
@@ -16147,6 +16621,8 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
       for (const via of board.vias) plot.circle(via, via.diameter);
     for (const f of board.footprints) {
       for (const p of f.pads) {
+        if (layer.endsWith(".Cu") && p.type === "np_thru_hole" && p.shape === "circle" && p.drill === p.size.x && !p.drillOffset && !p.drillSlot)
+          continue;
         const padLayers = p.layers ?? (p.type === "smd" ? [
           f.side === "front" ? "F.Cu" : "B.Cu",
           f.side === "front" ? "F.Mask" : "B.Mask",
@@ -16156,7 +16632,9 @@ function gerberFiles(project, board, root, stem2, stencil = false) {
           (l) => l === layer || l === "*.Cu" && layer.endsWith(".Cu") || l === "*.Mask" && layer.endsWith(".Mask")
         ))
           continue;
-        if (layer.endsWith(".Mask")) {
+        if (padApertureLayers(p)) {
+          plot.pad(f, p);
+        } else if (layer.endsWith(".Mask")) {
           const margin = p.solderMaskMargin ?? f.solderMaskMargin ?? setting("pad_to_mask_clearance");
           plot.pad(f, p, margin);
         } else if (layer.endsWith(".Paste")) {
@@ -16185,10 +16663,13 @@ var assemblyNotes = "\nAssembly CSV uses footprint origins, CCW degrees and Top/
 function drillFiles(board, stem2) {
   const files2 = [];
   for (const plated of [true, false]) {
+    const coordinate2 = (point2) => `X${point2.x.toFixed(6)}Y${(-point2.y).toFixed(6)}`;
     const holes = board.footprints.flatMap(
-      (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ ...padDrillPosition(f, p), diameter: p.drill }))
+      (f) => f.pads.filter((p) => p.drill && p.type !== "np_thru_hole" === plated).map((p) => ({ line: padDrillLine(f, p), diameter: p.drill, slot: !!p.drillSlot }))
     );
-    if (plated) holes.push(...board.vias.map((v) => ({ ...v, diameter: v.drill })));
+    if (plated)
+      for (const via of board.vias)
+        holes.push({ line: [via, via], diameter: via.drill, slot: false });
     const diameters = [...new Set(holes.map((h) => number4(h.diameter)))].sort(
       (a, b) => Number(a) - Number(b)
     );
@@ -16204,8 +16685,12 @@ function drillFiles(board, stem2) {
     ];
     for (const [i, d] of diameters.entries()) {
       commands.push(`T${i + 1}`);
-      for (const h of holes.filter((h2) => number4(h2.diameter) === d))
-        commands.push(`X${h.x.toFixed(6)}Y${(-h.y).toFixed(6)}`);
+      for (const {
+        line: [start, end],
+        slot
+      } of holes.filter((h) => number4(h.diameter) === d))
+        if (slot) commands.push(`${coordinate2(start)}G85${coordinate2(end)}`, "G05");
+        else commands.push(coordinate2(start));
     }
     files2.push({
       name: `${stem2}-${plated ? "PTH" : "NPTH"}.drl`,

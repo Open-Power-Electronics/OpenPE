@@ -9,6 +9,8 @@ import { serializeProject } from '../lib/project';
 import { manufacturingProject } from './manufacturing-fixture';
 import { GerberLayer } from '../lib/manufacturing-gerber';
 import { projectNativeFiles, projectFromNativeFiles } from '../lib/kicad-project';
+import { flipPCBFootprint } from '../lib/pcb-layout';
+import { solderMaskOpenings } from '../lib/pcb-solder-mask';
 const yauzl = createRequire(import.meta.url)('yauzl');
 
 function nativeBoard(edit: (source: string) => string) {
@@ -43,6 +45,90 @@ export async function unzip(bytes: Uint8Array): Promise<Map<string, string>> {
     }),
   );
 }
+
+test('drill-sized round mechanical holes with copper markers produce no copper flash', async () => {
+  const project = manufacturingProject();
+  const pad = project.pcb!.footprints[1].pads[0];
+  for (const marker of ['F&B.Cu', '*.Cu'] as const) {
+    pad.layers = [marker, '*.Mask'];
+    const files = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+    for (const name of ['x.gtl', 'x.gbl'])
+      assert.doesNotMatch(files.get(name)!, /X5000000Y-5000000D03/);
+    for (const name of ['x.gts', 'x.gbs']) assert.match(files.get(name)!, /X5000000Y-5000000D03/);
+    assert.match(files.get('x-NPTH.drl')!, /X5\.000000Y-5\.000000/);
+  }
+});
+
+test('mask and paste apertures use their exact native size in Gerber and stencil files', async () => {
+  const project = manufacturingProject();
+  const footprint = project.pcb!.footprints[0];
+  footprint.solderPasteMargin = -0.4;
+  footprint.solderPasteMarginRatio = -0.5;
+  footprint.pads.push(
+    ...(['F.Paste', 'B.Paste', 'B.Mask'] as const).map((layer, index) => ({
+      id: uid(),
+      x: 0,
+      y: 2 + index,
+      rotation: 0,
+      number: '',
+      type: 'smd' as const,
+      shape: 'circle' as const,
+      size: { x: 0.8125, y: 0.8125 },
+      layers: [layer],
+      netId: null,
+      solderPasteMargin: 0.125,
+      solderMaskMargin: 0.25,
+    })),
+  );
+  const gerber = await unzip(exportProjectFile(project, 'gerber', 'x').bytes);
+  const stencil = await unzip(exportProjectFile(project, 'stencil', 'x').bytes);
+  const frontFlash = /X12000000Y-12000000D03\*/;
+  const backFlash = /X13000000Y-12000000D03\*/;
+  for (const [name, flash, otherFlash] of [
+    ['x.gtp', frontFlash, backFlash],
+    ['x.gbp', backFlash, frontFlash],
+  ] as const) {
+    const paste = gerber.get(name)!;
+    assert.match(paste, /%ADD\d+C,0\.8125\*%/);
+    assert.match(paste, flash);
+    assert.doesNotMatch(paste, otherFlash);
+    assert.equal(stencil.get(name), paste);
+  }
+  for (const name of ['x.gtl', 'x.gbl', 'x.gts', 'x.gbs']) {
+    assert.doesNotMatch(gerber.get(name)!, frontFlash);
+    assert.doesNotMatch(gerber.get(name)!, backFlash);
+  }
+  const maskFlash = /X14000000Y-12000000D03\*/;
+  assert.match(gerber.get('x.gbs')!, /%ADD\d+C,0\.8125\*%/);
+  assert.match(gerber.get('x.gbs')!, maskFlash);
+  for (const name of ['x.gtl', 'x.gbl', 'x.gts', 'x.gtp', 'x.gbp'])
+    assert.doesNotMatch(gerber.get(name)!, maskFlash);
+  const mask = solderMaskOpenings(project.pcb!, 'back').openings[0].outer;
+  assert.equal(Math.max(...mask.map(({ x }) => x)), 14.40625);
+});
+
+test('straight chamfers keep their copper corners and export uniform mask and paste margins', () => {
+  const base = manufacturingProject().pcb!.footprints[0];
+  const footprint = { ...base, x: 0, y: 0, rotation: 0 };
+  const pad = {
+    ...base.pads[0],
+    x: 0,
+    y: 0,
+    size: { x: 2, y: 2 },
+    roundrectRatio: 0,
+    chamferRatio: 0.125,
+    chamfer: ['top_left' as const],
+  };
+  const plot = (margin: number) => {
+    const layer = new GerberLayer('Paste,Top');
+    layer.pad(footprint, pad, margin);
+    return layer.finish();
+  };
+  assert.match(plot(0), /X-1000000Y750000D01\*\nX-750000Y1000000D01\*/);
+  assert.match(plot(0.1), /X-1100000Y750000D0[12]\*/);
+  assert.match(plot(-0.1), /X-900000Y675000D0[12]\*/);
+  assert.doesNotMatch(plot(-1), /G36\*/);
+});
 
 test('Gerber manufacturing archive has actual layers, analytic rounded pads, separate drills and no native design files', async () => {
   const project = manufacturingProject(),
@@ -318,6 +404,46 @@ test('native board tenting masks vias by side and board mask clearance changes o
       ),
     /via covering/,
   );
+});
+
+test('Excellon places round hits and slot centreline moves in the proper drill files after a native round trip', async () => {
+  const project = manufacturingProject();
+  const board = project.pcb!;
+  const [connector, mounting] = board.footprints;
+  Object.assign(connector.pads[0], {
+    type: 'thru_hole',
+    drill: 0.5,
+    drillSlot: { axis: 'y', length: 1 },
+    drillOffset: { x: 0.1, y: 0.1 },
+  });
+  board.footprints[0] = flipPCBFootprint(connector);
+  Object.assign(mounting.pads[0], {
+    number: 'MH1',
+    rotation: 90,
+    shape: 'oval',
+    size: { x: 4, y: 1 },
+    drill: 0.5,
+    drillSlot: { axis: 'x', length: 3 },
+    drillOffset: { x: 0.25, y: 0.1 },
+    layers: ['*.Mask'],
+  });
+  const netId = uid();
+  board.nets.push({ id: netId, name: 'GND' });
+  board.vias.push({ id: uid(), x: 11, y: 12, diameter: 0.8, drill: 0.5, netId });
+  const reopened = projectFromNativeFiles(projectNativeFiles(project));
+  assert.deepEqual(reopened.pcb!.footprints[1].pads[0], mounting.pads[0]);
+  const files = await unzip(exportProjectFile(reopened, 'drill', 'slots').bytes);
+  const pth = files.get('slots-PTH.drl')!;
+  const npth = files.get('slots-NPTH.drl')!;
+  assert.match(pth, /T1C0\.5/);
+  assert.match(
+    pth,
+    /X10\.350000Y-11\.100000G85X9\.850000Y-11\.100000\nG05\nX11\.000000Y-12\.000000/,
+  );
+  assert.doesNotMatch(pth, /X5\.100000/);
+  assert.match(npth, /T1C0\.5/);
+  assert.match(npth, /X5\.100000Y-6\.000000G85X5\.100000Y-3\.500000/);
+  assert.doesNotMatch(npth, /X11\.000000/);
 });
 
 test('saved zone holes become Gerber contours without clearing overlapping pads and drill offsets rotate with their pads', async () => {

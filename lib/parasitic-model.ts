@@ -5,6 +5,7 @@ import type { PCB, Footprint, Pad } from './pcb';
 import { documentPinKey, projectNetGroups } from './project-net-groups';
 import { activePassiveModel, simulationModelSource } from './simulation-model-source';
 import { child, children, val, type SExpr } from './sexpr';
+import { padHasElectricalPin } from './pcb-pad-role';
 
 export type ParasiticPhysicalModel = {
   parts: Part[];
@@ -103,9 +104,10 @@ function assertBoardEndpoints(circuit: Circuit, board: PCB, models: ParasiticPhy
   const pads = new Map<string, { footprint: Footprint; pad: Pad; numberCount: number }>();
   for (const footprint of board.footprints) {
     const numbers = new Map<string, number>();
-    for (const pad of footprint.pads) numbers.set(pad.number, (numbers.get(pad.number) ?? 0) + 1);
+    for (const pad of footprint.pads)
+      if (padHasElectricalPin(pad)) numbers.set(pad.number, (numbers.get(pad.number) ?? 0) + 1);
     for (const pad of footprint.pads) {
-      if (!selectedIds.has(pad.id)) continue;
+      if (!padHasElectricalPin(pad) || !selectedIds.has(pad.id)) continue;
       if (pads.has(pad.id)) fail('The originating PCB pad identities are ambiguous.');
       pads.set(pad.id, { footprint, pad, numberCount: numbers.get(pad.number)! });
     }

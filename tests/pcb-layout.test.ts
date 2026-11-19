@@ -85,14 +85,48 @@ test('empty board is valid; placement embeds all supported geometry with stable 
   );
 });
 
+test('catalog pads keep explicit copper, mask and mechanical layer membership through Save and reopen', () => {
+  const text = source
+    .replace('(layers "*.Cu" "*.Mask")', '(layers "*.Cu")')
+    .replace(
+      'thru_hole oval (at 1.27 0) (size 1.8 1.4) (drill 0.8) (layers "*.Cu" "*.Mask")',
+      'smd oval (at 1.27 0) (size 1.8 1.4) (layers "B.Cu" "B.Mask")',
+    )
+    .replace(
+      /\)$/,
+      ' (pad "" np_thru_hole circle (at 3 0) (size 1 1) (drill 1) (layers "F&B.Cu" "*.Mask")))',
+    );
+  const { project, footprint } = fixture(text);
+  const expected = [['*.Cu'], ['B.Cu', 'B.Mask'], ['*.Mask', 'F&B.Cu']];
+  assert.deepEqual(
+    footprint.pads.map((pad) => pad.layers),
+    expected,
+  );
+  assert.deepEqual(
+    projectFromNativeFiles(projectNativeFiles(project)).pcb!.footprints[0].pads.map(
+      (pad) => pad.layers,
+    ),
+    expected,
+  );
+  assert.deepEqual(flipPCBFootprint(footprint).pads[1].layers, ['F.Cu', 'F.Mask']);
+  assert.throws(
+    () => fixture(text.replace('(layers "*.Cu")', '(layers "*.Cu *.Mask")')),
+    /layer sets/,
+  );
+  assert.throws(() => fixture(text.replace('"B.Cu" "B.Mask"', '"B.Cu" "F.Mask"')), /layer sets/);
+  assert.throws(() => fixture(text.replace('(drill 1)', '(drill 0.9)')), /mask opening/);
+});
+
 test('reject unsupported or changed physical geometry instead of manufacturing an approximation', () => {
   const mutations = [
     source.replace('thru_hole rect', 'thru_hole roundrect'),
     source.replace('thru_hole rect', 'np_thru_hole circle'),
-    source.replace('(drill 0.8)', '(drill oval 0.8 1)'),
-    source.replace('(drill 0.8)', '(drill 0.8 (offset 0.1 0))'),
+    source.replace('(drill 0.8)', '(drill oval 0.8 1.6)'),
+    source.replace('(drill 0.8)', '(drill oval 0.8 0.8)'),
+    source.replace('(drill 0.8)', '(drill 0.8 (offset 0.6 0))'),
+    source.replace('(drill 0.8)', '(drill 0.8 (offset 0.1 0) (offset 0.2 0))'),
     source.replace('(drill 0.8)', '(drill 2)'),
-    source.replace('(fill no)', '(fill solid)'),
+    source.replace('(fill no) (layer "F.SilkS")', '(fill solid) (layer "Edge.Cuts")'),
     source.replace('(type solid)', '(type dash)'),
     source.replace('(fill no) (layer "F.SilkS")', '(fill no) (layer "F.Cu")'),
     source.replace('(pad "2"', '(pad "9"'),
@@ -168,7 +202,9 @@ test('bundled 0805 placement preserves six-decimal artwork and rounded pad corne
   const reopened = projectFromNativeFiles(files);
   const restored = reopened.pcb!.footprints[0];
   for (const graphic of footprint.graphics) {
-    const { stroke: _stroke, ...actual } = restored.graphics.find((item) => item.id === graphic.id)!;
+    const { stroke: _stroke, ...actual } = restored.graphics.find(
+      (item) => item.id === graphic.id,
+    )!;
     assert.deepEqual(actual, graphic);
   }
   const padGeometry = (pad: (typeof footprint.pads)[number]) => ({

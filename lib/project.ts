@@ -6,11 +6,17 @@ import {
   uid,
   type Circuit,
 } from './circuit';
-import { child, children, quote, val, writeSExpr, type SExpr } from './sexpr';
+import { child, children, decodeKiCadString, quote, val, writeSExpr, type SExpr } from './sexpr';
 import { serializePCB, type BoardLine, type BoardZone, type PCB } from './pcb';
+import { padDrillClearance } from './pcb-drill';
+import { padHasElectricalPin } from './pcb-pad-role';
+import { footprintPoint } from './pcb-layout';
+import { validateCustomPad } from './pcb-custom-pad';
+import { customPadWorkLimit } from './pcb-custom-pad-limits';
 import validateSchema from './project-validator.mjs';
 import { KICAD_SCHEMATIC_VERSION } from './kicad-version';
-import { schematicTexts, schematicPolylines } from './schematic-text';
+import { schematicTexts, schematicTextBoxes, schematicPolylines } from './schematic-text';
+import { schematicImages } from './schematic-image';
 import validateDocument from './project-document-validator.mjs';
 import { fromProjectDocument, toProjectDocument, type ProjectDocument } from './project-document';
 import { formatProjectJson } from './project-json';
@@ -260,6 +266,8 @@ function validateProjectContent(input: unknown): void {
     };
     circuitId(d.id);
     for (const text of schematicTexts(d.original)) circuitId(text.id);
+    for (const box of schematicTextBoxes(d.original)) circuitId(box.id);
+    for (const image of schematicImages(d.original)) circuitId(image.id);
     for (const line of schematicPolylines(d.original)) circuitId(line.id);
     for (const v of [
       ...d.parts,
@@ -317,7 +325,7 @@ function validateProjectContent(input: unknown): void {
         if (Array.isArray(a)) checkSExpr(a);
         else if (a.startsWith('"')) {
           try {
-            if (typeof JSON.parse(a) !== 'string') fail('invalid quoted atom.');
+            decodeKiCadString(a);
           } catch {
             fail('invalid quoted KiCad atom.');
           }
@@ -392,7 +400,7 @@ function validateProjectContent(input: unknown): void {
     if (value.endsWith('.Cu') && !board.layers.some((l) => l === value))
       fail(`PCB layer ${value} is not in the board copper stack.`);
   };
-  const graphic = (g: BoardLine) => {
+  const graphic = (g: BoardLine, footprint = false) => {
     id(g.id);
     layer(g.layer);
     if ((g.kind === 'arc') !== (g.mid !== undefined))
@@ -403,6 +411,8 @@ function validateProjectContent(input: unknown): void {
       fail('PCB polygon graphics require at least three vertices.');
     if ((g.kind === 'text') !== (g.text !== undefined))
       fail('PCB text graphics require text properties.');
+    if (g.keepUpright !== undefined && (!footprint || g.kind !== 'text'))
+      fail('Text orientation applies only to footprint text.');
     if ((g.kind === 'dimension') !== (g.dimension !== undefined))
       fail('PCB dimensions require dimension properties.');
     if (g.fill !== undefined && !['circle', 'polygon'].includes(g.kind ?? ''))
@@ -457,6 +467,7 @@ function validateProjectContent(input: unknown): void {
     const footprintIdStart = boardIds?.length ?? 0;
     const initialFilledVertices = filledVertices;
     const linked = new Set<string>();
+    let customPadWork = 0;
     for (const f of board.footprints) {
       id(f.id);
       const p = d.parts.find((p) => p.id === f.symbolId);
@@ -464,7 +475,7 @@ function validateProjectContent(input: unknown): void {
         fail(
           `footprint ${f.libraryId} refers to a missing schematic symbol. Remove its PCB footprint before deleting that symbol.`,
         );
-      if (f.symbolId === null && (!f.reference || f.value === undefined))
+      if (f.symbolId === null && (f.reference === undefined || f.value === undefined))
         fail('unlinked footprints require their own reference and value.');
       if (p && (f.reference !== undefined || f.value !== undefined))
         fail('linked footprints derive their reference and value from the schematic symbol.');
@@ -481,23 +492,47 @@ function validateProjectContent(input: unknown): void {
       for (const pad of f.pads) {
         id(pad.id);
         net(pad.netId);
-        if (pad.type !== 'np_thru_hole' && p && !pins.has(pad.number) && !pad.unconnected)
+        customPadWork += (pad.outline?.length ?? 0) ** 2;
+        if (customPadWork > customPadWorkLimit)
+          fail('custom pads exceed the board geometry limit.');
+        validateCustomPad(pad, fail);
+        const electrical = padHasElectricalPin(pad);
+        if (electrical && p && !pins.has(pad.number) && !pad.unconnected)
           fail(`${p.ref} has no pin ${pad.number} for its PCB pad.`);
         if (pad.unconnected && (pad.netId !== null || !p || pins.has(pad.number)))
           fail('an explicitly unconnected package pad must have no schematic pin or net.');
-        if (pad.type === 'np_thru_hole' && pad.netId !== null)
-          fail('mechanical pads cannot carry an electrical net.');
-        if (pad.type === 'np_thru_hole' && !pad.drill) fail('non-plated holes require a drill.');
-        if (pinNets.has(pad.number) && pinNets.get(pad.number) !== pad.netId)
-          fail(`${p?.ref ?? f.reference} pin ${pad.number} has conflicting PCB net assignments.`);
-        pinNets.set(pad.number, pad.netId);
+        if (pad.type === 'np_thru_hole') {
+          if (pad.netId !== null) fail('mechanical pads cannot carry an electrical net.');
+          if (!pad.drill) fail('non-plated holes require a drill.');
+        } else if (electrical) {
+          if (pinNets.has(pad.number) && pinNets.get(pad.number) !== pad.netId)
+            fail(`${p?.ref ?? f.reference} pin ${pad.number} has conflicting PCB net assignments.`);
+          pinNets.set(pad.number, pad.netId);
+        } else if (pad.netId !== null) {
+          fail('Mask and paste apertures cannot carry a net.');
+        }
         if (
           pad.type === 'thru_hole' &&
-          (!pad.drill || pad.drill >= Math.min(pad.size.x, pad.size.y))
+          (!pad.drill || (!pad.outline && pad.drill >= Math.min(pad.size.x, pad.size.y)))
         )
           fail('through-hole drill must be positive and smaller than its pad.');
-        if (pad.type === 'smd' && (pad.drill !== undefined || pad.drillOffset !== undefined))
+        if (
+          pad.type === 'smd' &&
+          (pad.drill !== undefined || pad.drillOffset !== undefined || pad.drillSlot)
+        )
           fail('SMD pads cannot have a drill or drill offset.');
+        if (pad.drillSlot && (!pad.drill || pad.drillSlot.length <= pad.drill))
+          fail('slot length must exceed its tool diameter.');
+        if (
+          pad.type === 'thru_hole' &&
+          (pad.drillSlot || pad.outline) &&
+          padDrillClearance(pad) <= 1e-12
+        )
+          fail(
+            pad.outline
+              ? 'a plated drill must stay inside its copper pad.'
+              : 'a plated slot must stay inside its copper pad.',
+          );
         if (pad.shape === 'circle' && pad.size.x !== pad.size.y)
           fail('circular pads need equal width and height.');
         if (pad.shape === 'roundrect' && pad.roundrectRatio === undefined)
@@ -507,10 +542,28 @@ function validateProjectContent(input: unknown): void {
           [pad.roundrectRatio, pad.chamferRatio, pad.chamfer].some((v) => v !== undefined)
         )
           fail('rounded and chamfered corners require a roundrect pad.');
-        for (const padLayer of pad.layers ?? []) if (padLayer !== '*.Cu') layer(padLayer);
+        if (
+          pad.layers?.includes('F&B.Cu') &&
+          (pad.type !== 'np_thru_hole' ||
+            pad.shape !== 'circle' ||
+            pad.drill !== pad.size.x ||
+            pad.drillOffset ||
+            pad.drillSlot ||
+            pad.layers.length !== 2 ||
+            !pad.layers.includes('*.Mask'))
+        )
+          fail('The outer-copper layer marker requires an equal-size round mechanical hole.');
+        for (const padLayer of pad.layers ?? [])
+          if (padLayer !== '*.Cu' && padLayer !== 'F&B.Cu') layer(padLayer);
       }
       for (const g of f.graphics) {
-        graphic(g);
+        graphic(g, true);
+      }
+      for (const point of f.referencePoints ?? []) {
+        id(point.id);
+        const position = footprintPoint(f, point);
+        if (Math.abs(position.x) > 100000 || Math.abs(position.y) > 100000)
+          fail('footprint reference point exceeds the board coordinate limit.');
       }
       for (const z of f.zones ?? []) zone(z);
     }

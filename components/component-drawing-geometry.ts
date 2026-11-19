@@ -1,3 +1,4 @@
+import { localPadDrillLine } from '../lib/pcb-drill';
 import type { Point } from '@/lib/circuit';
 import type { FootprintDrawing } from '@/lib/footprint-drawing';
 import type { BoardLine } from '@/lib/pcb';
@@ -64,18 +65,23 @@ export function drawingBounds(kind: DrawingKind, drawing: Drawing): DrawingBound
         pad.shape === 'circle' ? halfX : Math.abs(cosine) * halfX + Math.abs(sine) * halfY;
       const extentY =
         pad.shape === 'circle' ? halfY : Math.abs(sine) * halfX + Math.abs(cosine) * halfY;
-      include({ x: pad.x - extentX, y: pad.y - extentY });
-      include({ x: pad.x + extentX, y: pad.y + extentY });
-      if (pad.drill) {
-        const offset = pad.drillOffset ?? { x: 0, y: 0 };
-        include(
-          {
-            x: pad.x + offset.x * cosine - offset.y * sine,
-            y: pad.y + offset.x * sine + offset.y * cosine,
-          },
-          Math.abs(pad.drill) / 2,
-        );
+      if (pad.outline) {
+        for (const { x, y } of pad.outline)
+          include({ x: pad.x + x * cosine - y * sine, y: pad.y + x * sine + y * cosine });
+      } else {
+        include({ x: pad.x - extentX, y: pad.y - extentY });
+        include({ x: pad.x + extentX, y: pad.y + extentY });
       }
+      if (pad.drill)
+        for (const offset of localPadDrillLine(pad)) {
+          include(
+            {
+              x: pad.x + offset.x * cosine - offset.y * sine,
+              y: pad.y + offset.x * sine + offset.y * cosine,
+            },
+            Math.abs(pad.drill) / 2,
+          );
+        }
     }
   }
   return bounds;

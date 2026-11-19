@@ -34,6 +34,7 @@ export type LibraryEntry = {
   footprint?: string;
   manufacturer?: string;
   package?: string;
+  footprintPreview?: 'unavailable' | '2d' | '2d-and-3d';
   attribution?: { source: string; homepages: string[]; notice: string };
 };
 export type SymbolDetail = LibraryEntry & {
@@ -42,6 +43,25 @@ export type SymbolDetail = LibraryEntry & {
   error?: string;
   warning?: string;
 };
+
+export type LibraryPrice = {
+  currency: 'USD';
+  checkedAt: number;
+  offers: {
+    sku: string;
+    manufacturer: string | null;
+    stock?: number;
+    tiers: { quantity: number; unitPrice: number }[];
+  }[];
+};
+
+export function isLibraryAssetUnavailable(
+  error: unknown,
+): error is Error & { code: 'OPENPE_LIBRARY_ASSET_UNAVAILABLE' } {
+  return (
+    error instanceof Error && 'code' in error && error.code === 'OPENPE_LIBRARY_ASSET_UNAVAILABLE'
+  );
+}
 
 /** Rank the complete catalog before pagination; never change the stored catalog order. */
 export function searchLibrary(entries: LibraryEntry[], query: string, library = '') {

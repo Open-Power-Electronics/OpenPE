@@ -7,6 +7,7 @@ import { isOwnedProjectNode } from '@/lib/immutable-project';
 import type { PCB, Pad, Footprint, BoardLayer } from '@/lib/pcb';
 import { replacePCBGraphic, type PCBBounds } from '@/lib/pcb-layout';
 import { pcbPadShapeLabel, pcbPadTypeLabel } from '@/lib/pcb-display';
+import { padApertureLayers } from '@/lib/pcb-pad-role';
 import {
   preparePCBZoneProperties,
   setPCBPadProperties,
@@ -151,6 +152,7 @@ export default function LayoutProperties({
   };
   const padChange = (changes: Parameters<typeof setPCBPadProperties>[2]) =>
     pad ? attempt(() => setPCBPadProperties(board, pad.id, changes)) : false;
+  const circularPadSize = pad?.shape === 'circle' || pad?.customAnchor === 'circle';
   const viaChange = (changes: Partial<PCB['vias'][number]>) =>
     via ? onCommit(setPCBViaProperties(board, via.id, changes)) : false;
   const endpoint = (end: 'start' | 'end', axis: 'x' | 'y', value: number) =>
@@ -313,12 +315,14 @@ export default function LayoutProperties({
                     padOwner.libraryId
                   }
                 />
-                <PropertyRow label="Type" value={pcbPadTypeLabel(pad.type)} />
-                <PropertyRow
-                  label="Net"
-                  value={netName(pad.netId)}
-                  description="Pad nets follow the schematic pin connections."
-                />
+                <PropertyRow label="Type" value={pcbPadTypeLabel(pad)} />
+                {!padApertureLayers(pad) && (
+                  <PropertyRow
+                    label="Net"
+                    value={netName(pad.netId)}
+                    description="Pad nets follow the schematic pin connections."
+                  />
+                )}
                 <button
                   className="secondary layout-owner-action"
                   onClick={() => onInspectFootprint(padOwner.id)}
@@ -329,11 +333,14 @@ export default function LayoutProperties({
               </PropertySection>
               <PropertySection title="Geometry" showTitle={false}>
                 <Select
-                  active={active}
+                  active={active && !pad.outline}
                   label="Pad shape"
                   displayLabel="Shape"
                   value={pad.shape}
-                  options={(['rect', 'circle', 'oval', 'roundrect'] as const).map((value) => ({
+                  options={(pad.outline
+                    ? (['custom'] as const)
+                    : (['rect', 'circle', 'oval', 'roundrect'] as const)
+                  ).map((value) => ({
                     value,
                     label: pcbPadShapeLabel(value),
                   }))}
@@ -364,21 +371,34 @@ export default function LayoutProperties({
                     onCommit={(rotation) => padChange({ rotation })}
                   />
                 </PropertyGrid>
-                <PropertyGrid columns={pad.shape !== 'circle' && pad.type !== 'smd' ? 3 : 2}>
+                <PropertyGrid columns={!circularPadSize && pad.type !== 'smd' ? 3 : 2}>
                   <NumberField
                     {...field}
-                    label="Width (mm)"
-                    accessibleLabel="Pad width (mm)"
+                    label={
+                      pad.customAnchor === 'circle'
+                        ? 'Anchor diameter (mm)'
+                        : pad.outline
+                          ? 'Anchor width (mm)'
+                          : 'Width (mm)'
+                    }
+                    accessibleLabel={
+                      pad.customAnchor === 'circle'
+                        ? 'Pad anchor diameter (mm)'
+                        : pad.outline
+                          ? 'Pad anchor width (mm)'
+                          : 'Pad width (mm)'
+                    }
                     value={pad.size.x}
-                    min={0.0001}
+                    min={pad.customAnchor === 'circle' ? 0.000001 : 0.0001}
                     max={1000}
+                    decimalPlaces={pad.customAnchor === 'circle' ? 6 : 2}
                     onCommit={(x) => padChange({ size: { ...pad.size, x } })}
                   />
-                  {pad.shape !== 'circle' && (
+                  {!circularPadSize && (
                     <NumberField
                       {...field}
-                      label="Height (mm)"
-                      accessibleLabel="Pad height (mm)"
+                      label={pad.outline ? 'Anchor height (mm)' : 'Height (mm)'}
+                      accessibleLabel={pad.outline ? 'Pad anchor height (mm)' : 'Pad height (mm)'}
                       value={pad.size.y}
                       min={0.0001}
                       max={1000}
@@ -388,17 +408,44 @@ export default function LayoutProperties({
                   {pad.type !== 'smd' && (
                     <NumberField
                       {...field}
-                      label="Drill (mm)"
-                      accessibleLabel="Pad drill (mm)"
+                      label={pad.drillSlot ? 'Slot width (mm)' : 'Drill (mm)'}
+                      accessibleLabel={pad.drillSlot ? 'Pad slot width (mm)' : 'Pad drill (mm)'}
                       value={pad.drill!}
                       min={0.0001}
                       max={
-                        pad.type === 'thru_hole' ? Math.min(pad.size.x, pad.size.y) - 0.0001 : 1000
+                        pad.type === 'thru_hole' && !pad.outline
+                          ? Math.min(pad.size.x, pad.size.y) - 0.0001
+                          : 1000
                       }
                       onCommit={(drill) => padChange({ drill })}
                     />
                   )}
+                  {pad.drillSlot && (
+                    <NumberField
+                      {...field}
+                      label="Slot length (mm)"
+                      accessibleLabel="Pad slot length (mm)"
+                      value={pad.drillSlot.length}
+                      min={0.0001}
+                      max={1000}
+                      onCommit={(length) => padChange({ drillSlot: { ...pad.drillSlot!, length } })}
+                    />
+                  )}
                 </PropertyGrid>
+                {pad.drillSlot && (
+                  <Select
+                    active={active}
+                    label="Slot axis"
+                    value={pad.drillSlot.axis}
+                    options={[
+                      { value: 'x', label: 'Pad X' },
+                      { value: 'y', label: 'Pad Y' },
+                    ]}
+                    onChange={(axis) =>
+                      padChange({ drillSlot: { ...pad.drillSlot!, axis: axis as 'x' | 'y' } })
+                    }
+                  />
+                )}
               </PropertySection>
             </PropertyTab>
             {pad.shape === 'roundrect' && (

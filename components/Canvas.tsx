@@ -52,7 +52,8 @@ import {
   visibleSchematicWireTargetIds,
   visibleJunctions,
 } from '@/lib/schematic-view';
-import { schematicTexts, schematicPolylines } from '@/lib/schematic-text';
+import { schematicTexts, schematicPolylines, schematicNoteBoxCorners } from '@/lib/schematic-text';
+import { schematicImageCorners } from '@/lib/schematic-image';
 import { type SExpr } from '@/lib/sexpr';
 import { createLibraryPart, symbolAnnotation } from '@/lib/library';
 import { commitWireRoute, onWire, samePoint } from '@/lib/wiring';
@@ -769,6 +770,8 @@ export default function Canvas({
         ? schematicTexts(doc.original).filter((text) => displayedIds.has(text.id))
         : []),
       ...(layers.notes ? schematicPolylines(doc.original).flatMap((line) => line.points) : []),
+      ...(layers.notes ? schematicNoteBoxCorners(doc.original) : []),
+      ...(layers.notes ? schematicImageCorners(doc.original) : []),
     ];
     if (!pts.length) {
       setView({ x: 0, y: 0, width: 185 });

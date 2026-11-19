@@ -502,6 +502,13 @@ export function assertCursorSdkTools(agent, expected) {
     throw new Error('Cursor SDK is using the host filesystem.');
   if (local.customTools || options.agents || options.cloud)
     throw new Error('Cursor SDK enabled custom tools, subagents, or a cloud runtime.');
+  const denied = new Set(options.disallowedProtoTools);
+  const effective = options.allowedProtoTools.filter((name) => !denied.has(name)).sort();
+  if (expected.raw) {
+    if (effective.length || Object.keys(options.mcpServers ?? {}).length)
+      throw new Error('Cursor SDK exposed tools in Raw KiCad mode.');
+    return;
+  }
   const server = options.mcpServers?.openpe;
   const servers = options.mcpServers ? Object.keys(options.mcpServers) : [];
   if (
@@ -517,8 +524,6 @@ export function assertCursorSdkTools(agent, expected) {
     throw new Error('Cursor SDK MCP server is not in the private directory.');
   if (server.env !== expected.env || !isolatedMcpEnv(server.env, expected))
     throw new Error('Cursor MCP environment is not isolated.');
-  const denied = new Set(options.disallowedProtoTools);
-  const effective = options.allowedProtoTools.filter((name) => !denied.has(name)).sort();
   if (!sameNames(effective, cursorBuiltinTools))
     throw new Error(`Cursor SDK exposed built-in tools ${effective.join(', ') || 'none'}.`);
 }
@@ -547,17 +552,17 @@ async function withStartup(signal, timeoutMs, work) {
  * @param {(event:any)=>void} emit
  * @param {AbortSignal} signal
  */
-export async function runCursorAgent(prompt, request, emit, signal, options) {
+export async function runCursorAgent(prompt, request, emit, signal, options, raw = false) {
   const sdk = options.sdk || (await (options.loadCursorSdk || loadCursorSdk)());
   let apiKey = '';
   try {
     apiKey = await readCursorApiKey(options.cursorCredential);
     if (!request.model) throw new Error('Choose a Cursor model from the catalog.');
-    if (!options.capabilities?.url || !options.capabilities.token)
+    if (!raw && (!options.capabilities?.url || !options.capabilities.token))
       throw new Error('Cursor requires the OpenPE capability bridge.');
-    if (!options.questions?.url || !options.questions.token)
+    if (!raw && (!options.questions?.url || !options.questions.token))
       throw new Error('Cursor requires the OpenPE question bridge.');
-    const env = Object.freeze({
+    const env = raw ? undefined : Object.freeze({
       ELECTRON_RUN_AS_NODE: '1',
       OPENPE_AGENT_BRIDGE_URL: options.capabilities.url,
       OPENPE_AGENT_BRIDGE_TOKEN: options.capabilities.token,
@@ -566,16 +571,16 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
     });
     if (signal.aborted) return { outcome: 'cancelled' };
     emit({ type: 'status', stage: 'starting', text: 'Checking Cursor tool isolation…' });
-    await proveCursorMcpTools(env);
+    if (env) await proveCursorMcpTools(env);
     const catalog = await cursorModelCatalog(apiKey, sdk);
     if (signal.aborted) return { outcome: 'cancelled' };
-    const raw = catalog.raw.find((model) => model?.id === request.model);
-    if (!catalog.models.some((model) => model.id === request.model) || !raw) {
+    const catalogModel = catalog.raw.find((model) => model?.id === request.model);
+    if (!catalog.models.some((model) => model.id === request.model) || !catalogModel) {
       const excluded = catalog.unavailable.find((entry) => entry.id === request.model);
       if (excluded) throw new Error(excluded.reason);
       throw new Error('Choose a Cursor model from the catalog.');
     }
-    const selection = cursorModelSelection(raw, request);
+    const selection = cursorModelSelection(catalogModel, request);
     emit({
       type: 'agent-info',
       model: selection.id,
@@ -586,19 +591,20 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
     const proof = Object.freeze({
       cwd: directory,
       fs: filesystem,
+      raw,
       env,
       apiKey,
-      capabilityUrl: options.capabilities.url,
-      capabilityToken: options.capabilities.token,
-      questionUrl: options.questions.url,
-      questionToken: options.questions.token,
+      capabilityUrl: options.capabilities?.url,
+      capabilityToken: options.capabilities?.token,
+      questionUrl: options.questions?.url,
+      questionToken: options.questions?.token,
     });
     const createOptions = {
       apiKey,
       model: selection,
-      tools: ['mcp'],
+      tools: raw ? [] : ['mcp'],
       disallowedTools,
-      mcpServers: {
+      mcpServers: raw ? {} : {
         openpe: {
           type: 'stdio',
           command: process.execPath,
@@ -632,7 +638,7 @@ export async function runCursorAgent(prompt, request, emit, signal, options) {
         throw error;
       }
       assertCursorSdkTools(agent, proof);
-      if (createOptions.local.fs !== proof.fs || createOptions.mcpServers.openpe.env !== proof.env)
+      if (createOptions.local.fs !== proof.fs || createOptions.mcpServers.openpe?.env !== proof.env)
         throw new Error('Cursor SDK options changed before the run.');
       if (signal.aborted) return { outcome: 'cancelled' };
       emit({ type: 'status', stage: 'waiting', text: 'Waiting for the model…' });

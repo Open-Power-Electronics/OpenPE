@@ -25,6 +25,7 @@ import { parseSExpr, child, children, val, quote, writeSExpr } from '../lib/sexp
 import { createProject, serializeProject, parseProject, exportKiCad } from '../lib/project';
 import { commitWireRoute, wireRoute, samePoint } from '../lib/wiring';
 import { createLibraryService } from '../server/libraries.mjs';
+import { readNextpcbPrices } from '../server/nextpcb-prices.mjs';
 import { startServer } from '../server/index.mjs';
 import { applyProposal } from '../lib/proposals';
 
@@ -96,12 +97,28 @@ test('library worker ranks saved symbol and footprint catalogs before bounded pa
     ),
     catalogEntry('Z:LM358'),
   ];
+  const modelFootprint = catalogEntry('Fixture:WithModel');
+  const plainFootprint = catalogEntry('Fixture:WithoutModel');
+  entries[0].footprint = modelFootprint.id;
+  entries[1].footprint = plainFootprint.id;
+  entries[2].footprint = 'Fixture:Missing';
+  await writeFile(
+    path.join(root, 'with-model.kicad_mod'),
+    '(footprint "WithModel" (version 20260206) (model "${KICAD10_3DMODEL_DIR}/Fixture.3dshapes/WithModel.step"))',
+  );
+  await writeFile(
+    path.join(root, 'without-model.kicad_mod'),
+    '(footprint "WithoutModel" (version 20260206))',
+  );
   await writeFile(
     path.join(root, 'library-index.json'),
     JSON.stringify({
       version: 1,
-      catalogs: { symbols: entries, footprints: entries },
-      files: [],
+      catalogs: { symbols: entries, footprints: [...entries, modelFootprint, plainFootprint] },
+      files: [
+        [`footprints:${modelFootprint.id}`, 'with-model.kicad_mod'],
+        [`footprints:${plainFootprint.id}`, 'without-model.kicad_mod'],
+      ],
     }),
   );
   const service = createLibraryService({ root, dataDir: root });
@@ -138,6 +155,26 @@ test('library worker ranks saved symbol and footprint catalogs before bounded pa
       });
       assert.deepEqual(returned, second, 'Changing filters or queries cannot reuse stale pages.');
     }
+    const verified = await service.request({
+      action: 'search',
+      kind: 'symbols',
+      query: 'lm358',
+      includeAssetStatus: true,
+    });
+    assert.equal(verified.entries.length, 16);
+    assert.equal(verified.nextOffset, 16);
+    assert.deepEqual(
+      verified.entries.slice(0, 4).map((entry: LibraryEntry) => entry.footprintPreview),
+      ['unavailable', '2d-and-3d', '2d', undefined],
+    );
+    const continued = await service.request({
+      action: 'search',
+      kind: 'symbols',
+      query: 'lm358',
+      offset: verified.nextOffset,
+      includeAssetStatus: true,
+    });
+    assert.equal(continued.entries[0].id, 'A:Part_015');
   } finally {
     service.close();
     await rm(root, { recursive: true, force: true });
@@ -214,6 +251,23 @@ test('NextPCB service routing needs no bundled resources and ordinary searches s
     });
     assert.equal(search.entries[0].id, id);
     assert.deepEqual(search.libraries, ['NextPCB']);
+    assert.equal(search.entries[0].footprintPreview, undefined);
+    const progress: unknown[] = [];
+    const verified = await service.request({
+      action: 'search',
+      kind: 'symbols',
+      library: 'NextPCB',
+      query: 'LM358',
+      includeAssetStatus: true,
+      onProgress: (count) => progress.push(count),
+    });
+    assert.deepEqual(progress, [
+      { completed: 0, total: 1 },
+      { completed: 1, total: 1 },
+    ]);
+    assert.equal(verified.entries[0].footprintPreview, '2d');
+    assert.equal(verified.nextOffset, null);
+    assert.equal(requests.length, 4);
     const detail = await service.request({ action: 'detail', kind: 'symbols', id });
     assert.equal(detail.error, undefined);
     assert.equal(detail.warning, undefined);
@@ -255,11 +309,24 @@ test('NextPCB service routing needs no bundled resources and ordinary searches s
   }
 });
 
-test('authenticated NextPCB HTTP reads use the injected vendor transport and reject empty searches locally', async () => {
+test('authenticated NextPCB HTTP reads browse suggestions and accept cross-category keyword searches', async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'openpe-nextpcb-http-'));
   const requests: string[] = [];
   const nextpcbFetcher: typeof fetch = async (input, options) => {
     requests.push(String(input));
+    if (String(input).endsWith('/productDetail')) return new Response(null, { status: 403 });
+    if (String(input).endsWith('/cateTree'))
+      return Response.json({
+        code: 200000,
+        result: [
+          {
+            cateId: 1737,
+            cateDisplayName: 'Operational Amplifier and Comparators',
+            parentId: 0,
+            level: 1,
+          },
+        ],
+      });
     assert.equal(String(input), 'https://library.nextpcb.com/api/chiplet/products/kicad/queryPage');
     assert.equal(options?.redirect, 'error');
     assert.equal(options?.credentials, 'omit');
@@ -271,7 +338,7 @@ test('authenticated NextPCB HTTP reads use the injected vendor transport and rej
       have3dModel: 0,
       haveSimModel: 0,
       haveSupplierModel: 0,
-      desc: 'LM358',
+      ...(requests.length === 2 ? { cateId: 1737 } : { desc: 'LM358' }),
     });
     return Response.json({
       code: 200000,
@@ -294,9 +361,9 @@ test('authenticated NextPCB HTTP reads use the injected vendor transport and rej
   try {
     const headers = { 'X-OpenPE-Token': server.token };
     const empty = await fetch(server.base + '/api/libraries/symbols?library=NextPCB', { headers });
-    assert.equal(empty.status, 422);
-    assert.match((await empty.json()).error, /model.*category/);
-    assert.equal(requests.length, 0);
+    assert.equal(empty.status, 200);
+    assert.equal((await empty.json()).entries[0].id, 'NextPCB:9728_LM358');
+    assert.equal(requests.length, 2);
     const response = await fetch(server.base + '/api/libraries/symbols?library=NextPCB&q=LM358', {
       headers,
     });
@@ -305,10 +372,219 @@ test('authenticated NextPCB HTTP reads use the injected vendor transport and rej
     assert.equal(page.total, 1);
     assert.equal(page.nextOffset, null);
     assert.equal(page.entries[0].id, 'NextPCB:9728_LM358');
-    assert.equal(requests.length, 1);
+    assert.equal(requests.length, 3);
+    const streamed = await fetch(
+      server.base + '/api/libraries/symbols?library=NextPCB&q=LM358&includeAssetStatus=1',
+      { headers: { ...headers, Accept: 'application/x-ndjson' } },
+    );
+    assert.equal(streamed.status, 200);
+    assert.match(streamed.headers.get('content-type') ?? '', /^application\/x-ndjson/);
+    const frames = (await streamed.text())
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(frames, [
+      { type: 'progress', completed: 0, total: 1 },
+      { type: 'result', result: page },
+    ]);
   } finally {
     server.close();
     await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test('authenticated NextPCB pricing refresh is explicit, fresh and matched to the selected part', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'openpe-nextpcb-price-'));
+  const staticDir = path.join(temporary, 'renderer');
+  const renderer = '<!DOCTYPE html><title>OpenPE</title>';
+  const priceUrl = 'https://www.hqonline.com/api/goods/products/search';
+  let lookups = 0;
+  let refreshes = 0;
+  const quoteRow = {
+    goodsId: 123,
+    goodsNo: 'IC123',
+    goodsName: 'LM358',
+    brandName: 'TI',
+    pinyin: { brandName: 'TI' },
+    spotNumber: 20,
+  };
+  const nextpcbFetcher: typeof fetch = async (input, options) => {
+    const url = String(input);
+    if (url.endsWith('/queryPage'))
+      return Response.json({
+        code: 200000,
+        total: 1,
+        result: [{ manufacturer_id: '9728', mpn: 'LM358' }],
+      });
+    if (url.endsWith('/productDetail'))
+      return Response.json({
+        code: 200000,
+        result: { mfgId: 9728, mpn: 'LM358', mfg: 'Texas Instruments (TI)' },
+      });
+    assert.equal(url, priceUrl);
+    assert.equal(options?.method, 'POST');
+    assert.equal(options?.credentials, 'omit');
+    assert.equal(options?.redirect, 'error');
+    assert.equal(options?.cache, 'no-store');
+    const request = JSON.parse(String(options?.body));
+    const { current } = request;
+    assert.deepEqual(request, { keyword: 'LM358', current, size: 50 });
+    assert.ok(current === 1 || (current === 2 && refreshes === 6));
+    if (current === 1) refreshes++;
+    lookups++;
+    if (lookups === 5)
+      return new Response('<!DOCTYPE html><title>HQ Online</title>', {
+        headers: { 'Content-Type': 'text/html' },
+      });
+    const price = [
+      { goodsId: lookups === 4 ? '234' : '123', purchases: 10, unitPrice: 0.08 },
+      { goodsId: '123', purchases: 1, unitPrice: 0.1 + lookups },
+    ];
+    const otherOffer = {
+      ...quoteRow,
+      goodsId: 234,
+      goodsNo: 'IC234',
+      brandName: 'DYW',
+      pinyin: { brandName: 'DYW' },
+      price: [{ goodsId: '234', purchases: 5, unitPrice: 0.02 }],
+    };
+    const similarPart = { ...quoteRow, goodsName: 'LM358D' };
+    return Response.json({
+      retCode: 200,
+      result: {
+        current,
+        size: 50,
+        pages: refreshes === 6 ? 2 : 1,
+        records: [
+          ...(refreshes === 3 || refreshes === 4 ? [] : [otherOffer]),
+          { ...similarPart, price },
+          ...(refreshes === 3 || (refreshes === 6 && current === 1)
+            ? []
+            : [{ ...quoteRow, price }]),
+        ],
+      },
+    });
+  };
+  await mkdir(staticDir);
+  await writeFile(path.join(staticDir, 'index.html'), renderer);
+  const server = await startServer({ dataDir: temporary, staticDir, nextpcbFetcher });
+  const headers = { 'X-OpenPE-Token': server.token };
+  const price = `${server.base}/api/library-price?id=NextPCB%3A9728_LM358`;
+  try {
+    const search = await fetch(`${server.base}/api/libraries/symbols?library=NextPCB&q=LM358`, {
+      headers,
+    });
+    assert.equal(search.status, 200);
+    assert.equal((await search.json()).entries[0].id, 'NextPCB:9728_LM358');
+    assert.equal((await fetch(price)).status, 401);
+    assert.equal(
+      (await fetch(price, { headers: { ...headers, Origin: 'https://example.invalid' } })).status,
+      403,
+    );
+    assert.equal((await fetch(`${price}&url=elsewhere`, { headers })).status, 400);
+    const missing = await fetch(`${server.base}/api/library-price-missing`, { headers });
+    assert.equal(missing.status, 404);
+    assert.deepEqual(await missing.json(), { error: 'Unknown OpenPE API route.' });
+    assert.equal(await (await fetch(`${server.base}/workbench`)).text(), renderer);
+    assert.equal(lookups, 0);
+    for (const unitPrice of [1.1, 2.1]) {
+      const response = await fetch(price, { headers });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const quote = await response.json();
+      assert.equal(quote.currency, 'USD');
+      assert.ok(Number.isSafeInteger(quote.checkedAt));
+      assert.deepEqual(quote.offers, [
+        {
+          sku: 'IC123',
+          manufacturer: 'TI',
+          stock: 20,
+          tiers: [
+            { quantity: 1, unitPrice },
+            { quantity: 10, unitPrice: 0.08 },
+          ],
+        },
+        {
+          sku: 'IC234',
+          manufacturer: 'DYW',
+          stock: 20,
+          tiers: [{ quantity: 5, unitPrice: 0.02 }],
+        },
+      ]);
+    }
+    assert.deepEqual((await (await fetch(price, { headers })).json()).offers, []);
+    assert.equal((await fetch(price, { headers })).status, 422);
+    const upstreamHtml = await fetch(price, { headers });
+    assert.equal(upstreamHtml.status, 422);
+    assert.deepEqual(await upstreamHtml.json(), {
+      error: 'HQ Online returned an invalid pricing response.',
+    });
+    const recovered = await fetch(price, { headers });
+    assert.equal(recovered.status, 200);
+    assert.equal((await recovered.json()).offers[0].tiers[0].unitPrice, 7.1);
+    assert.equal(lookups, 7);
+  } finally {
+    await server.close();
+    await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test('NextPCB pricing requires a full part number and reports incomplete searches', async () => {
+  const pages: number[] = [];
+  const fetcher: typeof fetch = async (_url, init) => {
+    const { current, size } = JSON.parse(String(init?.body));
+    pages.push(current);
+    return Response.json({
+      retCode: 200,
+      result: {
+        current,
+        size,
+        pages: 5,
+        records: [{ goodsName: 'LM358D', brandName: 'TI' }],
+      },
+    });
+  };
+  const signal = new AbortController().signal;
+  await assert.rejects(
+    readNextpcbPrices(fetcher, { name: '', manufacturer: 'TI' }, signal),
+    /part number for pricing/,
+  );
+  assert.deepEqual(pages, []);
+  await assert.rejects(
+    readNextpcbPrices(fetcher, { name: 'LM358', manufacturer: '' }, signal),
+    /exceeded the supported page limit/,
+  );
+  assert.deepEqual(pages, [1, 2, 3, 4]);
+});
+
+test('NextPCB pricing accepts an exact part number with a different or missing manufacturer', async () => {
+  const fetcher: typeof fetch = async () =>
+    Response.json({
+      retCode: 200,
+      result: {
+        current: 1,
+        size: 50,
+        pages: 1,
+        records: [
+          {
+            goodsName: 'tlv75733pdbvr',
+            goodsId: 1,
+            goodsNo: 'FIXTURE-1',
+            brandName: 'DYW',
+            price: [{ goodsId: '1', purchases: 10, unitPrice: 0.08 }],
+          },
+        ],
+      },
+    });
+  for (const manufacturer of ['Texas Instruments (TI)', '']) {
+    const { offers } = await readNextpcbPrices(
+      fetcher,
+      { name: 'TLV75733PDBVR', manufacturer },
+      new AbortController().signal,
+    );
+    assert.deepEqual(offers, [
+      { sku: 'FIXTURE-1', manufacturer: 'DYW', tiers: [{ quantity: 10, unitPrice: 0.08 }] },
+    ]);
   }
 });
 
@@ -350,7 +626,11 @@ function nextPcbOfficialModelFixture() {
       );
     throw new Error('Unexpected NextPCB fixture request.');
   };
-  return { id, reference, calls, nextpcbFetcher };
+  const footprintRequests = [
+    'https://library.nextpcb.com/api/chiplet/kicad/productDetail',
+    footprintUrl,
+  ];
+  return { id, reference, calls, nextpcbFetcher, footprintRequests };
 }
 
 test('NextPCB model indices resolve prepared official STEP bytes with a borrowed parser and preserve the declared pose', async () => {
@@ -394,7 +674,7 @@ test('NextPCB model indices resolve prepared official STEP bytes with a borrowed
     assert.deepEqual(Buffer.from(await library.componentModelBytes(fixture.id, 0)), bytes);
     assert.equal(parsed, 1);
     assert.equal(downloads, 0);
-    assert.equal(fixture.calls.length, 3, 'The vendor STEP URL is never fetched.');
+    assert.deepEqual(fixture.calls, fixture.footprintRequests);
     await assert.rejects(library.model(fixture.id, 1), /No model is assigned/);
     assert.equal(downloads, 0);
     library.close();
@@ -456,7 +736,7 @@ test('official model cache misses use only the fixed KiCad release transport and
       'The verified official bytes are reused from their fixed cache.',
     );
     assert.equal(parsed, 2);
-    assert.equal(fixture.calls.length, 3);
+    assert.deepEqual(fixture.calls, fixture.footprintRequests);
   } finally {
     library.close();
     assert.equal(path.dirname(path.resolve(temporary)), path.resolve(os.tmpdir()));
@@ -493,8 +773,10 @@ test('authenticated NextPCB model HTTP reads use the fixed official transport an
     const headers = { 'X-OpenPE-Token': server.token };
     const missing = await fetch(server.base + route, { headers });
     assert.equal(missing.status, 422);
+    const failure = await missing.json();
+    assert.equal(failure.code, 'OPENPE_LIBRARY_ASSET_UNAVAILABLE');
     assert.match(
-      (await missing.json()).error,
+      failure.error,
       /not available in the official KiCad 10\.0\.0 library.*2D footprint/,
     );
     assert.equal(downloads.length, 1);
@@ -511,7 +793,7 @@ test('authenticated NextPCB model HTTP reads use the fixed official transport an
       1,
       'Viewing accepted 2D geometry does not repeat a model download.',
     );
-    assert.equal(fixture.calls.length, 3, 'The separate vendor STEP URL receives no authority.');
+    assert.deepEqual(fixture.calls, fixture.footprintRequests);
   } finally {
     server.close();
     assert.equal(path.dirname(path.resolve(temporary)), path.resolve(os.tmpdir()));

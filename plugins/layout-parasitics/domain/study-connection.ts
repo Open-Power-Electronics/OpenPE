@@ -28,11 +28,15 @@ function exactTerminal(board: PCB, circuit: Circuit, pins: Terminal[], id: strin
   );
   const pad = footprint?.pads.find((pad) => pad.id === id);
   const owner = circuit.parts.find((part) => part.id === footprint?.symbolId);
-  if (!pad || !owner || !pad.number.trim())
+  if (!pad || pad.type === 'np_thru_hole' || !owner || !pad.number.trim())
     throw new Error(
       'Series insertion requires two PCB pads linked to exact pins in the selected schematic. Vias and unmapped pads cannot be inserted.',
     );
-  if (footprint!.pads.filter((candidate) => candidate.number === pad.number).length !== 1)
+  if (
+    footprint!.pads.filter(
+      (candidate) => candidate.type !== 'np_thru_hole' && candidate.number === pad.number,
+    ).length !== 1
+  )
     throw new Error(
       'Series insertion cannot detach one of several PCB lands sharing the same pad number.',
     );

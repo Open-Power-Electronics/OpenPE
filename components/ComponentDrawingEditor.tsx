@@ -1,5 +1,6 @@
 'use client';
 
+import { PadDrillGraphic } from './PadDrillGraphic';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   PencilRuler,
@@ -26,6 +27,7 @@ import type { CapabilityHost } from '@/api/capabilities';
 import type { Circuit, Point } from '@/lib/circuit';
 import type { Project } from '@/lib/project';
 import type { BoardLine, Pad } from '@/lib/pcb';
+import { pcbPadPath } from '@/lib/pcb-geometry';
 import {
   readSymbolDrawing,
   symbolPinTypes,
@@ -551,7 +553,13 @@ export default function ComponentDrawingEditor({
       },
     });
   }
-  function number(label: string, value: number, change: (value: number) => void, unit = 'mm') {
+  function number(
+    label: string,
+    value: number,
+    change: (value: number) => void,
+    unit = 'mm',
+    decimalPlaces = 2,
+  ) {
     return (
       <label className={styles.field} key={label}>
         {label}
@@ -559,7 +567,7 @@ export default function ComponentDrawingEditor({
           aria-label={label}
           disabled={busy}
           unit={unit || undefined}
-          decimalPlaces={2}
+          decimalPlaces={decimalPlaces}
           value={invalid[label] ?? value}
           aria-invalid={Object.hasOwn(invalid, label)}
           onFocus={() => {
@@ -714,41 +722,75 @@ export default function ComponentDrawingEditor({
           <>
             {text('Pad number', pad.number, (number) => updateSelected({ number }))}
             {xy('Pad', pad, (p) => updateSelected(p))}
-            {xy('Size', pad.size, (size) => updateSelected({ size }))}
+            {pad.customAnchor === 'circle'
+              ? number(
+                  'Anchor diameter',
+                  pad.size.x,
+                  (diameter) => updateSelected({ size: { x: diameter, y: diameter } }),
+                  'mm',
+                  6,
+                )
+              : xy(pad.outline ? 'Anchor size' : 'Size', pad.size, (size) =>
+                  updateSelected({ size }),
+                )}
             {number('Pad rotation', pad.rotation, (rotation) => updateSelected({ rotation }), '°')}
-            {select('Pad type', pad.type, ['smd', 'thru_hole', 'np_thru_hole'], (type) => {
-              const next = { ...pad, type } as Partial<Pad>;
-              if (type === 'smd') {
-                delete next.drill;
-                delete next.drillOffset;
-              } else next.drill = pad.drill ?? 0.8;
-              const { drill: _drill, drillOffset: _offset, ...retained } = pad;
-              edit({
-                ...drawings,
-                footprint: {
-                  ...drawings.footprint,
-                  pads: drawings.footprint.pads.map((p, i) =>
-                    i === selection.index
-                      ? ({
-                          ...retained,
-                          ...next,
-                          ...(type === 'smd' ? { drill: undefined, drillOffset: undefined } : {}),
-                        } as typeof pad)
-                      : p,
-                  ),
-                },
-              });
-            })}
-            {select('Pad shape', pad.shape, ['rect', 'circle', 'oval', 'roundrect'], (shape) =>
-              updateSelected({
-                shape,
-                ...(shape === 'roundrect'
-                  ? { roundrectRatio: pad.roundrectRatio ?? 0.25 }
-                  : { roundrectRatio: undefined, chamferRatio: undefined, chamfer: undefined }),
-              }),
+            {select(
+              'Pad type',
+              pad.type,
+              pad.outline ? ['smd', 'thru_hole'] : ['smd', 'thru_hole', 'np_thru_hole'],
+              (type) => {
+                const next = { ...pad, type } as Partial<Pad>;
+                if (type === 'smd') {
+                  delete next.drill;
+                  delete next.drillOffset;
+                  delete next.drillSlot;
+                } else next.drill = pad.drill ?? 0.8;
+                const { drill: _drill, drillOffset: _offset, drillSlot: _slot, ...retained } = pad;
+                edit({
+                  ...drawings,
+                  footprint: {
+                    ...drawings.footprint,
+                    pads: drawings.footprint.pads.map((p, i) =>
+                      i === selection.index
+                        ? ({
+                            ...retained,
+                            ...next,
+                            ...(type === 'smd'
+                              ? { drill: undefined, drillOffset: undefined, drillSlot: undefined }
+                              : {}),
+                          } as typeof pad)
+                        : p,
+                    ),
+                  },
+                });
+              },
+            )}
+            {pad.outline ? (
+              <div>Custom polygon</div>
+            ) : (
+              select('Pad shape', pad.shape, ['rect', 'circle', 'oval', 'roundrect'], (shape) =>
+                updateSelected({
+                  shape,
+                  ...(shape === 'roundrect'
+                    ? { roundrectRatio: pad.roundrectRatio ?? 0.25 }
+                    : { roundrectRatio: undefined, chamferRatio: undefined, chamfer: undefined }),
+                }),
+              )
             )}
             {pad.type !== 'smd' &&
-              number('Drill', pad.drill ?? 0.8, (drill) => updateSelected({ drill }))}
+              number(pad.drillSlot ? 'Slot width' : 'Drill', pad.drill ?? 0.8, (drill) =>
+                updateSelected({ drill }),
+              )}
+            {pad.drillSlot && (
+              <>
+                {number('Slot length', pad.drillSlot.length, (length) =>
+                  updateSelected({ drillSlot: { ...pad.drillSlot!, length } }),
+                )}
+                {select('Slot axis', pad.drillSlot.axis, ['x', 'y'], (axis) =>
+                  updateSelected({ drillSlot: { ...pad.drillSlot!, axis } }),
+                )}
+              </>
+            )}
             {pad.shape === 'roundrect' &&
               number(
                 'Corner ratio',
@@ -1500,23 +1542,18 @@ export default function ComponentDrawingEditor({
                         >
                           {pad.shape === 'circle' ? (
                             <circle r={pad.size.x / 2} />
+                          ) : pad.shape === 'roundrect' || pad.outline ? (
+                            <path d={pcbPadPath(pad)} />
                           ) : (
                             <rect
                               x={-pad.size.x / 2}
                               y={-pad.size.y / 2}
                               width={pad.size.x}
                               height={pad.size.y}
-                              rx={
-                                pad.shape === 'oval'
-                                  ? Math.min(pad.size.x, pad.size.y) / 2
-                                  : pad.shape === 'roundrect'
-                                    ? Math.min(pad.size.x, pad.size.y) *
-                                      (pad.roundrectRatio ?? 0.25)
-                                    : 0
-                              }
+                              rx={pad.shape === 'oval' ? Math.min(pad.size.x, pad.size.y) / 2 : 0}
                             />
                           )}
-                          {pad.drill && <circle r={pad.drill / 2} fill="var(--canvas)" />}
+                          {pad.drill && <PadDrillGraphic pad={pad} fill="var(--canvas)" />}
                           <text y={0.3} textAnchor="middle" fontSize={0.8} fill="var(--on-accent)">
                             {pad.number}
                           </text>

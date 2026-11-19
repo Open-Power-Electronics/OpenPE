@@ -4,6 +4,7 @@ import { partFields, unitGraphics } from '@/lib/library';
 import type { Part } from '@/lib/circuit';
 import { symbolRole, symbolRoles } from '@/lib/symbol-role';
 import SchematicSelectionPaint from './SchematicSelectionPaint';
+import { schematicStrokeDasharray } from './schematic-stroke';
 export function arcPath(n: SExpr) {
   const start = child(n, 'start'),
     mid = child(n, 'mid'),
@@ -111,6 +112,9 @@ function symbolGraphic({
       strokeLinejoin="round"
     >
       {orderedGraphics.map((n, i) => {
+        const strokeDasharray = schematicStrokeDasharray(
+          val(child(child(n, 'stroke') || [], 'type')),
+        );
         const fill =
           val(child(child(n, 'fill') || [], 'type')) === 'background'
             ? 'var(--canvas)'
@@ -122,6 +126,7 @@ function symbolGraphic({
             <polyline
               key={i}
               fill={fill}
+              strokeDasharray={strokeDasharray}
               points={children(child(n, 'pts') || [], 'xy')
                 .map((p) => `${num(p)},${-num(p, 2)}`)
                 .join(' ')}
@@ -138,6 +143,7 @@ function symbolGraphic({
               width={Math.abs(num(a) - num(b))}
               height={Math.abs(num(a, 2) - num(b, 2))}
               fill={fill}
+              strokeDasharray={strokeDasharray}
             />
           );
         }
@@ -149,9 +155,11 @@ function symbolGraphic({
               cy={-num(child(n, 'center'), 2)}
               r={num(child(n, 'radius'))}
               fill={fill}
+              strokeDasharray={strokeDasharray}
             />
           );
-        if (n[0] === 'arc') return <path key={i} d={arcPath(n)} />;
+        if (n[0] === 'arc')
+          return <path key={i} d={arcPath(n)} strokeDasharray={strokeDasharray} />;
         if (n[0] === 'pin') {
           const hidden = (node: SExpr | undefined) =>
             !!node && (node.includes('hide') || val(child(node, 'hide')) === 'yes');
@@ -166,10 +174,13 @@ function symbolGraphic({
           const labelAngle = num(at, 3);
           const name = val(child(n, 'name')),
             number = val(child(n, 'number'));
-          const nameSize =
-            num(
-              child(child(child(child(n, 'name') || [], 'effects') || [], 'font') || [], 'size'),
-            ) || 1.0;
+          const labelSize = (field: 'name' | 'number') => {
+            const effects = child(child(n, field) ?? [], 'effects');
+            return child(child(effects ?? [], 'font') ?? [], 'size');
+          };
+          const nameFont = labelSize('name'),
+            numberFont = labelSize('number');
+          const nameSize = nameFont ? num(nameFont) : 1;
           return (
             <g key={i}>
               <g transform={`translate(${x} ${y}) rotate(${-labelAngle})`}>
@@ -186,41 +197,48 @@ function symbolGraphic({
                   <path d={`M ${length - 0.6} -0.6 l 1.2 1.2 m 0 -1.2 l -1.2 1.2`} />
                 )}
               </g>
-              {showPinNumbers && !hidden(child(library, 'pin_numbers')) && number && (
-                <text
-                  x={x + (length * Math.cos(angle)) / 2}
-                  y={y - (length * Math.sin(angle)) / 2 - 0.5}
-                  transform={upright(
-                    x + (length * Math.cos(angle)) / 2,
-                    y - (length * Math.sin(angle)) / 2 - 0.5,
-                  )}
-                  textAnchor="middle"
-                  fill="var(--schematic-pin-number)"
-                  stroke="none"
-                  fontSize="0.9"
-                >
-                  {number}
-                </text>
-              )}
-              {showPinNames && !hidden(child(library, 'pin_names')) && name && name !== '~' && (
-                <text
-                  x={x + (length + 0.7) * Math.cos(angle)}
-                  y={y - (length + 0.7) * Math.sin(angle)}
-                  transform={upright(
-                    x + (length + 0.7) * Math.cos(angle),
-                    y - (length + 0.7) * Math.sin(angle),
-                  )}
-                  textAnchor={
-                    Math.cos(angle) > 0.5 ? 'start' : Math.cos(angle) < -0.5 ? 'end' : 'middle'
-                  }
-                  dominantBaseline="central"
-                  fill="var(--schematic-pin-name)"
-                  stroke="none"
-                  fontSize={nameSize}
-                >
-                  {name.replace(/^~\{(.*)\}$/, '$1')}
-                </text>
-              )}
+              {showPinNumbers &&
+                !hidden(child(library, 'pin_numbers')) &&
+                number &&
+                (!numberFont || num(numberFont) > 0) && (
+                  <text
+                    x={x + (length * Math.cos(angle)) / 2}
+                    y={y - (length * Math.sin(angle)) / 2 - 0.5}
+                    transform={upright(
+                      x + (length * Math.cos(angle)) / 2,
+                      y - (length * Math.sin(angle)) / 2 - 0.5,
+                    )}
+                    textAnchor="middle"
+                    fill="var(--schematic-pin-number)"
+                    stroke="none"
+                    fontSize="0.9"
+                  >
+                    {number}
+                  </text>
+                )}
+              {showPinNames &&
+                !hidden(child(library, 'pin_names')) &&
+                name &&
+                name !== '~' &&
+                nameSize > 0 && (
+                  <text
+                    x={x + (length + 0.7) * Math.cos(angle)}
+                    y={y - (length + 0.7) * Math.sin(angle)}
+                    transform={upright(
+                      x + (length + 0.7) * Math.cos(angle),
+                      y - (length + 0.7) * Math.sin(angle),
+                    )}
+                    textAnchor={
+                      Math.cos(angle) > 0.5 ? 'start' : Math.cos(angle) < -0.5 ? 'end' : 'middle'
+                    }
+                    dominantBaseline="central"
+                    fill="var(--schematic-pin-name)"
+                    stroke="none"
+                    fontSize={nameSize}
+                  >
+                    {name.replace(/^~\{(.*)\}$/, '$1')}
+                  </text>
+                )}
             </g>
           );
         }

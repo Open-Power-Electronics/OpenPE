@@ -8076,7 +8076,14 @@ function isOwnedProjectNode(value) {
 }
 
 // lib/sexpr.ts
-var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v : "";
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
 var val = (n, i = 1) => n ? atom(n[i]) : "";
@@ -8798,8 +8805,11 @@ function compileCapabilitySchema(schema) {
   };
 }
 
-// lib/pcb-polygons.ts
+// lib/pcb-custom-pad.ts
 var import_clipper_lib = __toESM(require_clipper(), 1);
+
+// lib/pcb-polygons.ts
+var import_clipper_lib2 = __toESM(require_clipper(), 1);
 
 // lib/design-rule-checks.ts
 var pcbDesignRuleLimits = {

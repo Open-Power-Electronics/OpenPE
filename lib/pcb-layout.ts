@@ -4,6 +4,12 @@ import { child, children, val, type SExpr } from './sexpr';
 import { pcbGraphicPoints, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
 import { footprintModels } from './pcb-models';
 import { squaredDistance } from './pcb-collision';
+import { localPadDrillLine, padDrillClearance, readPadDrill } from './pcb-drill';
+import { padBoundPoints, readCustomPad, validateCustomPad } from './pcb-custom-pad';
+import { footprintTextPlacement } from './pcb-text';
+import { padApertureLayers, padHasElectricalPin, readPadHeatsink } from './pcb-pad-role';
+export { insidePolygon, pointSegmentDistance, segmentDistance } from './pcb-collision';
+export { pcbPadChamferEndpoints, pcbPadCorners } from './pcb-geometry';
 
 export type PCBSelection = {
   kind: 'footprint' | 'track' | 'via' | 'graphic' | 'zone';
@@ -12,7 +18,8 @@ export type PCBSelection = {
 export type PCBBounds = { minX: number; minY: number; maxX: number; maxY: number };
 type Selection = PCBSelection | readonly PCBSelection[];
 
-const round = (n: number) => Number(n.toFixed(6));
+// Canonicalize signed zero when transforming native coordinates.
+const round = (n: number) => Number(n.toFixed(6)) + 0;
 const angle = (n: number) => round(((n % 360) + 360) % 360);
 function fail(message: string): never {
   throw new Error(`Layout: ${message}`);
@@ -53,9 +60,13 @@ export const padPosition = (footprint: Footprint, pad: Pad) => footprintPoint(fo
 export const padRotation = (footprint: Footprint, pad: Pad) =>
   angle(footprint.rotation + pad.rotation);
 export function padDrillPosition(footprint: Footprint, pad: Pad): Point {
-  const at = padPosition(footprint, pad),
-    offset = pad.drillOffset ?? { x: 0, y: 0 };
-  return footprintPoint({ ...footprint, ...at, rotation: padRotation(footprint, pad) }, offset);
+  return footprintPoint(footprint, pad.drillOffset ? footprintPoint(pad, pad.drillOffset) : pad);
+}
+
+export function padDrillLine(footprint: Footprint, pad: Pad): [Point, Point] {
+  const at = { ...padDrillPosition(footprint, pad), rotation: padRotation(footprint, pad) };
+  const [start, end] = localPadDrillLine({ drill: pad.drill, drillSlot: pad.drillSlot });
+  return [footprintPoint(at, start), footprintPoint(at, end)];
 }
 
 /** Flip through the footprint origin's horizontal board axis, preserving IDs/nets. */
@@ -77,6 +88,7 @@ export function flipPCBFootprint(footprint: Footprint): Footprint {
       ...p,
       ...mirror(p),
       rotation: angle(-p.rotation),
+      ...(p.outline ? { outline: p.outline.map(mirror) } : {}),
       ...(p.drillOffset ? { drillOffset: mirror(p.drillOffset) } : {}),
       ...(p.layers
         ? {
@@ -108,6 +120,15 @@ export function flipPCBFootprint(footprint: Footprint): Footprint {
         ? g.layer.replace(/^F\./, 'B.')
         : g.layer.replace(/^B\./, 'F.')) as BoardLine['layer'],
     })),
+    ...(footprint.referencePoints
+      ? {
+          referencePoints: footprint.referencePoints.map((p): typeof p => ({
+            ...p,
+            ...mirror(p),
+            layer: p.layer === 'F.Fab' ? 'B.Fab' : 'F.Fab',
+          })),
+        }
+      : {}),
     ...(footprint.zones
       ? {
           zones: footprint.zones.map((z) => ({
@@ -153,9 +174,9 @@ function tuple(node: SExpr | undefined, min: number, max: number, context: strin
   if (!node || node.length < min + 1 || node.length > max + 1 || node.slice(1).some(Array.isArray))
     fail(`${context} uses unsupported coordinates or dimensions.`);
 }
-function sourcePositive(node: SExpr | undefined, index: number, context: string) {
+function sourcePositive(node: SExpr | undefined, index: number, context: string, minimum = 0.0001) {
   const n = sourceNumber(node, index, context);
-  if (n < 0.0001 || n > 1000) fail(`${context} must be between 0.0001 and 1000 mm.`);
+  if (n < minimum || n > 1000) fail(`${context} must be between ${minimum} and 1000 mm.`);
   return n;
 }
 function sourceFlag(node: SExpr, name: string, context: string): boolean {
@@ -170,14 +191,19 @@ function sourceFlag(node: SExpr, name: string, context: string): boolean {
 
 /** Library user text is native package artwork, including polarity markers. */
 function sourceFootprintText(node: SExpr, graphicLayers: readonly string[]): BoardLine {
-  allowedChildren(node, ['at', 'layer', 'effects', 'hide', 'uuid', 'tstamp'], 'The footprint text');
+  allowedChildren(
+    node,
+    ['at', 'layer', 'effects', 'hide', 'unlocked', 'uuid', 'tstamp'],
+    'The footprint text',
+  );
   if (
     typeof node[2] !== 'string' ||
-    node.slice(3).some((item) => !Array.isArray(item) && item !== 'hide') ||
+    node.slice(3).some((item) => !Array.isArray(item) && item !== 'hide' && item !== 'unlocked') ||
     val(node, 2).length > 4096
   )
     fail('The footprint text uses unsupported content or flags.');
-  tuple(child(node, 'at'), 2, 3, 'Text position');
+  const { at, unlocked } = footprintTextPlacement(node, fail);
+  tuple(at, 2, 3, 'Text position');
   tuple(child(node, 'layer'), 1, 1, 'Text layer');
   const layer = val(child(node, 'layer'));
   if (!graphicLayers.includes(layer)) fail(`Footprint text on ${layer} is not supported.`);
@@ -213,7 +239,7 @@ function sourceFootprintText(node: SExpr, graphicLayers: readonly string[]): Boa
     hidden = nodeHidden || effectsHidden,
     bold = sourceFlag(font, 'bold', 'The text font'),
     italic = sourceFlag(font, 'italic', 'The text font');
-  const position = sourcePoint(child(node, 'at'), 'Text position');
+  const position = sourcePoint(at, 'Text position');
   return {
     id: uid(),
     kind: 'text',
@@ -221,9 +247,10 @@ function sourceFootprintText(node: SExpr, graphicLayers: readonly string[]): Boa
     end: { ...position },
     width: 0,
     layer: layer as BoardLine['layer'],
+    ...(unlocked ? { keepUpright: false } : {}),
     text: {
       value: val(node, 2),
-      rotation: angle(sourceNumber(child(node, 'at'), 3, 'Text rotation', true)),
+      rotation: angle(sourceNumber(at, 3, 'Text rotation', true)),
       size,
       thickness,
       ...(justify ? { justify: justify as BoardText['justify'] } : {}),
@@ -234,21 +261,25 @@ function sourceFootprintText(node: SExpr, graphicLayers: readonly string[]): Boa
   };
 }
 
+type FootprintMargins = Pick<
+  Footprint,
+  'solderMaskMargin' | 'solderPasteMargin' | 'solderPasteMarginRatio'
+>;
+const footprintMarginFields = new Map<string, keyof FootprintMargins>([
+  ['solder_mask_margin', 'solderMaskMargin'],
+  ['solder_paste_margin', 'solderPasteMargin'],
+  ['solder_paste_margin_ratio', 'solderPasteMarginRatio'],
+]);
+
 /** Convert only geometry represented exactly by the existing PCB v1 schema.
  * Author standard captions as native fields whose content follows the schematic.
  * Pads remain unassigned until the user explicitly assigns a board net.
  */
-export function createPCBFootprint(
-  detail: { id: string; footprint: SExpr },
-  circuit: Circuit,
-  symbolId: string,
-  at: Point,
-): Footprint {
+export function readLibraryFootprint(detail: {
+  id: string;
+  footprint: SExpr;
+}): Pick<Footprint, 'pads' | 'graphics' | 'models'> & FootprintMargins {
   const root = detail.footprint;
-  const symbol = circuit.parts.find((p) => p.id === symbolId);
-  if (!symbol) fail('Choose a component in the primary schematic before placing a footprint.');
-  const library = circuit.libraries[symbol.libId];
-  if (!library) fail('The schematic component has no embedded symbol.');
   if (
     !detail.id.includes(':') ||
     detail.id.length > 4096 ||
@@ -259,17 +290,35 @@ export function createPCBFootprint(
   if (root.length > 10000) fail('This footprint exceeds the supported size.');
   if (val(child(root, 'layer')) !== 'F.Cu')
     fail('Only front-side library footprints can be placed.');
-  const pins = new Set(
-    children(library, 'symbol')
-      .flatMap((unit) => children(unit, 'pin'))
-      .map((pin) => val(child(pin, 'number'))),
-  );
   const pads: Pad[] = [],
     graphics: BoardLine[] = [];
-  const graphicLayers = ['F.SilkS', 'B.SilkS', 'F.Fab', 'B.Fab', 'F.CrtYd', 'B.CrtYd'];
+  const margins: FootprintMargins = {};
+  const graphicLayers = [
+    'F.SilkS',
+    'B.SilkS',
+    'F.Fab',
+    'B.Fab',
+    'F.CrtYd',
+    'B.CrtYd',
+    'Dwgs.User',
+    'Cmts.User',
+    'Eco1.User',
+    'Eco2.User',
+    'User.1',
+    'User.2',
+    'User.3',
+    'User.4',
+  ];
   for (const node of root.slice(2)) {
     if (!Array.isArray(node)) fail('This footprint contains an unsupported top-level flag.');
     const kind = String(node[0]);
+    const margin = footprintMarginFields.get(kind);
+    if (margin) {
+      if (margins[margin] !== undefined) fail(`The footprint repeats ${kind}.`);
+      tuple(node, 1, 1, `Footprint ${kind}`);
+      margins[margin] = sourceNumber(node, 1, `Footprint ${kind}`);
+      continue;
+    }
     if (
       [
         'version',
@@ -321,22 +370,28 @@ export function createPCBFootprint(
           'tstamp',
           'remove_unused_layers',
           'roundrect_rratio',
+          'chamfer_ratio',
+          'chamfer',
+          'options',
+          'primitives',
           'solder_mask_margin',
           'solder_paste_margin',
           'solder_paste_margin_ratio',
           'thermal_bridge_angle',
           'zone_connect',
+          'property',
         ],
         'The pad',
       );
       const type = val(node, 2),
         shape = val(node, 3),
         number = val(node);
-      if (type !== 'smd' && type !== 'thru_hole') fail(`Pad type ${type} is not supported.`);
-      if (!['rect', 'circle', 'oval', 'roundrect'].includes(shape))
-        fail(
-          `Pad shape ${shape} is not supported. Use rectangular, circular, oval or rounded rectangular pads.`,
-        );
+      if (type !== 'smd' && type !== 'thru_hole' && type !== 'np_thru_hole')
+        fail(`Pad type ${type} is not supported.`);
+      if (!['rect', 'circle', 'oval', 'roundrect', 'custom'].includes(shape))
+        fail(`Pad shape ${shape} is not supported.`);
+      const customPad = readCustomPad(node, fail);
+      const { outline } = customPad;
       const ratioNode = child(node, 'roundrect_rratio');
       if ((shape === 'roundrect') !== Boolean(ratioNode))
         fail(
@@ -345,9 +400,41 @@ export function createPCBFootprint(
       let roundrectRatio: number | undefined;
       if (ratioNode) {
         tuple(ratioNode, 1, 1, 'Pad corner ratio');
-        roundrectRatio = sourceNumber(ratioNode, 1, 'Pad corner ratio');
-        if (roundrectRatio < 0 || roundrectRatio > 0.5)
+        const rawRatio = val(ratioNode);
+        roundrectRatio = Number(rawRatio);
+        if (
+          !rawRatio ||
+          !Number.isFinite(roundrectRatio) ||
+          roundrectRatio < 0 ||
+          roundrectRatio > 0.5
+        )
           fail('Pad corner ratio must be between 0 and 0.5.');
+      }
+      const chamferNode = child(node, 'chamfer');
+      const chamferRatioNode = child(node, 'chamfer_ratio');
+      let chamfer: Pad['chamfer'];
+      let chamferRatio: number | undefined;
+      if (chamferNode || chamferRatioNode) {
+        const allowed = ['top_left', 'top_right', 'bottom_left', 'bottom_right'];
+        tuple(chamferNode, 1, 4, 'Pad chamfer corners');
+        tuple(chamferRatioNode, 1, 1, 'Pad chamfer ratio');
+        const rawRatio = val(chamferRatioNode);
+        const corners = chamferNode!.slice(1).map((_, i) => val(chamferNode, i + 1));
+        const ratio = Number(rawRatio);
+        if (
+          shape !== 'roundrect' ||
+          !rawRatio ||
+          !Number.isFinite(ratio) ||
+          ratio <= 0 ||
+          ratio > 0.5 ||
+          new Set(corners).size !== corners.length ||
+          corners.some((corner) => !allowed.includes(corner))
+        )
+          fail(
+            'Pad chamfers require distinct corners and a ratio greater than zero and at most 0.5.',
+          );
+        chamferRatio = ratio;
+        chamfer = corners as Pad['chamfer'];
       }
       const attributes: Partial<
         Pick<
@@ -369,8 +456,17 @@ export function createPCBFootprint(
         const attribute = child(node, native);
         if (!attribute) continue;
         tuple(attribute, 1, 1, `Pad ${native}`);
-        const value = sourceNumber(attribute, 1, `Pad ${native}`);
+        let value: number;
+        if (key === 'solderPasteMarginRatio') {
+          const raw = val(attribute);
+          if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw))
+            fail('Pad solder_paste_margin_ratio must be a finite ratio.');
+          value = Number(raw);
+        } else {
+          value = sourceNumber(attribute, 1, `Pad ${native}`);
+        }
         if (
+          !Number.isFinite(value) ||
           value < minimum ||
           value > maximum ||
           (key === 'zoneConnect' && !Number.isInteger(value))
@@ -380,44 +476,112 @@ export function createPCBFootprint(
           );
         attributes[key] = value;
       }
-      if (!pins.has(number))
-        fail(`${symbol.ref} has no pin ${number || '(unnumbered)'} for this footprint pad.`);
       tuple(child(node, 'size'), 2, 2, 'Pad size');
       tuple(child(node, 'at'), 2, 3, 'Pad position');
+      const minimumSize = customPad.customAnchor === 'circle' ? 0.000001 : 0.0001;
       const size = {
-        x: sourcePositive(child(node, 'size'), 1, 'Pad width'),
-        y: sourcePositive(child(node, 'size'), 2, 'Pad height'),
+        x: sourcePositive(child(node, 'size'), 1, 'Pad width', minimumSize),
+        y: sourcePositive(child(node, 'size'), 2, 'Pad height', minimumSize),
       };
       if (shape === 'circle' && size.x !== size.y)
         fail('Circular pads must have equal width and height.');
-      const layers = child(node, 'layers')
-        ?.slice(1)
-        .map((_, i) => val(child(node, 'layers'), i + 1))
+      const layerNode = child(node, 'layers');
+      tuple(layerNode, 1, 3, 'Pad layers');
+      const layers = layerNode!
+        .slice(1)
+        .map((_, i) => val(layerNode, i + 1))
         .sort();
-      const expectedLayers = type === 'smd' ? ['F.Cu', 'F.Mask', 'F.Paste'] : ['*.Cu', '*.Mask'];
-      if (JSON.stringify(layers) !== JSON.stringify(expectedLayers))
+      const roundMechanicalCopperMarker =
+        type === 'np_thru_hole' &&
+        layers.length === 2 &&
+        layers.includes('*.Mask') &&
+        (layers.includes('F&B.Cu') || layers.includes('*.Cu'));
+      let retainedLayers = layers as NonNullable<Pad['layers']> | undefined;
+      const padRole: Pick<Pad, 'type' | 'number' | 'layers'> = {
+        type,
+        number,
+        layers: retainedLayers,
+      };
+      if (padHasElectricalPin(padRole) && number !== '' && !number.trim())
+        fail('Footprint pad numbers cannot contain only whitespace.');
+      if (type === 'smd') {
+        const side = layers.includes('B.Cu') ? 'B' : 'F';
+        if (
+          !padApertureLayers(padRole) &&
+          (!layers.includes(`${side}.Cu`) ||
+            new Set(layers).size !== layers.length ||
+            layers.some(
+              (layer) => ![`${side}.Cu`, `${side}.Mask`, `${side}.Paste`].includes(layer),
+            ))
+        )
+          fail('Custom pad layer sets are not supported.');
+        if (side === 'F' && layers.length === 3) retainedLayers = undefined;
+      } else if (type === 'thru_hole') {
+        if (
+          layers[0] !== '*.Cu' ||
+          layers.slice(1).some((layer) => !['*.Mask', 'F.Mask', 'B.Mask'].includes(layer)) ||
+          new Set(layers).size !== layers.length ||
+          (layers.includes('*.Mask') && layers.length > 2)
+        )
+          fail('Custom pad layer sets are not supported.');
+        if (layers.length === 2 && layers[1] === '*.Mask') retainedLayers = undefined;
+      } else if (!(layers.length === 1 && layers[0] === '*.Mask') && !roundMechanicalCopperMarker) {
         fail('Custom pad layer sets are not supported.');
+      }
       const remove = child(node, 'remove_unused_layers');
       if (remove && val(remove) !== 'no')
         fail('Pads that remove unused copper layers are not supported.');
-      const drillNode = child(node, 'drill');
-      if (drillNode && (drillNode.length !== 2 || type !== 'thru_hole'))
-        fail('Slotted, offset or SMD drills are not supported.');
-      const drill = type === 'thru_hole' ? sourcePositive(drillNode, 1, 'Pad drill') : undefined;
-      if (drill !== undefined && drill >= Math.min(size.x, size.y))
-        fail('A through-hole drill must be smaller than its copper pad.');
+      const drill = readPadDrill(child(node, 'drill'), fail);
+      if (!!drill.drill !== (type !== 'smd')) fail('Pad drill does not match its type.');
+      if (drill.drill !== undefined && drill.drill < 0.0001)
+        fail('Pad drill must be at least 0.0001 mm.');
+      const padShape = shape as Pad['shape'];
+      validateCustomPad(
+        { shape: padShape, type, size, ...customPad, drillOffset: drill.drillOffset },
+        fail,
+      );
+      const drillClearance = () =>
+        padDrillClearance({
+          ...drill,
+          size,
+          shape: padShape,
+          roundrectRatio,
+          chamferRatio,
+          chamfer,
+          outline,
+        });
+      if (type === 'np_thru_hole') {
+        const fits = drill.drillSlot
+          ? !roundMechanicalCopperMarker && shape === 'oval' && drillClearance() >= -1e-12
+          : shape === 'circle' && !drill.drillOffset && drill.drill === size.x;
+        if (!fits) fail('A non-plated hole must fit its mask opening.');
+      }
       const position = child(node, 'at');
+      const rotation = angle(sourceNumber(position, 3, 'Pad rotation', true));
+      const anchor = sourcePoint(position, 'Pad position');
+      const land = drill.drillOffset
+        ? footprintPoint(
+            { ...anchor, rotation },
+            { x: -drill.drillOffset.x, y: -drill.drillOffset.y },
+          )
+        : anchor;
+      if (type === 'thru_hole' && drillClearance() <= 1e-12)
+        fail('A through-hole drill must be smaller than and stay inside its copper pad.');
       pads.push({
         id: uid(),
         number,
-        ...sourcePoint(position, 'Pad position'),
-        rotation: angle(sourceNumber(position, 3, 'Pad rotation', true)),
+        ...land,
+        rotation,
         type,
-        shape: shape as Pad['shape'],
+        shape: padShape,
+        ...(retainedLayers ? { layers: retainedLayers } : {}),
         ...(roundrectRatio === undefined ? {} : { roundrectRatio }),
+        ...(chamfer ? { chamfer, chamferRatio } : {}),
+        ...customPad,
         ...attributes,
+        ...readPadHeatsink(node, fail),
         size,
-        ...(drill === undefined ? {} : { drill }),
+        ...drill,
         netId: null,
       });
     } else if (['fp_line', 'fp_rect', 'fp_circle', 'fp_arc', 'fp_poly'].includes(kind)) {
@@ -445,7 +609,9 @@ export function createPCBFootprint(
       tuple(child(node, 'layer'), 1, 1, 'Graphic layer');
       const layer = val(child(node, 'layer'));
       const pasteLayer = layer === 'F.Paste' || layer === 'B.Paste';
-      if (!pasteLayer && !graphicLayers.includes(layer))
+      const maskLayer = layer === 'F.Mask' || layer === 'B.Mask';
+      const edgeLayer = layer === 'Edge.Cuts';
+      if (!pasteLayer && !maskLayer && !edgeLayer && !graphicLayers.includes(layer))
         fail(`Footprint graphics on ${layer} are not supported.`);
       const fillNode = child(node, 'fill');
       if (fillNode) tuple(fillNode, 1, 1, 'Graphic fill');
@@ -453,11 +619,16 @@ export function createPCBFootprint(
       if (fillNode && !['no', 'none', 'yes', 'solid'].includes(fill))
         fail(`Footprint fill ${fill} is not supported.`);
       const filled = fill === 'yes' || fill === 'solid';
-      if (filled && kind !== 'fp_circle' && kind !== 'fp_poly')
-        fail('Only footprint circles and polygons support filled graphics.');
+      const filledRectangle = filled && kind === 'fp_rect';
+      const polygon = kind === 'fp_poly' || filledRectangle;
+      if (filled && kind !== 'fp_circle' && !polygon)
+        fail('Only footprint circles, rectangles and polygons support filled graphics.');
       const stroke = child(node, 'stroke');
       const nativeWidth = child(node, 'width');
-      if (nativeWidth && (stroke || val(child(root, 'version')) !== '20211014'))
+      if (
+        nativeWidth &&
+        (stroke || !['20210108', '20211014'].includes(val(child(root, 'version'))))
+      )
         fail('A native width field requires a KiCad 6 library footprint without a stroke record.');
       if (!stroke && !nativeWidth) fail('The footprint graphic has no supported stroke.');
       if (stroke) {
@@ -472,12 +643,16 @@ export function createPCBFootprint(
       const widthNode = nativeWidth ?? child(stroke!, 'width');
       tuple(widthNode, 1, 1, 'Graphic width');
       const width =
-        kind === 'fp_line' || kind === 'fp_rect'
+        kind === 'fp_line' || (kind === 'fp_rect' && !filledRectangle)
           ? sourcePositive(widthNode, 1, 'Graphic width')
           : sourceNumber(widthNode, 1, 'Graphic width');
       if (width < 0 || width > 1000) fail('Graphic width must be between 0 and 1000 mm.');
-      if (pasteLayer && (kind !== 'fp_poly' || !filled || width !== 0))
-        fail('Footprint paste graphics must be filled polygons without a stroke.');
+      if ((pasteLayer || maskLayer) && (!polygon || !filled || width !== 0))
+        fail(
+          'Footprint mask and paste graphics require filled polygons or rectangles without a stroke.',
+        );
+      if (edgeLayer && (filled || width <= 0))
+        fail('Footprint board edges require an unfilled contour with a positive stroke.');
       const common = {
         id: uid(),
         width,
@@ -529,6 +704,20 @@ export function createPCBFootprint(
         tuple(child(node, 'end'), 2, 2, 'Graphic end');
         const start = sourcePoint(child(node, 'start'), 'Graphic start'),
           end = sourcePoint(child(node, 'end'), 'Graphic end');
+        if (filledRectangle) {
+          if (start.x === end.x || start.y === end.y)
+            fail('A filled footprint rectangle needs a positive area.');
+          graphics.push({
+            ...common,
+            kind: 'polygon',
+            start,
+            points: [{ x: end.x, y: start.y }, end],
+            end: { x: start.x, y: end.y },
+            fill: true,
+          });
+          if (graphics.length > 2000) fail('This footprint exceeds the supported geometry limit.');
+          continue;
+        }
         points =
           kind === 'fp_rect'
             ? [start, { x: end.x, y: start.y }, end, { x: start.x, y: end.y }, start]
@@ -549,12 +738,44 @@ export function createPCBFootprint(
     if (pads.length > 2000 || graphics.length > 2000)
       fail('This footprint exceeds the supported geometry limit.');
   }
-  if (!pads.length) fail('Choose a footprint with numbered electrical pads.');
+  if (!pads.length && !graphics.length) fail('The footprint has no supported physical geometry.');
+  return {
+    pads,
+    graphics,
+    ...margins,
+    ...(children(root, 'model').length ? { models: footprintModels(root) } : {}),
+  };
+}
+
+export function createPCBFootprint(
+  detail: { id: string; footprint: SExpr },
+  circuit: Circuit,
+  symbolId: string,
+  at: Point,
+): Footprint {
+  const symbol = circuit.parts.find((p) => p.id === symbolId);
+  if (!symbol) fail('Choose a component in the primary schematic before placing a footprint.');
+  const library = circuit.libraries[symbol.libId];
+  if (!library) fail('The schematic component has no embedded symbol.');
+  const geometry = readLibraryFootprint(detail);
+  const electrical = geometry.pads.filter(padHasElectricalPin);
+  if (!electrical.some((pad) => pad.number))
+    fail('Choose a footprint with numbered electrical pads.');
+  const pins = new Set(
+    children(library, 'symbol')
+      .flatMap((unit) => children(unit, 'pin'))
+      .map((pin) => val(child(pin, 'number'))),
+  );
+  for (const pad of electrical) {
+    if (!pad.number) pad.unconnected = true;
+    else if (!pins.has(pad.number))
+      fail(`${symbol.ref} has no pin ${pad.number} for this footprint pad.`);
+  }
   for (const [property, layer, y] of [
     ['Reference', 'F.SilkS', -3],
     ['Value', 'F.Fab', 3],
   ] as const) {
-    graphics.push({
+    geometry.graphics.push({
       id: uid(),
       kind: 'text',
       layer,
@@ -577,9 +798,7 @@ export function createPCBFootprint(
     ...point(at),
     rotation: 0,
     side: 'front',
-    pads,
-    graphics,
-    ...(children(root, 'model').length ? { models: footprintModels(root) } : {}),
+    ...geometry,
   };
 }
 
@@ -938,12 +1157,11 @@ export function pcbBounds(board: PCB): PCBBounds {
     for (const p of f.pads) {
       const center = padPosition(f, p),
         radians = (-padRotation(f, p) * Math.PI) / 180;
-      for (const x of [-p.size.x / 2, p.size.x / 2])
-        for (const y of [-p.size.y / 2, p.size.y / 2])
-          add({
-            x: center.x + x * Math.cos(radians) - y * Math.sin(radians),
-            y: center.y + x * Math.sin(radians) + y * Math.cos(radians),
-          });
+      for (const { x, y } of padBoundPoints(p))
+        add({
+          x: center.x + x * Math.cos(radians) - y * Math.sin(radians),
+          y: center.y + x * Math.sin(radians) + y * Math.cos(radians),
+        });
     }
     for (const g of f.graphics) {
       for (const p of pcbGraphicPoints(g)) add(footprintPoint(f, p), g.width / 2);

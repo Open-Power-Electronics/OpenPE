@@ -63,6 +63,22 @@ export const piIsolationFlags = [
   '--no-session',
 ];
 
+export const codexIsolationArgs = [
+  'features.shell_tool=false',
+  'web_search="disabled"',
+  'mcp_servers={}',
+].flatMap((setting) => ['-c', setting]);
+
+export const rawCodexIsolationArgs = [
+  ...codexIsolationArgs,
+  ...[
+    'features.plugins=false',
+    'features.multi_agent=false',
+    'features.memories=false',
+    'project_doc_max_bytes=0',
+  ].flatMap((setting) => ['-c', setting]),
+];
+
 // Check the installed CLI's own flags without starting a conversation. Never
 // fall back to an older invocation that leaves tools or local resources active.
 export async function verifyPiIsolation(launch, options = {}) {

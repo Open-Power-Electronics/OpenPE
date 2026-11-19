@@ -1,11 +1,23 @@
+function retryDelay(value) {
+  if (!value) return 0;
+  const milliseconds = /^\d+$/.test(value)
+    ? Number(value) * 1000
+    : /^[A-Za-z]{3}/.test(value)
+      ? Date.parse(value) - Date.now()
+      : NaN;
+  return Number.isSafeInteger(milliseconds) && milliseconds > 0 ? milliseconds : 0;
+}
+
 export class CatalogHttpError extends Error {
-  constructor(provider, status) {
+  constructor(provider, status, retryAfter = null) {
     super(
       status === 403
         ? `${provider} denied the request (HTTP 403).`
         : `${provider} request failed (${status}). Retry when online.`,
     );
+    this.provider = provider;
     this.status = status;
+    this.retryAfterMs = retryDelay(retryAfter);
   }
 }
 
@@ -19,7 +31,7 @@ export async function readCatalogBytes(provider, fetcher, url, options, maximum,
   });
   if (!response.ok || response.redirected || (response.url && response.url !== url)) {
     await response.body?.cancel();
-    throw new CatalogHttpError(provider, response.status);
+    throw new CatalogHttpError(provider, response.status, response.headers.get('retry-after'));
   }
   const announced = response.headers.get('content-length');
   if (announced && (!/^\d+$/.test(announced) || Number(announced) > maximum)) {

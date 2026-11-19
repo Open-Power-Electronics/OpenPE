@@ -1,0 +1,7 @@
+{
+  "accuracy": "Report deviation from a target or reference under stated operating conditions.",
+  "cost": "Total BOM component cost using a shared, dated USD price reference.",
+  "count": "Total component quantity in the complete BOM.",
+  "efficiency": "Report total power delivered to the loads divided by input power at the stated operating point.",
+  "speed": "Measure how long an operation takes from its defined trigger to completion."
+}

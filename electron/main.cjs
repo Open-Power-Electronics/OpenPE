@@ -211,30 +211,77 @@ app.whenReady().then(async () => {
     },
   });
   installDesktopMenu();
+  let rawMode = false;
+  let nativeRequests = 0;
+  let rawPicker = false;
+  let rawEpoch = 0;
+  const workbenchIpc = {
+    handle(channel, handler) {
+      ipcMain.handle(channel, async (event, ...args) => {
+        trusted(event);
+        if (rawMode) throw new Error('This action is unavailable in Raw KiCad mode.');
+        ++nativeRequests;
+        try {
+          return await handler(event, ...args);
+        } finally {
+          --nativeRequests;
+        }
+      });
+    },
+  };
   ipcMain.handle('openpe:connection', (event) => {
     trusted(event);
     return { base: service.base, token: service.token };
   });
-  ipcMain.handle('openpe:open-library-homepage', async (event, site) => {
+  ipcMain.handle('openpe:set-raw-kicad-mode', (event, value) => {
+    trusted(event);
+    if (typeof value !== 'boolean') throw new Error('Invalid Raw KiCad mode.');
+    if (value === rawMode) return;
+    if (nativeRequests || rawPicker || (value && closePending))
+      throw new Error('Wait for the current native file operation to finish before switching modes.');
+    service.setRawKiCadMode(value);
+    rawMode = value;
+    ++rawEpoch;
+  });
+  ipcMain.handle('openpe:choose-raw-kicad-files', async (event) => {
+    trusted(event);
+    if (!rawMode || rawPicker) throw new Error('The Raw KiCad file picker is unavailable.');
+    const epoch = rawEpoch;
+    rawPicker = true;
+    try {
+      const result = await dialog.showOpenDialog(win, {
+        title: 'Choose raw KiCad files',
+        buttonLabel: 'Choose files',
+        filters: [{ name: 'KiCad files', extensions: service.rawKiCadExtensions }],
+        properties: ['openFile', 'multiSelections'],
+      });
+      trusted(event);
+      if (epoch !== rawEpoch) throw new Error('The Raw KiCad mode changed while choosing files.');
+      return result.canceled ? null : await service.selectRawKiCadFiles(result.filePaths);
+    } finally {
+      rawPicker = false;
+    }
+  });
+  workbenchIpc.handle('openpe:open-library-homepage', async (event, site) => {
     trusted(event);
     if (site === 'jlceda') return shell.openExternal('https://lceda.cn/');
     if (site === 'easyeda') return shell.openExternal('https://easyeda.com/');
     throw new Error('Unknown library homepage.');
   });
-  registerPluginInstaller({ ipcMain, dialog, authorize: trusted, getWindow: () => win, service });
-  registerCursorCredential({ ipcMain, authorize: trusted, store: cursorCredentials });
+  registerPluginInstaller({ ipcMain: workbenchIpc, dialog, authorize: trusted, getWindow: () => win, service });
+  registerCursorCredential({ ipcMain: workbenchIpc, authorize: trusted, store: cursorCredentials });
   registerWorkspaceRecovery({
-    ipcMain,
+    ipcMain: workbenchIpc,
     authorize: trusted,
     write: service.writeWorkspaceRecovery,
   });
   const projectDirectory = registerProjectDirectory({
-    ipcMain,
+    ipcMain: workbenchIpc,
     authorize: trusted,
     grants: fileGrants,
   });
   registerComponentModelPicker({
-    ipcMain,
+    ipcMain: workbenchIpc,
     dialog,
     getWindow: () => win,
     authorize: trusted,
@@ -242,7 +289,7 @@ app.whenReady().then(async () => {
     models: service.componentModels,
   });
   registerSpiceModelPicker({
-    ipcMain,
+    ipcMain: workbenchIpc,
     authorize: trusted,
     grants: fileGrants,
     dialog,
@@ -282,7 +329,7 @@ app.whenReady().then(async () => {
     };
     return { source, name: files.entry, native: true, openId: pendingFile.openId };
   };
-  ipcMain.handle('openpe:open', async (event) => {
+  workbenchIpc.handle('openpe:open', async (event) => {
     trusted(event);
     pendingFile = null;
     const result = await dialog.showOpenDialog(win, {
@@ -300,25 +347,25 @@ app.whenReady().then(async () => {
     if (result.canceled) return null;
     return openNativeFile(event, result.filePaths[0]);
   });
-  ipcMain.handle('openpe:open-recent', async (event, id) => {
+  workbenchIpc.handle('openpe:open-recent', async (event, id) => {
     trusted(event);
     pendingFile = null;
     const file = await recentProjects.resolve(id);
     return openNativeFile(event, file);
   });
-  ipcMain.handle('openpe:list-recent', async (event) => {
+  workbenchIpc.handle('openpe:list-recent', async (event) => {
     trusted(event);
     const result = await recentProjects.list();
     trusted(event);
     return result;
   });
-  ipcMain.handle('openpe:remove-recent', async (event, id) => {
+  workbenchIpc.handle('openpe:remove-recent', async (event, id) => {
     trusted(event);
     await recentProjects.remove(id);
     trusted(event);
     win.webContents.send('openpe:recent-changed');
   });
-  ipcMain.handle('openpe:pin-recent', async (event, id, pinned) => {
+  workbenchIpc.handle('openpe:pin-recent', async (event, id, pinned) => {
     trusted(event);
     await recentProjects.setPinned(id, pinned);
     trusted(event);
@@ -326,7 +373,7 @@ app.whenReady().then(async () => {
   });
   let recentPreviewQueue = Promise.resolve();
   const recentPreviews = new Map();
-  ipcMain.handle('openpe:preview-recent', (event, id) => {
+  workbenchIpc.handle('openpe:preview-recent', (event, id) => {
     trusted(event);
     if (typeof id !== 'string' || !/^recent:[a-f0-9]{64}$/.test(id))
       throw new Error('Unknown recent project.');
@@ -350,7 +397,7 @@ app.whenReady().then(async () => {
     recentPreviewQueue = preview.catch(() => {}).finally(() => recentPreviews.delete(id));
     return preview;
   });
-  ipcMain.handle('openpe:accept-open', async (event, openId) => {
+  workbenchIpc.handle('openpe:accept-open', async (event, openId) => {
     trusted(event);
     if (!pendingFile) throw new Error('No validated file is waiting to open.');
     if (openId !== pendingFile.openId)
@@ -371,11 +418,11 @@ app.whenReady().then(async () => {
     trusted(event);
     return fileId;
   });
-  ipcMain.handle('openpe:new', (event) => {
+  workbenchIpc.handle('openpe:new', (event) => {
     trusted(event);
     return fileGrants.create();
   });
-  ipcMain.handle('openpe:open-default-example', async (event, key) => {
+  workbenchIpc.handle('openpe:open-default-example', async (event, key) => {
     trusted(event);
     await prepareExamples();
     trusted(event);
@@ -385,18 +432,18 @@ app.whenReady().then(async () => {
     trusted(event);
     return opened;
   });
-  ipcMain.handle('openpe:list-examples', async (event) => {
+  workbenchIpc.handle('openpe:list-examples', async (event) => {
     trusted(event);
     const result = await exampleProjects.list();
     trusted(event);
     return result;
   });
-  ipcMain.handle('openpe:release-file', (event, fileId) => {
+  workbenchIpc.handle('openpe:release-file', (event, fileId) => {
     trusted(event);
     projectDirectory.release(fileId);
     fileGrants.release(fileId);
   });
-  ipcMain.handle('openpe:reveal-file', async (event, fileId) => {
+  workbenchIpc.handle('openpe:reveal-file', async (event, fileId) => {
     trusted(event);
     const file = fileGrants.location(fileId);
     if (!file) return { status: 'needs-save' };
@@ -418,15 +465,15 @@ app.whenReady().then(async () => {
     trusted(event);
     dirty = Boolean(value);
   });
-  ipcMain.handle('openpe:history-list', (event, { fileId, offset }) => {
+  workbenchIpc.handle('openpe:history-list', (event, { fileId, offset }) => {
     trusted(event);
     return history.list(fileId, offset);
   });
-  ipcMain.handle('openpe:history-read', (event, { fileId, id }) => {
+  workbenchIpc.handle('openpe:history-read', (event, { fileId, id }) => {
     trusted(event);
     return history.read(fileId, id);
   });
-  ipcMain.handle('openpe:history-create', (event, { fileId, source, message }) => {
+  workbenchIpc.handle('openpe:history-create', (event, { fileId, source, message }) => {
     trusted(event);
     return history.create(fileId, source, message);
   });
@@ -459,7 +506,7 @@ app.whenReady().then(async () => {
     },
     atomicWrite,
   });
-  ipcMain.handle('openpe:save', async (event, options) => {
+  workbenchIpc.handle('openpe:save', async (event, options) => {
     trusted(event);
     const saved = await nativeSave(options);
     trusted(event);
@@ -475,7 +522,7 @@ app.whenReady().then(async () => {
     atomicWrite,
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
   });
-  ipcMain.handle('openpe:export', async (event, options) => {
+  workbenchIpc.handle('openpe:export', async (event, options) => {
     trusted(event);
     return nativeExport(options, () => trusted(event));
   });
@@ -484,7 +531,7 @@ app.whenReady().then(async () => {
     nativeImage,
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
   });
-  ipcMain.handle('openpe:export-image', async (event, options) => {
+  workbenchIpc.handle('openpe:export-image', async (event, options) => {
     trusted(event);
     return imageExport(options);
   });
@@ -495,7 +542,7 @@ app.whenReady().then(async () => {
       createEnclosureStep(project, undefined, app.isPackaged ? process.resourcesPath : undefined),
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
   });
-  ipcMain.handle('openpe:export-enclosure', async (event, options) => {
+  workbenchIpc.handle('openpe:export-enclosure', async (event, options) => {
     trusted(event);
     return enclosureExport(options, () => trusted(event));
   });
@@ -517,6 +564,11 @@ app.whenReady().then(async () => {
     // Loading activity can belong to a subframe or same-document navigation.
     // Revoke grants only when the renderer document itself is being replaced.
     if (!details.isMainFrame || details.isSameDocument) return;
+    if (rawMode) {
+      service.setRawKiCadMode(false);
+      rawMode = false;
+      ++rawEpoch;
+    }
     closePending = false;
     pendingFile = null;
     fileGrants.clear();

@@ -1,13 +1,8 @@
 import type { Footprint, Pad, PCB } from './pcb';
 import { footprintPoint } from './pcb-layout';
 import { transformPCBGraphic } from './pcb-geometry';
-import {
-  circlePolygon,
-  graphicPolygons,
-  offsetPolygons,
-  padPolygon,
-  type Polygon,
-} from './pcb-polygons';
+import { circlePolygon, graphicPolygons, offsetPadPolygons, type Polygon } from './pcb-polygons';
+import { padApertureLayers } from './pcb-pad-role';
 
 /** Mask layers describe apertures, rather than the green coating itself. */
 export function padHasMaskOpening(footprint: Footprint, pad: Pad, side: 'front' | 'back') {
@@ -25,9 +20,10 @@ export function solderMaskOpenings(board: PCB, side: 'front' | 'back') {
     footprint.pads
       .filter((pad) => padHasMaskOpening(footprint, pad, side))
       .flatMap((pad) =>
-        offsetPolygons(
-          [padPolygon(footprint, pad)],
-          pad.solderMaskMargin ?? footprint.solderMaskMargin ?? 0,
+        offsetPadPolygons(
+          footprint,
+          pad,
+          padApertureLayers(pad) ? 0 : (pad.solderMaskMargin ?? footprint.solderMaskMargin ?? 0),
         ),
       ),
   );

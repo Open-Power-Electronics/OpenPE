@@ -69,7 +69,18 @@ try {
             error: 'The linked 3D model is unavailable. The 2D footprint can still be used.',
           },
         });
-      return route.fulfill({ json: model });
+      return route.fulfill({
+        json: {
+          ...model,
+          model: {
+            path: 'Fixture.step',
+            rotate: [
+              'rotate',
+              ['xyz', '0', '0', url.searchParams.get('id') === 'Test:Rotated' ? '90' : '0'],
+            ],
+          },
+        },
+      });
     }
     return route.fulfill({
       contentType: 'text/html',
@@ -141,6 +152,10 @@ try {
   for (let i = 0; i < data.length; i += info.channels)
     if (data[i + 1] > data[i] + 15 && data[i + 1] > data[i + 2] + 15) coloredPixels++;
   assert.ok(coloredPixels > 500, 'The retained canvas must actually render the model.');
+  await page.evaluate(() => window.preview('Test:Rotated'));
+  await ready();
+  const rotated = await preview.screenshot();
+  assert.notDeepEqual(rotated, before, 'The library preview applies the declared native rotation.');
   const bounds = await preview.boundingBox();
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await page.mouse.down();
@@ -150,7 +165,7 @@ try {
   await page.mouse.up();
   assert.notDeepEqual(
     await preview.screenshot(),
-    before,
+    rotated,
     'Orbit gestures change the rendered view.',
   );
   const beforeResize = await preview.locator('canvas').evaluate((canvas) => canvas.width);

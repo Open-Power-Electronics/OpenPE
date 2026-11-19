@@ -49,6 +49,7 @@ export type EditorDocument = {
       text: string;
       position: Point;
       size: number;
+      thickness?: number;
       anchor: 'start' | 'middle' | 'end';
       vertical: 'top' | 'middle' | 'bottom';
       excludeFromSimulation?: boolean;
@@ -519,6 +520,7 @@ function fromEditorDocument(document: EditorDocument): Project {
         [
           'font',
           ['size', String(text.size), String(text.size)],
+          ...(text.thickness === undefined ? [] : [['thickness', String(text.thickness)]]),
           ...(text.color ? [['color', ...text.color.map(String)] as SExpr] : []),
           ...(text.bold ? ['bold'] : []),
           ...(text.italic ? ['italic'] : []),

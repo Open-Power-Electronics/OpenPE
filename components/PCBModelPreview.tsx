@@ -86,12 +86,14 @@ import { solderMaskOpenings } from '@/lib/pcb-solder-mask';
 import { saveDrawingPNG } from '@/lib/drawing-export';
 import { previewFootprint, previewModel, type PreviewFootprint } from '@/lib/pcb-preview-cache';
 import { modelPlacement, resolveFootprintModels } from '@/lib/pcb-models';
-import { pcbBounds, footprintPoint, padDrillPosition, createEmptyPCB } from '@/lib/pcb-layout';
+import { pcbBounds, footprintPoint, createEmptyPCB } from '@/lib/pcb-layout';
 import { padCopperLayers } from '@/lib/pcb-connectivity';
+import { padHasElectricalPin } from '@/lib/pcb-pad-role';
 import { copperFillOpacity } from '@/lib/pcb-display';
 import {
   modelBoardPolygons,
   circlePolygon,
+  padDrillPolygon,
   filledCopperPolygons,
   graphicPolygons,
   padPolygon,
@@ -1052,9 +1054,7 @@ function PCBModelPreview({
             new THREE.Vector3(boardFrame.max.x, -boardFrame.min.y, 0),
           );
       const holes: Polygon[] = board.footprints.flatMap((f) =>
-        f.pads
-          .filter((p) => p.drill)
-          .map((p) => ({ outer: circlePolygon(padDrillPosition(f, p), p.drill! / 2), holes: [] })),
+        f.pads.filter((p) => p.drill).map((p) => ({ outer: padDrillPolygon(f, p), holes: [] })),
       );
       holes.push(...board.vias.map((v) => ({ outer: circlePolygon(v, v.drill / 2), holes: [] })));
       const body = subtractPolygons(boundary, holes);
@@ -1313,7 +1313,7 @@ function PCBModelPreview({
           await yieldBuild();
           estimateTask = performance.now();
         }
-        if (!footprint.pads.some((p) => p.type !== 'np_thru_hole')) continue;
+        if (!footprint.pads.some(padHasElectricalPin)) continue;
         const drawings = footprint.graphics.filter(
           (g) => !g.text && (g.layer.endsWith('.Fab') || g.layer.endsWith('.CrtYd')),
         );

@@ -296,13 +296,16 @@ try {
   await page.getByPlaceholder('Work with Codex', { exact: true }).waitFor();
   assert.equal(await composerHeight(), loadingHeight, 'Model loading preserves composer height.');
   assert.equal(await effort.locator('svg').count(), 0, 'The inline effort field is text-only.');
-  assert.equal(
-    await effort.locator('.select-value').evaluate((label) => getComputedStyle(label).textAlign),
-    'start',
-  );
-  const effortBox = await effort.boundingBox();
-  const gapToSend = (await send.boundingBox()).x - (effortBox.x + effortBox.width);
-  assert.ok(gapToSend >= 0 && gapToSend <= 6, 'The effort button sits near the Send button.');
+  const checkEffortLabelGap = async () => {
+    const textRight = await effort.locator('.select-value').evaluate((label) => {
+      const text = document.createRange();
+      text.selectNodeContents(label);
+      return text.getBoundingClientRect().right;
+    });
+    const gap = (await send.boundingBox()).x - textRight;
+    assert.ok(gap >= 0 && gap <= 12, 'The visible effort label sits near the Send button.');
+  };
+  await checkEffortLabelGap();
   await effort.click();
   const effortMenu = page.getByRole('listbox', { name: 'Reasoning effort', exact: true });
   assert.deepEqual(await effortMenu.getByRole('option').allTextContents(), [
@@ -315,27 +318,23 @@ try {
     'Max',
     'Ultra',
   ]);
-  const checkEffortWidth = async () => {
-    const menuWidth = (await effortMenu.boundingBox()).width;
-    assert.equal(menuWidth, (await effort.boundingBox()).width);
-    assert.ok(menuWidth >= 100, 'The effort menu has room for comfortably padded options.');
-    const remaining = await effortMenu.locator('strong').evaluateAll((labels) =>
-      labels.map((label) => {
-        const text = document.createRange();
-        text.selectNodeContents(label);
-        return label.getBoundingClientRect().width - text.getBoundingClientRect().width;
-      }),
+  const checkEffortPlacement = async () => {
+    const menuBox = await effortMenu.boundingBox();
+    const fieldBox = await effort.boundingBox();
+    assert.ok(menuBox.width > fieldBox.width, 'The menu can grow beyond the compact field.');
+    assert.ok(Math.abs(menuBox.x + menuBox.width - fieldBox.x - fieldBox.width) < 1);
+    assert.ok(Math.abs(fieldBox.y - menuBox.y - menuBox.height - 8) < 1);
+    const truncated = await effortMenu.locator('strong').evaluateAll((labels) =>
+      labels.filter((label) => label.scrollWidth > label.clientWidth).map((label) => label.textContent),
     );
-    assert.ok(
-      remaining.every((space) => space >= -1),
-      `Every effort fits on one line: ${remaining}`,
-    );
+    assert.deepEqual(truncated, [], 'All effort options show their full labels.');
   };
-  await checkEffortWidth();
+  await checkEffortPlacement();
   await page.keyboard.press('Escape');
   await page.evaluate(() => document.documentElement.style.setProperty('--font-step', '4px'));
+  await checkEffortLabelGap();
   await effort.click();
-  await checkEffortWidth();
+  await checkEffortPlacement();
   await page.evaluate(() => document.documentElement.style.removeProperty('--font-step'));
   await page.keyboard.press('Escape');
   await main.evaluate((element) => (element.style.width = ''));
@@ -346,6 +345,7 @@ try {
     ['Ultra', 'ultra'],
   ]) {
     await choose(effort, label);
+    await checkEffortLabelGap();
     await submitEffort(value);
   }
 
@@ -706,6 +706,7 @@ try {
   assert.equal((await contextPicker.textContent())?.trim(), '500K');
   assert.equal(await fastSwitch.getAttribute('aria-checked'), 'true');
   await effort.click();
+  await checkEffortPlacement();
   assert.deepEqual(await page.getByRole('option').allTextContents(), [
     'Low',
     'Medium',

@@ -3,22 +3,43 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { Search, SearchX, Library, RotateCw, Check, ChevronRight } from 'lucide-react';
+import {
+  CircleAlert,
+  Search,
+  SearchX,
+  Library,
+  RotateCw,
+  ChevronDown,
+  Check,
+  ChevronRight,
+  ChevronUp,
+  Square,
+  SquareCheck,
+} from 'lucide-react';
 import { api } from '@/lib/bridge';
 import type { CapabilityHost } from '@/api/capabilities';
 import {
   catalogSource,
+  isLibraryAssetUnavailable,
   isOnlineLibrary,
   propertyValue,
   unitGraphics,
   type LibraryEntry,
+  type LibraryPrice,
   type SymbolDetail,
 } from '@/lib/library';
+import {
+  isLibrarySearchProgress,
+  readLibrarySearch,
+  type LibrarySearchPage,
+  type LibrarySearchProgress,
+} from '@/lib/library-search';
 import { children, val, type SExpr } from '@/lib/sexpr';
 import Dialog from './Dialog';
 import Select from './Select';
@@ -27,8 +48,8 @@ import LibrarySourceSelect, {
   type LibraryCategoryStatus,
 } from './LibrarySourceSelect';
 import SymbolPreview from './SymbolPreview';
-import FootprintPreview from './FootprintPreview';
-import WorkspaceLoading from './WorkspaceLoading';
+import FootprintPreview, { canPreviewFootprint } from './FootprintPreview';
+import WorkspaceLoading, { LoadingProgress } from './WorkspaceLoading';
 const ModelPreview = lazy(() => import('./ModelPreview'));
 export type FootprintDetail = LibraryEntry & {
   footprint: SExpr;
@@ -36,6 +57,66 @@ export type FootprintDetail = LibraryEntry & {
   models: { path: string }[];
 };
 type Detail = SymbolDetail | FootprintDetail;
+const symbolColumns = [
+  ['name', 'Name'],
+  ['package', 'Package'],
+  ['footprint', 'Footprint'],
+  ['model', 'Model'],
+] as const;
+type SymbolColumn = (typeof symbolColumns)[number][0];
+type SymbolSort = { column: SymbolColumn; direction: 'ascending' | 'descending' };
+type AssetStatus = 'yes' | 'no' | 'unknown';
+type SymbolAssets = { footprint: AssetStatus; model: AssetStatus };
+const symbolAssetStates: Record<
+  NonNullable<LibraryEntry['footprintPreview']> | 'unknown',
+  SymbolAssets
+> = {
+  unavailable: { footprint: 'no', model: 'no' },
+  '2d': { footprint: 'yes', model: 'no' },
+  '2d-and-3d': { footprint: 'yes', model: 'yes' },
+  unknown: { footprint: 'unknown', model: 'unknown' },
+};
+const assetRank: Record<AssetStatus, number> = { yes: 1, no: 0, unknown: 0 };
+const assetLabels: Record<AssetStatus, string> = {
+  yes: 'Available',
+  no: 'Unavailable',
+  unknown: 'Unknown',
+};
+const catalogCollator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+function symbolPackage(entry: LibraryEntry) {
+  return entry.package || entry.footprint?.split(':').at(-1) || '';
+}
+
+function listedSymbolAssets(entry: LibraryEntry) {
+  return symbolAssetStates[entry.footprintPreview ?? 'unknown'];
+}
+
+function compareSymbolRows(
+  first: LibraryEntry,
+  second: LibraryEntry,
+  { column, direction }: SymbolSort,
+) {
+  const sign = direction === 'ascending' ? 1 : -1;
+  if (column === 'name') return sign * catalogCollator.compare(first.name, second.name);
+  if (column === 'package') {
+    const firstPackage = symbolPackage(first);
+    const secondPackage = symbolPackage(second);
+    return (
+      Number(!firstPackage) - Number(!secondPackage) ||
+      sign * catalogCollator.compare(firstPackage, secondPackage)
+    );
+  }
+  const firstAsset = listedSymbolAssets(first)[column];
+  const secondAsset = listedSymbolAssets(second)[column];
+  return (
+    Number(firstAsset === 'unknown') - Number(secondAsset === 'unknown') ||
+    sign * (assetRank[firstAsset] - assetRank[secondAsset])
+  );
+}
+
+const noModel = 'This footprint has no 3D model.';
+const noFootprintPreview = 'This footprint has no supported 2D preview.';
 function readLibraryDetail(
   kind: 'symbols' | 'footprints',
   id: string,
@@ -49,7 +130,63 @@ function readLibraryDetail(
   ) as Promise<Detail>;
 }
 
-function OnlineSymbolPreview({
+function LibraryModelSelect({
+  models,
+  index,
+  unavailable,
+  onChange,
+}: {
+  models: FootprintDetail['models'];
+  index: number;
+  unavailable?: Record<number, string>;
+  onChange: (index: number) => void;
+}) {
+  return (
+    <Select
+      label="3D model"
+      value={String(index)}
+      options={models.map(({ path }, i) => ({
+        value: String(i),
+        label: path.split('/').at(-1)!,
+        disabled: !!unavailable?.[i],
+        description: unavailable?.[i],
+      }))}
+      onChange={(value) => onChange(Number(value))}
+    />
+  );
+}
+
+const previewTabs = ['symbol', 'footprint', '3d'] as const;
+type PreviewTab = (typeof previewTabs)[number];
+
+function LibraryPreviewStage({
+  active,
+  className,
+  previews,
+  fallback,
+}: {
+  active: PreviewTab;
+  className: string;
+  previews: Partial<Record<PreviewTab, ReactNode>>;
+  fallback?: ReactNode;
+}) {
+  const [visited, setVisited] = useState(() => new Set([active]));
+  if (!visited.has(active)) setVisited(new Set([...visited, active]));
+  return (
+    <div className={className}>
+      {previewTabs.map((tab) =>
+        visited.has(tab) && previews[tab] ? (
+          <div key={tab} className="library-preview-pane" hidden={tab !== active}>
+            {previews[tab]}
+          </div>
+        ) : null,
+      )}
+      {fallback}
+    </div>
+  );
+}
+
+function LibrarySymbolPreview({
   detail,
   unit,
   host,
@@ -64,12 +201,34 @@ function OnlineSymbolPreview({
   onError: (message: string) => void;
   retry: number;
 }) {
-  const [tab, setTab] = useState<'symbol' | 'footprint' | '3d'>('symbol');
+  const [tab, setTab] = useState<PreviewTab>('symbol');
   const [footprint, setFootprint] = useState<FootprintDetail | null>(null);
-  const showPackage = tab !== 'symbol';
-  const identity = detail.footprint;
+  const [packageUnavailable, setPackageUnavailable] = useState('');
+  const [modelIndex, setModelIndex] = useState(0);
+  const [unavailableModels, setUnavailableModels] = useState<Record<number, string>>({});
+  const identity = (detail.footprint || propertyValue(detail.symbol, 'Footprint')).trim();
+  const packageReason =
+    packageUnavailable ||
+    (detail.footprintPreview === 'unavailable' ? detail.warning || noFootprintPreview : '') ||
+    (!identity ? 'This symbol has no linked footprint.' : '');
+  const footprintReason =
+    packageReason ||
+    (footprint && !canPreviewFootprint(footprint.footprint) ? noFootprintPreview : '');
+  const hasNoModel = footprint ? !footprint.models.length : detail.footprintPreview === '2d';
+  const modelUnavailable = unavailableModels[modelIndex];
+  const allModelsUnavailable = !!footprint?.models.every((_, index) => unavailableModels[index]);
+  const modelReason =
+    packageReason || (hasNoModel ? noModel : allModelsUnavailable ? modelUnavailable : '');
+  let activeTab = tab;
+  if (activeTab === '3d' && modelReason) activeTab = 'footprint';
+  if (activeTab === 'footprint' && footprintReason) activeTab = 'symbol';
+  const showPackage = activeTab !== 'symbol';
+  const previewNotice =
+    modelUnavailable ||
+    (tab === '3d' && hasNoModel && noModel) ||
+    (!packageReason && !footprint && detail.warning);
   useEffect(() => {
-    if (!showPackage || !identity || footprint) return;
+    if (!showPackage || !identity || footprint || packageReason) return;
     const control = new AbortController();
     onError('');
     void readLibraryDetail('footprints', identity, control.signal, host)
@@ -79,50 +238,76 @@ function OnlineSymbolPreview({
         if (!control.signal.aborted) setFootprint(loaded);
       })
       .catch((error) => {
-        if (!control.signal.aborted) onError(error.message);
+        if (control.signal.aborted) return;
+        if (isLibraryAssetUnavailable(error)) setPackageUnavailable(error.message);
+        else onError(error.message);
       });
     return () => control.abort();
-  }, [showPackage, identity, footprint, retry, host, onError]);
+  }, [showPackage, identity, footprint, packageReason, retry, host, onError]);
   return (
     <>
-      {identity && (
-        <div className="preview-tabs">
-          <button
-            aria-pressed={tab === 'symbol'}
-            onClick={() => {
-              onError('');
-              setTab('symbol');
-            }}
-          >
-            Symbol
-          </button>
-          <button aria-pressed={tab === 'footprint'} onClick={() => setTab('footprint')}>
-            Footprint
-          </button>
-          <button
-            aria-pressed={tab === '3d'}
-            disabled={footprint?.models.length === 0}
-            onClick={() => setTab('3d')}
-          >
-            3D model
-          </button>
-        </div>
-      )}
-      <div className="symbol-detail-preview">
-        {!showPackage ? (
-          <SymbolPreview library={detail.symbol} unit={unit} />
-        ) : error ? null : !footprint ? (
-          <WorkspaceLoading panel label="Loading footprint preview" />
-        ) : tab === 'footprint' ? (
-          <FootprintPreview footprint={footprint.footprint} />
-        ) : footprint.models.length ? (
-          <Suspense fallback={<WorkspaceLoading panel label="Loading 3D model" />}>
-            <ModelPreview id={footprint.id} />
-          </Suspense>
-        ) : (
-          <p>This footprint has no 3D model.</p>
-        )}
+      <div className="preview-tabs">
+        <button
+          aria-pressed={activeTab === 'symbol'}
+          onClick={() => {
+            onError('');
+            setTab('symbol');
+          }}
+        >
+          Symbol
+        </button>
+        <button
+          aria-pressed={activeTab === 'footprint'}
+          disabled={!!footprintReason}
+          title={footprintReason || undefined}
+          onClick={() => setTab('footprint')}
+        >
+          Footprint
+        </button>
+        <button
+          aria-pressed={activeTab === '3d'}
+          disabled={!!modelReason}
+          title={modelReason || undefined}
+          onClick={() => setTab('3d')}
+        >
+          3D model
+        </button>
       </div>
+      <LibraryPreviewStage
+        active={activeTab}
+        className="symbol-detail-preview"
+        previews={{
+          symbol: <SymbolPreview library={detail.symbol} unit={unit} interactive />,
+          footprint: footprint && <FootprintPreview footprint={footprint.footprint} />,
+          '3d': footprint && !modelReason && !modelUnavailable && (
+            <Suspense fallback={<WorkspaceLoading panel label="Loading 3D model" />}>
+              <ModelPreview
+                key={modelIndex}
+                id={footprint.id}
+                index={modelIndex}
+                active={activeTab === '3d'}
+                onUnavailable={(message) =>
+                  setUnavailableModels((current) => ({ ...current, [modelIndex]: message }))
+                }
+              />
+            </Suspense>
+          ),
+        }}
+        fallback={
+          showPackage &&
+          !error &&
+          !footprint && <WorkspaceLoading panel label="Loading footprint preview" />
+        }
+      />
+      {activeTab === '3d' && footprint && footprint.models.length > 1 && (
+        <LibraryModelSelect
+          models={footprint.models}
+          index={modelIndex}
+          unavailable={unavailableModels}
+          onChange={setModelIndex}
+        />
+      )}
+      {previewNotice && <p role="status">{previewNotice}</p>}
     </>
   );
 }
@@ -234,6 +419,170 @@ function LibraryInfoRows({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
+function isLibraryPrice(value: unknown): value is LibraryPrice {
+  const quote = value as Partial<LibraryPrice> | null;
+  return (
+    quote?.currency === 'USD' &&
+    typeof quote.checkedAt === 'number' &&
+    Number.isSafeInteger(quote.checkedAt) &&
+    quote.checkedAt > 0 &&
+    quote.checkedAt <= 8.64e15 &&
+    Array.isArray(quote.offers) &&
+    quote.offers.length <= 4 &&
+    quote.offers.every(
+      (offer) =>
+        offer &&
+        typeof offer.sku === 'string' &&
+        /^[A-Za-z0-9_-]{1,64}$/.test(offer.sku) &&
+        (offer.manufacturer === null ||
+          (typeof offer.manufacturer === 'string' &&
+            offer.manufacturer.trim().length > 0 &&
+            offer.manufacturer.length <= 200)) &&
+        (offer.stock === undefined || (Number.isSafeInteger(offer.stock) && offer.stock >= 0)) &&
+        Array.isArray(offer.tiers) &&
+        offer.tiers.length > 0 &&
+        offer.tiers.length <= 32 &&
+        offer.tiers.every(
+          (tier: LibraryPrice['offers'][number]['tiers'][number]) =>
+            tier &&
+            Number.isSafeInteger(tier.quantity) &&
+            tier.quantity > 0 &&
+            Number.isFinite(tier.unitPrice) &&
+            tier.unitPrice > 0,
+        ),
+    )
+  );
+}
+
+const priceCurrency = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 8,
+});
+const priceQuantity = new Intl.NumberFormat('en-US');
+
+function LibraryPricing({
+  id,
+  composing,
+  onKeyDown,
+}: {
+  id: string;
+  composing: () => boolean;
+  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
+}) {
+  const pending = useRef<AbortController | null>(null);
+  const [quote, setQuote] = useState<LibraryPrice | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failure, setFailure] = useState<'service' | 'quote' | null>(null);
+  useEffect(() => () => pending.current?.abort(), []);
+
+  async function refresh() {
+    if (pending.current || composing()) return;
+    const request = new AbortController();
+    pending.current = request;
+    setLoading(true);
+    setFailure(null);
+    try {
+      const response = await api(`library-price?id=${encodeURIComponent(id)}`, {
+        signal: request.signal,
+        cache: 'no-store',
+      });
+      const mediaType = response.headers
+        .get('content-type')
+        ?.split(';', 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (mediaType !== 'application/json') {
+        if (!request.signal.aborted) setFailure('service');
+        return;
+      }
+      const data: unknown = await response.json();
+      if (request.signal.aborted) return;
+      if (isLibraryPrice(data)) setQuote(data);
+      else setFailure('quote');
+    } catch {
+      if (!request.signal.aborted) setFailure('quote');
+    } finally {
+      pending.current = null;
+      if (!request.signal.aborted) setLoading(false);
+    }
+  }
+
+  const checkedAt = quote ? new Date(quote.checkedAt) : null;
+  const hasPrices = Boolean(quote?.offers.length);
+  let status = '';
+  if (loading) status = 'Checking HQ Online…';
+  else if (failure === 'service')
+    status = window.openpe
+      ? 'Price service unavailable. Restart OpenPE and try again.'
+      : 'Price service unavailable. Reload the browser preview and try again.';
+  else if (failure) status = 'Could not check prices. Try again.';
+  else if (quote && !hasPrices) status = 'No matching price found on HQ Online.';
+  return (
+    <section className="library-info-section library-pricing" aria-label="Price">
+      <div className="library-pricing-heading">
+        <div>
+          <h3>Price</h3>
+          <p className="library-price-source">HQ Online · USD</p>
+        </div>
+        <button
+          type="button"
+          className="dialog-button secondary"
+          aria-disabled={loading}
+          onClick={() => void refresh()}
+          onKeyDown={onKeyDown}
+        >
+          <RotateCw size={14} aria-hidden="true" />
+          {failure ? 'Retry price check' : quote ? 'Refresh price' : 'Check price'}
+        </button>
+      </div>
+      <p className="library-price-status" role="status" data-error={Boolean(failure)}>
+        {failure && <CircleAlert size={15} aria-hidden="true" />}
+        {status && <span>{status}</span>}
+      </p>
+      {quote && hasPrices && (
+        <div className="library-price-offers">
+          {quote.offers.map(({ sku, manufacturer, stock, tiers }) => (
+            <table className="library-price-table" key={sku}>
+              <caption>
+                <span>
+                  <span className="library-price-identity">
+                    <strong>{manufacturer ?? 'Manufacturer not listed'}</strong>
+                    <span>{sku}</span>
+                  </span>
+                  {stock !== undefined && <span>Stock {priceQuantity.format(stock)}</span>}
+                </span>
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Quantity</th>
+                  <th scope="col">Unit price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tiers.map((tier) => (
+                  <tr key={tier.quantity}>
+                    <td>{priceQuantity.format(tier.quantity)}+</td>
+                    <td>{priceCurrency.format(tier.unitPrice)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ))}
+        </div>
+      )}
+      {checkedAt && (hasPrices || (!loading && !failure)) && (
+        <p className="library-price-checked">
+          {failure || loading ? 'Last checked ' : 'Checked '}
+          <time dateTime={checkedAt.toISOString()} title={checkedAt.toLocaleString('en-US')}>
+            {checkedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+          </time>
+        </p>
+      )}
+    </section>
+  );
+}
+
 function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) {
   const symbol = 'symbol' in detail ? detail : null;
   const footprint = symbol
@@ -269,7 +618,7 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
             rows={[
               ['Units', symbol.units],
               [symbol.units > 1 ? 'Pins in unit' : 'Pins', pins],
-              ['Reference prefix', propertyValue(symbol.symbol, 'Reference') || 'Not provided'],
+              ['Prefix', propertyValue(symbol.symbol, 'Reference') || 'Not provided'],
             ]}
           />
         </LibraryInfoSection>
@@ -305,6 +654,10 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
     </div>
   );
 }
+type ModelAvailability = { detail: FootprintDetail; unavailable: Record<number, string> };
+
+const symbolBatchSize = 16;
+
 type BrowseSnapshot = {
   ready: boolean;
   query: string;
@@ -312,15 +665,16 @@ type BrowseSnapshot = {
   library: string;
   category: string;
   entries: LibraryEntry[];
+  symbolResultLimit: number;
   total: number;
   offset: number;
   nextOffset: number | null;
-  previewRequested: boolean;
   selected: string;
   detail: Detail | null;
   unit: number;
   tab: '2d' | '3d';
   model: number;
+  modelAvailability: ModelAvailability | null;
 };
 export default function LibraryChooser({
   kind,
@@ -355,17 +709,21 @@ export default function LibraryChooser({
     [library, setLibrary] = useState(initialLibrary);
   const [category, setCategory] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState(initialSearch);
+  const [symbolSort, setSymbolSort] = useState<SymbolSort | null>(null);
   const [entries, setEntries] = useState<LibraryEntry[]>([]),
     [libraries, setLibraries] = useState<string[]>([]);
   const [total, setTotal] = useState(0),
     [offset, setOffset] = useState(0),
     [selected, setSelected] = useState('');
+  const [symbolResultLimit, setSymbolResultLimit] = useState(symbolBatchSize);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [resultsError, setResultsError] = useState('');
-  const [previewRequested, setPreviewRequested] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<LibrarySearchProgress | null>(null);
   const [previewRetry, setPreviewRetry] = useState(0);
   const [packagePreviewError, setPackagePreviewError] = useState('');
   const [packagePreviewRetry, setPackagePreviewRetry] = useState(0);
+  const [footprintUnavailable, setFootprintUnavailable] = useState(false);
+  const [modelAvailability, setModelAvailability] = useState<ModelAvailability | null>(null);
   const [retry, setRetry] = useState(0);
   const [categoryStatus, setCategoryStatus] = useState<LibraryCategoryStatus>({
     source: '',
@@ -389,41 +747,66 @@ export default function LibraryChooser({
   const restoredDetail = useRef<BrowseSnapshot | null>(null);
   const librarySource = catalogSource(library);
   const online = isOnlineLibrary(library);
-  const previewEntry =
-    online && !previewRequested ? entries.find((entry) => entry.id === selected) : undefined;
+  const displayedEntries = useMemo(() => {
+    if (kind !== 'symbols') return entries;
+    const visible = entries.slice(0, symbolResultLimit);
+    return symbolSort
+      ? visible.toSorted((first, second) => compareSymbolRows(first, second, symbolSort))
+      : visible;
+  }, [entries, kind, symbolResultLimit, symbolSort]);
+  const selectedEntry =
+    detail?.id === selected ? detail : entries.find((entry) => entry.id === selected);
+  const failedPreviewEntry = error ? selectedEntry : undefined;
+  const detailHeading =
+    detail?.id === selected || selectedEntry?.library === 'NextPCB'
+      ? selectedEntry
+      : failedPreviewEntry;
   const failedCategories = categoryStatus.source === librarySource && Boolean(categoryStatus.error);
   const retryingCategories = categoryReload?.source === librarySource;
-  const suggestedCategoryId =
-    library === 'NextPCB' && !category && !submittedQuery.trim()
-      ? categoryStatus.browseCategoryId
-      : undefined;
-  const searchCategory = category || suggestedCategoryId || '';
-  const awaitingSearch = librarySource === 'NextPCB' && !submittedQuery.trim() && !searchCategory;
-  const waitingCategories =
-    librarySource === 'NextPCB' &&
-    !submittedQuery.trim() &&
-    (categoryStatus.source !== librarySource || categoryStatus.pending);
-  const loadingInitial =
-    retryingCategories ||
-    (!error && !resultsError && ((!awaitingSearch && busy) || waitingCategories));
-  const hasEntries = entries.length > 0;
-  const canLoadMore = isOnlineLibrary(library) && nextOffset !== null && !resultsError;
-  const EmptyIcon = awaitingSearch ? Search : SearchX;
+  const needsSymbolPage =
+    kind === 'symbols' &&
+    entries.length < symbolResultLimit &&
+    !resultsError &&
+    nextOffset !== null &&
+    nextOffset > offset;
+  const loadingDefaultPages =
+    kind === 'symbols' && symbolResultLimit === symbolBatchSize && offset > 0;
+  const resultsLoading = busy || needsSymbolPage;
+  const loadingInitial = !error && !resultsError && resultsLoading;
+  const visibleCount = displayedEntries.length;
+  const hasEntries = visibleCount > 0;
+  const canLoadMore =
+    (online || kind === 'symbols') &&
+    (nextOffset !== null || visibleCount < entries.length) &&
+    !resultsError;
   const chooseLabel = actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign footprint');
-  const refreshDisabled =
-    busy || waitingCategories || retryingCategories || (awaitingSearch && !failedCategories);
+  const refreshingPreview = !!selected && !detail && !error;
+  const refreshDisabled = resultsLoading || retryingCategories || refreshingPreview;
   function blockComposingActivation(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) {
       event.preventDefault();
       event.stopPropagation();
     }
   }
+  function sortSymbols(column: SymbolColumn) {
+    if (composing.current) return;
+    setSymbolSort((previous) => {
+      const first = column === 'footprint' || column === 'model' ? 'descending' : 'ascending';
+      if (previous?.column !== column) return { column, direction: first };
+      if (previous.direction !== first) return null;
+      return { column, direction: first === 'ascending' ? 'descending' : 'ascending' };
+    });
+  }
   function invalidate() {
+    if (results.current) results.current.scrollTop = 0;
     setBusy(true);
+    setBatchProgress(null);
     setResultsError('');
-    setPreviewRequested(false);
     setPackagePreviewError('');
+    setFootprintUnavailable(false);
+    setModelAvailability(null);
     setEntries([]);
+    setSymbolResultLimit(symbolBatchSize);
     setTotal(0);
     setNextOffset(null);
     setSelected('');
@@ -431,14 +814,19 @@ export default function LibraryChooser({
     chosen.current = false;
   }
   function loadMore() {
-    if (busy || resultsError || nextOffset === null) return;
-    setBusy(true);
-    setOffset(nextOffset);
+    if (resultsLoading || resultsError || (nextOffset === null && visibleCount === entries.length))
+      return;
+    if (kind === 'symbols') setSymbolResultLimit(symbolResultLimit + symbolBatchSize);
+    else if (nextOffset !== null) {
+      setBusy(true);
+      setOffset(nextOffset);
+    }
   }
   function selectEntry(id: string) {
-    if (online) setPreviewRequested(true);
     if (id === selected) return;
     setPackagePreviewError('');
+    setFootprintUnavailable(false);
+    setModelAvailability(null);
     setDetail(null);
     setSelected(id);
     chosen.current = false;
@@ -459,6 +847,7 @@ export default function LibraryChooser({
       return;
     }
     if (error && selected) {
+      setError('');
       setPreviewRetry((value) => value + 1);
       return;
     }
@@ -481,21 +870,22 @@ export default function LibraryChooser({
     const nextSource = catalogSource(nextLibrary);
     if (source !== nextSource)
       sourceSnapshots.current.set(source, {
-        ready: !busy && !resultsError,
+        ready: !resultsLoading && !resultsError,
         query,
         submittedQuery,
         library,
         category,
         entries,
+        symbolResultLimit,
         total,
         offset,
         nextOffset,
-        previewRequested,
         selected,
         detail,
         unit,
         tab,
         model,
+        modelAvailability,
       });
     const previous = source !== nextSource ? sourceSnapshots.current.get(nextSource) : undefined;
     if (previous) {
@@ -515,15 +905,16 @@ export default function LibraryChooser({
       restoredDetail.current = previous;
       setSubmittedQuery(previous.submittedQuery);
       setEntries(previous.entries);
+      setSymbolResultLimit(previous.symbolResultLimit);
       setTotal(previous.total);
       setOffset(previous.offset);
       setNextOffset(previous.nextOffset);
-      setPreviewRequested(previous.previewRequested);
       setSelected(previous.selected);
       setDetail(previous.detail);
       setUnit(previous.unit);
       setTab(previous.tab);
       setModel(previous.model);
+      setModelAvailability(previous.modelAvailability);
       setBusy(false);
     }
   }
@@ -537,99 +928,85 @@ export default function LibraryChooser({
     )
       return;
     setCategoryReload(null);
-    if (!categoryStatus.error && !awaitingSearch) {
-      invalidate();
-      setOffset(0);
-      setRetry((value) => value + 1);
-    }
-  }, [categoryReload, librarySource, categoryStatus, awaitingSearch]);
+  }, [categoryReload, librarySource, categoryStatus]);
   useEffect(() => {
     if (restoredSearch.current) {
       restoredSearch.current = false;
       return;
     }
     const control = new AbortController();
-    if (awaitingSearch || retryingCategories) {
-      if (!retryingCategories) setBusy(false);
-      return () => control.abort();
-    }
     setBusy(true);
+    setBatchProgress(null);
     setResultsError('');
     if (offset === 0) {
       setError('');
-      setPreviewRequested(false);
       setEntries([]);
       setTotal(0);
       setNextOffset(null);
       setSelected('');
       setDetail(null);
     }
-    const start = () =>
-      void (
-        capabilityHost
-          ? capabilityHost
-              .query(
-                'library.search',
-                {
-                  kind,
-                  query: submittedQuery,
-                  library,
-                  offset,
-                  ...(searchCategory ? { category: searchCategory } : {}),
-                },
-                { signal: control.signal },
-              )
-              .then((data) => ({ json: async () => data }))
-          : api(
-              `libraries/${kind}?q=${encodeURIComponent(submittedQuery)}&library=${encodeURIComponent(library)}&offset=${offset}${searchCategory ? `&category=${encodeURIComponent(searchCategory)}` : ''}`,
-              { signal: control.signal },
-            )
-      )
-        .then((r) => r.json())
-        .then((data) => {
-          if (control.signal.aborted) return;
-          const incoming = data.entries as LibraryEntry[];
-          setEntries((current) => {
-            const combined: LibraryEntry[] = offset === 0 ? [] : [...current];
-            const ids = new Set(combined.map((entry) => entry.id));
-            for (const entry of incoming) {
-              if (ids.has(entry.id)) continue;
-              ids.add(entry.id);
-              combined.push(entry);
-            }
-            return combined;
-          });
-          if (isOnlineLibrary(library)) {
-            setNextOffset(data.nextOffset);
-          } else {
-            const consumed = offset + incoming.length;
-            setNextOffset(incoming.length && consumed < data.total ? consumed : null);
-            setLibraries(data.libraries);
-            setTotal(data.total);
+    const input = {
+      kind,
+      query: submittedQuery,
+      library,
+      offset,
+      ...(kind === 'symbols' ? { includeAssetStatus: true } : {}),
+      ...(category ? { category } : {}),
+    };
+    const onProgress = (value: unknown) => {
+      if (!control.signal.aborted && isLibrarySearchProgress(value)) setBatchProgress(value);
+    };
+    const search = capabilityHost
+      ? (capabilityHost.query('library.search', input, {
+          signal: control.signal,
+          onProgress,
+        }) as Promise<LibrarySearchPage>)
+      : readLibrarySearch(input, control.signal, onProgress);
+    void search
+      .then((data) => {
+        if (control.signal.aborted) return;
+        const incoming = data.entries;
+        setEntries((current) => {
+          const combined = offset === 0 ? [] : [...current];
+          const ids = new Set(combined.map((entry) => entry.id));
+          for (const entry of incoming) {
+            if (ids.has(entry.id)) continue;
+            ids.add(entry.id);
+            combined.push(entry);
           }
-          if (incoming.length) setSelected((current) => current || incoming[0].id);
-          setBusy(false);
-        })
-        .catch((e) => {
-          if (!control.signal.aborted) {
-            setResultsError(e.message);
-            setBusy(false);
-          }
+          return combined;
         });
-    start();
+        const consumed = offset + incoming.length;
+        const next: number | null =
+          isOnlineLibrary(library) || kind === 'symbols'
+            ? (data.nextOffset ?? null)
+            : incoming.length && consumed < data.total
+              ? consumed
+              : null;
+        setNextOffset(next);
+        if (!isOnlineLibrary(library)) {
+          setLibraries(data.libraries);
+          setTotal(data.total);
+        }
+        if (incoming.length) setSelected((current) => current || incoming[0].id);
+        setBatchProgress(null);
+        setBusy(false);
+      })
+      .catch((e) => {
+        if (!control.signal.aborted) {
+          setResultsError(e.message);
+          setBatchProgress(null);
+          setBusy(false);
+        }
+      });
     return () => control.abort();
-  }, [
-    kind,
-    submittedQuery,
-    library,
-    category,
-    searchCategory,
-    offset,
-    retry,
-    capabilityHost,
-    awaitingSearch,
-    retryingCategories,
-  ]);
+  }, [kind, submittedQuery, library, category, offset, retry, capabilityHost]);
+  useEffect(() => {
+    if (busy || !needsSymbolPage || nextOffset === null) return;
+    setBusy(true);
+    setOffset(nextOffset);
+  }, [busy, needsSymbolPage, nextOffset]);
   useEffect(() => {
     const restored = restoredDetail.current;
     restoredDetail.current = null;
@@ -639,31 +1016,57 @@ export default function LibraryChooser({
     }
     setDetail(null);
     setError('');
+    setFootprintUnavailable(false);
+    setModelAvailability(null);
     setUnit(1);
     setTab(online ? '2d' : initialPreview);
     setModel(0);
-    if (!selected || (online && !previewRequested)) return;
+    if (!selected) return;
     const control = new AbortController();
     void readLibraryDetail(kind, selected, control.signal, capabilityHost)
       .then((value) => {
         const data = value as Detail;
-        if (!control.signal.aborted) setDetail(data);
+        if (control.signal.aborted) return;
+        setDetail(data);
+        const { id, footprintPreview } = data;
+        if ('symbol' in data && data.library === 'JLCPCB' && footprintPreview)
+          setEntries((current) =>
+            current.map((entry) => (entry.id === id ? { ...entry, footprintPreview } : entry)),
+          );
       })
       .catch((e) => {
-        if (!control.signal.aborted) setError(e.message);
+        if (!control.signal.aborted) {
+          setError(e.message);
+          if (kind === 'footprints') setFootprintUnavailable(isLibraryAssetUnavailable(e));
+        }
       });
     return () => control.abort();
-  }, [kind, selected, capabilityHost, initialPreview, online, previewRequested, previewRetry]);
+  }, [kind, selected, capabilityHost, initialPreview, online, previewRetry]);
+  const footprintDetail = detail && 'models' in detail ? detail : null;
+  const modelErrors =
+    modelAvailability?.detail === footprintDetail ? modelAvailability.unavailable : undefined;
+  const modelError = modelErrors?.[model];
+  const hasPreviewableModel = footprintDetail?.models.some((_, index) => !modelErrors?.[index]);
+  const modelReason = hasPreviewableModel ? undefined : modelError || noModel;
+  const show3d = tab === '3d' && !modelReason;
+  const footprintReason =
+    footprintDetail && !canPreviewFootprint(footprintDetail.footprint) ? noFootprintPreview : '';
   const invalid =
     detail && 'error' in detail && detail.error
       ? detail.error
-      : requireModel && detail && 'models' in detail && !detail.models.length
-        ? 'This footprint has no 3D model.'
+      : requireModel && footprintDetail
+        ? modelError || modelReason
         : '';
-  const ready = canChoose && !busy && !error && detail?.id === selected && !!detail && !invalid;
+  const ready =
+    canChoose &&
+    (!resultsLoading || loadingDefaultPages) &&
+    !error &&
+    detail?.id === selected &&
+    !!detail &&
+    !invalid;
   const footerError =
     resultsError ||
-    error ||
+    (!footprintUnavailable && error) ||
     packagePreviewError ||
     invalid ||
     (failedCategories && categoryStatus.error);
@@ -687,20 +1090,21 @@ export default function LibraryChooser({
       if (!event.repeat) choose();
       return;
     }
-    if (!['ArrowDown', 'ArrowUp'].includes(event.key) || busy) return;
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key) || (resultsLoading && !loadingDefaultPages))
+      return;
     event.preventDefault();
-    const index = entries.findIndex((entry) => entry.id === selected);
+    const index = displayedEntries.findIndex((entry) => entry.id === selected);
     const nextIndex = Math.max(
       0,
-      Math.min(entries.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)),
+      Math.min(displayedEntries.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)),
     );
-    const next = entries[nextIndex];
+    const next = displayedEntries[nextIndex];
     if (!next) return;
     selectEntry(next.id);
     const row = results.current?.querySelector<HTMLButtonElement>(`[data-index="${nextIndex}"]`);
     row?.scrollIntoView({ block: 'nearest' });
     if (focusResult) row?.focus({ preventScroll: true });
-    if (event.key === 'ArrowDown' && nextIndex >= entries.length - 5) loadMore();
+    if (event.key === 'ArrowDown' && nextIndex >= displayedEntries.length - 5) loadMore();
   }
   return (
     <>
@@ -762,17 +1166,15 @@ export default function LibraryChooser({
             onChange={changeLibrary}
           />
           <span className="library-result-status" role="status">
-            {awaitingSearch
-              ? 'Ready to search'
-              : busy
-                ? offset
-                  ? 'Loading…'
-                  : 'Searching…'
-                : resultsError && !entries.length
-                  ? 'Unavailable'
-                  : isOnlineLibrary(library)
-                    ? `${entries.length.toLocaleString()} ${entries.length === 1 ? 'result' : 'results'} loaded`
-                    : `${total.toLocaleString()} results`}
+            {resultsLoading
+              ? offset
+                ? 'Loading…'
+                : 'Searching…'
+              : resultsError && !entries.length
+                ? 'Unavailable'
+                : isOnlineLibrary(library)
+                  ? `${visibleCount.toLocaleString()} ${visibleCount === 1 ? 'result' : 'results'} loaded`
+                  : `${total.toLocaleString()} results`}
           </span>
         </div>
         <div className="library-search">
@@ -780,11 +1182,7 @@ export default function LibraryChooser({
           <input
             autoFocus
             aria-label={kind === 'symbols' ? 'Search components' : 'Search footprints'}
-            placeholder={
-              librarySource === 'JLCPCB'
-                ? 'Search by model, keyword or part number…'
-                : 'Search by name, description or keyword…'
-            }
+            placeholder="Search by model, keyword or part number…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onCompositionStart={() => {
@@ -821,80 +1219,127 @@ export default function LibraryChooser({
             ref={results}
             className={`library-results${kind === 'symbols' ? ' library-component-results' : ''}`}
             aria-label="Library results"
-            aria-busy={busy}
-            onKeyDown={(event) => navigate(event, true)}
+            aria-busy={resultsLoading}
             onScroll={(event) => {
               const list = event.currentTarget;
-              if (list.scrollHeight - list.scrollTop - list.clientHeight < 120) loadMore();
+              if (
+                list.scrollTop > 0 &&
+                list.scrollHeight - list.scrollTop - list.clientHeight < 120
+              )
+                loadMore();
             }}
           >
             {hasEntries && kind === 'symbols' && (
-              <div className="library-result-columns" aria-hidden="true">
-                <span>{isOnlineLibrary(library) ? 'Model' : 'Component'}</span>
-                <span>Package</span>
+              <div
+                className="library-result-columns"
+                role="group"
+                aria-label="Sort library results"
+              >
+                {symbolColumns.map(([column, label]) => {
+                  const direction = symbolSort?.column === column ? symbolSort.direction : null;
+                  const SortIcon = direction === 'ascending' ? ChevronUp : ChevronDown;
+                  return (
+                    <button
+                      key={column}
+                      type="button"
+                      data-asset-column={column === 'footprint' || column === 'model' || undefined}
+                      aria-label={`Sort by ${label}`}
+                      aria-pressed={!!direction}
+                      aria-description={direction ? `Sorted ${direction}` : undefined}
+                      title={direction ? `${label}: sorted ${direction}` : `Sort by ${label}`}
+                      onPointerDown={(event) => {
+                        if (composing.current) event.preventDefault();
+                      }}
+                      onKeyDown={(event) => {
+                        blockComposingActivation(event);
+                        if (event.repeat && (event.key === 'Enter' || event.key === ' '))
+                          event.preventDefault();
+                      }}
+                      onClick={() => sortSymbols(column)}
+                    >
+                      <span>{label}</span>
+                      <SortIcon size={12} aria-hidden="true" />
+                    </button>
+                  );
+                })}
               </div>
             )}
-            {entries.map((entry, i) => (
-              <button
-                key={entry.id}
-                data-index={i}
-                className={selected === entry.id ? 'selected' : ''}
-                aria-description={entry.id}
-                tabIndex={selected === entry.id ? 0 : -1}
-                aria-pressed={selected === entry.id}
-                onFocus={() => selectEntry(entry.id)}
-                onClick={() => selectEntry(entry.id)}
-                onDoubleClick={() => {
-                  if (detail?.id === entry.id) choose();
-                }}
-              >
-                {kind === 'symbols' ? (
-                  <>
-                    <strong title={entry.name}>{entry.name}</strong>
-                    <span
-                      className="library-result-package"
-                      title={entry.package || entry.footprint || ''}
-                    >
-                      {entry.package || entry.footprint?.split(':').at(-1) || '—'}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>{entry.name}</strong>
-                    <small>{entry.library}</small>
-                  </>
-                )}
-              </button>
-            ))}
-            {!hasEntries && loadingInitial && <WorkspaceLoading panel label="Loading library" />}
-            {!busy &&
-              !hasEntries &&
-              !error &&
-              !resultsError &&
-              !loadingInitial &&
-              !categoryStatus.error && (
-                <div className="library-empty-state">
-                  <span className="library-empty-icon">
-                    <EmptyIcon size={20} aria-hidden="true" />
-                  </span>
-                  <h3>
-                    {awaitingSearch
-                      ? 'Search the library'
-                      : canLoadMore
-                        ? 'No matching footprints in this batch.'
-                        : `No matching ${kind}.`}
-                  </h3>
-                  {awaitingSearch ? (
-                    <p>Enter a model or keyword, then search.</p>
+            {displayedEntries.map((entry, i) => {
+              const assets = kind === 'symbols' ? listedSymbolAssets(entry) : null;
+              const packageLabel = assets ? symbolPackage(entry) : '';
+              return (
+                <button
+                  key={entry.id}
+                  data-index={i}
+                  className={selected === entry.id ? 'selected' : ''}
+                  aria-label={
+                    assets
+                      ? `${entry.name}${packageLabel ? `, ${packageLabel}` : ''}, Footprint: ${assetLabels[assets.footprint]}, Model: ${assetLabels[assets.model]}`
+                      : undefined
+                  }
+                  aria-description={entry.id}
+                  tabIndex={selected === entry.id ? 0 : -1}
+                  aria-pressed={selected === entry.id}
+                  onKeyDown={(event) => navigate(event, true)}
+                  onFocus={() => selectEntry(entry.id)}
+                  onClick={() => selectEntry(entry.id)}
+                  onDoubleClick={() => {
+                    if (detail?.id === entry.id) choose();
+                  }}
+                >
+                  {assets ? (
+                    <>
+                      <strong title={entry.name}>{entry.name}</strong>
+                      <span
+                        className="library-result-package"
+                        title={entry.package || entry.footprint || ''}
+                      >
+                        {packageLabel || '—'}
+                      </span>
+                      {(['footprint', 'model'] as const).map((asset) => {
+                        const status = assets[asset];
+                        const StatusIcon = status === 'yes' ? SquareCheck : Square;
+                        return (
+                          <span
+                            key={asset}
+                            className="library-result-asset"
+                            data-status={status}
+                            title={`${asset === 'footprint' ? 'Footprint' : 'Model'}: ${assetLabels[status]}`}
+                          >
+                            <StatusIcon size={14} aria-hidden="true" />
+                          </span>
+                        );
+                      })}
+                    </>
                   ) : (
-                    !canLoadMore && <p>Try another keyword or category.</p>
+                    <>
+                      <strong title={entry.name}>{entry.name}</strong>
+                      <small title={entry.library}>{entry.library}</small>
+                    </>
                   )}
-                </div>
-              )}
-            {canLoadMore && (
+                </button>
+              );
+            })}
+            {!hasEntries && loadingInitial && (
+              <WorkspaceLoading panel progress={batchProgress} label="Loading library" />
+            )}
+            {!resultsLoading && !hasEntries && !error && !resultsError && (
+              <div className="library-empty-state">
+                <span className="library-empty-icon">
+                  <SearchX size={20} aria-hidden="true" />
+                </span>
+                <h3>{`No matching ${kind}${canLoadMore ? ' in this batch' : ''}.`}</h3>
+                {!canLoadMore && <p>Try another keyword or category.</p>}
+              </div>
+            )}
+            {hasEntries && resultsLoading && batchProgress ? (
+              <div className="library-page-progress">
+                <LoadingProgress label="Loading more components" progress={batchProgress} />
+              </div>
+            ) : canLoadMore ? (
               <button
                 className={`library-load-more${hasEntries ? '' : ' dialog-button secondary'}`}
-                disabled={busy}
+                disabled={resultsLoading}
                 onClick={loadMore}
                 onKeyDown={(event) => {
                   blockComposingActivation(event);
@@ -904,36 +1349,32 @@ export default function LibraryChooser({
                   }
                 }}
               >
-                Load more
+                {hasEntries && resultsLoading ? 'Loading…' : 'Load more'}
               </button>
-            )}
+            ) : null}
           </div>
           <div className={`library-detail${kind === 'footprints' ? ' assignment-detail' : ''}`}>
+            {detailHeading && (
+              <div className="library-detail-heading">
+                <strong className="library-detail-title">{detailHeading.name}</strong>
+                <small className="library-detail-id" title={detailHeading.id}>
+                  {detailHeading.id}
+                </small>
+              </div>
+            )}
             {detail ? (
               <>
-                <div className="library-detail-heading">
-                  <strong className="library-detail-title">{detail.name}</strong>
-                  <small className="library-detail-id" title={detail.id}>
-                    {detail.id}
-                  </small>
-                </div>
                 {'symbol' in detail ? (
                   <>
-                    {online ? (
-                      <OnlineSymbolPreview
-                        key={detail.id}
-                        detail={detail}
-                        unit={unit}
-                        host={capabilityHost}
-                        error={packagePreviewError}
-                        onError={setPackagePreviewError}
-                        retry={packagePreviewRetry}
-                      />
-                    ) : (
-                      <div className="symbol-detail-preview">
-                        <SymbolPreview library={detail.symbol} unit={unit} />
-                      </div>
-                    )}
+                    <LibrarySymbolPreview
+                      key={detail.id}
+                      detail={detail}
+                      unit={unit}
+                      host={capabilityHost}
+                      error={packagePreviewError}
+                      onError={setPackagePreviewError}
+                      retry={packagePreviewRetry}
+                    />
                     {detail.units > 1 && (
                       <Select
                         label="Symbol unit"
@@ -945,43 +1386,63 @@ export default function LibraryChooser({
                         onChange={(v) => setUnit(Number(v))}
                       />
                     )}
-                    {detail.warning && <p role="status">{detail.warning}</p>}
                   </>
                 ) : (
                   <>
                     <div className="preview-tabs">
                       <button
-                        aria-pressed={tab === '2d' || !detail.models.length}
+                        aria-pressed={!show3d && !footprintReason}
+                        disabled={!!footprintReason}
+                        title={footprintReason || undefined}
                         onClick={() => setTab('2d')}
                       >
                         Footprint
                       </button>
                       <button
-                        aria-pressed={tab === '3d' && !!detail.models.length}
-                        disabled={!detail.models.length}
+                        aria-pressed={show3d}
+                        disabled={!!modelReason}
+                        title={modelReason}
                         onClick={() => setTab('3d')}
                       >
                         3D model
                       </button>
                     </div>
-                    <div className="library-preview-stage assignment-preview-stage">
-                      {tab === '2d' || !detail.models.length ? (
-                        <FootprintPreview footprint={detail.footprint} />
-                      ) : (
-                        <Suspense fallback={<WorkspaceLoading panel label="Loading 3D model" />}>
-                          <ModelPreview id={detail.id} index={model} />
-                        </Suspense>
-                      )}
-                    </div>
-                    {tab === '3d' && detail.models.length > 1 && (
-                      <Select
-                        label="3D model"
-                        value={String(model)}
-                        options={detail.models.map((m, i) => ({
-                          value: String(i),
-                          label: m.path.split('/').at(-1)!,
-                        }))}
-                        onChange={(v) => setModel(Number(v))}
+                    <LibraryPreviewStage
+                      key={detail.id}
+                      active={show3d ? '3d' : 'footprint'}
+                      className="library-preview-stage assignment-preview-stage"
+                      previews={{
+                        footprint: <FootprintPreview footprint={detail.footprint} />,
+                        '3d': !modelError && !modelReason && (
+                          <Suspense fallback={<WorkspaceLoading panel label="Loading 3D model" />}>
+                            <ModelPreview
+                              key={model}
+                              id={detail.id}
+                              index={model}
+                              active={show3d}
+                              onUnavailable={(message) =>
+                                setModelAvailability((current) => ({
+                                  detail,
+                                  unavailable: {
+                                    ...(current?.detail === detail
+                                      ? current.unavailable
+                                      : undefined),
+                                    [model]: message,
+                                  },
+                                }))
+                              }
+                            />
+                          </Suspense>
+                        ),
+                      }}
+                    />
+                    {modelError && !requireModel && <p role="status">{modelError}</p>}
+                    {show3d && detail.models.length > 1 && (
+                      <LibraryModelSelect
+                        models={detail.models}
+                        index={model}
+                        unavailable={modelErrors}
+                        onChange={setModel}
                       />
                     )}
                   </>
@@ -991,43 +1452,55 @@ export default function LibraryChooser({
                   <JlcpcbAttribution key={detail.id} notice={detail.attribution.notice} />
                 )}
               </>
-            ) : previewEntry ? (
+            ) : failedPreviewEntry ? (
               <>
-                <div className="library-detail-heading">
-                  <strong className="library-detail-title">{previewEntry.name}</strong>
-                  <small className="library-detail-id">{previewEntry.id}</small>
-                </div>
+                {footprintUnavailable && (
+                  <div className="preview-tabs">
+                    <button disabled title={error}>
+                      Footprint
+                    </button>
+                    <button disabled title={error}>
+                      3D model
+                    </button>
+                  </div>
+                )}
                 <div className="library-detail-sections">
                   <LibraryInfoSection title="Basic information" wide>
                     <LibraryInfoRows
                       rows={[
                         ['Source', librarySource],
-                        ...(previewEntry.manufacturer
-                          ? [['Manufacturer', previewEntry.manufacturer] as [string, ReactNode]]
+                        ...(failedPreviewEntry.manufacturer
+                          ? [
+                              ['Manufacturer', failedPreviewEntry.manufacturer] as [
+                                string,
+                                ReactNode,
+                              ],
+                            ]
                           : []),
-                        ...(previewEntry.package
-                          ? [['Package', previewEntry.package] as [string, ReactNode]]
+                        ...(failedPreviewEntry.package
+                          ? [['Package', failedPreviewEntry.package] as [string, ReactNode]]
                           : []),
                       ]}
                     />
                   </LibraryInfoSection>
-                  {previewEntry.description && (
+                  {failedPreviewEntry.description && (
                     <LibraryInfoSection title="Description" wide>
-                      <p>{previewEntry.description}</p>
+                      <p>{failedPreviewEntry.description}</p>
                     </LibraryInfoSection>
                   )}
                 </div>
-                <button
-                  className="dialog-button secondary library-preview-action"
-                  onClick={() => selectEntry(previewEntry.id)}
-                  onKeyDown={blockComposingActivation}
-                >
-                  Preview
-                </button>
               </>
             ) : !error && selected ? (
               <WorkspaceLoading panel label="Loading preview" />
             ) : null}
+            {selectedEntry?.library === 'NextPCB' && (
+              <LibraryPricing
+                key={selectedEntry.id}
+                id={selectedEntry.id}
+                composing={() => composing.current}
+                onKeyDown={blockComposingActivation}
+              />
+            )}
           </div>
         </div>
       </Dialog>

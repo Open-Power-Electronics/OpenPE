@@ -13,14 +13,17 @@ import {
   createLibraryPart,
   validateProject,
 } from './library-format.mjs';
-import { createEmptyPCB, createPCBFootprint } from './pcb-layout-format.mjs';
+import { createEmptyPCB, createPCBFootprint, readLibraryFootprint } from './pcb-layout-format.mjs';
 import { officialModelRelativePath } from './library-model-reference.mjs';
-import { readCatalogBytes } from './online-library-fetch.mjs';
+import { CatalogHttpError, readCatalogBytes } from './online-library-fetch.mjs';
+import { LibraryAssetUnavailable } from './library-asset-error.mjs';
+import { readNextpcbPrices } from './nextpcb-prices.mjs';
 
 const ORIGIN = 'https://library.nextpcb.com';
 // The provider's 100-row option currently returns a false empty page.
 // Use its verified 50-row page size and map offsets to those native pages.
 const PAGE_SIZE = 50;
+const SUGGESTED_CATEGORY = '1737';
 const MAX_NATIVE_BYTES = 2_000_000;
 const MAX_JSON_BYTES = 2_000_000;
 const MAX_MODEL_BYTES = 32 * 1024 * 1024;
@@ -30,6 +33,12 @@ function text(value, maximum = 4096) {
   if (typeof value !== 'string' || value.length > maximum || /[\u0000-\u001f]/.test(value))
     throw new Error('NextPCB returned invalid component metadata.');
   return value;
+}
+
+function description(value) {
+  if (typeof value !== 'string' || value.length > 4096)
+    throw new Error('NextPCB returned invalid component metadata.');
+  return text(value.replace(/[\t\r\n]+/g, ' '));
 }
 
 function identity(manufacturer, mpn) {
@@ -57,28 +66,33 @@ function decodeIdentity(id) {
 }
 
 function assetUrl(value, extension) {
-  let url;
+  if (typeof value !== 'string' || value.length > 2048)
+    throw new LibraryAssetUnavailable('NextPCB returned an invalid native asset URL.');
+  const source = value.startsWith('//') ? `https:${value}` : value;
+  const basename = /^https:\/\/file\.eda\.cn\/web[12]\/M00\/(?:[A-Za-z0-9_-]+\/)*([^/\\?#]+)$/.exec(
+    source,
+  )?.[1];
+  let filename = '';
   try {
-    url = new URL(value);
+    if (basename) filename = decodeURIComponent(basename);
   } catch {
-    throw new Error('NextPCB returned an invalid native asset URL.');
+    throw new LibraryAssetUnavailable('NextPCB returned an invalid native asset URL.');
   }
-  // Only the public native-file CDN observed in NextPCB's own component API.
-  // Caller-controlled URLs, credentials, ports, queries and redirects are never accepted.
   if (
-    typeof value !== 'string' ||
-    value !== url.href ||
-    url.origin !== 'https://file.eda.cn' ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !new RegExp(`^/web[12]/M00/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\\.${extension}$`).test(
-      url.pathname,
-    )
+    /[\u0000-\u001f\u007f]/.test(filename) ||
+    !new RegExp(`^[\\p{L}\\p{N}_-][\\p{L}\\p{N} _().+-]*\\.${extension}$`, 'u').test(filename)
   )
-    throw new Error('NextPCB native asset is outside its supported HTTPS source.');
-  return url.href;
+    throw new LibraryAssetUnavailable(
+      'NextPCB native asset is outside its supported HTTPS source.',
+    );
+  return new URL(source).href;
+}
+
+function footprintWarning(message) {
+  const reason = String(message)
+    .replace(/[\u0000-\u001f]/g, ' ')
+    .slice(0, 300);
+  return `Footprint unavailable: ${reason} Choose a supported footprint in Properties.`;
 }
 
 function put(cache, key, value, limit) {
@@ -108,6 +122,69 @@ function setProperty(symbol, name, value) {
       ['at', '0', '0', '0'],
       ['effects', ['font', ['size', '1.27', '1.27']], ['hide', 'yes']],
     ]);
+}
+
+function readPackage(entry, source) {
+  const footprint = parseSExpr(source, MAX_NATIVE_BYTES);
+  const version = child(footprint, 'version');
+  if (footprint[0] !== 'footprint' || num(version) > 20260206)
+    throw new Error('Unsupported NextPCB footprint version.');
+  const models = children(footprint, 'model').map((model) => {
+    const path = val(model);
+    try {
+      officialModelRelativePath(path);
+    } catch {
+      throw new Error('NextPCB model references must use the supported KiCad 3D library.');
+    }
+    const inchOffsets = children(model, 'at');
+    if (inchOffsets.length) {
+      const [at] = inchOffsets;
+      const xyz = child(at, 'xyz');
+      if (
+        val(version) !== '20210108' ||
+        inchOffsets.length !== 1 ||
+        child(model, 'offset') ||
+        at.length !== 2 ||
+        xyz?.length !== 4
+      )
+        throw new Error('Unsupported NextPCB 3D model offset.');
+      const millimetres = xyz.slice(1).map((coordinate) => {
+        if (
+          typeof coordinate !== 'string' ||
+          !/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(coordinate)
+        )
+          throw new Error('Invalid NextPCB 3D model offset.');
+        const mm = Number(coordinate) * 25.4;
+        const native = Number(mm.toFixed(6));
+        if (!Number.isFinite(mm) || Math.abs(mm) > 100000 || Math.abs(mm - native) > 1e-9)
+          throw new Error('NextPCB 3D model offset exceeds native coordinate bounds or precision.');
+        return String(native);
+      });
+      model[model.indexOf(at)] = ['offset', ['xyz', ...millimetres]];
+    }
+    const offset = child(model, 'offset'),
+      scale = child(model, 'scale'),
+      rotate = child(model, 'rotate');
+    return {
+      path,
+      ...(offset ? { offset } : {}),
+      ...(scale ? { scale } : {}),
+      ...(rotate ? { rotate } : {}),
+    };
+  });
+  footprint[1] = quote(entry.id.slice('NextPCB:'.length));
+  return {
+    ...entry,
+    footprint,
+    pads: [
+      ...new Set(
+        children(footprint, 'pad')
+          .map((pad) => val(pad))
+          .filter(Boolean),
+      ),
+    ],
+    models,
+  };
 }
 
 /** Read-only public NextPCB catalog; all returned documents still require Core admission. */
@@ -151,37 +228,54 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     return result;
   }
 
+  async function componentRecord(id, signal) {
+    const key = decodeIdentity(id);
+    const { result } = await api('/api/chiplet/kicad/productDetail', key, signal);
+    if (!result || identity(result.mfgId, result.mpn) !== id)
+      throw new Error('NextPCB returned a different or invalid component.');
+    return result;
+  }
+
   async function product(id, signal) {
     const saved = cached(metadata, id);
     if (saved) return saved;
-    const key = decodeIdentity(id);
-    const { result } = await api('/api/chiplet/kicad/productDetail', key, signal);
-    if (!result || identity(result.mfgId, result.mpn) !== id || !Array.isArray(result.cadUrlList))
+    const result = await componentRecord(id, signal);
+    if (!Array.isArray(result.cadUrlList))
       throw new Error('NextPCB returned a different or invalid component.');
     if (result.cadUrlList.length > 32) throw new Error('NextPCB returned too many native assets.');
     const urls = {};
+    const assetErrors = {};
     for (const [type, extension] of [
       ['symbol', 'kicad_sym'],
       ['footprint', 'kicad_mod'],
     ]) {
       const assets = result.cadUrlList.filter((entry) => entry?.type === type);
-      if (assets.length > 1) throw new Error(`NextPCB returned ambiguous ${type} assets.`);
-      if (assets.length) urls[type] = assetUrl(assets[0].fileUrl, extension);
+      if (assets.length > 1) {
+        assetErrors[type] = `NextPCB returned ambiguous ${type} assets.`;
+        continue;
+      }
+      if (!assets.length) continue;
+      try {
+        urls[type] = assetUrl(assets[0].fileUrl, extension);
+      } catch (error) {
+        if (!(error instanceof LibraryAssetUnavailable)) throw error;
+        assetErrors[type] = error.message;
+      }
     }
     const entry = {
       id,
       name: text(result.mpn, 200),
       library: 'NextPCB',
-      description: text(result.description ?? ''),
+      description: description(result.description ?? ''),
       keywords: [text(result.mfg ?? '', 200), text(result.mfPackageCode ?? '', 200)].join(' '),
       ...(result.mfg != null ? { manufacturer: text(result.mfg, 200) } : {}),
       ...(result.mfPackageCode != null ? { package: text(result.mfPackageCode, 200) } : {}),
-      ...(urls.footprint ? { footprint: id } : {}),
+      ...(urls.footprint || assetErrors.footprint ? { footprint: id } : {}),
     };
-    const value = { entry, urls };
+    const value = { entry, urls, assetErrors };
     const modelAssets = result.cadUrlList.filter((asset) => asset?.type === '3d');
     value.modelAssets = modelAssets.map((asset) => ({ fileUrl: asset.fileUrl }));
-    put(metadata, id, value, 32);
+    if (!Object.keys(assetErrors).length) put(metadata, id, value, 32);
     return structuredClone(value);
   }
 
@@ -250,7 +344,10 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     return structuredClone(value);
   }
 
-  async function search({ query = '', library = 'NextPCB', category = '', offset = 0 }, signal) {
+  async function search(
+    { kind, query = '', library = 'NextPCB', category = '', offset = 0, scanLimit = PAGE_SIZE },
+    signal,
+  ) {
     if (
       library !== 'NextPCB' ||
       typeof query !== 'string' ||
@@ -263,12 +360,16 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
       offset > 999999
     )
       throw new Error('Invalid NextPCB search.');
-    if (!query.trim() && !category)
-      throw new Error('Enter a model or choose a NextPCB category before searching.');
-    if (category && !(await categories(signal)).ids.includes(category))
-      throw new Error('Choose an available NextPCB category.');
+    const keyword = query.trim();
+    const catalogCategory = category || (keyword ? '' : SUGGESTED_CATEGORY);
+    if (catalogCategory && !(await categories(signal)).ids.includes(catalogCategory))
+      throw new Error(
+        category
+          ? 'Choose an available NextPCB category.'
+          : 'NextPCB suggestions are unavailable. Enter a model or choose a category.',
+      );
     const pageNum = Math.floor(offset / PAGE_SIZE) + 1;
-    const key = JSON.stringify([query.trim(), category, pageNum]);
+    const key = JSON.stringify([keyword, catalogCategory, pageNum]);
     let page = cached(pages, key);
     if (!page) {
       const result = await api(
@@ -280,8 +381,8 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
           have3dModel: 0,
           haveSimModel: 0,
           haveSupplierModel: 0,
-          ...(query.trim() ? { desc: query.trim() } : {}),
-          ...(category ? { cateId: Number(category) } : {}),
+          ...(keyword ? { desc: keyword } : {}),
+          ...(catalogCategory ? { cateId: Number(catalogCategory) } : {}),
         },
         signal,
       );
@@ -295,17 +396,19 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
       page = {
         total: result.total,
         entries: result.result.map((row) => {
+          let hasFootprint = false;
           try {
             assetUrl(row?.footprintFileUrl, 'kicad_mod');
-          } catch {
-            return null;
+            hasFootprint = true;
+          } catch (error) {
+            if (!(error instanceof LibraryAssetUnavailable)) throw error;
           }
           const id = identity(row.manufacturer_id, row.mpn);
           return {
             id,
             name: text(row.mpn, 200),
             library: 'NextPCB',
-            description: text(row.Description ?? ''),
+            description: description(row.Description ?? ''),
             keywords: [
               text(row.manufacturer ?? '', 200),
               text(row.category ?? '', 200),
@@ -313,20 +416,24 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
             ].join(' '),
             ...(row.manufacturer != null ? { manufacturer: text(row.manufacturer, 200) } : {}),
             ...(row.package != null ? { package: text(row.package, 200) } : {}),
-            footprint: id,
+            ...(hasFootprint ? { footprint: id } : {}),
           };
         }),
       };
-      const ids = page.entries.filter(Boolean).map((entry) => entry.id);
+      const ids = page.entries.map((entry) => entry.id);
       if (new Set(ids).size !== ids.length)
         throw new Error('NextPCB returned duplicate component identities.');
       put(pages, key, page, 8);
     }
+    const start = offset % PAGE_SIZE;
+    const end = Math.min(PAGE_SIZE, start + scanLimit);
+    const next = offset - start + end;
     return {
-      entries: page.entries.slice(offset % PAGE_SIZE).filter(Boolean),
+      entries: page.entries
+        .slice(start, end)
+        .filter((entry) => kind === 'symbols' || entry.footprint),
       total: page.total,
-      nextOffset:
-        pageNum * PAGE_SIZE < Math.min(page.total, 1_000_000) ? pageNum * PAGE_SIZE : null,
+      nextOffset: next < Math.min(page.total, 1_000_000) ? next : null,
       libraries: ['NextPCB'],
     };
   }
@@ -336,11 +443,46 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     const key = `${kind}:${id}`;
     const saved = cached(details, key);
     if (saved) return saved;
-    const { entry, urls } = await product(id, signal);
-    const type = kind === 'symbols' ? 'symbol' : 'footprint';
-    if (!urls[type]) throw new Error(`This NextPCB component has no native KiCad ${type}.`);
+    const { entry, urls, assetErrors } = await product(id, signal);
+    if (kind === 'footprints') {
+      if (assetErrors.footprint || !urls.footprint)
+        throw new LibraryAssetUnavailable(
+          assetErrors.footprint ?? 'This NextPCB component has no native KiCad footprint.',
+        );
+      const source = await read(urls.footprint, {}, MAX_NATIVE_BYTES, signal).catch((error) => {
+        if (error instanceof CatalogHttpError && error.status === 404)
+          throw new LibraryAssetUnavailable(error.message);
+        throw error;
+      });
+      let packageDetail;
+      try {
+        packageDetail = readPackage(entry, source);
+        const project = createProject();
+        project.pcb = createEmptyPCB();
+        project.pcb.footprints = [
+          {
+            id: crypto.randomUUID(),
+            libraryId: id,
+            symbolId: null,
+            reference: 'U1',
+            value: entry.name,
+            side: 'front',
+            x: 0,
+            y: 0,
+            rotation: 0,
+            ...readLibraryFootprint(packageDetail),
+          },
+        ];
+        validateProject(project);
+      } catch (error) {
+        throw new LibraryAssetUnavailable(error.message);
+      }
+      signal.throwIfAborted();
+      put(details, key, packageDetail, 16);
+      return packageDetail;
+    }
     if (!urls.symbol)
-      throw new Error('This NextPCB package has no native KiCad symbol for validation.');
+      throw new Error(assetErrors.symbol ?? 'This NextPCB component has no native KiCad symbol.');
     const [symbolRead, footprintRead] = await Promise.allSettled([
       read(urls.symbol, {}, MAX_NATIVE_BYTES, signal),
       urls.footprint
@@ -369,41 +511,14 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     project.schematic.parts = [createLibraryPart(project.schematic, symbol, 0, 0)];
     validateProject(project);
     let packageDetail;
-    let warning;
+    let warning = assetErrors.footprint ? footprintWarning(assetErrors.footprint) : undefined;
+    let footprintUnavailable = !!assetErrors.footprint;
     // Preflight the linked package with the shared converter. A valid schematic
     // symbol retains its exact assignment when bounded PCB geometry is unavailable.
     if (urls.footprint) {
       try {
         if (footprintRead.status === 'rejected') throw footprintRead.reason;
-        const footprint = parseSExpr(footprintRead.value, MAX_NATIVE_BYTES);
-        if (footprint[0] !== 'footprint' || num(child(footprint, 'version')) > 20260206)
-          throw new Error('Unsupported NextPCB footprint version.');
-        const modelNodes = children(footprint, 'model');
-        for (const model of modelNodes) {
-          try {
-            officialModelRelativePath(val(model));
-          } catch {
-            throw new Error('NextPCB model references must use the supported KiCad 3D library.');
-          }
-        }
-        footprint[1] = quote(id.slice('NextPCB:'.length));
-        packageDetail = {
-          ...entry,
-          footprint,
-          pads: [
-            ...new Set(
-              children(footprint, 'pad')
-                .map((pad) => val(pad))
-                .filter(Boolean),
-            ),
-          ],
-          models: modelNodes.map((model) => ({
-            path: val(model),
-            ...(child(model, 'offset') ? { offset: child(model, 'offset') } : {}),
-            ...(child(model, 'scale') ? { scale: child(model, 'scale') } : {}),
-            ...(child(model, 'rotate') ? { rotate: child(model, 'rotate') } : {}),
-          })),
-        };
+        packageDetail = readPackage(entry, footprintRead.value);
         project.pcb = createEmptyPCB();
         project.pcb.footprints = [
           createPCBFootprint(packageDetail, project.schematic, project.schematic.parts[0].id, {
@@ -413,23 +528,29 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
         ];
         validateProject(project);
       } catch (error) {
-        if (signal.aborted || kind === 'footprints') throw error;
+        signal.throwIfAborted();
+        footprintUnavailable =
+          footprintRead.status === 'fulfilled' ||
+          (error instanceof CatalogHttpError && error.status === 404);
         packageDetail = undefined;
-        warning = `Footprint unavailable: ${String(error.message)
-          .replace(/[\u0000-\u001f]/g, ' ')
-          .slice(0, 300)} Choose a supported footprint in Properties.`;
+        warning = footprintWarning(error.message);
       }
     }
     signal.throwIfAborted();
+    const footprintPreview =
+      footprintUnavailable || !urls.footprint
+        ? 'unavailable'
+        : packageDetail && (packageDetail.models.length ? '2d-and-3d' : '2d');
     const symbolDetail = {
       ...entry,
       symbol,
       units: symbolUnits(symbol),
       ...(warning ? { warning } : {}),
+      ...(footprintPreview ? { footprintPreview } : {}),
     };
     if (!warning) put(details, `symbols:${id}`, symbolDetail, 16);
     if (packageDetail) put(details, `footprints:${id}`, packageDetail, 16);
-    return structuredClone(kind === 'symbols' ? symbolDetail : packageDetail);
+    return symbolDetail;
   }
 
   async function run(signal, operation) {
@@ -457,6 +578,19 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     }
   }
   return {
+    async price(id, signal) {
+      decodeIdentity(id);
+      return run(signal, async (signal) => {
+        const { entry } = cached(metadata, id) ?? {};
+        if (entry) return readNextpcbPrices(fetcher, entry, signal);
+        const record = await componentRecord(id, signal);
+        return readNextpcbPrices(
+          fetcher,
+          { name: record.mpn, manufacturer: text(record.mfg ?? '', 200) },
+          signal,
+        );
+      });
+    },
     async request(message) {
       if (
         !['symbols', 'footprints'].includes(message.kind) ||
@@ -478,16 +612,17 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
       return run(signal, async (signal) => {
         const { modelAssets } = await product(id, signal);
         if (!modelAssets.length) return undefined;
-        if (modelAssets.length !== 1) throw new Error('NextPCB returned ambiguous 3D assets.');
+        if (modelAssets.length !== 1)
+          throw new LibraryAssetUnavailable('NextPCB returned ambiguous 3D assets.');
         const url = assetUrl(modelAssets[0].fileUrl, '(?:step|stp)');
         const footprint = await detail({ kind: 'footprints', id }, signal);
         if (footprint.models.length !== 1 || index !== 0)
-          throw new Error(
+          throw new LibraryAssetUnavailable(
             'NextPCB STEP adoption requires exactly one native footprint model reference.',
           );
         const bytes = await readCatalogBytes('NextPCB', fetcher, url, {}, MAX_MODEL_BYTES, signal);
         if (!bytes.subarray(0, 100).toString('ascii').includes('ISO-10303-21'))
-          throw new Error('NextPCB returned an invalid STEP model.');
+          throw new LibraryAssetUnavailable('NextPCB returned an invalid STEP model.');
         return bytes;
       });
     },

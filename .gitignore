@@ -10,6 +10,7 @@ node_modules/
 # Local workspace state, experiments and verification output
 /.openpe/
 /test-results/
+/promotion/
 /tmp/
 /coverage/
 *.log

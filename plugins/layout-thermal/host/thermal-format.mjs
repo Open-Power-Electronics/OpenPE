@@ -6120,9 +6120,23 @@ function pcbArc(g) {
   const delta = positive3(mid - start) <= positive3(end - start) ? positive3(end - start) : positive3(end - start) - Math.PI * 2;
   return { center, radius: Math.hypot(a.x - center.x, a.y - center.y), delta, start };
 }
+var pcbPadCorners = [
+  { x: -1, y: -1, name: "top_left" },
+  { x: 1, y: -1, name: "top_right" },
+  { x: 1, y: 1, name: "bottom_right" },
+  { x: -1, y: 1, name: "bottom_left" }
+];
+function pcbPadChamferEndpoints({ x, y }, size, cut) {
+  const horizontal = { x: x * (size.x / 2 - cut), y: y * size.y / 2 };
+  const vertical = { x: x * size.x / 2, y: y * (size.y / 2 - cut) };
+  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+
+// lib/pcb-custom-pad.ts
+var import_clipper_lib = __toESM(require_clipper(), 1);
 
 // lib/pcb-layout.ts
-var round = (n) => Number(n.toFixed(6));
+var round = (n) => Number(n.toFixed(6)) + 0;
 var angle = (n) => round((n % 360 + 360) % 360);
 function footprintPoint(footprint, local) {
   const radians = -footprint.rotation * Math.PI / 180;
@@ -6134,12 +6148,11 @@ function footprintPoint(footprint, local) {
 var padPosition = (footprint, pad) => footprintPoint(footprint, pad);
 var padRotation = (footprint, pad) => angle(footprint.rotation + pad.rotation);
 function padDrillPosition(footprint, pad) {
-  const at = padPosition(footprint, pad), offset = pad.drillOffset ?? { x: 0, y: 0 };
-  return footprintPoint({ ...footprint, ...at, rotation: padRotation(footprint, pad) }, offset);
+  return footprintPoint(footprint, pad.drillOffset ? footprintPoint(pad, pad.drillOffset) : pad);
 }
 
 // lib/pcb-polygons.ts
-var import_clipper_lib = __toESM(require_clipper(), 1);
+var import_clipper_lib2 = __toESM(require_clipper(), 1);
 
 // lib/design-rule-checks.ts
 var pcbDesignRuleLimits = {
@@ -6240,22 +6253,22 @@ var integer = (points) => points.map((p) => ({ X: Math.round(p.x * scale), Y: Ma
 var decimal = (points) => points.map((p) => ({ x: p.X / scale, y: p.Y / scale }));
 function oriented(points, positive3 = true) {
   const path = integer(points);
-  return import_clipper_lib.default.Clipper.Orientation(path) === positive3 ? path : path.reverse();
+  return import_clipper_lib2.default.Clipper.Orientation(path) === positive3 ? path : path.reverse();
 }
 var paths = (polygons) => polygons.flatMap((p) => [oriented(p.outer), ...p.holes.map((h) => oriented(h, false))]);
 function operation(subject, clip, type) {
   if (!subject.length) return [];
-  const engine = new import_clipper_lib.default.Clipper(), tree = new import_clipper_lib.default.PolyTree();
-  engine.AddPaths(paths(subject), import_clipper_lib.default.PolyType.ptSubject, true);
-  engine.AddPaths(paths(clip), import_clipper_lib.default.PolyType.ptClip, true);
-  engine.Execute(type, tree, import_clipper_lib.default.PolyFillType.pftNonZero, import_clipper_lib.default.PolyFillType.pftNonZero);
-  return import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  const engine = new import_clipper_lib2.default.Clipper(), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(paths(subject), import_clipper_lib2.default.PolyType.ptSubject, true);
+  engine.AddPaths(paths(clip), import_clipper_lib2.default.PolyType.ptClip, true);
+  engine.Execute(type, tree, import_clipper_lib2.default.PolyFillType.pftNonZero, import_clipper_lib2.default.PolyFillType.pftNonZero);
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal)
   }));
 }
-var subtractPolygons = (a, b) => operation(a, b, import_clipper_lib.default.ClipType.ctDifference);
-var intersectPolygons = (a, b) => operation(a, b, import_clipper_lib.default.ClipType.ctIntersection);
+var subtractPolygons = (a, b) => operation(a, b, import_clipper_lib2.default.ClipType.ctDifference);
+var intersectPolygons = (a, b) => operation(a, b, import_clipper_lib2.default.ClipType.ctIntersection);
 function circleSideCount(radius) {
   return Math.min(128, Math.max(24, Math.ceil(Math.PI * Math.sqrt(Math.max(radius, 0.01) / 0.01))));
 }
@@ -6268,14 +6281,14 @@ function circlePolygon(at, radius) {
 }
 function strokedPath(points, width, closed, arcTolerance = 0.01) {
   if (points.length < 2 || width <= 0) return [];
-  const engine = new import_clipper_lib.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib.default.PolyTree();
+  const engine = new import_clipper_lib2.default.ClipperOffset(2, arcTolerance * scale), tree = new import_clipper_lib2.default.PolyTree();
   engine.AddPath(
     integer(points),
-    import_clipper_lib.default.JoinType.jtRound,
-    closed ? import_clipper_lib.default.EndType.etClosedLine : import_clipper_lib.default.EndType.etOpenRound
+    import_clipper_lib2.default.JoinType.jtRound,
+    closed ? import_clipper_lib2.default.EndType.etClosedLine : import_clipper_lib2.default.EndType.etOpenRound
   );
   engine.Execute(tree, width * scale / 2);
-  return import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal)
   }));
@@ -6344,15 +6357,15 @@ function closedGraphicContours(edges, context) {
   return loops;
 }
 function polygonsFromContours(loops) {
-  const engine = new import_clipper_lib.default.Clipper(), tree = new import_clipper_lib.default.PolyTree();
-  engine.AddPaths(loops.map(integer), import_clipper_lib.default.PolyType.ptSubject, true);
+  const engine = new import_clipper_lib2.default.Clipper(), tree = new import_clipper_lib2.default.PolyTree();
+  engine.AddPaths(loops.map(integer), import_clipper_lib2.default.PolyType.ptSubject, true);
   engine.Execute(
-    import_clipper_lib.default.ClipType.ctUnion,
+    import_clipper_lib2.default.ClipType.ctUnion,
     tree,
-    import_clipper_lib.default.PolyFillType.pftEvenOdd,
-    import_clipper_lib.default.PolyFillType.pftEvenOdd
+    import_clipper_lib2.default.PolyFillType.pftEvenOdd,
+    import_clipper_lib2.default.PolyFillType.pftEvenOdd
   );
-  return import_clipper_lib.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
+  return import_clipper_lib2.default.JS.PolyTreeToExPolygons(tree).map((p) => ({
     outer: decimal(p.outer),
     holes: p.holes.map(decimal)
   }));
@@ -6368,29 +6381,26 @@ function padCornerRadius(p) {
 function padPolygon(f, p) {
   const w = p.size.x, h = p.size.y;
   let local;
-  if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
+  if (p.outline) local = p.outline;
+  else if (p.shape === "circle") local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
     const radius = padCornerRadius(p);
-    const corners = [
-      { x: -1, y: -1, name: "top_left" },
-      { x: 1, y: -1, name: "top_right" },
-      { x: 1, y: 1, name: "bottom_right" },
-      { x: -1, y: 1, name: "bottom_left" }
-    ];
-    local = corners.flatMap((c, i) => {
+    local = pcbPadCorners.flatMap((c, i) => {
       const cut = p.chamfer?.includes(c.name) ? Math.min(w, h) * (p.chamferRatio ?? 0) : 0;
       const start = Math.PI + i * Math.PI / 2;
-      if (cut)
-        return [
-          { x: c.x * (w / 2 - (i % 2 ? 0 : cut)), y: c.y * (h / 2 - (i % 2 ? cut : 0)) },
-          { x: c.x * (w / 2 - (i % 2 ? cut : 0)), y: c.y * (h / 2 - (i % 2 ? 0 : cut)) }
-        ];
+      if (p.chamfer?.includes(c.name))
+        return cut ? pcbPadChamferEndpoints(c, p.size, cut) : [{ x: c.x * w / 2, y: c.y * h / 2 }];
       if (!radius) return [{ x: c.x * w / 2, y: c.y * h / 2 }];
       return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
         x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
         y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep)
       }));
     });
+    if (p.chamfer?.length)
+      local = local.filter((point2, i) => {
+        const previous = local[(i + local.length - 1) % local.length];
+        return point2.x !== previous.x || point2.y !== previous.y;
+      });
   }
   const at = padPosition(f, p), radians = -padRotation(f, p) * Math.PI / 180;
   return {
@@ -6421,7 +6431,7 @@ function filledCopperPolygons(board) {
     if (vertices > 6e4)
       throw new Error("Saved copper fills exceed the 60000-vertex board limit.");
     const polygons = z.filledPolygons.map((p) => ({ outer: p.points, holes: [] }));
-    result.set(z.id, operation(polygons, [], import_clipper_lib.default.ClipType.ctUnion));
+    result.set(z.id, operation(polygons, [], import_clipper_lib2.default.ClipType.ctUnion));
   }
   return result;
 }

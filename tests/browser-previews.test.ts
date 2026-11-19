@@ -150,16 +150,24 @@ test('browser plugin routes share bundled lifecycle and delegate provider operat
     assert.equal((await plugin('provider-list?provider=codex&refresh=true')).status, 200);
     assert.equal((await plugin('provider-list?provider=unknown')).status, 400);
     assert.equal(
-      (await plugin('provider-change', {
-        provider: 'claude', action: 'disable', id: 'fixture@local',
-      })).status,
+      (
+        await plugin('provider-change', {
+          provider: 'claude',
+          action: 'disable',
+          id: 'fixture@local',
+        })
+      ).status,
       200,
     );
     assert.equal(
-      (await plugin('provider-change', { provider: 'claude', action: 'disable', id: '--unknown' })).status,
+      (await plugin('provider-change', { provider: 'claude', action: 'disable', id: '--unknown' }))
+        .status,
       400,
     );
-    assert.deepEqual(providerCalls, [['codex', 'true'], ['claude', 'disable', 'fixture@local']]);
+    assert.deepEqual(providerCalls, [
+      ['codex', 'true'],
+      ['claude', 'disable', 'fixture@local'],
+    ]);
     for (const [action, id] of [
       ['spice-status', 'spice-simulation@openpe'],
       ['thermal-status', 'pcb-thermal@openpe'],
@@ -251,6 +259,10 @@ test('browser model previews resolve library identities without exposing file gr
           calls.push({ id, index });
           return { meshes: [] };
         },
+        price: async (id) => {
+          calls.push({ id });
+          return { currency: 'USD', checkedAt: 1, offers: [] };
+        },
         close: () => {
           closed = true;
         },
@@ -266,12 +278,15 @@ test('browser model previews resolve library identities without exposing file gr
   try {
     const { token } = await (await post('session', {})).json();
     assert.equal((await post('footprint', { id: 'Device:Package' })).status, 401);
+    assert.equal((await post('price', { id: 'NextPCB:9728_LM358' })).status, 401);
     for (const [route, body] of [
       ['model', { id: 'Device:Package', index: -1 }],
       ['model', { id: 'Device:Package', index: 100 }],
       ['model', { id: 'Device:Package', index: 0, fileId: 'not-a-grant' }],
       ['footprint', { id: 'Device:Package', path: 'C:/secret.step' }],
       ['footprint', { id: 'x'.repeat(257) }],
+      ['price', { id: 'Device:Package' }],
+      ['price', { id: 'NextPCB:9728_LM358', url: 'https://example.invalid' }],
     ] as const)
       assert.equal((await post(route, body, token)).status, 400);
     for (const route of ['component-model', 'component-model/library', 'state'])
@@ -288,9 +303,13 @@ test('browser model previews resolve library identities without exposing file gr
     assert.equal(calls.length, 0);
     assert.equal((await post('footprint', { id: 'Device:Package' }, token)).status, 200);
     assert.equal((await post('model', { id: 'Device:Package', index: 0 }, token)).status, 200);
+    const price = await post('price', { id: 'NextPCB:9728_LM358' }, token);
+    assert.equal(price.status, 200);
+    assert.deepEqual(await price.json(), { currency: 'USD', checkedAt: 1, offers: [] });
     assert.deepEqual(calls, [
       { action: 'detail', kind: 'footprints', id: 'Device:Package' },
       { id: 'Device:Package', index: 0 },
+      { id: 'NextPCB:9728_LM358' },
     ]);
   } finally {
     await host.close();

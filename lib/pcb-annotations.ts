@@ -123,7 +123,7 @@ export function capturePCBAnnotationSelection(
             'Local rotation (deg)': String(pad.rotation),
             'Board position (mm)': JSON.stringify(padPosition(footprint, pad)),
             'Board rotation (deg)': String(padRotation(footprint, pad)),
-            'Size (mm)': JSON.stringify(pad.size),
+            [pad.outline ? 'Anchor size (mm)' : 'Size (mm)']: JSON.stringify(pad.size),
             'Drill (mm)': pad.drill === undefined ? '' : String(pad.drill),
             'Net ID': pad.netId || '',
             Net: pad.netId ? nets.get(pad.netId) || '' : '',

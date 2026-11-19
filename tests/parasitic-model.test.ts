@@ -342,6 +342,17 @@ test('current PCB association is revalidated after successful structural cache r
   assert.equal(parasiticPhysicalModels(owned, board).length, 1);
   const moved = structuredClone(board);
   moved.footprints[0].x += 20;
+  const pads = moved.footprints[0].pads;
+  pads.push({
+    ...pads[0],
+    id: uid(),
+    type: 'np_thru_hole',
+    drill: 0.5,
+    drillSlot: { axis: 'x', length: 1 },
+    x: 2,
+    layers: ['*.Mask'],
+    netId: null,
+  });
   assert.equal(parasiticPhysicalModels(owned, moved).length, 1);
   const wrongBoard = structuredClone(board);
   wrongBoard.id = uid();

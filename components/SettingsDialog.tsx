@@ -2,6 +2,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   Bot,
+  Check,
   CheckCircle2,
   ClipboardCheck,
   LoaderCircle,
@@ -18,6 +19,7 @@ import { useAgentSettings } from './AgentSettings';
 import Select from './Select';
 import type { FollowUpMode } from '@/lib/agent-settings';
 import RuleSettings, { type RuleSettingsActions, type RuleSettingsProps } from './RuleSettings';
+import WorkspaceModeSelect from './WorkspaceModeSelect';
 
 export default function SettingsDialog({
   appearance,
@@ -25,6 +27,7 @@ export default function SettingsDialog({
   detecting,
   error,
   onDetect,
+  onEnterRawMode,
   onClose,
   initialSection = 'appearance',
   ruleSettings,
@@ -34,6 +37,7 @@ export default function SettingsDialog({
   detecting: boolean;
   error: string;
   onDetect: () => Promise<void>;
+  onEnterRawMode?: () => Promise<void>;
   onClose: () => void;
   initialSection?: 'appearance' | 'agents' | 'rules';
   ruleSettings?: RuleSettingsProps;
@@ -47,6 +51,8 @@ export default function SettingsDialog({
     suffix?: string;
   } | null>(null);
   const [cursorError, setCursorError] = useState('');
+  const [switchingMode, setSwitchingMode] = useState(false);
+  const [modeError, setModeError] = useState('');
   const cursorComposing = useRef(false);
   useEffect(() => {
     const status = window.openpe?.cursorCredentialStatus;
@@ -85,7 +91,9 @@ export default function SettingsDialog({
       footer={
         <button
           type="button"
-          className="dialog-button primary"
+          className="dialog-button primary dialog-footer-icon"
+          aria-label="Done"
+          title="Done"
           onPointerDown={(event) => {
             if (section === 'rules' && ruleActions.current?.isComposing()) event.preventDefault();
           }}
@@ -94,7 +102,7 @@ export default function SettingsDialog({
             onClose();
           }}
         >
-          Done
+          <Check size={18} aria-hidden="true" />
         </button>
       }
     >
@@ -193,6 +201,37 @@ export default function SettingsDialog({
               <p className="dialog-error" role="alert">
                 {error}
               </p>
+            )}
+            {onEnterRawMode && (
+              <>
+                <div
+                  className="settings-field"
+                  onPointerDownCapture={(event) => {
+                    if (cursorComposing.current) event.preventDefault();
+                  }}
+                >
+                  <span>Workspace mode</span>
+                  <WorkspaceModeSelect
+                    mode="workbench"
+                    composing={cursorComposing}
+                    disabled={switchingMode}
+                    onChange={async () => {
+                      if (switchingMode) return;
+                      setSwitchingMode(true);
+                      setModeError('');
+                      try {
+                        await onEnterRawMode();
+                        onClose();
+                      } catch (error) {
+                        setModeError((error as Error).message);
+                      } finally {
+                        setSwitchingMode(false);
+                      }
+                    }}
+                  />
+                </div>
+                {modeError && <p className="dialog-error" role="alert">{modeError}</p>}
+              </>
             )}
             <div className="settings-field">
               <span>Messages sent while the Agent is running</span>

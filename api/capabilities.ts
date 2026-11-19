@@ -21,6 +21,8 @@ export type CapabilityOptions = {
   actor?: CapabilityActor;
   requestId?: string;
   expectedRevision?: string;
+  /** Progress delivered only to the calling Human adapter. */
+  onProgress?: (data: JsonValue) => void;
   /** Remote adapters resolve true only after the result reaches its caller. */
   resultDelivery?: Promise<boolean>;
   /** Track only serialized deferred requests, so normal transport EOF can drain them. */
@@ -32,6 +34,7 @@ export type CapabilityContext = {
   requestId: string;
   expectedRevision?: string;
   emit: (type: string, data: unknown) => void;
+  reportProgress?: (data: unknown) => void;
   /** Defer one lifecycle action until result delivery, retaining cancellation. */
   afterResult: (action: () => void) => void;
 };
@@ -265,6 +268,16 @@ export function createCapabilityHost(
         actor,
         requestId,
         emit,
+        ...(actor === 'human' &&
+          options.onProgress && {
+            reportProgress(data: unknown) {
+              if (control.signal.aborted || !entry.active.has(control)) return;
+              const payload = copyJson(data, maxEventBytes);
+              try {
+                options.onProgress?.(payload);
+              } catch {}
+            },
+          }),
         afterResult(action) {
           if (kind !== 'command' || deferred || typeof action !== 'function')
             throw new Error('Only commands may defer one lifecycle action.');

@@ -1,10 +1,11 @@
 import { pinPositions, uid, type Circuit, type Part, type Point } from './circuit';
 import { partFields, unitGraphics } from './library';
 import { child, children, val, type SExpr } from './sexpr';
-import { invalidatePCBFill, type PCB, type Footprint } from './pcb';
+import { invalidatePCBFill, type PCB, type Footprint, type Pad } from './pcb';
 import { createEmptyPCB, createPCBFootprint, flipPCBFootprint, pcbBounds } from './pcb-layout';
 import { isOwnedCircuit, isOwnedPCB } from './immutable-project';
 import { parasiticPhysicalModels } from './parasitic-model';
+import { padApertureLayers, padHasElectricalPin } from './pcb-pad-role';
 
 type Pin = { key: string; ref: string; number: string; index: number };
 export type SchematicNet = { name: string; pins: string[] };
@@ -356,7 +357,12 @@ export function updatePCBFromSchematic(
     if (old) {
       if (old.side === 'back') next = flipPCBFootprint(next);
       const ids = new Map<string, string[]>();
-      old.pads.forEach((p) => ids.set(p.number, [...(ids.get(p.number) || []), p.id]));
+      const padKey = (pad: Pad) =>
+        `${padApertureLayers(pad)?.toSorted().join(',') ?? (padHasElectricalPin(pad) ? 'electrical' : 'mechanical')}:${pad.number}`;
+      for (const pad of old.pads) {
+        const key = padKey(pad);
+        ids.set(key, [...(ids.get(key) ?? []), pad.id]);
+      }
       next = {
         ...old,
         ...next,
@@ -364,7 +370,7 @@ export function updatePCBFromSchematic(
         x: old.x,
         y: old.y,
         rotation: old.rotation,
-        pads: next.pads.map((p) => ({ ...p, id: ids.get(p.number)?.shift() || p.id })),
+        pads: next.pads.map((p) => ({ ...p, id: ids.get(padKey(p))?.shift() ?? p.id })),
       };
       footprints[index] = next;
       replaced++;
@@ -442,6 +448,7 @@ export function updatePCBFromSchematic(
       const pads = retainArray(
         f.pads,
         f.pads.map((pad) => {
+          if (!padHasElectricalPin(pad)) return pad;
           const index = pinNet.get(pcbPinKey(part.ref, pad.number));
           const netId = index === undefined ? null : nets[index].id;
           return pad.netId === netId ? pad : { ...pad, netId };

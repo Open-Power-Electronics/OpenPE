@@ -1,14 +1,47 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { convertJlcpcbComponent } from './jlcpcb-cad.mjs';
-import { readCatalogBytes } from './online-library-fetch.mjs';
+import { CatalogHttpError, readCatalogBytes } from './online-library-fetch.mjs';
+import { LibraryAssetUnavailable } from './library-asset-error.mjs';
 
 const catalogUrl =
   'https://jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList/v2';
 const cadOrigin = 'https://easyeda.com';
+const cadProvider = 'EasyEDA CAD';
+const stepProvider = 'EasyEDA STEP';
 const pageSize = 100;
 const partCode = /^C[1-9]\d{0,11}$/;
 const categoryId = /^[1-9]\d{0,9}$/;
 const catalogLifetime = 5 * 60_000;
-const concurrentCadReads = 8;
+const cadReadIntervalMs = 1_000;
+const cadTransientRetryMs = 2_000;
+const cadCooldownMs = 60_000;
+const maximumCadCooldownMs = 5 * 60_000;
+
+function cadRetryError(status, remaining) {
+  const seconds = Math.ceil(remaining / 1000);
+  const message = status === 403 ? 'denied the request' : 'is rate-limiting requests';
+  return new Error(
+    `${cadProvider} ${message} (HTTP ${status}). Retry in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`,
+  );
+}
+
+async function waitForCadRead(read, signal) {
+  const { promise, resolve } = Promise.withResolvers();
+  signal.addEventListener('abort', resolve, { once: true });
+  try {
+    await Promise.race([read, promise]);
+  } finally {
+    signal.removeEventListener('abort', resolve);
+  }
+}
+
+export function isOmittableJlcpcbStep(error) {
+  return (
+    error instanceof CatalogHttpError &&
+    error.provider === stepProvider &&
+    (error.status === 403 || error.status === 404)
+  );
+}
 
 function remember(cache, key, value, limit) {
   cache.delete(key);
@@ -95,8 +128,11 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
   const pages = new Map();
   const availability = new Map();
   const details = new Map();
-  const cadReads = new Set();
   let categories;
+  let nextCadReadAt = 0;
+  let pendingCadRead;
+  let cadCooldown;
+  let cadDenials = 0;
   let active = 0;
 
   async function readJson(provider, url, options, signal) {
@@ -160,7 +196,7 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
     return page;
   }
 
-  async function search({ query = '', category = '', offset = 0 }, signal) {
+  async function search({ query = '', category = '', offset = 0, scanLimit = pageSize }, signal) {
     if (
       typeof query !== 'string' ||
       query.length > 200 ||
@@ -177,11 +213,17 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
     if (category && !match) throw new Error('Choose an available JLCPCB category.');
     const currentPage = Math.floor(offset / pageSize) + 1;
     const { entries, total } = await loadPage(keyword, currentPage, match?.filter, signal);
-    const next = currentPage * pageSize;
+    const start = offset % pageSize;
+    const end = Math.min(pageSize, start + scanLimit);
+    const next = offset - start + end;
     return {
-      entries: entries
-        .slice(offset % pageSize)
-        .filter((entry) => entry.package?.trim() && recall(availability, entry.id) !== false),
+      entries: entries.slice(start, end).filter((entry) => {
+        const available = recall(availability, entry.id);
+        return (
+          available !== 'unavailable' &&
+          (available || entry.package?.trim() || entry.id === `JLCPCB:${keyword}`)
+        );
+      }),
       total,
       nextOffset: next < Math.min(total, 1_000_000) ? next : null,
       libraries: ['JLCPCB'],
@@ -189,27 +231,12 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
   }
 
   async function readCad(code, signal) {
-    while (cadReads.size >= concurrentCadReads) {
-      await Promise.race(cadReads);
-      signal.throwIfAborted();
-    }
-    const request = readJson(
-      'EasyEDA',
-      `${cadOrigin}/api/products/${code}/components?version=6.4.19.5`,
+    const response = await readJson(
+      cadProvider,
+      `${cadOrigin}/api/products/${code}/components`,
       { headers: { Accept: 'application/json' } },
       signal,
     );
-    const slot = request.then(
-      () => {},
-      () => {},
-    );
-    cadReads.add(slot);
-    let response;
-    try {
-      response = await request;
-    } finally {
-      cadReads.delete(slot);
-    }
     if (response?.success === false && response.code === 404) return;
     if (response?.success !== true || response?.code !== 0)
       throw new Error('EasyEDA could not verify CAD availability. Retry shortly.');
@@ -218,11 +245,48 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
     return response.result;
   }
 
-  function convert(entry, cad, signal) {
-    const converted = convertJlcpcbComponent(entry, cad);
-    signal.throwIfAborted();
-    if (!converted.symbols.warning) remember(details, entry.id, converted, 16);
-    return converted;
+  async function loadDetailCad(entry, code, kind, signal) {
+    const { id } = entry;
+    for (;;) {
+      signal.throwIfAborted();
+      const cached = recall(details, id)?.[kind];
+      if (cached) return cached;
+      const now = performance.now();
+      if (cadCooldown && !cadCooldown.transient && now < cadCooldown.until)
+        throw cadRetryError(cadCooldown.status, cadCooldown.until - now);
+      if (pendingCadRead) {
+        await waitForCadRead(pendingCadRead, signal);
+        continue;
+      }
+      const wait = Math.max(nextCadReadAt, cadCooldown?.until ?? 0) - now;
+      if (wait > 0) {
+        await delay(Math.ceil(wait), undefined, { signal });
+        continue;
+      }
+      const { promise, resolve } = Promise.withResolvers();
+      pendingCadRead = promise;
+      nextCadReadAt = now + cadReadIntervalMs;
+      try {
+        const cad = await readCad(code, signal);
+        cadCooldown = undefined;
+        cadDenials = 0;
+        return convertedDetail(entry, kind, cad, signal);
+      } catch (error) {
+        if (!(error instanceof CatalogHttpError) || ![403, 429].includes(error.status)) throw error;
+        const transient = error.status === 403 && !error.retryAfterMs && cadDenials === 0;
+        cadDenials = Math.min(cadDenials + 1, 6);
+        const wait =
+          error.retryAfterMs ||
+          (transient
+            ? cadTransientRetryMs
+            : Math.min(maximumCadCooldownMs, cadCooldownMs * 2 ** Math.max(0, cadDenials - 2)));
+        cadCooldown = { status: error.status, transient, until: performance.now() + wait };
+        if (!transient) throw cadRetryError(error.status, wait);
+      } finally {
+        pendingCadRead = undefined;
+        resolve();
+      }
+    }
   }
 
   async function detail({ id, kind }, signal) {
@@ -241,54 +305,68 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
       entry = entries.find((item) => item.id === id);
     }
     if (!entry) throw new Error('This component is unavailable in the JLCPCB catalog.');
-    const cad = await readCad(code, signal);
+    return loadDetailCad(entry, code, kind, signal);
+  }
+
+  function convertedDetail(entry, kind, cad, signal) {
+    signal.throwIfAborted();
+    const { id } = entry;
     if (!cad) {
-      remember(availability, id, false, 1024);
-      throw new Error('No EasyEDA CAD data is available for this JLCPCB component.');
+      remember(availability, id, 'unavailable', 1024);
+      throw new LibraryAssetUnavailable(
+        'No EasyEDA CAD data is available for this JLCPCB component.',
+      );
     }
-    const converted = convert(entry, cad, signal);
-    remember(availability, id, Boolean(converted.footprints), 1024);
+    const converted = convertJlcpcbComponent(entry, cad);
+    signal.throwIfAborted();
+    if (!converted.footprintError) remember(details, id, converted, 16);
+    const footprint = converted.footprints;
+    const status = footprint ? (footprint.models.length ? '2d-and-3d' : '2d') : 'unavailable';
+    remember(availability, id, status, 1024);
     if (!converted[kind])
-      throw new Error(
-        converted.symbols.warning ?? 'This JLCPCB component has no linked footprint.',
+      throw new LibraryAssetUnavailable(
+        kind === 'footprints'
+          ? (converted.footprintError ?? 'This JLCPCB component has no linked footprint.')
+          : converted.symbolError,
       );
     return converted[kind];
   }
 
+  async function request(message) {
+    if (shutdown.signal.aborted) throw new Error('JLCPCB library service closed.');
+    if (!['symbols', 'footprints'].includes(message.kind))
+      throw new Error('Unsupported JLCPCB library kind.');
+    if (!['categories', 'search', 'detail'].includes(message.action))
+      throw new Error('Unsupported JLCPCB library operation.');
+    if (active >= 8) throw new Error('Too many JLCPCB requests. Try again shortly.');
+    const signal = AbortSignal.any([
+      shutdown.signal,
+      AbortSignal.timeout(20_000),
+      ...(message.signal ? [message.signal] : []),
+    ]);
+    active++;
+    try {
+      signal.throwIfAborted();
+      const result =
+        message.action === 'categories'
+          ? { categories: (await loadCategories(signal)).categories }
+          : await (message.action === 'search' ? search(message, signal) : detail(message, signal));
+      signal.throwIfAborted();
+      return structuredClone(result);
+    } catch (error) {
+      if (signal.aborted)
+        throw new Error('JLCPCB request cancelled or timed out. Retry when online.');
+      if (error instanceof TypeError)
+        throw new Error('JLCPCB request failed. Check your internet connection and retry.');
+      throw error;
+    } finally {
+      active--;
+    }
+  }
+
   return {
-    async request(message) {
-      if (shutdown.signal.aborted) throw new Error('JLCPCB library service closed.');
-      if (!['symbols', 'footprints'].includes(message.kind))
-        throw new Error('Unsupported JLCPCB library kind.');
-      if (!['categories', 'search', 'detail'].includes(message.action))
-        throw new Error('Unsupported JLCPCB library operation.');
-      if (active >= 8) throw new Error('Too many JLCPCB requests. Try again shortly.');
-      const signal = AbortSignal.any([
-        shutdown.signal,
-        AbortSignal.timeout(20_000),
-        ...(message.signal ? [message.signal] : []),
-      ]);
-      active++;
-      try {
-        signal.throwIfAborted();
-        const result =
-          message.action === 'categories'
-            ? { categories: (await loadCategories(signal)).categories }
-            : await (message.action === 'search'
-                ? search(message, signal)
-                : detail(message, signal));
-        signal.throwIfAborted();
-        return structuredClone(result);
-      } catch (error) {
-        if (signal.aborted)
-          throw new Error('JLCPCB request cancelled or timed out. Retry when online.');
-        if (error instanceof TypeError)
-          throw new Error('JLCPCB request failed. Check your internet connection and retry.');
-        throw error;
-      } finally {
-        active--;
-      }
-    },
+    cachedFootprintStatus: (id) => recall(availability, id),
+    request,
     async modelBytes(reference, signal) {
       const uuid =
         typeof reference === 'string' && /^JLCPCB:([a-f0-9]{32})\.step$/.exec(reference)?.[1];
@@ -297,7 +375,7 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
       active++;
       try {
         const bytes = await readCatalogBytes(
-          'EasyEDA',
+          stepProvider,
           fetcher,
           `https://modules.easyeda.com/qAxj6KHrDKw4blvCG8QJPs7Y/${uuid}`,
           {},
@@ -309,7 +387,7 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
           ]),
         );
         if (!bytes.subarray(0, 100).toString('ascii').includes('ISO-10303-21'))
-          throw new Error('EasyEDA returned an invalid STEP model.');
+          throw new LibraryAssetUnavailable('EasyEDA returned an invalid STEP model.');
         return bytes;
       } finally {
         active--;

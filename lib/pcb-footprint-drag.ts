@@ -7,7 +7,7 @@ import {
   padCopperLayers,
   partitionPCBRoutingCopper,
 } from './pcb-connectivity';
-import { movePCBSelection, padDrillPosition, type PCBSelection } from './pcb-layout';
+import { movePCBSelection, padDrillLine, padDrillPosition, type PCBSelection } from './pcb-layout';
 import { borrowPCBPadOutline } from './pcb-pad-contour';
 import {
   createDynamicPCBRouter,
@@ -279,7 +279,12 @@ export function createPCBFootprintDrag(
                     netId: pad.type === 'np_thru_hole' ? null : pad.netId,
                     width: pad.drill,
                     obstacleType: 'pad',
-                  }).validate([padDrillPosition(footprint, pad)], spend);
+                  }).validate(
+                    pad.drillSlot
+                      ? padDrillLine(footprint, pad)
+                      : [padDrillPosition(footprint, pad)],
+                    spend,
+                  );
                   if (issue) throw new Error(issue);
                 }
               }

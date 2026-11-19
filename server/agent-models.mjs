@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { resolveAgent } from './agents.mjs';
 import { isAgentProvider, isProviderReasoningEffort, validModelId } from './agent-provider-format.mjs';
-import { verifyPiIsolation } from './agent-provider-runtime.mjs';
+import { rawCodexIsolationArgs, verifyPiIsolation } from './agent-provider-runtime.mjs';
 import {
   listCursorModels,
   loadCursorSdk,
@@ -59,7 +59,7 @@ export async function listAgentModels(provider, cwd, signal, options = {}) {
             '--mcp-config',
             '{"mcpServers":{}}',
           ]
-        : ['app-server', '--listen', 'stdio://'];
+        : ['app-server', '--listen', 'stdio://', ...(options.raw ? rawCodexIsolationArgs : [])];
     const proc = spawn(launch.file, [...launch.args, ...args], {
       cwd,
       env: launch.env,

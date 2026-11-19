@@ -115,6 +115,8 @@ action. Use the shared [toolbar order and spacing](../DESIGN.md#toolbars-and-too
 The shared PluginLogo uses 17 px in toolbars and 64 px in details, with a
 4-unit outline on its 64-unit viewBox. Layout Parasitics depicts two plated
 pad rings joined by parallel traces, with one trace in signal green.
+EMC Analysis depicts two pairs of signal-green wavefronts radiating from a
+single point.
 
 ## Page and categories
 
@@ -206,6 +208,8 @@ project aborts its owned work but cannot undo completed external writes. See
 [Core](CORE.md) for review, event budgets and cancellation.
 
 ## Bundled workbench lifecycle
+
+[Raw KiCad mode](ARCHITECTURE.md#raw-kicad-chat) suspends the workbench and blocks bundled, local and provider plugin operations for the duration of the mode. Plugin installation and enablement settings are retained.
 
 Built-in plugins start installed and enabled. Their Install action activates packaged
 resources without downloading code or running provider CLIs. Uninstalled

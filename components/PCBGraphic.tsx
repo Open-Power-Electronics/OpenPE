@@ -1,6 +1,6 @@
 import type { BoardLine, BoardText } from '@/lib/pcb';
 import { pcbGraphicPath } from '@/lib/pcb-geometry';
-import { pcbReadableTextAngle } from '@/lib/pcb-display';
+import { pcbFootprintTextRotation } from '@/lib/pcb-display';
 
 /** Shared, typed artwork rendering for editable board geometry. */
 export default function PCBGraphic({
@@ -22,7 +22,7 @@ export default function PCBGraphic({
         role="presentation"
         x={0}
         y={0}
-        transform={`translate(${x} ${y}) rotate(${-(footprintRotation === undefined ? t.rotation : pcbReadableTextAngle(t.rotation + footprintRotation) - footprintRotation)}) scale(${((t.justify?.includes('mirror') ? -1 : 1) * t.size.x) / t.size.y} 1)`}
+        transform={`translate(${x} ${y}) rotate(${-(footprintRotation === undefined ? t.rotation : pcbFootprintTextRotation(t.rotation, footprintRotation, g.keepUpright))}) scale(${((t.justify?.includes('mirror') ? -1 : 1) * t.size.x) / t.size.y} 1)`}
         fill={color}
         stroke="none"
         fontSize={t.size.y}

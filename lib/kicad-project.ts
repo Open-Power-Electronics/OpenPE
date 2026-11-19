@@ -2,6 +2,7 @@ import { isPluginProjectData } from '../plugins/runtime/project-data.mjs';
 import { emptyCircuit, parseCircuitTree, type Circuit } from './circuit';
 import { parseKiCadPCB, expandNativeBoardZones } from './kicad-pcb';
 import { nativeIdentity } from './kicad-project-identity';
+import { footprintTextPlacement } from './pcb-text';
 import {
   loadKiCadPCBDesignRuleLimits,
   pcbDesignRuleLimitKeys,
@@ -632,18 +633,16 @@ function mergeBoardSource(
     keys: string[],
     retainLocks = nativeLock(old) === nativeLock(node),
   ) => {
-    for (const key of new Set([...keys, ...(retainLocks ? ['locked', 'unlocked'] : [])])) {
+    for (const key of new Set([...keys, ...(retainLocks ? ['locked'] : [])])) {
       const source = children(old, key);
       if (!source.length) continue;
       for (const item of children(node, key)) node.splice(node.indexOf(item), 1);
       node.push(...source);
     }
-    if (retainLocks)
-      for (const flag of ['locked', 'unlocked'])
-        if (old.includes(flag)) {
-          for (const item of children(node, flag)) node.splice(node.indexOf(item), 1);
-          if (!node.includes(flag)) node.push(flag);
-        }
+    if (retainLocks && old.includes('locked')) {
+      for (const item of children(node, 'locked')) node.splice(node.indexOf(item), 1);
+      if (!node.includes('locked')) node.push('locked');
+    }
     const oldLayer = child(old, 'layer');
     let newLayer = child(node, 'layer');
     // Layer modifiers such as text knockout are independent of the edited layer.
@@ -717,7 +716,18 @@ function mergeBoardSource(
             ].includes(String(node[0]))
           : String(node[0]).startsWith('gr_') || node[0] === 'dimension'),
     );
-  const retainGraphic = (old: SExpr, node: SExpr) => retain(old, node, ['unlocked']);
+  const retainGraphic = (old: SExpr, node: SExpr) => {
+    retain(old, node, []);
+    if (old[0] !== 'fp_text' && old[0] !== 'property') return;
+    const original = footprintTextPlacement(old, fail);
+    const generated = footprintTextPlacement(node, fail);
+    if (original.unlocked !== generated.unlocked) return;
+    if (generated.flag) node.splice(node.indexOf(generated.flag), 1);
+    if (original.flag) node.push(original.flag);
+    if (original.bare) node.push('unlocked');
+    if (original.inPosition && generated.at)
+      node[node.indexOf(generated.at)] = [...generated.at, 'unlocked'];
+  };
   const retainZone = (old: SExpr, node: SExpr) => retain(old, node, ['hatch', 'placement', 'name']);
   matched(
     children(before, 'segment'),

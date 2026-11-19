@@ -304,6 +304,33 @@ test('drill spacing uses actual round holes across nets and respects its indepen
   assert.deepEqual(disabled.checkedRules, ['pcb.copper-hole']);
 });
 
+test('hole clearance reaches the far end of a rotated, offset slot', () => {
+  const board = fixture();
+  const part = pad(board, 5, 5);
+  part.rotation = 90;
+  Object.assign(part.pads[0], {
+    type: 'np_thru_hole',
+    netId: null,
+    shape: 'oval',
+    size: { x: 4, y: 0.8 },
+    drill: 0.8,
+    drillSlot: { axis: 'x', length: 4 },
+    drillOffset: { x: 0.5, y: 0 },
+  });
+  const viaId = uid();
+  board.vias = [{ id: viaId, x: 5, y: 2.2, diameter: 0.5, drill: 0.4, netId: board.nets[1].id }];
+  const report = runPCBDesignRules(board, {
+    scopes: ['holes'],
+    copperToHole: 0.1,
+    holeToHole: 0.2,
+  });
+  assert.deepEqual(report.issues.map((issue) => issue.ruleId).sort(), [
+    'pcb.copper-hole',
+    'pcb.hole-spacing',
+  ]);
+  assert.ok(report.issues.every((issue) => issue.objectIds.includes(viaId)));
+});
+
 test('silkscreen geometry and visible text dimensions run as separate configurable checks', () => {
   const board = fixture();
   const part = pad(board, 0, 0);

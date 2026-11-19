@@ -17,16 +17,20 @@ const bundle = await build({
       const ground = {id:'power:GND',name:'GND',library:'power',description:'Ground',keywords:'ground'};
       const online = [1001,1002].map((id,index) => ({
         id:'NextPCB:'+id,name:'Online amplifier '+(index+1),library:'NextPCB',
-        description:'Online fixture amplifier '+(index+1),keywords:'amplifier',footprint:'',
+        description:'Online fixture amplifier '+(index+1),keywords:'amplifier',footprint:index===0?'NextPCB:1001':'',
+        footprintPreview:index===0?'2d-and-3d':'unavailable',
         manufacturer:'Fixture Semiconductor',package:'SOIC-8',category:'1737',
       }));
       const resistor = {id:'NextPCB:1003',name:'Online resistor',library:'NextPCB',description:'Online resistor',keywords:'resistor',manufacturer:'Fixture Passives',package:'0603',category:'201'};
       const regulator = {...resistor,id:'NextPCB:1004',name:'Online regulator',keywords:'regulator',category:'302'};
-      const jlc = {id:'JLCPCB:C7593',name:'NE555DR',library:'JLCPCB',description:'Timer',keywords:'timer',package:'SOIC-8'};
+      const jlc = {id:'JLCPCB:C7593',name:'NE555DR',library:'JLCPCB',description:'Timer',keywords:'timer',package:'SOIC-8',footprintPreview:'2d-and-3d'};
       const jlcRows = [jlc,...Array.from({length:124},(_,index)=>({
-        ...jlc,id:'JLCPCB:C'+(9000+index),name:'Timer '+(index+1),
+        ...jlc,id:'JLCPCB:C'+(9000+index),name:'Timer '+(index+1),footprintPreview:undefined,
       }))];
-      const jlcAllRows = [{...jlc,id:'JLCPCB:C8000',name:'Unfiltered catalog part'},...jlcRows];
+      const jlcAllRows = [{...jlc,id:'JLCPCB:C8000',name:'Unfiltered catalog part',footprintPreview:'unavailable'},...jlcRows];
+      const kicadRows = [local,...Array.from({length:79},(_,index)=>({
+        ...local,id:'Device:Fixture'+(index+1),name:'KiCad fixture '+(index+1),
+      }))];
       const paged = Array.from({length:120},(_,index)=>({
         ...online[0],id:'NextPCB:'+(2000+index),name:'Paged amplifier '+String(index+1).padStart(3,'0'),
         description:'Paged fixture amplifier',
@@ -36,11 +40,12 @@ const bundle = await build({
         description:'Overlapping-page fixture amplifier',
       }));
       const searchable = [local,ground,...online,resistor,regulator,...paged];
-      const entries = [...searchable,...overlapping,...jlcAllRows];
+      const entries = [...searchable,...overlapping,...jlcAllRows,...kicadRows.slice(1)];
       const fixture = window.fixture = {
         requests:[], chosen:[], closed:0, failNextSearch:false, failNextAppend:false, failNextCategories:true,
         blockedCad:false,
         holdSearch:false, holdCategories:true, releaseCategories:null, editedAt:0,
+        holdJlcPage:false, releaseJlcPage:null, checkedBrowseFixture:false,
         heldDetails:new Set(), pendingDetails:new Map(), pendingSearch:[],
         releaseDetail(id) {
           for (const resolve of this.pendingDetails.get(id) || []) resolve();
@@ -52,7 +57,7 @@ const bundle = await build({
           this.pendingSearch.splice(0).forEach(resolve => resolve());
         },
       };
-      const capabilityHost = {async query(action,input,{signal}) {
+      const capabilityHost = {async query(action,input,{signal,onProgress}) {
         const request = {action,input,aborted:signal.aborted};
         fixture.requests.push(request);
         signal.addEventListener('abort',()=>{request.aborted=true;},{once:true});
@@ -81,12 +86,29 @@ const bundle = await build({
         if (action === 'library.search') {
           if (input.library === 'JLCPCB') {
             const matches = !input.category ? jlcAllRows : ['20','228'].includes(input.category) ? jlcRows : [];
-            if (input.query === 'blocked') return {entries:[jlc],total:1,nextOffset:null,libraries:['JLCPCB']};
+            if (input.query === 'blocked') return {entries:[{...jlc,footprintPreview:undefined}],total:1,nextOffset:null,libraries:['JLCPCB']};
             if (input.query === 'sparse') {
               if (input.offset === 0) return {entries:[],total:13,nextOffset:12,libraries:['JLCPCB']};
               return {entries:[jlc],total:13,nextOffset:null,libraries:['JLCPCB']};
             }
-            return {entries:matches.slice(input.offset,input.offset+100),total:matches.length,nextOffset:input.offset+100<matches.length?input.offset+100:null,libraries:['JLCPCB']};
+            if (input.query === 'LM2596') {
+              if (input.offset === 0) return {entries:jlcRows.slice(0,12),total:25,nextOffset:16,libraries:['JLCPCB']};
+              if (input.offset !== 16) throw new Error('The filtered batch must advance by its raw cursor.');
+              return {entries:jlcRows.slice(11,20),total:25,nextOffset:null,libraries:['JLCPCB']};
+            }
+            if (fixture.holdJlcPage && !input.category && !input.query && input.offset === 12) {
+              onProgress?.({completed:5,total:12});
+              await new Promise(resolve => {fixture.releaseJlcPage=resolve;});
+            }
+            const end = input.offset + (input.includeAssetStatus ? 12 : 100);
+            return {entries:matches.slice(input.offset,end),total:matches.length,nextOffset:end<matches.length?end:null,libraries:['JLCPCB']};
+          }
+          if (fixture.checkedBrowseFixture && input.includeAssetStatus && !input.query) {
+            const nextpcb = input.library === 'NextPCB';
+            const matches = nextpcb ? [...online,...paged] : kicadRows;
+            const end = input.offset + (nextpcb ? 12 : 24);
+            return {entries:matches.slice(input.offset,end),total:matches.length,nextOffset:end<matches.length?end:null,
+              libraries:nextpcb?['NextPCB']:['Device','power']};
           }
           if (input.library === 'NextPCB' && input.offset > 0 && fixture.failNextAppend) {
             fixture.failNextAppend = false;
@@ -96,26 +118,30 @@ const bundle = await build({
             fixture.failNextSearch = false;
             throw new Error('NextPCB fixture is temporarily unavailable.');
           }
-          if (fixture.holdSearch)
+          if (fixture.holdSearch) {
+            if (input.includeAssetStatus) onProgress?.({completed:7,total:16});
             await new Promise(resolve => fixture.pendingSearch.push(resolve));
+          }
           if (input.library === 'NextPCB' && input.query === 'Overlap') {
             const pages = {
-              0: overlapping.slice(0,100),
-              100: overlapping.slice(90,110),
-              120: overlapping.slice(110,120),
+              0: overlapping.slice(0,16),
+              16: overlapping.slice(12,28),
+              32: overlapping.slice(28,44),
+              48: overlapping.slice(44,52),
             };
             if (!Object.hasOwn(pages,input.offset))
               throw new Error('Unexpected overlapping-page offset: '+input.offset);
-            return {entries:pages[input.offset],total:130,nextOffset:({0:100,100:120,120:null})[input.offset],libraries:['NextPCB']};
+            return {entries:pages[input.offset],total:56,nextOffset:({0:16,16:32,32:48,48:null})[input.offset],libraries:['NextPCB']};
           }
           const matches = searchable.filter(entry =>
             (input.library === 'NextPCB' ? entry.library === 'NextPCB' : entry.library !== 'NextPCB'&&(!input.library||entry.library===input.library)) &&
             (!input.category || entry.category===input.category || input.category==='100'&&['1737','102'].includes(entry.category) || input.category==='200'&&entry.category==='201' || ['300','301'].includes(input.category)&&entry.category==='302') &&
             (!input.query || [entry.name,entry.description,entry.keywords,entry.manufacturer].join(' ').toLowerCase().includes(input.query.toLowerCase())));
-          return {entries:matches.slice(input.offset,input.offset+100),total:!input.library&&!input.query?22712:matches.length,nextOffset:input.offset+100<matches.length?input.offset+100:null,libraries:input.library==='NextPCB'?['NextPCB']:['Device','power']};
+          const end = input.offset + (input.includeAssetStatus ? 16 : 100);
+          return {entries:matches.slice(input.offset,end),total:!input.library&&!input.query?22712:matches.length,nextOffset:end<matches.length?end:null,libraries:input.library==='NextPCB'?['NextPCB']:['Device','power']};
         }
         if (action === 'library.detail') {
-          if (input.id === jlc.id && fixture.blockedCad) throw new Error('EasyEDA denied the request (HTTP 403).');
+          if (input.id === jlc.id && fixture.blockedCad) throw new Error('EasyEDA CAD denied the request (HTTP 403).');
           if (fixture.heldDetails.has(input.id))
             await new Promise(resolve => {
               const pending = fixture.pendingDetails.get(input.id) || [];
@@ -125,7 +151,11 @@ const bundle = await build({
           if (!entry) throw new Error('Unknown fixture symbol.');
           const symbol = structuredClone(symbols['Device:R']);
           symbol[1] = quote(entry.id);
-          return {...entry,symbol,units:1};
+          return {
+            ...entry,symbol,units:1,
+            ...(entry.id==='NextPCB:1001'?{footprintPreview:'2d-and-3d'}:{}),
+            ...(entry.id===jlc.id?{footprint:entry.id,footprintPreview:'2d-and-3d'}:{}),
+          };
         }
         throw new Error('Unexpected fixture capability.');
       }};
@@ -156,9 +186,18 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1120, height: 760 } });
   const errors = [];
+  const priceRequests = [];
+  let priceReply;
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('**/*', async (route) => {
-    if (route.request().url() === 'http://localhost/brand/openpe-mark.svg')
+    const request = route.request();
+    if (request.url() === 'http://localhost/api/browser-preview/session')
+      return route.fulfill({ json: { token: 'a'.repeat(64) } });
+    if (request.url() === 'http://localhost/api/browser-preview/price') {
+      priceRequests.push(request.postDataJSON());
+      return route.fulfill(await priceReply);
+    }
+    if (request.url() === 'http://localhost/brand/openpe-mark.svg')
       return route.fulfill({
         contentType: 'image/svg+xml',
         body: await readFile('public/brand/openpe-mark.svg'),
@@ -177,7 +216,6 @@ try {
   const search = page.getByRole('textbox', { name: 'Search components', exact: true });
   const submit = page.getByRole('button', { name: 'Search', exact: true });
   const source = page.getByRole('combobox', { name: 'Library source', exact: true });
-  const category = page.getByRole('combobox', { name: 'Category', exact: true });
   const categoryLevel = (level) =>
     page.getByRole('combobox', { name: `Category level ${level}`, exact: true });
   const categoryPath = async () =>
@@ -209,12 +247,6 @@ try {
     }));
   const waitForDetail = async (id) => {
     await page.waitForFunction(
-      (expected) => document.querySelector('.library-detail-id')?.textContent === expected,
-      id,
-    );
-    const preview = chooser.getByRole('button', { name: 'Preview', exact: true });
-    if (await preview.isVisible()) await preview.click();
-    await page.waitForFunction(
       (expected) =>
         document.querySelector('.library-detail-id')?.textContent === expected &&
         !document.querySelector('.dialog-button.primary')?.disabled,
@@ -227,11 +259,6 @@ try {
     await option('Library source', name).click();
   }
   async function chooseCategory(labels) {
-    if ((await source.textContent()) === 'KiCad') {
-      await category.click();
-      await option('Category', labels[0]).click();
-      return;
-    }
     for (const [index, label] of [
       labels[0],
       ...(labels.length > 1 ? [labels.slice(1).join(' / ')] : []),
@@ -242,6 +269,15 @@ try {
   }
 
   await waitForDetail('Device:R');
+  assert.equal(await categoryLevel(2).isDisabled(), true);
+  assert.equal(
+    await page.getByRole('button', { name: 'Footprint', exact: true }).isDisabled(),
+    true,
+  );
+  assert.equal(
+    await page.getByRole('button', { name: '3D model', exact: true }).isDisabled(),
+    true,
+  );
   const initialBrowse = await browseState();
   await search.fill('draft local');
   await search.fill('');
@@ -278,27 +314,123 @@ try {
   await option('Library source', 'KiCad').click();
 
   // Online categories are loaded only after the user explicitly selects NextPCB.
+  await page.evaluate(() => (fixture.holdSearch = true));
   await chooseSource('NextPCB');
   await page.getByRole('status', { name: 'Loading library', exact: true }).waitFor();
+  await page.waitForFunction(
+    () => fixture.pendingSearch.length === 1 && typeof fixture.releaseCategories === 'function',
+  );
+  const progress = page.getByRole('progressbar', { name: 'Loading library', exact: true });
+  await progress.waitFor();
+  assert.equal(await progress.getAttribute('aria-valuenow'), '7');
+  assert.equal(await progress.getAttribute('aria-valuemax'), '16');
+  assert.equal(await progress.locator('span').getAttribute('style'), 'width: 43.75%;');
+  assert.equal(await page.getByText('7 / 16 loaded', { exact: true }).isVisible(), true);
   assert.ok(await page.locator('.loading-mark img').count());
   assert.equal(await page.locator('.loading-mark').count(), 1);
   await mkdir('test-results/library-chooser-ui', { recursive: true });
   await page.screenshot({ path: 'test-results/library-chooser-ui/loading.png' });
+  await page.evaluate(() => fixture.releaseSearch());
+  await progress.waitFor({ state: 'hidden' });
+  await waitForDetail('NextPCB:1001');
+  assert.equal(await resultCount.textContent(), '16 results loaded');
+  const pricing = chooser.getByRole('region', { name: 'Price', exact: true });
+  assert.equal(
+    await pricing.evaluate((section) => section.parentElement.lastElementChild === section),
+    true,
+  );
+  const checkPrice = pricing.getByRole('button', { name: 'Check price', exact: true });
+  const retryPrice = pricing.getByRole('button', { name: 'Retry price check', exact: true });
+  const refreshPrice = pricing.getByRole('button', { name: 'Refresh price', exact: true });
+  const quoteStatus = pricing.getByRole('status');
+  const checkedAt = 1_760_000_000_000;
+  const quote = {
+    currency: 'USD',
+    checkedAt,
+    offers: [
+      {
+        sku: 'FIXTURE-123',
+        manufacturer: 'Fixture Semiconductor',
+        stock: 1200,
+        tiers: [{ quantity: 10, unitPrice: 0.08 }],
+      },
+      {
+        sku: 'FIXTURE-456',
+        manufacturer: 'Other manufacturer',
+        tiers: [{ quantity: 5, unitPrice: 0.07 }],
+      },
+    ],
+  };
+  assert.equal(priceRequests.length, 0);
+  const htmlReply = Promise.withResolvers();
+  priceReply = htmlReply.promise;
+  const composingPriceKeyBlocked = await checkPrice.evaluate((button) => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      keyCode: 229,
+      bubbles: true,
+      cancelable: true,
+    });
+    button.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  assert.equal(composingPriceKeyBlocked, true);
+  await checkPrice.press('Enter');
+  await quoteStatus.getByText('Checking HQ Online…', { exact: true }).waitFor();
+  assert.equal(await checkPrice.isDisabled(), true);
+  await checkPrice.press('Enter');
+  htmlReply.resolve({ contentType: 'text/html', body: '<!DOCTYPE html><title>OpenPE</title>' });
+  await quoteStatus.getByText(/Price service unavailable/).waitFor();
+  assert.equal(await retryPrice.evaluate((button) => button === document.activeElement), true);
+  assert.deepEqual(priceRequests, [{ id: 'NextPCB:1001' }]);
+
+  priceReply = { json: quote };
+  await retryPrice.press('Space');
+  await pricing.getByRole('cell', { name: '$0.08', exact: true }).waitFor();
+  assert.match(await pricing.locator('caption').first().textContent(), /Fixture Semiconductor/);
+  assert.match(await pricing.locator('caption').nth(1).textContent(), /Other manufacturer/);
+  assert.equal(await pricing.getByText('Stock 1,200', { exact: true }).isVisible(), true);
+  const checkedDate = new Date(checkedAt).toISOString();
+  assert.equal(await pricing.locator('time').getAttribute('datetime'), checkedDate);
+  priceReply = { json: { ...quote, checkedAt: Number.MAX_SAFE_INTEGER } };
+  await refreshPrice.click();
+  await quoteStatus.getByText('Could not check prices. Try again.', { exact: true }).waitFor();
+  assert.equal(await pricing.getByRole('cell', { name: '$0.08', exact: true }).isVisible(), true);
+  assert.match(await pricing.locator('.library-price-checked').textContent(), /^Last checked /);
+  assert.equal(await pricing.locator('time').getAttribute('datetime'), checkedDate);
+  assert.equal(await place.isEnabled(), true);
+  await pricing.screenshot({ path: 'test-results/library-chooser-ui/price-retry.png' });
+  priceReply = { json: { ...quote, offers: [] } };
+  await retryPrice.click();
+  await quoteStatus.getByText('No matching price found on HQ Online.', { exact: true }).waitFor();
+  assert.equal(await pricing.getByRole('table').count(), 0);
+  await rows.nth(1).click();
+  await waitForDetail('NextPCB:1002');
+  assert.equal(await checkPrice.isEnabled(), true);
+  assert.equal(await pricing.locator('time').count(), 0);
+  await rows.first().click();
+  await waitForDetail('NextPCB:1001');
+  assert.equal(await checkPrice.isEnabled(), true);
+  assert.equal(priceRequests.length, 4);
+
+  const catalogSearches = () =>
+    page.evaluate(() =>
+      fixture.requests
+        .filter(
+          (request) => request.action === 'library.search' && request.input.library === 'NextPCB',
+        )
+        .map(({ input }) => input),
+    );
+  const initialCatalogSearches = await catalogSearches();
+  assert.equal(initialCatalogSearches.length, 1);
+  assert.equal(initialCatalogSearches[0].query, '');
+  assert.equal(initialCatalogSearches[0].category, undefined);
+  assert.equal(await rows.locator('[title="Online resistor"]').count(), 1);
   await page.evaluate(() => {
     fixture.holdCategories = false;
     fixture.releaseCategories();
   });
   assert.equal(await search.inputValue(), '');
-  assert.equal(await resultCount.textContent(), 'Ready to search');
-  assert.equal(
-    await page.evaluate(
-      () =>
-        window.fixture.requests.filter(
-          (request) => request.action === 'library.search' && request.input.library === 'NextPCB',
-        ).length,
-    ),
-    0,
-  );
   await categoryLevel(1).click();
   await option('Category level 1', 'Categories unavailable').waitFor();
   assert.equal(
@@ -324,22 +456,13 @@ try {
     window.fixture.holdCategories = true;
     window.fixture.releaseCategories = null;
     window.fixture.failNextCategories = true;
-    window.fixture.failNextSearch = true;
   });
   await footerRefresh.click();
   await page.waitForFunction(() => typeof fixture.releaseCategories === 'function');
-  await page.getByRole('status', { name: 'Loading library', exact: true }).waitFor();
   assert.equal(await footerRefresh.isDisabled(), true);
   assert.equal(await categoryRequestCount(), beforeCategoryRetry + 1);
-  assert.equal(
-    await page.evaluate(
-      () =>
-        fixture.requests.filter(
-          (request) => request.action === 'library.search' && request.input.library === 'NextPCB',
-        ).length,
-    ),
-    0,
-  );
+  assert.deepEqual(await catalogSearches(), initialCatalogSearches);
+  assert.equal(await rows.count(), 16);
   await page.evaluate(() => {
     fixture.holdCategories = false;
     fixture.releaseCategories();
@@ -356,6 +479,12 @@ try {
   assert.equal(await source.textContent(), 'NextPCB');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   await page
+    .getByText('NextPCB categories are temporarily unavailable.', { exact: true })
+    .waitFor({ state: 'detached' });
+  assert.deepEqual(await catalogSearches(), initialCatalogSearches);
+  await page.evaluate(() => (fixture.failNextSearch = true));
+  await submit.click();
+  await page
     .getByRole('alert')
     .filter({ hasText: 'NextPCB fixture is temporarily unavailable.' })
     .waitFor();
@@ -365,7 +494,7 @@ try {
   assert.equal(await place.isDisabled(), true);
   await chooser.getByRole('button', { name: 'Retry loading results' }).click();
   await waitForDetail('NextPCB:1001');
-  assert.equal(await resultCount.textContent(), '100 results loaded');
+  assert.equal(await resultCount.textContent(), '16 results loaded');
 
   assert.equal(await chooser.getByText(/^Browse suggestions ·/).count(), 0);
   await rows.nth(1).click();
@@ -391,7 +520,7 @@ try {
   assert.equal(await rows.count(), 1);
   await chooseSource('NextPCB');
   await waitForDetail('NextPCB:1001');
-  assert.equal(await resultCount.textContent(), '100 results loaded');
+  assert.equal(await resultCount.textContent(), '16 results loaded');
 
   // Online edits do not search until Search or non-composing input Enter.
   const onlineBrowse = await browseState();
@@ -423,6 +552,64 @@ try {
     'SOIC-8',
     'SOIC-8',
   ]);
+  const sortBy = (column) =>
+    chooser.getByRole('button', { name: `Sort by ${column}`, exact: true });
+  const rowIds = () =>
+    rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-description')));
+  const originalOrder = ['NextPCB:1001', 'NextPCB:1002'];
+  const reversedOrder = [...originalOrder].reverse();
+  const beforeSort = await page.evaluate(() => fixture.requests.length);
+  assert.equal(
+    await sortBy('Name').evaluate((button) =>
+      button.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+          keyCode: 229,
+        }),
+      ),
+    ),
+    false,
+    'Composing Enter cannot activate a sort header.',
+  );
+  await sortBy('Name').press('Enter');
+  assert.deepEqual(await rowIds(), originalOrder);
+  await sortBy('Name').press('Space');
+  assert.equal(await sortBy('Name').getAttribute('aria-description'), 'Sorted descending');
+  assert.deepEqual(await rowIds(), reversedOrder);
+  assert.equal(await rows.last().getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:1001');
+  assert.equal(await page.evaluate(() => fixture.requests.length), beforeSort);
+  await search.press('ArrowUp');
+  await waitForDetail('NextPCB:1002');
+  await search.press('ArrowDown');
+  await waitForDetail('NextPCB:1001');
+  await sortBy('Name').click();
+  assert.deepEqual(await rowIds(), originalOrder);
+  for (const column of ['Footprint', 'Model']) {
+    const checked = rows.first().getByTitle(`${column}: Available`);
+    const unchecked = rows.last().getByTitle(`${column}: Unavailable`);
+    assert.equal(await checked.getAttribute('data-status'), 'yes');
+    assert.equal(await unchecked.getAttribute('data-status'), 'no');
+    assert.equal(await checked.locator('svg').count(), 1);
+    assert.equal(await unchecked.locator('svg').count(), 1);
+    assert.match(await unchecked.locator('svg').getAttribute('class'), /\blucide-square\b(?!-)/);
+    assert.equal(await checked.textContent(), '');
+    assert.equal(await unchecked.textContent(), '');
+    await sortBy(column).click();
+    assert.deepEqual(await rowIds(), originalOrder);
+    await sortBy(column).click();
+    assert.deepEqual(await rowIds(), reversedOrder);
+    await sortBy(column).click();
+    assert.deepEqual(await rowIds(), originalOrder);
+  }
+  const packageSort = sortBy('Package');
+  await packageSort.press('Enter');
+  assert.deepEqual(await rowIds(), originalOrder, 'Equal package names keep the catalog order.');
+  await packageSort.press('Enter');
+  await packageSort.press('Enter');
+  assert.equal(await packageSort.getAttribute('aria-pressed'), 'false');
   assert.equal(await page.evaluate(() => window.fixture.chosen.length), 0);
   assert.deepEqual(
     await page.evaluate(
@@ -430,7 +617,14 @@ try {
         window.fixture.requests.filter((request) => request.action === 'library.search').at(-1)
           .input,
     ),
-    { kind: 'symbols', query: 'Online', library: 'NextPCB', offset: 0, category: '1737' },
+    {
+      kind: 'symbols',
+      query: 'Online',
+      library: 'NextPCB',
+      offset: 0,
+      category: '1737',
+      includeAssetStatus: true,
+    },
   );
 
   // Clearing retains accepted results until an explicit submit.
@@ -440,7 +634,7 @@ try {
   assert.deepEqual(await browseState(), beforeClear);
   await submit.click();
   await waitForDetail('NextPCB:1001');
-  assert.equal(await resultCount.textContent(), '100 results loaded');
+  assert.equal(await resultCount.textContent(), '16 results loaded');
   const defaultSearch = await page.evaluate(
     () =>
       window.fixture.requests.filter((request) => request.action === 'library.search').at(-1).input,
@@ -455,7 +649,7 @@ try {
   const beforeSourceSwitch = await searchCount();
   await chooseSource('KiCad');
   await waitForDetail('Device:R');
-  assert.equal(await category.textContent(), 'Device');
+  assert.equal(await categoryLevel(1).textContent(), 'Device');
   assert.equal(await search.inputValue(), 'resistor');
   assert.equal(await rows.count(), 1);
   await chooseSource('NextPCB');
@@ -524,7 +718,11 @@ try {
     ),
   );
   assert.equal(await place.isDisabled(), true);
-  assert.equal(await page.locator('.library-detail-id').count(), 0);
+  assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:1001');
+  assert.equal(
+    await page.getByRole('status', { name: 'Loading preview', exact: true }).isVisible(),
+    true,
+  );
   await rows.first().press('Enter');
   assert.equal(await page.evaluate(() => window.fixture.chosen.length), 0);
   await page.evaluate(() => window.fixture.releaseDetail('NextPCB:1001'));
@@ -609,18 +807,18 @@ try {
     .getByRole('alert')
     .filter({ hasText: 'NextPCB fixture page is temporarily unavailable.' })
     .waitFor();
-  assert.equal(await rows.count(), 100);
-  assert.equal(await resultCount.textContent(), '100 results loaded');
+  assert.equal(await rows.count(), 16);
+  assert.equal(await resultCount.textContent(), '16 results loaded');
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:2000');
   assert.equal(await place.isDisabled(), false);
   await page.getByRole('button', { name: 'Retry loading results', exact: true }).click();
   await page.waitForFunction(() =>
     window.fixture.requests.some(
-      (request) => request.action === 'library.search' && request.input.offset === 100,
+      (request) => request.action === 'library.search' && request.input.offset === 16,
     ),
   );
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button[data-index]').length === 120,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 32,
   );
   const pagedBrowse = await browseState();
   await search.fill('unsent pagination draft');
@@ -645,7 +843,14 @@ try {
         window.fixture.requests.filter((request) => request.action === 'library.search').at(-1)
           .input,
     ),
-    { kind: 'symbols', query: 'Paged', library: 'NextPCB', offset: 0, category: '201' },
+    {
+      kind: 'symbols',
+      query: 'Paged',
+      library: 'NextPCB',
+      offset: 0,
+      category: '201',
+      includeAssetStatus: true,
+    },
   );
   await page.evaluate(() => window.fixture.releaseSearch());
   await search.fill('Online');
@@ -668,21 +873,21 @@ try {
   await search.fill('Overlap');
   await submit.click();
   await waitForDetail('NextPCB:4000');
-  assert.equal(await rows.count(), 100);
+  assert.equal(await rows.count(), 16);
   await search.fill('Unsubmitted page draft');
-  assert.equal(await resultCount.textContent(), '100 results loaded');
+  assert.equal(await resultCount.textContent(), '16 results loaded');
   await page.locator('.library-results').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
     node.dispatchEvent(new Event('scroll'));
   });
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button[data-index]').length === 110,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 32,
   );
   const uniqueIds = async () =>
     new Set(
       await rows.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-description'))),
     ).size;
-  assert.equal(await uniqueIds(), 110);
+  assert.equal(await uniqueIds(), 32);
   assert.equal(
     await rows
       .filter({ has: page.locator('strong', { hasText: 'Overlap amplifier 001' }) })
@@ -691,14 +896,14 @@ try {
   );
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:4000');
 
-  // Source restoration must retain the raw cursor (120), not the unique count (110).
+  // Source restoration retains the raw cursor and the visible batch limit.
   const beforeOverlapRestore = await searchCount();
   await chooseSource('KiCad');
   await waitForDetail('Device:R');
   await chooseSource('NextPCB');
   await waitForDetail('NextPCB:4000');
   assert.equal(await search.inputValue(), 'Unsubmitted page draft');
-  assert.equal(await rows.count(), 110);
+  assert.equal(await rows.count(), 32);
   assert.equal(await searchCount(), beforeOverlapRestore);
   await page.evaluate(() => {
     window.fixture.failNextAppend = true;
@@ -711,14 +916,14 @@ try {
     .getByRole('alert')
     .filter({ hasText: 'NextPCB fixture page is temporarily unavailable.' })
     .waitFor();
-  assert.equal(await rows.count(), 110);
-  assert.equal(await resultCount.textContent(), '110 results loaded');
+  assert.equal(await rows.count(), 44);
+  assert.equal(await resultCount.textContent(), '44 results loaded');
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:4000');
   await page.getByRole('button', { name: 'Retry loading results', exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button[data-index]').length === 120,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 48,
   );
-  assert.equal(await uniqueIds(), 120);
+  assert.equal(await uniqueIds(), 48);
   assert.equal(await page.locator('.library-detail-id').textContent(), 'NextPCB:4000');
   assert.deepEqual(
     await page.evaluate(() =>
@@ -728,9 +933,11 @@ try {
         )
         .map((request) => request.input.offset),
     ),
-    [0, 100, 120, 120],
+    [0, 16, 32, 48, 48],
   );
   const consumedOverlap = await searchCount();
+  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
+  assert.equal(await uniqueIds(), 52);
   await page.locator('.library-results').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
     node.dispatchEvent(new Event('scroll'));
@@ -771,16 +978,16 @@ try {
       () =>
         fixture.requests.findLast((request) => request.action === 'library.search').input.category,
     ),
-    '1737',
+    undefined,
   );
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
-  const beforeSuggestionRestore = await searchCount();
+  const beforeCatalogRestore = await searchCount();
   await chooseSource('KiCad');
   await waitForDetail('Device:R');
   await chooseSource('NextPCB');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   assert.ok((await rows.count()) > 0);
-  assert.equal(await searchCount(), beforeSuggestionRestore);
+  assert.equal(await searchCount(), beforeCatalogRestore);
 
   // Closing cancels the active online search; even a late result cannot place.
   await page.evaluate(() => {
@@ -834,35 +1041,109 @@ try {
     window.reopenChooser();
   });
   await waitForDetail('Device:R');
+  await page.evaluate(() => (fixture.holdJlcPage = true));
   await chooseSource('JLCPCB');
+  await page.waitForFunction(() => Boolean(fixture.releaseJlcPage));
   await waitForDetail('JLCPCB:C8000');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   assert.equal(await search.inputValue(), '');
-  assert.equal(await rows.count(), 100);
+  assert.equal(await rows.count(), 12, 'The first page is visible and usable during the append.');
+  const appendProgress = page
+    .locator('.library-results > .library-page-progress:last-child')
+    .getByRole('progressbar', { name: 'Loading more components' });
+  await appendProgress.waitFor();
+  assert.equal(await appendProgress.getAttribute('aria-valuenow'), '5');
+  assert.equal(await chooser.getByRole('button', { name: 'Load more', exact: true }).count(), 0);
+  await page.evaluate(() => {
+    fixture.holdJlcPage = false;
+    fixture.releaseJlcPage();
+  });
+  await page.waitForFunction(
+    () => document.querySelector('.library-result-status').textContent === '16 results loaded',
+  );
+  await appendProgress.waitFor({ state: 'hidden' });
+  assert.equal(await rows.count(), 16);
+  const unknownModel = rows.nth(2).getByTitle('Model: Unknown');
+  assert.equal(await unknownModel.getAttribute('data-status'), 'unknown');
+  const emptyBox = await unknownModel.locator('svg').getAttribute('class');
+  assert.match(emptyBox, /\blucide-square\b(?!-)/);
+  assert.equal(
+    await rows.first().getByTitle('Model: Unavailable').locator('svg').getAttribute('class'),
+    emptyBox,
+    'Missing and unknown models have the same empty checkbox.',
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      fixture.requests.some(
+        (request) => request.action === 'library.detail' && request.input.id === 'JLCPCB:C7593',
+      ),
+    ),
+    false,
+  );
+  for (const asset of ['Footprint', 'Model']) {
+    const confirmed = rows.nth(1).getByTitle(`${asset}: Available`);
+    assert.equal(await confirmed.getAttribute('data-status'), 'yes');
+    assert.match(await confirmed.locator('svg').getAttribute('class'), /\blucide-square-check\b/);
+  }
+  await sortBy('Model').click();
+  assert.equal(await rows.first().getAttribute('aria-description'), 'JLCPCB:C7593');
+  await rows.first().click();
+  await waitForDetail('JLCPCB:C7593');
+  assert.equal(
+    await rows.first().getByTitle('Model: Available').getAttribute('data-status'),
+    'yes',
+  );
+  assert.equal(
+    await chooser.getByRole('button', { name: '3D model', exact: true }).isEnabled(),
+    true,
+  );
+  await sortBy('Model').click();
+  await sortBy('Model').click();
+  await rows.first().click();
+  await waitForDetail('JLCPCB:C8000');
+  await sortBy('Name').click();
+  assert.equal(await rows.first().getAttribute('aria-description'), 'JLCPCB:C7593');
   await page.locator('.library-results').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
     node.dispatchEvent(new Event('scroll'));
   });
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button[data-index]').length === 126,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 32,
   );
-  assert.equal(await uniqueIds(), 126);
+  assert.equal(await uniqueIds(), 32);
+  assert.equal(
+    await chooser.locator('.library-results button[aria-description="JLCPCB:C9029"]').count(),
+    1,
+  );
+  assert.equal(await rows.last().getAttribute('aria-description'), 'JLCPCB:C8000');
+  assert.equal(await rows.last().getAttribute('aria-pressed'), 'true');
+  await sortBy('Name').click();
+  await sortBy('Name').click();
   await categoryLevel(1).click();
   await option('Category level 1', 'Clock/Timing').click();
   await waitForDetail('JLCPCB:C7593');
+  await page.waitForFunction(
+    () => document.querySelector('.library-result-status').textContent === '16 results loaded',
+  );
+  const knownModel = rows.first().getByTitle('Model: Available');
+  assert.equal(await knownModel.getAttribute('data-status'), 'yes');
+  assert.match(await knownModel.locator('svg').getAttribute('class'), /\blucide-square-check\b/);
   await categoryLevel(2).click();
   await option('Category level 2', '555 Timers / Counters').click();
   await waitForDetail('JLCPCB:C7593');
   assert.equal(await categoryPath(), 'Clock/Timing / 555 Timers / Counters');
-  assert.equal(await rows.count(), 100);
+  await page.waitForFunction(
+    () => document.querySelector('.library-result-status').textContent === '16 results loaded',
+  );
+  assert.equal(await rows.count(), 16);
   await page.locator('.library-results').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
     node.dispatchEvent(new Event('scroll'));
   });
   await page.waitForFunction(
-    () => document.querySelectorAll('.library-results button[data-index]').length === 125,
+    () => document.querySelectorAll('.library-results button[data-index]').length === 32,
   );
-  assert.equal(await uniqueIds(), 125);
+  assert.equal(await uniqueIds(), 32);
   assert.deepEqual(
     await page.evaluate(() =>
       fixture.requests
@@ -871,31 +1152,42 @@ try {
         )
         .map((request) => [request.input.category, request.input.query, request.input.offset]),
     ),
-    [
-      [undefined, '', 0],
-      [undefined, '', 100],
-      ['20', '', 0],
-      ['228', '', 0],
-      ['228', '', 100],
-    ],
+    [undefined, '20', '228'].flatMap((category) =>
+      (category === '20' ? [0, 12] : [0, 12, 24]).map((offset) => [category, '', offset]),
+    ),
   );
   await chooseSource('KiCad');
   await waitForDetail('Device:R');
   await chooseSource('JLCPCB');
   await waitForDetail('JLCPCB:C7593');
   assert.equal(await categoryPath(), 'Clock/Timing / 555 Timers / Counters');
-  assert.equal(await rows.count(), 125);
+  assert.equal(await rows.count(), 32);
   await categoryLevel(1).click();
   await option('Category level 1', 'All categories').click();
   await waitForDetail('JLCPCB:C8000');
+  await search.fill('LM2596');
+  await submit.click();
+  await page.waitForFunction(
+    () => document.querySelector('.library-result-status').textContent === '16 results loaded',
+  );
+  assert.equal(
+    await uniqueIds(),
+    16,
+    'Keyword results fill 16 visible rows despite filtering and overlap.',
+  );
+  const beforeBufferedResults = await searchCount();
+  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
+  assert.equal(await uniqueIds(), 20);
+  assert.equal(
+    await searchCount(),
+    beforeBufferedResults,
+    'Buffered results are not fetched twice.',
+  );
+
   await search.fill('sparse');
   await submit.click();
-  await chooser.getByText('No matching footprints in this batch.').waitFor();
-  assert.equal(await rows.count(), 0);
-  assert.equal(await chooser.locator('.library-result-columns').count(), 0);
-  assert.equal(await chooser.locator('.library-detail').isVisible(), false);
-  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
   await waitForDetail('JLCPCB:C7593');
+  assert.equal(await rows.count(), 1, 'An empty batch advances automatically to the next cursor.');
   assert.equal(await resultCount.textContent(), '1 result loaded');
   assert.equal(await chooser.getByRole('button', { name: 'Load more', exact: true }).count(), 0);
 
@@ -905,25 +1197,35 @@ try {
     page.evaluate(
       () => window.fixture.requests.filter((request) => request.action === 'library.detail').length,
     );
-  const beforeSearchOnly = await detailRequests();
+  const beforeBlockedPreview = await detailRequests();
   await search.fill('blocked');
   await submit.click();
-  const preview = chooser.getByRole('button', { name: 'Preview', exact: true });
-  await preview.waitFor();
-  assert.equal(await detailRequests(), beforeSearchOnly);
-  await preview.click();
   await footer
     .getByRole('alert')
-    .filter({ hasText: 'EasyEDA denied the request (HTTP 403).' })
+    .filter({ hasText: 'EasyEDA CAD denied the request (HTTP 403).' })
     .waitFor();
+  assert.equal(await detailRequests(), beforeBlockedPreview + 1);
+  assert.equal(await place.isDisabled(), true);
   assert.equal(await chooser.locator('.dialog-content').getByRole('alert').count(), 0);
   assert.equal(await rows.count(), 1);
+  assert.equal(await chooser.locator('.library-detail-id').textContent(), 'JLCPCB:C7593');
+  assert.equal(await rows.first().getByTitle('Footprint: Unknown').count(), 1);
   assert.equal(await footer.locator('button').count(), 2, 'Retry shares the refresh control.');
   assert.equal(await chooser.evaluate((node) => getComputedStyle(node).boxShadow), 'none');
-  await page.evaluate(() => (window.fixture.blockedCad = false));
+  const beforeRetrySearches = await searchCount();
+  await page.evaluate(() => {
+    fixture.blockedCad = false;
+    fixture.heldDetails.add('JLCPCB:C7593');
+  });
   await footer.getByRole('button', { name: 'Retry loading preview' }).click();
+  await page.waitForFunction(() => fixture.pendingDetails.has('JLCPCB:C7593'));
+  assert.equal(await footer.getByRole('button', { name: 'Refresh library' }).isDisabled(), true);
+  assert.equal(await rows.first().getAttribute('aria-pressed'), 'true');
+  assert.equal(await searchCount(), beforeRetrySearches);
+  await page.evaluate(() => fixture.releaseDetail('JLCPCB:C7593'));
   await waitForDetail('JLCPCB:C7593');
   await footer.getByRole('alert').waitFor({ state: 'detached' });
+  await rows.first().getByTitle('Footprint: Available').waitFor();
 
   await chooseSource('NextPCB');
   await search.fill('Missing model');
@@ -940,6 +1242,51 @@ try {
     assert.ok(Math.abs(frame.x + frame.width / 2 - (state.x + state.width / 2)) < 2);
     assert.ok(Math.abs(frame.y + frame.height / 2 - (state.y + state.height / 2)) < 2);
   }
+  await page.setViewportSize({ width: 1120, height: 800 });
+  await page.keyboard.press('Escape');
+  await chooser.waitFor({ state: 'detached' });
+  await page.evaluate(() => {
+    fixture.requests = [];
+    fixture.checkedBrowseFixture = true;
+    window.reopenChooser();
+  });
+  const waitForBrowseRows = (count) =>
+    page.waitForFunction((expected) => {
+      const list = document.querySelector('.library-results');
+      return (
+        list?.getAttribute('aria-busy') === 'false' &&
+        list.querySelectorAll('button[data-index]').length === expected
+      );
+    }, count);
+  await waitForBrowseRows(16);
+  await waitForDetail('Device:R');
+  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
+  await waitForBrowseRows(32);
+  await chooseSource('NextPCB');
+  await waitForBrowseRows(16);
+  await waitForDetail('NextPCB:1001');
+  await chooser.locator('.library-results').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+    node.dispatchEvent(new Event('scroll'));
+  });
+  await waitForBrowseRows(32);
+  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
+  await waitForBrowseRows(48);
+  assert.deepEqual(
+    await page.evaluate(() =>
+      fixture.requests
+        .filter((request) => request.action === 'library.search')
+        .map((request) => [request.input.library, request.input.offset]),
+    ),
+    [
+      ['', 0],
+      ['', 24],
+      ['NextPCB', 0],
+      ['NextPCB', 12],
+      ['NextPCB', 24],
+      ['NextPCB', 36],
+    ],
+  );
   assert.deepEqual(errors, []);
   console.log(
     'PASS: default online browsing, overlapping-page deduplication/raw cursor/restoration/retry, failed-search count reset, append-error retention, source/category hierarchy, explicit search, metadata, native single placement, stale preview, IME and cancellation (mocked isolated browser).',

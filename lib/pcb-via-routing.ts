@@ -1,7 +1,7 @@
 import type { Point } from './circuit';
 import type { PCB } from './pcb';
-import { padDrillPosition } from './pcb-layout';
-import { squaredDistance } from './pcb-collision';
+import { padDrillLine } from './pcb-layout';
+import { pointSegmentDistance, squaredDistance } from './pcb-collision';
 import { createPCBRouter } from './pcb-routing';
 import { preparePCBArtworkObstacles } from './pcb-routing-artwork';
 
@@ -11,8 +11,9 @@ export type PCBViaOptions = {
   drill: number;
   clearance: number;
 };
-type Hole = Point &
-  ({ radius: number; owner: 'pad' } | { radius: number; copperRadius: number; owner: 'via' });
+type Hole = { radius: number } & (
+  { line: [Point, Point]; owner: 'pad' } | { at: Point; copperRadius: number; owner: 'via' }
+);
 const safety = 0.002;
 const limitMessage =
   'Via placement exceeds the geometry limit. Simplify the board before placing a via.';
@@ -53,11 +54,10 @@ export function createPCBViaValidator(
     for (const footprint of board.footprints)
       for (const pad of footprint.pads)
         if (pad.drill)
-          addHole({ ...padDrillPosition(footprint, pad), radius: pad.drill / 2, owner: 'pad' });
+          addHole({ line: padDrillLine(footprint, pad), radius: pad.drill / 2, owner: 'pad' });
     for (const via of board.vias)
       addHole({
-        x: via.x,
-        y: via.y,
+        at: via,
         radius: via.drill / 2,
         copperRadius: via.diameter / 2,
         owner: 'via',
@@ -94,7 +94,11 @@ export function createPCBViaValidator(
               hole.owner === 'via'
                 ? Math.max(radius + hole.radius, hole.copperRadius + drill / 2 + clearance + safety)
                 : radius + hole.radius;
-            if (squaredDistance(at, hole) < separation ** 2)
+            const distance =
+              hole.owner === 'via'
+                ? squaredDistance(at, hole.at)
+                : pointSegmentDistance(at, ...hole.line);
+            if (distance < separation ** 2)
               return `Via blocked by an existing ${hole.owner} hole. Move away from the hole or connect to its existing copper.`;
           }
           for (const engine of engines) {

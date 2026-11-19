@@ -6,6 +6,8 @@ import { exampleFootprintDetail, exampleModelBytes } from './example-footprints.
 import { appendEmcFootprintModels } from './emc-flyback-assets.mjs';
 import { createNextPcbLibrary } from './nextpcb-library.mjs';
 import { createJlcpcbLibrary } from './jlcpcb-library.mjs';
+import { LibraryAssetUnavailable } from './library-asset-error.mjs';
+import { CatalogHttpError } from './online-library-fetch.mjs';
 import { isOnlineLibrary, librarySources, onlineFootprintLibrary } from './library-format.mjs';
 import {
   officialModelRelativePath,
@@ -13,6 +15,52 @@ import {
 } from './library-model-reference.mjs';
 
 const LIBRARY_VERSION = '10.0.0';
+const statusBatchSize = 16;
+
+async function readOnlineStatusPage(adapter, message, signal) {
+  const offset = message.offset ?? 0;
+  const read = (offset, scanLimit) => adapter.request({ ...message, offset, scanLimit, signal });
+  const first = await read(offset, statusBatchSize);
+  const cursor = first.nextOffset;
+  if (cursor === null || cursor - offset === statusBatchSize) return first;
+  const second = await read(cursor, statusBatchSize - (cursor - offset));
+  const seen = new Set(first.entries.map((entry) => entry.id));
+  return {
+    ...second,
+    entries: [...first.entries, ...second.entries.filter((entry) => !seen.has(entry.id))],
+  };
+}
+
+async function withAssetStatus(result, check, signal, checkSignal, onProgress) {
+  const entries = [...result.entries];
+  let nextIndex = 0;
+  let completed = 0;
+  signal.throwIfAborted();
+  if (entries.length) onProgress?.({ completed, total: entries.length });
+  await Promise.all(
+    Array.from({ length: Math.min(4, entries.length) }, async () => {
+      while (nextIndex < entries.length && !checkSignal.aborted) {
+        signal.throwIfAborted();
+        const index = nextIndex++;
+        const entry = entries[index];
+        let footprintPreview;
+        try {
+          footprintPreview = await check(entry, checkSignal);
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof LibraryAssetUnavailable) footprintPreview = 'unavailable';
+        }
+        if (!checkSignal.aborted && footprintPreview) {
+          entries[index] = { ...entry, footprintPreview };
+          completed++;
+          onProgress?.({ completed, total: entries.length });
+        }
+      }
+    }),
+  );
+  signal.throwIfAborted();
+  return { ...result, entries };
+}
 
 // Keep the parser warm between serialized board requests without retaining an
 // unbounded WASM heap or occupying the chooser's second conversion slot.
@@ -56,7 +104,8 @@ export function createStepParserPool({
         retire(parser);
         return;
       }
-      pending.finish(result.error ? new Error(result.error) : null, result);
+      const ErrorType = result.unavailable === true ? LibraryAssetUnavailable : Error;
+      pending.finish(result.error ? new ErrorType(result.error) : null, result);
     });
     parser.worker.on('error', (error) => {
       parser.pending?.finish(error);
@@ -142,9 +191,11 @@ export function createLibraryService({
   const nextpcb = createNextPcbLibrary({ fetcher: nextpcbFetcher });
   const jlcpcb = createJlcpcbLibrary({ fetcher: jlcpcbFetcher });
   const online = { NextPCB: nextpcb, JLCPCB: jlcpcb };
-  /** @param {{signal?: AbortSignal, [key: string]: any}} input */
-  function request({ signal, ...message }) {
+  /** @param {{signal?: AbortSignal, onProgress?: (progress: {completed: number, total: number}) => void, [key: string]: any}} input */
+  function request({ signal, onProgress, ...message }) {
     if (closed) return Promise.reject(new Error('Library service closed.'));
+    if (message.includeAssetStatus && (message.action !== 'search' || message.kind !== 'symbols'))
+      return Promise.reject(new Error('Asset status applies only to symbol searches.'));
     if (message.action === 'categories') {
       if (
         !librarySources.includes(message.source) ||
@@ -165,12 +216,63 @@ export function createLibraryService({
       message.action === 'detail'
         ? onlineFootprintLibrary(message.id ?? '')
         : message.action === 'search' && isOnlineLibrary(message.library) && message.library;
+    if (message.includeAssetStatus) {
+      const statusSignal = AbortSignal.any([shutdown.signal, ...(signal ? [signal] : [])]);
+      if (provider) {
+        const adapter = online[provider];
+        return readOnlineStatusPage(adapter, message, statusSignal).then((result) =>
+          withAssetStatus(
+            result,
+            async ({ id }, signal) => {
+              if (provider === 'JLCPCB') return jlcpcb.cachedFootprintStatus(id);
+              const detail = await adapter.request({
+                action: 'detail',
+                kind: 'symbols',
+                id,
+                signal,
+              });
+              return detail.footprintPreview;
+            },
+            statusSignal,
+            provider === 'JLCPCB'
+              ? statusSignal
+              : AbortSignal.any([statusSignal, AbortSignal.timeout(10_000)]),
+            onProgress,
+          ),
+        );
+      }
+      return workerRequest(message).then((result) => {
+        const entries = result.entries.slice(0, statusBatchSize);
+        const next = (message.offset ?? 0) + entries.length;
+        const checkedFootprints = new Map();
+        return withAssetStatus(
+          { ...result, entries, nextOffset: entries.length && next < result.total ? next : null },
+          async ({ footprint }) => {
+            const id = footprint?.trim();
+            if (!id) return 'unavailable';
+            if (!checkedFootprints.has(id)) {
+              checkedFootprints.set(
+                id,
+                readLocalFootprint({ action: 'detail', kind: 'footprints', id }),
+              );
+            }
+            const detail = await checkedFootprints.get(id);
+            return detail.models.length ? '2d-and-3d' : '2d';
+          },
+          statusSignal,
+          statusSignal,
+          onProgress,
+        );
+      });
+    }
     if (provider) return online[provider].request({ ...message, signal });
     if (message.action === 'detail' && message.kind === 'footprints')
-      return exampleFootprintDetail(message.id).then(async (detail) =>
-        appendEmcFootprintModels(message.id, detail ?? (await workerRequest(message))),
-      );
+      return readLocalFootprint(message);
     return workerRequest(message);
+  }
+  async function readLocalFootprint(message) {
+    const example = await exampleFootprintDetail(message.id);
+    return appendEmcFootprintModels(message.id, example ?? (await workerRequest(message)));
   }
   function workerRequest(message) {
     if (closed) return Promise.reject(new Error('Library service closed.'));
@@ -257,7 +359,7 @@ export function createLibraryService({
           if (!response.ok) {
             await response.body?.cancel();
             if (response.status === 404)
-              throw new Error(
+              throw new LibraryAssetUnavailable(
                 `The linked 3D model ${relative} is not available in the official KiCad ${LIBRARY_VERSION} library. The 2D footprint can still be used.`,
               );
             throw new Error(`3D model download failed (${response.status}). Retry when online.`);
@@ -266,12 +368,12 @@ export function createLibraryService({
           let length = 0;
           for await (const chunk of response.body) {
             length += chunk.length;
-            if (length > 30_000_000) throw new Error('Model exceeds 30 MB.');
+            if (length > 30_000_000) throw new LibraryAssetUnavailable('Model exceeds 30 MB.');
             chunks.push(chunk);
           }
           const bytes = Buffer.concat(chunks);
           if (!bytes.subarray(0, 100).toString().includes('ISO-10303-21'))
-            throw new Error('The download is not a STEP model.');
+            throw new LibraryAssetUnavailable('The download is not a STEP model.');
           const dest = path.join(cache, relative);
           await mkdir(path.dirname(dest), { recursive: true });
           await writeFile(dest + '.tmp', bytes);
@@ -304,6 +406,7 @@ export function createLibraryService({
   }
   return {
     request,
+    price: (id, signal) => nextpcb.price(id, signal),
     componentModelBytes,
     parseStep: (bytes, signal) => stepParsers.run(bytes, signal),
     async modelPath(reference, signal) {
@@ -315,12 +418,16 @@ export function createLibraryService({
       if (modelJobs >= 2) throw new Error('Two 3D previews are loading. Try again shortly.');
       modelJobs++;
       try {
-        const detail = await request({ action: 'detail', kind: 'footprints', id });
+        const detail = await request({ action: 'detail', kind: 'footprints', id, signal });
         const model = detail.models[index];
-        if (!model) throw new Error('No model is assigned to this footprint.');
+        if (!model) throw new LibraryAssetUnavailable('No model is assigned to this footprint.');
         const bytes = await componentModelBytes(id, index, signal);
         if (signal?.aborted || closed) throw new Error('Preview cancelled.');
         return { ...(await stepParsers.run(bytes, signal)), model };
+      } catch (error) {
+        if (error instanceof CatalogHttpError && error.status === 404)
+          throw new LibraryAssetUnavailable(error.message);
+        throw error;
       } finally {
         modelJobs--;
       }

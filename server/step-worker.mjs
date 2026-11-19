@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import occtImport from 'occt-import-js';
+import { LibraryAssetUnavailable } from './library-asset-error.mjs';
 let parser;
 async function convert(bytes) {
   const occt = await (parser ??= occtImport());
@@ -10,9 +11,10 @@ async function convert(bytes) {
     angularDeflection: 0.5,
   });
   if (!result.success || !result.meshes?.length)
-    throw new Error('The STEP model could not be tessellated.');
+    throw new LibraryAssetUnavailable('The STEP model could not be tessellated.');
   const vertices = result.meshes.reduce((n, m) => n + m.attributes.position.array.length, 0);
-  if (vertices > 6_000_000) throw new Error('This model exceeds the preview complexity limit.');
+  if (vertices > 6_000_000)
+    throw new LibraryAssetUnavailable('This model exceeds the preview complexity limit.');
   return { meshes: result.meshes, heapBytes: occt.HEAPU8.buffer.byteLength };
 }
 
@@ -38,7 +40,11 @@ if (workerData) {
     try {
       parentPort.postMessage({ requestId, ...(await convert(bytes)) });
     } catch (error) {
-      parentPort.postMessage({ requestId, error: error.message });
+      parentPort.postMessage({
+        requestId,
+        error: error.message,
+        unavailable: error instanceof LibraryAssetUnavailable,
+      });
     } finally {
       busy = false;
     }

@@ -123,9 +123,9 @@ try {
       !document.querySelector('.dialog-button.primary').disabled,
   );
   assert.equal(await page.locator('.library-pagination').count(), 0);
-  const library = page.getByRole('combobox', { name: 'Category', exact: true });
+  const library = page.getByRole('combobox', { name: 'Category level 1', exact: true });
   await library.click();
-  const popup = page.getByRole('listbox', { name: 'Category', exact: true });
+  const popup = page.getByRole('listbox', { name: 'Category level 1', exact: true });
   await popup.waitFor();
   const popupBounds = await popup.boundingBox();
   assert.ok(popupBounds.height <= 280 && popupBounds.y + popupBounds.height <= 760);

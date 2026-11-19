@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { createModelCadPreviewService } from './model-cad-kernel.mjs';
 import { createLibraryService, createStepParserPool } from './libraries.mjs';
+import { libraryAssetFailure } from './library-asset-error.mjs';
 import { createWorkbenchPlugins, registerWorkbenchPlugins } from './workbench-plugins.mjs';
 
 import {
@@ -105,7 +106,7 @@ function mountBrowserPlugins(app, providerService) {
  * @param {{origin?: string, previewFactory?: typeof createModelCadPreviewService,
  * providerPluginService?: ReturnType<typeof createPluginService>,
  * libraryFactory?: (options: Parameters<typeof createLibraryService>[0]) =>
- * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'close'>}} [options]
+ * Pick<ReturnType<typeof createLibraryService>, 'request' | 'model' | 'price' | 'close'>}} [options]
  */
 export async function startBrowserPreviewServer({
   origin = 'http://127.0.0.1:3000',
@@ -198,6 +199,25 @@ export async function startBrowserPreviewServer({
       if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
     }
   });
+  app.post('/api/browser-preview/price', express.json({ limit: '1kb' }), async (req, res) => {
+    const body = req.body;
+    if (
+      !body ||
+      Array.isArray(body) ||
+      Object.keys(body).join(',') !== 'id' ||
+      typeof body.id !== 'string' ||
+      !body.id.startsWith('NextPCB:') ||
+      body.id.length > 500
+    )
+      return res.status(400).json({ error: 'Send one NextPCB component ID.' });
+    const signal = requestSignal(res);
+    try {
+      const result = await libraries.price(body.id, signal);
+      if (!res.destroyed) res.json(result);
+    } catch (error) {
+      if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));
+    }
+  });
   for (const kind of ['footprint', 'model']) {
     app.post(`/api/browser-preview/${kind}`, express.json({ limit: '1kb' }), async (req, res) => {
       const body = req.body;
@@ -224,7 +244,7 @@ export async function startBrowserPreviewServer({
         signal.throwIfAborted();
         if (!res.destroyed) res.json(result);
       } catch (error) {
-        if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
+        if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));
       }
     });
   }

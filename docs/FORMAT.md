@@ -92,9 +92,17 @@ needed; UUIDs are replayed globally and embedded-library identity remains part
 of board acceptance. Native validation checks track locks without separate
 snapshot compatibility metadata.
 
-Supported notes include horizontal plain/bold/italic text with inert HTTP(S)
-links and finite unfilled Notes polylines. Polylines are read-only on canvas and
-editable in Source. Native footprint, pad, track, via, graphic and zone locks map
+Supported notes include horizontal plain/bold/italic text with bounded stroke
+thickness and inert HTTP(S) links, and finite unfilled polylines, rectangles
+and horizontal text boxes. Outlines and text boxes are read-only on canvas
+and editable in Source. Quoted native strings can contain
+literal tabs, including in embedded-library descriptions.
+Notes can also display up to 16 embedded PNG images per sheet, with dimensions up
+to 4,096 pixels on either axis, at most 16 million pixels in total and up to 1 MB
+of base64 text per image. Source
+retains the native image data and placement. The canvas uses the recorded scale
+and image density and edits the image only through Source.
+Native footprint, pad, track, via, graphic and zone locks map
 to optional `locked: true`; unlocked objects omit it. Serialization synchronizes
 the canonical lock state with retained native text. Properties and `layout.lock`
 share lock/unlock transactions; locked objects reject ordinary property/geometry
@@ -103,7 +111,12 @@ edits and removal. Source remains explicit native editing. See
 Pad pin-function/type metadata, non-rendered footprint properties and unit records
 survive edits. Footprint
 mask/paste margins are retained; pad mask overrides take precedence over the
-footprint default. Multi-layer zones have one editable instance per layer;
+footprint default. Up to 256 native `point` records on `F.Fab` or `B.Fab` per
+footprint are retained with their native identifiers and sizes. They follow
+footprint movement, rotation and side changes. Source edits their native values.
+OpenPE leaves these reference points out of canvas artwork and manufacturing output.
+An unlinked footprint retains an explicitly blank native Reference or Value.
+Multi-layer zones have one editable instance per layer;
 the first retains the native UUID and later instances use deterministic UUIDs.
 Clean files retain their exact original bytes; a PCB edit writes equivalent
 single-layer zones with their original per-layer fills and rules. Disabled
@@ -311,15 +324,35 @@ zones, perform DRC, change geometry or acquire a project destination.
 
 - Gerber X2 uses metric 6.6 coordinates for two/four copper layers, front/back
   mask, paste and silk, and Edge.Cuts. Lines, arcs, circular/oval/rectangular/
-  rounded/chamfered pads and saved zone contours are plotted independently of
+  rounded/chamfered pads, custom polygon pads and saved zone contours are plotted independently of
   view visibility. Arc direction follows the upward-Y output plane. Separate
-  metric Excellon files contain plated and non-plated round through drills,
-  including via drills and rotated pad drill offsets.
+  metric Excellon files contain plated and non-plated round through drills and
+  straight slots. Slots use a G85 command between the two tool centreline
+  endpoints with the slot width as the tool diameter. The coordinates retain
+  native drill anchors and pad rotation, including offset drills. KiCad native
+  pad anchors locate the hole, and the native drill offset locates the copper
+  land relative to that anchor. Native slots use `(drill oval x y)`.
+  OpenPE retains mechanical numbers on non-plated slots through Save and
+  reopen. KiCad 10 clears those numbers when it reads a pad.
+  [KiCad pad numbering](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pad.cpp#L288-L299)
+  [KiCad pad parser](https://github.com/KiCad/kicad-source-mirror/blob/10.0/pcbnew/pcb_io/kicad_sexpr/pcb_io_kicad_sexpr_parser.cpp#L6110-L6115)
 - Full Gerber requires a closed unambiguous board outline and saved fills for every enabled
   non-keepout zone. Keepouts and disabled fills contribute no plotted area.
   Native board-level via tenting and pad/footprint/board mask/paste margins apply.
+  Mask- and paste-only apertures plot their native pad geometry without expansion.
+  Footprint-owned routed cutouts appear in the Edge.Cuts profile. The
+  Excellon files carry pad and via drill operations.
+  Straight-chamfered pads support uniform mask and paste margins. Positive
+  margins use round polygon offsets with a 0.0005 mm arc tolerance and
+  0.0001 mm clipping grid. Negative margins resize the pad dimensions and
+  retain the chamfer ratio.
+  Custom pads use outline clearance and the single outline defined in [Layout](LAYOUT.md).
+  Gerber uses the whole outline for
+  copper and applies uniform mask or paste expansion or contraction using the
+  same tolerance and grid. A relative paste margin uses the native anchor size.
 - Reject unused-layer removal, nonzero minimum mask web, enabled via covering/
-  plugging/capping/filling, margins on chamfered pads, elliptical pad apertures,
+  plugging/capping/filling, asymmetric margins on chamfered or custom pads, margins on
+  pads with both rounded and chamfered corners, elliptical pad apertures,
   dashed artwork, dimensions, font faces/knockout, formatted/unresolved text
   and characters outside the pinned U+0020–U+03FF stroke glyph subset on
   manufacturing layers. Unsupported output never silently omits geometry.

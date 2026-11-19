@@ -10,7 +10,14 @@ function recordOwnedProjectNode(value) {
 }
 
 // lib/sexpr.ts
-var atom = (v) => typeof v === "string" ? v.startsWith('"') ? JSON.parse(v) : v : "";
+function decodeKiCadString(value) {
+  const decoded = JSON.parse(
+    value.includes("	") ? value.replace(/\\[\s\S]|\t/g, (token) => token === "	" ? "\\t" : token) : value
+  );
+  if (typeof decoded !== "string") throw new Error("Invalid string.");
+  return decoded;
+}
+var atom = (v) => typeof v === "string" ? v.startsWith('"') ? decodeKiCadString(v) : v : "";
 var quote = (v) => JSON.stringify(v);
 var children = (n, name) => n.filter((x) => Array.isArray(x) && x[0] === name);
 var child = (n, name) => n.find((value) => Array.isArray(value) && value[0] === name);
@@ -41,7 +48,7 @@ function parseSExprValue(source, maxLength, owned) {
         const t = tokens[i++];
         if (t.startsWith('"')) {
           try {
-            JSON.parse(t);
+            decodeKiCadString(t);
           } catch {
             throw new Error("Invalid string.");
           }
@@ -544,6 +551,9 @@ function onlineFootprintLibrary(id) {
   const library = id.slice(0, separator);
   return separator > 0 && isOnlineLibrary(library) ? library : void 0;
 }
+function isLibraryAssetUnavailable(error) {
+  return error instanceof Error && "code" in error && error.code === "OPENPE_LIBRARY_ASSET_UNAVAILABLE";
+}
 function searchLibrary(entries, query, library = "") {
   const phrase = query.trim().toLowerCase().replace(/\s+/g, " ");
   if (!phrase)
@@ -799,6 +809,7 @@ export {
   displayPartValue,
   exampleModelPath,
   extraSymbolAnnotations,
+  isLibraryAssetUnavailable,
   isOnlineLibrary,
   librarySources,
   modelReferenceKey,

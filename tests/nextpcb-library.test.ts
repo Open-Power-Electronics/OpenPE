@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { LibraryAssetUnavailable } from '../server/library-asset-error.mjs';
 import { createNextPcbLibrary } from '../server/nextpcb-library.mjs';
-import { child, children, propertyValue, val } from '../lib/library';
+import { createLibraryService } from '../server/libraries.mjs';
+import { child, children, propertyValue, val, type LibraryEntry } from '../lib/library';
 import { footprintModels } from '../lib/pcb-models';
 import { quote } from '../lib/sexpr';
 
@@ -72,22 +74,19 @@ function fixture(
   respond?: (url: string, options: RequestInit) => Response | Promise<Response> | undefined,
 ) {
   const calls: { url: string; options: RequestInit }[] = [];
-  const service = createNextPcbLibrary({
-    fetcher: async (input: RequestInfo | URL, options: RequestInit = {}) => {
-      const url = String(input);
-      calls.push({ url, options });
-      const custom = respond?.(url, options);
-      if (custom) return custom;
-      if (url === `${origin}/api/chiplet/products/kicad/queryPage`)
-        return json([row], { total: 1 });
-      if (url === `${origin}/api/chiplet/products/cateTree`) return json(categoryRows);
-      if (url === `${origin}/api/chiplet/kicad/productDetail`) return json(product);
-      if (url === symbolUrl) return new Response(symbol);
-      if (url === footprintUrl) return new Response(footprint);
-      throw new Error('Unexpected mock request.');
-    },
-  });
-  return { service, calls };
+  const fetcher: typeof fetch = async (input, options = {}) => {
+    const url = String(input);
+    calls.push({ url, options });
+    const custom = respond?.(url, options);
+    if (custom) return custom;
+    if (url === `${origin}/api/chiplet/products/kicad/queryPage`) return json([row], { total: 1 });
+    if (url === `${origin}/api/chiplet/products/cateTree`) return json(categoryRows);
+    if (url === `${origin}/api/chiplet/kicad/productDetail`) return json(product);
+    if (url === symbolUrl) return new Response(symbol);
+    if (url === footprintUrl) return new Response(footprint);
+    throw new Error('Unexpected mock request.');
+  };
+  return { service: createNextPcbLibrary({ fetcher }), calls, fetcher };
 }
 
 test('NextPCB public search uses fixed JSON POST, stable manufacturer identities and bounded pages', async () => {
@@ -139,15 +138,21 @@ test('NextPCB public search uses fixed JSON POST, stable manufacturer identities
   }
 });
 
-test('NextPCB requires a model or category and permits explicit category-only browsing', async () => {
-  const { service, calls } = fixture();
+test('NextPCB uses the verified suggestion category for blank All searches', async () => {
+  const { service, calls } = fixture((url, options) => {
+    if (!url.endsWith('/queryPage')) return;
+    const { cateId, desc } = JSON.parse(String(options.body));
+    if (!desc && !cateId) return Response.json({ code: 50000, message: '参数不能为空' });
+  });
   try {
-    for (const query of ['', '   '])
-      await assert.rejects(
-        service.request({ action: 'search', kind: 'symbols', query, category: '' }),
-        /^Error: Enter a model or choose a NextPCB category before searching\.$/,
-      );
-    assert.equal(calls.length, 0, 'Empty searches must not reach the provider.');
+    const all = await service.request({ action: 'search', kind: 'symbols', query: '   ' });
+    assert.equal(all.entries[0].id, id);
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].url.endsWith('/cateTree'));
+    assert.ok(calls[1].url.endsWith('/queryPage'));
+    const suggestions = JSON.parse(String(calls[1].options.body));
+    assert.equal(suggestions.cateId, 1737);
+    assert.equal(Object.hasOwn(suggestions, 'desc'), false);
     const result = await service.request({
       action: 'search',
       kind: 'symbols',
@@ -155,22 +160,31 @@ test('NextPCB requires a model or category and permits explicit category-only br
       category: '1737',
     });
     assert.equal(result.entries[0].id, id);
-    assert.equal(
-      calls.length,
-      2,
-      'Category-only browsing validates its category before searching.',
-    );
-    assert.ok(calls[0].url.endsWith('/cateTree'));
-    assert.ok(calls[1].url.endsWith('/queryPage'));
-    const body = JSON.parse(String(calls[1].options.body));
-    assert.equal(body.cateId, 1737);
-    assert.equal(Object.hasOwn(body, 'desc'), false);
+    assert.equal(calls.length, 2, 'Suggestions and the same explicit category share a page.');
+    await service.request({ action: 'search', kind: 'symbols', query: 'LM358' });
+    const keyword = JSON.parse(String(calls[2].options.body));
+    assert.equal(keyword.desc, 'LM358');
+    assert.equal(Object.hasOwn(keyword, 'cateId'), false);
   } finally {
     service.close();
   }
 });
 
-test('NextPCB only lists native footprint links and shares raw result paging between chooser kinds', async () => {
+test('NextPCB leaves a missing suggestion category retryable and still permits keyword search', async () => {
+  const { service, calls } = fixture((url) => {
+    if (url.endsWith('/cateTree')) return json([categoryRows.at(-1)]);
+  });
+  try {
+    const browse = { action: 'search', kind: 'symbols' };
+    await assert.rejects(service.request(browse), /NextPCB suggestions are unavailable/);
+    assert.ok(calls.every(({ url }) => url.endsWith('/cateTree')));
+    assert.equal((await service.request({ ...browse, query: 'LM358' })).entries[0].id, id);
+  } finally {
+    service.close();
+  }
+});
+
+test('NextPCB keeps symbol candidates without a footprint and shares raw paging with the footprint chooser', async () => {
   const { service, calls } = fixture((url, options) => {
     if (!url.endsWith('/queryPage')) return;
     const { pageNum } = JSON.parse(String(options.body));
@@ -189,16 +203,81 @@ test('NextPCB only lists native footprint links and shares raw result paging bet
     const first = await service.request(search);
     assert.deepEqual(
       first.entries.map((entry: { id: string }) => entry.id),
-      [id],
+      ['NextPCB:9728_No%20CAD', 'NextPCB:9728_Foreign%20CAD', id],
     );
+    assert.equal(first.entries[0].footprint, undefined);
+    assert.equal(first.entries[1].footprint, undefined);
     assert.equal(first.nextOffset, 50);
-    assert.deepEqual(await service.request({ ...search, kind: 'footprints' }), first);
+    assert.deepEqual(await service.request({ ...search, kind: 'footprints' }), {
+      ...first,
+      entries: [first.entries[2]],
+    });
     assert.equal(calls.length, 1, 'Both kinds share the catalog without downloading native files.');
     const second = await service.request({ ...search, offset: first.nextOffset });
     assert.equal(second.entries[0].name, 'Other model');
     assert.equal(second.nextOffset, null);
   } finally {
     service.close();
+  }
+});
+
+test('NextPCB checked batches span native pages without shifting the raw cursor', async () => {
+  const {
+    calls,
+    fetcher,
+    service: adapter,
+  } = fixture((url, options) => {
+    if (url.endsWith('/queryPage')) {
+      const { pageNum, pageSize } = JSON.parse(String(options.body));
+      const start = (pageNum - 1) * pageSize;
+      const rows = Array.from({ length: Math.min(pageSize, 70 - start) }, (_, index) => {
+        const cursor = start + index;
+        return {
+          ...row,
+          mpn: `Part_${cursor}`,
+          footprintFileUrl: cursor === 64 ? null : footprintUrl,
+        };
+      });
+      return json(rows, { total: 70 });
+    }
+    if (url.endsWith('/productDetail')) {
+      const { mpn } = JSON.parse(String(options.body));
+      return json({
+        ...product,
+        mpn,
+        ...(mpn === 'Part_64' ? { cadUrlList: [{ type: 'symbol', fileUrl: symbolUrl }] } : {}),
+      });
+    }
+  });
+  const libraries = createLibraryService({ nextpcbFetcher: fetcher });
+  try {
+    const search = {
+      action: 'search',
+      kind: 'symbols',
+      library: 'NextPCB',
+      query: 'Part',
+      includeAssetStatus: true,
+    };
+    const first = await libraries.request({ ...search, offset: 47 });
+    assert.equal(first.nextOffset, 63);
+    assert.deepEqual(
+      first.entries.map((entry: LibraryEntry) => entry.name),
+      Array.from({ length: 16 }, (_, index) => `Part_${47 + index}`),
+    );
+    assert.ok(first.entries.every((entry: LibraryEntry) => entry.footprintPreview === '2d'));
+    const last = await libraries.request({ ...search, offset: first.nextOffset });
+    assert.equal(last.nextOffset, null);
+    assert.deepEqual(
+      last.entries.map((entry: LibraryEntry) => entry.name),
+      ['Part_63', 'Part_64', 'Part_65', 'Part_66', 'Part_67', 'Part_68', 'Part_69'],
+    );
+    assert.equal(last.entries[1].footprintPreview, 'unavailable');
+    assert.equal(last.entries[1].footprint, undefined);
+    assert.equal(calls.filter(({ url }) => url.endsWith('/queryPage')).length, 2);
+    assert.equal(calls.filter(({ url }) => url.endsWith('/productDetail')).length, 23);
+  } finally {
+    libraries.close();
+    adapter.close();
   }
 });
 
@@ -371,8 +450,81 @@ test('NextPCB native symbol detail prepares its linked package before placement 
   }
 });
 
+test('NextPCB resolves scheme-relative native links and preserves filenames on the supported CDN', async () => {
+  const symbolLink = '//file.eda.cn/web2/M00/03/F2/元件 Rev.2.kicad_sym';
+  const footprintLink = '//file.eda.cn/web2/M00/07/D4/Package%20(Rev.2).kicad_mod';
+  const canonicalSymbol = 'https://file.eda.cn/web2/M00/03/F2/%E5%85%83%E4%BB%B6%20Rev.2.kicad_sym';
+  const canonicalFootprint = `https:${footprintLink}`;
+  const { service, calls } = fixture((url) => {
+    if (url.endsWith('/queryPage'))
+      return json([{ ...row, footprintFileUrl: footprintLink }], { total: 1 });
+    if (url.endsWith('/productDetail'))
+      return json({
+        ...product,
+        cadUrlList: [
+          { type: 'symbol', fileUrl: symbolLink },
+          { type: 'footprint', fileUrl: footprintLink },
+        ],
+      });
+    if (url === canonicalSymbol) return new Response(symbol);
+    if (url === canonicalFootprint) return new Response(footprint);
+  });
+  try {
+    const results = await service.request({ action: 'search', kind: 'symbols', query: 'LM358' });
+    assert.deepEqual(
+      results.entries.map((entry: LibraryEntry) => entry.id),
+      [id],
+    );
+    const result = await service.request({ action: 'detail', kind: 'symbols', id });
+    assert.equal(result.footprintPreview, '2d');
+    assert.equal(result.warning, undefined);
+    assert.deepEqual(
+      calls.slice(2).map(({ url }) => url),
+      [canonicalSymbol, canonicalFootprint],
+    );
+  } finally {
+    service.close();
+  }
+});
+
+test('NextPCB preserves valid symbols with a rejected footprint source and retries corrected links', async () => {
+  const rejectedFootprint = 'https://example.com/web1/M00/vendor.kicad_mod';
+  let repaired = false;
+  const { service, calls } = fixture((url) =>
+    url.endsWith('/productDetail') && !repaired
+      ? json({
+          ...product,
+          cadUrlList: [product.cadUrlList[0], { type: 'footprint', fileUrl: rejectedFootprint }],
+        })
+      : undefined,
+  );
+  try {
+    const result = await service.request({ action: 'detail', kind: 'symbols', id });
+    assert.equal(propertyValue(result.symbol, 'Footprint'), id);
+    assert.equal(result.footprintPreview, 'unavailable');
+    assert.match(result.warning, /^Footprint unavailable: .*HTTPS source/);
+    assert.equal(JSON.stringify(result).includes(rejectedFootprint), false);
+    await assert.rejects(
+      service.request({ action: 'detail', kind: 'footprints', id }),
+      (error) => error instanceof LibraryAssetUnavailable && /HTTPS source/.test(error.message),
+    );
+    assert.equal(
+      calls.some(({ url }) => url === rejectedFootprint),
+      false,
+    );
+
+    repaired = true;
+    const updated = await service.request({ action: 'detail', kind: 'symbols', id });
+    assert.equal(updated.footprintPreview, '2d');
+    assert.equal(updated.warning, undefined);
+    assert.ok(calls.some(({ url }) => url === footprintUrl));
+  } finally {
+    service.close();
+  }
+});
+
 test('NextPCB starts both native reads together and a failed footprint retains its valid schematic symbol', async () => {
-  for (const footprintFails of [false, true]) {
+  for (const footprintStatus of [200, 404, 503]) {
     const releases = new Map<string, (response: Response) => void>();
     let bothStarted!: () => void;
     const started = new Promise<void>((resolve) => {
@@ -399,16 +551,20 @@ test('NextPCB starts both native reads together and a failed footprint retains i
       ]);
       assert.deepEqual([...releases.keys()], [symbolUrl, footprintUrl]);
       releases.get(footprintUrl)!(
-        footprintFails ? new Response(null, { status: 404 }) : new Response(footprint),
+        footprintStatus === 200
+          ? new Response(footprint)
+          : new Response(null, { status: footprintStatus }),
       );
       await new Promise<void>((resolve) => setImmediate(resolve));
       releases.get(symbolUrl)!(new Response(symbol));
       const result = await pending;
       assert.equal(propertyValue(result.symbol, 'Footprint'), id);
-      if (footprintFails)
-        assert.match(result.warning, /Footprint unavailable: NextPCB request failed \(404\)/);
-      else {
+      if (footprintStatus !== 200) {
+        assert.ok(result.warning?.includes(`NextPCB request failed (${footprintStatus})`));
+        assert.equal(result.footprintPreview, footprintStatus === 404 ? 'unavailable' : undefined);
+      } else {
         assert.equal(result.warning, undefined);
+        assert.equal(result.footprintPreview, '2d');
         assert.deepEqual(
           (await service.request({ action: 'detail', kind: 'footprints', id })).pads,
           ['1', '2'],
@@ -419,6 +575,34 @@ test('NextPCB starts both native reads together and a failed footprint retains i
       service.close();
       for (const release of releases.values()) release(new Response(null, { status: 499 }));
       await pending.catch(() => {});
+    }
+  }
+});
+
+test('NextPCB validates standalone footprints even when the supplier has no usable symbol', async () => {
+  for (const brokenSymbol of [null, 'https://example.org/vendor.kicad_sym', symbolUrl]) {
+    const { service, calls } = fixture((url) => {
+      if (url.endsWith('/productDetail'))
+        return json({
+          ...product,
+          cadUrlList: [
+            { type: 'footprint', fileUrl: footprintUrl },
+            ...(brokenSymbol ? [{ type: 'symbol', fileUrl: brokenSymbol }] : []),
+          ],
+        });
+      if (url === symbolUrl) return new Response('Invalid native symbol');
+    });
+    try {
+      const detail = await service.request({ action: 'detail', kind: 'footprints', id });
+      assert.deepEqual(detail.pads, ['1', '2']);
+      assert.equal(detail.id, id);
+      assert.deepEqual(
+        calls.map(({ url }) => url),
+        [`${origin}/api/chiplet/kicad/productDetail`, footprintUrl],
+      );
+      await assert.rejects(service.request({ action: 'detail', kind: 'symbols', id }));
+    } finally {
+      service.close();
     }
   }
 });
@@ -446,6 +630,40 @@ test('NextPCB display metadata stays optional and is never inferred from keyword
       assert.equal(Object.hasOwn(entry, 'manufacturer'), false);
       assert.equal(Object.hasOwn(entry, 'package'), false);
     }
+  } finally {
+    service.close();
+  }
+});
+
+test('NextPCB accepts multiline descriptions without losing other catalog results or relaxing identity checks', async () => {
+  const description = 'Digital microphone\r\nSupply voltage:\t1.8 V';
+  let mpn = row.mpn;
+  const { service } = fixture((url) => {
+    if (url.endsWith('/queryPage'))
+      return json(
+        [
+          { ...row, mpn, Description: description },
+          { ...row, manufacturer_id: '9769' },
+        ],
+        { total: 2 },
+      );
+    if (url.endsWith('/productDetail')) return json({ ...product, description });
+  });
+  try {
+    const request = { action: 'search', kind: 'symbols', query: 'LM358' };
+    const { entries } = await service.request(request);
+    assert.deepEqual(
+      entries.map(({ id }: LibraryEntry) => id),
+      [id, 'NextPCB:9769_LM358'],
+    );
+    const detail = await service.request({ action: 'detail', kind: 'symbols', id });
+    for (const entry of [entries[0], detail])
+      assert.equal(entry.description, 'Digital microphone Supply voltage: 1.8 V');
+    mpn = 'LM\n358';
+    await assert.rejects(
+      service.request({ ...request, query: 'LM' }),
+      /invalid component metadata/,
+    );
   } finally {
     service.close();
   }
@@ -481,13 +699,20 @@ test('NextPCB rejects caller URLs, noncanonical identities and invalid search re
   }
 });
 
-test('NextPCB rejects asset redirects, foreign hosts, credentials, ports, query strings and wrong extensions', async () => {
+test('NextPCB rejects asset redirects, foreign origins, path escapes and wrong file formats', async () => {
   for (const fileUrl of [
     'http://file.eda.cn/web1/M00/native.kicad_sym',
     'https://file.eda.cn.evil.test/web1/M00/native.kicad_sym',
+    '//example.com/web1/M00/native.kicad_sym',
     'https://user:pass@file.eda.cn/web1/M00/native.kicad_sym',
+    'https://file.eda.cn:443/web1/M00/native.kicad_sym',
     'https://file.eda.cn:444/web1/M00/native.kicad_sym',
     'https://file.eda.cn/web1/M00/native.kicad_sym?url=http://127.0.0.1',
+    'https://file.eda.cn/web1/M00/native.kicad_sym#download',
+    'https://file.eda.cn/web1/M00/%2e%2e/native.kicad_sym',
+    'https://file.eda.cn/web1/M00/a%2Fnative.kicad_sym',
+    'https://file.eda.cn/web1/M00/a%252Fnative.kicad_sym',
+    'https://file.eda.cn/web1/M00/a%23native.kicad_sym',
     'https://file.eda.cn/web1/M00/native.zip',
   ]) {
     const { service, calls } = fixture((url) =>
@@ -647,6 +872,40 @@ test('NextPCB official model references retain their native path and pose withou
   }
 });
 
+test('NextPCB converts the documented inch-based model pose in supported vendor footprints', async () => {
+  const reference = '${KICAD6_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8.wrl';
+  const packageWith = (version: string, pose: string) =>
+    footprint.replace('20240108', version).replace(/\)$/, ` (model ${quote(reference)} ${pose}))`);
+  let native = packageWith('20210108', '(at (xyz 0.05 -0.1 0.2)) (rotate (xyz 0 0 90))');
+  const { service } = fixture((url) => (url === footprintUrl ? new Response(native) : undefined));
+  try {
+    const detail = await service.request({ action: 'detail', kind: 'footprints', id });
+    assert.deepEqual(detail.models[0].offset, ['offset', ['xyz', '1.27', '-2.54', '5.08']]);
+    assert.deepEqual(footprintModels(detail.footprint)[0].offset, { x: 1.27, y: -2.54, z: 5.08 });
+    assert.equal(child(child(detail.footprint, 'model')!, 'at'), undefined);
+  } finally {
+    service.close();
+  }
+  for (const file of [
+    packageWith('20210108', '(at (xyz 0 0 0)) (offset (xyz 0 0 0))'),
+    packageWith('20210108', '(at (xyz 0 0 0)) (at (xyz 0 0 0))'),
+    packageWith('20210108', '(at (xyz 0.00000001 0 0))'),
+    packageWith('20210108', '(at (xyz Infinity 0 0))'),
+    packageWith('20240108', '(at (xyz 0 0 0))'),
+  ]) {
+    native = file;
+    const { service } = fixture((url) => (url === footprintUrl ? new Response(native) : undefined));
+    try {
+      await assert.rejects(
+        service.request({ action: 'detail', kind: 'footprints', id }),
+        /NextPCB 3D model offset/,
+      );
+    } finally {
+      service.close();
+    }
+  }
+});
+
 test('NextPCB foreign and malformed model paths warn on symbols and reject package detail without fetching those paths', async () => {
   for (const reference of [
     '/private/foreign.step',
@@ -796,7 +1055,10 @@ test('NextPCB provider STEP URL validation rejects foreign paths and never expos
       const detail = await service.request({ action: 'detail', kind: 'footprints', id });
       assert.equal(JSON.stringify(detail).includes(url), false);
       await assert.rejects(service.modelBytes(id, 0), /HTTPS source/);
-      assert.equal(calls.length, 3);
+      assert.deepEqual(
+        calls.map(({ url: called }) => called),
+        [`${origin}/api/chiplet/kicad/productDetail`, footprintUrl],
+      );
     } finally {
       service.close();
     }

@@ -19,6 +19,7 @@ const entries = {
     description: 'Precision dual amplifier.',
     keywords: 'amplifier analog',
     footprint: 'NextPCB:123_package',
+    footprintPreview: '2d',
     symbol,
     units: 1,
   },
@@ -80,10 +81,90 @@ const jlcEntries = Object.fromEntries(
     if (detail.symbol) {
       detail.symbol[1] = JSON.stringify(id);
       detail.footprint = id;
-    } else detail.models = [{ path: 'JLCPCB:fixture.step' }];
+      detail.footprintPreview = '2d-and-3d';
+    } else {
+      detail.models = [{ path: 'JLCPCB:fixture.step' }];
+      const pad = detail.footprint.find((node) => Array.isArray(node) && node[0] === 'pad');
+      detail.pads[0] = 'MH1';
+      pad[1] = '"MH1"';
+      pad[2] = 'np_thru_hole';
+      pad[3] = 'oval';
+      pad.find((node) => Array.isArray(node) && node[0] === 'size')[1] = '1.5';
+      pad.find((node) => Array.isArray(node) && node[0] === 'layers').splice(1, 3, '"*.Mask"');
+      pad
+        .find((node) => Array.isArray(node) && node[0] === 'at')
+        .splice(1, 2, '0.15', '-0.125', '90');
+      pad.push(['drill', 'oval', '0.75', '0.4', ['offset', '-0.125', '-0.15']]);
+      const shaped = detail.footprint.filter((node) => Array.isArray(node) && node[0] === 'pad')[1];
+      shaped[3] = 'roundrect';
+      shaped.push(['roundrect_rratio', '0'], ['chamfer_ratio', '0.25'], ['chamfer', 'top_left']);
+      detail.footprint.push(
+        [
+          'pad',
+          '"2"',
+          'smd',
+          'custom',
+          ['at', '3', '-2', '30'],
+          ['size', '0.0001', '0.0001'],
+          ['layers', '"F.Cu"', '"F.Paste"', '"F.Mask"'],
+          ['options', ['clearance', 'outline'], ['anchor', 'rect']],
+          [
+            'primitives',
+            [
+              'gr_poly',
+              [
+                'pts',
+                ['xy', '-1', '-0.5'],
+                ['xy', '1', '-0.5'],
+                ['xy', '1', '1'],
+                ['xy', '0.5', '1'],
+                ['xy', '0.5', '0.5'],
+                ['xy', '-1', '0.5'],
+              ],
+              ['width', '0'],
+              ['fill', 'yes'],
+            ],
+          ],
+        ],
+        [
+          'fp_poly',
+          ['pts', ['xy', '0', '2'], ['xy', '1', '2'], ['xy', '1', '3'], ['xy', '0', '3']],
+          ['fill', 'yes'],
+          ['layer', '"F.Mask"'],
+        ],
+        [
+          'fp_poly',
+          ['pts', ['xy', '2', '2'], ['xy', '3', '2'], ['xy', '3', '3'], ['xy', '2', '3']],
+          ['fill', 'none'],
+          ['layer', '"Edge.Cuts"'],
+        ],
+      );
+    }
     return [kind, detail];
   }),
 );
+const localSymbol = structuredClone(symbol);
+localSymbol[1] = '"Device:Fixture"';
+localSymbol.find((node) => node[0] === 'property' && node[1] === '"Footprint"')[2] =
+  '"Package_SO:Fixture"';
+const kicadEntries = {
+  symbols: {
+    id: 'Device:Fixture',
+    name: 'Fixture',
+    library: 'Device',
+    description: 'Bundled fixture symbol.',
+    keywords: 'fixture symbol',
+    symbol: localSymbol,
+    units: 1,
+  },
+  footprints: {
+    ...entries.footprints,
+    id: 'Package_SO:Fixture',
+    name: 'Fixture',
+    library: 'Package_SO',
+    manufacturer: undefined,
+  },
+};
 const bundle = await build({
   stdin: {
     contents: `import React,{useState}from'react';
@@ -93,7 +174,9 @@ const bundle = await build({
     for(const[key,color]of Object.entries(appearanceVariables(defaultAppearance,value)))document.documentElement.style.setProperty(key,color)};
   function App(){const[kind,setKind]=useState('symbols');window.setKind=setKind;
     const[source,setSource]=useState('NextPCB');window.setSource=setSource;return <Chooser key={source+kind}
-    kind={kind} initialLibrary={source} initialSearch="Fixture" onClose={()=>{}} onChoose={()=>{window.placements=(window.placements||0)+1}}/>}createRoot(document.getElementById('root')).render(<App/>);`,
+    kind={kind==='models'?'footprints':kind} requireModel={kind==='models'}
+    actionLabel={kind==='models'?'Use model':undefined}
+    initialLibrary={source} initialSearch="Fixture" onClose={()=>{}} onChoose={()=>{window.placements=(window.placements||0)+1}}/>}createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -101,31 +184,93 @@ const bundle = await build({
   write: false,
   platform: 'browser',
   define: { 'process.env.NODE_ENV': '"production"' },
+  plugins: [{
+    name: 'preview-frame-probe',
+    setup(build) {
+      build.onResolve({ filter: /^three$/ }, ({ importer }) => {
+        if (importer.endsWith('ModelPreview.tsx'))
+          return { path: 'renderer', namespace: 'preview-frame-probe' };
+      });
+      build.onLoad({ filter: /renderer/, namespace: 'preview-frame-probe' }, () => ({
+        resolveDir: process.cwd(),
+        contents: `
+          export * from 'three';
+          export class WebGLRenderer {
+            domElement = document.createElement('canvas');
+            frame = 0;
+            setPixelRatio() {}
+            setSize(width,height) {
+              this.domElement.width=width;
+              this.domElement.height=height;
+            }
+            render(scene,camera) {
+              this.domElement.previewPose=[...camera.position.toArray(),...camera.quaternion.toArray()];
+            }
+            setAnimationLoop(render) {
+              cancelAnimationFrame(this.frame);
+              this.domElement.previewRunning=!!render;
+              if (render) {
+                const tick=()=>{render();this.frame=requestAnimationFrame(tick);};
+                this.frame=requestAnimationFrame(tick);
+              }
+            }
+            dispose() {this.setAnimationLoop(null);}
+          }`,
+      }));
+    },
+  }],
 });
 await mkdir('test-results/library-chooser-ui', { recursive: true });
 const browser = await chromium.launch({
   headless: true,
   channel: process.platform === 'win32' ? 'msedge' : undefined,
 });
+const unavailableCode = 'OPENPE_LIBRARY_ASSET_UNAVAILABLE';
+const pasteWarning = 'Footprint unavailable: EasyEDA CAD: Unsupported front paste region path.';
 try {
   const page = await browser.newPage({ viewport: { width: 1120, height: 800 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  let detailsHeld = true,
-    releaseDetails,
-    refreshHeld = false,
+  const initialDetail = Promise.withResolvers();
+  let refreshHeld = false,
     releaseRefresh,
     searches = 0,
-    modelReads = 0;
+    modelReads = 0,
+    packageReads = 0,
+    renderModels = false,
+    modelMissing = false,
+    multipleModels = false,
+    unsupportedPackage = false;
   await page.route('http://localhost/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/api/library-model') {
       modelReads++;
-      return route.fulfill({ json: { meshes: [] } });
+      if (renderModels)
+        return route.fulfill({
+          json: {
+            meshes: [{
+              attributes: { position: { array: [0, 0, 0, 2, 0, 0, 0, 1, 0] } },
+              index: { array: [0, 1, 2] },
+            }],
+          },
+        });
+      return route.fulfill({
+        status: 422,
+        json: modelMissing
+          ? { error: 'The linked STEP model is unavailable.', code: unavailableCode }
+          : { error: 'The preview request timed out.' },
+      });
     }
     if (url.pathname.startsWith('/api/libraries/')) {
       const kind = url.pathname.split('/').at(-1);
-      if (url.searchParams.has('categories'))
+      const categorySource = url.searchParams.get('categories');
+      if (categorySource === 'KiCad') {
+        const namespace = kicadEntries[kind].library;
+        return route.fulfill({
+          json: { categories: [{ id: namespace, name: namespace, children: [] }] },
+        });
+      }
+      if (categorySource)
         return route.fulfill({
           json: {
             categories: [
@@ -143,10 +288,7 @@ try {
             ],
           },
         });
-      if (url.searchParams.has('id') && detailsHeld)
-        await new Promise((resolve) => {
-          releaseDetails = resolve;
-        });
+      if (url.searchParams.has('id')) await initialDetail.promise;
       if (!url.searchParams.has('id')) {
         searches++;
         if (refreshHeld)
@@ -154,15 +296,31 @@ try {
             releaseRefresh = resolve;
           });
       }
-      const jlc =
-        url.searchParams.get('library') === 'JLCPCB' ||
-        url.searchParams.get('id')?.startsWith('JLCPCB:');
-      const entry = (jlc ? jlcEntries : entries)[kind];
-      return route.fulfill({
-        json: url.searchParams.has('id')
-          ? entry
-          : { entries: [entry], libraries: [entry.library], total: 1, nextOffset: null },
-      });
+      const library = url.searchParams.get('id')?.split(':')[0] ?? url.searchParams.get('library');
+      const jlc = library === 'JLCPCB';
+      let entry = (jlc ? jlcEntries : library === 'NextPCB' ? entries : kicadEntries)[kind];
+      if (url.searchParams.has('id')) {
+        if (kind === 'footprints') {
+          packageReads++;
+          if (jlc && unsupportedPackage)
+            return route.fulfill({
+              status: 422,
+              json: { error: pasteWarning, code: unavailableCode },
+            });
+          if (jlc && multipleModels)
+            entry = { ...entry, models: [...entry.models, { path: 'JLCPCB:alternate.step' }] };
+        } else if (jlc && unsupportedPackage) {
+          entry = { ...entry, footprintPreview: 'unavailable', warning: pasteWarning };
+        }
+      }
+      if (url.searchParams.has('id')) return route.fulfill({ json: entry });
+      const result = { entries: [entry], libraries: [entry.library], total: 1, nextOffset: null };
+      if (route.request().headers().accept === 'application/x-ndjson')
+        return route.fulfill({
+          contentType: 'application/x-ndjson',
+          body: JSON.stringify({ type: 'result', result }) + '\n',
+        });
+      return route.fulfill({ json: result });
     }
     return route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
   });
@@ -181,13 +339,122 @@ try {
   });
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   const place = page.getByRole('button', { name: 'Place', exact: true });
-  const requestPreview = () => page.getByRole('button', { name: 'Preview', exact: true }).click();
-  await place.waitFor();
-  assert.equal(await place.isDisabled(), true);
-  await requestPreview();
+  const modelTab = page.getByRole('button', { name: '3D model', exact: true });
+  const footprintTab = page.getByRole('button', { name: 'Footprint', exact: true });
+  async function assertPlanarCamera(kind) {
+    const label = kind === 'symbol' ? 'Symbol preview' : 'Footprint preview';
+    const preview = page.getByRole('img', { name: label, exact: true });
+    const fit = page.getByRole('button', { name: `Fit ${kind} preview`, exact: true });
+    await preview.scrollIntoViewIfNeeded();
+    const fitted = await preview.getAttribute('viewBox');
+    const geometry = await preview.innerHTML();
+    const bounds = await preview.boundingBox();
+    const point = {
+      x: Math.round(bounds.x + bounds.width * 0.57),
+      y: Math.round(bounds.y + bounds.height * 0.46),
+    };
+    const worldPoint = () =>
+      preview.evaluate((svg, { x, y }) => {
+        const world = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM().inverse());
+        return { x: world.x, y: world.y };
+      }, point);
+    const previous = await worldPoint();
+    const scrollOffset = () => preview.evaluate((svg) => svg.closest('.library-detail').scrollTop);
+    const scrollBefore = await scrollOffset();
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.wheel(0, -180);
+    await page.waitForFunction(
+      ({ label, fitted }) =>
+        document.querySelector(`svg[aria-label="${label}"]`).getAttribute('viewBox') !== fitted,
+      { label, fitted },
+    );
+    const magnified = (await preview.getAttribute('viewBox')).split(' ').map(Number);
+    assert.ok(magnified[2] < Number(fitted.split(' ')[2]));
+    const anchored = await worldPoint();
+    assert.ok(
+      Math.hypot(previous.x - anchored.x, previous.y - anchored.y) < 1e-4,
+      `Wheel zoom preserves the world point under the pointer: ${JSON.stringify({ previous, anchored })}`,
+    );
+    assert.equal(await scrollOffset(), scrollBefore, 'Wheel zoom stays inside the preview.');
+    await page.mouse.down();
+    await page.mouse.move(point.x + 36, point.y + 22, { steps: 3 });
+    await page.mouse.up();
+    const panned = (await preview.getAttribute('viewBox')).split(' ').map(Number);
+    assert.ok(panned[0] < magnified[0] && panned[1] < magnified[1]);
+    assert.equal(panned[2], magnified[2]);
+    await preview.dispatchEvent('keydown', { key: 'ArrowLeft', keyCode: 229, isComposing: true });
+    assert.equal(await preview.getAttribute('viewBox'), panned.join(' '));
+    await preview.press('ArrowLeft');
+    assert.notEqual(await preview.getAttribute('viewBox'), panned.join(' '));
+    await fit.click();
+    assert.equal(await preview.getAttribute('viewBox'), fitted);
+    assert.equal(await preview.innerHTML(), geometry, 'The view changes never rewrite geometry.');
+    if (kind === 'symbol') {
+      const touch = await page.context().newCDPSession(page);
+      const area = await preview.boundingBox();
+      const touchPoints = (radius) =>
+        [-radius, radius].map((offset, id) => ({
+          id,
+          x: Math.round(area.x + area.width / 2 + offset),
+          y: Math.round(area.y + area.height / 2),
+        }));
+      try {
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: touchPoints(24),
+        });
+        await touch.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: touchPoints(46),
+        });
+        await page.waitForFunction(
+          ({ label, fitted }) =>
+            document.querySelector(`svg[aria-label="${label}"]`).getAttribute('viewBox') !== fitted,
+          { label, fitted },
+        );
+        assert.ok(
+          Number((await preview.getAttribute('viewBox')).split(' ')[2]) <
+            Number(fitted.split(' ')[2]),
+          'A two-finger pinch also zooms the preview.',
+        );
+      } finally {
+        await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await touch.detach();
+      }
+      await fit.click();
+      assert.equal(await preview.getAttribute('viewBox'), fitted);
+    }
+  }
+  const sourceField = page.getByRole('combobox', { name: 'Library source', exact: true });
+  const subcategory = page.getByRole('combobox', { name: 'Category level 2', exact: true });
+  const selectSource = async (source, id) => {
+    await sourceField.click();
+    await page
+      .getByRole('listbox', { name: 'Library source', exact: true })
+      .getByRole('option', { name: source, exact: true })
+      .click();
+    await page.locator('.library-detail-id').filter({ hasText: id }).waitFor();
+  };
+  const geometry = () =>
+    page.evaluate(() =>
+      [
+        '.library-source-filters > button',
+        '.library-search',
+        '.library-results',
+        '.library-results button[data-index]',
+        '.library-detail',
+        '.preview-tabs',
+        '.symbol-detail-preview, .library-preview-stage',
+      ].map((selector) =>
+        [...document.querySelectorAll(selector)].slice(0, 3).map((node) => {
+          const { width, height } = node.getBoundingClientRect();
+          return [width, height];
+        }),
+      ),
+    );
   await page.getByRole('status', { name: 'Loading preview', exact: true }).waitFor();
-  detailsHeld = false;
-  releaseDetails();
+  assert.equal(await place.isDisabled(), true);
+  initialDetail.resolve();
   async function assertTopControls() {
     const layout = await page.evaluate(() => {
       const header = document.querySelector('.dialog-header').getBoundingClientRect();
@@ -238,13 +505,18 @@ try {
   for (const kind of ['symbols', 'footprints']) {
     if (kind === 'footprints') {
       await page.evaluate(() => window.setKind('footprints'));
-      await requestPreview();
     }
     await page.waitForFunction(
       (expected) => document.querySelector('.library-detail-id')?.textContent === expected,
       entries[kind].id,
     );
     await page.locator('.library-info-section').first().waitFor();
+    assert.equal(
+      await modelTab.isDisabled(),
+      true,
+      'Known missing models are disabled immediately.',
+    );
+    assert.equal(await footprintTab.isEnabled(), true);
     const section = (name) =>
       page
         .locator('.library-info-section')
@@ -303,34 +575,100 @@ try {
       await page.waitForFunction(
         () => document.querySelector('.library-detail-id')?.textContent === 'NextPCB:123_component',
       );
-      await requestPreview();
       await section('Symbol details').waitFor();
       assert.equal(await section('Symbol details').count(), 1);
       assert.equal(pairs.Units, '1');
-      assert.equal(pairs['Reference prefix'], 'R');
+      assert.equal(pairs.Prefix, 'R');
     } else {
       assert.equal(await section('3D models').count(), 1);
       assert.equal(pairs.Pads, '2');
     }
     for (const width of [1120, 360]) {
       await page.setViewportSize({ width, height: 800 });
-      const source = page.getByRole('combobox', { name: 'Library source', exact: true });
-      const nextWidth = (await source.boundingBox()).width;
-      await source.click();
-      await page
-        .getByRole('listbox', { name: 'Library source', exact: true })
-        .getByRole('option', { name: 'KiCad', exact: true })
-        .click();
-      const localWidth = (await source.boundingBox()).width;
+      await selectSource('JLCPCB', jlcEntries[kind].id);
+      const reference = await geometry();
+      await selectSource('KiCad', kicadEntries[kind].id);
+      await assertTopControls();
+      assert.equal(await subcategory.isDisabled(), true);
+      assert.equal(await subcategory.textContent(), 'No subcategories');
+      assert.deepEqual(await geometry(), reference, 'KiCad uses the JLCPCB chooser layout.');
+      if (kind === 'symbols') {
+        assert.deepEqual(await page.locator('.library-result-columns > button').allTextContents(), [
+          'Name',
+          'Package',
+          'Footprint',
+          'Model',
+        ]);
+        const assetColumns = page.locator('.library-result-columns > [data-asset-column]');
+        const sortFootprint = assetColumns.first();
+        const textStart = () =>
+          sortFootprint.locator('span').evaluate((label) => label.getBoundingClientRect().left);
+        const initialStart = await textStart();
+        await sortFootprint.click();
+        assert.equal(
+          await textStart(),
+          initialStart,
+          'The sort indicator does not move the title.',
+        );
+        assert.ok(
+          await assetColumns.evaluateAll((columns) =>
+            columns.every((column) => {
+              const label = column.querySelector('span');
+              return label.scrollWidth <= label.clientWidth;
+            }),
+          ),
+          'Asset column headings fit at both dialog widths.',
+        );
+        const list = page.locator('.library-component-results');
+        const columnOffsets = await list.evaluate((node) => {
+          const center = (element) => {
+            const { left, width } = element.getBoundingClientRect();
+            return left + width / 2;
+          };
+          const headers = node.querySelectorAll('[data-asset-column]');
+          const indicators = node.querySelectorAll('button[data-index] .library-result-asset svg');
+          return [...headers].map((header, index) =>
+            Math.abs(center(header) - center(indicators[index])),
+          );
+        });
+        assert.ok(
+          columnOffsets.every((offset) => offset < 1),
+          'Checkboxes align with their headers.',
+        );
+        await sortFootprint.click();
+        await sortFootprint.click();
+        assert.equal(
+          await page.getByRole('button', { name: 'Symbol', exact: true }).isEnabled(),
+          true,
+        );
+        assert.equal(await footprintTab.isEnabled(), true);
+        if (width === 1120) await assertPlanarCamera('symbol');
+        const readsBefore = packageReads;
+        await footprintTab.press('Enter');
+        await page.locator('svg.footprint-preview').waitFor();
+        assert.equal(packageReads, readsBefore + 1);
+        assert.equal(await modelTab.isDisabled(), true);
+        assert.deepEqual(
+          await geometry(),
+          reference,
+          'Switching geometry keeps the same preview frame.',
+        );
+        if (width === 1120) await assertPlanarCamera('footprint');
+      } else if (width === 1120) {
+        await assertPlanarCamera('footprint');
+      }
+      await selectSource('NextPCB', entries[kind].id);
+      assert.deepEqual(await geometry(), reference, 'NextPCB uses the JLCPCB chooser layout.');
       assert.ok(
-        Math.abs(localWidth - nextWidth) < 0.5,
-        'Source field width is independent of the selected provider.',
+        await page.locator('.preview-tabs > button').evaluateAll((buttons) =>
+          buttons.every((button) => {
+            const label = document.createRange();
+            label.selectNodeContents(button);
+            return label.getClientRects().length === 1;
+          }),
+        ),
+        'Preview labels fit on one line in the tested window sizes.',
       );
-      await source.click();
-      await page
-        .getByRole('listbox', { name: 'Library source', exact: true })
-        .getByRole('option', { name: 'NextPCB', exact: true })
-        .click();
       await assertTopControls();
       for (const name of ['Library source', 'Category level 1']) {
         const trigger = page.getByRole('combobox', { name, exact: true });
@@ -394,7 +732,6 @@ try {
     await page.setViewportSize({ width, height: 800 });
     await page.evaluate((value) => window.setKind(value), kind);
     await page.evaluate((theme) => window.setTheme(theme), width > 600 ? 'light' : 'dark');
-    await requestPreview();
     const source = page.getByRole('region', { name: 'CAD source', exact: true });
     await source
       .getByRole('heading', { name: 'JLCEDA/EasyEDA Official Library', exact: true })
@@ -461,14 +798,211 @@ try {
     await failure.waitFor({ state: 'detached' });
   }
   assert.equal(modelReads, 0, 'Search and 2D previews do not fetch STEP meshes.');
-  await page.getByRole('button', { name: 'Footprint', exact: true }).click();
-  await page.locator('svg.footprint-preview').waitFor();
+  await footprintTab.click();
+  const footprintSvg = page.locator('svg.footprint-preview');
+  await footprintSvg
+    .locator(
+      'path[d="M -0.25 -0.5 L 0.5 -0.5 L 0.5 -0.5 L 0.5 0.5 L 0.5 0.5 L -0.5 0.5 L -0.5 0.5 L -0.5 -0.25 L -0.25 -0.5 Z"]',
+    )
+    .waitFor();
+  await footprintSvg
+    .locator(
+      'g[transform="translate(3 -2) rotate(-30)"] path[d="M -1 -0.5 L 1 -0.5 L 1 1 L 0.5 1 L 0.5 0.5 L -1 0.5 Z"]',
+    )
+    .waitFor();
+  const mask = footprintSvg.locator('polygon[points="0,2 1,2 1,3 0,3"]');
+  const cutout = footprintSvg.locator('polygon[points="2,2 3,2 3,3 2,3"]');
+  await mask.waitFor();
+  await cutout.waitFor();
+  assert.equal(await mask.getAttribute('fill-opacity'), '0.22');
+  assert.equal(await cutout.evaluate((node) => getComputedStyle(node).fill), 'none');
+  const drill = page.locator('svg.footprint-preview rect[fill="var(--canvas)"]');
+  await drill.waitFor();
+  assert.deepEqual(
+    await drill.evaluate((node) => ({
+      x: node.x.baseVal.value,
+      y: node.y.baseVal.value,
+      width: node.getAttribute('width'),
+      height: node.getAttribute('height'),
+      radius: node.getAttribute('rx'),
+      pose: node.parentElement.getAttribute('transform'),
+      landX: node.previousElementSibling.getAttribute('x'),
+      landY: node.previousElementSibling.getAttribute('y'),
+      number: node.nextElementSibling.textContent,
+    })),
+    {
+      x: -0.375,
+      y: Math.fround(-0.2),
+      width: '0.75',
+      height: '0.4',
+      radius: '0.2',
+      pose: 'translate(0.15 -0.125) rotate(-90)',
+      landX: '-0.875',
+      landY: '-0.65',
+      number: 'MH1',
+    },
+  );
   assert.equal(modelReads, 0);
   const modelRequest = page.waitForRequest(
     (request) => new URL(request.url()).pathname === '/api/library-model',
   );
-  await page.getByRole('button', { name: '3D model', exact: true }).click();
+  assert.equal(
+    await modelTab.evaluate((button) =>
+      button.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+          keyCode: 229,
+        }),
+      ),
+    ),
+    false,
+  );
+  await modelTab.press('Enter');
   assert.equal(new URL((await modelRequest).url()).searchParams.get('id'), 'JLCPCB:C7593');
+  const retryModel = page.getByRole('button', { name: 'Retry preview', exact: true });
+  await retryModel.waitFor();
+  assert.equal(await modelTab.isEnabled(), true, 'A temporary failure leaves the 3D tab enabled.');
+  modelMissing = true;
+  await retryModel.click();
+  await page.getByText('The linked STEP model is unavailable.', { exact: true }).waitFor();
+  assert.equal(await modelTab.isDisabled(), true);
+  assert.equal(await footprintTab.getAttribute('aria-pressed'), 'true');
+  assert.equal(await retryModel.count(), 0);
+  assert.equal(modelReads, 2);
+
+  unsupportedPackage = true;
+  let readsBefore;
+  for (const kind of ['footprints', 'symbols']) {
+    await page.evaluate((value) => window.setKind(value), kind);
+    await page
+      .getByRole('dialog', { name: kind === 'symbols' ? 'Components' : 'Footprints', exact: true })
+      .getByRole('button', { name: 'Footprint', exact: true })
+      .waitFor();
+    for (const tab of [footprintTab, modelTab]) {
+      assert.equal(await tab.isDisabled(), true);
+      assert.equal(await tab.getAttribute('title'), pasteWarning);
+    }
+    assert.equal(await page.getByText(pasteWarning, { exact: true }).count(), 0);
+    if (kind === 'footprints') readsBefore = packageReads;
+  }
+  assert.equal(await place.isEnabled(), true);
+  assert.equal(packageReads, readsBefore, 'Known unsupported CAD needs no extra request.');
+
+  unsupportedPackage = false;
+  multipleModels = true;
+  await page.setViewportSize({ width: 1120, height: 800 });
+  const useModel = page.getByRole('button', { name: 'Use model', exact: true });
+  const modelSelector = page.getByRole('combobox', { name: '3D model', exact: true });
+  const modelOptions = page.getByRole('listbox', { name: '3D model', exact: true });
+  const unavailableOption = modelOptions
+    .getByRole('option')
+    .filter({ hasText: 'JLCPCB:fixture.step' });
+  for (const kind of ['models', 'symbols']) {
+    modelMissing = true;
+    await page.evaluate((value) => window.setKind(value), kind);
+    await modelTab.click();
+    await page.getByText('The linked STEP model is unavailable.', { exact: true }).waitFor();
+    if (kind === 'models') assert.equal(await useModel.isDisabled(), true);
+    assert.equal(await modelTab.isEnabled(), true, 'Another model keeps the 3D tab available.');
+    await modelSelector.press('Enter');
+    assert.equal(await unavailableOption.isDisabled(), true);
+    modelMissing = false;
+    await modelSelector.press('End');
+    await Promise.all([
+      page.waitForRequest((request) => {
+        const url = new URL(request.url());
+        return url.pathname === '/api/library-model' && url.searchParams.get('index') === '1';
+      }),
+      modelSelector.press('Enter'),
+    ]);
+    if (kind === 'models') assert.equal(await useModel.isEnabled(), true);
+  }
+  renderModels = true;
+  multipleModels = false;
+  const symbolTab = page.getByRole('button', { name: 'Symbol', exact: true });
+  const symbolPreview = page.getByRole('img', { name: 'Symbol preview', exact: true });
+  const footprintPreview = page.getByRole('img', { name: 'Footprint preview', exact: true });
+  const fit = (kind) => page.getByRole('button', { name: `Fit ${kind} preview`, exact: true });
+  const cameraAfterFrames = (canvas) =>
+    canvas.evaluate(
+      (node) =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve(node.previewPose))),
+        ),
+    );
+  function assertSamePose(actual, expected) {
+    assert.ok(
+      actual.every((coordinate, index) => Math.abs(coordinate - expected[index]) < 1e-7),
+      'The model retains its position, zoom and orientation.',
+    );
+  }
+  for (const kind of ['footprints', 'symbols']) {
+    await page.evaluate((value) => window.setKind(value), kind);
+    let symbolFit;
+    let symbolPose;
+    if (kind === 'symbols') {
+      await symbolPreview.waitFor();
+      symbolFit = await symbolPreview.getAttribute('viewBox');
+      await symbolPreview.press('ArrowUp');
+      await symbolPreview.press('=');
+      symbolPose = await symbolPreview.getAttribute('viewBox');
+      assert.notEqual(symbolPose, symbolFit);
+      await footprintTab.click();
+    }
+    await footprintPreview.waitFor();
+    const footprintFit = await footprintPreview.getAttribute('viewBox');
+    await footprintPreview.press('ArrowLeft');
+    await footprintPreview.press('-');
+    const footprintPose = await footprintPreview.getAttribute('viewBox');
+    assert.notEqual(footprintPose, footprintFit);
+    const iconSize = (kind) =>
+      fit(kind).locator('svg').evaluate((node) => {
+        const { width, height } = node.getBoundingClientRect();
+        return [width, height];
+      });
+    assert.deepEqual(await iconSize('footprint'), [16, 16]);
+    const beforeRender = modelReads;
+    await modelTab.click();
+    await fit('model').waitFor();
+    assert.deepEqual(await iconSize('model'), [16, 16]);
+    const canvas = page.locator('.model-preview canvas');
+    const fittedModel = await cameraAfterFrames(canvas);
+    await canvas.evaluate((node) => (window.retainedModelCanvas = node));
+    const bounds = await canvas.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.wheel(0, -190);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(bounds.x + bounds.width / 2 + 32, bounds.y + bounds.height / 2 + 14);
+    await page.mouse.up({ button: 'right' });
+    const movedModel = await cameraAfterFrames(canvas);
+    assert.notDeepEqual(movedModel, fittedModel);
+    if (kind === 'symbols') {
+      await symbolTab.click();
+      assert.deepEqual(await iconSize('symbol'), [16, 16]);
+      assert.equal(await symbolPreview.getAttribute('viewBox'), symbolPose);
+      await fit('symbol').click();
+      assert.equal(await symbolPreview.getAttribute('viewBox'), symbolFit);
+    }
+    await footprintTab.click();
+    assert.equal(await footprintPreview.getAttribute('viewBox'), footprintPose);
+    assert.equal(await canvas.isVisible(), false);
+    assert.equal(await canvas.evaluate((node) => node.previewRunning), false);
+    const hiddenPose = await cameraAfterFrames(canvas);
+    assertSamePose(await cameraAfterFrames(canvas), hiddenPose);
+    await modelTab.click();
+    await fit('model').waitFor();
+    assert.equal(await canvas.evaluate((node) => node === window.retainedModelCanvas), true);
+    assert.equal(modelReads, beforeRender + 1, 'Returning to the model does not read it again.');
+    assertSamePose(await cameraAfterFrames(canvas), hiddenPose);
+    await fit('model').click();
+    assertSamePose(await cameraAfterFrames(canvas), fittedModel);
+    await footprintTab.click();
+    assert.equal(await footprintPreview.getAttribute('viewBox'), footprintPose);
+    await fit('footprint').click();
+    assert.equal(await footprintPreview.getAttribute('viewBox'), footprintFit);
+  }
   assert.deepEqual(await page.evaluate(() => window.openedHomepages), [
     'jlceda',
     'easyeda',
@@ -481,7 +1015,7 @@ try {
   assert.equal(page.context().pages().length, 1);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS: categorized details, responsive filters, official links and collapsed copyright for symbols and footprints.',
+    'PASS: categorized details, responsive filters, attribution and asset availability for symbols and footprints.',
   );
 } finally {
   await browser.close();

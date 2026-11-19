@@ -216,7 +216,14 @@ if (mode.startsWith('claude-catalog')) {
     }
     if (e.method === 'thread/start') {
       assert.equal(e.params.sandbox, 'read-only');
-      assert.equal(e.params.approvalPolicy, 'untrusted');
+      assert.equal(e.params.approvalPolicy, mode === 'raw-kicad' ? 'never' : 'untrusted');
+      if (mode === 'raw-kicad') {
+        assert.equal(e.params.developerInstructions, undefined);
+        assert.equal(e.params.config['features.default_mode_request_user_input'], false);
+        assert.equal(e.params.dynamicTools, undefined);
+        assert.ok(process.argv.includes('features.plugins=false'));
+        assert.ok(process.argv.includes('mcp_servers={}'));
+      }
       assert.equal(
         e.params.config.model_reasoning_effort,
         mode === 'codex-model-default' || mode === 'default-effort'
@@ -245,6 +252,8 @@ if (mode.startsWith('claude-catalog')) {
     if (e.method === 'turn/start') {
       assert.notEqual(mode, 'codex-clamped', 'A clamped effort must fail before prompting');
       assert.match(e.params.input[0].text, /Fixture/);
+      if (mode === 'raw-kicad')
+        assert.deepEqual(e.params.input, [{ type: 'text', text: 'Fixture raw prompt\r\n(kicad_pcb)' }]);
       if (mode === 'codex-annotations') {
         assert.equal(e.params.input[1].type, 'image');
         assert.match(e.params.input[1].url, /^data:image\/png;base64,/);

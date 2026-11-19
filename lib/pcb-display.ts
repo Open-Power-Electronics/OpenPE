@@ -3,6 +3,8 @@ import { padCopperLayers } from './pcb-connectivity';
 import { footprintPoint, pcbBounds, type PCBBounds } from './pcb-layout';
 import { pcbGraphicPoints } from './pcb-geometry';
 import { boardPolygons } from './pcb-polygons';
+import { padBoundPoints, padExtent } from './pcb-custom-pad';
+import { padApertureLayers, padHasElectricalPin } from './pcb-pad-role';
 
 const pcbDisplayOptions = [
   'footprints',
@@ -81,6 +83,15 @@ export function pcbActiveLayerPaintOrder(order: BoardLayer[], active: BoardLayer
   ];
 }
 
+export function pcbPadDisplayLayers(
+  board: Pick<PCB, 'layers'>,
+  footprint: Footprint,
+  pad: Pad,
+): readonly BoardLayer[] {
+  if (pad.type === 'np_thru_hole') return ['Edge.Cuts'];
+  return padApertureLayers(pad) ?? padCopperLayers(board, footprint, pad);
+}
+
 /** A spanning pad has one owner: its uppermost visible pass in the current paint order. */
 export function pcbPadPaintLayer(
   padLayers: readonly string[],
@@ -109,12 +120,24 @@ export function pcbReadableTextAngle(rotation: number): number {
   return angle > 90 ? angle - 180 : angle;
 }
 
-export const pcbPadTypeLabel = (type: Pad['type']): string =>
-  type === 'smd'
-    ? 'Surface-mount pad'
-    : type === 'thru_hole'
-      ? 'Plated through-hole pad'
-      : 'Non-plated hole';
+export function pcbFootprintTextRotation(
+  rotation: number,
+  footprintRotation: number,
+  keepUpright?: false,
+): number {
+  return keepUpright === false
+    ? rotation
+    : pcbReadableTextAngle(rotation + footprintRotation) - footprintRotation;
+}
+
+export function pcbPadTypeLabel(pad: Pad): string {
+  const apertureLayers = padApertureLayers(pad);
+  if (apertureLayers?.length === 2) return 'Solder mask and paste aperture';
+  if (apertureLayers)
+    return apertureLayers[0].endsWith('.Paste') ? 'Solder paste aperture' : 'Solder mask aperture';
+  if (pad.type === 'smd') return 'Surface-mount pad';
+  return pad.type === 'thru_hole' ? 'Plated through-hole pad' : 'Non-plated hole';
+}
 
 export const pcbPadShapeLabel = (shape: Pad['shape']): string =>
   shape === 'rect'
@@ -123,7 +146,9 @@ export const pcbPadShapeLabel = (shape: Pad['shape']): string =>
       ? 'Rounded rectangle'
       : shape === 'circle'
         ? 'Circle'
-        : 'Oval';
+        : shape === 'custom'
+          ? 'Custom polygon'
+          : 'Oval';
 
 /** Pad-local annotation geometry; full net names remain available in inspection/accessibility. */
 export function pcbPadLabels(
@@ -133,14 +158,15 @@ export function pcbPadLabels(
   visible: Pick<PCBDisplay, 'padNumbers' | 'padNets'>,
 ) {
   const lines: { kind: 'number' | 'net'; text: string; y: number; size: number }[] = [];
-  if (pad.type === 'np_thru_hole') return { rotation: 0, lines };
+  if (!padHasElectricalPin(pad)) return { rotation: 0, lines };
   if (visible.padNumbers && pad.number)
     lines.push({ kind: 'number', text: pad.number, y: 0, size: 0 });
   const name = netName?.split('/').at(-1) || netName;
   if (visible.padNets && name) lines.push({ kind: 'net', text: name, y: 0, size: 0 });
-  const tall = pad.size.y > pad.size.x * 1.05;
-  const length = Math.max(pad.size.x, pad.size.y);
-  const breadth = Math.min(pad.size.x, pad.size.y);
+  const size = padExtent(pad);
+  const tall = size.y > size.x * 1.05;
+  const length = Math.max(size.x, size.y);
+  const breadth = Math.min(size.x, size.y);
   // Round and square pads have no long axis: keep their labels horizontal on the board.
   const axis = length <= breadth * 1.05 ? 0 : pcbReadableTextAngle(rotation + (tall ? 90 : 0));
   const width = length * (pad.shape === 'circle' ? 0.62 : 0.82);
@@ -179,16 +205,9 @@ export function pcbFootprintBodyBounds(
   if (!visible.footprints) return null;
   const points = [];
   for (const pad of footprint.pads) {
-    if (
-      pad.type === 'np_thru_hole'
-        ? !visible['Edge.Cuts']
-        : !padCopperLayers(board, footprint, pad).some((layer) => visible[layer as BoardLayer])
-    )
-      continue;
+    if (!pcbPadDisplayLayers(board, footprint, pad).some((layer) => visible[layer])) continue;
     const localPad = { ...footprint, x: pad.x, y: pad.y, rotation: pad.rotation };
-    for (const x of [-pad.size.x / 2, pad.size.x / 2])
-      for (const y of [-pad.size.y / 2, pad.size.y / 2])
-        points.push(footprintPoint(localPad, { x, y }));
+    for (const point of padBoundPoints(pad)) points.push(footprintPoint(localPad, point));
   }
   for (const graphic of footprint.graphics) {
     if (!visible[graphic.layer] || graphic.kind === 'text' || graphic.kind === 'dimension')
@@ -234,11 +253,7 @@ export function pcbDisplayBounds(
       ? board.footprints
           .map((f) => ({
             ...f,
-            pads: f.pads.filter(
-              (p) =>
-                padCopperLayers(board, f, p).some((l) => visible[l as BoardLayer]) ||
-                (p.type === 'np_thru_hole' && visible['Edge.Cuts']),
-            ),
+            pads: f.pads.filter((p) => pcbPadDisplayLayers(board, f, p).some((l) => visible[l])),
             graphics: f.graphics.filter((g) => visible[g.layer]),
             zones: f.zones?.filter(
               (z) => visible[z.layer] && (visible.zoneOutlines || visible.copper),

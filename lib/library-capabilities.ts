@@ -1,6 +1,7 @@
 import type { CapabilityActor, CapabilityHost } from '../api/capabilities';
 import { ProjectCore } from '../core/project-core';
 import { api, type SpiceModelDeclaration } from './bridge';
+import { readLibrarySearch } from './library-search';
 import { uid } from './circuit';
 import {
   createLibraryPart,
@@ -447,7 +448,7 @@ export function registerLibraryCapabilities(
       id: 'library.search',
       kind: 'query',
       description:
-        'Search KiCad symbols and footprints or online parts with linked footprints. For online search, use a keyword or a category ID from library.categories. Empty filters browse JLCPCB. Use the returned nextOffset to continue an online search, including after an empty batch. Null ends the scan.',
+        'Search KiCad symbols and footprints or online parts with linked footprints. For online search, use a keyword or a category ID from library.categories. Empty filters browse JLCPCB. Set includeAssetStatus for symbol pages with checked footprint and model links. Use the returned nextOffset to continue a paged scan, including after an empty batch. Null ends the scan.',
       inputSchema: object(
         {
           kind,
@@ -455,20 +456,12 @@ export function registerLibraryCapabilities(
           library: { type: 'string', maxLength: 200 },
           category: { type: 'string', maxLength: 10 },
           offset: { type: 'integer', minimum: 0, maximum: 999999 },
+          includeAssetStatus: { type: 'boolean' },
         },
         ['kind'],
       ),
-      handler: async (
-        { kind, query = '', library = '', category = '', offset = 0 },
-        { signal },
-      ) => {
-        return (
-          await api(
-            `libraries/${kind}?q=${encodeURIComponent(query)}&library=${encodeURIComponent(library)}&offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ''}`,
-            { signal },
-          )
-        ).json();
-      },
+      handler: (input, { signal, reportProgress }) =>
+        readLibrarySearch(input, signal, reportProgress),
     }),
     host.register<any>({
       owner: 'host',

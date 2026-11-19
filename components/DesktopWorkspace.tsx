@@ -17,6 +17,7 @@ import type { ProjectAction, ProjectFileAction, ProjectNavigationItem } from './
 import { useAppearance } from './AppearanceSettings';
 import DesktopTitlebar from './DesktopTitlebar';
 import WorkspaceLoading from './WorkspaceLoading';
+import RawKiCadChat from './RawKiCadChat';
 import { loadAgentModelCatalog, resetAgentModelCatalogs } from './ModelSelect';
 import { api, writeWorkspaceRecovery } from '@/lib/bridge';
 import { importDocument, projectFilename, type Project } from '@/lib/project';
@@ -49,6 +50,7 @@ export type DocumentController = {
   snapshot: () => CloseSnapshot;
   fileAction: (action: Exclude<ProjectFileAction, 'reveal'>) => Promise<boolean>;
   notify: (message: string) => void;
+  suspendForRawKiCad: () => () => void;
   requestClose: (
     done: (choice: CloseChoice, snapshot: CloseSnapshot) => Promise<void>,
     cancel: () => void,
@@ -126,6 +128,9 @@ export default function DesktopWorkspace() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeRef = useRef(activeId);
   const [preferences, setPreferences] = useState<AgentPreferences>(defaultAgentPreferences);
+  const [rawMode, setRawMode] = useState(false);
+  const pauseWorkspace = useRef<(() => void)[] | null>(null);
+  const switchingMode = useRef(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [agentError, setAgentError] = useState('');
@@ -349,9 +354,10 @@ export default function DesktopWorkspace() {
     };
   }, [updateDocuments]);
   useEffect(() => {
-    if (!loaded || !ready.current || !documents.length || closing.current || quit.current) return;
+    if (!loaded || !ready.current || !documents.length || closing.current || quit.current || rawMode) return;
     setDraftStatus('Saving draft');
     timer.current = setTimeout(() => {
+      if (pauseWorkspace.current) return;
       void persist()
         .then(() => setDraftStatus('Draft saved'))
         .catch((error) => {
@@ -362,7 +368,7 @@ export default function DesktopWorkspace() {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [loaded, documents, activeId, preferences, persist, quitting]);
+  }, [loaded, documents, activeId, preferences, persist, quitting, rawMode]);
   useEffect(() => {
     void window.openpe?.setDirty(documents.some((item) => item.unsaved));
   }, [documents]);
@@ -616,14 +622,55 @@ export default function DesktopWorkspace() {
     },
     [selectDocument, updateDocuments],
   );
+  const changeRawMode = useCallback(async (value: boolean) => {
+    const bridge = window.openpe;
+    if (!bridge) throw new Error('Raw KiCad mode requires the desktop app.');
+    if (switchingMode.current || closing.current || quit.current)
+      throw new Error('Wait for the current workspace operation to finish before switching modes.');
+    if (value === Boolean(pauseWorkspace.current)) return;
+    switchingMode.current = true;
+    try {
+      if (value) {
+        const resume: (() => void)[] = [];
+        pauseWorkspace.current = resume;
+        try {
+          for (const controller of controllers.current.values())
+            resume.push(controller.suspendForRawKiCad());
+          await writes.current.catch(() => {});
+          await bridge.setRawKiCadMode(true);
+        } catch (error) {
+          pauseWorkspace.current = null;
+          for (const release of resume) release();
+          throw error;
+        }
+      } else {
+        await bridge.setRawKiCadMode(false);
+        for (const resume of pauseWorkspace.current ?? []) resume();
+        pauseWorkspace.current = null;
+      }
+      setRawMode(value);
+    } finally {
+      switchingMode.current = false;
+    }
+  }, []);
+  const enterRawMode = useCallback(() => changeRawMode(true), [changeRawMode]);
+  const leaveRawMode = useCallback(() => changeRawMode(false), [changeRawMode]);
   useEffect(
     () =>
-      window.openpe?.onCloseRequested(() => {
+      window.openpe?.onCloseRequested(async () => {
         // A repeated close request must not revoke the review already in progress.
         if (quit.current) return;
-        if (closing.current) {
+        if (closing.current || switchingMode.current) {
           void window.openpe?.resolveClose(false);
           return;
+        }
+        if (pauseWorkspace.current) {
+          try {
+            await leaveRawMode();
+          } catch {
+            void window.openpe?.resolveClose(false);
+            return;
+          }
         }
         quit.current = true;
         setQuitting(true);
@@ -690,7 +737,7 @@ export default function DesktopWorkspace() {
           cancel();
         });
       }),
-    [persist, selectDocument],
+    [persist, selectDocument, leaveRawMode],
   );
 
   if (!loaded)
@@ -704,7 +751,7 @@ export default function DesktopWorkspace() {
     <WorkspacePresentationContext.Provider value={presentation}>
       {[null, ...documents].map((item) => {
         const id = item?.state.id ?? 'home';
-        const active = item ? activeId === id : activeId === null;
+        const active = !rawMode && (item ? activeId === id : activeId === null);
         return (
           <ProjectSurface key={id} active={active}>
             <ProjectWorkbench
@@ -735,10 +782,22 @@ export default function DesktopWorkspace() {
               setPreferences={setPreferences}
               appearanceSettings={appearanceSettings}
               startupError={error}
+              rawMode={rawMode}
+              onEnterRawMode={window.openpe ? enterRawMode : undefined}
             />
           </ProjectSurface>
         );
       })}
+      {rawMode && (
+        <RawKiCadChat
+          agents={agents}
+          detecting={detecting}
+          agentError={agentError}
+          onDetect={detectAgents}
+          preferences={preferences}
+          onExit={leaveRawMode}
+        />
+      )}
     </WorkspacePresentationContext.Provider>
   );
 }

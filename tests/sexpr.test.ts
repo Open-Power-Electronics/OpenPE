@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isOwnedProjectNode, ownProjectData } from '../lib/immutable-project';
-import { parseOwnedSExpr, parseSExpr, writeSExpr, type SExpr } from '../lib/sexpr';
+import { parseOwnedSExpr, parseSExpr, val, writeSExpr, type SExpr } from '../lib/sexpr';
+
+test('KiCad quoted properties accept literal tabs without normalizing native syntax', () => {
+  const source = '(property "Description" "\tConnector\\\"\\\\\twith tap")';
+  for (const parse of [parseSExpr, parseOwnedSExpr]) {
+    const record = parse(source);
+    assert.equal(val(record, 2), '\tConnector"\\\twith tap');
+    assert.equal(writeSExpr(record), source);
+    assert.throws(() => parse('(property "Description" "invalid\u0000value")'), /Invalid string/);
+  }
+});
 
 test('owned S-expression text preserves exact indentation through depth changes and cache eviction', () => {
   const source =

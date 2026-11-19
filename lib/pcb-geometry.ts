@@ -93,8 +93,29 @@ export function pcbGraphicPoints(g: BoardLine): Point[] {
   }
   return points;
 }
-/** Exact chamfered rectangle outline; rounded corners use circular SVG arcs. */
-export function pcbPadPath(p: Pad): string {
+export const pcbPadCorners = [
+  { x: -1, y: -1, name: 'top_left' },
+  { x: 1, y: -1, name: 'top_right' },
+  { x: 1, y: 1, name: 'bottom_right' },
+  { x: -1, y: 1, name: 'bottom_left' },
+] as const;
+
+/** The two endpoints in clockwise pad-local traversal order. */
+export function pcbPadChamferEndpoints(
+  { x, y }: (typeof pcbPadCorners)[number],
+  size: Point,
+  cut: number,
+): [Point, Point] {
+  const horizontal = { x: x * (size.x / 2 - cut), y: (y * size.y) / 2 };
+  const vertical = { x: (x * size.x) / 2, y: y * (size.y / 2 - cut) };
+  return x === y ? [vertical, horizontal] : [horizontal, vertical];
+}
+
+/** Pad-local path; rounded corners use circular SVG arcs. */
+export function pcbPadPath(
+  p: Pick<Pad, 'size' | 'roundrectRatio' | 'chamferRatio' | 'chamfer' | 'outline'>,
+): string {
+  if (p.outline) return `M ${p.outline.map(({ x, y }) => `${x} ${y}`).join(' L ')} Z`;
   const x = p.size.x / 2,
     y = p.size.y / 2,
     r = Math.min(p.size.x, p.size.y) * (p.roundrectRatio ?? 0),

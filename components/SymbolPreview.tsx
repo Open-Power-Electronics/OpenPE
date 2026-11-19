@@ -5,6 +5,7 @@ import type { SExpr } from '@/lib/sexpr';
 import type { Part } from '@/lib/circuit';
 import { isOwnedProjectNode } from '@/lib/immutable-project';
 import SymbolGraphic, { symbolVoltageSource } from './SymbolGraphic';
+import LibraryPreviewViewport, { measurePreviewBounds } from './LibraryPreviewViewport';
 
 // These are measured SVG bounds, never geometric/text-width approximations.
 // Only detached library nodes qualify, and each retains a small number of exact
@@ -151,10 +152,12 @@ export default function SymbolPreview({
   library,
   unit = 1,
   part,
+  interactive = false,
 }: {
   library: SExpr;
   unit?: number;
   part?: Part;
+  interactive?: boolean;
 }) {
   const drawing = useRef<SVGGElement>(null);
   const [viewBox, setViewBox] = useState('-8 -8 16 16');
@@ -202,19 +205,10 @@ export default function SymbolPreview({
         return;
       }
       // Hidden dialogs can report empty bounds; wait until they become visible.
-      if (!svg.getClientRects().length) return;
       // Chromium can hint SVG text differently at each viewBox scale. Measure
       // in one fixed viewport, restoring the live fit before the browser paints.
-      const previousViewBox = svg.getAttribute('viewBox');
-      svg.setAttribute('viewBox', measurementViewBox);
-      let bounds: DOMRect;
-      try {
-        bounds = group.getBBox();
-      } finally {
-        if (previousViewBox === null) svg.removeAttribute('viewBox');
-        else svg.setAttribute('viewBox', previousViewBox);
-      }
-      if (!bounds.width && !bounds.height) return;
+      const bounds = measurePreviewBounds(group, measurementViewBox);
+      if (!bounds || (!bounds.width && !bounds.height)) return;
       // Keep point-like symbols readable without enlarging them into oversized rings.
       const size = Math.max(bounds.width, bounds.height, 4) * 1.25;
       const fitted = `${bounds.x + bounds.width / 2 - size / 2} ${bounds.y + bounds.height / 2 - size / 2} ${size} ${size}`;
@@ -248,14 +242,23 @@ export default function SymbolPreview({
       fonts.removeEventListener('loadingdone', measure);
       fonts.removeEventListener('loadingerror', measure);
     };
-  }, [library, unit, voltageSource]);
+  }, [library, unit, voltageSource, interactive]);
 
+  const graphic = (
+    <g ref={drawing}>
+      <SymbolGraphic library={library} unit={unit} part={part} />
+    </g>
+  );
+  if (interactive)
+    return (
+      <LibraryPreviewViewport key={unit} kind="symbol" fitBox={viewBox}>
+        {graphic}
+      </LibraryPreviewViewport>
+    );
   return (
     <span className="component-preview" aria-hidden="true">
       <svg viewBox={viewBox} focusable="false">
-        <g ref={drawing}>
-          <SymbolGraphic library={library} unit={unit} part={part} />
-        </g>
+        {graphic}
       </svg>
     </span>
   );

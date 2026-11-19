@@ -17,7 +17,6 @@ export type LibraryCategoryStatus = {
   pending: boolean;
   error: string;
   reloadSerial: number;
-  browseCategoryId?: string;
 };
 
 function categoryPath(categories: Category[], id: string): Category[] | undefined {
@@ -133,21 +132,16 @@ export default function LibrarySourceSelect({
   }, [request, kind, capabilityHost]);
 
   const categories = categoriesFor(source);
-  const cascading =
-    source === 'NextPCB' ||
-    (online && (!categories || categories.some((item) => item.children.length)));
   const categoryPending = !categories || loading === source;
   const categoryError = errors[source] ?? '';
-  const browseCategoryId = categoryPath(catalogs.NextPCB ?? [], '1737')?.at(-1)?.id;
   useEffect(() => {
     onStatus?.({
       source,
       pending: categoryPending && !categoryError,
       error: categoryError,
       reloadSerial: completedReload,
-      browseCategoryId,
     });
-  }, [source, categoryPending, categoryError, completedReload, browseCategoryId, onStatus]);
+  }, [source, categoryPending, categoryError, completedReload, onStatus]);
   const options: SelectOption[] = [
     { value: '', label: 'All categories' },
     ...(categories
@@ -166,12 +160,10 @@ export default function LibrarySourceSelect({
       : []),
   ];
   const path = activeCategory ? (categoryPath(categories ?? [], activeCategory) ?? []) : [];
+  const root = path[0];
+  const subcategories = root?.children ?? [];
   return (
-    <div
-      className="library-source-filters"
-      data-source={source}
-      data-category-levels={cascading ? 2 : 1}
-    >
+    <div className="library-source-filters">
       <Select
         label="Library source"
         value={source}
@@ -180,66 +172,34 @@ export default function LibrarySourceSelect({
           if (provider !== source) onChange(provider === 'KiCad' ? '' : provider, '');
         }}
       />
-      {cascading ? (
-        [0, 1].map((level) => {
-          const parent = level ? path[level - 1] : undefined;
-          const children = level ? (parent?.children ?? []) : (categories ?? []);
-          const unavailable = level > 0 && !children.length;
-          const leafSelected = path.length > 0 && !path.at(-1)!.children.length;
-          const value = level === 1 && path.length > 1 ? path.at(-1)!.id : (path[level]?.id ?? '');
-          const choices: SelectOption[] =
-            level === 0
-              ? options
-              : [
-                  {
-                    value: '',
-                    label: unavailable
-                      ? parent || leafSelected
-                        ? 'No subcategories'
-                        : 'All subcategories'
-                      : 'All subcategories',
-                  },
-                  ...(level === 1
-                    ? finalLevelOptions(children)
-                    : children.map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                      }))),
-                ];
-          return (
-            <Select
-              key={level}
-              label={`Category level ${level + 1}`}
-              hint={
-                path
-                  .slice(0, level + 1)
-                  .map((item) => item.name)
-                  .join(' / ') || `Category level ${level + 1}`
-              }
-              value={value}
-              options={choices}
-              disabled={unavailable}
-              popupMaxHeight={280}
-              onChange={(next) => {
-                if (next === 'action:retry') load(source, true);
-                else onChange(source, next || parent?.id || '');
-              }}
-            />
-          );
-        })
-      ) : (
-        <Select
-          label="Category"
-          value={activeCategory}
-          options={options}
-          popupMaxHeight={280}
-          onChange={(value) => {
-            if (value === 'action:retry') load(source, true);
-            else if (online) onChange(source, value);
-            else onChange(value, '');
-          }}
-        />
-      )}
+      <Select
+        label="Category level 1"
+        value={online ? (root?.id ?? '') : activeCategory}
+        options={options}
+        popupMaxHeight={280}
+        onChange={(value) => {
+          if (value === 'action:retry') load(source, true);
+          else if (online) onChange(source, value);
+          else onChange(value, '');
+        }}
+      />
+      <Select
+        label="Category level 2"
+        value={path.length > 1 ? activeCategory : ''}
+        disabled={!subcategories.length}
+        options={[
+          {
+            value: '',
+            label:
+              !subcategories.length && (root || !online) ? 'No subcategories' : 'All subcategories',
+          },
+          ...finalLevelOptions(subcategories),
+        ]}
+        popupMaxHeight={280}
+        onChange={(value) => {
+          if (root) onChange(source, value || root.id);
+        }}
+      />
     </div>
   );
 }

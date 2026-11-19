@@ -1,9 +1,21 @@
 import Clipper from 'clipper-lib';
 import type { Point } from './circuit';
 import type { BoardLine, BoardZone, CopperLayer, Footprint, Pad, PCB } from './pcb';
-import { pcbArc, transformPCBGraphic, transformPCBZone } from './pcb-geometry';
+import {
+  pcbArc,
+  pcbPadChamferEndpoints,
+  pcbPadCorners,
+  transformPCBGraphic,
+  transformPCBZone,
+} from './pcb-geometry';
 import { invalidatePCBFill, pcbFillInputsChanged, samePCBTrackCopper } from './pcb';
-import { footprintPoint, padDrillPosition, padPosition, padRotation } from './pcb-layout';
+import {
+  footprintPoint,
+  padDrillLine,
+  padDrillPosition,
+  padPosition,
+  padRotation,
+} from './pcb-layout';
 import { isOwnedPCB, isOwnedProjectNode, ownProjectData } from './immutable-project';
 import { padCopperLayers, partitionPCBRoutingCopper } from './pcb-connectivity';
 import { borrowPCBPadCopperContour } from './pcb-pad-contour';
@@ -17,6 +29,7 @@ import {
 } from './pcb-clearance-sources';
 import { loadKiCadPCBDesignRuleLimits, workbenchPCBDesignRules } from './design-rule-checks';
 import { insidePolygon, polygonEdges, segmentDistance } from './pcb-collision';
+import { padReach } from './pcb-custom-pad';
 
 export type Polygon = { outer: Point[]; holes: Point[][] };
 type CopperFillPolygon = Polygon & { island?: true };
@@ -68,6 +81,19 @@ export function circlePolygon(at: Point, radius: number): Point[] {
     x: at.x + radius * Math.cos((i * Math.PI * 2) / count),
     y: at.y + radius * Math.sin((i * Math.PI * 2) / count),
   }));
+}
+export function padDrillPolygon(footprint: Footprint, pad: Pad): Point[] {
+  const radius = pad.drill! / 2;
+  if (!pad.drillSlot) return circlePolygon(padDrillPosition(footprint, pad), radius);
+  const [start, end] = padDrillLine(footprint, pad);
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  const steps = Math.ceil(circleSideCount(radius) / 2);
+  return [end, start].flatMap((point, i) =>
+    Array.from({ length: steps + 1 }, (_, j) => {
+      const theta = angle + (i - 0.5 + j / steps) * Math.PI;
+      return { x: point.x + radius * Math.cos(theta), y: point.y + radius * Math.sin(theta) };
+    }),
+  );
 }
 function strokedPath(
   points: Point[],
@@ -221,29 +247,28 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
   const w = p.size.x,
     h = p.size.y;
   let local: Point[];
-  if (p.shape === 'circle') local = circlePolygon({ x: 0, y: 0 }, w / 2);
+  if (p.outline) local = p.outline;
+  else if (p.shape === 'circle') local = circlePolygon({ x: 0, y: 0 }, w / 2);
   else {
     const radius = padCornerRadius(p);
-    const corners = [
-      { x: -1, y: -1, name: 'top_left' },
-      { x: 1, y: -1, name: 'top_right' },
-      { x: 1, y: 1, name: 'bottom_right' },
-      { x: -1, y: 1, name: 'bottom_left' },
-    ] as const;
-    local = corners.flatMap((c, i) => {
+    local = pcbPadCorners.flatMap((c, i) => {
       const cut = p.chamfer?.includes(c.name) ? Math.min(w, h) * (p.chamferRatio ?? 0) : 0;
       const start = Math.PI + (i * Math.PI) / 2;
-      if (cut)
-        return [
-          { x: c.x * (w / 2 - (i % 2 ? 0 : cut)), y: c.y * (h / 2 - (i % 2 ? cut : 0)) },
-          { x: c.x * (w / 2 - (i % 2 ? cut : 0)), y: c.y * (h / 2 - (i % 2 ? 0 : cut)) },
-        ];
+      if (p.chamfer?.includes(c.name))
+        return cut
+          ? pcbPadChamferEndpoints(c, p.size, cut)
+          : [{ x: (c.x * w) / 2, y: (c.y * h) / 2 }];
       if (!radius) return [{ x: (c.x * w) / 2, y: (c.y * h) / 2 }];
       return Array.from({ length: padCornerSegments + 1 }, (_, j) => ({
         x: c.x * (w / 2 - radius) + radius * Math.cos(start + j * padCornerStep),
         y: c.y * (h / 2 - radius) + radius * Math.sin(start + j * padCornerStep),
       }));
     });
+    if (p.chamfer?.length)
+      local = local.filter((point, i) => {
+        const previous = local[(i + local.length - 1) % local.length];
+        return point.x !== previous.x || point.y !== previous.y;
+      });
   }
   const at = padPosition(f, p),
     radians = (-padRotation(f, p) * Math.PI) / 180;
@@ -254,6 +279,20 @@ export function padPolygon(f: Footprint, p: Pad): Polygon {
     })),
     holes: [],
   };
+}
+
+/** Uniform mask/paste apertures for straight chamfers follow KiCad's plot geometry. */
+export function offsetPadPolygons(f: Footprint, pad: Pad, margin: number): Polygon[] {
+  if (pad.outline) {
+    const polygon = padPolygon(f, pad);
+    return margin ? offsetPolygons([polygon], margin, 0.0005) : [polygon];
+  }
+  const straightChamfers = pad.chamfer?.length && !pad.roundrectRatio;
+  if (straightChamfers && margin < 0) {
+    const size = { x: pad.size.x + 2 * margin, y: pad.size.y + 2 * margin };
+    return size.x > 0 && size.y > 0 ? [padPolygon(f, { ...pad, size })] : [];
+  }
+  return offsetPolygons([padPolygon(f, pad)], margin, straightChamfers ? 0.0005 : undefined);
 }
 export function worldZones(board: PCB): BoardZone[] {
   return [
@@ -517,7 +556,9 @@ function fillPad(pad: Pad) {
     type: pad.type,
     shape: pad.shape,
     size: fillPoint(pad.size),
+    outline: pad.outline?.map(fillPoint),
     drill: pad.drill === undefined ? null : fillNumber(pad.drill),
+    drillSlot: pad.drillSlot ? [pad.drillSlot.axis, fillNumber(pad.drillSlot.length)] : null,
     netId: pad.netId,
     layers: pad.layers ?? null,
     drillOffset: [fillNumber(offset.x), fillNumber(offset.y)],
@@ -767,7 +808,7 @@ function calculateCopperPolygons(
       .filter(({ p }) => p.drill)
       .map(({ f, p }) => ({
         netId: p.type === 'thru_hole' ? p.netId : null,
-        polygon: { outer: circlePolygon(padDrillPosition(f, p), p.drill! / 2), holes: [] },
+        polygon: { outer: padDrillPolygon(f, p), holes: [] },
       })),
   ];
   const stored = fingerprint
@@ -855,7 +896,7 @@ function calculateCopperPolygons(
       } else if (connection === 'thermal') {
         const gap = offset([shape], z.thermalGap);
         const at = padPosition(f, p),
-          r = Math.hypot(p.size.x, p.size.y) / 2 + z.thermalGap + z.thermalBridge;
+          r = padReach(p) + z.thermalGap + z.thermalBridge;
         const spokes = Array.from({ length: 2 }, (_, i) => {
           const a = (((p.thermalBridgeAngle ?? 90) - padRotation(f, p) + i * 90) * Math.PI) / 180;
           return strokePolygon(

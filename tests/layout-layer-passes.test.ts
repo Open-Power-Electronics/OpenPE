@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { layoutFootprintLayerPasses } from '../components/layoutLayerPasses';
 import type { BoardLayer, BoardLine, Footprint, PCB } from '../lib/pcb';
 import { defaultPCBDisplay, pcbLayerPaintOrder } from '../lib/pcb-display';
+import { createEmptyPCB } from '../lib/pcb-layout';
+import { defaultPCBSelectionFilters, selectPCBPadPoint } from '../lib/pcb-selection';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const footprint = (): Footprint => ({
@@ -121,6 +123,30 @@ test('surface pads and non-plated holes retain their independent physical owners
     ),
     ['B.Cu'],
   );
+});
+
+test('paste-only apertures paint and select only on their visible paste layer', () => {
+  const part = footprint();
+  const aperture = {
+    ...through(),
+    number: '',
+    type: 'smd' as const,
+    drill: undefined,
+    layers: ['F.Paste' as const],
+  };
+  part.pads = [aperture];
+  const pcb = { ...createEmptyPCB(), footprints: [part] };
+  const display = defaultPCBDisplay();
+  const enabled = { ...display, 'F.Paste': true };
+  const order = pcbLayerPaintOrder(['F.Cu', 'F.Paste', 'B.Paste']);
+  const filters = defaultPCBSelectionFilters();
+  assert.deepEqual(layoutFootprintLayerPasses(pcb, display, order).graphics, []);
+  assert.deepEqual(
+    layoutFootprintLayerPasses(pcb, enabled, order).graphics.map((pass) => pass.layer),
+    ['F.Paste'],
+  );
+  assert.deepEqual(selectPCBPadPoint(pcb, display, filters, part, 0), []);
+  assert.deepEqual(selectPCBPadPoint(pcb, enabled, filters, part, 0), [aperture.id]);
 });
 
 test('native Reference fields suppress fabricated fallback captions even when hidden', () => {

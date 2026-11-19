@@ -344,6 +344,12 @@
                 "maximum": 1000,
                 "multipleOf": 0.0001
               },
+              "thickness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
               "anchor": {
                 "enum": [
                   "start",
@@ -976,6 +982,9 @@
                   "thickness"
                 ],
                 "additionalProperties": false
+              },
+              "keepUpright": {
+                "const": false
               },
               "dimension": {
                 "type": "object",
@@ -1745,6 +1754,9 @@
                 ],
                 "additionalProperties": false
               },
+              "keepUpright": {
+                "const": false
+              },
               "dimension": {
                 "type": "object",
                 "properties": {
@@ -1966,6 +1978,49 @@
             "additionalProperties": false
           },
           "maxItems": 10000
+        },
+        "referencePoints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+              },
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "size": {
+                "type": "number",
+                "minimum": 0.000001,
+                "maximum": 1000,
+                "multipleOf": 0.000001
+              },
+              "layer": {
+                "enum": [
+                  "F.Fab",
+                  "B.Fab"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "x",
+              "y",
+              "size",
+              "layer"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256
         },
         "reference": {
           "type": "string",
@@ -2390,7 +2445,8 @@
             "rect",
             "circle",
             "oval",
-            "roundrect"
+            "roundrect",
+            "custom"
           ]
         },
         "size": {
@@ -2414,6 +2470,36 @@
             "y"
           ],
           "additionalProperties": false
+        },
+        "customAnchor": {
+          "const": "circle"
+        },
+        "outline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "multipleOf": 0.000001
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "multipleOf": 0.000001
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 128,
+          "minItems": 3
         },
         "drill": {
           "type": "number",
@@ -2463,6 +2549,7 @@
               "User.3",
               "User.4",
               "*.Cu",
+              "F&B.Cu",
               "*.Mask"
             ]
           },
@@ -2489,6 +2576,28 @@
           "required": [
             "x",
             "y"
+          ],
+          "additionalProperties": false
+        },
+        "drillSlot": {
+          "type": "object",
+          "properties": {
+            "length": {
+              "type": "number",
+              "minimum": 0.000001,
+              "maximum": 1000,
+              "multipleOf": 0.000001
+            },
+            "axis": {
+              "enum": [
+                "x",
+                "y"
+              ]
+            }
+          },
+          "required": [
+            "length",
+            "axis"
           ],
           "additionalProperties": false
         },
@@ -2546,6 +2655,9 @@
         },
         "removeUnusedLayers": {
           "type": "boolean"
+        },
+        "heatsink": {
+          "const": true
         },
         "unconnected": {
           "const": true
