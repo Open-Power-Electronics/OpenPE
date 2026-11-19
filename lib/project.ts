@@ -23,6 +23,8 @@ import { formatProjectJson } from './project-json';
 import { exceedsUtf8ByteLimit } from './utf8-byte-limit';
 import { ungroupProjectSchematic } from './project-objects';
 export { schematicDocumentItems, projectDocumentFootprints } from './project-objects';
+export { projectFootprintSource, projectPackageModelPaths } from './library-project-assets';
+export { footprintModels } from './pcb-models';
 export {
   projectNativeFiles,
   projectFromNativeFiles,
@@ -34,6 +36,8 @@ import {
   isPassiveSimulationModel,
 } from './simulation-model-source';
 import { simulationFieldNames } from './simulation-fields';
+import { partFields } from './library';
+import { controllerModelSources } from './reference-models';
 import {
   isOwnedCircuit,
   isOwnedPCB,
@@ -62,6 +66,21 @@ export const MAX_PROJECT_BYTES = 8_000_000;
 export const MAX_SCHEMATIC_FILES = 12;
 export function projectSchematics(project: Project): Circuit[] {
   return [project.schematic, ...(project.additionalSchematics ?? [])];
+}
+export function projectBoundTiModels(project: Project) {
+  const tiModelBindings = new Map(controllerModelSources.map((model) => [`TI:${model.id}`, model]));
+  const reviewedIds = new Set<string>();
+  const libraries = new Set<string>();
+  for (const sheet of projectSchematics(project)) {
+    for (const part of sheet.parts) {
+      const fields = partFields(part);
+      if (!fields['Sim.Library'] || !fields['Sim.Name']) continue;
+      const model = tiModelBindings.get(fields['Sim.Library']);
+      if (model && fields['Sim.Name'] === model.subcircuit) reviewedIds.add(model.id);
+      libraries.add(fields['Sim.Library']);
+    }
+  }
+  return { reviewedIds, libraries };
 }
 export function findSchematic(project: Project, id: string): Circuit | undefined {
   return projectSchematics(project).find((schematic) => schematic.id === id);

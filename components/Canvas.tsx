@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { isOwnedCircuit } from '@/lib/immutable-project';
 import type { RuleCheckFocus } from '@/lib/design-rule-checks';
@@ -179,7 +179,7 @@ type Props = {
   onAnnotationsChange: (annotations: AgentAnnotation[]) => void;
   onAnnotationAdd?: () => void;
   onCommit: (d: Circuit) => boolean;
-  onPlacePart?: (d: Circuit, id: string) => boolean;
+  onPlacePart?: (d: Circuit, id: string, signal: AbortSignal) => boolean | Promise<boolean>;
   setTool: (t: Tool) => void;
   fitKey: number;
   onPosition: (p: Point) => void;
@@ -282,6 +282,15 @@ export default function Canvas({
     }
   }, [wireDraft, cursor]);
   const [placementRotation, setPlacementRotation] = useState(0);
+  const placementRequest = useRef<AbortController | null>(null);
+  function cancelPlacement() {
+    placementRequest.current?.abort();
+    placementRequest.current = null;
+  }
+  useLayoutEffect(
+    () => cancelPlacement,
+    [active, doc, editingBlocked, placement, placementRotation, sectionView, tool],
+  );
   const pendingWire = useRef<Point | null>(null);
   const pointerPosition = useRef<{ clientX: number; clientY: number } | null>(null);
   const pointerInside = useRef(false);
@@ -1094,6 +1103,7 @@ export default function Canvas({
     }
     const p = tool === 'wire' ? wirePoint(e) : point(e);
     if (tool === 'place') {
+      if (placementRequest.current) return;
       const d = structuredClone(doc);
       const part = placement
         ? createLibraryPart(d, placement.symbol, p.x, p.y, placement.unit)
@@ -1107,7 +1117,23 @@ export default function Canvas({
         sectionView === 'simulation' ? 'simulation' : 'hardware',
       );
       if (onPlacePart) {
-        if (!onPlacePart(prepared, part.id)) return;
+        const request = new AbortController();
+        const accepted = onPlacePart(prepared, part.id, request.signal);
+        if (typeof accepted !== 'boolean') {
+          placementRequest.current = request;
+          void accepted
+            .then((placed) => {
+              if (placed) setTool('select');
+            })
+            .catch((error: Error) => {
+              if (!request.signal.aborted) onNotify?.(error.message);
+            })
+            .finally(() => {
+              if (placementRequest.current === request) placementRequest.current = null;
+            });
+          return;
+        }
+        if (!accepted) return;
       } else {
         if (!onCommit(prepared)) return;
         onSelect(part.id);
@@ -1518,6 +1544,7 @@ export default function Canvas({
       label: 'Cancel tool',
       icon: X,
       run: () => {
+        cancelPlacement();
         cancelGesture();
         updateWireDraft(null);
         pendingWire.current = null;
@@ -1634,6 +1661,7 @@ export default function Canvas({
           const key = e.key.toLowerCase();
           const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
           const currentPickup = pickupRef.current;
+          if (e.key === 'Escape') cancelPlacement();
           if (
             e.key === 'Escape' &&
             (currentPickup || drag || box || pan.current || annotationGesture)

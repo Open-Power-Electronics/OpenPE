@@ -56,6 +56,7 @@
     "occt-import-js": "0.0.23",
     "pdfjs-dist": "6.5.438",
     "quickjs-emscripten": "0.32.0",
+    "yauzl": "3.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -95,8 +96,7 @@
     "three-mesh-bvh": "0.9.5",
     "tsx": "^4.20.0",
     "typescript": "^5.9.3",
-    "unified": "^11.0.5",
-    "yauzl": "2.10.0"
+    "unified": "^11.0.5"
   },
   "build": {
     "appId": "ai.openpe.desktop",

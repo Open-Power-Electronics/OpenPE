@@ -4,7 +4,35 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node
 import os from 'node:os';
 import path from 'node:path';
 import { createComponentModelStore } from '../server/component-models.mjs';
+import { registerComponentModelPicker } from '../electron/component-model-picker.cjs';
+import { FileGrants } from '../electron/file-grants.cjs';
 const data = Buffer.from('ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n');
+
+test('the STEP picker accepts a live unsaved grant and rejects a grant revoked during selection', async () => {
+  const grants = new FileGrants();
+  const fileId = grants.create();
+  const path = '${KIPRJMOD}/models/' + 'a'.repeat(64) + '.step';
+  let pick!: (event: object, id: string) => Promise<{ path: string } | null>;
+  let finish!: (selection: { canceled: boolean; filePaths: string[] }) => void;
+  let imports = 0;
+  registerComponentModelPicker({
+    ipcMain: { handle: (_channel: string, handler: typeof pick) => (pick = handler) },
+    dialog: { showOpenDialog: () => new Promise((resolve) => (finish = resolve)) },
+    getWindow: () => undefined,
+    authorize: () => {},
+    grants,
+    models: { importFile: async () => { imports++; return { path }; } },
+  });
+  const selection = { canceled: false, filePaths: ['picked.step'] };
+  const first = pick({}, fileId);
+  finish(selection);
+  assert.deepEqual(await first, { path });
+  const revoked = pick({}, fileId);
+  grants.release(fileId);
+  finish(selection);
+  await assert.rejects(revoked, /no file access grant/);
+  assert.equal(imports, 1);
+});
 async function fixtureDirectory(t: TestContext) {
   // The store verifies every ancestor. Keep fixtures within the readable workspace.
   const parent = path.resolve('test-results');

@@ -115,7 +115,7 @@ try {
   const rows = page.locator('.library-results button');
   const list = page.locator('.library-results');
   const search = page.getByRole('textbox', { name: 'Search footprints' });
-  const assign = page.getByRole('button', { name: 'Assign footprint', exact: true });
+  const assign = page.getByRole('button', { name: 'Assign', exact: true });
   const submit = page.getByRole('button', { name: 'Search', exact: true });
   await page.waitForFunction(
     () =>

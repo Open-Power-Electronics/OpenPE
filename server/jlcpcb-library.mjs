@@ -289,11 +289,9 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
     }
   }
 
-  async function detail({ id, kind }, signal) {
+  async function catalogPart(id, signal) {
     const code = typeof id === 'string' && /^JLCPCB:(C[1-9]\d{0,11})$/.exec(id)?.[1];
     if (!code) throw new Error('Invalid JLCPCB component identity.');
-    const saved = recall(details, id);
-    if (saved?.[kind]) return saved[kind];
     let entry;
     for (const { value, expires } of pages.values()) {
       if (expires <= Date.now()) continue;
@@ -305,6 +303,13 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
       entry = entries.find((item) => item.id === id);
     }
     if (!entry) throw new Error('This component is unavailable in the JLCPCB catalog.');
+    return { code, entry };
+  }
+
+  async function detail({ id, kind }, signal) {
+    const saved = recall(details, id);
+    if (saved?.[kind]) return saved[kind];
+    const { code, entry } = await catalogPart(id, signal);
     return loadDetailCad(entry, code, kind, signal);
   }
 
@@ -332,25 +337,18 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
     return converted[kind];
   }
 
-  async function request(message) {
+  async function run(requestSignal, operation) {
     if (shutdown.signal.aborted) throw new Error('JLCPCB library service closed.');
-    if (!['symbols', 'footprints'].includes(message.kind))
-      throw new Error('Unsupported JLCPCB library kind.');
-    if (!['categories', 'search', 'detail'].includes(message.action))
-      throw new Error('Unsupported JLCPCB library operation.');
     if (active >= 8) throw new Error('Too many JLCPCB requests. Try again shortly.');
     const signal = AbortSignal.any([
       shutdown.signal,
       AbortSignal.timeout(20_000),
-      ...(message.signal ? [message.signal] : []),
+      ...(requestSignal ? [requestSignal] : []),
     ]);
     active++;
     try {
       signal.throwIfAborted();
-      const result =
-        message.action === 'categories'
-          ? { categories: (await loadCategories(signal)).categories }
-          : await (message.action === 'search' ? search(message, signal) : detail(message, signal));
+      const result = await operation(signal);
       signal.throwIfAborted();
       return structuredClone(result);
     } catch (error) {
@@ -366,7 +364,25 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
 
   return {
     cachedFootprintStatus: (id) => recall(availability, id),
-    request,
+    async request(message) {
+      if (!['symbols', 'footprints'].includes(message.kind))
+        throw new Error('Unsupported JLCPCB library kind.');
+      if (!['categories', 'search', 'detail'].includes(message.action))
+        throw new Error('Unsupported JLCPCB library operation.');
+      return run(message.signal, async (signal) =>
+        message.action === 'categories'
+          ? { categories: (await loadCategories(signal)).categories }
+          : message.action === 'search'
+            ? search(message, signal)
+            : detail(message, signal),
+      );
+    },
+    pricingPart(id, signal) {
+      return run(signal, async (signal) => {
+        const { entry, code } = await catalogPart(id, signal);
+        return { mpn: entry.name, manufacturer: entry.manufacturer, lcscSku: code };
+      });
+    },
     async modelBytes(reference, signal) {
       const uuid =
         typeof reference === 'string' && /^JLCPCB:([a-f0-9]{32})\.step$/.exec(reference)?.[1];

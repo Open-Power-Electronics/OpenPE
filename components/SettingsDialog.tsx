@@ -2,7 +2,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   Bot,
-  Check,
   CheckCircle2,
   ClipboardCheck,
   LoaderCircle,
@@ -91,9 +90,7 @@ export default function SettingsDialog({
       footer={
         <button
           type="button"
-          className="dialog-button primary dialog-footer-icon"
-          aria-label="Done"
-          title="Done"
+          className="dialog-button primary"
           onPointerDown={(event) => {
             if (section === 'rules' && ruleActions.current?.isComposing()) event.preventDefault();
           }}
@@ -102,7 +99,7 @@ export default function SettingsDialog({
             onClose();
           }}
         >
-          <Check size={18} aria-hidden="true" />
+          Done
         </button>
       }
     >
@@ -305,26 +302,24 @@ export default function SettingsDialog({
                               .catch((error: Error) => setCursorError(error.message));
                           }}
                         >
-                          <label>
-                            Cursor API key
-                            <input
-                              type="password"
-                              autoComplete="off"
-                              spellCheck={false}
-                              value={cursorKey}
-                              onChange={(event) => setCursorKey(event.target.value)}
-                              onCompositionStart={() => {
-                                cursorComposing.current = true;
-                              }}
-                              onCompositionEnd={() => {
-                                cursorComposing.current = false;
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
-                                  event.preventDefault();
-                              }}
-                            />
-                          </label>
+                          <input
+                            type="password"
+                            aria-label="Cursor API key"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={cursorKey}
+                            onChange={(event) => setCursorKey(event.target.value)}
+                            onCompositionStart={() => {
+                              cursorComposing.current = true;
+                            }}
+                            onCompositionEnd={() => {
+                              cursorComposing.current = false;
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+                                event.preventDefault();
+                            }}
+                          />
                           <div className="cursor-key-actions">
                             <button className="dialog-button primary" type="submit">
                               Save key

@@ -1,142 +1,114 @@
 import { readCatalogBytes } from './online-library-fetch.mjs';
 
-const endpoint = 'https://www.hqonline.com/api/goods/products/search';
-const pageSize = 50;
-const maxPages = 4;
+const endpoint = 'https://library.nextpcb.com/api/chiplet/kicad/searchSupplyChain';
+const manufacturerIdPattern = /^[1-9]\d{0,18}$/;
 const maxOffers = 4;
-export const pricingPartNumber = (value) =>
-  typeof value === 'string' ? value.trim().toUpperCase() : '';
-const invalidResponse = () => new Error('HQ Online returned an invalid pricing response.');
-const manufacturerLabels = new Map([
-  ['TEXAS INSTRUMENTS', 'TI'],
-  ['TEXAS INSTRUMENTS (TI)', 'TI'],
-  ['STMICROELECTRONICS', 'ST'],
-  ['ANALOG DEVICES', 'ADI'],
-  ['ON SEMICONDUCTOR', 'ON'],
-  ['MICROCHIP TECHNOLOGY', 'MICROCHIP'],
-]);
+export const nextpcbSupplyBatchLimit = 50;
+const invalidResponse = () =>
+  new Error('Huaqiu returned an invalid supply-chain pricing response.');
 
-function manufacturerKey(value) {
-  const label = typeof value === 'string' ? value.trim().toUpperCase() : '';
-  return manufacturerLabels.get(label) ?? label;
+function supplyKey(manufacturerId, mpn) {
+  if (
+    typeof manufacturerId !== 'string' ||
+    !manufacturerIdPattern.test(manufacturerId) ||
+    typeof mpn !== 'string' ||
+    !mpn.trim() ||
+    mpn.length > 200 ||
+    /[\u0000-\u001f]/.test(mpn)
+  )
+    return '';
+  return manufacturerId + '-' + mpn;
 }
 
-async function readPricePage(fetcher, keyword, current, signal) {
+function readUsdOffer(row) {
+  if (row.price === null) return null;
+  if (!Array.isArray(row.price) || row.price.length > 32) throw invalidResponse();
+  const quantities = new Set();
+  const tiers = [];
+  for (const tier of row.price) {
+    if (!tier || !Object.hasOwn(tier, 'usd')) throw invalidResponse();
+    if (tier.usd === null) continue;
+    if (
+      !Number.isSafeInteger(tier.breakMin) ||
+      tier.breakMin <= 0 ||
+      quantities.has(tier.breakMin) ||
+      !Number.isFinite(tier.usd) ||
+      tier.usd <= 0 ||
+      tier.usd > 1_000_000_000
+    )
+      throw invalidResponse();
+    quantities.add(tier.breakMin);
+    tiers.push({ quantity: tier.breakMin, unitPrice: tier.usd });
+  }
+  if (!tiers.length) return null;
+  if (typeof row.sku !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(row.sku))
+    throw invalidResponse();
+  return {
+    sku: row.sku,
+    manufacturer: null,
+    tiers: tiers.sort((a, b) => a.quantity - b.quantity),
+    ...(Number.isSafeInteger(row.stock) && row.stock >= 0 ? { stock: row.stock } : {}),
+  };
+}
+
+/**
+ * @param {typeof fetch} fetcher
+ * @param {{manufacturer_id: string, mpn: string}[]} parts
+ * @param {AbortSignal} signal
+ */
+export async function readNextpcbSupplyPrices(fetcher, parts, signal) {
+  if (!Array.isArray(parts) || !parts.length || parts.length > nextpcbSupplyBatchLimit)
+    throw new Error('Invalid Huaqiu pricing batch size.');
+  const requests = new Map();
+  for (const part of parts) {
+    const key = supplyKey(part?.manufacturer_id, part?.mpn);
+    if (!key || requests.has(key))
+      throw new Error('Invalid or duplicate NextPCB pricing identity.');
+    requests.set(key, { offers: new Map(), invalid: false });
+  }
+
   const bytes = await readCatalogBytes(
-    'HQ Online',
+    'Huaqiu supply chain',
     fetcher,
     endpoint,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       cache: 'no-store',
-      body: JSON.stringify({ keyword, current, size: pageSize }),
+      body: JSON.stringify([...requests.keys()]),
     },
-    512 * 1024,
+    1024 * 1024,
     signal,
   );
-  let data;
+  let response;
   try {
-    data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    response = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
     throw invalidResponse();
   }
-  const result = data?.result;
   if (
-    data?.retCode !== 200 ||
-    result?.current !== current ||
-    result.size !== pageSize ||
-    !Number.isSafeInteger(result.pages) ||
-    result.pages < 0 ||
-    !Array.isArray(result.records) ||
-    result.records.length > pageSize ||
-    (current > result.pages && result.records.length)
+    response?.code !== 200000 ||
+    !Array.isArray(response.result) ||
+    response.result.length > parts.length * 32
   )
     throw invalidResponse();
-  return result;
-}
 
-export function readHqOnlineOffer(row) {
-  if (
-    typeof row.goodsNo !== 'string' ||
-    !/^[A-Za-z0-9_-]{1,64}$/.test(row.goodsNo) ||
-    !Number.isSafeInteger(row.goodsId) ||
-    row.goodsId <= 0 ||
-    !Array.isArray(row.price) ||
-    row.price.length > 32
-  )
-    throw invalidResponse();
-  if (!row.price.length) return null;
-  const quantities = new Set();
-  const tiers = row.price.map((tier) => {
-    const quantity = tier?.purchases;
-    const unitPrice = tier?.unitPrice;
-    if (
-      String(tier?.goodsId) !== String(row.goodsId) ||
-      !Number.isSafeInteger(quantity) ||
-      quantity <= 0 ||
-      quantities.has(quantity) ||
-      !Number.isFinite(unitPrice) ||
-      unitPrice <= 0 ||
-      unitPrice > 1_000_000_000
-    )
-      throw invalidResponse();
-    quantities.add(quantity);
-    return { quantity, unitPrice };
-  });
-  const manufacturer = [row.brandName, row.pinyin?.brandName]
-    .filter((value) => typeof value === 'string')
-    .map((value) => value.trim())
-    .find((value) => value.length > 0 && value.length <= 200 && !/[\u0000-\u001f]/.test(value));
-  return {
-    sku: row.goodsNo,
-    manufacturer: manufacturer ?? null,
-    tiers: tiers.sort((a, b) => a.quantity - b.quantity),
-    ...(Number.isSafeInteger(row.spotNumber) && row.spotNumber >= 0
-      ? { stock: row.spotNumber }
-      : {}),
-  };
-}
-
-export async function readNextpcbPrices(fetcher, { name, manufacturer }, signal) {
-  const partNumber = pricingPartNumber(name);
-  if (!partNumber) throw new Error('NextPCB did not supply a part number for pricing.');
-  const brand = manufacturerKey(manufacturer);
-
-  const preferred = [];
-  const other = [];
-  const skus = new Set();
-  let invalidOffer;
-  let pages = 1;
-  for (let current = 1; current <= Math.min(pages, maxPages); current++) {
-    const result = await readPricePage(fetcher, name, current, signal);
-    pages = result.pages;
-    for (const row of result.records) {
-      if (pricingPartNumber(row?.goodsName) !== partNumber || skus.has(row.goodsNo)) continue;
-      const sameManufacturer =
-        brand &&
-        [row.brandName, row.pinyin?.brandName].some((label) => manufacturerKey(label) === brand);
-      const group = sameManufacturer ? preferred : other;
-      if (group.length === maxOffers) continue;
-      let offer;
-      try {
-        offer = readHqOnlineOffer(row);
-      } catch (error) {
-        invalidOffer ??= error;
-        continue;
-      }
-      if (!offer) continue;
-      skus.add(offer.sku);
-      group.push(offer);
-      if (preferred.length === maxOffers || (!brand && other.length === maxOffers)) break;
+  for (const row of response.result) {
+    const manufacturerId = Number.isSafeInteger(row?.mfgId) ? String(row.mfgId) : row?.mfgId;
+    const key = supplyKey(manufacturerId, row?.mpn);
+    if (!key || typeof row.vendor !== 'string') throw invalidResponse();
+    const request = requests.get(key);
+    if (!request || row.vendor !== 'hqself' || request.offers.size >= maxOffers) continue;
+    try {
+      const offer = readUsdOffer(row);
+      if (offer && !request.offers.has(offer.sku)) request.offers.set(offer.sku, offer);
+    } catch {
+      request.invalid = true;
     }
-    if (preferred.length === maxOffers || (!brand && other.length === maxOffers)) break;
   }
-  const offers = [...preferred, ...other].slice(0, maxOffers);
-  if (!offers.length) {
-    if (invalidOffer) throw invalidOffer;
-    if (pages > maxPages)
-      throw new Error('HQ Online pricing search exceeded the supported page limit.');
-  }
-  return { currency: 'USD', checkedAt: Date.now(), offers };
+  const checkedAt = Date.now();
+  return [...requests.values()].map(({ offers, invalid }) => ({
+    quote: { currency: 'USD', checkedAt, offers: [...offers.values()] },
+    ...(invalid && !offers.size ? { error: invalidResponse().message } : {}),
+  }));
 }

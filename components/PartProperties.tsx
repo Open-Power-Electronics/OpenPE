@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { Activity, Check, FolderSearch, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { type Part, type Circuit } from '@/lib/circuit';
-import { displayPartValue, partFields, partFootprint } from '@/lib/library';
+import { displayPartValue, footprintSearchTerm, onlineFootprintLibrary, partFields, partFootprint } from '@/lib/library';
 import {
   preparePartProperties,
   simulationSourceProperties,
@@ -23,6 +23,7 @@ import { isSimulationField } from '@/lib/simulation-fields';
 import { storagePrimitive, initialConditionField } from '@/lib/simulation-initial-conditions';
 import {
   simulationLibraryPath,
+  simulationLibraryForPath,
   simulationLibraryDeclaration,
   simulationLibraryModelName,
   simulationComponentPresentation,
@@ -32,7 +33,7 @@ import DeferredDialog from './DeferredDialog';
 import Select from './Select';
 import { PropertyTab, PropertyTabs } from './PropertyTabs';
 import type { CapabilityHost } from '@/api/capabilities';
-import type { SpiceModelDeclaration } from '@/lib/bridge';
+import type { SpiceModelCatalog, SpiceModelDeclaration } from '@/lib/bridge';
 import {
   simulationModelSource,
   activePassiveModel,
@@ -51,10 +52,11 @@ import {
 import { prepareSourceConversion } from '@/lib/simulation-source-conversion';
 import type { SimulationSourceType } from '@/lib/simulation-source-parameters';
 import { isCommandModifier } from '@/lib/command-modifier';
-import { partSchematicSection, type SchematicSection } from '@/lib/schematic-section';
-import { symbolRole } from '@/lib/symbol-role';
 
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
+const SpiceModelChooser = lazy(
+  () => import('@/plugins/spice-simulation/renderer/SpiceModelChooser'),
+);
 
 function withModelFields(
   rows: PropertyRow[],
@@ -148,8 +150,8 @@ function PartProperties({
   locked = false,
   spiceAvailable = false,
   fileId,
+  projectSource,
   getRevision,
-  onSectionChange,
   onDraftPendingChange,
 }: {
   part: Part;
@@ -162,8 +164,8 @@ function PartProperties({
   /** Shared component controls owned by the installed and enabled SPICE plugin. */
   spiceAvailable?: boolean;
   fileId?: string;
+  projectSource?: string;
   getRevision?: () => number;
-  onSectionChange?: (section: SchematicSection) => boolean;
   onDraftPendingChange?: (pending: boolean) => void;
   onRequestSave?: (saveAs: boolean) => void;
   capabilityHost?: CapabilityHost;
@@ -175,6 +177,8 @@ function PartProperties({
   ) => boolean;
 }) {
   const fields = partFields(part);
+  const footprintId = partFootprint(part);
+  const footprintLibrary = onlineFootprintLibrary(footprintId);
   const presentation = useMemo(
     () =>
       spiceAvailable
@@ -232,21 +236,19 @@ function PartProperties({
   const libraryPath = simulationLibraryPath(rowFields['Sim.Library'] || '');
   const libraryFilename = libraryPath.split(/[\\/]/).at(-1) || '';
   const externalName = rowFields['Sim.Name'] || '';
-  const [catalog, setCatalog] = useState<{
-    path: string;
-    models: SpiceModelDeclaration[];
-    issues: string[];
-  } | null>(null);
+  const [catalog, setCatalog] = useState<SpiceModelCatalog | null>(null);
   const [mapping, setMapping] = useState<{
     declaration: SpiceModelDeclaration;
     binding: ReturnType<typeof externalModelBinding>;
     choices: Record<string, string>;
     snapshot: string;
     revision: number | undefined;
+    catalog?: SpiceModelCatalog;
   } | null>(null);
   const declarations = catalog?.path === libraryPath ? catalog.models : [];
   const [picker, setPicker] = useState(false),
     [error, setError] = useState('');
+  const [modelPicker, setModelPicker] = useState(false);
   const [modelBrowsing, setModelBrowsing] = useState(false);
   const modelBrowseButton = useRef<HTMLButtonElement>(null);
   const modelBrowseRequest = useRef(0);
@@ -292,7 +294,10 @@ function PartProperties({
     return () => {
       modelBrowseRequest.current++;
     };
-  }, [active, spiceAvailable, fileId, snapshot]);
+  }, [active, locked, spiceAvailable, fileId, snapshot]);
+  useLayoutEffect(() => {
+    setModelPicker(false);
+  }, [active, locked, spiceAvailable, fileId, part.id]);
   useEffect(() => {
     if (
       !active ||
@@ -356,7 +361,7 @@ function PartProperties({
   }
 
   async function browseModel() {
-    if (!active || !spiceAvailable || modelBrowsing || composing.current) return;
+    if (!active || locked || !spiceAvailable || modelBrowsing || composing.current) return;
     if (!fileId || !window.openpe) {
       setError('Use the desktop app to browse model files.');
       return;
@@ -402,6 +407,57 @@ function PartProperties({
     } finally {
       if (request === modelBrowseRequest.current) setModelBrowsing(false);
     }
+  }
+
+  function tiLibraryFields(result: SpiceModelCatalog, declaration: SpiceModelDeclaration) {
+    const current = { ...rowFields };
+    if (simulationLibraryPath(current['Sim.Library'] || '') === result.path) {
+      // Selecting the official model must not retain a derivative of the same file.
+      if (current['Sim.Library'] !== simulationLibraryForPath(result.path, ''))
+        delete current['Sim.Library'];
+      if (current['Sim.Name'] !== declaration.name) delete current['Sim.Name'];
+    }
+    return prepareSimulationLibrarySelection(part, current, result.path, result.models);
+  }
+
+  function chooseTiModel(
+    result: SpiceModelCatalog,
+    declaration: SpiceModelDeclaration,
+    revision: number | undefined,
+  ) {
+    if (!active || locked || !spiceAvailable || basis !== snapshot || composing.current || !circuit)
+      throw new Error('The component is unavailable. Reopen the model chooser.');
+    if (getRevision?.() !== revision)
+      throw new Error('The project changed. Download the TI package again.');
+    const current = tiLibraryFields(result, declaration);
+    const binding = externalModelBinding(circuit, part, declaration);
+    if (!binding.compatible) throw new Error(binding.reason || 'Incompatible with this component.');
+    if (!binding.mapping && current['Sim.Name'] !== declaration.name) {
+      setMapping({
+        declaration,
+        binding,
+        choices: { ...binding.suggested },
+        snapshot,
+        revision,
+        catalog: result,
+      });
+      setError('');
+      return;
+    }
+    const next = withPreparedModelFields(
+      rows,
+      prepareSimulationModelSelection(circuit, part, current, {
+        source: 'external',
+        name: declaration.name,
+        declarations: result.models,
+        mapping:
+          current['Sim.Name'] === declaration.name ? undefined : (binding.mapping ?? undefined),
+      }),
+    );
+    if (!save(next)) throw new Error('The model binding could not be applied.');
+    setCatalog(result);
+    setRows(next);
+    setMapping(null);
   }
 
   function parameterValue(row: PropertyRow) {
@@ -538,7 +594,7 @@ function PartProperties({
   }
 
   function applyMapping() {
-    if (!mapping || !circuit || !active || !spiceAvailable || composing.current) return;
+    if (!mapping || !circuit || !active || locked || !spiceAvailable || composing.current) return;
     if (mapping.snapshot !== snapshot || mapping.revision !== getRevision?.()) {
       setError('The component changed. Select the model again.');
       return;
@@ -547,15 +603,23 @@ function PartProperties({
       validateExternalModelMapping(mapping.binding, mapping.choices);
       const next = withPreparedModelFields(
         rows,
-        prepareSimulationModelSelection(circuit, part, rowFields, {
-          source: 'external',
-          name: mapping.declaration.name,
-          declarations: [mapping.declaration],
-          mapping: mapping.choices,
-        }),
+        prepareSimulationModelSelection(
+          circuit,
+          part,
+          mapping.catalog ? tiLibraryFields(mapping.catalog, mapping.declaration) : rowFields,
+          {
+            source: 'external',
+            name: mapping.declaration.name,
+            declarations: [mapping.declaration],
+            mapping: mapping.choices,
+          },
+        ),
       );
-      setRows(next);
-      if (save(next)) setMapping(null);
+      if (save(next)) {
+        if (mapping.catalog) setCatalog(mapping.catalog);
+        setRows(next);
+        setMapping(null);
+      }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Invalid model mapping.');
     }
@@ -598,21 +662,22 @@ function PartProperties({
     const sourceDevice = basicSimulationKind(part);
     const waveformSource = sourceDevice === 'V' || sourceDevice === 'I';
     const sourceType = rowFields['OpenPE.SourceType'] || simulationSourceProperties(part)?.type;
-    const selection = mapping
-      ? `external:${mapping.declaration.name}`
-      : currentBuiltin
-        ? 'current'
-        : !externalModel && (basicAvailable || selectedPassive || unassigned)
-          ? waveformSource
-            ? 'source:' + sourceType
-            : selectedPassive
-              ? 'passive:' + selectedPassive
-              : unassigned
-                ? 'unassigned'
-                : 'intrinsic'
-          : externalName && libraryPath
-            ? `external:${externalName}`
-            : '';
+    const selection =
+      mapping && !mapping.catalog
+        ? `external:${mapping.declaration.name}`
+        : currentBuiltin
+          ? 'current'
+          : !externalModel && (basicAvailable || selectedPassive || unassigned)
+            ? waveformSource
+              ? 'source:' + sourceType
+              : selectedPassive
+                ? 'passive:' + selectedPassive
+                : unassigned
+                  ? 'unassigned'
+                  : 'intrinsic'
+            : externalName && libraryPath
+              ? `external:${externalName}`
+              : '';
     const choices = [
       ...(waveformSource
         ? ['DC', 'PULSE', 'SIN'].map((type) => ({
@@ -674,10 +739,13 @@ function PartProperties({
               type="button"
               className="icon-button"
               aria-label="Browse SPICE models"
-              title="Choose model file"
-              disabled={!active || !spiceAvailable || modelBrowsing}
+              title="Choose SPICE model"
+              disabled={!active || locked || !spiceAvailable || modelBrowsing}
               aria-busy={modelBrowsing}
-              onClick={() => void browseModel()}
+              aria-haspopup="dialog"
+              onClick={() => {
+                if (!composing.current) setModelPicker(true);
+              }}
             >
               <FolderSearch size={17} />
             </button>
@@ -717,7 +785,7 @@ function PartProperties({
         )}
         {mapping && (
           <details className="property-model-mapping" open>
-            <summary>Pins</summary>
+            <summary>{mapping.catalog ? `Pins · ${mapping.declaration.name}` : 'Pins'}</summary>
             {mapping.binding.terminals.map((terminal) => (
               <label key={terminal}>
                 {terminal}
@@ -943,31 +1011,6 @@ function PartProperties({
       >
         <PropertyTabs locked={locked} action={tabAction}>
           <PropertyTab label="General" icon={SlidersHorizontal}>
-            {onSectionChange &&
-              (!circuit || symbolRole(circuit.libraries[part.libId], part) !== 'marker') && (
-                <div className="property-field schematic-section-property">
-                  <span>Section</span>
-                  <Select
-                    label="Schematic section"
-                    value={partSchematicSection(part)}
-                    options={[
-                      { value: 'hardware', label: 'Real', disabled: !partFootprint(part) },
-                      { value: 'simulation', label: 'Virtual' },
-                    ]}
-                    disabled={!active || locked}
-                    onChange={(section) => {
-                      if (composing.current || !active || locked) return;
-                      if (pendingProperties) {
-                        setError('Apply or discard the Properties edits before changing section.');
-                        return;
-                      }
-                      if (section === 'hardware' && !partFootprint(part)) return;
-                      if (section === 'hardware' || section === 'simulation')
-                        onSectionChange(section);
-                    }}
-                  />
-                </div>
-              )}
             <div className="property-primary">
               <label>
                 Reference
@@ -1024,12 +1067,33 @@ function PartProperties({
           </p>
         )}
       </div>
+      {modelPicker && active && !locked && spiceAvailable && (
+        <DeferredDialog title="Choose SPICE model" onClose={() => setModelPicker(false)}>
+          <SpiceModelChooser
+            component={`${part.ref} · ${displayPartValue(part)}`}
+            initialSearch={value}
+            fileId={fileId}
+            getRevision={getRevision}
+            modelIssue={modelOptionIssue}
+            onClose={() => setModelPicker(false)}
+            onBrowse={() => {
+              setModelPicker(false);
+              void browseModel();
+            }}
+            onChoose={chooseTiModel}
+          />
+        </DeferredDialog>
+      )}
       {picker && active && (
         <DeferredDialog title="Choose footprint" onClose={() => setPicker(false)}>
           <LibraryChooser
             capabilityHost={capabilityHost}
             kind="footprints"
-            initialSearch={rows.find((row) => row.name === 'Footprint')?.value ?? ''}
+            initialSearch={footprintSearchTerm(footprintId)}
+            initialLibrary={footprintLibrary}
+            initialFootprintId={footprintLibrary ? footprintId : undefined}
+            projectSource={projectSource}
+            fileId={fileId}
             onClose={() => setPicker(false)}
             onChoose={(detail) => {
               if (!('pads' in detail && 'models' in detail)) return;
@@ -1054,7 +1118,6 @@ export default memo(
   PartProperties,
   (previous, next) =>
     previous.onSave === next.onSave &&
-    previous.onSectionChange === next.onSectionChange &&
     previous.onDraftPendingChange === next.onDraftPendingChange &&
     previous.modelFields === next.modelFields &&
     previous.tabAction === next.tabAction &&
@@ -1064,6 +1127,7 @@ export default memo(
     previous.locked === next.locked &&
     previous.spiceAvailable === next.spiceAvailable &&
     previous.fileId === next.fileId &&
+    previous.projectSource === next.projectSource &&
     previous.getRevision === next.getRevision &&
     previous.capabilityHost === next.capabilityHost &&
     previous.part.id === next.part.id &&

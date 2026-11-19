@@ -17,7 +17,8 @@ import { createEmptyPCB, createPCBFootprint, readLibraryFootprint } from './pcb-
 import { officialModelRelativePath } from './library-model-reference.mjs';
 import { CatalogHttpError, readCatalogBytes } from './online-library-fetch.mjs';
 import { LibraryAssetUnavailable } from './library-asset-error.mjs';
-import { readNextpcbPrices } from './nextpcb-prices.mjs';
+import { readNextpcbSupplyPrices } from './nextpcb-prices.mjs';
+import { matchesPricePart } from './library-prices.mjs';
 
 const ORIGIN = 'https://library.nextpcb.com';
 // The provider's 100-row option currently returns a false empty page.
@@ -234,6 +235,15 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     if (!result || identity(result.mfgId, result.mpn) !== id)
       throw new Error('NextPCB returned a different or invalid component.');
     return result;
+  }
+
+  async function pricingPart(id, signal) {
+    const key = decodeIdentity(id);
+    const { entry } = cached(metadata, id) ?? {};
+    const manufacturer = entry
+      ? entry.manufacturer
+      : text((await componentRecord(id, signal)).mfg ?? '', 200);
+    return { ...key, manufacturer };
   }
 
   async function product(id, signal) {
@@ -579,16 +589,30 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
   }
   return {
     async price(id, signal) {
-      decodeIdentity(id);
       return run(signal, async (signal) => {
-        const { entry } = cached(metadata, id) ?? {};
-        if (entry) return readNextpcbPrices(fetcher, entry, signal);
-        const record = await componentRecord(id, signal);
-        return readNextpcbPrices(
-          fetcher,
-          { name: record.mpn, manufacturer: text(record.mfg ?? '', 200) },
-          signal,
-        );
+        const part = await pricingPart(id, signal);
+        const [result] = await readNextpcbSupplyPrices(fetcher, [part], signal);
+        if (result.error) throw new Error(result.error);
+        return result.quote;
+      });
+    },
+    pricingPart: (id, signal) => run(signal, (signal) => pricingPart(id, signal)),
+    searchPrices(part, signal) {
+      return run(signal, async (signal) => {
+        const { entries } = await search({ kind: 'symbols', query: part.mpn }, signal);
+        const matches = entries
+          .filter(({ name, manufacturer }) => matchesPricePart(part, name, manufacturer))
+          .slice(0, 4)
+          .map(({ id }) => decodeIdentity(id));
+        if (!matches.length) return [];
+        const results = await readNextpcbSupplyPrices(fetcher, matches, signal);
+        const offers = new Map();
+        for (const result of results) {
+          for (const offer of result.quote.offers) offers.set(offer.sku, offer);
+        }
+        const failure = results.find((result) => result.error);
+        if (!offers.size && failure) throw new Error(failure.error);
+        return [...offers.values()].slice(0, 4);
       });
     },
     async request(message) {

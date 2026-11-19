@@ -47,7 +47,7 @@ try {
   await page.getByRole('button', { name: '3D model', exact: true }).click();
   await page.locator('.model-preview [role="status"]').waitFor({ state: 'hidden', timeout: 60000 });
   await page.locator('.model-preview canvas').waitFor({ timeout: 60000 });
-  await page.getByRole('button', { name: 'Assign footprint', exact: true }).click();
+  await page.getByRole('button', { name: 'Assign', exact: true }).click();
   assert.equal(
     await page.getByLabel('Footprint', { exact: true }).inputValue(),
     'Resistor_SMD:R_0805_2012Metric',

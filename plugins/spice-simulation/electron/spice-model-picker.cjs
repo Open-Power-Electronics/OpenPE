@@ -1,6 +1,10 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { MAX_MODEL_BYTES, spiceModelDeclarations } = require('./spice-model-declarations.cjs');
+const {
+  MAX_MODEL_BYTES,
+  inspectSpiceModelLibrary,
+  spiceModelDeclarations,
+} = require('../host/spice-model-declarations.cjs');
 const { createProjectDirectoryReader } = require('../../../electron/project-directory.cjs');
 const { assertContainedPath, canonicalDirectory } = require('../../../server/host-path.cjs');
 
@@ -93,7 +97,7 @@ async function readSpiceModelFile(file, fileSystem = fs) {
 
 // The native selection authorizes bounded declaration inspection only. No model
 // bodies, includes or controls are returned, copied, followed or executed.
-function registerSpiceModelPicker({ ipcMain, authorize, grants, dialog, getWindow }) {
+function registerSpiceModelPicker({ ipcMain, authorize, grants, dialog, getWindow, readPrepared }) {
   let picking = false;
   ipcMain.handle('openpe:inspect-spice-model', async (event, fileId, library) => {
     authorize(event);
@@ -102,22 +106,25 @@ function registerSpiceModelPicker({ ipcMain, authorize, grants, dialog, getWindo
     modelPickerDefaultPath(library, location);
     // Automatic inspection uses only a fresh, bounded observation inside this
     // project's grant. An absolute reference still requires native selection.
-    if (!location || path.isAbsolute(library)) return null;
+    if (path.isAbsolute(library)) return null;
     const name = library.split(/[\\/]/).join('/');
     const reader = createProjectDirectoryReader(grants);
-    const listing = await reader.list(fileId);
-    const entry = listing.entries.find(
+    const listing = location ? await reader.list(fileId) : null;
+    const entry = listing?.entries.find(
       (entry) => entry.kind === 'file' && normalize(entry.name) === normalize(name),
     );
-    if (!entry)
-      throw new Error(
-        'The model library is not available in the project directory. Choose the file again.',
-      );
-    const result = await reader.spice(fileId, entry.id);
+    const bytes = entry ? null : await readPrepared?.(name);
+    const result = entry
+      ? await reader.spice(fileId, entry.id)
+      : bytes && inspectSpiceModelLibrary(bytes, name);
     authorize(event);
     if (grants.location(fileId) !== location)
       throw new Error('The project location changed. Choose the model again.');
-    return { path: library, ...result };
+    if (result) return { path: library, ...result };
+    if (!location) return null;
+    throw new Error(
+      'The model library is not available in the project directory. Choose the file again.',
+    );
   });
   ipcMain.handle('openpe:choose-spice-model', async (event, fileId, currentLibrary) => {
     authorize(event);

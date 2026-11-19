@@ -18,6 +18,7 @@ import {
   type WorkbenchCapabilityPorts,
 } from '../lib/workbench-capabilities';
 import { registerLibraryCapabilities } from '../lib/library-capabilities';
+import { prepareSchematicPackage } from '../lib/library-package';
 import { partSchematicSection, prepareSchematicSection } from '../lib/schematic-section';
 
 test('Core catalog distinguishes object and operation commands from infrastructure', async () => {
@@ -554,8 +555,16 @@ test('NextPCB GUI and Agent placement preserve native symbol fields and undo to 
   };
   globalThis.fetch = async (url, options) => {
     const request = new URL(String(url));
-    assert.equal(request.pathname, '/api/libraries/symbols');
     assert.equal((options!.headers as Record<string, string>)['X-OpenPE-Token'], 'fixture');
+    if (request.pathname === '/api/library-package') {
+      assert.deepEqual(JSON.parse(String(options!.body)), { id });
+      return Response.json({
+        id,
+        projectAssets: true,
+        footprint: parseSExpr('(footprint "9728_LM358" (layer "F.Cu"))'),
+      });
+    }
+    assert.equal(request.pathname, '/api/libraries/symbols');
     if (request.searchParams.has('id')) {
       assert.equal(request.searchParams.get('id'), id);
       return Response.json(detail);
@@ -578,7 +587,12 @@ test('NextPCB GUI and Agent placement preserve native symbol fields and undo to 
     const humanPart = createLibraryPart(humanSheet, loaded.symbol, 3, 6, 1);
     humanSheet.libraries[id] = loaded.symbol;
     humanSheet.parts.push(humanPart);
-    gui.replaceSchematic(humanSheet);
+    const nativeFiles = await prepareSchematicPackage(
+      gui.getSnapshot().project!,
+      id,
+      new AbortController().signal,
+    );
+    gui.replaceSchematic(humanSheet, nativeFiles);
     const placed = (await host.execute(
       'schematic.place',
       {
@@ -596,6 +610,7 @@ test('NextPCB GUI and Agent placement preserve native symbol fields and undo to 
     assert.equal(part.x, 2.54);
     assert.equal(part.y, 6.35);
     const native = agent.getNativeFiles();
+    assert.ok(native.files.some((file) => file.name === 'footprints/NextPCB.pretty/9728_LM358.kicad_mod'));
     assert.equal(
       JSON.stringify(native).replaceAll(placed.id, humanPart.id),
       JSON.stringify(gui.getNativeFiles()),

@@ -238,7 +238,7 @@ test('browser preview forwards cancellation and keeps kernel failures retryable'
   }
 });
 
-test('browser model previews resolve library identities without exposing file grants, imports or downloads', async () => {
+test('browser library previews resolve identities without exposing file grants, imports or downloads', async () => {
   const calls: unknown[] = [];
   let closed = false;
   const host = await startBrowserPreviewServer({
@@ -259,9 +259,9 @@ test('browser model previews resolve library identities without exposing file gr
           calls.push({ id, index });
           return { meshes: [] };
         },
-        price: async (id) => {
-          calls.push({ id });
-          return { currency: 'USD', checkedAt: 1, offers: [] };
+        price: async (input) => {
+          calls.push(input);
+          return { source: input.source, currency: 'USD', checkedAt: 1, offers: [] };
         },
         close: () => {
           closed = true;
@@ -277,8 +277,9 @@ test('browser model previews resolve library identities without exposing file gr
     });
   try {
     const { token } = await (await post('session', {})).json();
+    const lookup = { id: 'JLCPCB:C123', kind: 'symbols', source: 'lcsc' };
     assert.equal((await post('footprint', { id: 'Device:Package' })).status, 401);
-    assert.equal((await post('price', { id: 'NextPCB:9728_LM358' })).status, 401);
+    assert.equal((await post('price', lookup)).status, 401);
     for (const [route, body] of [
       ['model', { id: 'Device:Package', index: -1 }],
       ['model', { id: 'Device:Package', index: 100 }],
@@ -286,7 +287,8 @@ test('browser model previews resolve library identities without exposing file gr
       ['footprint', { id: 'Device:Package', path: 'C:/secret.step' }],
       ['footprint', { id: 'x'.repeat(257) }],
       ['price', { id: 'Device:Package' }],
-      ['price', { id: 'NextPCB:9728_LM358', url: 'https://example.invalid' }],
+      ['price', { ...lookup, url: 'https://example.invalid' }],
+      ['price', { ...lookup, source: 'custom' }],
     ] as const)
       assert.equal((await post(route, body, token)).status, 400);
     for (const route of ['component-model', 'component-model/library', 'state'])
@@ -303,13 +305,19 @@ test('browser model previews resolve library identities without exposing file gr
     assert.equal(calls.length, 0);
     assert.equal((await post('footprint', { id: 'Device:Package' }, token)).status, 200);
     assert.equal((await post('model', { id: 'Device:Package', index: 0 }, token)).status, 200);
-    const price = await post('price', { id: 'NextPCB:9728_LM358' }, token);
+    const price = await post('price', lookup, token);
     assert.equal(price.status, 200);
-    assert.deepEqual(await price.json(), { currency: 'USD', checkedAt: 1, offers: [] });
+    assert.equal(price.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await price.json(), {
+      source: 'lcsc',
+      currency: 'USD',
+      checkedAt: 1,
+      offers: [],
+    });
     assert.deepEqual(calls, [
       { action: 'detail', kind: 'footprints', id: 'Device:Package' },
       { id: 'Device:Package', index: 0 },
-      { id: 'NextPCB:9728_LM358' },
+      lookup,
     ]);
   } finally {
     await host.close();

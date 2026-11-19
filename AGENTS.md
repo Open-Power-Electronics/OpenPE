@@ -16,7 +16,8 @@ Build **OpenPE · Electrical Engineering Studio**, a local desktop workbench wit
 | Native files, preservation, Source and Save | [Format](docs/FORMAT.md) |
 | PCB/Model geometry and bounded rule coverage | [Layout](docs/LAYOUT.md), [Design rules](docs/DESIGN-RULES.md) |
 | Catalog, pinned resources and reference evidence | [Examples](docs/EXAMPLES.md), [Libraries](docs/LIBRARIES.md), [Datasheets](docs/DATASHEETS.md) |
-| Solver profiles, execution, artifacts and results | [Simulation](docs/SIMULATION.md), [Thermal](docs/THERMAL.md), [EMC verification](docs/EMC-FLYBACK.md) |
+| Solver profiles, execution, artifacts and results | [Simulation](docs/SIMULATION.md), [Thermal](docs/THERMAL.md) |
+| EMC review, evidence boundaries and reference case | [EMC Analysis](docs/EMC.md), [EMC Flyback verification](docs/EMC-FLYBACK.md) |
 | Bundled features and provider management | [Plugins](docs/PLUGINS.md) |
 | Destination-bound local Git history | [Version history](docs/VERSION-HISTORY.md) |
 
@@ -41,7 +42,7 @@ Classify changes by GUI, Context Management, Agent, Uniform API, Core, Plugin or
 - `ProjectCore` alone owns validated documents, Source drafts and whole-project undo. Workbench owns presentation/adapters/current dirty baseline; DesktopWorkspace owns selection/recovery; host ports own grants/native writes/Git.
 - GUI and Agent design, simulation and project-file operations share Core or bounded host-backed capabilities, preparation, validation and transactions, with native dialogs and Agent model/log access restrictions intact. Expose editable parameters in discovery; verify native-file/undo GUI-Agent parity. Pointer/camera presentation creates no second mutation algorithm. Generate PCB property schemas from canonical definitions. Partial constrained commands require explicit consent and report applied displacement.
 - Owner/abstraction metadata is not permission; runtime discovery defines availability. Update [API](docs/API.md) for ID/schema/result/route/bridge/lifecycle changes. Unsupported schema keywords fail explicitly.
-- Generate schemas, validators and service bundles atomically with `scripts/build-format.mjs` from TypeScript/generator sources. Never hand-edit generated validators or embed duplicate project validators in consumers.
+- Regenerate schemas, validators and service bundles with `npm run build:format`. Change the TypeScript/generator sources and keep consumers on the shared validator.
 
 ## Editing and validation
 
@@ -85,7 +86,7 @@ Follow [Examples](docs/EXAMPLES.md)'s catalog, provenance, native paths and gene
 
 - Open original files from `examples/` and its dedicated `examples/project/` group. Scan and package each root independently without including the project group in the outer root. Runtime never copies/regenerates/cleans/downloads Home content. Fixed resource IDs are not grants. Desktop Recent uses persisted native opening/save history and pins, with EMC Flyback pinned by default alongside real history until explicitly unpinned.
 - Preserve neutral names, pinned bytes/transforms and provenance/licenses; keep manufacturer supplements separate. Create only populated asset directories, retain `.pretty`, exclude `.kicad_prl`, and never hand-edit snapshots/pinned source, substitute assets or use preview downloads.
-- Use `npm run examples` (KiCad via `KICAD_CLI`: 10.0.1 for the TPS61046 refill and 10 for EMC conversion), then `npm run build:format` after generated TypeScript changes. Run `npm run examples:prepare` before renderer build/dev. Preserve portable paths/bundled sources; no runtime KiCad CLI or user-library discovery.
+- Follow [example regeneration](docs/EXAMPLES.md#regeneration-and-resource-preparation) for pinned KiCad versions and format generation. Prepare Home assets before starting the renderer directly. Preserve portable paths and bundled sources. Runtime must stay independent of KiCad CLI and user-library discovery.
 - Service/window/Home/new/ordinary recovery stay independent of example preflight. First example open shares the [bounded opening barrier](docs/VERSION-HISTORY.md#opening-barrier-and-concurrency), including clean recovery; unrelated failures/missing Git cannot block a usable project.
 
 ## Plugins, simulation and Agents

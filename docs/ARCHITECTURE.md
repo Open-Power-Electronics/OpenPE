@@ -96,13 +96,14 @@ Changes identify their layer, update the owning contract and regenerate formats 
 - Electron starts the service and owns native dialogs, resource roots and live opaque project grants. It establishes application data under `OpenPE`, or the explicit `OPENPE_DATA_DIR` override, before applying the native OpenPE name. Former-brand directories and contracts have no migration or fallback.
 - The renderer is static-exported in packaged builds, or uses the local Next.js dev server. It imports no Node APIs; Electron keeps context isolation/sandboxing. Layout calculates gesture copper paths in a renderer Worker using pure shared fill geometry; this worker has no host, native file or document authority.
 - `window.openpe` is a narrow preload bridge. Native calls verify the originating main frame and resolve grants. Host filesystem destinations and grant IDs never enter projects or recovery; native model paths and portable relative references remain valid design metadata. The library chooser opens its two fixed attribution homepages in the system browser through a trusted main-frame action. [Electron bridge](API.md#electron-bridge) owns the selectors.
+- The centered SPICE chooser uses the plugin renderer and authenticated host routes for live TI product-page metadata and selected archive inspection. The SPICE host reuses the pinned model store, bounded in-memory ZIP reading and the shared declaration scanner. Staged library bytes become native sidecars through the existing Save writer. The renderer applies the declaration through ordinary Properties preparation.
 - `plugins/spice-simulation/electron/spice-model-picker.cjs` opens a single native SPICE file picker for a live project grant, including an unsaved project. The current library may supply a bounded display-only dialog location. Explicit local selection returns its path and bounded declaration metadata, with frame/grant and regular-file checks; it creates no general renderer file-read or solver authority. The same module automatically inspects project-relative libraries through a private bounded directory observation and the shared declaration scanner. The scanner hides helper dependencies and uses generated exact-hash public-entry metadata from canonical TI/reference records for pinned vendor libraries; absolute external references require native selection. This read returns metadata only and leaves Core, undo and native bytes unchanged. Properties applies the selected binding through Core. External references stay external through Save, recovery and history.
 - Express binds loopback and validates hosts/origins/request bounds. Renderer APIs/SSE/tool results require process authentication. The separate Agent bridge uses a scoped turn token; one-time result tokens also bind request/run/session/origin.
 - `server/datasheets.mjs` owns read-only pinned PDF page access through `/api/datasheets/page`. It verifies original bundled PDFs or fixed vendor downloads and retains two verified buffers in memory. `server/datasheet-worker.mjs` parses or rasterizes the requested page. Workbench binds live reads to the validated controller and rejects stale results. `context/agent-prompt-context.ts` derives the reference identity or reviewed parameter excerpt from the validated submission. [Datasheets](DATASHEETS.md#submission-and-on-demand-context) owns access and bounds.
-- `server/component-models.mjs` owns approved immutable local STEP bytes, bounded online package adoption, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. Preview requests identify a validated project component/model index and share the bounded STEP worker pool. `lib/library-package.ts` shares renderer preparation across GUI/Agent, while pure `lib/library-project-assets.ts` adds native package sidecars and library tables through Core. Shared component Properties commits native PCB model records through Core.
+- `server/component-models.mjs` owns approved immutable local STEP bytes, bounded online package adoption, project-grant model reads and Save/Save as sidecars. Electron component-model selection grants file access only through its native picker. The preview route resolves a validated PCB instance or downloaded project footprint and model index through a project location or the approved STEP cache. PCB instances also support exact portable assets from `server/example-footprints.mjs`. All share the bounded STEP worker pool. `lib/library-package.ts` shares preparation across GUI/Agent placement. Pure `lib/library-project-assets.ts` prepares the native package files and library table for the same Core transaction as the placement. Shared component Properties commits native PCB model records through Core.
 - Provider CLIs and solvers use restricted child-process adapters. Library indexing and STEP conversion use bounded workers. These are implementation mechanisms, not independent plugin processes.
 - `server/nextpcb-library.mjs` is a read-only host adapter behind the existing authenticated library service. Explicit NextPCB selection reads fixed HTTPS catalog endpoints and allowlisted native assets; shared validators and generated PCB preparation retain Core document authority. `server/jlcpcb-library.mjs` reads JLCPCB search metadata and resolves exact EasyEDA CAD over fixed HTTPS. Symbol chooser search pages use the same host CAD readers to check footprint and model references before delivery; STEP remains on demand. `server/jlcpcb-cad.mjs` converts the supported subset and validates symbol and footprint records independently using the generated project and PCB validators. Both online sources share the authenticated library routes, bounded response reader and Electron system-network adapter on desktop. Provider pages never run in the renderer. [Libraries](LIBRARIES.md#catalog-service-and-chooser) owns access and geometry/model limits.
-- `server/nextpcb-prices.mjs` reads HQ Online quotes on explicit chooser refresh. The authenticated library service resolves the part and uses the existing host network adapter. [Libraries](LIBRARIES.md#nextpcb-online-catalog) owns quote matching and retention.
+- The authenticated library service resolves KiCad, NextPCB and JLCPCB identities for explicit chooser price checks. `server/library-prices.mjs` owns LCSC Electronics transport and cross-catalog identity matching. `server/nextpcb-prices.mjs` owns HQ Online quote transport. Desktop requests use the host network adapter. [Libraries](LIBRARIES.md#component-pricing) owns quote matching and retention.
 - Codex, Claude, and Cursor expose scoped live OpenPE tools; DeepSeek/Pi retain context/proposals without document tools. Cursor uses `@cursor/sdk` in the service process: MCP-only built-ins, inline OpenPE MCP, one frozen empty filesystem and MCP environment for that run, no setting sources, and a private temporary directory. Its API key is `safeStorage` ciphertext at `cursor-credential.bin` in the OpenPE data directory, outside recovery, history, and Agent context. POSIX mode is 0600; Windows relies on the per-user data-directory ACL and does not call `icacls`. `server/agent-questions.mjs` owns the separate origin-bound question bridge for every runnable harness: native Codex/Claude control requests, the Cursor `openpe_ask_user` MCP tool, the private DeepSeek user-question patch, and the sole explicitly loaded Pi question extension. The latter three receive only a scoped question endpoint/token, never the process token. UI Review/Auto cannot bypass provider restrictions or native grants.
 
 `server/agent-models.mjs` owns bounded provider model/effort discovery before
@@ -139,7 +140,8 @@ issuing a preview token. Token-gated routes provide CAD previews, read-only
 library previews and fixed plugin operations. CAD and library previews share
 the desktop geometry and STEP parser code through one serial parse queue and
 one bounded parser pool. Library IDs and model indices resolve prepared
-resources without downloads or cache/project writes. Native project grants,
+resources without downloads or cache/project writes. Explicit price checks use
+the same host library service and supplier adapters as desktop. Native project grants,
 Agent chat and workspace recovery are desktop-only. Packaged builds use the
 Electron bridge. [Preview transport](API.md#browser-development-preview-transport)
 · [Plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle)
@@ -239,7 +241,7 @@ EMC Flyback’s external electrical testbench is native Core-owned schematic con
 ```mermaid
 flowchart LR
     UI[Human controls] --> Host[Per-project capability host]
-    Agent[Codex / Claude] <--> Bridge[Scoped service / Chat bridge]
+    Agent[Codex / Claude / Cursor] <--> Bridge[Scoped service / Chat bridge]
     Bridge <--> Host
     UI --> Preview[Local gesture preview]
     Preview --> Core[ProjectCore]
@@ -289,6 +291,11 @@ A live tool call retains its originating project/run/session. Review checks live
 Up to 12 projects remain mounted with independent Core/undo/Source/sessions; inactive Workbenches live in detached DOM. Only the active editor handles global keys. Closing blocks edits and cancels/suspends capabilities before recovery and grant release; failures resume editing.
 
 Retained presentation is separate from document ownership. Pointer/camera readouts, conversations and recovery status avoid unrelated renders. Workspace presentation subscriptions retain immutable navigation snapshots, including project and conversation pin flags. When development refresh replaces the presentation implementation, DesktopWorkspace rebuilds only that cache and republishes current projects/status before paint; project, draft and mounted editor state remain intact. Hidden Layout/Model and clean Source defer presentation, then consume current documents/revision guards on reveal. Library selection, version history, Plugins, Settings and About load their modules on first use; deferred modal dialogs keep background input blocked and remain cancellable during loading. Native contexts and Send read current state. Internally owned immutable inputs support bounded caches; caller freezing never grants reuse. [Core](CORE.md#immutable-data-and-bounded-caches) owns cache correctness.
+
+`PanelFindController` routes presentation searches to the active pane, including
+Model's bounded scene metadata adapter. `components/component-highlight.ts`
+resolves cross-mode targets from native associations for the existing camera
+and selection adapters. [Panel Find](../DESIGN.md#panel-find) · [Cross-mode highlighting](../DESIGN.md#cross-mode-component-highlighting)
 
 `lib/schematic-wire-target.ts` snapshots visible anchors and wire bounds for the current gesture. Pointer updates reject candidates outside a conservative tolerance box before exact distance/projection checks, preserving native coordinates, inclusive tolerance and anchor tie priority.
 
@@ -426,18 +433,12 @@ packaged service, including `@cursor/sdk`, `express`, `occt-import-js`,
 `pdfjs-dist`, `@napi-rs/canvas`, and the host Cursor platform package's
 tree-sitter natives, and fails if a module resolves outside the archive.
 
-| Host                   | Installer targets | Unpacked entry under `release/` |
-| ---------------------- | ----------------- | ------------------------------- |
-| Windows x64            | NSIS              | `win-unpacked/OpenPE.exe`       |
-| macOS arm64            | DMG               | `mac-arm64/OpenPE.app`          |
-| Linux x64, glibc 2.41+ | AppImage, Debian  | `linux-unpacked/openpe`         |
-
-Other hosts/architectures are rejected. Icons derive from the Signal E master.
-macOS signing stays off, with entitlements in `build/entitlements.mac.plist`;
-Gatekeeper may require first-launch approval. Linux desktop metadata matches
-`ai.openpe.desktop`. `build/after-pack.cjs` rejects links/special files and sets
-directories/executables to 0755, other files to 0644. Umask 022 also keeps later
-`.desktop` entries readable after root-owned installation.
+The supported hosts and package paths are listed in [Packaging](DEVELOPMENT.md#packaging).
+Icons derive from the Signal E master. macOS signing stays off, with entitlements
+in `build/entitlements.mac.plist`. Linux desktop metadata matches
+`ai.openpe.desktop`. `build/after-pack.cjs` rejects links and special files
+and sets directories and executables to 0755, other files to 0644. Umask 022
+keeps later `.desktop` entries readable after root-owned installation.
 
 Shared `extraResources` are native examples, the project group, KiCad libraries,
 `resources/thermal/1`, `resources/example-catalog/simulation/models`, and the
@@ -469,31 +470,13 @@ of at most 256 KiB.
 Only successful preparation with unchanged inputs updates the record. Solver
 resource checks run on every development start.
 
-Checks can write logs, screenshots, temporary profiles and reports to
-`test-results/`. Retained renderer benchmarks can also read their verified
-prior snapshots there, as described in [Layout](LAYOUT.md#examples-and-verification).
-Classify files by their consumers before cleanup. `tmp/` holds local experiments and is excluded from Git, formatting
-and typecheck. `promotion/` holds the local Remotion authoring workspace,
-including source, recordings, and renders. Git ignores the entire directory,
-and the Remotion package owns its own TypeScript configuration. Capture bundle
-filenames may retain a TypeScript extension for URL matching. Resolve cleanup
-paths within the workspace and reject links.
-Keep native projects, recovery, Git history, prepared offline resources,
-corresponding sources/notices and current builds separate from test outputs.
-
-The root `.gitignore` excludes local state, verification output, dependencies,
-downloaded resources and renderer/release builds. Project asset/result rules
-are scoped to `examples/` and `tests/fixtures/`; source directories named
-`spice` or `thermal` remain eligible for version control. Native designs,
-lockfiles, notices, pinned inputs, required generated service/schema files and
-brand assets remain tracked. Next.js manages and regenerates `next-env.d.ts`,
-which is ignored rather than versioned. Ignoring a path does not authorize its deletion.
+For local output ownership and cleanup, see [Workspace artifacts](DEVELOPMENT.md#workspace-artifacts).
+Project-specific ignore rules are scoped to `examples/` and `tests/fixtures/`.
+Native designs, lockfiles, notices, pinned inputs, required generated
+service/schema files and brand assets remain tracked. Next.js regenerates the
+ignored `next-env.d.ts`.
 
 ## Verification
-
-`components/component-highlight.ts` resolves read-only cross-mode component targets from current native symbol associations. Workbench owns the guarded presentation requests; Canvas, LayoutEditor and PCBModelPreview retain their selection/camera adapters. `tests/component-highlight.test.ts` covers all six directions, missing and ambiguous associations, board-only footprints, independent sheets, current positions and input preservation. [Cross-mode presentation](../DESIGN.md#cross-mode-component-highlighting) owns menus, gates and focus behavior.
-
-Panel Find is GUI-owned: `PanelFindController` routes Ctrl+F by pointer region and anchors `PanelFind` inside the Agent pane or the active Preview canvas/code container. `panel-find` observes only transcript, drawing SVG or Source code, excluding editor toolbars/docks, results, file navigation and code gutters. Bounded CSS highlights and local scroll revelation remain presentation-only. `usePanelFindCanvas` connects rendered drawing matches to the current eligible object selection and camera fit in Canvas/LayoutEditor, retaining query focus and other offscreen drawing matches. `model-panel-find` connects the same bar to bounded, literal per-object matching of current eligible Model scene metadata. PCBModelPreview re-resolves every selected hit and uses its existing component/CAD selection paint and orientation-preserving camera framing. Scene refresh revokes removed or hidden hits; search performs no Core query, native/model-byte read, host request, persistent indexing or document change. Chat pauses following through an instance-local reveal event. `tests/panel-find.test.ts` covers routing, literal offsets, bounds, isolation and IME shortcut guards; `check-panel-find-ui.mjs`, `check-model-checks-ui.mjs` and the reading check provide separate opt-in rendered-pane, Model search and reader verification.
 
 [AGENTS](../AGENTS.md#verification-and-delivery) defines the checks and authorization for each change tier. Windows x64, macOS arm64 and glibc Linux x64 are verified separately; unavailable hosts are recorded as unverified. The [Agent conversation](../DESIGN.md#agent-conversation) and [Agent transport](CORE.md#agent-transport-and-review) contracts describe the corresponding interaction and execution semantics.
 
@@ -505,31 +488,19 @@ Panel Find is GUI-owned: `PanelFindController` routes Ctrl+F by pointer region a
 | Tool reviews, history and diagnostics                                         | `check-agent-tools-ui.mjs`, `check-agent-history-ui.mjs`, `check-agent-review-navigation-ui.mjs`                                               |
 | Queued messages and attachments                                               | `check-agent-queue-preview-ui.mjs`, `check-agent-follow-ups-ui.mjs`, `check-agent-attachments-ui.mjs`, `check-annotations.mjs`                 |
 | Embedded symbol and footprint drawing                                         | `tests/component-drawing-parity.test.ts`, `tests/symbol-drawing.test.ts`, `tests/footprint-drawing.test.ts`, `check-component-drawing-ui.mjs`  |
+| [Panel Find](../DESIGN.md#panel-find) | `tests/panel-find.test.ts`, `check-panel-find-ui.mjs`, `check-model-checks-ui.mjs` |
+| [Cross-mode component highlighting](../DESIGN.md#cross-mode-component-highlighting) | `tests/component-highlight.test.ts` |
 
 Run the browser scripts with `node scripts/<script>.mjs`. They use isolated
 renderer fixtures and controlled services. Native dialogs, clipboard
 permissions, CAD kernel execution and provider authentication require their own
 checks.
 
-GUI/Agent design parity is exercised by `tests/gui-agent-parity.test.ts`: shared
-preparations produce matching native KiCad files and undo results behind the
-same revision, Source and close gates. PCB property capability schemas are
-generated from the canonical format definitions into
-`core/layout-property-schemas.json`; the API interpreter accepts their bounded
-nonrecursive shapes, while Core retains full document validation. Ownership and
-host grants remain unchanged by these object commands.
-
-Host parity extends through `lib/library-capabilities.ts` for STEP/SPICE resource
-selection, `lib/workbench-capabilities.ts` for workspace requests/history, and
-`lib/project-file-capabilities.ts` for explicit ordinary-file operations. The
-latter shares `useProjectDirectory` drafts and host compare-before-write checks;
-opaque file observations bind reads to destination/draft revisions without
-moving disk files into Core. Model contents/logs remain unavailable to Agents.
-Workspace requests acknowledge before navigation can revoke the originating run;
-opening another project never transfers its authority. Focused regressions are
-`tests/model-resource-capabilities.test.ts`, `tests/project-file-capabilities.test.ts`
-and `tests/workbench-project-actions.test.ts`, alongside existing Source, history
-and native-file lifecycle tests. The API contract records the scoped parity matrix.
+`tests/gui-agent-parity.test.ts` compares native KiCad bytes and undo for GUI
+and Agent edits behind revision, Source and close gates. Host parity checks
+include `tests/model-resource-capabilities.test.ts`,
+`tests/project-file-capabilities.test.ts` and
+`tests/workbench-project-actions.test.ts`. See the [API parity matrix](API.md).
 
 `scripts/test.mjs` discovers the complete `tests/*.test.ts` set and uses Node's
 process-isolated runner with bounded file concurrency. Successful complete runs

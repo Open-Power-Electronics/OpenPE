@@ -12,7 +12,8 @@ For Debian, use `sudo apt install ./openpe_0.1.0_amd64.deb`. Without FUSE, pass 
 
 ## Run from source
 
-Prerequisites: Node.js 24 and Git. macOS also needs Xcode Command Line Tools (`xcode-select --install`). Ordinary setup uses prebuilt solvers and does not need Homebrew. If releases are unavailable, prepare [local archives or rebuilds](#solver-release-access) before startup.
+Install Node.js 24 and Git. On macOS, install Xcode Command Line Tools with
+`xcode-select --install`.
 
 ```sh
 npm ci
@@ -22,7 +23,10 @@ npm run dev
 
 If dependency installation skipped scripts, run `npm run postinstall` before starting Electron.
 
-`npm run dev` prepares formats, Home projects and portable assets, verifies or downloads solver resources, then starts Electron with renderer hot reload. `npm run dev -- --verbose` includes preparation logs. An already verified local bundle is reused. To prepare ngspice separately, use `npm run simulation:prepare`.
+`npm run dev` prepares formats and Home assets, verifies or downloads the
+prebuilt solver resources, and starts Electron with renderer hot reload. Use
+`npm run dev -- --verbose` for preparation logs. If a solver release is
+unavailable, prepare [a verified local archive or rebuild](#solver-release-access).
 
 Run one development server at a time. Save work and restart the app after Electron or service changes; renderer reload does not replace those modules. Agent integrations are configured separately in Settings. Manual editing and simulation do not require an Agent.
 
@@ -55,7 +59,10 @@ Prepare missing CAD/thermal resources with `npm run thermal:prepare`, ngspice wi
 | `npm run build`            | Prepare resources and build the renderer                          |
 | `npm run package`          | Build and check the host installer                                |
 
-Pass test paths after `npm test --` for focused Node checks. The [verification index](ARCHITECTURE.md#verification) maps focused checks to features. Follow the engineering contract's change tiers and authorization requirements for graphical checks and real providers/solvers. [Examples](EXAMPLES.md#regeneration-and-resource-preparation) owns native example regeneration and its KiCad requirements.
+Pass test paths after `npm test --` for focused Node checks. See
+[Verification](ARCHITECTURE.md#verification) for the feature index and
+[example regeneration](EXAMPLES.md#regeneration-and-resource-preparation) for
+the native projects and pinned KiCad versions.
 
 Before a standalone typecheck on a fresh checkout, run `npx next typegen` to
 generate the ignored `next-env.d.ts` and route types. `npm run dev` and
@@ -73,7 +80,23 @@ On Windows, the atomic-write, host-path and local-archive tests use directory ju
 | macOS arm64 | `release/mac-arm64/OpenPE.app` and `release/OpenPE-<version>-arm64.dmg`                                       |
 | Linux x64   | `release/linux-unpacked/openpe`, `release/OpenPE-<version>.AppImage` and `release/openpe_<version>_amd64.deb` |
 
-`package.json` supplies the version. Other package hosts are rejected. Keep downloads, dependencies and build outputs out of Git; ignored files can contain generation inputs and verification evidence. See [storage boundaries](ARCHITECTURE.md#storage-and-build-boundaries) before cleanup.
+`package.json` supplies the version and supported package targets.
+
+## Workspace artifacts
+
+| Path                         | Contents                                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `.openpe/`                   | Development and test caches, temporary fixtures, local inputs and optional app data overrides                                 |
+| `test-results/`              | Check outputs, temporary profiles, saved audit inputs and [retained benchmark snapshots](LAYOUT.md#examples-and-verification) |
+| `.next/`, `out/`, `release/` | Renderer builds, packages and maintainer solver archives                                                                      |
+| `promotion/`                 | Separate local Remotion workspace with source, recordings and renders                                                         |
+| `tmp/`                       | Local experiments                                                                                                             |
+
+Classify ignored files by their consumers before cleanup. Resolve each target
+inside the workspace and reject links before recursive operations. Keep native
+designs, prepared offline resources, corresponding sources and notices, current
+builds, recovery and private Git history. See [Storage and build boundaries](ARCHITECTURE.md#storage-and-build-boundaries)
+for application-owned stores and generated files.
 
 ## Solver release access
 

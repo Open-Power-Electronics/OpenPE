@@ -3,9 +3,10 @@ import { createHash } from 'node:crypto';
 import { lstat, realpath, readFile, mkdir, open } from 'node:fs/promises';
 import { atomicWrite } from './atomic-write.mjs';
 import { logicalSuffixOfCanonical } from './host-path.cjs';
-import { parseProject } from './project-format.mjs';
+import { footprintModels, parseProject, projectFootprintSource, projectPackageModelPaths } from './project-format.mjs';
 import { children, onlineFootprintLibrary, quote, val } from './library-format.mjs';
 import { isOmittableJlcpcbStep } from './jlcpcb-library.mjs';
+import { portableExampleModelBytes } from './example-footprints.mjs';
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const local = /^\$\{KIPRJMOD\}\/models\/([a-f0-9]{64})\.step$/;
 const relative = /^\$\{KIPRJMOD\}\/((?:[\w .()+,-]+\/)*[\w .()+,-]+\.(?:step|stp))$/i;
@@ -133,27 +134,30 @@ export function createComponentModelStore(dataDir, parse) {
     },
     async prepare(project, destination, source) {
       const plans = new Map();
+      const references = new Set(projectPackageModelPaths(project));
       for (const footprint of project.pcb?.footprints ?? [])
-        for (const model of footprint.models ?? []) {
-          if (!relative.test(model.path)) continue;
-          const name = relative.exec(model.path)[1];
-          // Existing pinned Home assets are prepared by their owning asset store.
-          let bytes;
-          try {
-            bytes = await store.read(model.path, source || destination);
-          } catch (error) {
-            if (error.code === 'ENOENT' && !local.test(model.path)) continue;
-            throw error;
-          }
-          const target = path.join(path.dirname(destination), name);
-          const previous = await bytesAt(target).catch((error) => {
-            if (error.code === 'ENOENT') return null;
-            throw error;
-          });
-          if (previous && !previous.equals(bytes))
-            throw new Error('Preserve the existing changed STEP file: ' + name);
-          if (!previous) plans.set(target, bytes);
+        for (const model of footprint.models ?? []) references.add(model.path);
+      for (const reference of references) {
+        const match = relative.exec(reference);
+        if (!match) continue;
+        const name = match[1];
+        // Existing pinned Home assets are prepared by their owning asset store.
+        let bytes;
+        try {
+          bytes = await store.read(reference, source || destination);
+        } catch (error) {
+          if (error.code === 'ENOENT' && !local.test(reference)) continue;
+          throw error;
         }
+        const target = path.join(path.dirname(destination), name);
+        const previous = await bytesAt(target).catch((error) => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        });
+        if (previous && !previous.equals(bytes))
+          throw new Error('Preserve the existing changed STEP file: ' + name);
+        if (!previous) plans.set(target, bytes);
+      }
       for (const [target, bytes] of plans) {
         await directory(path.dirname(target));
         await atomicWrite(target, bytes, async () => {
@@ -278,24 +282,32 @@ export function registerComponentModels(app, store, libraries, files) {
       const body = req.body;
       if (
         !body ||
-        Object.keys(body).some((k) => !['source', 'fileId', 'footprintId', 'index'].includes(k)) ||
+        Object.keys(body).some((k) => !['source', 'fileId', 'footprintId', 'libraryId', 'index'].includes(k)) ||
         typeof body.source !== 'string' ||
         !Number.isSafeInteger(body.index) ||
         body.index < 0 ||
-        typeof body.footprintId !== 'string' ||
-        (body.fileId !== undefined && !/^[a-f0-9-]{36}$/i.test(body.fileId))
+        (body.libraryId === undefined
+          ? typeof body.footprintId !== 'string'
+          : body.footprintId !== undefined || typeof body.libraryId !== 'string' || body.libraryId.length > 500) ||
+        (body.fileId !== undefined && (typeof body.fileId !== 'string' || !/^[a-f0-9-]{36}$/i.test(body.fileId)))
       )
         throw new Error('Send the current project, component and model index.');
       const project = parseProject(body.source);
-      const model = project.pcb?.footprints.find((f) => f.id === body.footprintId)?.models?.[
-        body.index
-      ];
+      const footprint = project.pcb?.footprints.find((f) => f.id === body.footprintId);
+      const localPackage = body.libraryId && projectFootprintSource(project, body.libraryId);
+      const model = localPackage
+        ? footprintModels(localPackage.footprint)[body.index]
+        : footprint?.models?.[body.index];
       if (!model) throw new Error('The component model is unavailable.');
       let result;
       if (model.path.startsWith('${KIPRJMOD}/')) {
         const file = body.fileId ? files?.resolve(body.fileId) : undefined;
-        if (body.fileId && !file) throw new Error('The project file grant is unavailable.');
-        const bytes = await store.read(model.path, file);
+        if (body.fileId && file === undefined)
+          throw new Error('The project file grant is unavailable.');
+        const pinned = file === null && footprint
+          ? await portableExampleModelBytes(footprint.libraryId, model.path)
+          : null;
+        const bytes = pinned || (await store.read(model.path, file));
         result = await libraries.parseStep(bytes, control.signal);
         if (body.fileId && files.resolve(body.fileId) !== file)
           throw new Error('The project location changed.');

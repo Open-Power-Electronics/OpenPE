@@ -18,6 +18,6 @@ Choose a workflow below. Each feature contract owns its detailed behaviour and l
 
 OpenPE supports a bounded subset of KiCad 10 and Model CAD, including manual PCB placement and routing. General CAD/model import, complete KiCad ERC/DRC parity, autorouting and production qualification are outside its scope. Feature contracts describe supported geometry, circuits, models and incomplete checks.
 
-Save and Save as retain native `.kicad_pro`, `.kicad_sch` and `.kicad_pcb` file sets. [Design exchange](FORMAT.md#design-exchange) and [manufacturing export](FORMAT.md#manufacturing-export) cover available outputs. Review CAM and assembly output before manufacturing.
+Review CAM and assembly files before manufacturing. [Manufacturing export](FORMAT.md#manufacturing-export)
 
-SPICE support depends on the documented circuits and models. Layout Thermal estimates PCB temperature under stated material and cooling assumptions; it does not predict package junction temperature or EMC emissions. [EMC Flyback](EMC-FLYBACK.md) records the separate reference case and its evidence.
+Use the documented SPICE circuits and models, the stated PCB thermal assumptions and the bounded EMC review coverage. [SPICE](SIMULATION.md) · [Layout Thermal](THERMAL.md) · [EMC Analysis](EMC.md) · [EMC Flyback evidence](EMC-FLYBACK.md)

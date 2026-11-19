@@ -1178,7 +1178,7 @@ try {
     await footprintDialog
       .locator(`.library-results button[aria-description="${detail.id}"]`)
       .click();
-    await footprintDialog.getByRole('button', { name: 'Assign footprint', exact: true }).click();
+    await footprintDialog.getByRole('button', { name: 'Assign', exact: true }).click();
     await footprintDialog.waitFor({ state: 'hidden' });
   };
   await choosePackage(replacementPackage);

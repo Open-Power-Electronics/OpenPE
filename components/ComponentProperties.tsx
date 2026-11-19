@@ -66,6 +66,7 @@ export default function ComponentProperties({
   const assignmentFields = (
     <>
       <FootprintModels
+        key={footprint.id}
         footprint={footprint}
         active={active}
         fileId={fileId}
@@ -128,6 +129,7 @@ export default function ComponentProperties({
             part={part}
             circuit={schematic}
             fileId={fileId}
+            projectSource={projectSource}
             getRevision={getRevision}
             spiceAvailable={spiceAvailable}
             tabAction={tabAction}

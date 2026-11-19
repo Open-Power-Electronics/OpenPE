@@ -273,8 +273,8 @@ try {
   ]) {
     assert.equal(
       (await button(name).textContent()).trim(),
-      '',
-      `${name} uses an icon without repeated text.`,
+      name === 'Apply drawing' ? 'Apply' : '',
+      `${name} uses the intended action label.`,
     );
     assert.equal(
       await button(name).getAttribute('title'),

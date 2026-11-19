@@ -153,7 +153,7 @@ const PCBModelPreview = lazy(() => import('./PCBModelPreview'));
 import { type PCB, type Footprint } from '@/lib/pcb';
 import { findPCBGraphic } from '@/lib/pcb-layout';
 import { PCBProjectSync, type LayoutSyncStatus, type SyncedProject } from '@/lib/pcb-project-sync';
-import { loadLibraryFootprint } from '@/lib/library-package';
+import { loadLibraryFootprint, prepareSchematicPackage } from '@/lib/library-package';
 import { attachOnlineFootprint } from '@/lib/library-project-assets';
 import type { FootprintSource } from '@/lib/pcb-sync';
 import SchematicLayers from './SchematicLayers';
@@ -161,7 +161,6 @@ import { visibleSchematicIds } from '@/lib/schematic-view';
 import {
   partSchematicSection,
   schematicSectionIds,
-  type SchematicSection,
   type SchematicSectionView,
 } from '@/lib/schematic-section';
 import SchematicSectionSwitch from './SchematicSectionSwitch';
@@ -219,7 +218,7 @@ import { useWorkbenchPlugins, registerWorkbenchPluginCapabilities } from '@/lib/
 import { registerLayoutParasiticsCapability } from '../plugins/layout-parasitics/renderer/capabilities';
 import { registerEmcCapabilities } from '../plugins/emc-analysis/renderer/capabilities';
 import { schematicTexts } from '@/lib/schematic-text';
-import { displayPartValue, onlineFootprintLibrary, partFields } from '@/lib/library';
+import { displayPartValue, onlineFootprintLibrary, partFields, partFootprint } from '@/lib/library';
 import { preparePartGeometry, preparePartProperties } from '@/lib/part-properties';
 import { val, type SExpr } from '@/lib/sexpr';
 import ProjectNavigation, {
@@ -639,7 +638,11 @@ export default function Workbench({
         : null,
     [spiceAvailable, simulationOpened, project, doc],
   );
-  const [placement, setPlacement] = useState<{ symbol: SExpr; unit: number }>();
+  const [placement, setPlacement] = useState<{
+    symbol: SExpr;
+    unit: number;
+    unavailableFootprint?: string;
+  }>();
   const [modal, setModal] = useState<Modal>(null);
   const workspaceElement = useRef<HTMLDivElement>(null);
   const panelFindControl = useRef<PanelFindHandle | null>(null);
@@ -1716,9 +1719,9 @@ export default function Workbench({
     }
   }
   const commit = useCallback(
-    (next: Circuit) => {
+    (next: Circuit, nativeFiles?: Project['nativeFiles']) => {
       try {
-        return core.replaceSchematic(next);
+        return core.replaceSchematic(next, nativeFiles);
       } catch (error) {
         notify((error as Error).message);
         return false;
@@ -3442,29 +3445,48 @@ export default function Workbench({
     view === 'layout' ? layoutGridSpacingOptions : gridSpacingOptions;
   const canvasProperties = useEditorAction(openObjectProperties);
   const canvasDelete = useEditorAction(remove);
-  const placeCanvasPart = useEditorAction((next: Circuit, id: string) => {
-    const snapshot = core.getSnapshot();
-    if (
-      !active ||
-      screen !== 'workspace' ||
-      view !== 'canvas' ||
-      modal ||
-      confirmation ||
-      snapshot.sourceDraft !== null ||
-      snapshot.editingBlocked ||
-      schematicComposing.current ||
-      activeSchematicRef.current !== next.id ||
-      !snapshot.project ||
-      findSchematic(snapshot.project, next.id) !== doc
-    )
-      return false;
-    if (propertiesDraftPending()) {
-      notify('Apply or discard the Properties edits before placing a component.');
-      return false;
-    }
-    if (!commit(next)) return false;
-    followSchematicPartSection(next.id, id);
-    return true;
+  const canPlaceCanvasPart = useEditorAction(
+    (schematicId: string, snapshot: ReturnType<typeof core.getSnapshot>) => {
+      if (
+        !active ||
+        screen !== 'workspace' ||
+        view !== 'canvas' ||
+        tool !== 'place' ||
+        modal ||
+        confirmation ||
+        snapshot.sourceDraft !== null ||
+        snapshot.editingBlocked ||
+        schematicComposing.current ||
+        activeSchematicRef.current !== schematicId ||
+        !snapshot.project ||
+        findSchematic(snapshot.project, schematicId) !== doc
+      )
+        return false;
+      if (propertiesDraftPending()) {
+        notify('Apply or discard the Properties edits before placing a component.');
+        return false;
+      }
+      return true;
+    },
+  );
+  const placeCanvasPart = useEditorAction((next: Circuit, id: string, signal: AbortSignal) => {
+    const basis = core.getSnapshot();
+    const part = next.parts.find((item) => item.id === id);
+    if (!part || !basis.project || !canPlaceCanvasPart(next.id, basis)) return false;
+    const place = (nativeFiles?: Project['nativeFiles']) => {
+      if (!commit(next, nativeFiles)) return false;
+      followSchematicPartSection(next.id, id);
+      return true;
+    };
+    const footprint = partFootprint(part);
+    if (!onlineFootprintLibrary(footprint) || footprint === placement?.unavailableFootprint)
+      return place();
+    return prepareSchematicPackage(basis.project, footprint, signal).then((nativeFiles) => {
+      signal.throwIfAborted();
+      if (core.getSnapshot() !== basis)
+        throw new Error('The project changed while preparing the symbol. Try again.');
+      return canPlaceCanvasPart(next.id, basis) && place(nativeFiles);
+    });
   });
   const canvasViewport = useMemo(
     () => (doc ? fileViewports.current.get(doc.id) : undefined),
@@ -4539,7 +4561,7 @@ export default function Workbench({
     if (
       !active ||
       screen !== 'workspace' ||
-      !['schematic', 'layout', '3d'].includes(view) ||
+      !['canvas', 'layout', '3d'].includes(view) ||
       !rightSidebarVisible ||
       modal ||
       confirmation ||
@@ -4567,7 +4589,7 @@ export default function Workbench({
       if (
         !active ||
         screen !== 'workspace' ||
-        !['schematic', 'layout', '3d'].includes(view) ||
+        !['canvas', 'layout', '3d'].includes(view) ||
         !rightSidebarVisible ||
         layoutAnalysisVisible ||
         modal ||
@@ -5228,40 +5250,11 @@ export default function Workbench({
                                       active={propertiesActive}
                                       spiceAvailable={spiceAvailable}
                                       fileId={fileId}
+                                      projectSource={source}
                                       getRevision={getPropertiesRevision}
                                       onRequestSave={requestPropertiesSave}
                                       capabilityHost={capabilityHost}
                                       onDraftPendingChange={onPropertiesPendingChange}
-                                      onSectionChange={(section: SchematicSection) => {
-                                        if (
-                                          !canEditProperties() ||
-                                          !part ||
-                                          propertiesDraftPending() ||
-                                          schematicComposing.current
-                                        )
-                                          return false;
-                                        try {
-                                          core.execute('part.section', {
-                                            schematicId: doc.id,
-                                            partId: part.id,
-                                            section,
-                                          });
-                                          if (schematicSection !== 'all') {
-                                            setSchematicSections((previous) => ({
-                                              ...previous,
-                                              [doc.id]: section,
-                                            }));
-                                            setFileSelections((previous) => ({
-                                              ...previous,
-                                              [doc.id]: [part.id],
-                                            }));
-                                          }
-                                          return true;
-                                        } catch (error) {
-                                          notify((error as Error).message);
-                                          return false;
-                                        }
-                                      }}
                                       key={part.id}
                                       part={part}
                                       tabAction={propertiesDeleteAction}
@@ -5971,7 +5964,12 @@ export default function Workbench({
                 if (!('symbol' in detail) || detail.error) return;
                 setModal(null);
                 if (!(await changeView('canvas'))) return;
-                setPlacement({ symbol: detail.symbol, unit });
+                setPlacement({
+                  symbol: detail.symbol,
+                  unit,
+                  unavailableFootprint:
+                    detail.footprintPreview === 'unavailable' ? detail.footprint : undefined,
+                });
                 setTool('place');
                 queueSchematicNavigation('place');
               }}

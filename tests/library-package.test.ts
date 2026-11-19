@@ -14,7 +14,7 @@ import { parseSExpr } from '../lib/sexpr';
 import { projectFromNativeFiles, projectNativeFiles } from '../lib/kicad-project';
 import { attachOnlineFootprint } from '../lib/library-project-assets';
 import { PCBProjectSync } from '../lib/pcb-project-sync';
-import { parseProject, serializeProject } from '../lib/project';
+import { appendSchematic, parseProject, serializeProject } from '../lib/project';
 import { createComponentModelStore, prepareLibraryPackage } from '../server/component-models.mjs';
 import { atomicWrite } from '../server/atomic-write.mjs';
 
@@ -105,6 +105,55 @@ test('Agent package placement retains resources, assignment and pose in one undo
     );
     core.undo();
     assert.deepEqual(core.getNativeFiles(), baseline);
+  } finally {
+    dispose();
+    host.dispose();
+    globalThis.fetch = previousFetch;
+    (globalThis as any).window = previousWindow;
+  }
+});
+
+test('online symbol placement adopts packages on additional sheets and reuses them offline', async () => {
+  const { project, schematic: sheet } = appendSchematic(fixture());
+  const core = new ProjectCore(project);
+  const host = createCapabilityHost({ revision: () => String(core.getSnapshot().revision) });
+  const previousWindow = (globalThis as any).window;
+  const previousFetch = globalThis.fetch;
+  (globalThis as any).window = {
+    openpe: { connection: async () => ({ base: 'http://fixture', token: 'test' }) },
+  };
+  const dispose = registerLibraryCapabilities(host, core);
+  const baseline = core.getNativeFiles();
+  try {
+    for (const id of [prepared.id, 'JLCPCB:C7593']) {
+      const [library, name] = id.split(':');
+      const symbol = parseSExpr(`(symbol "${id}" (property "Reference" "U")
+        (property "Value" "Fixture") (property "Footprint" "${id}"))`);
+      const footprint = structuredClone(prepared.footprint);
+      footprint[1] = JSON.stringify(name);
+      let downloads = 0;
+      globalThis.fetch = async (url) => {
+        if (String(url).endsWith('/library-package')) {
+          downloads++;
+          return Response.json({ ...prepared, id, footprint });
+        }
+        assert.equal(new URL(String(url)).searchParams.get('id'), id);
+        return Response.json({ id, symbol, units: 1, footprint: id });
+      };
+      const input = { schematicId: sheet.id, libraryId: id, x: 0, y: 0 };
+      await host.execute('schematic.place', input, { actor: 'agent' });
+      const current = core.getSnapshot();
+      assert.equal(current.undoDepth, 1);
+      assert.equal(current.project!.additionalSchematics![0].parts[0].fields?.Footprint, id);
+      assert.equal(current.project!.pcb!.footprints.length, 0);
+      assert.ok(core.getNativeFiles().files.some((file) => file.name === `footprints/${library}.pretty/${name}.kicad_mod`));
+      await host.execute('schematic.place', { ...input, x: 6.35 }, { actor: 'agent' });
+      assert.equal(core.getSnapshot().project!.additionalSchematics![0].parts.length, 2);
+      assert.equal(downloads, 1);
+      core.undo();
+      core.undo();
+      assert.deepEqual(core.getNativeFiles(), baseline);
+    }
   } finally {
     dispose();
     host.dispose();
@@ -297,6 +346,11 @@ test('adopted package files and STEP survive native Save, Source reopening and o
   assert.equal(await readFile(path.join(path.dirname(copy), 'fp-lib-table'), 'utf8'), table);
   const copied = projectFromNativeFiles(await readNativeProject(copy));
   assert.deepEqual(copied.pcb!.footprints[0].models, reopened.pcb!.footprints[0].models);
+  const schematicOnly = attachOnlineFootprint(fixture(), source);
+  const unlinkedTarget = path.join(root, 'unlinked', 'design.kicad_pro');
+  await mkdir(path.dirname(unlinkedTarget));
+  await store.prepare(schematicOnly, unlinkedTarget);
+  assert.deepEqual(await freshStore.read(localPath, unlinkedTarget), bytes);
   core.undo();
   assert.equal(core.getSnapshot().project!.pcb!.footprints.length, 0);
 });

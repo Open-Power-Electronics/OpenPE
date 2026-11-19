@@ -184,16 +184,17 @@ const bundle = await build({
   write: false,
   platform: 'browser',
   define: { 'process.env.NODE_ENV': '"production"' },
-  plugins: [{
-    name: 'preview-frame-probe',
-    setup(build) {
-      build.onResolve({ filter: /^three$/ }, ({ importer }) => {
-        if (importer.endsWith('ModelPreview.tsx'))
-          return { path: 'renderer', namespace: 'preview-frame-probe' };
-      });
-      build.onLoad({ filter: /renderer/, namespace: 'preview-frame-probe' }, () => ({
-        resolveDir: process.cwd(),
-        contents: `
+  plugins: [
+    {
+      name: 'preview-frame-probe',
+      setup(build) {
+        build.onResolve({ filter: /^three$/ }, ({ importer }) => {
+          if (importer.endsWith('ModelPreview.tsx'))
+            return { path: 'renderer', namespace: 'preview-frame-probe' };
+        });
+        build.onLoad({ filter: /renderer/, namespace: 'preview-frame-probe' }, () => ({
+          resolveDir: process.cwd(),
+          contents: `
           export * from 'three';
           export class WebGLRenderer {
             domElement = document.createElement('canvas');
@@ -216,9 +217,10 @@ const bundle = await build({
             }
             dispose() {this.setAnimationLoop(null);}
           }`,
-      }));
+        }));
+      },
     },
-  }],
+  ],
 });
 await mkdir('test-results/library-chooser-ui', { recursive: true });
 const browser = await chromium.launch({
@@ -232,10 +234,7 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const initialDetail = Promise.withResolvers();
-  let refreshHeld = false,
-    releaseRefresh,
-    searches = 0,
-    modelReads = 0,
+  let modelReads = 0,
     packageReads = 0,
     renderModels = false,
     modelMissing = false,
@@ -248,10 +247,12 @@ try {
       if (renderModels)
         return route.fulfill({
           json: {
-            meshes: [{
-              attributes: { position: { array: [0, 0, 0, 2, 0, 0, 0, 1, 0] } },
-              index: { array: [0, 1, 2] },
-            }],
+            meshes: [
+              {
+                attributes: { position: { array: [0, 0, 0, 2, 0, 0, 0, 1, 0] } },
+                index: { array: [0, 1, 2] },
+              },
+            ],
           },
         });
       return route.fulfill({
@@ -289,13 +290,6 @@ try {
           },
         });
       if (url.searchParams.has('id')) await initialDetail.promise;
-      if (!url.searchParams.has('id')) {
-        searches++;
-        if (refreshHeld)
-          await new Promise((resolve) => {
-            releaseRefresh = resolve;
-          });
-      }
       const library = url.searchParams.get('id')?.split(':')[0] ?? url.searchParams.get('library');
       const jlc = library === 'JLCPCB';
       let entry = (jlc ? jlcEntries : library === 'NextPCB' ? entries : kicadEntries)[kind];
@@ -523,7 +517,10 @@ try {
         .filter({ has: page.getByRole('heading', { name, exact: true }) });
     assert.equal(await section('Basic information').count(), 1);
     assert.equal(await section('Package').count(), 1);
-    assert.equal(await section('Description').count(), 1);
+    assert.equal(
+      await section('Description').locator('p').textContent(),
+      entries[kind].description,
+    );
     const pairs = await page
       .locator('.library-detail-attributes')
       .evaluateAll((nodes) =>
@@ -539,6 +536,8 @@ try {
     assert.equal(await page.getByRole('region', { name: 'CAD source', exact: true }).count(), 0);
     assert.equal(pairs.Manufacturer, 'Example Semiconductor');
     assert.equal(pairs.Package, 'SOP-8');
+    assert.equal(Object.hasOwn(pairs, 'Keywords'), false);
+    assert.equal(await page.locator('.dialog-footer').getByRole('button').count(), 1);
     if (kind === 'symbols') {
       assert.equal(await place.innerText(), '');
       assert.equal(await place.getAttribute('title'), 'Place');
@@ -546,35 +545,7 @@ try {
       await place.click();
       await place.click();
       assert.equal(await page.evaluate(() => window.placements), 1);
-      const refresh = page.getByRole('button', { name: 'Refresh library', exact: true });
       assert.equal(await place.locator('svg').count(), 1);
-      assert.equal(
-        await page
-          .locator('.dialog-footer')
-          .getByRole('button', { name: 'Refresh library' })
-          .count(),
-        1,
-      );
-      assert.ok(
-        await refresh.evaluate((node) => {
-          const place = node.parentElement.querySelector('[aria-label="Place"]');
-          return Boolean(node.compareDocumentPosition(place) & Node.DOCUMENT_POSITION_FOLLOWING);
-        }),
-      );
-      const before = searches;
-      await refresh.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
-      await page.waitForTimeout(50);
-      assert.equal(searches, before);
-      refreshHeld = true;
-      await refresh.click();
-      await page.getByRole('status', { name: 'Loading library', exact: true }).waitFor();
-      assert.equal(searches, before + 1);
-      assert.equal(await refresh.isDisabled(), true);
-      refreshHeld = false;
-      releaseRefresh();
-      await page.waitForFunction(
-        () => document.querySelector('.library-detail-id')?.textContent === 'NextPCB:123_component',
-      );
       await section('Symbol details').waitFor();
       assert.equal(await section('Symbol details').count(), 1);
       assert.equal(pairs.Units, '1');
@@ -737,8 +708,8 @@ try {
       .getByRole('heading', { name: 'JLCEDA/EasyEDA Official Library', exact: true })
       .waitFor();
     assert.equal(
-      await source.evaluate((node) => node === node.parentElement.lastElementChild),
-      true,
+      await source.evaluate((node) => node.nextElementSibling?.getAttribute('aria-label')),
+      'Price',
     );
     const jlc = source.getByRole('link', { name: 'JLCEDA official website', exact: true });
     const easyeda = source.getByRole('link', { name: 'EasyEDA official website', exact: true });
@@ -958,10 +929,12 @@ try {
     const footprintPose = await footprintPreview.getAttribute('viewBox');
     assert.notEqual(footprintPose, footprintFit);
     const iconSize = (kind) =>
-      fit(kind).locator('svg').evaluate((node) => {
-        const { width, height } = node.getBoundingClientRect();
-        return [width, height];
-      });
+      fit(kind)
+        .locator('svg')
+        .evaluate((node) => {
+          const { width, height } = node.getBoundingClientRect();
+          return [width, height];
+        });
     assert.deepEqual(await iconSize('footprint'), [16, 16]);
     const beforeRender = modelReads;
     await modelTab.click();

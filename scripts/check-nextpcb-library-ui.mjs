@@ -269,6 +269,7 @@ try {
   }
 
   await waitForDetail('Device:R');
+  assert.equal(await chooser.getByRole('combobox', { name: 'Price source' }).isVisible(), true);
   assert.equal(await categoryLevel(2).isDisabled(), true);
   assert.equal(
     await page.getByRole('button', { name: 'Footprint', exact: true }).isDisabled(),
@@ -345,6 +346,7 @@ try {
   const quoteStatus = pricing.getByRole('status');
   const checkedAt = 1_760_000_000_000;
   const quote = {
+    source: 'huaqiu',
     currency: 'USD',
     checkedAt,
     offers: [
@@ -356,7 +358,8 @@ try {
       },
       {
         sku: 'FIXTURE-456',
-        manufacturer: 'Other manufacturer',
+        manufacturer: null,
+        stock: 0,
         tiers: [{ quantity: 5, unitPrice: 0.07 }],
       },
     ],
@@ -382,16 +385,35 @@ try {
   htmlReply.resolve({ contentType: 'text/html', body: '<!DOCTYPE html><title>OpenPE</title>' });
   await quoteStatus.getByText(/Price service unavailable/).waitFor();
   assert.equal(await retryPrice.evaluate((button) => button === document.activeElement), true);
-  assert.deepEqual(priceRequests, [{ id: 'NextPCB:1001' }]);
+  assert.deepEqual(priceRequests, [{ id: 'NextPCB:1001', kind: 'symbols', source: 'huaqiu' }]);
 
   priceReply = { json: quote };
   await retryPrice.press('Space');
   await pricing.getByRole('cell', { name: '$0.08', exact: true }).waitFor();
-  assert.match(await pricing.locator('caption').first().textContent(), /Fixture Semiconductor/);
-  assert.match(await pricing.locator('caption').nth(1).textContent(), /Other manufacturer/);
-  assert.equal(await pricing.getByText('Stock 1,200', { exact: true }).isVisible(), true);
+  const priceTables = pricing.getByRole('table');
+  assert.equal(await priceTables.first().locator('caption').textContent(), 'Fixture Semiconductor');
+  assert.equal(await priceTables.last().locator('caption').count(), 0);
+  assert.equal(await pricing.getByText(/FIXTURE-123|FIXTURE-456/).count(), 0);
+  const firstPriceFooter = priceTables.first().locator('tfoot');
+  const lastPriceFooter = priceTables.last().locator('tfoot');
+  assert.equal(await firstPriceFooter.getByText('Stock 1,200', { exact: true }).isVisible(), true);
+  assert.equal(await firstPriceFooter.locator('time').count(), 0);
+  assert.equal(await lastPriceFooter.getByText('Stock 0', { exact: true }).isVisible(), true);
+  assert.ok(
+    await priceTables.evaluateAll((tables) =>
+      tables.every((table) => {
+        const body = table.tBodies[0].getBoundingClientRect();
+        const footer = table.tFoot.querySelector('.library-price-footer').getBoundingClientRect();
+        const stock = table.tFoot
+          .querySelector('.library-price-footer')
+          .lastElementChild.getBoundingClientRect();
+        return footer.top >= body.bottom && Math.abs(stock.right - body.right) <= 1;
+      }),
+    ),
+    'Stock aligns with the right edge below each price table.',
+  );
   const checkedDate = new Date(checkedAt).toISOString();
-  assert.equal(await pricing.locator('time').getAttribute('datetime'), checkedDate);
+  assert.equal(await lastPriceFooter.locator('time').getAttribute('datetime'), checkedDate);
   priceReply = { json: { ...quote, checkedAt: Number.MAX_SAFE_INTEGER } };
   await refreshPrice.click();
   await quoteStatus.getByText('Could not check prices. Try again.', { exact: true }).waitFor();
@@ -400,9 +422,44 @@ try {
   assert.equal(await pricing.locator('time').getAttribute('datetime'), checkedDate);
   assert.equal(await place.isEnabled(), true);
   await pricing.screenshot({ path: 'test-results/library-chooser-ui/price-retry.png' });
+  const priceSource = pricing.getByRole('combobox', { name: 'Price source' });
+  async function assertPriceSourceFits(name) {
+    const label = priceSource.locator('.select-value');
+    const viewport = page.viewportSize();
+    for (const width of [viewport.width, 360]) {
+      await page.setViewportSize({ ...viewport, width });
+      assert.equal(await label.textContent(), name);
+      assert.ok(
+        await label.evaluate((element) => element.scrollWidth <= element.clientWidth),
+        `The selected price source ${name} should fit at ${width}px.`,
+      );
+    }
+    await page.setViewportSize(viewport);
+  }
+  await assertPriceSourceFits('HQ Online');
+  await priceSource.press('Enter');
+  assert.deepEqual(await listbox('Price source').getByRole('option').allTextContents(), [
+    'LCSC Electronics',
+    'HQ Online',
+  ]);
+  await page.getByRole('option', { name: 'LCSC Electronics', exact: true }).click();
+  await assertPriceSourceFits('LCSC Electronics');
+  assert.equal(await pricing.getByRole('table').count(), 0);
+  assert.equal(priceRequests.length, 3);
+  priceReply = { json: { ...quote, source: 'lcsc', offers: [] } };
+  await checkPrice.press('Enter');
+  await quoteStatus
+    .getByText('No USD quote from LCSC Electronics for this component.', { exact: true })
+    .waitFor();
+  assert.deepEqual(priceRequests.at(-1), { id: 'NextPCB:1001', kind: 'symbols', source: 'lcsc' });
+  await priceSource.press('Enter');
+  await page.getByRole('option', { name: 'HQ Online', exact: true }).click();
+  await pricing.getByRole('cell', { name: '$0.08', exact: true }).waitFor();
   priceReply = { json: { ...quote, offers: [] } };
-  await retryPrice.click();
-  await quoteStatus.getByText('No matching price found on HQ Online.', { exact: true }).waitFor();
+  await refreshPrice.click();
+  await quoteStatus
+    .getByText('No USD quote from HQ Online for this component.', { exact: true })
+    .waitFor();
   assert.equal(await pricing.getByRole('table').count(), 0);
   await rows.nth(1).click();
   await waitForDetail('NextPCB:1002');
@@ -411,7 +468,7 @@ try {
   await rows.first().click();
   await waitForDetail('NextPCB:1001');
   assert.equal(await checkPrice.isEnabled(), true);
-  assert.equal(priceRequests.length, 4);
+  assert.equal(priceRequests.length, 5);
 
   const catalogSearches = () =>
     page.evaluate(() =>
@@ -438,8 +495,8 @@ try {
     'true',
   );
   await categoryLevel(1).press('Escape');
-  const footerRefresh = page.getByRole('button', { name: 'Refresh library', exact: true });
-  assert.equal(await footerRefresh.isEnabled(), true);
+  const retryCategories = chooser.getByRole('button', { name: 'Retry categories', exact: true });
+  assert.equal(await retryCategories.isEnabled(), true);
   const categoryRequestCount = () =>
     page.evaluate(
       () =>
@@ -449,7 +506,7 @@ try {
         ).length,
     );
   const beforeCategoryRetry = await categoryRequestCount();
-  await footerRefresh.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
+  await retryCategories.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
   await page.waitForTimeout(50);
   assert.equal(await categoryRequestCount(), beforeCategoryRetry);
   await page.evaluate(() => {
@@ -457,9 +514,9 @@ try {
     window.fixture.releaseCategories = null;
     window.fixture.failNextCategories = true;
   });
-  await footerRefresh.click();
+  await retryCategories.click();
   await page.waitForFunction(() => typeof fixture.releaseCategories === 'function');
-  assert.equal(await footerRefresh.isDisabled(), true);
+  await retryCategories.waitFor({ state: 'detached' });
   assert.equal(await categoryRequestCount(), beforeCategoryRetry + 1);
   assert.deepEqual(await catalogSearches(), initialCatalogSearches);
   assert.equal(await rows.count(), 16);
@@ -471,11 +528,11 @@ try {
     .getByText('NextPCB categories are temporarily unavailable.', { exact: true })
     .waitFor();
   assert.equal(
-    await footerRefresh.isEnabled(),
+    await retryCategories.isEnabled(),
     true,
     'A repeated category failure remains retryable.',
   );
-  await footerRefresh.click();
+  await retryCategories.click();
   assert.equal(await source.textContent(), 'NextPCB');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   await page
@@ -948,7 +1005,7 @@ try {
   await waitForAsync(page, () => performance.now() - window.fixture.editedAt > 350);
   assert.equal(await searchCount(), consumedOverlap);
 
-  // Explicit All remains selected through details, refresh, clearing and restoration.
+  // Explicit All remains selected through details, resubmission, clearing and restoration.
   await search.fill('Online');
   await submit.click();
   await waitForDetail('NextPCB:1001');
@@ -967,7 +1024,7 @@ try {
   await rows.nth(1).click();
   await waitForDetail('NextPCB:1002');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
-  await page.getByRole('button', { name: 'Refresh library', exact: true }).click();
+  await submit.click();
   await waitForDetail('NextPCB:1001');
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   await search.fill('');
@@ -1019,7 +1076,7 @@ try {
     fixture.holdCategories = true;
     fixture.releaseCategories = null;
   });
-  await footerRefresh.click();
+  await retryCategories.click();
   await page.waitForFunction(() => typeof fixture.releaseCategories === 'function');
   await search.press('Escape');
   await chooser.waitFor({ state: 'detached' });
@@ -1045,6 +1102,7 @@ try {
   await chooseSource('JLCPCB');
   await page.waitForFunction(() => Boolean(fixture.releaseJlcPage));
   await waitForDetail('JLCPCB:C8000');
+  assert.equal(await chooser.getByRole('combobox', { name: 'Price source' }).isVisible(), true);
   assert.equal(await categoryLevel(1).textContent(), 'All categories');
   assert.equal(await search.inputValue(), '');
   assert.equal(await rows.count(), 12, 'The first page is visible and usable during the append.');
@@ -1210,16 +1268,21 @@ try {
   assert.equal(await rows.count(), 1);
   assert.equal(await chooser.locator('.library-detail-id').textContent(), 'JLCPCB:C7593');
   assert.equal(await rows.first().getByTitle('Footprint: Unknown').count(), 1);
-  assert.equal(await footer.locator('button').count(), 2, 'Retry shares the refresh control.');
+  assert.equal(
+    await footer.locator('.library-footer-feedback').getByRole('button').count(),
+    1,
+    'Retry appears next to the request error.',
+  );
   assert.equal(await chooser.evaluate((node) => getComputedStyle(node).boxShadow), 'none');
   const beforeRetrySearches = await searchCount();
   await page.evaluate(() => {
     fixture.blockedCad = false;
     fixture.heldDetails.add('JLCPCB:C7593');
   });
-  await footer.getByRole('button', { name: 'Retry loading preview' }).click();
+  const retryPreview = footer.getByRole('button', { name: 'Retry loading preview' });
+  await retryPreview.click();
   await page.waitForFunction(() => fixture.pendingDetails.has('JLCPCB:C7593'));
-  assert.equal(await footer.getByRole('button', { name: 'Refresh library' }).isDisabled(), true);
+  await retryPreview.waitFor({ state: 'detached' });
   assert.equal(await rows.first().getAttribute('aria-pressed'), 'true');
   assert.equal(await searchCount(), beforeRetrySearches);
   await page.evaluate(() => fixture.releaseDetail('JLCPCB:C7593'));

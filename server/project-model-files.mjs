@@ -1,7 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, lstat, realpath, open, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { validateSimulationModels } from './simulation-model-format.mjs';
+import {
+  simulationModelDefinitions,
+  validateSimulationModels,
+} from './simulation-model-format.mjs';
+import { projectBoundTiModels } from './project-format.mjs';
+import { readCachedTiModel } from './ti-models.mjs';
+import {
+  importedTiModelPath,
+  readCachedTiImport,
+  readImportedTiModel,
+  verifyImportedTiModel,
+} from '../plugins/spice-simulation/host/ti-model-import.mjs';
+export { readCachedTiImport };
 
 export function verifyProjectModelBytes(model, bytes) {
   validateSimulationModels([model]);
@@ -102,5 +114,41 @@ export async function prepareProjectModelFiles(project, destination, sourceFile,
       (await store(model.id, signal));
     signal.throwIfAborted();
     await writeProjectModelFile(destination, model, bytes);
+  }
+}
+
+/** Carry explicit TI bindings through native Save without adding run references. */
+export async function prepareBoundTiModelFiles(project, bundle, destination, sourceFile, dataDir) {
+  const existing = new Map(bundle.files.map((entry) => [entry.name.toLowerCase(), entry]));
+  const { reviewedIds, libraries } = projectBoundTiModels(project);
+  for (const id of reviewedIds) {
+    const model = simulationModelDefinitions.find((entry) => entry.id === id);
+    if (existing.has(model.file.toLowerCase())) continue;
+    const bytes =
+      (await readProjectModelFile(destination, model)) ??
+      (sourceFile !== destination ? await readProjectModelFile(sourceFile, model) : null) ??
+      (await readCachedTiModel(dataDir, id));
+    if (bytes)
+      bundle.files.push({ name: model.file, source: bytes.toString('latin1'), encoding: 'latin1' });
+  }
+  for (const file of libraries) {
+    if (!importedTiModelPath(file)) continue;
+    const entry = existing.get(file.toLowerCase());
+    const current = await readImportedTiModel(file, path.dirname(destination));
+    if (entry) {
+      verifyImportedTiModel(file, Buffer.from(entry.source, entry.encoding ?? 'utf8'));
+      continue;
+    }
+    const bytes =
+      current ??
+      (sourceFile && sourceFile !== destination
+        ? await readImportedTiModel(file, path.dirname(sourceFile))
+        : null) ??
+      (await readCachedTiImport(dataDir, file));
+    if (!bytes)
+      throw new Error(
+        `The TI library ${path.posix.basename(file)} is missing. Download the package again before saving.`,
+      );
+    bundle.files.push({ name: file, source: bytes.toString('latin1'), encoding: 'latin1' });
   }
 }

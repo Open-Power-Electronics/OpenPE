@@ -1,5 +1,6 @@
 import type { Circuit } from './circuit';
 import type { PCB } from './pcb';
+import type { ModelCAD } from './model-cad';
 import { isOwnedPCB } from './immutable-project';
 import { footprintPoint, padPosition, padRotation } from './pcb-layout';
 import {
@@ -76,6 +77,7 @@ export function capturePCBAnnotationSelection(
   schematic: Circuit,
   ids: string[],
   markup?: AnnotationMarkup,
+  model?: { viewBasis: string; cad?: ModelCAD | null },
 ): Omit<AgentAnnotation, 'image' | 'comment'> {
   if (markup) validateAnnotationMarkup(markup);
   if (
@@ -87,6 +89,22 @@ export function capturePCBAnnotationSelection(
   const parts = new Map(schematic.parts.map((part) => [part.id, part]));
   const nets = new Map(board.nets.map((net) => [net.id, net.name]));
   const elements = ids.map((id): AnnotationElement => {
+    const solid = model?.cad?.objects.find((object) => object.id === id);
+    if (solid)
+      return {
+        id,
+        kind: 'solid',
+        label: solid.name,
+        properties: {
+          Shape: solid.kind,
+          Material: solid.material,
+          Opacity: String(solid.opacity),
+          'Position (mm)': JSON.stringify(solid.position),
+          'Rotation (deg)': JSON.stringify(solid.rotation),
+          'Size (mm)': JSON.stringify(solid.size),
+          ...(solid.color ? { Color: solid.color } : {}),
+        },
+      };
     for (const footprint of board.footprints) {
       const part = footprint.symbolId ? parts.get(footprint.symbolId) : undefined;
       const label = part?.ref || footprint.reference || footprint.libraryId;
@@ -215,17 +233,18 @@ export function capturePCBAnnotationSelection(
           Fill: 'Unfilled',
         },
       };
-    throw new Error('A selected layout element no longer exists. Select the elements again.');
+    throw new Error('A selected element no longer exists. Select the elements again.');
   });
   return {
     id: crypto.randomUUID(),
-    target: 'layout',
+    target: model ? 'object' : 'layout',
     version: 1,
     boardId: board.id,
     circuitId: schematic.id,
-    title: `${schematic.title.slice(0, 4087)} · Layout`,
+    title: `${schematic.title.slice(0, 4087)} · ${model ? 'Model' : 'Layout'}`,
     basis: pcbAnnotationFingerprint(board, schematic),
     elements,
+    ...(model ? { viewBasis: model.viewBasis } : {}),
     ...(markup ? { markup: structuredClone(markup) } : {}),
   };
 }

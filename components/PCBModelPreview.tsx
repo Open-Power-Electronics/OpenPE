@@ -688,6 +688,14 @@ function PCBModelPreview({
     cadVisible,
     cadSelectable,
   };
+  const annotationSelection = useRef<string[]>([]);
+  const selectAnnotation = useCallback((ids: string[]) => {
+    annotationSelection.current = ids;
+    setSelection(
+      ids.filter((id) => !cadState.current.modelCad?.objects.some((body) => body.id === id)),
+    );
+    redraw.current();
+  }, []);
   function changeModelFilters(next: ModelCadSelectionFilters) {
     if (cad.selectionBlocked) return;
     if (
@@ -1405,6 +1413,23 @@ function PCBModelPreview({
       let shadersReady = false;
       const clippingSphere = new THREE.Sphere();
       const clippingBounds = new THREE.Box3();
+      const canAnnotateCad = () => cadGroup.visible && modelsSelectableRef.current;
+      const annotationSolids = () =>
+        canAnnotateCad()
+          ? cadGroup.children.filter((object) => object.visible && !object.userData.modelCadPending)
+          : [];
+      const annotationMeshes = (ids: string[]) => {
+        if (!ids.length) return [];
+        const selected = new Set(ids);
+        return [
+          ...(components.visible && modelsSelectableRef.current
+            ? components.children.filter(
+                (object) => object.visible && selected.has(object.userData.footprintId),
+              )
+            : []),
+          ...annotationSolids().filter((object) => selected.has(object.userData.modelCadId)),
+        ];
+      };
       const drawScene = (
         selected: THREE.Object3D[] = [],
         moving = false,
@@ -1615,13 +1640,7 @@ function PCBModelPreview({
           }
           try {
             drawScene(
-              annotatingRef.current && components.visible
-                ? components.children.filter(
-                    (object) =>
-                      object.visible &&
-                      selectionRef.current.ids.includes(object.userData.footprintId),
-                  )
-                : [],
+              annotatingRef.current ? annotationMeshes(annotationSelection.current) : [],
               Boolean(changing || pressedPointers.current.size),
               false,
               !updateView,
@@ -2158,35 +2177,44 @@ function PCBModelPreview({
           : null;
       };
       const pick = (point: { x: number; y: number }) => {
-        return pickAt(point, {
-          cad: false,
+        const hit = pickAt(point, {
+          cad: canAnnotateCad(),
           components: modelsSelectableRef.current,
-        }).footprint;
+        });
+        return hit.cad?.id ?? hit.footprint;
       };
       pickAnnotation.current = pick;
       updateAnnotationView.current = () => {
         if (!host.current || !renderer || !annotatingRef.current) return;
         const ratio = host.current.clientHeight / host.current.clientWidth;
         const elements: ObjectAnnotationView['elements'] = [];
+        const projectBounds = (object: THREE.Object3D) => {
+          const box = new THREE.Box3().setFromObject(object);
+          if (box.isEmpty()) return null;
+          const points = [box.min.x, box.max.x].flatMap((x) =>
+            [box.min.y, box.max.y].flatMap((y) =>
+              [box.min.z, box.max.z].map((z) => new THREE.Vector3(x, y, z).project(camera)),
+            ),
+          );
+          const x = Math.max(0, Math.min(...points.map((p) => (p.x + 1) * 500)));
+          const y = Math.max(0, Math.min(...points.map((p) => (1 - p.y) * 500 * ratio)));
+          const width = Math.min(1000, Math.max(...points.map((p) => (p.x + 1) * 500))) - x;
+          const height =
+            Math.min(1000 * ratio, Math.max(...points.map((p) => (1 - p.y) * 500 * ratio))) - y;
+          return width > 0 && height > 0 ? { x, y, width, height } : null;
+        };
+        for (const object of annotationSolids()) {
+          const bounds = projectBounds(object);
+          if (bounds) elements.push({ id: object.userData.modelCadId, bounds, pointOnly: true });
+        }
         if (components.visible && modelsSelectableRef.current)
           for (const object of components.children) {
             if (!object.visible || !object.userData.footprintId) continue;
-            const box = new THREE.Box3().setFromObject(object);
-            if (box.isEmpty()) continue;
-            const points = [box.min.x, box.max.x].flatMap((x) =>
-              [box.min.y, box.max.y].flatMap((y) =>
-                [box.min.z, box.max.z].map((z) => new THREE.Vector3(x, y, z).project(camera)),
-              ),
-            );
-            const x = Math.max(0, Math.min(...points.map((p) => (p.x + 1) * 500)));
-            const y = Math.max(0, Math.min(...points.map((p) => (1 - p.y) * 500 * ratio)));
-            const width = Math.min(1000, Math.max(...points.map((p) => (p.x + 1) * 500))) - x;
-            const height =
-              Math.min(1000 * ratio, Math.max(...points.map((p) => (1 - p.y) * 500 * ratio))) - y;
+            const bounds = projectBounds(object);
+            if (!bounds) continue;
+            const { x, y, width, height } = bounds;
             const id = object.userData.footprintId as string;
             if (
-              width > 0 &&
-              height > 0 &&
               [
                 [0.5, 0.5],
                 [0.25, 0.25],
@@ -2204,7 +2232,7 @@ function PCBModelPreview({
                   width: Math.max(x + width, b.x + b.width) - Math.min(x, b.x),
                   height: Math.max(y + height, b.y + b.height) - Math.min(y, b.y),
                 };
-              } else elements.push({ id, bounds: { x, y, width, height } });
+              } else elements.push({ id, bounds });
             }
           }
         const basis = pcbObjectViewFingerprint({
@@ -2253,15 +2281,7 @@ function PCBModelPreview({
         try {
           return selectionPaint.withoutSelection(() =>
             cadPaint.withoutSelection(() => {
-              drawScene(
-                components.visible
-                  ? components.children.filter(
-                      (object) => object.visible && ids.includes(object.userData.footprintId),
-                    )
-                  : [],
-                false,
-                true,
-              );
+              drawScene(annotationMeshes(ids), false, true);
               return captureObjectAnnotationImage(renderer!.domElement, bounds, markup);
             }),
           );
@@ -3305,13 +3325,14 @@ function PCBModelPreview({
               <PCB3DAnnotations
                 board={board}
                 schematic={schematic}
+                modelCad={modelCad}
                 active={active && annotating && ready && !failed && !annotationProps.disabled}
                 view={annotationView}
                 {...annotationProps}
                 pick={(point) => pickAnnotation.current(point)}
                 captureImage={(...args) => captureAnnotation.current(...args)}
                 onExit={() => setAnnotating(false)}
-                onSelection={setSelection}
+                onSelection={selectAnnotation}
               />
             )}
             {!readOnly && (

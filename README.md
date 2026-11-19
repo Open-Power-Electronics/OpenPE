@@ -20,18 +20,9 @@ Start with a curated example or your own circuit. Save a portable KiCad project 
 
 ## Get OpenPE
 
-Choose a published **Windows x64**, **macOS arm64** or **Linux x64** package from [Releases](https://github.com/fleaxiao/OpenPE/releases), or build locally. Linux requires glibc 2.41+ (Debian 13 or equivalent). Solvers, libraries and examples are bundled. See [installation notes](docs/DEVELOPMENT.md#install-the-app) for platform requirements.
+Desktop packages bundle solvers, libraries and examples for **Windows x64**, **macOS arm64** and **Linux x64**. [Releases](https://github.com/fleaxiao/OpenPE/releases) · [Installation notes](docs/DEVELOPMENT.md#install-the-app)
 
-To develop from source with Node.js 24 and Git:
-
-```sh
-npm ci
-npm run libraries:download
-npm run thermal:prepare
-npm run dev
-```
-
-Initial preparation downloads pinned resources; unavailable solver releases need verified local archives or a maintainer rebuild. [Setup and development](docs/DEVELOPMENT.md) covers browser mode, resource access, checks and packaging.
+Use Node.js 24 and Git to [run from source](docs/DEVELOPMENT.md#run-from-source). The development guide also covers browser mode, offline solver preparation, checks and packaging.
 
 ## Learn more
 

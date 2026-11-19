@@ -11,6 +11,8 @@ import { child, children, parseSExpr, quote, val, writeSExpr, type SExpr } from 
 
 const tableName = 'fp-lib-table';
 type OnlineLibrary = Exclude<LibrarySource, 'KiCad'>;
+const onlinePackageFile = /^footprints\/(?:NextPCB|JLCPCB)\.pretty\/[^/]+\.kicad_mod$/;
+const portableModel = /^\$\{KIPRJMOD\}\/models\/[a-f0-9]{64}\.step$/;
 
 const libraryDirectory = (library: OnlineLibrary) => `footprints/${library}.pretty`;
 const libraryUri = (library: OnlineLibrary) => '${KIPRJMOD}/' + libraryDirectory(library);
@@ -67,7 +69,7 @@ function packageTree(library: OnlineLibrary, id: string, footprint: SExpr): void
   if (footprint[0] !== 'footprint' || val(footprint) !== id.slice(library.length + 1))
     fail(library, 'the native package does not match its component identity.');
   for (const model of footprintModels(footprint))
-    if (!/^\$\{KIPRJMOD\}\/models\/[a-f0-9]{64}\.step$/.test(model.path))
+    if (!portableModel.test(model.path))
       fail(
         library,
         'prepare the package 3D models as project-relative STEP assets before placement.',
@@ -141,4 +143,17 @@ export function projectFootprintSource(project: Project, id: string): FootprintS
   const footprint = parseSExpr(file.source);
   packageTree(library, id, footprint);
   return { id, footprint, projectAssets: true };
+}
+
+/** Downloaded libraries may be used by schematics without a linked board package. */
+export function projectPackageModelPaths(project: Project): string[] {
+  const paths = new Set<string>();
+  for (const file of project.nativeFiles?.files ?? []) {
+    if (!onlinePackageFile.test(file.name)) continue;
+    for (const model of children(parseSExpr(file.source), 'model')) {
+      const path = val(model);
+      if (portableModel.test(path)) paths.add(path);
+    }
+  }
+  return [...paths];
 }

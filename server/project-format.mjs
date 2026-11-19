@@ -6033,6 +6033,14 @@ for (const [relative, entry] of records) {
 }
 
 // lib/library.ts
+function isOnlineLibrary(source) {
+  return source === "NextPCB" || source === "JLCPCB";
+}
+function onlineFootprintLibrary(id) {
+  const separator = id.indexOf(":");
+  const library = id.slice(0, separator);
+  return separator > 0 && isOnlineLibrary(library) ? library : void 0;
+}
 function symbolUnits(library) {
   return Math.max(
     1,
@@ -6057,6 +6065,23 @@ function unitGraphics(library, unit = 1) {
     return [...graphics];
   }
   return graphics;
+}
+var ownedPartFields = /* @__PURE__ */ new WeakMap();
+function partFields(part) {
+  const owned = isOwnedProjectNode(part);
+  const cached = owned ? ownedPartFields.get(part) : void 0;
+  if (cached) return { ...cached };
+  const fields = {
+    ...Object.fromEntries(
+      children(part.raw || [], "property").filter((p) => !["Reference", "Value"].includes(val(p))).map((p) => [val(p), val(p, 2)])
+    ),
+    ...part.fields
+  };
+  if (owned) {
+    ownedPartFields.set(part, fields);
+    return { ...fields };
+  }
+  return fields;
 }
 function singleSimulationParameter(params) {
   const match = /^(\s*[a-zA-Z][\w.]*\s*=\s*)([^\s=]+)(\s*)$/.exec(params);
@@ -6772,7 +6797,7 @@ function localPadDrillLine({ drill = 0, drillSlot, drillOffset }) {
     { x: center.x + dx, y: center.y + dy }
   ];
 }
-function readPadDrill(node, fail5 = (message) => {
+function readPadDrill(node, fail6 = (message) => {
   throw new Error(message);
 }) {
   if (!node) return {};
@@ -6782,15 +6807,15 @@ function readPadDrill(node, fail5 = (message) => {
   const offsetValue = (n, i) => {
     const raw = val(n, i), value = Number(raw);
     if (!raw || !Number.isFinite(value) || Math.abs(value) > 1e5 || Math.abs(value - Number(value.toFixed(6))) > 1e-9)
-      fail5("Pad drill needs finite dimensions at 0.000001 mm precision.");
+      fail6("Pad drill needs finite dimensions at 0.000001 mm precision.");
     return value;
   };
   if (node.length !== dimensions + Number(!!offset) || node.slice(1, dimensions).some(Array.isArray) || offset && (node[dimensions] !== offset || offset.length !== 3 || offset.slice(1).some(Array.isArray)))
-    fail5("Use a round or oval drill with at most one XY offset.");
+    fail6("Use a round or oval drill with at most one XY offset.");
   const x = offsetValue(node, oval ? 2 : 1);
   const y = oval ? offsetValue(node, 3) : x;
   if (Math.min(x, y) < 1e-6 || Math.max(x, y) > 1e3 || oval && x === y)
-    fail5("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
+    fail6("Pad drill dimensions must be between 0.000001 and 1000 mm, with distinct oval axes.");
   const drillOffset = offset && {
     x: -offsetValue(offset, 1) || 0,
     y: -offsetValue(offset, 2) || 0
@@ -7035,14 +7060,14 @@ function validateCustomPad({
 }
 
 // lib/pcb-text.ts
-function footprintTextPlacement(node, fail5) {
+function footprintTextPlacement(node, fail6) {
   const at = child(node, "at");
   const inPosition = at?.at(-1) === "unlocked";
   const flags = children(node, "unlocked");
   const bare = node.filter((item) => item === "unlocked").length;
   const [flag] = flags;
   if (flags.length + bare + Number(inPosition) > 1 || flag && (flag.length !== 2 || !["yes", "no"].includes(val(flag))))
-    fail5("Invalid footprint text orientation flag.");
+    fail6("Invalid footprint text orientation flag.");
   return {
     at: inPosition ? at.slice(0, -1) : at,
     unlocked: inPosition || bare === 1 || val(flag) === "yes",
@@ -7066,12 +7091,12 @@ function padApertureLayers(pad) {
 function padHasElectricalPin(pad) {
   return pad.type !== "np_thru_hole" && !padApertureLayers(pad);
 }
-function readPadHeatsink(node, fail5) {
+function readPadHeatsink(node, fail6) {
   const properties = children(node, "property");
   if (!properties.length) return {};
   const [property] = properties;
   if (properties.length !== 1 || property.length !== 2 || property[1] !== "pad_prop_heatsink")
-    fail5("Unsupported pad fabrication property.");
+    fail6("Unsupported pad fabrication property.");
   return { heatsink: true };
 }
 
@@ -33902,6 +33927,79 @@ function projectWithNativeFiles(project, bundle) {
   };
 }
 
+// lib/library-project-assets.ts
+var tableName = "fp-lib-table";
+var onlinePackageFile = /^footprints\/(?:NextPCB|JLCPCB)\.pretty\/[^/]+\.kicad_mod$/;
+var portableModel = /^\$\{KIPRJMOD\}\/models\/[a-f0-9]{64}\.step$/;
+var libraryDirectory = (library) => `footprints/${library}.pretty`;
+var libraryUri = (library) => "${KIPRJMOD}/" + libraryDirectory(library);
+function fail4(library, message) {
+  throw new Error(`${library} project library: ${message}`);
+}
+function packageName(library, id) {
+  const name = id.slice(library.length + 1);
+  if (!name || name.length + ".kicad_mod".length > 160 || /[<>:"/\\|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name) || [".", ".."].includes(name) || /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(name))
+    fail4(
+      library,
+      "the component identity cannot be represented by a supported native footprint filename."
+    );
+  return `${libraryDirectory(library)}/${name}.kicad_mod`;
+}
+function libraryTable(library, files2) {
+  const file = files2.find((item) => item.name === tableName);
+  const tree = file ? parseSExpr(file.source) : ["fp_lib_table", ["version", "7"]];
+  if (tree[0] !== "fp_lib_table")
+    fail4(library, "fp-lib-table must contain a native footprint library table.");
+  const entries = children(tree, "lib").filter(
+    (entry) => val(child(entry, "name")).toLowerCase() === library.toLowerCase()
+  );
+  if (entries.length > 1 || entries.some(
+    (entry) => ["name", "type", "uri"].some(
+      (name) => children(entry, name).length !== 1 || child(entry, name).length !== 2
+    ) || val(child(entry, "name")) !== library || val(child(entry, "type")) !== "KiCad" || val(child(entry, "uri")) !== libraryUri(library)
+  ))
+    fail4(
+      library,
+      `preserve the existing ${library} library mapping before adding a downloaded package.`
+    );
+  return { file, tree, entry: entries[0] };
+}
+function packageTree(library, id, footprint) {
+  if (footprint[0] !== "footprint" || val(footprint) !== id.slice(library.length + 1))
+    fail4(library, "the native package does not match its component identity.");
+  for (const model of footprintModels(footprint))
+    if (!portableModel.test(model.path))
+      fail4(
+        library,
+        "prepare the package 3D models as project-relative STEP assets before placement."
+      );
+}
+function projectFootprintSource(project, id) {
+  const library = onlineFootprintLibrary(id);
+  if (!library) return void 0;
+  const name = packageName(library, id);
+  const files2 = project.nativeFiles?.files ?? [];
+  const { entry } = libraryTable(library, files2);
+  if (!entry) return void 0;
+  const file = files2.find((item) => item.name.toLowerCase() === name.toLowerCase());
+  if (!file) return void 0;
+  if (file.name !== name) fail4(library, `the native filename does not match ${id}.`);
+  const footprint = parseSExpr(file.source);
+  packageTree(library, id, footprint);
+  return { id, footprint, projectAssets: true };
+}
+function projectPackageModelPaths(project) {
+  const paths = /* @__PURE__ */ new Set();
+  for (const file of project.nativeFiles?.files ?? []) {
+    if (!onlinePackageFile.test(file.name)) continue;
+    for (const model of children(parseSExpr(file.source), "model")) {
+      const path = val(model);
+      if (portableModel.test(path)) paths.add(path);
+    }
+  }
+  return [...paths];
+}
+
 // lib/reference-simulation.json
 var reference_simulation_default = {
   profiles: [
@@ -38674,6 +38772,21 @@ var MAX_SCHEMATIC_FILES = 12;
 function projectSchematics(project) {
   return [project.schematic, ...project.additionalSchematics ?? []];
 }
+function projectBoundTiModels(project) {
+  const tiModelBindings = new Map(controllerModelSources.map((model) => [`TI:${model.id}`, model]));
+  const reviewedIds = /* @__PURE__ */ new Set();
+  const libraries = /* @__PURE__ */ new Set();
+  for (const sheet of projectSchematics(project)) {
+    for (const part of sheet.parts) {
+      const fields = partFields(part);
+      if (!fields["Sim.Library"] || !fields["Sim.Name"]) continue;
+      const model = tiModelBindings.get(fields["Sim.Library"]);
+      if (model && fields["Sim.Name"] === model.subcircuit) reviewedIds.add(model.id);
+      libraries.add(fields["Sim.Library"]);
+    }
+  }
+  return { reviewedIds, libraries };
+}
 function findSchematic(project, id) {
   return projectSchematics(project).find((schematic) => schematic.id === id);
 }
@@ -38767,35 +38880,35 @@ function createProject(schematic = emptyCircuit()) {
     extensions: {}
   };
 }
-function fail4(message) {
+function fail5(message) {
   throw new Error(`Invalid OpenPE project: ${message}`);
 }
 var ownedBounds = /* @__PURE__ */ new WeakMap();
 function bounded(value, depth = 0, budget = { nodes: 0 }) {
   if (depth > 80 || ++budget.nodes > 3e5)
-    fail4("document nesting or object count exceeds the supported limit.");
-  if (typeof value === "number" && !Number.isFinite(value)) fail4("numbers must be finite.");
+    fail5("document nesting or object count exceeds the supported limit.");
+  if (typeof value === "number" && !Number.isFinite(value)) fail5("numbers must be finite.");
   if (value && typeof value === "object") {
     const owned = isOwnedProjectNode(value);
     const cached = owned ? ownedBounds.get(value) : void 0;
     if (cached) {
       budget.nodes += cached.nodes - 1;
       if (depth + cached.depth > 80 || budget.nodes > 3e5)
-        fail4("document nesting or object count exceeds the supported limit.");
+        fail5("document nesting or object count exceeds the supported limit.");
       return cached.depth;
     }
     const start = budget.nodes;
     let height = 0;
     if (!Array.isArray(value) && ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
-      fail4("only plain JSON objects are allowed.");
+      fail5("only plain JSON objects are allowed.");
     for (const [key, v] of Object.entries(value)) {
-      if (["__proto__", "prototype", "constructor"].includes(key)) fail4(`reserved key ${key}.`);
+      if (["__proto__", "prototype", "constructor"].includes(key)) fail5(`reserved key ${key}.`);
       height = Math.max(height, 1 + bounded(v, depth + 1, budget));
     }
     if (owned) ownedBounds.set(value, { nodes: budget.nodes - start + 1, depth: height });
     return height;
   } else if (!["string", "number", "boolean"].includes(typeof value) && value !== null)
-    fail4("only JSON values are allowed.");
+    fail5("only JSON values are allowed.");
   return 0;
 }
 var ownedFootprintCertificates = /* @__PURE__ */ new WeakMap();
@@ -38813,22 +38926,22 @@ function validateProjectContent(input) {
   bounded(input);
   if (!stdin_default(input)) {
     const e = stdin_default.errors?.[0];
-    fail4(
+    fail5(
       `${e?.instancePath || "/"} ${e?.message || "does not match the editor model"} (${JSON.stringify(e?.params || {})}). Only project data is supported.`
     );
   }
   const project = input;
   validateSimulationModels(project.simulationModels);
   if (Object.hasOwn(project.extensions, "org.openpe.enclosure"))
-    fail4("unsupported retired enclosure data. Use current Model CAD objects.");
+    fail5("unsupported retired enclosure data. Use current Model CAD objects.");
   const modelCad = modelCadFromProject(project);
-  if (modelCad && !project.pcb) fail4("Model CAD requires its PCB layout.");
+  if (modelCad && !project.pcb) fail5("Model CAD requires its PCB layout.");
   if (project.nativeFiles) validateNativeSourceFiles(project.nativeFiles, project);
   const ids = /* @__PURE__ */ new Set();
   let boardIds;
   const id = (value) => {
     const key = value.toLowerCase();
-    if (ids.has(key)) fail4(`duplicate UUID ${value}.`);
+    if (ids.has(key)) fail5(`duplicate UUID ${value}.`);
     ids.add(key);
     boardIds?.push(value);
   };
@@ -38863,17 +38976,17 @@ function validateProjectContent(input) {
     ]) {
       circuitId(v.id);
       if (v.raw && val(child(v.raw, "uuid")).toLowerCase() !== v.id.toLowerCase())
-        fail4(`raw UUID disagrees with ${v.id}.`);
+        fail5(`raw UUID disagrees with ${v.id}.`);
     }
     if (d2.original && val(child(d2.original, "uuid")).toLowerCase() !== d2.id.toLowerCase())
-      fail4("original schematic UUID disagrees with schematic.id.");
+      fail5("original schematic UUID disagrees with schematic.id.");
     if (d2.original && child(d2.original, "paper"))
-      fail4("schematics use an infinite canvas. Remove paper-size metadata from the schematic.");
+      fail5("schematics use an infinite canvas. Remove paper-size metadata from the schematic.");
     const refs = /* @__PURE__ */ new Map();
     for (const p of d2.parts) {
       const previous = refs.get(p.ref);
       if (previous && (previous.libId !== p.libId || previous.units.has(p.unit || 1) || previous.value !== p.value || previous.fields !== JSON.stringify(p.fields || {})))
-        fail4(`duplicate reference or inconsistent units for ${p.ref}.`);
+        fail5(`duplicate reference or inconsistent units for ${p.ref}.`);
       if (previous) previous.units.add(p.unit || 1);
       else
         refs.set(p.ref, {
@@ -38882,14 +38995,14 @@ function validateProjectContent(input) {
           value: p.value,
           fields: JSON.stringify(p.fields || {})
         });
-      if (!Object.hasOwn(d2.libraries, p.libId)) fail4(`missing embedded symbol ${p.libId}.`);
+      if (!Object.hasOwn(d2.libraries, p.libId)) fail5(`missing embedded symbol ${p.libId}.`);
       const passiveField = simulationFieldNames.passiveModel;
       const rawPassive = children(p.raw ?? [], "property").find(
         (item) => val(item) === passiveField
       );
       const passive = p.fields?.[passiveField] ?? (rawPassive && val(rawPassive, 2));
       if (passive !== void 0 && (!isPassiveSimulationModel(passive) || !canSelectPassiveSimulationModel(p, d2)))
-        fail4(`${p.ref}: a passive simulation model requires a supported two-terminal symbol.`);
+        fail5(`${p.ref}: a passive simulation model requires a supported two-terminal symbol.`);
     }
     const checkSExpr = (n) => {
       if (validatedOwnedSExpressions.has(n)) return;
@@ -38899,16 +39012,16 @@ function validateProjectContent(input) {
           try {
             decodeKiCadString(a);
           } catch {
-            fail4("invalid quoted KiCad atom.");
+            fail5("invalid quoted KiCad atom.");
           }
-        } else if (!a || /[\s()"\\]/.test(a)) fail4("invalid unquoted KiCad atom.");
+        } else if (!a || /[\s()"\\]/.test(a)) fail5("invalid unquoted KiCad atom.");
       }
       if (isOwnedProjectNode(n)) validatedOwnedSExpressions.add(n);
     };
     for (const [key, lib] of Object.entries(d2.libraries)) {
       checkSExpr(lib);
       if (lib[0] !== "symbol" || val(lib) !== key)
-        fail4(`embedded symbol key disagrees with ${key}.`);
+        fail5(`embedded symbol key disagrees with ${key}.`);
     }
     if (d2.original) checkSExpr(d2.original);
     for (const v of [...d2.parts, ...d2.wires, ...d2.junctions, ...d2.labels, ...d2.noConnects || []])
@@ -38920,18 +39033,18 @@ function validateProjectContent(input) {
       [d2.noConnects || [], "no_connect"]
     ])
       for (const item of items)
-        if (item.raw && item.raw[0] !== tag) fail4("raw object type disagrees with its collection.");
+        if (item.raw && item.raw[0] !== tag) fail5("raw object type disagrees with its collection.");
     for (const l of d2.labels) {
-      if (l.shape && l.scope !== "global") fail4("label shapes require global scope.");
+      if (l.shape && l.scope !== "global") fail5("label shapes require global scope.");
       if (l.raw && l.raw[0] !== (l.scope === "global" ? "global_label" : "label"))
-        fail4("raw label scope disagrees with its collection.");
+        fail5("raw label scope disagrees with its collection.");
     }
     const parsed = parseCircuitTree(materializedCircuitTree(d2));
     if (parsed.parts.length !== d2.parts.length || parsed.wires.length !== d2.wires.length || parsed.labels.length !== d2.labels.length || parsed.junctions.length !== d2.junctions.length || (parsed.noConnects?.length || 0) !== (d2.noConnects?.length || 0))
-      fail4("raw object type disagrees with its collection.");
+      fail5("raw object type disagrees with its collection.");
     for (let i = 0; i < d2.parts.length; i++)
       if (parsed.parts[i].libId !== d2.parts[i].libId)
-        fail4("raw symbol library disagrees with libId.");
+        fail5("raw symbol library disagrees with libId.");
     if (owned) validatedOwnedCircuits.set(d2, { ids: circuitIds });
   }
   const d = project.schematic;
@@ -38952,33 +39065,33 @@ function validateProjectContent(input) {
   const names = /* @__PURE__ */ new Set();
   for (const n of board.nets) {
     id(n.id);
-    if (names.has(n.name)) fail4(`duplicate net name ${n.name}.`);
+    if (names.has(n.name)) fail5(`duplicate net name ${n.name}.`);
     names.add(n.name);
   }
   const net = (value) => {
-    if (value !== null && !netIds.has(value)) fail4(`missing PCB net ${value}.`);
+    if (value !== null && !netIds.has(value)) fail5(`missing PCB net ${value}.`);
   };
   const layer = (value) => {
     if (value.endsWith(".Cu") && !board.layers.some((l) => l === value))
-      fail4(`PCB layer ${value} is not in the board copper stack.`);
+      fail5(`PCB layer ${value} is not in the board copper stack.`);
   };
   const graphic = (g, footprint = false) => {
     id(g.id);
     layer(g.layer);
     if (g.kind === "arc" !== (g.mid !== void 0))
-      fail4("PCB arc graphics require exactly one middle point.");
+      fail5("PCB arc graphics require exactly one middle point.");
     if (g.points !== void 0 && g.kind !== "polygon")
-      fail4("PCB polygon points require a polygon graphic.");
+      fail5("PCB polygon points require a polygon graphic.");
     if (g.kind === "polygon" && !g.points?.length)
-      fail4("PCB polygon graphics require at least three vertices.");
+      fail5("PCB polygon graphics require at least three vertices.");
     if (g.kind === "text" !== (g.text !== void 0))
-      fail4("PCB text graphics require text properties.");
+      fail5("PCB text graphics require text properties.");
     if (g.keepUpright !== void 0 && (!footprint || g.kind !== "text"))
-      fail4("Text orientation applies only to footprint text.");
+      fail5("Text orientation applies only to footprint text.");
     if (g.kind === "dimension" !== (g.dimension !== void 0))
-      fail4("PCB dimensions require dimension properties.");
+      fail5("PCB dimensions require dimension properties.");
     if (g.fill !== void 0 && !["circle", "polygon"].includes(g.kind ?? ""))
-      fail4("Only circle and polygon PCB graphics support fill.");
+      fail5("Only circle and polygon PCB graphics support fill.");
   };
   let filledVertices = 0;
   const zone = (z) => {
@@ -38986,10 +39099,10 @@ function validateProjectContent(input) {
     net(z.netId);
     layer(z.layer);
     if (z.filledPolygons !== void 0 && (!z.layer.endsWith(".Cu") || z.keepout || z.fillEnabled === false))
-      fail4("saved copper fills require an enabled copper zone without keepout rules.");
-    if (z.filledPolygons?.length && !z.netId) fail4("saved copper fills require an assigned net.");
+      fail5("saved copper fills require an enabled copper zone without keepout rules.");
+    if (z.filledPolygons?.length && !z.netId) fail5("saved copper fills require an assigned net.");
     filledVertices += (z.filledPolygons ?? []).reduce((n, p) => n + p.points.length, 0);
-    if (filledVertices > 6e4) fail4("saved copper fills exceed the 60000-vertex board limit.");
+    if (filledVertices > 6e4) fail5("saved copper fills exceed the 60000-vertex board limit.");
     for (const outline of [
       z.outline,
       ...z.holes ?? [],
@@ -38999,7 +39112,7 @@ function validateProjectContent(input) {
         const next = outline[(i + 1) % outline.length];
         return a + p.x * next.y - next.x * p.y;
       }, 0);
-      if (Math.abs(area) < 1e-12) fail4("copper zones need a non-degenerate polygon.");
+      if (Math.abs(area) < 1e-12) fail5("copper zones need a non-degenerate polygon.");
     }
   };
   const reusableFootprints = isOwnedProject(project) && reusable && isOwnedProjectNode(board.footprints) && isOwnedProjectNode(board.nets) && isOwnedProjectNode(board.layers);
@@ -39017,14 +39130,14 @@ function validateProjectContent(input) {
       id(f.id);
       const p = d.parts.find((p2) => p2.id === f.symbolId);
       if (f.symbolId !== null && !p)
-        fail4(
+        fail5(
           `footprint ${f.libraryId} refers to a missing schematic symbol. Remove its PCB footprint before deleting that symbol.`
         );
       if (f.symbolId === null && (f.reference === void 0 || f.value === void 0))
-        fail4("unlinked footprints require their own reference and value.");
+        fail5("unlinked footprints require their own reference and value.");
       if (p && (f.reference !== void 0 || f.value !== void 0))
-        fail4("linked footprints derive their reference and value from the schematic symbol.");
-      if (p && linked.has(p.ref)) fail4(`multiple footprints refer to ${p.ref}.`);
+        fail5("linked footprints derive their reference and value from the schematic symbol.");
+      if (p && linked.has(p.ref)) fail5(`multiple footprints refer to ${p.ref}.`);
       if (p) linked.add(p.ref);
       const pins2 = new Set(
         d.parts.filter((part) => p && part.ref === p.ref).flatMap((part) => children(d.libraries[part.libId], "symbol")).flatMap((s) => children(s, "pin")).map((p2) => val(child(p2, "number")))
@@ -39035,41 +39148,41 @@ function validateProjectContent(input) {
         net(pad.netId);
         customPadWork += (pad.outline?.length ?? 0) ** 2;
         if (customPadWork > customPadWorkLimit)
-          fail4("custom pads exceed the board geometry limit.");
-        validateCustomPad(pad, fail4);
+          fail5("custom pads exceed the board geometry limit.");
+        validateCustomPad(pad, fail5);
         const electrical = padHasElectricalPin(pad);
         if (electrical && p && !pins2.has(pad.number) && !pad.unconnected)
-          fail4(`${p.ref} has no pin ${pad.number} for its PCB pad.`);
+          fail5(`${p.ref} has no pin ${pad.number} for its PCB pad.`);
         if (pad.unconnected && (pad.netId !== null || !p || pins2.has(pad.number)))
-          fail4("an explicitly unconnected package pad must have no schematic pin or net.");
+          fail5("an explicitly unconnected package pad must have no schematic pin or net.");
         if (pad.type === "np_thru_hole") {
-          if (pad.netId !== null) fail4("mechanical pads cannot carry an electrical net.");
-          if (!pad.drill) fail4("non-plated holes require a drill.");
+          if (pad.netId !== null) fail5("mechanical pads cannot carry an electrical net.");
+          if (!pad.drill) fail5("non-plated holes require a drill.");
         } else if (electrical) {
           if (pinNets.has(pad.number) && pinNets.get(pad.number) !== pad.netId)
-            fail4(`${p?.ref ?? f.reference} pin ${pad.number} has conflicting PCB net assignments.`);
+            fail5(`${p?.ref ?? f.reference} pin ${pad.number} has conflicting PCB net assignments.`);
           pinNets.set(pad.number, pad.netId);
         } else if (pad.netId !== null) {
-          fail4("Mask and paste apertures cannot carry a net.");
+          fail5("Mask and paste apertures cannot carry a net.");
         }
         if (pad.type === "thru_hole" && (!pad.drill || !pad.outline && pad.drill >= Math.min(pad.size.x, pad.size.y)))
-          fail4("through-hole drill must be positive and smaller than its pad.");
+          fail5("through-hole drill must be positive and smaller than its pad.");
         if (pad.type === "smd" && (pad.drill !== void 0 || pad.drillOffset !== void 0 || pad.drillSlot))
-          fail4("SMD pads cannot have a drill or drill offset.");
+          fail5("SMD pads cannot have a drill or drill offset.");
         if (pad.drillSlot && (!pad.drill || pad.drillSlot.length <= pad.drill))
-          fail4("slot length must exceed its tool diameter.");
+          fail5("slot length must exceed its tool diameter.");
         if (pad.type === "thru_hole" && (pad.drillSlot || pad.outline) && padDrillClearance(pad) <= 1e-12)
-          fail4(
+          fail5(
             pad.outline ? "a plated drill must stay inside its copper pad." : "a plated slot must stay inside its copper pad."
           );
         if (pad.shape === "circle" && pad.size.x !== pad.size.y)
-          fail4("circular pads need equal width and height.");
+          fail5("circular pads need equal width and height.");
         if (pad.shape === "roundrect" && pad.roundrectRatio === void 0)
-          fail4("rounded rectangular pads require a corner radius ratio.");
+          fail5("rounded rectangular pads require a corner radius ratio.");
         if (pad.shape !== "roundrect" && [pad.roundrectRatio, pad.chamferRatio, pad.chamfer].some((v) => v !== void 0))
-          fail4("rounded and chamfered corners require a roundrect pad.");
+          fail5("rounded and chamfered corners require a roundrect pad.");
         if (pad.layers?.includes("F&B.Cu") && (pad.type !== "np_thru_hole" || pad.shape !== "circle" || pad.drill !== pad.size.x || pad.drillOffset || pad.drillSlot || pad.layers.length !== 2 || !pad.layers.includes("*.Mask")))
-          fail4("The outer-copper layer marker requires an equal-size round mechanical hole.");
+          fail5("The outer-copper layer marker requires an equal-size round mechanical hole.");
         for (const padLayer of pad.layers ?? [])
           if (padLayer !== "*.Cu" && padLayer !== "F&B.Cu") layer(padLayer);
       }
@@ -39080,7 +39193,7 @@ function validateProjectContent(input) {
         id(point2.id);
         const position2 = footprintPoint(f, point2);
         if (Math.abs(position2.x) > 1e5 || Math.abs(position2.y) > 1e5)
-          fail4("footprint reference point exceeds the board coordinate limit.");
+          fail5("footprint reference point exceeds the board coordinate limit.");
       }
       for (const z of f.zones ?? []) zone(z);
     }
@@ -39100,43 +39213,43 @@ function validateProjectContent(input) {
   for (const track of board.tracks) layer(track.layer);
   for (const g of board.graphics) graphic(g);
   for (const v of board.vias)
-    if (v.drill >= v.diameter) fail4("via drill must be smaller than its diameter.");
+    if (v.drill >= v.diameter) fail5("via drill must be smaller than its diameter.");
   for (const z of board.zones) zone(z);
   if (reusable) validatedOwnedBoards.set(board, { libraries: d.libraries, pins, ids: boardIds });
   if (pendingFootprintCertificate)
     ownedFootprintCertificates.set(board.footprints, pendingFootprintCertificate);
 }
 function parseProject(source) {
-  if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail4("file exceeds 8 MB.");
+  if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail5("file exceeds 8 MB.");
   let data;
   try {
     data = JSON.parse(source);
   } catch {
-    fail4(
+    fail5(
       "expected a valid internal project snapshot. Open native KiCad files through Open project."
     );
   }
   bounded(data);
   if (!data || typeof data !== "object" || data.version !== 1)
-    fail4(
+    fail5(
       "unsupported format version. This project format is not supported; older projects are not migrated. Re-export the schematic from KiCad or create a new project."
     );
   if (data.format !== "openpe")
-    fail4(
+    fail5(
       "unsupported internal snapshot format. Retired project files are not supported. Open a native KiCad project or create a new project."
     );
   validateFileDocument(data);
   const project = fromProjectDocument(data);
   validateProjectContent(project);
   if (exceedsUtf8ByteLimit(formatProjectJson(toProjectDocument(project, true)), MAX_PROJECT_BYTES))
-    fail4("canonical JSON exceeds 8 MB.");
+    fail5("canonical JSON exceeds 8 MB.");
   return project;
 }
 var validatedOwnedDocumentComponents = /* @__PURE__ */ new WeakSet();
 function validateFileDocument(data, reuseOwnedData = false) {
   if (!stdin_default2(data)) {
     const e = stdin_default2.errors?.[0];
-    fail4(
+    fail5(
       `${e?.instancePath || "/"} ${e?.message} (${JSON.stringify(e?.params || {})}). The internal snapshot must match schemas/internal-project-snapshot.schema.json.`
     );
   }
@@ -39151,21 +39264,21 @@ function validateFileDocument(data, reuseOwnedData = false) {
       if (reusable && validatedOwnedDocumentComponents.has(p)) continue;
       if (p.simulation) {
         if (Object.hasOwn(p.fields ?? {}, "Sim.Params"))
-          fail4(`${p.reference}: simulation.valueFormat replaces Sim.Params; edit value only.`);
+          fail5(`${p.reference}: simulation.valueFormat replaces Sim.Params; edit value only.`);
         if (!p.value.trim() || p.value.includes("${") || p.simulation.valueFormat !== "${VALUE}" && /[=\s]/.test(p.value) || p.simulation.valueFormat.length - "${VALUE}".length + p.value.length > 4096)
-          fail4(`${p.reference}: invalid simulation value binding. Use a literal component value.`);
+          fail5(`${p.reference}: invalid simulation value binding. Use a literal component value.`);
       }
       for (const name of Object.keys(p.fieldLayout ?? {}))
         if (!["Reference", "Value"].includes(name) && !(name === "Sim.Params" && p.simulation) && !Object.hasOwn(p.fields ?? {}, name))
-          fail4(`field layout ${name} has no matching component field.`);
+          fail5(`field layout ${name} has no matching component field.`);
       if (reusable) pendingComponents.push(p);
     }
     for (const label of schematic.labels ?? [])
       if (label.scope === "global" !== (label.shape !== void 0))
-        fail4("global labels require a shape; local labels cannot have one.");
+        fail5("global labels require a shape; local labels cannot have one.");
     for (const node of schematic.kicad ?? [])
       if (node[0] === "title_block" && child(node, "title"))
-        fail4("the schematic name belongs in schematic.name, not KiCad metadata.");
+        fail5("the schematic name belongs in schematic.name, not KiCad metadata.");
   }
   for (const component of pendingComponents) validatedOwnedDocumentComponents.add(component);
 }
@@ -39178,7 +39291,7 @@ function serializeProject(project) {
   if (project.nativeFiles) document2.nativeFiles = projectNativeFilesSnapshot(project);
   validateFileDocument(document2, true);
   const source = formatProjectJson(document2);
-  if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail4("file exceeds 8 MB.");
+  if (exceedsUtf8ByteLimit(source, MAX_PROJECT_BYTES)) fail5("file exceeds 8 MB.");
   if (isOwnedProject(project)) ownedProjectSources.set(project, source);
   return source;
 }
@@ -39274,12 +39387,16 @@ export {
   exportKiCad,
   exportKiCadSchematicTree,
   findSchematic,
+  footprintModels,
   importDocument,
   parseProject,
+  projectBoundTiModels,
   projectDocumentFootprints,
   projectFilename,
+  projectFootprintSource,
   projectFromNativeFiles,
   projectNativeFiles,
+  projectPackageModelPaths,
   projectSchematics,
   removeSchematic,
   replaceNativeProjectFile,

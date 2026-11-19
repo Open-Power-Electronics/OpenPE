@@ -10,6 +10,12 @@ import { validateSpiceConfig } from '../../../server/project-spice-files.mjs';
 import { createSimulationModelStore } from '../../../server/example-models.mjs';
 import { spiceRuntime } from './spice-runtime.mjs';
 import { projectSimulationModels } from '../../../server/project-models.mjs';
+import { verifyProjectModelBytes } from '../../../server/project-model-files.mjs';
+import { controllerModelSources } from '../../../server/reference-model-format.mjs';
+import { simulationModelDefinitions } from '../../../server/simulation-model-format.mjs';
+import { spiceModelDeclarations } from './spice-model-declarations.cjs';
+import { searchTiModels, tiProductNumber } from './ti-model-search.mjs';
+import { importTiModelArchive, TiEncryptedModelError } from './ti-model-import.mjs';
 import { createSpiceResultCache } from './spice-cache.mjs';
 import { createSpiceRawReader, liveSpiceNetlist } from './spice-raw.mjs';
 import { sendSpiceEvent } from './spice-events.mjs';
@@ -348,12 +354,17 @@ export function registerSpice(
   let active = null;
   const detections = new Set();
   const lookups = new Set();
+  const modelSelections = new Map();
+  const modelSearches = new Map();
+  const encryptedTiImports = new Set();
   const unsubscribe = plugins?.subscribe((_id, state) => {
     if (_id !== 'spice-simulation@openpe') return;
     if (state.installed && state.enabled) return;
     active?.abort();
     for (const control of detections) control.abort();
     for (const control of lookups) control.abort();
+    for (const control of modelSelections.values()) control.abort();
+    modelSearches.clear();
   });
   function prepareRequest(body, loadOnly = false) {
     if (
@@ -446,6 +457,108 @@ export function registerSpice(
       lookups.delete(control);
     }
   });
+  const tiModelRequest = (field, parse, prepare) => async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      await plugins?.require('spice-simulation@openpe');
+    } catch (error) {
+      return res.status(403).json({ error: error.message });
+    }
+    const { fileId, [field]: input } = req.body ?? {};
+    const value = parse(input);
+    if (
+      !value ||
+      typeof fileId !== 'string' ||
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(fileId) ||
+      Object.keys(req.body).length !== 2
+    )
+      return res.status(400).json({
+        error: 'Enter a TI product number or choose a reviewed TI model for an open project.',
+      });
+    if (!modelStore || !modelFiles?.location)
+      return res.status(403).json({ error: 'Use the desktop app to choose TI models.' });
+    if (modelSelections.has(fileId))
+      return res.status(409).json({ error: 'Wait for the current TI model request to finish.' });
+    const control = new AbortController();
+    modelSelections.set(fileId, control);
+    res.on('close', () => control.abort());
+    try {
+      const location = modelFiles.location(fileId);
+      const result = await prepare(value, fileId, control.signal);
+      control.signal.throwIfAborted();
+      await plugins?.require('spice-simulation@openpe');
+      control.signal.throwIfAborted();
+      if (modelFiles.location(fileId) !== location)
+        throw new Error('The project location changed. Choose the TI model again.');
+      if (field === 'partNumber') {
+        modelSearches.delete(fileId);
+        modelSearches.set(fileId, { models: result.models, expires: Date.now() + 600000 });
+        if (modelSearches.size > 12) modelSearches.delete(modelSearches.keys().next().value);
+      }
+      if (!res.destroyed) res.json(result);
+    } catch (error) {
+      if (!res.destroyed)
+        res.status(control.signal.aborted ? 409 : 422).json({
+          error: control.signal.aborted ? 'TI model selection cancelled.' : error.message,
+          ...(!control.signal.aborted && error instanceof TiEncryptedModelError
+            ? { code: error.code }
+            : {}),
+        });
+    } finally {
+      modelSelections.delete(fileId);
+    }
+  };
+  app.post(
+    '/api/simulation/ti-model-search',
+    tiModelRequest('partNumber', tiProductNumber, async (part, _fileId, signal) => {
+      const result = await searchTiModels(part, modelFetcher, signal);
+      for (const model of result.models)
+        if (!model.modelId && encryptedTiImports.has(model.archive)) model.encryption = 'encrypted';
+      return result;
+    }),
+  );
+  app.post(
+    '/api/simulation/ti-model',
+    tiModelRequest(
+      'archive',
+      (archive) => typeof archive === 'string' && /^[A-Z0-9]{6,16}$/.test(archive) && archive,
+      async (archive, fileId, signal) => {
+        const search = modelSearches.get(fileId);
+        const choice = search?.models.find((model) => model.archive === archive);
+        if (!choice || search.expires <= Date.now())
+          throw new Error('Search TI again and select a package from the current results.');
+        if (
+          choice.encryption === 'encrypted' ||
+          (!choice.modelId && encryptedTiImports.has(archive))
+        )
+          throw new TiEncryptedModelError();
+        if (!choice.modelId) {
+          try {
+            return {
+              libraries: await importTiModelArchive(dataDir, archive, modelFetcher, signal),
+            };
+          } catch (error) {
+            if (error instanceof TiEncryptedModelError) {
+              choice.encryption = 'encrypted';
+              encryptedTiImports.add(archive);
+              if (encryptedTiImports.size > 64)
+                encryptedTiImports.delete(encryptedTiImports.values().next().value);
+            }
+            throw error;
+          }
+        }
+        const source = controllerModelSources.find((model) => model.id === choice.modelId);
+        const model = simulationModelDefinitions.find((entry) => entry.id === source.id);
+        const bytes =
+          (await modelFiles.read(fileId, model)) ?? (await modelStore(model.id, signal));
+        signal.throwIfAborted();
+        const { models, issues } = spiceModelDeclarations(verifyProjectModelBytes(model, bytes));
+        const declaration = models.find(({ name }) => name === source.subcircuit);
+        if (!declaration) throw new Error('The verified TI model declaration is unavailable.');
+        return { libraries: [{ path: model.file, models: [declaration], issues }] };
+      },
+    ),
+  );
   app.get('/api/simulation/status', async (_req, res) => {
     try {
       await plugins?.require('spice-simulation@openpe');
@@ -561,6 +674,7 @@ export function registerSpice(
       active?.abort();
       for (const c of detections) c.abort();
       for (const c of lookups) c.abort();
+      for (const c of modelSelections.values()) c.abort();
     },
   };
 }

@@ -99,11 +99,21 @@ export async function previewAssignedModel(
   index: number,
   signal: AbortSignal,
 ): Promise<MeshData[]> {
+  return previewProjectComponentModel(source, fileId, { footprintId }, index, signal);
+}
+
+export async function previewProjectComponentModel(
+  source: string,
+  fileId: string | undefined,
+  target: { footprintId: string } | { libraryId: string },
+  index: number,
+  signal: AbortSignal,
+): Promise<MeshData[]> {
   const result = await (
     await api('component-model', {
       method: 'POST',
       signal,
-      body: JSON.stringify({ source, ...(fileId ? { fileId } : {}), footprintId, index }),
+      body: JSON.stringify({ source, ...(fileId ? { fileId } : {}), ...target, index }),
     })
   ).json();
   checkCancelled(signal);

@@ -25,6 +25,18 @@ export function onlineFootprintLibrary(id: string) {
   return separator > 0 && isOnlineLibrary(library) ? library : undefined;
 }
 
+export function footprintSearchTerm(id: string) {
+  const library = onlineFootprintLibrary(id);
+  const name = id.slice(id.indexOf(':') + 1);
+  const nextpcb = library === 'NextPCB' && /^[1-9]\d{0,18}_(.+)$/.exec(name);
+  if (!nextpcb) return library === 'JLCPCB' ? name : id;
+  try {
+    return decodeURIComponent(nextpcb[1]);
+  } catch {
+    return '';
+  }
+}
+
 export type LibraryEntry = {
   id: string;
   name: string;
@@ -44,7 +56,15 @@ export type SymbolDetail = LibraryEntry & {
   warning?: string;
 };
 
+export const libraryPriceSources = ['lcsc', 'huaqiu'] as const;
+export type LibraryPriceSource = (typeof libraryPriceSources)[number];
+
+export function isLibraryPriceSource(value: unknown): value is LibraryPriceSource {
+  return libraryPriceSources.some((source) => source === value);
+}
+
 export type LibraryPrice = {
+  source: LibraryPriceSource;
   currency: 'USD';
   checkedAt: number;
   offers: {

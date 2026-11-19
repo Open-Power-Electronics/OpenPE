@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createModelCadPreviewService } from './model-cad-kernel.mjs';
 import { createLibraryService, createStepParserPool } from './libraries.mjs';
 import { libraryAssetFailure } from './library-asset-error.mjs';
+import { isLibraryPriceRequest } from './library-prices.mjs';
 import { createWorkbenchPlugins, registerWorkbenchPlugins } from './workbench-plugins.mjs';
 
 import {
@@ -141,7 +142,10 @@ export async function startBrowserPreviewServer({
     close() {},
   };
   const previews = previewFactory({ parseStep: sharedParsers.run });
-  const libraries = libraryFactory({ allowModelDownloads: false, stepParserPool: sharedParsers });
+  const libraries = libraryFactory({
+    allowModelDownloads: false,
+    stepParserPool: sharedParsers,
+  });
   const requests = new Set();
   function requestSignal(res) {
     const control = new AbortController();
@@ -199,20 +203,13 @@ export async function startBrowserPreviewServer({
       if (!res.destroyed) res.status(422).json({ error: String(error.message).slice(0, 4000) });
     }
   });
-  app.post('/api/browser-preview/price', express.json({ limit: '1kb' }), async (req, res) => {
-    const body = req.body;
-    if (
-      !body ||
-      Array.isArray(body) ||
-      Object.keys(body).join(',') !== 'id' ||
-      typeof body.id !== 'string' ||
-      !body.id.startsWith('NextPCB:') ||
-      body.id.length > 500
-    )
-      return res.status(400).json({ error: 'Send one NextPCB component ID.' });
+  app.post('/api/browser-preview/price', express.json({ limit: '2kb' }), async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!isLibraryPriceRequest(req.body))
+      return res.status(400).json({ error: 'Send a component ID, library kind and price source.' });
     const signal = requestSignal(res);
     try {
-      const result = await libraries.price(body.id, signal);
+      const result = await libraries.price(req.body, signal);
       if (!res.destroyed) res.json(result);
     } catch (error) {
       if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));

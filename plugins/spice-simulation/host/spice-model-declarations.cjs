@@ -1,7 +1,7 @@
 // Declaration discovery only: no body statements, includes or control commands
 // from an external library become executable through this parser.
 const { createHash } = require('node:crypto');
-const { reviewedModelEntries } = require('../host/spice-model-entrypoints.cjs');
+const { reviewedModelEntries } = require('./spice-model-entrypoints.cjs');
 const reviewedEntries = new Map(
   reviewedModelEntries.map(({ sha256, names }) => [
     sha256,
@@ -9,6 +9,7 @@ const reviewedEntries = new Map(
   ]),
 );
 const MAX_MODEL_BYTES = 2 * 1024 * 1024;
+const importedTiPath = /^models\/ti\/([0-9a-f]{64})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,95}\.lib)$/;
 const MAX_MODELS = 256;
 const MAX_PORTS = 64;
 const token = /^[A-Za-z0-9_+.$:#-]{1,128}$/;
@@ -58,7 +59,7 @@ function instanceModel(line) {
   });
 }
 
-function spiceModelDeclarations(bytes) {
+function spiceModelDeclarations(bytes, tiImport = false) {
   if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > MAX_MODEL_BYTES)
     throw new Error('Choose a nonempty SPICE library up to 2 MiB.');
   // Declaration names and ports are ASCII. Vendor comment/body bytes are opaque
@@ -149,7 +150,7 @@ function spiceModelDeclarations(bytes) {
     } else if (/^\.ends(?:\s|$)/i.test(line)) {
       const name = line.split(/\s+/)[1];
       const current = subcircuits.pop();
-      if (!current || (name && name.toLowerCase() !== current.name.toLowerCase()))
+      if (!current || (!tiImport && name && name.toLowerCase() !== current.name.toLowerCase()))
         throw new Error('Unmatched SPICE subcircuit end.');
       const references = [...current.references].filter(
         (reference) => !current.locals.has(reference),
@@ -191,4 +192,18 @@ function spiceModelDeclarations(bytes) {
   return { models: devices, issues };
 }
 
-module.exports = { MAX_MODEL_BYTES, spiceModelDeclarations };
+function inspectSpiceModelLibrary(bytes, file) {
+  const imported = importedTiPath.exec(file);
+  if (imported && createHash('sha256').update(bytes).digest('hex') !== imported[1])
+    throw new Error('The TI model file has changed. Restore its original bytes.');
+  // TI packages can contain stale optional .ENDS names. Inspect the balanced
+  // block structure without rewriting the received bytes or compiling them.
+  return spiceModelDeclarations(bytes, !!imported);
+}
+
+module.exports = {
+  MAX_MODEL_BYTES,
+  importedTiPath,
+  inspectSpiceModelLibrary,
+  spiceModelDeclarations,
+};

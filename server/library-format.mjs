@@ -551,6 +551,21 @@ function onlineFootprintLibrary(id) {
   const library = id.slice(0, separator);
   return separator > 0 && isOnlineLibrary(library) ? library : void 0;
 }
+function footprintSearchTerm(id) {
+  const library = onlineFootprintLibrary(id);
+  const name = id.slice(id.indexOf(":") + 1);
+  const nextpcb = library === "NextPCB" && /^[1-9]\d{0,18}_(.+)$/.exec(name);
+  if (!nextpcb) return library === "JLCPCB" ? name : id;
+  try {
+    return decodeURIComponent(nextpcb[1]);
+  } catch {
+    return "";
+  }
+}
+var libraryPriceSources = ["lcsc", "huaqiu"];
+function isLibraryPriceSource(value) {
+  return libraryPriceSources.some((source) => source === value);
+}
 function isLibraryAssetUnavailable(error) {
   return error instanceof Error && "code" in error && error.code === "OPENPE_LIBRARY_ASSET_UNAVAILABLE";
 }
@@ -809,8 +824,11 @@ export {
   displayPartValue,
   exampleModelPath,
   extraSymbolAnnotations,
+  footprintSearchTerm,
   isLibraryAssetUnavailable,
+  isLibraryPriceSource,
   isOnlineLibrary,
+  libraryPriceSources,
   librarySources,
   modelReferenceKey,
   num,

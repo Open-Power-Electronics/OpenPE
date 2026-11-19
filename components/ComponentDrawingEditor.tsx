@@ -17,11 +17,9 @@ import {
   ZoomOut,
   Scan,
   RotateCcw,
-  Check,
   X,
   Crosshair,
   RefreshCw,
-  LoaderCircle,
 } from 'lucide-react';
 import type { CapabilityHost } from '@/api/capabilities';
 import type { Circuit, Point } from '@/lib/circuit';
@@ -1002,18 +1000,14 @@ export default function ComponentDrawingEditor({
             </button>
           </div>
           <button
-            className="dialog-button primary dialog-footer-icon"
+            className="dialog-button primary"
             aria-label="Apply drawing"
             title="Apply drawing"
             aria-busy={busy}
             disabled={!canApply}
             onClick={() => void apply()}
           >
-            {busy ? (
-              <LoaderCircle size={18} className={styles.preparing} aria-hidden="true" />
-            ) : (
-              <Check size={18} aria-hidden="true" />
-            )}
+            {busy ? 'Applying…' : 'Apply'}
           </button>
         </div>
       }

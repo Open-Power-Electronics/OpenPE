@@ -48,7 +48,10 @@ const bundle = await build({
       const connectorLibrary=emcProject.schematic.libraries['Connector_Generic:Conn_01x02'];
       const connector=createLibraryPart(circuit,connectorLibrary,7.62,0);
       circuit.libraries[connector.libId]=structuredClone(connectorLibrary);
-      circuit.parts.push(initial, capacitor, source, connector);
+      const lm5001=lm5001Project.schematic.parts.find(part=>part.ref==='U1');
+      const tiPart=createLibraryPart(circuit,lm5001Project.schematic.libraries[lm5001.libId],10.16,0);
+      circuit.libraries[tiPart.libId]=structuredClone(lm5001Project.schematic.libraries[lm5001.libId]);
+      circuit.parts.push(initial, capacitor, source, connector, tiPart);
       const core = new ProjectCore(createProject(circuit));
       const getRevision = () => core.getSnapshot().revision;
       window.modelPickerCalls=[];
@@ -59,7 +62,8 @@ const bundle = await build({
       window.modelInspectionCalls=[];
       window.modelCatalog=[{name:'RES_A',kind:'subcircuit',pins:['+','-']},
         {name:'RES_B',kind:'subcircuit',pins:['+','-']}];
-      window.openpe={inspectSpiceModel:async(fileId,library)=>{
+      window.openpe={connection:async()=>({base:'http://localhost',token:'fixture'}),
+      inspectSpiceModel:async(fileId,library)=>{
         window.modelInspectionCalls.push({fileId,library});
         if(window.modelInspectionMode==='delayed')return new Promise(resolve=>{window.resolveModelInspection=resolve;});
         return window.modelInspectionResult;
@@ -133,6 +137,72 @@ try {
   await page.route('http://localhost/**', (route) =>
     route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
   );
+  const tiRequests = [];
+  const tiSearches = [];
+  const tiSearchResults = {
+    LM5001: [
+      {
+        archive: 'SNVM540',
+        title: 'LM5001 PSpice Transient Model',
+        encryption: 'encrypted',
+      },
+      {
+        archive: 'SNVM921',
+        title: 'LM5001 Unencrypted PSpice Transient Model',
+        encryption: 'unencrypted',
+        modelId: 'reference-lm5001',
+      },
+    ],
+    TPS61020: [
+      {
+        archive: 'SLIM039A',
+        title: 'TPS61020 Unencrypted PSpice Transient Model Package (Rev. A)',
+        encryption: 'unencrypted',
+      },
+      { archive: 'UNKNWN', title: 'TPS61020 second model', encryption: 'unknown' },
+    ],
+  };
+  await page.route('http://localhost/api/simulation/ti-model-search', async (route) => {
+    const body = route.request().postDataJSON();
+    tiSearches.push(body);
+    await route.fulfill({
+      json: { partNumber: body.partNumber, models: tiSearchResults[body.partNumber] ?? [] },
+    });
+  });
+  let tiResponse = 'failed';
+  const importedLibrary = `models/ti/${'e'.repeat(64)}/TPS61020.lib`;
+  let finishTiResponse;
+  const pendingTiResponse = new Promise((resolve) => (finishTiResponse = resolve));
+  await page.route('http://localhost/api/simulation/ti-model', async (route) => {
+    const body = route.request().postDataJSON();
+    tiRequests.push(body);
+    if (tiResponse === 'pending') await pendingTiResponse;
+    if (tiResponse === 'failed')
+      return route.fulfill({ status: 422, json: { error: 'TI model download failed.' } });
+    if (body.archive === 'UNKNWN')
+      return route.fulfill({
+        status: 422,
+        json: {
+          error: 'This TI package contains encrypted models.',
+          code: 'OPENPE_TI_MODEL_ENCRYPTED',
+        },
+      });
+    const libraries =
+      body.archive === 'SLIM039A'
+        ? [
+            {
+              path: importedLibrary,
+              models: [
+                { name: 'TPS61020_TRANS', kind: 'subcircuit', pins: lm5001Models.models[0].pins },
+                { name: 'TPS61020_AUX', kind: 'subcircuit', pins: ['1', '2'] },
+                { name: 'TPS61020_ALT', kind: 'subcircuit', pins: lm5001Models.models[0].pins },
+              ],
+              issues: [],
+            },
+          ]
+        : [{ path: 'models/LM5001.lib', ...lm5001Models }];
+    await route.fulfill({ json: { libraries } });
+  });
   await page.goto('http://localhost');
   for (const file of ['app/globals.css', 'app/workspace.css'])
     await page.addStyleTag({ content: await readFile(file, 'utf8') });
@@ -141,6 +211,11 @@ try {
   const state = () => page.evaluate(() => window.modelState);
   const field = (name) => page.getByLabel(name, { exact: true });
   const browse = page.getByRole('button', { name: 'Browse SPICE models', exact: true });
+  const chooser = page.getByRole('dialog', { name: 'Choose SPICE model' });
+  const browseLocal = async () => {
+    await browse.click();
+    await chooser.getByRole('button', { name: 'Browse local file' }).click();
+  };
   const model = page.getByRole('combobox', { name: 'Simulation model', exact: true });
   const fileModels = model;
   const filePopup = page.getByRole('listbox', { name: 'Simulation model', exact: true });
@@ -202,9 +277,130 @@ try {
   };
   const open = async (path = 'models/vendor.lib', models = resistanceCatalog) => {
     await choose('file', path, models);
-    await browse.click();
+    await browseLocal();
     await idle();
   };
+  await browse.click();
+  const search = chooser.getByRole('searchbox', { name: 'Search SPICE models' });
+  const searchButton = chooser.getByRole('button', { name: 'Search', exact: true });
+  const source = chooser.getByRole('combobox', { name: 'Model source', exact: true });
+  const sourceOptions = page.getByRole('listbox', { name: 'Model source', exact: true });
+  const download = chooser.getByRole('button', { name: 'Download', exact: true });
+  const useTi = chooser.getByRole('button', { name: 'Use model', exact: true });
+  await search.waitFor();
+  const chooserBounds = await chooser.boundingBox();
+  assert.equal(await chooser.locator('.dialog-footer button').count(), 1);
+  assert.equal(chooserBounds.width, 712);
+  assert.equal(chooserBounds.height, 720);
+  assert.ok(Math.abs(chooserBounds.x + chooserBounds.width / 2 - 380) < 1);
+  assert.ok(Math.abs(chooserBounds.y + chooserBounds.height / 2 - 400) < 1);
+  assert.equal(await search.evaluate((input) => input === document.activeElement), true);
+  assert.equal(
+    await search.inputValue(),
+    await page.locator('[aria-label="Component value"]').inputValue(),
+  );
+  assert.equal(await chooser.getByRole('radio').count(), 0);
+  assert.equal(await source.textContent(), 'Texas Instruments');
+  await source.press('ArrowDown');
+  const tiSource = sourceOptions.getByRole('option', { name: 'Texas Instruments', exact: true });
+  await tiSource.waitFor();
+  assert.equal(await sourceOptions.getByRole('option').count(), 1);
+  assert.equal(await tiSource.getAttribute('aria-selected'), 'true');
+  await source.press('Escape');
+  await sourceOptions.waitFor({ state: 'hidden' });
+  assert.equal(await chooser.isVisible(), true);
+  await source.click();
+  await tiSource.click();
+  await sourceOptions.waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 360, height: 800 });
+  const narrow = await chooser.boundingBox();
+  assert.ok((await source.boundingBox()).x >= narrow.x);
+  const searchAction = await searchButton.boundingBox();
+  assert.ok(searchAction.x + searchAction.width <= narrow.x + narrow.width);
+  await page.setViewportSize({ width: 760, height: 800 });
+  assert.deepEqual(tiSearches, []);
+  await search.fill('lm5001');
+  assert.deepEqual(tiSearches, []);
+  await search.dispatchEvent('compositionstart');
+  await search.press('Enter');
+  assert.deepEqual(tiSearches, []);
+  await search.dispatchEvent('compositionend');
+  await search.press('Enter');
+  const reviewedPackage = chooser.getByRole('radio', { name: /SNVM921/ });
+  const encryptedPackage = chooser.getByRole('radio', { name: /SNVM540.*Encrypted/ });
+  await reviewedPackage.waitFor();
+  assert.equal(await chooser.getByRole('radio').count(), 2);
+  assert.deepEqual(tiSearches, [{ fileId: 'project-grant', partNumber: 'LM5001' }]);
+  assert.deepEqual(tiRequests, []);
+  assert.equal(await encryptedPackage.isDisabled(), true);
+  assert.equal(await reviewedPackage.isChecked(), true);
+  assert.equal(await chooser.getByText('Reviewed for simulation', { exact: true }).count(), 0);
+  await download.click();
+  await chooser.getByText('TI model download failed.').waitFor();
+  assert.equal((await state()).source, original.source);
+  assert.deepEqual(tiRequests, [{ fileId: 'project-grant', archive: 'SNVM921' }]);
+  tiResponse = 'pending';
+  await Promise.all([
+    page.waitForRequest('http://localhost/api/simulation/ti-model'),
+    download.click(),
+  ]);
+  await chooser.getByRole('button', { name: 'Downloading…' }).waitFor();
+  await page.keyboard.press('Escape');
+  tiResponse = 'ready';
+  finishTiResponse();
+  await chooser.waitFor({ state: 'hidden' });
+  assert.equal((await state()).source, original.source);
+  assert.equal(await browse.evaluate((button) => button === document.activeElement), true);
+  await configure({ partIndex: 4 });
+  await ensureOpen();
+  const beforeTi = await state();
+  await browse.click();
+  assert.equal(await search.inputValue(), 'LM5001');
+  await search.fill('TPS-invalid');
+  await searchButton.click();
+  await chooser.getByText('No SPICE packages found for TPS-INVALID.').waitFor();
+  assert.equal(await download.isDisabled(), true);
+  await search.fill('TPS61020');
+  await searchButton.click();
+  const unknownPackage = chooser.getByRole('radio', { name: /UNKNWN/ });
+  await unknownPackage.waitFor();
+  assert.equal(await download.isDisabled(), true);
+  await unknownPackage.check();
+  await download.click();
+  await chooser.getByText('This TI package contains encrypted models.').waitFor();
+  assert.equal(await unknownPackage.isDisabled(), true);
+  assert.equal(await download.isDisabled(), true);
+  await chooser.getByRole('radio', { name: /SLIM039A/ }).check();
+  await download.click();
+  await chooser.getByRole('radio', { name: /TPS61020_TRANS/ }).waitFor();
+  assert.equal(await chooser.getByRole('radio', { name: /TPS61020_AUX/ }).isDisabled(), true);
+  assert.equal(await useTi.isDisabled(), true);
+  assert.equal((await state()).source, beforeTi.source);
+  await chooser.getByRole('radio', { name: /TPS61020_ALT/ }).check();
+  await useTi.click();
+  await chooser.waitFor({ state: 'hidden' });
+  assert.equal((await state()).fields['Sim.Library'], importedLibrary);
+  assert.equal((await state()).fields['Sim.Name'], 'TPS61020_ALT');
+  await undoTo(0);
+  await browse.click();
+  await search.fill('LM5001');
+  await searchButton.click();
+  await reviewedPackage.waitFor();
+  assert.equal(await reviewedPackage.isChecked(), true);
+  await search.dispatchEvent('compositionstart');
+  await download.click();
+  assert.equal(tiRequests.length, 4);
+  await search.dispatchEvent('compositionend');
+  await download.click();
+  await chooser.getByRole('radio', { name: /LM5001_TRANS/ }).waitFor();
+  assert.equal((await state()).source, beforeTi.source);
+  await useTi.click();
+  await chooser.waitFor({ state: 'hidden' });
+  assert.equal((await state()).fields['Sim.Library'], 'TI:reference-lm5001');
+  assert.equal((await state()).fields['Sim.Name'], 'LM5001_TRANS');
+  assert.equal((await state()).undoDepth, beforeTi.undoDepth + 1);
+  await undoTo(0);
+  assert.equal((await state()).source, beforeTi.source);
   await configure({ partIndex: 3 });
   await ensureOpen();
   assert.equal(await library.inputValue(), '');
@@ -348,7 +544,7 @@ try {
   await undoTo(0);
   for (const mode of ['cancel', 'failure', 'stale-host']) {
     await choose(mode);
-    await browse.click();
+    await browseLocal();
     await idle();
     assert.equal((await state()).source, original.source);
   }
@@ -387,7 +583,7 @@ try {
   ]) {
     await choose('delayed');
     await page.evaluate(() => delete window.resolveModelPicker);
-    await browse.click();
+    await browseLocal();
     await page.waitForFunction(() => typeof window.resolveModelPicker === 'function');
     if (change.revision) await page.evaluate(() => window.invalidateModelRevision());
     else await configure(change);
@@ -577,7 +773,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    'Themed model dropdown, source DC/PULSE/SIN conversion, parameter adaptation, geometry-preserving Core edits, undo/reopen, external models, pin mapping, keyboard/IME and stale origins passed.',
+    'Centered local/TI chooser, verified model binding, themed model dropdown, waveform conversion, undo, keyboard/IME and stale origins passed.',
   );
 } finally {
   await browser.close();

@@ -2,6 +2,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -16,7 +17,6 @@ import {
   Library,
   RotateCw,
   ChevronDown,
-  Check,
   ChevronRight,
   ChevronUp,
   Square,
@@ -26,12 +26,17 @@ import { api } from '@/lib/bridge';
 import type { CapabilityHost } from '@/api/capabilities';
 import {
   catalogSource,
+  footprintSearchTerm,
   isLibraryAssetUnavailable,
+  isLibraryPriceSource,
   isOnlineLibrary,
+  libraryPriceSources,
+  onlineFootprintLibrary,
   propertyValue,
   unitGraphics,
   type LibraryEntry,
   type LibraryPrice,
+  type LibraryPriceSource,
   type SymbolDetail,
 } from '@/lib/library';
 import {
@@ -40,7 +45,12 @@ import {
   type LibrarySearchPage,
   type LibrarySearchProgress,
 } from '@/lib/library-search';
-import { children, val, type SExpr } from '@/lib/sexpr';
+import { child, children, val, type SExpr } from '@/lib/sexpr';
+import { parseProject } from '@/lib/project';
+import { projectFootprintSource } from '@/lib/library-project-assets';
+import { footprintModels } from '@/lib/pcb-models';
+import { previewProjectComponentModel } from '@/lib/pcb-preview-cache';
+import { modelReferenceKey } from '@/lib/example-model-paths';
 import Dialog from './Dialog';
 import Select from './Select';
 import LibrarySourceSelect, {
@@ -51,12 +61,31 @@ import SymbolPreview from './SymbolPreview';
 import FootprintPreview, { canPreviewFootprint } from './FootprintPreview';
 import WorkspaceLoading, { LoadingProgress } from './WorkspaceLoading';
 const ModelPreview = lazy(() => import('./ModelPreview'));
-export type FootprintDetail = LibraryEntry & {
+export type FootprintDetail = Omit<LibraryEntry, 'footprint'> & {
   footprint: SExpr;
   pads: string[];
   models: { path: string }[];
+  projectAssets?: true;
 };
 type Detail = SymbolDetail | FootprintDetail;
+
+function readProjectFootprint(source: string, id: string): FootprintDetail | undefined {
+  const library = onlineFootprintLibrary(id);
+  if (!library) return;
+  const local = projectFootprintSource(parseProject(source), id);
+  if (!local) return;
+  return {
+    id,
+    library,
+    name: footprintSearchTerm(id),
+    description: val(child(local.footprint, 'descr')),
+    keywords: val(child(local.footprint, 'tags')),
+    footprint: local.footprint,
+    pads: [...new Set(children(local.footprint, 'pad').map((pad) => val(pad)).filter(Boolean))],
+    models: footprintModels(local.footprint),
+    projectAssets: true,
+  };
+}
 const symbolColumns = [
   ['name', 'Name'],
   ['package', 'Package'],
@@ -419,10 +448,11 @@ function LibraryInfoRows({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
-function isLibraryPrice(value: unknown): value is LibraryPrice {
+function isLibraryPrice(value: unknown, source: LibraryPriceSource): value is LibraryPrice {
   const quote = value as Partial<LibraryPrice> | null;
   return (
-    quote?.currency === 'USD' &&
+    quote?.source === source &&
+    quote.currency === 'USD' &&
     typeof quote.checkedAt === 'number' &&
     Number.isSafeInteger(quote.checkedAt) &&
     quote.checkedAt > 0 &&
@@ -460,21 +490,44 @@ const priceCurrency = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 8,
 });
 const priceQuantity = new Intl.NumberFormat('en-US');
+const priceSourceLabels = { lcsc: 'LCSC Electronics', huaqiu: 'HQ Online' };
+const priceSourceOptions = libraryPriceSources.map((value) => ({
+  value,
+  label: priceSourceLabels[value],
+}));
+const priceSourceNames = priceSourceOptions.map(({ label }) => label);
 
 function LibraryPricing({
   id,
+  kind,
+  source,
+  onSourceChange,
   composing,
   onKeyDown,
 }: {
   id: string;
+  kind: 'symbols' | 'footprints';
+  source: LibraryPriceSource;
+  onSourceChange: (source: LibraryPriceSource) => void;
   composing: () => boolean;
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const pending = useRef<AbortController | null>(null);
-  const [quote, setQuote] = useState<LibraryPrice | null>(null);
+  const [quotes, setQuotes] = useState<Partial<Record<LibraryPriceSource, LibraryPrice>>>({});
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<'service' | 'quote' | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
+  const quote = quotes[source];
+  const sourceLabel = priceSourceLabels[source];
+
+  function changeSource(value: string) {
+    if (composing() || !isLibraryPriceSource(value) || value === source) return;
+    pending.current?.abort();
+    pending.current = null;
+    setLoading(false);
+    setFailure(null);
+    onSourceChange(value);
+  }
 
   async function refresh() {
     if (pending.current || composing()) return;
@@ -483,7 +536,8 @@ function LibraryPricing({
     setLoading(true);
     setFailure(null);
     try {
-      const response = await api(`library-price?id=${encodeURIComponent(id)}`, {
+      const query = new URLSearchParams({ id, kind, source });
+      const response = await api(`library-price?${query}`, {
         signal: request.signal,
         cache: 'no-store',
       });
@@ -498,43 +552,64 @@ function LibraryPricing({
       }
       const data: unknown = await response.json();
       if (request.signal.aborted) return;
-      if (isLibraryPrice(data)) setQuote(data);
+      if (isLibraryPrice(data, source)) setQuotes((previous) => ({ ...previous, [source]: data }));
       else setFailure('quote');
     } catch {
       if (!request.signal.aborted) setFailure('quote');
     } finally {
-      pending.current = null;
-      if (!request.signal.aborted) setLoading(false);
+      if (pending.current === request) {
+        pending.current = null;
+        if (!request.signal.aborted) setLoading(false);
+      }
     }
   }
 
   const checkedAt = quote ? new Date(quote.checkedAt) : null;
   const hasPrices = Boolean(quote?.offers.length);
+  const checkedTime = checkedAt && (hasPrices || (!loading && !failure)) && (
+    <span className="library-price-checked">
+      {failure || loading ? 'Last checked ' : 'Checked '}
+      <time dateTime={checkedAt.toISOString()} title={checkedAt.toLocaleString('en-US')}>
+        {checkedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+      </time>
+    </span>
+  );
+  const priceActionLabel = failure ? 'Retry price check' : quote ? 'Refresh price' : 'Check price';
   let status = '';
-  if (loading) status = 'Checking HQ Online…';
+  if (loading) status = `Checking ${sourceLabel}…`;
   else if (failure === 'service')
     status = window.openpe
       ? 'Price service unavailable. Restart OpenPE and try again.'
       : 'Price service unavailable. Reload the browser preview and try again.';
   else if (failure) status = 'Could not check prices. Try again.';
-  else if (quote && !hasPrices) status = 'No matching price found on HQ Online.';
+  else if (quote && !hasPrices) status = `No USD quote from ${sourceLabel} for this component.`;
   return (
     <section className="library-info-section library-pricing" aria-label="Price">
       <div className="library-pricing-heading">
-        <div>
-          <h3>Price</h3>
-          <p className="library-price-source">HQ Online · USD</p>
+        <h3>Price</h3>
+        <div className="library-price-controls">
+          <Select
+            compact
+            label="Price source"
+            value={source}
+            options={priceSourceOptions}
+            fitLabels={priceSourceNames}
+            onBeforeOpen={() => !composing()}
+            onChange={changeSource}
+            popupMatchWidth="content"
+          />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={priceActionLabel}
+            title={priceActionLabel}
+            aria-disabled={loading}
+            onClick={() => void refresh()}
+            onKeyDown={onKeyDown}
+          >
+            <RotateCw size={16} aria-hidden="true" />
+          </button>
         </div>
-        <button
-          type="button"
-          className="dialog-button secondary"
-          aria-disabled={loading}
-          onClick={() => void refresh()}
-          onKeyDown={onKeyDown}
-        >
-          <RotateCw size={14} aria-hidden="true" />
-          {failure ? 'Retry price check' : quote ? 'Refresh price' : 'Check price'}
-        </button>
       </div>
       <p className="library-price-status" role="status" data-error={Boolean(failure)}>
         {failure && <CircleAlert size={15} aria-hidden="true" />}
@@ -542,43 +617,43 @@ function LibraryPricing({
       </p>
       {quote && hasPrices && (
         <div className="library-price-offers">
-          {quote.offers.map(({ sku, manufacturer, stock, tiers }) => (
-            <table className="library-price-table" key={sku}>
-              <caption>
-                <span>
-                  <span className="library-price-identity">
-                    <strong>{manufacturer ?? 'Manufacturer not listed'}</strong>
-                    <span>{sku}</span>
-                  </span>
-                  {stock !== undefined && <span>Stock {priceQuantity.format(stock)}</span>}
-                </span>
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Quantity</th>
-                  <th scope="col">Unit price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tiers.map((tier) => (
-                  <tr key={tier.quantity}>
-                    <td>{priceQuantity.format(tier.quantity)}+</td>
-                    <td>{priceCurrency.format(tier.unitPrice)}</td>
+          {quote.offers.map(({ sku, manufacturer, stock, tiers }, index) => {
+            const offerCheckedTime = index === quote.offers.length - 1 ? checkedTime : null;
+            return (
+              <table className="library-price-table" key={sku}>
+                {manufacturer !== null && <caption>{manufacturer}</caption>}
+                <thead>
+                  <tr>
+                    <th scope="col">Quantity</th>
+                    <th scope="col">Unit price (USD)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          ))}
+                </thead>
+                <tbody>
+                  {tiers.map((tier) => (
+                    <tr key={tier.quantity}>
+                      <td>{priceQuantity.format(tier.quantity)}+</td>
+                      <td>{priceCurrency.format(tier.unitPrice)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {(stock !== undefined || offerCheckedTime) && (
+                  <tfoot>
+                    <tr>
+                      <td colSpan={2}>
+                        <div className="library-price-footer">
+                          {offerCheckedTime}
+                          {stock !== undefined && <span>Stock {priceQuantity.format(stock)}</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            );
+          })}
         </div>
       )}
-      {checkedAt && (hasPrices || (!loading && !failure)) && (
-        <p className="library-price-checked">
-          {failure || loading ? 'Last checked ' : 'Checked '}
-          <time dateTime={checkedAt.toISOString()} title={checkedAt.toLocaleString('en-US')}>
-            {checkedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          </time>
-        </p>
-      )}
+      {!hasPrices && checkedTime && <div className="library-price-footer">{checkedTime}</div>}
     </section>
   );
 }
@@ -589,9 +664,7 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
     ? symbol.footprint || propertyValue(symbol.symbol, 'Footprint')
     : detail.id;
   const datasheet = symbol ? propertyValue(symbol.symbol, 'Datasheet') : '';
-  const descriptionRows: [string, ReactNode][] = [];
-  if (detail.keywords) descriptionRows.push(['Keywords', detail.keywords]);
-  if (datasheet && datasheet !== '~') descriptionRows.push(['Datasheet', datasheet]);
+  const hasDatasheet = datasheet !== '' && datasheet !== '~';
   const pins = symbol
     ? new Set(
         unitGraphics(symbol.symbol, unit).flatMap((node) =>
@@ -645,10 +718,10 @@ function LibraryInformation({ detail, unit }: { detail: Detail; unit: number }) 
           />
         </LibraryInfoSection>
       )}
-      {(detail.description || descriptionRows.length > 0) && (
+      {(detail.description || hasDatasheet) && (
         <LibraryInfoSection title="Description" wide>
           {detail.description && <p>{detail.description}</p>}
-          {descriptionRows.length > 0 && <LibraryInfoRows rows={descriptionRows} />}
+          {hasDatasheet && <LibraryInfoRows rows={[['Datasheet', datasheet]]} />}
         </LibraryInfoSection>
       )}
     </div>
@@ -675,6 +748,7 @@ type BrowseSnapshot = {
   tab: '2d' | '3d';
   model: number;
   modelAvailability: ModelAvailability | null;
+  exactFootprint: boolean;
 };
 export default function LibraryChooser({
   kind,
@@ -688,12 +762,15 @@ export default function LibraryChooser({
   actionLabel,
   header,
   canChoose = true,
-  initialPreview = '2d',
   requireModel = false,
+  initialModelPath,
+  initialFootprintId,
+  projectSource,
+  fileId,
 }: {
   kind: 'symbols' | 'footprints';
   onClose: () => void;
-  onChoose: (detail: Detail, unit: number, modelIndex: number) => void;
+  onChoose: (detail: Detail, unit: number, modelIndex: number) => void | Promise<void>;
   initialSearch?: string;
   initialLibrary?: string;
   capabilityHost?: CapabilityHost;
@@ -702,19 +779,24 @@ export default function LibraryChooser({
   actionLabel?: string;
   header?: ReactNode;
   canChoose?: boolean;
-  initialPreview?: '2d' | '3d';
   requireModel?: boolean;
+  initialModelPath?: string;
+  initialFootprintId?: string;
+  projectSource?: string;
+  fileId?: string;
 }) {
   const [query, setQuery] = useState(initialSearch),
     [library, setLibrary] = useState(initialLibrary);
   const [category, setCategory] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState(initialSearch);
+  const [priceSource, setPriceSource] = useState<LibraryPriceSource>('huaqiu');
   const [symbolSort, setSymbolSort] = useState<SymbolSort | null>(null);
   const [entries, setEntries] = useState<LibraryEntry[]>([]),
     [libraries, setLibraries] = useState<string[]>([]);
   const [total, setTotal] = useState(0),
     [offset, setOffset] = useState(0),
-    [selected, setSelected] = useState('');
+    [selected, setSelected] = useState(initialFootprintId ?? '');
+  const [exactFootprint, setExactFootprint] = useState(Boolean(initialFootprintId));
   const [symbolResultLimit, setSymbolResultLimit] = useState(symbolBatchSize);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [resultsError, setResultsError] = useState('');
@@ -724,6 +806,9 @@ export default function LibraryChooser({
   const [packagePreviewRetry, setPackagePreviewRetry] = useState(0);
   const [footprintUnavailable, setFootprintUnavailable] = useState(false);
   const [modelAvailability, setModelAvailability] = useState<ModelAvailability | null>(null);
+  const [verifiedModel, setVerifiedModel] = useState<{ detail: FootprintDetail; index: number }>();
+  const [confirming, setConfirming] = useState(false);
+  const [confirmationError, setConfirmationError] = useState('');
   const [retry, setRetry] = useState(0);
   const [categoryStatus, setCategoryStatus] = useState<LibraryCategoryStatus>({
     source: '',
@@ -735,7 +820,7 @@ export default function LibraryChooser({
   const categoryReloadSerial = useRef(0);
   const [detail, setDetail] = useState<Detail | null>(null),
     [unit, setUnit] = useState(1);
-  const [busy, setBusy] = useState(true),
+  const [busy, setBusy] = useState(!initialFootprintId),
     [error, setError] = useState(''),
     [tab, setTab] = useState<'2d' | '3d'>('2d'),
     [model, setModel] = useState(0);
@@ -747,13 +832,17 @@ export default function LibraryChooser({
   const restoredDetail = useRef<BrowseSnapshot | null>(null);
   const librarySource = catalogSource(library);
   const online = isOnlineLibrary(library);
-  const displayedEntries = useMemo(() => {
+  const displayedEntries = useMemo<LibraryEntry[]>(() => {
+    if (exactFootprint && detail) {
+      const { footprint: _footprint, ...entry } = detail;
+      return [entry];
+    }
     if (kind !== 'symbols') return entries;
     const visible = entries.slice(0, symbolResultLimit);
     return symbolSort
       ? visible.toSorted((first, second) => compareSymbolRows(first, second, symbolSort))
       : visible;
-  }, [entries, kind, symbolResultLimit, symbolSort]);
+  }, [detail, entries, exactFootprint, kind, symbolResultLimit, symbolSort]);
   const selectedEntry =
     detail?.id === selected ? detail : entries.find((entry) => entry.id === selected);
   const failedPreviewEntry = error ? selectedEntry : undefined;
@@ -779,9 +868,9 @@ export default function LibraryChooser({
     (online || kind === 'symbols') &&
     (nextOffset !== null || visibleCount < entries.length) &&
     !resultsError;
-  const chooseLabel = actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign footprint');
-  const refreshingPreview = !!selected && !detail && !error;
-  const refreshDisabled = resultsLoading || retryingCategories || refreshingPreview;
+  const chooseLabel = actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign');
+  const loadingPreview = !!selected && !detail && !error;
+  const retryDisabled = confirming || resultsLoading || retryingCategories || loadingPreview;
   function blockComposingActivation(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) {
       event.preventDefault();
@@ -800,6 +889,7 @@ export default function LibraryChooser({
   function invalidate() {
     if (results.current) results.current.scrollTop = 0;
     setBusy(true);
+    setExactFootprint(false);
     setBatchProgress(null);
     setResultsError('');
     setPackagePreviewError('');
@@ -811,6 +901,7 @@ export default function LibraryChooser({
     setNextOffset(null);
     setSelected('');
     setDetail(null);
+    setConfirmationError('');
     chosen.current = false;
   }
   function loadMore() {
@@ -829,6 +920,7 @@ export default function LibraryChooser({
     setModelAvailability(null);
     setDetail(null);
     setSelected(id);
+    setConfirmationError('');
     chosen.current = false;
   }
   function submitSearch() {
@@ -838,15 +930,15 @@ export default function LibraryChooser({
     setOffset(0);
     setRetry((value) => value + 1);
   }
-  function refreshResults() {
-    if (composing.current || refreshDisabled) return;
+  function retryLibraryRequest() {
+    if (composing.current || retryDisabled) return;
     if (resultsError) {
       setResultsError('');
       setBusy(true);
       setRetry((value) => value + 1);
       return;
     }
-    if (error && selected) {
+    if (error && selected && !footprintUnavailable) {
       setError('');
       setPreviewRetry((value) => value + 1);
       return;
@@ -857,11 +949,7 @@ export default function LibraryChooser({
     }
     if (failedCategories) {
       setCategoryReload({ source: librarySource, serial: ++categoryReloadSerial.current });
-      return;
     }
-    invalidate();
-    setOffset(0);
-    setRetry((value) => value + 1);
   }
   function changeLibrary(nextLibrary: string, nextCategory: string) {
     if (nextLibrary === library && nextCategory === category) return;
@@ -886,6 +974,7 @@ export default function LibraryChooser({
         tab,
         model,
         modelAvailability,
+        exactFootprint,
       });
     const previous = source !== nextSource ? sourceSnapshots.current.get(nextSource) : undefined;
     if (previous) {
@@ -915,6 +1004,7 @@ export default function LibraryChooser({
       setTab(previous.tab);
       setModel(previous.model);
       setModelAvailability(previous.modelAvailability);
+      setExactFootprint(previous.exactFootprint);
       setBusy(false);
     }
   }
@@ -934,6 +1024,7 @@ export default function LibraryChooser({
       restoredSearch.current = false;
       return;
     }
+    if (exactFootprint) return;
     const control = new AbortController();
     setBusy(true);
     setBatchProgress(null);
@@ -1001,7 +1092,7 @@ export default function LibraryChooser({
         }
       });
     return () => control.abort();
-  }, [kind, submittedQuery, library, category, offset, retry, capabilityHost]);
+  }, [kind, submittedQuery, library, category, offset, retry, capabilityHost, exactFootprint]);
   useEffect(() => {
     if (busy || !needsSymbolPage || nextOffset === null) return;
     setBusy(true);
@@ -1019,15 +1110,27 @@ export default function LibraryChooser({
     setFootprintUnavailable(false);
     setModelAvailability(null);
     setUnit(1);
-    setTab(online ? '2d' : initialPreview);
+    setTab(requireModel ? '3d' : '2d');
     setModel(0);
     if (!selected) return;
     const control = new AbortController();
-    void readLibraryDetail(kind, selected, control.signal, capabilityHost)
+    void Promise.resolve()
+      .then(() => {
+        control.signal.throwIfAborted();
+        return (
+          (kind === 'footprints' && projectSource && readProjectFootprint(projectSource, selected)) ||
+          readLibraryDetail(kind, selected, control.signal, capabilityHost)
+        );
+      })
       .then((value) => {
         const data = value as Detail;
         if (control.signal.aborted) return;
         setDetail(data);
+        if (initialModelPath && 'models' in data) {
+          const key = modelReferenceKey(initialModelPath);
+          const index = data.models.findIndex(({ path }) => modelReferenceKey(path) === key);
+          if (index >= 0) setModel(index);
+        }
         const { id, footprintPreview } = data;
         if ('symbol' in data && data.library === 'JLCPCB' && footprintPreview)
           setEntries((current) =>
@@ -1041,13 +1144,23 @@ export default function LibraryChooser({
         }
       });
     return () => control.abort();
-  }, [kind, selected, capabilityHost, initialPreview, online, previewRetry]);
+  }, [kind, selected, capabilityHost, initialModelPath, previewRetry, projectSource, requireModel]);
   const footprintDetail = detail && 'models' in detail ? detail : null;
+  const projectLibraryId = footprintDetail?.projectAssets ? footprintDetail.id : undefined;
+  const loadProjectModel = useCallback(
+    (signal: AbortSignal) =>
+      previewProjectComponentModel(projectSource!, fileId, { libraryId: projectLibraryId! }, model, signal),
+    [fileId, model, projectLibraryId, projectSource],
+  );
+  const projectModel = footprintDetail?.projectAssets
+    ? footprintModels(footprintDetail.footprint)[model]
+    : undefined;
   const modelErrors =
     modelAvailability?.detail === footprintDetail ? modelAvailability.unavailable : undefined;
   const modelError = modelErrors?.[model];
   const hasPreviewableModel = footprintDetail?.models.some((_, index) => !modelErrors?.[index]);
   const modelReason = hasPreviewableModel ? undefined : modelError || noModel;
+  const selectedModelIssue = modelError || modelReason;
   const show3d = tab === '3d' && !modelReason;
   const footprintReason =
     footprintDetail && !canPreviewFootprint(footprintDetail.footprint) ? noFootprintPreview : '';
@@ -1055,25 +1168,43 @@ export default function LibraryChooser({
     detail && 'error' in detail && detail.error
       ? detail.error
       : requireModel && footprintDetail
-        ? modelError || modelReason
+        ? selectedModelIssue
         : '';
   const ready =
     canChoose &&
+    !confirming &&
     (!resultsLoading || loadingDefaultPages) &&
     !error &&
     detail?.id === selected &&
     !!detail &&
-    !invalid;
+    !invalid &&
+    (!requireModel || (verifiedModel?.detail === footprintDetail && verifiedModel.index === model));
   const footerError =
+    confirmationError ||
     resultsError ||
     (!footprintUnavailable && error) ||
     packagePreviewError ||
-    invalid ||
+    (!requireModel && invalid) ||
     (failedCategories && categoryStatus.error);
+  const retryLabel = resultsError
+    ? 'Retry loading results'
+    : (error && selected && !footprintUnavailable) || packagePreviewError
+      ? 'Retry loading preview'
+      : !invalid && failedCategories
+        ? 'Retry categories'
+        : '';
   const choose = () => {
-    if (ready && detail && !chosen.current) {
+    if (ready && detail && !chosen.current && !composing.current) {
       chosen.current = true;
-      onChoose(detail, unit, model);
+      const confirmation = onChoose(detail, unit, model);
+      if (!confirmation) return;
+      setConfirming(true);
+      setConfirmationError('');
+      void confirmation.catch((error: Error) => {
+        chosen.current = false;
+        setConfirming(false);
+        setConfirmationError(error.message);
+      });
     }
   };
   function navigate(event: KeyboardEvent<HTMLElement>, focusResult: boolean) {
@@ -1118,43 +1249,37 @@ export default function LibraryChooser({
         footer={
           <>
             {footerError && (
-              <p className="library-footer-feedback" role="alert">
-                {footerError}
-              </p>
+              <div className="library-footer-feedback">
+                <p role="alert">{footerError}</p>
+                {retryLabel && !confirmationError && (
+                  <button
+                    type="button"
+                    className="dialog-button secondary"
+                    aria-label={retryLabel}
+                    disabled={retryDisabled}
+                    onClick={retryLibraryRequest}
+                    onKeyDown={blockComposingActivation}
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
             )}
-            <div className="dialog-footer-toolbar">
-              <button
-                className="icon-button dialog-footer-icon"
-                aria-label={
-                  resultsError
-                    ? 'Retry loading results'
-                    : error || packagePreviewError
-                      ? 'Retry loading preview'
-                      : 'Refresh library'
-                }
-                title={resultsError || error || packagePreviewError ? 'Retry' : 'Refresh'}
-                disabled={refreshDisabled}
-                onClick={refreshResults}
-                onKeyDown={blockComposingActivation}
-              >
-                <RotateCw size={18} aria-hidden="true" />
-              </button>
-              <button
-                className="dialog-button primary dialog-footer-icon"
-                aria-label={chooseLabel}
-                title={chooseLabel}
-                disabled={!ready}
-                onClick={choose}
-                onKeyDown={blockComposingActivation}
-              >
-                <Check size={18} aria-hidden="true" />
-              </button>
-            </div>
+            <button
+              className="dialog-button primary"
+              aria-label={chooseLabel}
+              title={chooseLabel}
+              disabled={!ready}
+              onClick={choose}
+              onKeyDown={blockComposingActivation}
+            >
+              {chooseLabel}
+            </button>
           </>
         }
       >
         {header}
-        <div className="library-filter">
+        <div className="library-filter" inert={confirming}>
           <LibrarySourceSelect
             kind={kind}
             library={library}
@@ -1166,7 +1291,9 @@ export default function LibraryChooser({
             onChange={changeLibrary}
           />
           <span className="library-result-status" role="status">
-            {resultsLoading
+            {exactFootprint
+              ? detail ? '1 result' : loadingPreview ? 'Loading…' : 'Unavailable'
+              : resultsLoading
               ? offset
                 ? 'Loading…'
                 : 'Searching…'
@@ -1177,35 +1304,40 @@ export default function LibraryChooser({
                   : `${total.toLocaleString()} results`}
           </span>
         </div>
-        <div className="library-search">
-          <Search size={16} />
-          <input
-            autoFocus
-            aria-label={kind === 'symbols' ? 'Search components' : 'Search footprints'}
-            placeholder="Search by model, keyword or part number…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onCompositionStart={() => {
-              composing.current = true;
-            }}
-            onCompositionEnd={() => {
-              composing.current = false;
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Enter' &&
-                !composing.current &&
-                !event.nativeEvent.isComposing &&
-                event.keyCode !== 229
-              ) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (!event.repeat) submitSearch();
-              } else navigate(event, false);
-            }}
-          />
+        <div className="library-search-row" inert={confirming}>
+          <div className="library-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              autoFocus
+              aria-label={
+                requireModel ? 'Search models' : kind === 'symbols' ? 'Search components' : 'Search footprints'
+              }
+              placeholder="Search by model, keyword or part number…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onCompositionStart={() => {
+                composing.current = true;
+              }}
+              onCompositionEnd={() => {
+                composing.current = false;
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' &&
+                  !composing.current &&
+                  !event.nativeEvent.isComposing &&
+                  event.keyCode !== 229
+                ) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!event.repeat) submitSearch();
+                } else navigate(event, false);
+              }}
+            />
+          </div>
           <button
-            className="dialog-button library-search-submit"
+            type="button"
+            className="dialog-button secondary"
             onClick={submitSearch}
             onKeyDown={blockComposingActivation}
           >
@@ -1214,6 +1346,7 @@ export default function LibraryChooser({
         </div>
         <div
           className={`library-browser${kind === 'footprints' ? ' assignment-browser' : ''}${hasEntries ? '' : ' library-browser-empty'}`}
+          inert={confirming}
         >
           <div
             ref={results}
@@ -1323,12 +1456,12 @@ export default function LibraryChooser({
             {!hasEntries && loadingInitial && (
               <WorkspaceLoading panel progress={batchProgress} label="Loading library" />
             )}
-            {!resultsLoading && !hasEntries && !error && !resultsError && (
+            {!resultsLoading && !loadingPreview && !hasEntries && !error && !resultsError && (
               <div className="library-empty-state">
                 <span className="library-empty-icon">
                   <SearchX size={20} aria-hidden="true" />
                 </span>
-                <h3>{`No matching ${kind}${canLoadMore ? ' in this batch' : ''}.`}</h3>
+                <h3>{`No matching ${requireModel ? 'models' : kind}${canLoadMore ? ' in this batch' : ''}.`}</h3>
                 {!canLoadMore && <p>Try another keyword or category.</p>}
               </div>
             )}
@@ -1413,13 +1546,20 @@ export default function LibraryChooser({
                       className="library-preview-stage assignment-preview-stage"
                       previews={{
                         footprint: <FootprintPreview footprint={detail.footprint} />,
-                        '3d': !modelError && !modelReason && (
+                        '3d': !selectedModelIssue && (
                           <Suspense fallback={<WorkspaceLoading panel label="Loading 3D model" />}>
                             <ModelPreview
                               key={model}
                               id={detail.id}
                               index={model}
+                              load={projectLibraryId ? loadProjectModel : undefined}
+                              model={projectModel}
                               active={show3d}
+                              onReady={
+                                requireModel
+                                  ? () => setVerifiedModel({ detail, index: model })
+                                  : undefined
+                              }
                               onUnavailable={(message) =>
                                 setModelAvailability((current) => ({
                                   detail,
@@ -1436,13 +1576,16 @@ export default function LibraryChooser({
                         ),
                       }}
                     />
-                    {modelError && !requireModel && <p role="status">{modelError}</p>}
+                    {modelError && <p role="status">{modelError}</p>}
                     {show3d && detail.models.length > 1 && (
                       <LibraryModelSelect
                         models={detail.models}
                         index={model}
                         unavailable={modelErrors}
-                        onChange={setModel}
+                        onChange={(index) => {
+                          setConfirmationError('');
+                          setModel(index);
+                        }}
                       />
                     )}
                   </>
@@ -1493,10 +1636,13 @@ export default function LibraryChooser({
             ) : !error && selected ? (
               <WorkspaceLoading panel label="Loading preview" />
             ) : null}
-            {selectedEntry?.library === 'NextPCB' && (
+            {selectedEntry && (
               <LibraryPricing
-                key={selectedEntry.id}
+                key={`${kind}:${selectedEntry.id}`}
                 id={selectedEntry.id}
+                kind={kind}
+                source={priceSource}
+                onSourceChange={setPriceSource}
                 composing={() => composing.current}
                 onKeyDown={blockComposingActivation}
               />

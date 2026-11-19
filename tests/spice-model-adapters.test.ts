@@ -161,7 +161,14 @@ test('simulation route rejects renderer adapter flags and private netlists befor
     {
       get() {},
       post(route: string, callback: typeof handler) {
-        assert.ok(['/api/simulation/transient', '/api/simulation/result'].includes(route));
+        assert.ok(
+          [
+            '/api/simulation/transient',
+            '/api/simulation/result',
+            '/api/simulation/ti-model',
+            '/api/simulation/ti-model-search',
+          ].includes(route),
+        );
         if (route === '/api/simulation/transient') handler = callback;
       },
     },

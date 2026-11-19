@@ -25,7 +25,7 @@ import { parseSExpr, child, children, val, quote, writeSExpr } from '../lib/sexp
 import { createProject, serializeProject, parseProject, exportKiCad } from '../lib/project';
 import { commitWireRoute, wireRoute, samePoint } from '../lib/wiring';
 import { createLibraryService } from '../server/libraries.mjs';
-import { readNextpcbPrices } from '../server/nextpcb-prices.mjs';
+import { readNextpcbSupplyPrices } from '../server/nextpcb-prices.mjs';
 import { startServer } from '../server/index.mjs';
 import { applyProposal } from '../lib/proposals';
 
@@ -393,21 +393,12 @@ test('authenticated NextPCB HTTP reads browse suggestions and accept cross-categ
   }
 });
 
-test('authenticated NextPCB pricing refresh is explicit, fresh and matched to the selected part', async () => {
+test('authenticated NextPCB pricing uses the selected CAD identity and refreshes live quotes', async () => {
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'openpe-nextpcb-price-'));
   const staticDir = path.join(temporary, 'renderer');
   const renderer = '<!DOCTYPE html><title>OpenPE</title>';
-  const priceUrl = 'https://www.hqonline.com/api/goods/products/search';
+  const priceUrl = 'https://library.nextpcb.com/api/chiplet/kicad/searchSupplyChain';
   let lookups = 0;
-  let refreshes = 0;
-  const quoteRow = {
-    goodsId: 123,
-    goodsNo: 'IC123',
-    goodsName: 'LM358',
-    brandName: 'TI',
-    pinyin: { brandName: 'TI' },
-    spotNumber: 20,
-  };
   const nextpcbFetcher: typeof fetch = async (input, options) => {
     const url = String(input);
     if (url.endsWith('/queryPage'))
@@ -426,52 +417,39 @@ test('authenticated NextPCB pricing refresh is explicit, fresh and matched to th
     assert.equal(options?.credentials, 'omit');
     assert.equal(options?.redirect, 'error');
     assert.equal(options?.cache, 'no-store');
-    const request = JSON.parse(String(options?.body));
-    const { current } = request;
-    assert.deepEqual(request, { keyword: 'LM358', current, size: 50 });
-    assert.ok(current === 1 || (current === 2 && refreshes === 6));
-    if (current === 1) refreshes++;
+    assert.deepEqual(JSON.parse(String(options?.body)), ['9728-LM358']);
     lookups++;
     if (lookups === 5)
-      return new Response('<!DOCTYPE html><title>HQ Online</title>', {
+      return new Response('<!DOCTYPE html><title>Huaqiu</title>', {
         headers: { 'Content-Type': 'text/html' },
       });
-    const price = [
-      { goodsId: lookups === 4 ? '234' : '123', purchases: 10, unitPrice: 0.08 },
-      { goodsId: '123', purchases: 1, unitPrice: 0.1 + lookups },
-    ];
-    const otherOffer = {
-      ...quoteRow,
-      goodsId: 234,
-      goodsNo: 'IC234',
-      brandName: 'DYW',
-      pinyin: { brandName: 'DYW' },
-      price: [{ goodsId: '234', purchases: 5, unitPrice: 0.02 }],
-    };
-    const similarPart = { ...quoteRow, goodsName: 'LM358D' };
+    const offer = supplyOffer({
+      price: [
+        { breakMin: 10, usd: lookups === 4 ? -1 : 0.08 },
+        { breakMin: 1, usd: 0.1 + lookups },
+      ],
+    });
     return Response.json({
-      retCode: 200,
-      result: {
-        current,
-        size: 50,
-        pages: refreshes === 6 ? 2 : 1,
-        records: [
-          ...(refreshes === 3 || refreshes === 4 ? [] : [otherOffer]),
-          { ...similarPart, price },
-          ...(refreshes === 3 || (refreshes === 6 && current === 1)
-            ? []
-            : [{ ...quoteRow, price }]),
-        ],
-      },
+      code: 200000,
+      result: [
+        { ...offer, mfgId: 4, sku: 'OTHER-MANUFACTURER' },
+        { ...offer, mpn: 'LM358D', sku: 'OTHER-PART' },
+        { ...offer, vendor: 'other', sku: 'OTHER-VENDOR' },
+        ...(lookups === 3 ? [] : [offer]),
+      ],
     });
   };
   await mkdir(staticDir);
   await writeFile(path.join(staticDir, 'index.html'), renderer);
-  const server = await startServer({ dataDir: temporary, staticDir, nextpcbFetcher });
+  const server = await startServer({
+    dataDir: temporary,
+    staticDir,
+    nextpcbFetcher,
+  });
   const headers = { 'X-OpenPE-Token': server.token };
-  const price = `${server.base}/api/library-price?id=NextPCB%3A9728_LM358`;
+  const price = server.base + '/api/library-price?id=NextPCB%3A9728_LM358&kind=symbols&source=huaqiu';
   try {
-    const search = await fetch(`${server.base}/api/libraries/symbols?library=NextPCB&q=LM358`, {
+    const search = await fetch(server.base + '/api/libraries/symbols?library=NextPCB&q=LM358', {
       headers,
     });
     assert.equal(search.status, 200);
@@ -481,34 +459,34 @@ test('authenticated NextPCB pricing refresh is explicit, fresh and matched to th
       (await fetch(price, { headers: { ...headers, Origin: 'https://example.invalid' } })).status,
       403,
     );
-    assert.equal((await fetch(`${price}&url=elsewhere`, { headers })).status, 400);
-    const missing = await fetch(`${server.base}/api/library-price-missing`, { headers });
+    assert.equal((await fetch(price + '&url=elsewhere', { headers })).status, 400);
+    assert.equal((await fetch(price + '&source=lcsc', { headers })).status, 400);
+    assert.equal(
+      (await fetch(price.replace('source=huaqiu', 'source=unsupported'), { headers })).status,
+      400,
+    );
+    const missing = await fetch(server.base + '/api/library-price-missing', { headers });
     assert.equal(missing.status, 404);
     assert.deepEqual(await missing.json(), { error: 'Unknown OpenPE API route.' });
-    assert.equal(await (await fetch(`${server.base}/workbench`)).text(), renderer);
+    assert.equal(await (await fetch(server.base + '/workbench')).text(), renderer);
     assert.equal(lookups, 0);
     for (const unitPrice of [1.1, 2.1]) {
       const response = await fetch(price, { headers });
       assert.equal(response.status, 200);
       assert.equal(response.headers.get('cache-control'), 'no-store');
       const quote = await response.json();
+      assert.equal(quote.source, 'huaqiu');
       assert.equal(quote.currency, 'USD');
       assert.ok(Number.isSafeInteger(quote.checkedAt));
       assert.deepEqual(quote.offers, [
         {
-          sku: 'IC123',
-          manufacturer: 'TI',
+          sku: '2500013854',
+          manufacturer: null,
           stock: 20,
           tiers: [
             { quantity: 1, unitPrice },
             { quantity: 10, unitPrice: 0.08 },
           ],
-        },
-        {
-          sku: 'IC234',
-          manufacturer: 'DYW',
-          stock: 20,
-          tiers: [{ quantity: 5, unitPrice: 0.02 }],
         },
       ]);
     }
@@ -517,75 +495,94 @@ test('authenticated NextPCB pricing refresh is explicit, fresh and matched to th
     const upstreamHtml = await fetch(price, { headers });
     assert.equal(upstreamHtml.status, 422);
     assert.deepEqual(await upstreamHtml.json(), {
-      error: 'HQ Online returned an invalid pricing response.',
+      error: 'Huaqiu returned an invalid supply-chain pricing response.',
     });
     const recovered = await fetch(price, { headers });
     assert.equal(recovered.status, 200);
-    assert.equal((await recovered.json()).offers[0].tiers[0].unitPrice, 7.1);
-    assert.equal(lookups, 7);
+    assert.equal((await recovered.json()).offers[0].tiers[0].unitPrice, 6.1);
+    assert.equal(lookups, 6);
   } finally {
     await server.close();
     await rm(temporary, { recursive: true, force: true });
   }
 });
 
-test('NextPCB pricing requires a full part number and reports incomplete searches', async () => {
-  const pages: number[] = [];
+function supplyOffer(overrides: Record<string, unknown> = {}) {
+  return {
+    mfgId: 9728,
+    mpn: 'LM358',
+    vendor: 'hqself',
+    sku: '2500013854',
+    stock: 20,
+    price: [{ breakMin: 5, usd: 0.08 }],
+    ...overrides,
+  };
+}
+
+test('Huaqiu batch results preserve identities and distinguish omitted, unpriced and malformed entries', async () => {
+  const parts = [
+    { manufacturer_id: '9728', mpn: 'LM358' },
+    { manufacturer_id: '4', mpn: 'LM358' },
+    { manufacturer_id: '9728', mpn: 'LM358D' },
+    { manufacturer_id: '5', mpn: 'LM358' },
+    { manufacturer_id: '9728', mpn: 'LM358/NS-NOPB' },
+    { manufacturer_id: '6', mpn: 'LM358' },
+  ];
+  let requested = 0;
   const fetcher: typeof fetch = async (_url, init) => {
-    const { current, size } = JSON.parse(String(init?.body));
-    pages.push(current);
+    requested++;
+    assert.deepEqual(JSON.parse(String(init?.body)), [
+      '9728-LM358',
+      '4-LM358',
+      '9728-LM358D',
+      '5-LM358',
+      '9728-LM358/NS-NOPB',
+      '6-LM358',
+    ]);
     return Response.json({
-      retCode: 200,
-      result: {
-        current,
-        size,
-        pages: 5,
-        records: [{ goodsName: 'LM358D', brandName: 'TI' }],
-      },
+      code: 200000,
+      result: [
+        supplyOffer({ mfgId: '4', sku: 'OTHER', stock: 0 }),
+        supplyOffer({ mfgId: 5, price: [{ breakMin: 0, usd: 1 }] }),
+        supplyOffer({ mpn: 'LM358D', price: [{ breakMin: 1, usd: null, rmb: 1 }] }),
+        supplyOffer({ mpn: 'LM358/NS', sku: 'SUBSTRING' }),
+        supplyOffer({ mfgId: 6, price: null, stock: 0 }),
+        supplyOffer(),
+        supplyOffer(),
+      ],
     });
   };
   const signal = new AbortController().signal;
   await assert.rejects(
-    readNextpcbPrices(fetcher, { name: '', manufacturer: 'TI' }, signal),
-    /part number for pricing/,
+    readNextpcbSupplyPrices(fetcher, [{ ...parts[0], mpn: '' }], signal),
+    /invalid.*identity/i,
   );
-  assert.deepEqual(pages, []);
   await assert.rejects(
-    readNextpcbPrices(fetcher, { name: 'LM358', manufacturer: '' }, signal),
-    /exceeded the supported page limit/,
+    readNextpcbSupplyPrices(fetcher, [parts[0], parts[0]], signal),
+    /duplicate.*identity/i,
   );
-  assert.deepEqual(pages, [1, 2, 3, 4]);
-});
-
-test('NextPCB pricing accepts an exact part number with a different or missing manufacturer', async () => {
-  const fetcher: typeof fetch = async () =>
-    Response.json({
-      retCode: 200,
-      result: {
-        current: 1,
-        size: 50,
-        pages: 1,
-        records: [
-          {
-            goodsName: 'tlv75733pdbvr',
-            goodsId: 1,
-            goodsNo: 'FIXTURE-1',
-            brandName: 'DYW',
-            price: [{ goodsId: '1', purchases: 10, unitPrice: 0.08 }],
-          },
-        ],
-      },
-    });
-  for (const manufacturer of ['Texas Instruments (TI)', '']) {
-    const { offers } = await readNextpcbPrices(
-      fetcher,
-      { name: 'TLV75733PDBVR', manufacturer },
-      new AbortController().signal,
-    );
-    assert.deepEqual(offers, [
-      { sku: 'FIXTURE-1', manufacturer: 'DYW', tiers: [{ quantity: 10, unitPrice: 0.08 }] },
-    ]);
-  }
+  assert.equal(requested, 0);
+  const results = await readNextpcbSupplyPrices(fetcher, parts, signal);
+  assert.equal(results.length, parts.length);
+  assert.deepEqual(
+    results[0].quote.offers.map((offer) => offer.sku),
+    ['2500013854'],
+  );
+  assert.deepEqual(results[1].quote.offers, [
+    {
+      sku: 'OTHER',
+      manufacturer: null,
+      stock: 0,
+      tiers: [{ quantity: 5, unitPrice: 0.08 }],
+    },
+  ]);
+  assert.deepEqual(results[2].quote.offers, []);
+  assert.equal(results[2].error, undefined);
+  assert.match(results[3].error ?? '', /invalid supply-chain pricing response/);
+  assert.deepEqual(results[4].quote.offers, []);
+  assert.equal(results[4].error, undefined);
+  assert.deepEqual(results[5].quote.offers, []);
+  assert.equal(results[5].error, undefined);
 });
 
 function nextPcbOfficialModelFixture() {

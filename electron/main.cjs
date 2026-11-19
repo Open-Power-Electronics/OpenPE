@@ -117,7 +117,13 @@ app.whenReady().then(async () => {
   const [
     { startServer },
     { atomicWrite },
-    { readProjectModelFile, writeProjectModelFile, prepareProjectModelFiles },
+    {
+      readProjectModelFile,
+      writeProjectModelFile,
+      prepareProjectModelFiles,
+      prepareBoundTiModelFiles,
+      readCachedTiImport,
+    },
     { createSimulationModelStore },
     { createProjectSpiceStore },
     { createProjectThermalStore },
@@ -173,11 +179,13 @@ app.whenReady().then(async () => {
     datasheetFetcher: modelFetcher,
     nextpcbFetcher: modelFetcher,
     jlcpcbFetcher: modelFetcher,
+    priceFetcher: modelFetcher,
     libraryModelFetcher: modelFetcher,
     datasheetRoots: { examples: examplesRoot, project: projectRoot },
     simulationProjectRoot: projectRoot,
     componentModelFiles: { resolve: (id) => fileGrants.location(id) },
     simulationModelFiles: {
+      location: (fileId) => fileGrants.get(fileId),
       read: (fileId, model) => readProjectModelFile(fileGrants.get(fileId), model),
       write: (fileId, model, bytes) => writeProjectModelFile(fileGrants.get(fileId), model, bytes),
     },
@@ -294,6 +302,7 @@ app.whenReady().then(async () => {
     grants: fileGrants,
     dialog,
     getWindow: () => win,
+    readPrepared: (file) => readCachedTiImport(app.getPath('userData'), file),
   });
   // Save destinations come from native pickers or the fixed managed-example grant.
   let pendingFile = null;
@@ -493,6 +502,8 @@ app.whenReady().then(async () => {
     fileGrants,
     exampleRoots: [examplesRoot, projectRoot],
     showSaveDialog: (options) => dialog.showSaveDialog(win, options),
+    prepareModelSources: (project, bundle, file, sourceFile) =>
+      prepareBoundTiModelFiles(project, bundle, file, sourceFile, app.getPath('userData')),
     prepareProjectFiles: async (project, file, sourceFile) => {
       await prepareExampleFootprints(project, file);
       await service.componentModels.prepare(project, file, sourceFile);

@@ -553,7 +553,6 @@ p {
 .library-search {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
 }
 .library-search input {
   border: 0;

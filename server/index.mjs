@@ -32,6 +32,7 @@ import {
 import { validCursorRequestParameters } from './agent-cursor.mjs';
 import { createLibraryService } from './libraries.mjs';
 import { libraryAssetFailure } from './library-asset-error.mjs';
+import { isLibraryPriceRequest } from './library-prices.mjs';
 import { isOnlineLibrary, librarySources } from './library-format.mjs';
 import { registerAppearance } from './appearance.mjs';
 import { registerAgentSettings } from './agent-settings.mjs';
@@ -62,6 +63,7 @@ export async function startServer({
   nextpcbFetcher = fetch,
   jlcpcbFetcher = fetch,
   libraryModelFetcher = fetch,
+  priceFetcher = fetch,
   simulationRunner = runSimulation,
   simulationDetector = detectSpice,
   simulationResultLoader = findSimulationResult,
@@ -74,8 +76,14 @@ export async function startServer({
   datasheetRoots = undefined,
   datasheetServiceFactory = createDatasheetService,
   simulationModelFetcher = fetch,
-  simulationModelFiles = undefined,
-  componentModelFiles = undefined,
+  simulationModelFiles = /** @type {{
+    location?: (fileId: string) => string | null,
+    read: (fileId: string, model: { id: string, file: string, sha256: string }) => Promise<Buffer | null>,
+    write: (fileId: string, model: { id: string, file: string, sha256: string }, bytes: Buffer) => Promise<void>,
+  } | undefined} */ (undefined),
+  componentModelFiles = /** @type {{resolve: (fileId: string) => string | null | undefined} | undefined} */ (
+    undefined
+  ),
   simulationProjectRoot = undefined,
   simulationResultFiles = /** @type {{ forProject(fileId: string): ReturnType<typeof import('./project-spice-files.mjs').createProjectSpiceStore> | null } | undefined} */ (
     undefined
@@ -96,6 +104,7 @@ export async function startServer({
     nextpcbFetcher,
     jlcpcbFetcher,
     modelFetcher: libraryModelFetcher,
+    priceFetcher,
   });
   const modelCadPreviews = modelCadPreviewFactory({ resourceRoot: thermalRoot });
   const componentModels = createComponentModelStore(dataDir, libraries.parseStep);
@@ -176,6 +185,7 @@ export async function startServer({
   app.use('/api/state', express.json({ limit: '96mb' }));
   // Simulation also wraps a bounded project string in a JSON request envelope.
   app.use(['/api/simulation/transient', '/api/simulation/result'], express.json({ limit: '24mb' }));
+  app.use(['/api/simulation/ti-model', '/api/simulation/ti-model-search'], express.json({ limit: '2kb' }));
   app.use(
     ['/api/thermal/run', '/api/thermal/result', '/api/thermal/spice-sources'],
     express.json({ limit: '24mb' }),
@@ -306,18 +316,12 @@ export async function startServer({
   });
   app.get('/api/library-price', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const { id } = req.query;
-    if (
-      Object.keys(req.query).length !== 1 ||
-      typeof id !== 'string' ||
-      !id.startsWith('NextPCB:') ||
-      id.length > 500
-    )
-      return res.status(400).json({ error: 'Send one NextPCB component ID.' });
+    if (!isLibraryPriceRequest(req.query))
+      return res.status(400).json({ error: 'Send a component ID, library kind and price source.' });
     const control = new AbortController();
     res.on('close', () => control.abort());
     try {
-      const result = await libraries.price(id, control.signal);
+      const result = await libraries.price(req.query, control.signal);
       if (!res.destroyed) res.json(result);
     } catch (error) {
       if (!res.destroyed) res.status(422).json(libraryAssetFailure(error));

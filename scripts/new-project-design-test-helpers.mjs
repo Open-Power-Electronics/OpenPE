@@ -80,7 +80,7 @@ export async function exerciseNewProjectDesign(page, step) {
       .locator('.library-results button')
       .filter({ has: page.getByText('R_0805_2012Metric', { exact: true }) })
       .click();
-    await button('Assign footprint').click();
+    await button('Assign').click();
     assert.equal(await page.getByLabel('Footprint', { exact: true }).inputValue(), footprintId);
   }
   await button('Layout').click();

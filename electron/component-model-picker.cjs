@@ -3,7 +3,6 @@ function registerComponentModelPicker({ ipcMain, dialog, getWindow, authorize, g
   ipcMain.handle('openpe:choose-component-model', async (event, fileId) => {
     authorize(event);
     const location = grants.location(fileId);
-    if (!location) throw new Error('Save the project before importing a STEP model.');
     const current = () => {
       authorize(event);
       if (grants.location(fileId) !== location) throw new Error('The project location changed.');

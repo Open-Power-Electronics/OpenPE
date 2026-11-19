@@ -55,16 +55,16 @@ Reviewed datasheets are host references outside Core native files, drafts, undo 
 
 `core/register-project.ts` binds document commands/queries/events; `lib/*-capabilities.ts` binds host, library and plugin ports. Exact IDs/schemas/results belong in [API](API.md), avoiding a second catalog here.
 
-| Group                  | Responsibility                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| Project/Source/history | Canonical reads/replacement, Source draft/apply/discard and project undo/redo                    |
-| Schematic              | Sheet management, component/property/connectivity edits, wires/labels/transforms and ERC         |
-| Layout                 | Board queries, checked routing/vias/transforms/drag, zones/fills/properties and DRC              |
-| Model CAD              | Independent solids, analytic sketch Boolean extrusion and prepared edits                         |
-| Host/library           | Verified placement/assignment, UI context, native save/export and local Git                      |
-| Plugin                 | Lifecycle, SPICE settings/waveforms, Layout Thermal fields and explicit parasitic study creation |
+| Group                  | Responsibility                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| Project/Source/history | Canonical reads/replacement, Source draft/apply/discard and project undo/redo            |
+| Schematic              | Sheet management, component/property/connectivity edits, wires/labels/transforms and ERC |
+| Layout                 | Board queries, checked routing/vias/transforms/drag, zones/fills/properties and DRC      |
+| Model CAD              | Independent solids, analytic sketch Boolean extrusion and prepared edits                 |
+| Host/library           | Verified placement/assignment, UI context, native save/export and local Git              |
+| Plugin                 | Lifecycle, SPICE, Layout Thermal, PCB guidance, Layout Parasitics and EMC Analysis       |
 
-The PCB links to the primary schematic; commands identify sheet/board explicitly. Complete canonical replacement still validates supported bounded content. Native access resolves opaque grants in Electron; no command accepts arbitrary paths, executables or download URLs.
+Commands identify the schematic sheet or PCB explicitly. Replacement validates the complete canonical project, and native access uses [host grants](FORMAT.md#native-access-and-writes).
 
 Layout Parasitics prepares a labelled R/L series insertion from the current board in
 an explicitly identified existing schematic through its pure domain helper. Its
@@ -142,22 +142,20 @@ Each turn permits 32 reviews; each mounted conversation retains at most 64 recor
 
 ## Plugin boundary
 
-Bundled SPICE and Layout Thermal handlers share the host with human controls, independently gated by installed/enabled state. Disable/uninstall cancels work and releases resident state. Hiding settings cancels active work but retains completed state; SPICE explicit Stop also retains validated partial results.
-
-Simulation attributes and verified portable references are document data, independent of plugin availability. Solver settings/results/probes/waveforms are session data. Completed records persist only through grant-bound host adapters under generated `spice/` / `thermal/` directories excluded from native discovery. Load-only restore validates current inputs/resources without changing Core/Source/undo/dirty state. See [Simulation](SIMULATION.md), [Layout Thermal](THERMAL.md#completed-desktop-records) and [provider management](PLUGINS.md#provider-discovery-and-management).
+Simulation attributes and verified portable model references are Core data. Mounted
+solver handlers use the same capability host as human controls. Session settings,
+probes and waveform/field data stay outside Core. Completed desktop records use
+the owning plugin's project directory and can restore a session through the
+grant-bound host without changing Source, undo or dirty state. [Plugin lifecycle](PLUGINS.md#bundled-workbench-lifecycle)
+· [SPICE results](SIMULATION.md#execution-streaming-and-completed-results)
+· [Thermal results](THERMAL.md#completed-desktop-records)
 
 ## Verification
 
-`tests/gui-agent-parity.test.ts` compares the native KiCad files produced by GUI
-preparation and Agent commands, including creation identity mapping, project
-renaming, labels, text positions, no-connects, wire simplification, pad/via/track
-Properties, footprint flips/models, drawings, boundary resizing and official
-footprint placement. It checks whole-project undo, invalid/stale inputs, Source
-and close barriers, asynchronous placement and public-result isolation. These
-checks establish the exercised design operations; provider transport availability
-and native file grants retain their separate contracts.
-
-Core/capability/lifecycle/transport tests cover ownership, structural sharing, mutation isolation, revision conflicts, Source/close barriers and cancellation. Owned-validation, native materialization/cache, admission and save tests protect private derivation boundaries. Rule-check capability/ERC/DRC tests cover read-only reports and incomplete coverage.
+Core tests cover structural sharing, result isolation, native materialization,
+revision/Source/close gates and cancellation. See [Architecture verification](ARCHITECTURE.md#verification)
+for GUI/Agent parity and lifecycle checks, and [Design rules](DESIGN-RULES.md#verification)
+for bounded ERC/DRC checks.
 
 `tests/schematic-drafting.test.ts` checks bounded physical-island evidence and
 transformed native geometry; `tests/schematic-drafting-capabilities.test.ts`
@@ -176,7 +174,3 @@ never writes either input project; keep its output outside their directories.
 
 `tests/capability-discovery.test.ts` checks compact filters, isolation and live
 availability without adding document operations.
-
-`scripts/benchmark-project-runtime.ts` measures fresh geometry, Core property/participation commands and unchanged property requests together with native Source/dirty reads, checking revisions, undo and unchanged snapshot identity.
-
-Isolated UI checks include `check-agent-tools-ui.mjs`, `check-project-lifecycle-ui.mjs`, `check-project-admission-ui.mjs`, `check-source-retention-ui.mjs` and `check-render-isolation-ui.mjs`. They use actual renderer/Core integration with fixture services; they do not prove live provider/solver/Electron behaviour. [Architecture verification](ARCHITECTURE.md#verification) and [engineering rules](../AGENTS.md#verification-and-delivery) define broader checks and opt-in limits.

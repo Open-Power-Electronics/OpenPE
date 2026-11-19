@@ -218,19 +218,6 @@
 .placement > summary:focus-visible {
   outline: none;
 }
-.preparing {
-  animation: preparing 1s linear infinite;
-}
-@keyframes preparing {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .preparing {
-    animation: none;
-  }
-}
 .placementFields {
   position: absolute;
   z-index: 2;

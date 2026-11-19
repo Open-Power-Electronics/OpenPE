@@ -33,6 +33,7 @@ import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
 
 const root = fileURLToPath(new URL('../resources/example-catalog/footprints/', import.meta.url));
 const packages = new Map(manifest.footprints.map((entry) => [entry.id, entry]));
+const emcPackages = new Map(emcManifest.footprints.map((entry) => [entry.id, entry]));
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 async function readAsset(file, hash, assetRoot = root) {
   if (!file || path.isAbsolute(file) || file.split(/[\\/]/).some((p) => p === '..' || !p))
@@ -105,6 +106,17 @@ export async function exampleModelBytes(id, relative) {
   if (!relative) return null;
   const model = manifest.models[relative];
   if (!model) throw new Error('Missing pinned example model.');
+  return readAsset(model.file, model.sha256);
+}
+
+export async function portableExampleModelBytes(id, reference) {
+  if (emcPackages.get(id)?.models.some((model) => model.path === reference))
+    return emcModelBytes(id, reference);
+  const relative = packages
+    .get(id)
+    ?.models.find((item) => reference === '${KIPRJMOD}/' + exampleModelPath(item));
+  if (!relative) return null;
+  const model = manifest.models[relative];
   return readAsset(model.file, model.sha256);
 }
 

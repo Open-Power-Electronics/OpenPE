@@ -5,13 +5,16 @@ import type { Footprint, FootprintModel } from '@/lib/pcb';
 import { api } from '@/lib/bridge';
 import { previewAssignedModel } from '@/lib/pcb-preview-cache';
 import { prepareFootprintModelSelection } from '@/lib/model-resource-preparation';
+import { footprintSearchTerm, onlineFootprintLibrary } from '@/lib/library';
 import type { CapabilityHost } from '@/api/capabilities';
 import { TextField, NumberField, PropertyGrid, PropertyToggle } from './LayoutPropertyFields';
 import Dialog from './Dialog';
 import DeferredDialog from './DeferredDialog';
 import WorkspaceLoading from './WorkspaceLoading';
+import type { FootprintDetail } from './LibraryChooser';
 const LibraryChooser = lazy(() => import('./LibraryChooser'));
 const ModelPreview = lazy(() => import('./ModelPreview'));
+
 export default function FootprintModels({
   footprint,
   active,
@@ -35,9 +38,14 @@ export default function FootprintModels({
     [busy, setBusy] = useState(false),
     [choosing, setChoosing] = useState<number | null>(null);
   const request = useRef(0);
-  const close = () => {
+  const importRequest = useRef<AbortController | null>(null);
+  const closeChooser = useCallback(() => {
     request.current++;
+    importRequest.current?.abort();
     setChoosing(null);
+  }, []);
+  const close = () => {
+    closeChooser();
     setOpened(false);
   };
   const latest = useRef({ footprint, active, fileId, projectSource });
@@ -45,21 +53,22 @@ export default function FootprintModels({
   const desktop = typeof window !== 'undefined' && !!window.openpe;
   useEffect(
     () => () => {
-      latest.current.active = false;
+      request.current++;
+      importRequest.current?.abort();
     },
     [],
   );
   useEffect(() => {
-    setChoosing(null);
-  }, [footprint]);
+    closeChooser();
+  }, [footprint, closeChooser]);
   useEffect(() => {
     if (!active) {
-      request.current++;
-      setChoosing(null);
+      closeChooser();
       setOpened(false);
     }
-  }, [active]);
+  }, [active, closeChooser]);
   const models = footprint.models ?? [];
+  const modelPaths = models.map((model) => model.path).join('; ');
   const selectedIndex = Math.min(previewIndex, Math.max(0, models.length - 1));
   const selectedModel = models[selectedIndex];
   const selectedPath = selectedModel?.path;
@@ -75,14 +84,7 @@ export default function FootprintModels({
   );
   function change(index: number, path: string) {
     if (!active) return false;
-    let next: FootprintModel[];
-    try {
-      next = prepareFootprintModelSelection(footprint, index, path);
-    } catch (error) {
-      setError((error as Error).message);
-      return false;
-    }
-    const accepted = onChange(next);
+    const accepted = onChange(prepareFootprintModelSelection(footprint, index, path));
     if (accepted) {
       setError('');
       setPreviewIndex(index);
@@ -99,15 +101,15 @@ export default function FootprintModels({
     setError('');
     try {
       const selected = await native.chooseComponentModel(fileId);
+      if (!selected || token !== request.current || !latest.current.active) return;
       if (
-        selected &&
-        token === request.current &&
-        latest.current.active &&
-        latest.current.footprint === basis &&
-        latest.current.fileId === fileId &&
-        revision === getRevision?.()
-      )
-        change(index, selected.path);
+        latest.current.footprint !== basis ||
+        latest.current.fileId !== fileId ||
+        revision !== getRevision?.()
+      ) {
+        throw new Error('The project changed. Select the STEP file again.');
+      }
+      if (!change(index, selected.path)) throw new Error('The model assignment could not be applied.');
     } catch (error) {
       if (token === request.current && latest.current.footprint === basis)
         setError((error as Error).message);
@@ -115,31 +117,37 @@ export default function FootprintModels({
       setBusy(false);
     }
   }
-  async function chooseLibrary(index: number, library: string, modelIndex: number) {
+  async function chooseLibrary(index: number, detail: FootprintDetail, modelIndex: number) {
     const basis = footprint,
       revision = getRevision?.();
-    if (!active || busy) return;
+    if (!active || busy) throw new Error('Model selection is unavailable.');
     const token = ++request.current;
-    setBusy(true);
+    const control = new AbortController();
+    importRequest.current = control;
     setError('');
     try {
-      const response = await api('component-model/library', {
-        method: 'POST',
-        body: JSON.stringify({ id: library, index: modelIndex }),
-      });
-      const selected = await response.json();
+      const selected = detail.projectAssets
+        ? detail.models[modelIndex]
+        : await (
+            await api('component-model/library', {
+              method: 'POST',
+              body: JSON.stringify({ id: detail.id, index: modelIndex }),
+              signal: control.signal,
+            })
+          ).json();
+      if (token !== request.current) return;
       if (
-        token === request.current &&
-        latest.current.active &&
-        latest.current.footprint === basis &&
-        revision === getRevision?.()
+        !latest.current.active ||
+        latest.current.footprint !== basis ||
+        latest.current.fileId !== fileId ||
+        revision !== getRevision?.()
       )
-        change(index, selected.path);
-    } catch (error) {
-      if (token === request.current && latest.current.footprint === basis)
-        setError((error as Error).message);
+        throw new Error('The project changed. Confirm the model again.');
+      if (!selected || !change(index, selected.path))
+        throw new Error('The model assignment could not be applied.');
+      closeChooser();
     } finally {
-      setBusy(false);
+      if (importRequest.current === control) importRequest.current = null;
     }
   }
   const update = (index: number, changes: Partial<FootprintModel>) =>
@@ -154,23 +162,38 @@ export default function FootprintModels({
           disabled={!active}
           aria-label="Model field name"
         />
-        <input
-          className="property-field-value"
-          value={models.map((m) => m.path.split(/[\\/]/).at(-1)).join('; ')}
-          placeholder={footprint.models === undefined ? 'From footprint library' : 'Unassigned'}
-          aria-label="Model"
-          aria-description={models.map((m) => m.path).join('; ')}
-          title={models.map((m) => m.path).join('; ')}
-          readOnly
+        <button
+          type="button"
+          className="property-field-value property-model-manager"
+          data-empty={!models.length || undefined}
+          aria-label="Manage assigned models"
+          aria-haspopup="dialog"
+          aria-description={modelPaths || undefined}
+          title={modelPaths ? `${modelPaths}\nManage assigned models` : 'Manage assigned models'}
           disabled={!active}
-        />
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)
+              event.preventDefault();
+          }}
+          onClick={() => {
+            setError('');
+            setOpened(true);
+          }}
+        >
+          {models.length
+            ? models.map((model) => model.path.split(/[\\/]/).at(-1)).join('; ')
+            : footprint.models === undefined ? 'From footprint library' : 'Unassigned'}
+        </button>
         <button
           type="button"
           className="icon-button"
           aria-label="Browse models"
           title="Browse models"
           disabled={!active}
-          onClick={() => setOpened(true)}
+          onClick={() => {
+            setError('');
+            setChoosing(0);
+          }}
         >
           <FolderSearch size={17} />
         </button>
@@ -178,16 +201,15 @@ export default function FootprintModels({
       {opened && (
         <Dialog
           wide
+          open={choosing === null}
           className="component-model-dialog assignment-dialog"
           title="Component models"
           icon={<Box size={20} />}
           onClose={close}
           footer={
-            <div className="dialog-footer-toolbar">
-              <button type="button" className="dialog-button primary" onClick={close}>
-                Done
-              </button>
-            </div>
+            <button type="button" className="dialog-button primary" onClick={close}>
+              Done
+            </button>
           }
         >
           <div className="component-model-browser assignment-browser">
@@ -227,7 +249,10 @@ export default function FootprintModels({
                         className="dialog-button secondary"
                         disabled={!active || busy}
                         aria-label={`Choose library model ${index + 1}`}
-                        onClick={() => setChoosing(index)}
+                        onClick={() => {
+                          setError('');
+                          setChoosing(index);
+                        }}
                       >
                         <Library size={14} />
                         Library
@@ -251,7 +276,14 @@ export default function FootprintModels({
                         value={model.path}
                         active={active && !busy}
                         resetKey={active}
-                        onCommit={(path) => change(index, path)}
+                        onCommit={(path) => {
+                          try {
+                            return change(index, path);
+                          } catch (error) {
+                            setError((error as Error).message);
+                            return false;
+                          }
+                        }}
                       />
                     </details>
                     <details>
@@ -313,33 +345,15 @@ export default function FootprintModels({
                     type="button"
                     className="dialog-button secondary"
                     disabled={!active || busy}
-                    onClick={() => setChoosing(models.length)}
+                    onClick={() => {
+                      setError('');
+                      setChoosing(models.length);
+                    }}
                   >
                     Add library model
                   </button>
                 </div>
                 {error && <p role="alert">{error}</p>}
-                {choosing !== null && (
-                  <DeferredDialog title="Choose component model" onClose={() => setChoosing(null)}>
-                    <LibraryChooser
-                      kind="footprints"
-                      title="Choose component model"
-                      label="Model library footprint"
-                      actionLabel="Use model"
-                      initialPreview="3d"
-                      requireModel
-                      capabilityHost={capabilityHost}
-                      initialSearch={footprint.libraryId}
-                      onClose={() => setChoosing(null)}
-                      onChoose={(detail, _unit, modelIndex) => {
-                        if (!active || !('models' in detail)) return;
-                        const index = choosing;
-                        setChoosing(null);
-                        if (detail.models.length) void chooseLibrary(index, detail.id, modelIndex);
-                      }}
-                    />
-                  </DeferredDialog>
-                )}
               </div>
             </div>
             <section
@@ -350,9 +364,13 @@ export default function FootprintModels({
                 {selectedModel || footprint.models === undefined ? (
                   <Suspense fallback={<WorkspaceLoading panel label="Loading model preview" />}>
                     {selectedModel ? (
-                      <ModelPreview load={loadPreview} model={selectedModel} />
+                      <ModelPreview
+                        load={loadPreview}
+                        model={selectedModel}
+                        active={choosing === null}
+                      />
                     ) : (
-                      <ModelPreview id={footprint.libraryId} />
+                      <ModelPreview id={footprint.libraryId} active={choosing === null} />
                     )}
                   </Suspense>
                 ) : (
@@ -365,6 +383,29 @@ export default function FootprintModels({
             </section>
           </div>
         </Dialog>
+      )}
+      {choosing !== null && active && (
+        <DeferredDialog title="Choose component model" onClose={closeChooser}>
+          <LibraryChooser
+            kind="footprints"
+            title="Choose component model"
+            label="Choose component model"
+            actionLabel="Use model"
+            requireModel
+            canChoose={!busy}
+            capabilityHost={capabilityHost}
+            initialSearch={footprintSearchTerm(footprint.libraryId)}
+            initialLibrary={onlineFootprintLibrary(footprint.libraryId) ?? ''}
+            initialFootprintId={onlineFootprintLibrary(footprint.libraryId) ? footprint.libraryId : undefined}
+            initialModelPath={models[choosing]?.path}
+            fileId={fileId}
+            projectSource={projectSource}
+            onClose={closeChooser}
+            onChoose={(detail, _unit, modelIndex) => {
+              if ('models' in detail) return chooseLibrary(choosing, detail, modelIndex);
+            }}
+          />
+        </DeferredDialog>
       )}
     </>
   );

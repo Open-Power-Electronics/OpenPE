@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import type { PCB } from '@/lib/pcb';
 import type { Circuit, Point } from '@/lib/circuit';
 import type { AgentAnnotation, AnnotationBounds } from '@/lib/agent-annotations';
+import type { ModelCAD } from '@/lib/model-cad';
 import { markupBounds, type captureAnnotationImage } from '@/lib/annotation-screenshot';
 import CanvasAnnotations, {
   type AnnotationMode,
@@ -19,12 +20,13 @@ export type ObjectAnnotationProps = {
 export type ObjectAnnotationView = {
   basis: string;
   ratio: number;
-  elements: { id: string; bounds: AnnotationBounds }[];
+  elements: { id: string; bounds: AnnotationBounds; pointOnly?: true }[];
 };
 
 export default function PCB3DAnnotations({
   board,
   schematic,
+  modelCad,
   active,
   view,
   captureImage,
@@ -36,6 +38,7 @@ export default function PCB3DAnnotations({
 }: ObjectAnnotationProps & {
   board: PCB;
   schematic: Circuit;
+  modelCad: ModelCAD | null;
   active: boolean;
   view: ObjectAnnotationView;
   captureImage: typeof captureAnnotationImage;
@@ -119,7 +122,8 @@ export default function PCB3DAnnotations({
           const bounds = markupBounds({ kind: 'freehand', points });
           const ids = view.elements
             .filter(
-              ({ bounds: b }) =>
+              ({ bounds: b, pointOnly }) =>
+                !pointOnly &&
                 b.x <= bounds.x + bounds.width &&
                 b.x + b.width >= bounds.x &&
                 b.y <= bounds.y + bounds.height &&
@@ -167,6 +171,7 @@ export default function PCB3DAnnotations({
         svg={svg}
         doc={schematic}
         board={board}
+        modelCad={modelCad}
         active={active}
         {...props}
         selectableIds={selectableIds}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test, { type TestContext } from 'node:test';
 import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -36,7 +37,7 @@ const {
 const {
   MAX_MODEL_BYTES,
   spiceModelDeclarations,
-} = require('../plugins/spice-simulation/electron/spice-model-declarations.cjs');
+} = require('../plugins/spice-simulation/host/spice-model-declarations.cjs');
 const externalModels = [{ name: 'vendor', kind: 'subcircuit', pins: ['1', '2'] }];
 const internalModels = [
   { name: 'LM2596_TRANS', kind: 'subcircuit', pins: ['1', '2', '3', '4', '5'] },
@@ -355,6 +356,43 @@ async function fixture(t: TestContext) {
     },
   };
 }
+
+test('unsaved projects can inspect a prepared TI library through their live grant', async () => {
+  const grants = new FileGrants();
+  const id = grants.create();
+  const bytes = Buffer.from('.subckt example A B\n.ends DifferentName\n');
+  const file = `models/ti/${createHash('sha256').update(bytes).digest('hex')}/example.lib`;
+  let inspect!: (event: unknown, fileId: string, library: string) => Promise<unknown>;
+  const reads: string[] = [];
+  registerSpiceModelPicker({
+    ipcMain: {
+      handle(channel: string, handler: typeof inspect) {
+        if (channel === 'openpe:inspect-spice-model') inspect = handler;
+      },
+    },
+    authorize: (event: unknown) => {
+      if (event !== 'trusted') throw new Error('Unauthorized window.');
+    },
+    grants,
+    readPrepared: async (library: string) => {
+      reads.push(library);
+      return library === file ? bytes : null;
+    },
+  });
+  await assert.rejects(inspect('foreign', id, file), /Unauthorized/);
+  await assert.rejects(
+    inspect('trusted', id, '../example.lib'),
+    /Invalid current SPICE model path/,
+  );
+  assert.deepEqual(await inspect('trusted', id, file), {
+    path: file,
+    issues: [],
+    models: [{ name: 'example', kind: 'subcircuit', pins: ['A', 'B'] }],
+  });
+  grants.release(id);
+  await assert.rejects(inspect('trusted', id, file), /no file access grant/);
+  assert.deepEqual(reads, [file]);
+});
 
 test('automatic inspection lists the current project library without a picker or file writes', async (t) => {
   const f = await fixture(t);

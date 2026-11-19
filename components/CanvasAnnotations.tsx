@@ -20,6 +20,7 @@ import {
 import { captureAnnotationSelection } from '@/lib/annotation-selection';
 import { capturePCBAnnotationSelection, pcbAnnotationFingerprint } from '@/lib/pcb-annotations';
 import type { PCB } from '@/lib/pcb';
+import type { ModelCAD } from '@/lib/model-cad';
 import { useAnnotationSelectionOutline } from './AnnotationSelectionOutline';
 import {
   annotationSelectionBounds,
@@ -50,6 +51,7 @@ type Props = {
   onExit: () => void;
   /** Model uses the same comment UI with a rendered WebGL capture. */
   objectView?: string;
+  modelCad?: ModelCAD | null;
   captureImage?: typeof captureAnnotationImage;
 };
 
@@ -73,6 +75,7 @@ const CanvasAnnotations = forwardRef<CanvasAnnotationsHandle, Props>(
       onMode,
       onExit,
       objectView,
+      modelCad,
       captureImage = captureAnnotationImage,
     } = props;
     const [draft, setDraft] = useState<{
@@ -130,7 +133,7 @@ const CanvasAnnotations = forwardRef<CanvasAnnotationsHandle, Props>(
       capture.current++;
       capturing.current = false;
       setBusy(false);
-    }, [active, sessionId, doc, board, objectView, selectableIds]);
+    }, [active, sessionId, doc, board, objectView, modelCad, selectableIds]);
     useEffect(
       () => () => {
         capture.current++;
@@ -164,7 +167,13 @@ const CanvasAnnotations = forwardRef<CanvasAnnotationsHandle, Props>(
         setListed(false);
         try {
           const snapshot = board
-            ? capturePCBAnnotationSelection(board, doc, ids, markup)
+            ? capturePCBAnnotationSelection(
+                board,
+                doc,
+                ids,
+                markup,
+                objectView === undefined ? undefined : { viewBasis: objectView, cad: modelCad },
+              )
             : captureAnnotationSelection(doc, ids, markup);
           const bounds = markup
             ? markupBounds(markup)
@@ -179,6 +188,7 @@ const CanvasAnnotations = forwardRef<CanvasAnnotationsHandle, Props>(
             latest.current.doc !== doc ||
             latest.current.board !== board ||
             latest.current.objectView !== objectView ||
+            latest.current.modelCad !== modelCad ||
             latest.current.selectableIds !== selectableIds
           )
             return;
@@ -188,13 +198,6 @@ const CanvasAnnotations = forwardRef<CanvasAnnotationsHandle, Props>(
               bounds,
               image,
               comment: '',
-              ...(objectView === undefined
-                ? {}
-                : {
-                    target: 'object',
-                    viewBasis: objectView,
-                    title: `${doc.title.slice(0, 4087)} · Model`,
-                  }),
             },
             sessionId,
             saved: false,

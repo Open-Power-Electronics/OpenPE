@@ -67,7 +67,10 @@ and custom captions retain native nets, fills and packages while refreshing
 linked captions; power-symbol Values remain electrical. Participation-only
 changes retain PCB bytes. Async preparation cannot replace pending Source,
 newer revisions or a closing project. Accepted synchronization joins its
-originating undo edit; clean materialization retains its baseline. Detailed
+originating undo edit; clean materialization retains its baseline. Footprint and
+Model browse buttons open an assigned online footprint by exact identity and
+prefer the project's downloaded footprint and STEP files. Search remains
+available to browse other packages. Detailed
 connectivity/copper handling belongs in [Layout](LAYOUT.md#project-integrity-and-schematic-synchronization).
 
 ## Catalog service and chooser
@@ -115,30 +118,56 @@ append.
 
 Submit from any source with Search or non-composing input Enter. Editing or clearing
 the draft retains accepted rows, selection, preview, count and appended pages.
-Submitting a query or changing category restarts paging. Refresh replays the
-committed query. Initial loading uses the branded indicator. The chooser retains
+Submitting a query or changing category restarts paging. Retry resumes a failed
+page, preview or category request. Initial loading uses the branded indicator. The chooser retains
 search/filter/selection/preview through appends and errors. Confirm only current loaded valid details, ignoring stale,
 repeated or composing Enter. Symbols enter a canvas preview before committing;
 footprint assignment uses Core. [DESIGN.md](../DESIGN.md) owns presentation.
 
-### NextPCB online catalog
+### Component pricing
 
-For a selected NextPCB entry, **Check price** queries the public HQ Online
-storefront for USD unit prices by order quantity. The host sends only the
-validated original manufacturer part number and pagination fields to the fixed
-HTTPS search endpoint. It reads up to four pages of 50 records and accepts
-offers for the exact full part number, compared without case sensitivity.
-Offers from the selected manufacturer rank first when its label is known.
-The host maps verified catalog labels for Texas Instruments, STMicroelectronics,
-Analog Devices, ON Semiconductor and Microchip Technology for ranking. Other
-manufacturers' offers with the same full part number remain eligible. The
-result includes up to four distinct SKUs with their storefront manufacturer
-labels and stock where provided. A search with unscanned pages and no valid
-offers reports a failed check. A refresh reads current prices even when CAD
-metadata is cached.
-Search, automatic selection, and CAD previews issue no price requests.
-Prices are chooser state and disappear when the selection changes or the dialog
-closes. A failed refresh retains the last successful quote and its checked time.
+The **Price source** dropdown offers LCSC Electronics and HQ Online for selected
+KiCad, NextPCB and JLCPCB entries. It defaults to HQ Online and keeps the user's choice
+while the chooser is open. **Check price** or **Refresh price** starts a request.
+Search, selection, switching price sources and CAD previews issue no price
+requests. A source or selection change cancels pending requests. Each source's
+last successful result and check time stay with the selected entry through
+switches and failed refreshes. Changing the selected entry or closing the chooser
+discards those quotes.
+
+The host resolves the catalog identity before lookup. KiCad uses the symbol's
+Manufacturer Part Number or MPN property and the Manufacturer property when
+present. The bundled `Regulator_Switching:LM2596S-5` and
+`Regulator_Switching:LM2596T-5` symbols with the TI LM2596 datasheet use the
+reviewed order numbers `LM2596S-5.0/NOPB` and `LM2596T-5.0/NOPB` for pricing
+when those fields are empty. Other symbols without a part-number property use
+their full symbol name when it contains a digit. [TI orderable parts](https://www.ti.com/lit/ds/symlink/lm2596.pdf)
+
+Generic symbols without a suitable identifier and standalone KiCad
+footprints yield an empty result. NextPCB and JLCPCB use their catalog part
+numbers and manufacturer metadata without requiring downloadable CAD artwork.
+Cross-catalog searches match the full part number and, when available, the
+manufacturer name or its catalog-provided parenthetical alias. Searches are
+bounded to the first provider page.
+
+- LCSC Electronics supplies USD quantity tiers from its public storefront catalog. JLCPCB
+  entries use the exact shared LCSC part code. Other catalogs use the part number
+  and available manufacturer metadata.
+- HQ Online quotes come from NextPCB's fixed HTTPS `searchSupplyChain` endpoint. A NextPCB entry
+  supplies its validated manufacturer ID and original part number. For KiCad and
+  JLCPCB, the host finds up to four matching NextPCB catalog identities first.
+  The request sends each identity as `manufacturerId-MPN` and accepts HQ Online
+  offers carrying the corresponding ID and complete part number. The offer
+  includes the supplier SKU. The lookup's manufacturer ID identifies the
+  request, so the maker remains unlisted in the offer.
+
+Results contain up to four distinct SKUs with valid USD unit prices by order
+quantity, the manufacturer's label and stock where available. No matching
+priced offer yields an empty result. Provider failures and malformed responses
+remain retryable. Provider requests use fixed HTTPS endpoints with bounded
+responses and no quote cache.
+
+### NextPCB online catalog
 
 The selected deepest category ID determines the displayed path and lower-field
 values. Selecting an ancestor clears lower selections. **All categories** clears
@@ -168,7 +197,7 @@ The public NextPCB search requires a category or keyword. An empty query under
 All categories automatically browses suggestions from the reachable Operational
 Amplifier and Comparators category (1737). A keyword under All categories
 searches across the catalog. Explicit choices survive component selection,
-refresh, clearing and source restoration.
+query resubmission, clearing and source restoration.
 Result Enter/double-click starts placement. Category
 changes restart paging, while completed source restoration retains loaded pages,
 selection and preview. Repeated identities across provider pages produce one
@@ -246,15 +275,17 @@ basename in that store. Missing/ambiguous assets remain explicit retryable error
 models are never inferred from a package name. NextPCB SPICE downloads and
 arbitrary model URLs/local paths are unsupported.
 
-Accepted packages add `footprints/NextPCB.pretty/<ID suffix>.kicad_mod` and the
-`NextPCB` entry in `fp-lib-table` to native Source in the same Core edit as the
-package. Filenames must satisfy the existing native filename bounds; differing
-existing files or library mappings are preserved and reject adoption. Model
-references become `${KIPRJMOD}/models/<SHA-256>.step`, backed by verified immutable
-bytes in the component model store. Save writes these resources beside the
-project; a new unsaved project publishes them on its first Save. Save as carries
-the same footprints and models, and an opened local package can be reused
-without catalog access. No project files are written merely by browsing.
+Schematic placement prepares supported linked packages for both online catalogs,
+including additional sheets and Virtual components. Placement adds the native
+`.kicad_mod` under `footprints/<catalog>.pretty/` and its `fp-lib-table` entry in
+the same Core edit as the symbol. Existing project packages are reused offline.
+Filenames follow native limits. Differing files and library mappings reject
+adoption and retain their bytes. Model references use
+`${KIPRJMOD}/models/<SHA-256>.step`, backed by verified immutable bytes in the
+component model store. The project can preview staged assets immediately. Save
+and Save as write the footprint library and STEP assets beside the native
+project, including STEP files referenced only by a downloaded library footprint.
+Browsing leaves project files alone.
 
 No remote model paths receive local file access. Search/preview never edits a project;
 placement embeds the accepted symbol and uses ordinary Core undo/native Save.
@@ -567,21 +598,31 @@ limits. HTTP 403 and 429 from NextPCB pause the sweep.
 Pass `--exclude path/to/components.jsonl` for each earlier sweep to verify
 distinct catalog identities in a new output directory.
 
+The opt-in supply audit reuses completed symbol and footprint checks from each
+`--cad` report. It sends batches of up to 50 distinct manufacturer ID and full
+part-number pairs. The output under `test-results/` contains separate lists for
+priced, unpriced, failed and unqueried identities plus a summary. HTTP 403 and
+429 stop further requests and retain the results collected so far. Pass
+`--resume <audit-directory>` with the same CAD reports to reuse completed
+results and retry the remaining identities in a new output directory.
+
 | Check                                                                                                               | Scope                                                                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `npm run libraries:verify`                                                                                          | Prepared catalogs, symbols, fields and starter models                                                                                                                                                                    |
 | `node scripts/download-kicad-models.mjs --verify`                                                                   | Complete archive/inventory, offline                                                                                                                                                                                      |
 | `npm run examples:check-models -- --render`                                                                         | Real parsing of 46 reference/31 EMC files and all ten Home Model views; 83 visible EMC model instances, five mounting-hole notices                                                                                       |
 | `tests/libraries.test.ts`, `tests/core-integration.test.ts`, `tests/project-core.test.ts`                           | Catalog/access boundaries, placement/assignment and atomic synchronization                                                                                                                                               |
+| `tests/library-prices.test.ts`                                                                                   | Mocked pricing across the three CAD catalogs and both suppliers, with exact match filtering and reviewed LM2596 orderable identities.                                                                                     |
 | `tests/nextpcb-library.test.ts`, `node scripts/check-nextpcb-library-ui.mjs`                                        | Mocked online catalog boundaries, native validation, retry/cancellation and chooser/IME behavior                                                                                                                         |
 | `node scripts/check-nextpcb-models.mjs --count 10000`                                                               | Opt-in live NextPCB sweep of unique catalog identities, native symbols, footprints and each supported STEP reference. Records per-asset outcomes in `test-results/nextpcb-models/` and resumes from recorded components. |
+| `node scripts/check-nextpcb-prices.mjs --cad test-results/nextpcb-models/components.jsonl`                         | Opt-in live HQ Online quote audit for identities with validated NextPCB symbols and footprints. Repeat `--cad` for additional reports. |
 | `tests/jlcpcb-library.test.ts`, `node scripts/check-library-details-ui.mjs`                                         | Catalog transport, EasyEDA conversion, GUI/Agent queries, portable adoption and the attribution disclosure/links in an isolated browser                                                                                  |
 | `tests/library-footprint-geometry.test.ts`, `tests/nextpcb-project-assets.test.ts`, `tests/library-package.test.ts` | Exact vendor geometry, native package sidecars, portable STEP adoption, offline reuse and shared undo                                                                                                                    |
 | `node scripts/check-model-sync-ui.mjs`                                                                              | Isolated Workbench Model synchronization status/retry, Source/close/IME gates and retained scene/camera; mocked host, no Electron                                                                                        |
 | `node scripts/check-layout-package-ui.mjs`                                                                          | Isolated Layout package preparation/placement, sidecars, undo and cancelled/stale/Source/close/IME rejection; mocked host, no Electron                                                                                   |
 | `tests/step-parser-pool.test.ts`, `node scripts/check-step-parser-reuse.mjs`                                        | Worker bounds/recovery and exact 31-file mesh parity                                                                                                                                                                     |
 | `node scripts/check-library-scroll-ui.mjs`, `node scripts/check-object-retention-ui.mjs`                            | Mocked isolated chooser/state retention                                                                                                                                                                                  |
-| `node scripts/check-assignment-preview-ui.mjs`                                                                      | Opt-in real STEP previews in both assignment dialogs, model-index selection, retry, retained placement scene, IME, narrow layout and native undo                                                                         |
+| `node scripts/check-assignment-preview-ui.mjs`                                                                      | Isolated browser check of shared chooser layout, STEP previews with an unsaved grant, model-index confirmation and retry, retained placement scene, IME and native undo                                                                         |
 | `node scripts/e2e-libraries.mjs`                                                                                    | Opt-in desktop interaction                                                                                                                                                                                               |
 
 `KICAD_CLI` is test-only for `libraries:verify` and must report KiCad 10.x.

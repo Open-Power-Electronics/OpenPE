@@ -15,6 +15,7 @@ export type SpiceModelDeclaration = {
   device?: string;
   pins: string[];
 };
+export type SpiceModelCatalog = { path: string; models: SpiceModelDeclaration[]; issues: string[] };
 import type {
   ProjectDirectoryListing,
   ProjectFilePreview,
@@ -67,11 +68,11 @@ declare global {
       chooseSpiceModel(
         fileId: string,
         currentLibrary?: string,
-      ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
+      ): Promise<SpiceModelCatalog | null>;
       inspectSpiceModel(
         fileId: string,
         library: string,
-      ): Promise<{ path: string; models: SpiceModelDeclaration[]; issues: string[] } | null>;
+      ): Promise<SpiceModelCatalog | null>;
       projectFilePreview(options: { fileId: string; id: string }): Promise<ProjectFilePreview>;
       projectFilePdf(options: { fileId: string; id: string }): Promise<ProjectFilePdf>;
       projectFileWrite(options: ProjectFileWrite): Promise<ProjectFilePreview>;
@@ -146,15 +147,23 @@ async function browserPreviewRequest(route: string, options: RequestInit) {
     if (!prefix || (options.method ?? 'GET') !== 'GET' || options.body !== undefined)
       throw unavailable();
     const query = new URLSearchParams(route.slice(prefix.length));
-    if (!query.has('id') || query.size !== (prefix === 'library-model?' ? 2 : 1))
-      throw unavailable();
+    const expectedSize = prefix === 'library-price?' ? 3 : prefix === 'library-model?' ? 2 : 1;
+    if (!query.has('id') || query.size !== expectedSize) throw unavailable();
     if (prefix === 'library-model?') {
       const index = query.get('index');
       if (index === null || !/^\d{1,2}$/.test(index)) throw unavailable();
       endpoint = 'model';
       body = JSON.stringify({ id: query.get('id'), index: Number(index) });
+    } else if (prefix === 'library-price?') {
+      if (!query.has('kind') || !query.has('source')) throw unavailable();
+      endpoint = 'price';
+      body = JSON.stringify({
+        id: query.get('id'),
+        kind: query.get('kind'),
+        source: query.get('source'),
+      });
     } else {
-      endpoint = prefix === 'library-price?' ? 'price' : 'footprint';
+      endpoint = 'footprint';
       body = JSON.stringify({ id: query.get('id') });
     }
   }

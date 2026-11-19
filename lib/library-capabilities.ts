@@ -8,6 +8,7 @@ import {
   librarySources,
   symbolUnits,
   partFields,
+  partFootprint,
   type SymbolDetail,
   displayPartValue,
 } from './library';
@@ -24,7 +25,7 @@ import { externalModelBinding } from './simulation-model-binding';
 import { prepareSourceConversion } from './simulation-source-conversion';
 import layoutPropertySchemas from '../core/layout-property-schemas.json';
 import { agentCoreResult } from './agent-project-access';
-import { loadLibraryFootprint } from './library-package';
+import { loadLibraryFootprint, prepareSchematicPackage } from './library-package';
 import { attachOnlineFootprint } from './library-project-assets';
 import { prepareSchematicSection } from './schematic-section';
 import type { FootprintSource } from './pcb-sync';
@@ -202,7 +203,7 @@ export function registerLibraryCapabilities(
         review: 'optional',
         description:
           method === 'import'
-            ? 'Select and prepare a local STEP file through the saved project native picker, then append or replace one footprint model in one undo edit. No path input is accepted.'
+            ? 'Select and prepare a local STEP file through the native picker for the open project, then append or replace one footprint model in one undo edit. No path input is accepted.'
             : 'Prepare an official footprint model by catalog ID/index, then append or replace one footprint model in one undo edit.',
         inputSchema: object(
           {
@@ -522,7 +523,16 @@ export function registerLibraryCapabilities(
         part.rotation = rotation;
         next.libraries[part.libId] = structuredClone(resolved.symbol);
         next.parts.push(part);
-        core.replaceSchematic(prepareSchematicSection(next, [part.id], section));
+        const footprint = partFootprint(part);
+        const packageUnavailable =
+          resolved.footprintPreview === 'unavailable' && resolved.footprint === footprint;
+        const nativeFiles = packageUnavailable
+          ? undefined
+          : await prepareSchematicPackage(snapshot.project!, footprint, context.signal);
+        context.signal.throwIfAborted();
+        if (core.getSnapshot() !== snapshot)
+          throw new Error('The project changed while preparing the symbol. Try again.');
+        core.replaceSchematic(prepareSchematicSection(next, [part.id], section), nativeFiles);
         return { id: part.id, reference: part.ref, revision: String(core.getSnapshot().revision) };
       },
     }),

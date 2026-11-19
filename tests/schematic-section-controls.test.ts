@@ -155,23 +155,15 @@ test('compact footer Select exposes the three supported sections and rejects oth
   assert.deepEqual(disabled.changes, []);
 });
 
-test('Properties uses Real and Virtual labels while electrical markers omit manual section assignment', () => {
+test('component Properties omit the section picker for both Real and Virtual parts', () => {
   const circuit = emptyCircuit();
-  const render = (kind: 'R' | 'GND', footprint = '') => {
-    const part = createPart(circuit, kind, 0, 0);
+  for (const footprint of ['', 'Resistor_SMD:R_0805_2012Metric']) {
+    const part = createPart(circuit, 'R', 0, 0);
     if (footprint) part.fields = { Footprint: footprint };
-    return renderToStaticMarkup(
-      createElement(PartProperties, {
-        circuit,
-        part,
-        onSave: () => true,
-        onSectionChange: () => true,
-      }),
+    const markup = renderToStaticMarkup(
+      createElement(PartProperties, { circuit, part, onSave: () => true }),
     );
-  };
-  const resistor = render('R');
-  assert.match(resistor, /aria-label="Schematic section"/);
-  assert.match(resistor, />Virtual</);
-  assert.match(render('R', 'Resistor_SMD:R_0805_2012Metric'), />Real</);
-  assert.doesNotMatch(render('GND'), /aria-label="Schematic section"/);
+    assert.match(markup, /aria-label="Component reference"/);
+    assert.doesNotMatch(markup, /aria-label="Schematic section"/);
+  }
 });

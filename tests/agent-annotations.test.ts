@@ -16,6 +16,7 @@ import {
   pcbAnnotationFingerprint,
 } from '../lib/pcb-annotations';
 import { exampleProject } from '../lib/project-example';
+import { newModelCadObject, type ModelCAD } from '../lib/model-cad';
 import { ownProject } from '../lib/immutable-project';
 import { fieldId } from '../lib/schematic-edit';
 import { createReferenceExample } from '../lib/reference-examples';
@@ -93,6 +94,53 @@ test('layout annotations capture PCB identities and physical properties without 
     () => capturePCBAnnotationSelection(board, project.schematic, []),
     /Select between/,
   );
+});
+
+test('Model solid annotations preserve CAD identity and appearance across later edits', () => {
+  const project = exampleProject();
+  const board = project.pcb!;
+  const lid = { ...newModelCadObject(board, 'box'), name: 'Enclosure lid' };
+  const cad: ModelCAD = { version: 1, objects: [lid] };
+  const viewBasis = '100:200:300';
+  const snapshot = capturePCBAnnotationSelection(
+    board,
+    project.schematic,
+    [lid.id, board.footprints[0].id],
+    undefined,
+    { viewBasis, cad },
+  );
+  assert.equal(snapshot.target, 'object');
+  assert.equal(snapshot.viewBasis, viewBasis);
+  assert.equal(snapshot.basis, pcbAnnotationFingerprint(board, project.schematic));
+  assert.deepEqual(
+    snapshot.elements.map(({ id, kind }) => [id, kind]),
+    [
+      [lid.id, 'solid'],
+      [board.footprints[0].id, 'footprint'],
+    ],
+  );
+  assert.equal(snapshot.elements[0].label, 'Enclosure lid');
+  assert.equal(snapshot.elements[0].properties.Material, 'aluminium');
+  assert.deepEqual(JSON.parse(snapshot.elements[0].properties['Size (mm)']), lid.size);
+  lid.material = 'pmma';
+  assert.equal(snapshot.elements[0].properties.Material, 'aluminium');
+  const accepted = {
+    ...snapshot,
+    comment: 'Make this lid clear acrylic.',
+    image: annotationFixture().image,
+  };
+  const { viewBasis: _viewBasis, ...layoutFields } = accepted;
+  const validators: ((annotations: unknown) => void)[] = [
+    validateAnnotations,
+    validateServiceAnnotations,
+  ];
+  for (const validate of validators) {
+    validate([accepted]);
+    assert.throws(
+      () => validate([{ ...layoutFields, target: 'layout' }]),
+      /Invalid annotated element/,
+    );
+  }
 });
 
 test('owned layout fingerprints reuse board bytes while tracking every drawn label and board edit', () => {

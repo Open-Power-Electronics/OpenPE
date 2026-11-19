@@ -44,6 +44,7 @@ export default function ModelPreview({
   model,
   active = true,
   onUnavailable,
+  onReady,
 }: {
   id?: string;
   index?: number;
@@ -51,6 +52,7 @@ export default function ModelPreview({
   model?: FootprintModel;
   active?: boolean;
   onUnavailable?: (message: string) => void;
+  onReady?: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const currentModel = useRef(model);
@@ -64,6 +66,7 @@ export default function ModelPreview({
   const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
   const reportUnavailable = useEffectEvent((message: string) => onUnavailable?.(message));
+  const reportReady = useEffectEvent(() => onReady?.());
   useLayoutEffect(() => {
     isActive.current = active;
     setRendering.current?.(active);
@@ -181,6 +184,7 @@ export default function ModelPreview({
         fit.current = null;
       };
       setStatus('');
+      reportReady();
     })().catch((e) => {
       if (!control.signal.aborted) {
         if (isLibraryAssetUnavailable(e)) reportUnavailable(e.message);

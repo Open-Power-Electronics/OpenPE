@@ -844,7 +844,7 @@ export class ProjectCore {
     return this.commit(next);
   }
 
-  replaceSchematic(next: Circuit): boolean {
+  replaceSchematic(next: Circuit, nativeFiles?: Project['nativeFiles']): boolean {
     this.requireAppliedSource();
     const latest = this.project;
     if (!latest) return this.commit(createProject(next));
@@ -872,7 +872,7 @@ export class ProjectCore {
         pcb: invalidatePCBFill(latest.pcb, board),
       };
     }
-    return this.commit(replacement);
+    return this.commit(nativeFiles ? { ...replacement, nativeFiles } : replacement);
   }
 
   replaceBoard(board: PCB, nativeFiles?: Project['nativeFiles']): boolean {

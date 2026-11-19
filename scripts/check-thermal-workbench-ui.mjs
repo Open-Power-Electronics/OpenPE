@@ -189,18 +189,25 @@ async function runChecks() {
     if (url.pathname === '/api/agents') return route.fulfill({ json: [] });
     if (url.pathname === '/api/models')
       return route.fulfill({ json: { models: [], defaultModel: '' } });
-    if (process.argv.includes('--schematic-sections') && url.pathname === '/api/libraries/symbols')
-      return route.fulfill({
-        json: url.searchParams.has('categories')
-          ? {
-              categories: [
-                { id: placementDetail.library, name: placementDetail.library, children: [] },
-              ],
-            }
-          : url.searchParams.has('id')
-            ? placementDetail
-            : { entries: [placementDetail], libraries: [placementDetail.library], total: 1 },
-      });
+    if (process.argv.includes('--schematic-sections') && url.pathname === '/api/libraries/symbols') {
+      if (url.searchParams.has('categories'))
+        return route.fulfill({
+          json: { categories: [{ id: placementDetail.library, name: placementDetail.library, children: [] }] },
+        });
+      if (url.searchParams.has('id')) return route.fulfill({ json: placementDetail });
+      const result = {
+        entries: [placementDetail],
+        libraries: [placementDetail.library],
+        total: 1,
+        nextOffset: null,
+      };
+      if (route.request().headers().accept === 'application/x-ndjson')
+        return route.fulfill({
+          contentType: 'application/x-ndjson',
+          body: JSON.stringify({ type: 'result', result }) + '\n',
+        });
+      return route.fulfill({ json: result });
+    }
     if (url.pathname === '/api/thermal/status') {
       statusRequests++;
       return route.fulfill({
@@ -316,6 +323,24 @@ async function runChecks() {
         await new Promise(requestAnimationFrame);
         return svg.getAttribute('viewBox');
       });
+    const waitForCameraChange = (viewBox) =>
+      page.waitForFunction(
+        (before) =>
+          document.querySelector('[data-testid="schematic-canvas"]').getAttribute('viewBox') !==
+          before,
+        viewBox,
+      );
+    const fitSheet = async () => {
+      // Start away from the fitted pose so the delayed Fit has an observable result.
+      const before = await settledCamera();
+      await canvas.hover();
+      await page.mouse.wheel(0, -100);
+      await waitForCameraChange(before);
+      const zoomed = await settledCamera();
+      await canvas.press('Space');
+      await waitForCameraChange(zoomed);
+      return settledCamera();
+    };
     const sectionMenu = () => page.getByRole('listbox', { name: 'Schematic section', exact: true });
     const chooseSection = async (value) => {
       const viewport = await settledCamera();
@@ -458,12 +483,11 @@ async function runChecks() {
     await setTheme('light');
     await sectionTrigger.press('Escape');
     await assertSection('all');
-    await canvas.focus();
-    await canvas.press('Space');
-    const fullFit = await settledCamera();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    const fullFit = await fitSheet();
     const assertFullFit = async () => {
       const expected = fullFit.split(' ').map(Number);
-      const current = (await settledCamera()).split(' ').map(Number);
+      const current = (await fitSheet()).split(' ').map(Number);
       assert.ok(
         current.every((value, index) => Math.abs(value - expected[index]) < 0.5),
         'Fit retains complete-sheet bounds, allowing the existing measured-text rounding.',
@@ -488,8 +512,6 @@ async function runChecks() {
     };
     await chooseSection('hardware');
     await assertSection('hardware');
-    await canvas.focus();
-    await canvas.press('Space');
     await assertFullFit();
     await assertOpacity(sourcePart.id, 0.25);
     await assertOpacity(hardwarePart.id, 1);
@@ -506,16 +528,12 @@ async function runChecks() {
       name: 'Schematic section',
       exact: true,
     });
-    await membership.waitFor();
-    await membership.click();
-    const menu = page.getByRole('listbox', { name: 'Schematic section', exact: true });
-    const fieldBounds = await membership.boundingBox();
-    const popupBounds = await menu.boundingBox();
-    assert.ok(
-      Math.abs(popupBounds.width - fieldBounds.width) <= 1,
-      'The membership popup matches the originating selection field width.',
+    await page.getByRole('textbox', { name: 'Component reference', exact: true }).waitFor();
+    assert.equal(await membership.count(), 0, 'Real components have no section field in Properties.');
+    await page.evaluate(
+      (args) => window.thermalWorkbenchHost().execute('part.section', args),
+      { schematicId: project.schematic.id, partId: membershipPart.id, section: 'simulation' },
     );
-    await menu.getByRole('option', { name: 'Virtual', exact: true }).click();
     await waitForAsync(
       page,
       async (expectedUndoDepth) =>
@@ -567,8 +585,6 @@ async function runChecks() {
       beforeProject.pcb.zones.map(zoneIdentity),
       'Package removal retains zone identities and outlines while refreshing enabled fills.',
     );
-    await assertSection('simulation');
-    await chooseSection('hardware');
     await assertSection('hardware');
     await assertOpacity(sourcePart.id, 0.25);
     await assertOpacity(membershipPart.id, 0.25);
@@ -596,8 +612,6 @@ async function runChecks() {
     await assertOpacity(hardwarePart.id, 0.25);
     for (const item of [...sourceWires, ...sourceLabels]) await assertOpacity(item.id, 1);
     await assertOpacity(mixedWire.id, 0.25);
-    await canvas.focus();
-    await canvas.press('Space');
     await assertFullFit();
     const inactivePosition = await canvas.evaluate((svg, part) => {
       const point = new DOMPoint(part.x, part.y).matrixTransform(svg.getScreenCTM());
@@ -697,13 +711,7 @@ async function runChecks() {
           ?.value === reference,
       sourcePart.ref,
     );
-    await membership.click();
-    assert.equal(
-      await menu.getByRole('option', { name: 'Real', exact: true }).getAttribute('aria-disabled'),
-      'true',
-      'Real cannot be selected in Properties without a Footprint.',
-    );
-    await membership.press('Escape');
+    assert.equal(await membership.count(), 0, 'Virtual components have no section field in Properties.');
     const xPosition = page.getByRole('spinbutton', { name: 'Component X position', exact: true });
     await xPosition.fill('100001');
     await sectionTrigger.click();
@@ -788,7 +796,7 @@ async function runChecks() {
       const viewport = await canvas.getAttribute('viewBox');
       await page.getByRole('button', { name: 'Add component', exact: true }).click();
       const chooser = page.getByRole('dialog', { name: 'Components', exact: true });
-      await chooser.locator('.library-results button').first().click();
+      await chooser.locator('.library-results button[data-index="0"]').waitFor();
       await waitForAsync(page, () => {
         const place = document.querySelector('dialog[open] button[aria-label="Place"]');
         return place && !place.disabled;

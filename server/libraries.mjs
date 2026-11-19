@@ -7,6 +7,7 @@ import { appendEmcFootprintModels } from './emc-flyback-assets.mjs';
 import { createNextPcbLibrary } from './nextpcb-library.mjs';
 import { createJlcpcbLibrary } from './jlcpcb-library.mjs';
 import { LibraryAssetUnavailable } from './library-asset-error.mjs';
+import { isLibraryPriceRequest, kiCadPricePart, readLcscPrices } from './library-prices.mjs';
 import { CatalogHttpError } from './online-library-fetch.mjs';
 import { isOnlineLibrary, librarySources, onlineFootprintLibrary } from './library-format.mjs';
 import {
@@ -166,7 +167,7 @@ export function createStepParserPool({
 
 /** @param {{root?: string, dataDir?: string, allowModelDownloads?: boolean,
  * stepParserPool?: ReturnType<typeof createStepParserPool>, nextpcbFetcher?: typeof fetch,
- * modelFetcher?: typeof fetch, jlcpcbFetcher?: typeof fetch}} options */
+ * modelFetcher?: typeof fetch, jlcpcbFetcher?: typeof fetch, priceFetcher?: typeof fetch}} options */
 export function createLibraryService({
   root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -179,11 +180,13 @@ export function createLibraryService({
   nextpcbFetcher,
   jlcpcbFetcher,
   modelFetcher = fetch,
+  priceFetcher = fetch,
 }) {
   let worker,
     serial = 0,
     closed = false,
-    modelJobs = 0;
+    modelJobs = 0,
+    priceJobs = 0;
   const pending = new Map(),
     downloads = new Map();
   const stepParsers = stepParserPool ?? createStepParserPool();
@@ -267,15 +270,59 @@ export function createLibraryService({
     }
     if (provider) return online[provider].request({ ...message, signal });
     if (message.action === 'detail' && message.kind === 'footprints')
-      return readLocalFootprint(message);
-    return workerRequest(message);
+      return readLocalFootprint(message, signal);
+    return workerRequest(message, signal);
   }
-  async function readLocalFootprint(message) {
+  async function readLocalFootprint(message, signal) {
     const example = await exampleFootprintDetail(message.id);
-    return appendEmcFootprintModels(message.id, example ?? (await workerRequest(message)));
+    signal?.throwIfAborted();
+    return appendEmcFootprintModels(message.id, example ?? (await workerRequest(message, signal)));
   }
-  function workerRequest(message) {
+  /** @returns {Promise<import('../lib/library').LibraryPrice>} */
+  async function price(input, requestSignal) {
+    if (!isLibraryPriceRequest(input)) throw new Error('Invalid component price request.');
+    if (closed) throw new Error('Library service closed.');
+    if (priceJobs >= 4) throw new Error('Too many price checks. Try again shortly.');
+    const signal = AbortSignal.any([
+      shutdown.signal,
+      AbortSignal.timeout(20_000),
+      ...(requestSignal ? [requestSignal] : []),
+    ]);
+    signal.throwIfAborted();
+    const { id, kind, source } = input;
+    priceJobs++;
+    try {
+      const catalog = onlineFootprintLibrary(id);
+      if (source === 'huaqiu' && catalog === 'NextPCB') {
+        const quote = await nextpcb.price(id, signal);
+        signal.throwIfAborted();
+        return { source, ...quote };
+      }
+      let part;
+      if (catalog) {
+        part = await online[catalog].pricingPart(id, signal);
+      } else {
+        const detail = await request({ action: 'detail', kind, id, signal });
+        if (detail.symbol) part = kiCadPricePart(detail);
+      }
+      signal.throwIfAborted();
+      let offers = [];
+      if (part?.mpn) {
+        if (source === 'lcsc') offers = await readLcscPrices(priceFetcher, part, signal);
+        else offers = await nextpcb.searchPrices(part, signal);
+      }
+      signal.throwIfAborted();
+      return { source, currency: 'USD', checkedAt: Date.now(), offers };
+    } catch (error) {
+      if (signal.aborted) throw new Error('Price check cancelled or timed out. Try again.');
+      throw error;
+    } finally {
+      priceJobs--;
+    }
+  }
+  function workerRequest(message, signal) {
     if (closed) return Promise.reject(new Error('Library service closed.'));
+    if (signal?.aborted) return Promise.reject(signal.reason);
     if (pending.size >= 64)
       return Promise.reject(new Error('Too many library requests. Try again shortly.'));
     if (!worker) {
@@ -287,27 +334,42 @@ export function createLibraryService({
       worker.on('message', ({ requestId, result, error }) => {
         const p = pending.get(requestId);
         if (!p) return;
-        clearTimeout(p.timer);
-        pending.delete(requestId);
         error ? p.reject(new Error(error)) : p.resolve(result);
       });
       worker.on('error', (error) => {
-        for (const p of pending.values()) {
-          clearTimeout(p.timer);
-          p.reject(error);
-        }
-        pending.clear();
+        for (const p of pending.values()) p.reject(error);
         worker = undefined;
       });
     }
     return new Promise((resolve, reject) => {
       const requestId = ++serial;
-      const timer = setTimeout(() => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
         pending.delete(requestId);
-        reject(new Error('Library indexing timed out. Try again.'));
-      }, 120000);
-      pending.set(requestId, { resolve, reject, timer });
-      worker.postMessage({ ...message, requestId });
+      };
+      const fail = (error) => {
+        finish();
+        reject(error);
+      };
+      const abort = () => fail(signal.reason);
+      const timer = setTimeout(
+        () => fail(new Error('Library indexing timed out. Try again.')),
+        120000,
+      );
+      pending.set(requestId, {
+        resolve(result) {
+          finish();
+          resolve(result);
+        },
+        reject: fail,
+      });
+      signal?.addEventListener('abort', abort, { once: true });
+      try {
+        worker.postMessage({ ...message, requestId });
+      } catch (error) {
+        fail(error);
+      }
     });
   }
   async function modelBytes(relative) {
@@ -406,7 +468,7 @@ export function createLibraryService({
   }
   return {
     request,
-    price: (id, signal) => nextpcb.price(id, signal),
+    price,
     componentModelBytes,
     parseStep: (bytes, signal) => stepParsers.run(bytes, signal),
     async modelPath(reference, signal) {
@@ -437,11 +499,7 @@ export function createLibraryService({
       shutdown.abort();
       for (const library of Object.values(online)) library.close();
       void worker?.terminate();
-      for (const p of pending.values()) {
-        clearTimeout(p.timer);
-        p.reject(new Error('Library service closed.'));
-      }
-      pending.clear();
+      for (const p of pending.values()) p.reject(new Error('Library service closed.'));
       if (!stepParserPool) stepParsers.close();
     },
   };
