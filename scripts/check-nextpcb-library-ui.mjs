@@ -86,6 +86,8 @@ const bundle = await build({
         if (action === 'library.search') {
           if (input.library === 'JLCPCB') {
             const matches = !input.category ? jlcAllRows : ['20','228'].includes(input.category) ? jlcRows : [];
+            if (input.query === 'SOIC-8' && !input.category)
+              return {entries:[jlc],total:1,nextOffset:null,libraries:['JLCPCB']};
             if (input.query === 'blocked') return {entries:[{...jlc,footprintPreview:undefined}],total:1,nextOffset:null,libraries:['JLCPCB']};
             if (input.query === 'sparse') {
               if (input.offset === 0) return {entries:[],total:13,nextOffset:12,libraries:['JLCPCB']};
@@ -133,6 +135,14 @@ const bundle = await build({
               throw new Error('Unexpected overlapping-page offset: '+input.offset);
             return {entries:pages[input.offset],total:56,nextOffset:({0:16,16:32,32:48,48:null})[input.offset],libraries:['NextPCB']};
           }
+          if (input.library === 'NextPCB' && input.query === 'package:0603' && input.category === '201') {
+            return {entries:input.offset === 50 ? [resistor] : [],total:51,
+              nextOffset:input.offset === 50 ? null : 50,libraries:['NextPCB']};
+          }
+          if (input.library === 'NextPCB' && input.query === '0603' && !input.category) {
+            if (input.offset !== 0) throw new Error('Bare package search must start at offset 0.');
+            return {entries:[resistor],total:1,nextOffset:null,libraries:['NextPCB']};
+          }
           const matches = searchable.filter(entry =>
             (input.library === 'NextPCB' ? entry.library === 'NextPCB' : entry.library !== 'NextPCB'&&(!input.library||entry.library===input.library)) &&
             (!input.category || entry.category===input.category || input.category==='100'&&['1737','102'].includes(entry.category) || input.category==='200'&&entry.category==='201' || ['300','301'].includes(input.category)&&entry.category==='302') &&
@@ -164,9 +174,11 @@ const bundle = await build({
         window.reopenChooser=()=>setOpen(true);
         return open && <LibraryChooser kind="symbols" capabilityHost={capabilityHost}
           onClose={()=>{fixture.closed++;setOpen(false);}}
-          onChoose={(detail,unit,model)=>fixture.chosen.push({
-            id:detail.id,library:detail.library,nativeId:val(detail.symbol),unit,model,
-          })}/>;
+          onChoose={(detail,unit,model)=>{
+            fixture.chosen.push({
+              id:detail.id,library:detail.library,nativeId:val(detail.symbol),unit,model,
+            });
+          }}/>;
       }
       createRoot(document.getElementById('root')).render(<App/>);
     `,
@@ -910,6 +922,12 @@ try {
     },
   );
   await page.evaluate(() => window.fixture.releaseSearch());
+  await search.fill('package:0603');
+  await search.press('Enter');
+  await chooser.getByText('No matching symbols in this batch.', { exact: true }).waitFor();
+  await chooser.getByRole('button', { name: 'Load more', exact: true }).press('Enter');
+  await waitForDetail('NextPCB:1003');
+  assert.equal(await rows.count(), 1);
   await search.fill('Online');
   await submit.click();
   await waitForDetail('NextPCB:1003');
@@ -1350,6 +1368,19 @@ try {
       ['NextPCB', 36],
     ],
   );
+  assert.equal(await categoryPath(), '');
+  await search.fill('0603');
+  await search.press('Enter');
+  await waitForBrowseRows(1);
+  await waitForDetail('NextPCB:1003');
+  assert.equal(await rows.first().locator('.library-result-package').textContent(), '0603');
+  assert.equal(await categoryPath(), '');
+  await chooseSource('JLCPCB');
+  await search.fill('SOIC-8');
+  await search.press('Enter');
+  await waitForBrowseRows(1);
+  await waitForDetail('JLCPCB:C7593');
+  assert.equal(await rows.first().locator('.library-result-package').textContent(), 'SOIC-8');
   assert.deepEqual(errors, []);
   console.log(
     'PASS: default online browsing, overlapping-page deduplication/raw cursor/restoration/retry, failed-search count reset, append-error retention, source/category hierarchy, explicit search, metadata, native single placement, stale preview, IME and cancellation (mocked isolated browser).',

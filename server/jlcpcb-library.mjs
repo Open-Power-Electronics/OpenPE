@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { convertJlcpcbComponent } from './jlcpcb-cad.mjs';
+import { libraryPackageQuery, matchesLibraryPackage } from './library-format.mjs';
 import { CatalogHttpError, readCatalogBytes } from './online-library-fetch.mjs';
 import { LibraryAssetUnavailable } from './library-asset-error.mjs';
 
@@ -208,22 +209,32 @@ export function createJlcpcbLibrary({ fetcher = fetch } = {}) {
       (category && !categoryId.test(category))
     )
       throw new Error('Invalid JLCPCB search.');
-    const keyword = query.trim();
+    const packageQuery = libraryPackageQuery(query);
+    if (packageQuery === '')
+      return { entries: [], total: 0, nextOffset: null, libraries: ['JLCPCB'] };
+    const keyword = packageQuery ?? query.trim();
     const match = category ? (await loadCategories(signal)).filters.get(category) : undefined;
     if (category && !match) throw new Error('Choose an available JLCPCB category.');
     const currentPage = Math.floor(offset / pageSize) + 1;
     const { entries, total } = await loadPage(keyword, currentPage, match?.filter, signal);
     const start = offset % pageSize;
-    const end = Math.min(pageSize, start + scanLimit);
-    const next = offset - start + end;
+    const end = packageQuery === undefined ? Math.min(pageSize, start + scanLimit) : pageSize;
+    const matches = [];
+    let cursor = start;
+    while (cursor < end && matches.length < scanLimit) {
+      const entry = entries[cursor++];
+      if (!entry) continue;
+      const available = recall(availability, entry.id);
+      if (
+        available !== 'unavailable' &&
+        (packageQuery === undefined || matchesLibraryPackage(entry.package, packageQuery)) &&
+        (available || entry.package?.trim() || entry.id === `JLCPCB:${keyword}`)
+      )
+        matches.push(entry);
+    }
+    const next = offset - start + cursor;
     return {
-      entries: entries.slice(start, end).filter((entry) => {
-        const available = recall(availability, entry.id);
-        return (
-          available !== 'unavailable' &&
-          (available || entry.package?.trim() || entry.id === `JLCPCB:${keyword}`)
-        );
-      }),
+      entries: matches,
       total,
       nextOffset: next < Math.min(total, 1_000_000) ? next : null,
       libraries: ['JLCPCB'],

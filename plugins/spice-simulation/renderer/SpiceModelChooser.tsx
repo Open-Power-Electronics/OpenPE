@@ -219,7 +219,7 @@ export default function SpiceModelChooser({
           disabled={busy !== null || (downloaded ? !model : !choice)}
           onClick={downloaded ? choose : download}
         >
-          {busy === 'download' ? 'Downloading…' : downloaded ? 'Use model' : 'Download'}
+          {busy === 'download' ? 'Downloading…' : downloaded ? 'Apply' : 'Download'}
         </button>
       }
     >

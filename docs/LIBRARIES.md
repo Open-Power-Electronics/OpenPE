@@ -1,8 +1,9 @@
 # KiCad libraries and model delivery
 
-OpenPE uses bundled official KiCad libraries and the explicitly selected NextPCB
-and JLCPCB online catalogs. It uses bundled resources and host adapters without
-installed KiCad resource discovery or runtime CLI conversion.
+OpenPE uses bundled official KiCad libraries, pinned native example footprints
+and the explicitly selected NextPCB and JLCPCB online catalogs. It uses bundled
+resources and host adapters without installed KiCad resource discovery or runtime
+CLI conversion.
 Catalog availability does not imply support
 for every feature or simulation model. [FORMAT.md](FORMAT.md) defines native
 data, [LAYOUT.md](LAYOUT.md) defines synchronization/Model editing, and
@@ -90,14 +91,34 @@ placement and ranking rules in `lib/library.ts` generate
 `server/library-format.mjs` through `npm run build:format`; edit sources, not
 bundles.
 
-Bundled search ranks all matches before returning pages of at most 100: exact IDs/names,
+The KiCad source in the Footprint and Model choosers combines official
+namespaces with pinned native examples, including all seven reviewed Würth
+Elektronik footprints and their linked STEP models. Filter by the native
+namespace or search by footprint ID or pinned STEP filename. Search
+deduplicates shared footprint IDs before ranking and pagination. Detail and
+assignment use the original native IDs and asset provenance. The on-disk KiCad
+index tracks the official resource tree.
+
+Bundled search ranks all matches before returning pages of at most 100. Exact IDs/names,
 prefixes and partial names precede keywords/descriptions, with stable ID ties.
 Empty queries browse alphabetically. Workers retain the last ranked query per
 kind so appending pages avoids repeating a search.
 
+Search for common package codes such as `0603`, `SOT-23` and `SOP8` directly in
+KiCad, NextPCB and JLCPCB. Use `package:<name>` to search for other package
+labels. Package queries match the linked native footprint for KiCad symbols,
+the native ID for KiCad footprints and the declared Package field for online
+sources. Named package matching ignores case, spaces and punctuation. Chip
+size matching uses the package code and excludes parenthesized metric aliases.
+Ordinary KiCad symbol search also matches the linked footprint name and ID.
+Scroll or use Load more to continue online package-only searches, including
+after a batch with no matches.
+
 Ordinary catalog queries do not read CAD for result rows. The symbol chooser
 requests status-checked pages via `library.search`. Each batch covers up to
-16 KiCad results or 16 raw NextPCB or JLCPCB catalog rows. Online batches
+16 KiCad results or 16 raw NextPCB or JLCPCB catalog rows for ordinary searches.
+Online package search can examine the rest of the current catalog page and
+returns at most 16 matches per status-checked batch. Online batches
 continue across provider page boundaries; filtered or repeated rows consume
 their raw cursor positions and can yield fewer results. KiCad reads the exact
 linked native footprint, and NextPCB checks up to four rows in parallel with a
@@ -198,6 +219,16 @@ All categories automatically browses suggestions from the reachable Operational
 Amplifier and Comparators category (1737). A keyword under All categories
 searches across the catalog. Explicit choices survive component selection,
 query resubmission, clearing and source restoration.
+Common chip package codes (`01005`, `0201`, `0402`, `0603`, `0805`, `1008`,
+`1206`, `1210`, `1812`, `2010`, `2220`, `2512`) search the declared package
+directly. The first numeric group must equal the code. All categories combines the
+first 50 rows of each reachable Chip Resistors, Chip Capacitor (MLCC), Ceramic
+Capacitors, Inductors and Chip Bead category, deduplicates identities, and pages
+through the matching sample. Recognized named packages sample General Purpose
+Transistors, MOSFETs, Schottky Diode, Operational Amplifier and Comparators, and
+Linear Voltage Regulators, plus the first cross-category keyword page. Selecting
+a category searches its browsing pages. Other package labels under All
+categories filter the provider's keyword results by their declared package.
 Result Enter/double-click starts placement. Category
 changes restart paging, while completed source restoration retains loaded pages,
 selection and preview. Repeated identities across provider pages produce one
@@ -304,6 +335,8 @@ results, including when All categories is selected and the query is blank.
 Choose a root to include its descendants or a child to narrow the search.
 Categories can be browsed without a keyword. A model, keyword or `C` part
 number can search across all categories or within the selected category.
+Package-only search sends the package text as a keyword and filters the
+returned candidates by their declared package.
 The host returns up to 100 catalog rows per page in provider order. A row
 with a declared or verified package is eligible. An exact part-number search
 can also find a part whose package label is missing. An earlier detail check
@@ -518,6 +551,15 @@ identical tessellation parameters and never caches failures. A missing STEP
 source or explicit tessellation rejection confirms the current preview is
 unavailable. Network errors, timeouts and worker failures remain retryable.
 Chooser 3D previews one footprint. Model renders the board and available packages.
+
+Four pinned Würth STEP assemblies (WE-DD-7345straight, WE-LQSH-2010,
+WE-LQSH-2512 and WE-CMB 744822222) carry surface colours on the component
+definition. `server/step-appearance.mjs` matches their SHA-256 hashes and
+reads the same solids without the single assembly occurrence to recover its
+solid and face colours. Mesh and face counts must agree before recovered
+colours fill uncoloured ranges. Positions, normals, indices, face ranges and
+saved STEP bytes come from the original model. The analytical 750311591 STEP
+has no colour records and uses the neutral preview material.
 
 ### Model lifetime and caches
 

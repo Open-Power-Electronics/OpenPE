@@ -138,6 +138,96 @@ test('NextPCB public search uses fixed JSON POST, stable manufacturer identities
   }
 });
 
+test('NextPCB matches declared packages across category pages while preserving raw offsets', async () => {
+  const { fetcher, calls } = fixture((url, options) => {
+    if (!url.endsWith('/queryPage')) return;
+    const body = JSON.parse(String(options.body));
+    if (!body.cateId) {
+      assert.equal(body.desc, 'SOP8');
+      return json([row, { ...row, mpn: 'SOP8-Comparison', package: 'DIP8' }], { total: 2 });
+    }
+    assert.equal(body.cateId, 1737);
+    assert.equal(body.desc, undefined, 'Category scanning matches package-only rows.');
+    const other = Array.from({ length: 49 }, (_, index) => ({
+      ...row,
+      mpn: 'Other-' + index,
+      package: index % 2 ? 'DIP8' : '',
+    }));
+    return body.pageNum === 1
+      ? json([...other, row], { total: 51 })
+      : json([{ ...row, mpn: 'Other-50', package: 'DIP8' }], { total: 51 });
+  });
+  const service = createLibraryService({ nextpcbFetcher: fetcher });
+  const search = { action: 'search', kind: 'symbols', library: 'NextPCB', includeAssetStatus: true };
+  try {
+    const first = await service.request({ ...search, query: ' package:sop-8 ', category: '1737' });
+    assert.deepEqual(first.entries.map(({ id }: LibraryEntry) => id), [id]);
+    assert.equal(first.entries[0].footprintPreview, '2d');
+    assert.equal(first.nextOffset, 50);
+    const next = await service.request({
+      ...search,
+      query: 'package:sop-8',
+      category: '1737',
+      offset: first.nextOffset,
+    });
+    assert.deepEqual(next.entries, []);
+    assert.equal(next.nextOffset, null);
+    const all = await service.request({ ...search, query: 'package:SOP8' });
+    assert.deepEqual(all.entries.map(({ id }: LibraryEntry) => id), [id]);
+    assert.deepEqual(await service.request({ ...search, query: 'SOP8' }), all);
+    assert.equal(calls.filter(({ url }) => url.endsWith('/queryPage')).length, 3);
+    assert.equal(calls.filter(({ url }) => url.endsWith('/productDetail')).length, 1);
+  } finally {
+    service.close();
+  }
+});
+
+test('NextPCB finds bare 0603 in All categories by matching catalog package fields', async () => {
+  const resistor = { ...row, mpn: 'Chip-R', package: '0603' };
+  const capacitor = { ...row, mpn: 'Chip-C', package: 'C0603 (1608 Metric)' };
+  const { service, calls } = fixture((url, options) => {
+    if (url.endsWith('/cateTree'))
+      return json([
+        ...categoryRows,
+        { cateId: 865, cateDisplayName: 'Resistors', parentId: 0, level: 1 },
+        { cateId: 1009, cateDisplayName: 'Chip Resistors', parentId: 865, level: 2 },
+        { cateId: 398, cateDisplayName: 'Chip Capacitor (MLCC)', parentId: 855, level: 2 },
+      ]);
+    assert.ok(url.endsWith('/queryPage'), 'Search reads metadata only.');
+    const body = JSON.parse(String(options.body));
+    assert.equal(body.desc, undefined, 'Bare package codes use category pages.');
+    assert.equal(body.pageNum, 1);
+    if (body.cateId === 1009)
+      return json(
+        [
+          { ...row, mpn: 'Chip-0201', package: '0201 (0603 Metric)' },
+          { ...row, mpn: 'Looks-like-0603', package: '0805' },
+          resistor,
+        ],
+        { total: 500 },
+      );
+    assert.equal(body.cateId, 398);
+    return json([resistor, capacitor], { total: 500 });
+  });
+  const search = { action: 'search', kind: 'symbols', library: 'NextPCB', query: ' 0603 ' };
+  try {
+    const first = await service.request({ ...search, scanLimit: 1 });
+    assert.deepEqual(first.entries.map(({ name }: LibraryEntry) => name), ['Chip-R']);
+    assert.equal(first.total, 2);
+    assert.equal(first.nextOffset, 1);
+    const second = await service.request({ ...search, offset: first.nextOffset, scanLimit: 1 });
+    assert.deepEqual(second.entries.map(({ name }: LibraryEntry) => name), ['Chip-C']);
+    assert.equal(second.nextOffset, null);
+    assert.deepEqual(await service.request({ ...search, query: 'package:0603', scanLimit: 1 }), first);
+    assert.equal(calls.length, 3, 'Pagination and equivalent queries reuse catalog pages.');
+    const selected = await service.request({ ...search, category: '1009' });
+    assert.deepEqual(selected.entries.map(({ name }: LibraryEntry) => name), ['Chip-R']);
+    assert.equal(selected.nextOffset, 50);
+  } finally {
+    service.close();
+  }
+});
+
 test('NextPCB uses the verified suggestion category for blank All searches', async () => {
   const { service, calls } = fixture((url, options) => {
     if (!url.endsWith('/queryPage')) return;

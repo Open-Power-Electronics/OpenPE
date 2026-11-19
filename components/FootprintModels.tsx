@@ -390,7 +390,6 @@ export default function FootprintModels({
             kind="footprints"
             title="Choose component model"
             label="Choose component model"
-            actionLabel="Use model"
             requireModel
             canChoose={!busy}
             capabilityHost={capabilityHost}

@@ -175,7 +175,6 @@ const bundle = await build({
   function App(){const[kind,setKind]=useState('symbols');window.setKind=setKind;
     const[source,setSource]=useState('NextPCB');window.setSource=setSource;return <Chooser key={source+kind}
     kind={kind==='models'?'footprints':kind} requireModel={kind==='models'}
-    actionLabel={kind==='models'?'Use model':undefined}
     initialLibrary={source} initialSearch="Fixture" onClose={()=>{}} onChoose={()=>{window.placements=(window.placements||0)+1}}/>}createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
@@ -864,7 +863,7 @@ try {
   unsupportedPackage = false;
   multipleModels = true;
   await page.setViewportSize({ width: 1120, height: 800 });
-  const useModel = page.getByRole('button', { name: 'Use model', exact: true });
+  const useModel = page.getByRole('button', { name: 'Update', exact: true });
   const modelSelector = page.getByRole('combobox', { name: '3D model', exact: true });
   const modelOptions = page.getByRole('listbox', { name: '3D model', exact: true });
   const unavailableOption = modelOptions

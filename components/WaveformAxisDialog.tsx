@@ -84,7 +84,7 @@ export default function WaveformAxisDialog({
               if (!composing.current) onApply(null);
             }}
           >
-            Auto scale
+            Autoscale
           </button>
           <button className="dialog-button primary" onClick={apply}>
             Apply

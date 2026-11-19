@@ -259,7 +259,7 @@
 .docked .fields > label,
 .docked .fields > .field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
 }
@@ -270,7 +270,7 @@
 .docked .fields > label:last-child:nth-child(odd) {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
 }
@@ -330,7 +330,7 @@
 }
 .docked .fields.dimensions > label:only-child {
   grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   grid-template-rows: auto;
   align-items: center;
 }
@@ -517,7 +517,7 @@
 .colorField {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
   color: var(--muted);

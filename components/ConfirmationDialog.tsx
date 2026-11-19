@@ -39,7 +39,7 @@ export default function ConfirmationDialog({
               disabled={busy}
               onClick={() => void onConfirm()}
             >
-              Don't save
+              Discard
             </button>
 
             <button

@@ -6313,7 +6313,7 @@ function LayoutEditor({
           kind="footprints"
           title="Place footprint"
           label="Footprint placement"
-          actionLabel="Place footprint"
+          actionLabel="Place"
           canChoose={unplaced.some((part) => part.id === partId)}
           header={
             <div className="layout-placement-target">

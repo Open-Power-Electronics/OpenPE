@@ -34,6 +34,33 @@ import { assertContainedPath, canonicalDirectory } from './host-path.cjs';
 const root = fileURLToPath(new URL('../resources/example-catalog/footprints/', import.meta.url));
 const packages = new Map(manifest.footprints.map((entry) => [entry.id, entry]));
 const emcPackages = new Map(emcManifest.footprints.map((entry) => [entry.id, entry]));
+
+/** Build the searchable view without changing the official KiCad index or reading CAD. */
+export function exampleFootprintSearchCatalog(official) {
+  const entries = new Map(official.map((entry) => [entry.id, entry]));
+  function include(record, modelPaths) {
+    const original = entries.get(record.id);
+    if (!original && !record.file) return;
+    const [library, name] = record.id.split(':');
+    const filenames = new Set(modelPaths.map((model) => model.split('/').at(-1)));
+    entries.set(record.id, {
+      ...(original ?? {
+        id: record.id,
+        library,
+        name,
+        description: 'Bundled example footprint',
+        keywords: '',
+      }),
+      keywords: [original?.keywords, ...filenames].filter(Boolean).join(' '),
+    });
+  }
+  for (const entry of packages.values())
+    include(entry, entry.models.flatMap((model) => [model, exampleModelPath(model)]));
+  for (const entry of emcPackages.values())
+    include(entry, entry.models.map((model) => model.path));
+  return [...entries.values()];
+}
+
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 async function readAsset(file, hash, assetRoot = root) {
   if (!file || path.isAbsolute(file) || file.split(/[\\/]/).some((p) => p === '..' || !p))

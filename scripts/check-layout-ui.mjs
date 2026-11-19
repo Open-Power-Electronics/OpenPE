@@ -802,7 +802,7 @@ try {
   assert.equal(await placementDialog.count(), 0, 'Closing the chooser cancels initial placement.');
   assert.equal(await placeFootprint.getAttribute('aria-pressed'), 'false');
   await placeFootprint.click();
-  await placementDialog.getByRole('button', { name: 'Place footprint', exact: true }).click();
+  await placementDialog.getByRole('button', { name: 'Place', exact: true }).click();
   assert.equal(await placementDialog.count(), 0);
   assert.equal(await canvas.evaluate((element) => document.activeElement === element), true);
   const placementPreview = canvas.locator('.layout-footprint.is-placement > g').first();
@@ -822,7 +822,7 @@ try {
   );
   await button('Layout').click();
   await placeFootprint.click();
-  await placementDialog.getByRole('button', { name: 'Place footprint', exact: true }).click();
+  await placementDialog.getByRole('button', { name: 'Place', exact: true }).click();
   await button('Route tracks').click();
   assert.equal(
     await canvas.locator('.is-placement').count(),
@@ -830,7 +830,7 @@ try {
     'Switching tools cancels placement.',
   );
   await placeFootprint.click();
-  await placementDialog.getByRole('button', { name: 'Place footprint', exact: true }).click();
+  await placementDialog.getByRole('button', { name: 'Place', exact: true }).click();
   await clickPoint(25.4, 25.4);
   assert.equal(
     await placeFootprint.getAttribute('aria-pressed'),

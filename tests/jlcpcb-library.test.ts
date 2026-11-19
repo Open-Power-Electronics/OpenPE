@@ -799,6 +799,49 @@ test('JLCPCB category browsing applies verified parents and children and shares 
   }
 });
 
+test('JLCPCB bare and explicit package searches find declared matches beyond the first raw batch', async () => {
+  const fetcher: typeof fetch = async (url, options) => {
+    assert.equal(String(url), catalogUrl);
+    const body = JSON.parse(String(options?.body));
+    const chip = body.keyword === '0603';
+    assert.deepEqual(body, {
+      keyword: chip ? '0603' : 'smd2',
+      currentPage: 1,
+      pageSize: 100,
+    });
+    return Response.json({
+      code: 200,
+      data: {
+        componentPageInfo: {
+          total: 21,
+          pageNum: 1,
+          pageSize: 100,
+          list: [
+            ...Array.from({ length: 20 }, (_, index) => ({
+              ...row,
+              componentCode: 'C' + (999 + index),
+              componentModelEn: (chip ? '0603' : 'SMD2') + '-Other',
+              componentSpecificationEn: chip ? '0201 (0603 Metric)' : 'SMD-4',
+            })),
+            { ...row, componentSpecificationEn: chip ? '0603' : 'SMD-2' },
+          ],
+        },
+      },
+    });
+  };
+  const library = createJlcpcbLibrary({ fetcher });
+  try {
+    for (const query of ['package:smd2', 'smd2', '0603']) {
+      const result = await library.request({ action: 'search', kind: 'symbols', query, scanLimit: 16 });
+      assert.deepEqual(result.entries.map((entry: { id: string }) => entry.id), [id], query);
+      assert.equal(result.total, 21);
+      assert.equal(result.nextOffset, null);
+    }
+  } finally {
+    library.close();
+  }
+});
+
 test('JLCPCB keeps metadata paging independent of CAD and omits known absent packages', async () => {
   const { fetcher, requests } = fixture((part) =>
     part === 'C1000' ? Response.json({ success: false, code: 404 }) : undefined,

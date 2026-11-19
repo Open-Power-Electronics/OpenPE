@@ -101,7 +101,7 @@ try {
       throw error;
     });
     await dialog.locator('.library-results button').first().click();
-    const choose = dialog.getByRole('button', { name: 'Place footprint', exact: true });
+    const choose = dialog.getByRole('button', { name: 'Place', exact: true });
     await choose.waitFor();
     await choose.dispatchEvent('keydown', { key: 'Enter', keyCode: 229 });
     await page.waitForTimeout(50);

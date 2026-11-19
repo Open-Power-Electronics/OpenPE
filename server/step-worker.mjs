@@ -1,20 +1,24 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import occtImport from 'occt-import-js';
 import { LibraryAssetUnavailable } from './library-asset-error.mjs';
+import { restoreStepAssemblyColors } from './step-appearance.mjs';
 let parser;
 async function convert(bytes) {
   const occt = await (parser ??= occtImport());
-  const result = occt.ReadStepFile(new Uint8Array(bytes), {
-    linearUnit: 'millimeter',
-    linearDeflectionType: 'bounding_box_ratio',
-    linearDeflection: 0.003,
-    angularDeflection: 0.5,
-  });
+  const read = (source) =>
+    occt.ReadStepFile(new Uint8Array(source), {
+      linearUnit: 'millimeter',
+      linearDeflectionType: 'bounding_box_ratio',
+      linearDeflection: 0.003,
+      angularDeflection: 0.5,
+    });
+  const result = read(bytes);
   if (!result.success || !result.meshes?.length)
     throw new LibraryAssetUnavailable('The STEP model could not be tessellated.');
   const vertices = result.meshes.reduce((n, m) => n + m.attributes.position.array.length, 0);
   if (vertices > 6_000_000)
     throw new LibraryAssetUnavailable('This model exceeds the preview complexity limit.');
+  restoreStepAssemblyColors(bytes, result.meshes, read);
   return { meshes: result.meshes, heapBytes: occt.HEAPU8.buffer.byteLength };
 }
 

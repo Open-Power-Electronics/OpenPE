@@ -11,6 +11,9 @@ import {
   quote,
   createProject,
   createLibraryPart,
+  libraryPackageCodeKind,
+  libraryPackageQuery,
+  matchesLibraryPackage,
   validateProject,
 } from './library-format.mjs';
 import { createEmptyPCB, createPCBFootprint, readLibraryFootprint } from './pcb-layout-format.mjs';
@@ -25,6 +28,12 @@ const ORIGIN = 'https://library.nextpcb.com';
 // Use its verified 50-row page size and map offsets to those native pages.
 const PAGE_SIZE = 50;
 const SUGGESTED_CATEGORY = '1737';
+const PACKAGE_SEARCH_CATEGORIES = {
+  // Chip Resistors, Chip Capacitor (MLCC), Ceramic Capacitors, Inductors and Chip Bead.
+  chip: ['1009', '398', '1173', '856', '364'],
+  // General Purpose Transistors, MOSFETs, Schottky Diode, Amplifiers and Linear Regulators.
+  named: ['1575', '1578', '1558', '1737', '1700'],
+};
 const MAX_NATIVE_BYTES = 2_000_000;
 const MAX_JSON_BYTES = 2_000_000;
 const MAX_MODEL_BYTES = 32 * 1024 * 1024;
@@ -354,31 +363,7 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     return structuredClone(value);
   }
 
-  async function search(
-    { kind, query = '', library = 'NextPCB', category = '', offset = 0, scanLimit = PAGE_SIZE },
-    signal,
-  ) {
-    if (
-      library !== 'NextPCB' ||
-      typeof query !== 'string' ||
-      query.length > 200 ||
-      /[\u0000-\u001f]/.test(query) ||
-      typeof category !== 'string' ||
-      (category !== '' && !/^[1-9]\d{0,9}$/.test(category)) ||
-      !Number.isInteger(offset) ||
-      offset < 0 ||
-      offset > 999999
-    )
-      throw new Error('Invalid NextPCB search.');
-    const keyword = query.trim();
-    const catalogCategory = category || (keyword ? '' : SUGGESTED_CATEGORY);
-    if (catalogCategory && !(await categories(signal)).ids.includes(catalogCategory))
-      throw new Error(
-        category
-          ? 'Choose an available NextPCB category.'
-          : 'NextPCB suggestions are unavailable. Enter a model or choose a category.',
-      );
-    const pageNum = Math.floor(offset / PAGE_SIZE) + 1;
+  async function searchPage(keyword, catalogCategory, pageNum, signal) {
     const key = JSON.stringify([keyword, catalogCategory, pageNum]);
     let page = cached(pages, key);
     if (!page) {
@@ -435,13 +420,87 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
         throw new Error('NextPCB returned duplicate component identities.');
       put(pages, key, page, 8);
     }
-    const start = offset % PAGE_SIZE;
-    const end = Math.min(PAGE_SIZE, start + scanLimit);
-    const next = offset - start + end;
+    return page;
+  }
+
+  async function searchPackageSample({ kind, query, packageKind, offset, scanLimit }, signal) {
+    const { ids } = await categories(signal);
+    const scope = PACKAGE_SEARCH_CATEGORIES[packageKind].filter((id) => ids.includes(id));
+    const pages = scope.map((id) => searchPage('', id, 1, signal));
+    if (packageKind === 'named') pages.push(searchPage(query, '', 1, signal));
+    if (!pages.length) throw new Error('NextPCB chip package categories are unavailable.');
+    const matches = new Map();
+    for (const { entries } of await Promise.all(pages))
+      for (const entry of entries)
+        if (
+          (kind === 'symbols' || entry.footprint) &&
+          matchesLibraryPackage(entry.package, query) &&
+          !matches.has(entry.id)
+        )
+          matches.set(entry.id, entry);
+    const end = offset + scanLimit;
     return {
-      entries: page.entries
-        .slice(start, end)
-        .filter((entry) => kind === 'symbols' || entry.footprint),
+      entries: [...matches.values()].slice(offset, end),
+      total: matches.size,
+      nextOffset: end < matches.size ? end : null,
+      libraries: ['NextPCB'],
+    };
+  }
+
+  async function search(
+    { kind, query = '', library = 'NextPCB', category = '', offset = 0, scanLimit = PAGE_SIZE },
+    signal,
+    allowPackageQuery = true,
+  ) {
+    if (
+      library !== 'NextPCB' ||
+      typeof query !== 'string' ||
+      query.length > 200 ||
+      /[\u0000-\u001f]/.test(query) ||
+      typeof category !== 'string' ||
+      (category !== '' && !/^[1-9]\d{0,9}$/.test(category)) ||
+      !Number.isInteger(offset) ||
+      offset < 0 ||
+      offset > 999999
+    )
+      throw new Error('Invalid NextPCB search.');
+    const packageQuery = allowPackageQuery ? libraryPackageQuery(query) : undefined;
+    const packageKind = packageQuery && libraryPackageCodeKind(packageQuery);
+    if (packageKind && !category)
+      return searchPackageSample({ kind, query: packageQuery, packageKind, offset, scanLimit }, signal);
+    if (packageQuery === '')
+      return { entries: [], total: 0, nextOffset: null, libraries: ['NextPCB'] };
+    // With a category, browse its package metadata independently of the provider's text index.
+    const keyword = packageQuery === undefined ? query.trim() : category ? '' : packageQuery;
+    const catalogCategory = category || (keyword ? '' : SUGGESTED_CATEGORY);
+    if (catalogCategory && !(await categories(signal)).ids.includes(catalogCategory))
+      throw new Error(
+        category
+          ? 'Choose an available NextPCB category.'
+          : 'NextPCB suggestions are unavailable. Enter a model or choose a category.',
+      );
+    const page = await searchPage(
+      keyword,
+      catalogCategory,
+      Math.floor(offset / PAGE_SIZE) + 1,
+      signal,
+    );
+    const start = offset % PAGE_SIZE;
+    const end = packageQuery === undefined ? Math.min(PAGE_SIZE, start + scanLimit) : PAGE_SIZE;
+    const entries = [];
+    let cursor = start;
+    while (cursor < end && entries.length < scanLimit) {
+      const entry = page.entries[cursor++];
+      if (
+        entry &&
+        (kind === 'symbols' || entry.footprint) &&
+        (packageQuery === undefined || matchesLibraryPackage(entry.package, packageQuery))
+      )
+        entries.push(entry);
+    }
+    const next = offset - start + cursor;
+    return {
+      entries,
       total: page.total,
       nextOffset: next < Math.min(page.total, 1_000_000) ? next : null,
       libraries: ['NextPCB'],
@@ -599,7 +658,7 @@ export function createNextPcbLibrary({ fetcher = fetch } = {}) {
     pricingPart: (id, signal) => run(signal, (signal) => pricingPart(id, signal)),
     searchPrices(part, signal) {
       return run(signal, async (signal) => {
-        const { entries } = await search({ kind: 'symbols', query: part.mpn }, signal);
+        const { entries } = await search({ kind: 'symbols', query: part.mpn }, signal, false);
         const matches = entries
           .filter(({ name, manufacturer }) => matchesPricePart(part, name, manufacturer))
           .slice(0, 4)

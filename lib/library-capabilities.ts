@@ -449,7 +449,7 @@ export function registerLibraryCapabilities(
       id: 'library.search',
       kind: 'query',
       description:
-        'Search KiCad symbols and footprints or online parts with linked footprints. For online search, use a keyword or a category ID from library.categories. Empty filters browse JLCPCB. Set includeAssetStatus for symbol pages with checked footprint and model links. Use the returned nextOffset to continue a paged scan, including after an empty batch. Null ends the scan.',
+        'Search KiCad symbols and footprints or online parts with linked footprints. Enter common package codes such as 0603 or SOT-23 directly, or prefix another label with package:. For online search, use a query or a category ID from library.categories. Empty filters browse JLCPCB. Set includeAssetStatus for symbol pages with checked footprint and model links. Use the returned nextOffset to continue a paged scan, including after an empty batch. Null ends the scan.',
       inputSchema: object(
         {
           kind,

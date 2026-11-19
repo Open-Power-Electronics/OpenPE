@@ -201,7 +201,7 @@ try {
   await button('Source').click();
   await fillSource(page, '{discard this draft');
   await button('Close project').click();
-  await button("Don't save").click();
+  await button('Discard').click();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   assert.equal(saved, baseline, 'Discarding a project never deletes its saved file.');
   assert.deepEqual(errors, []);

@@ -411,7 +411,7 @@ try {
   await button('Source').click();
   await fillSource(page, '{unfinished');
   await fileMenuAction(page, 'Close project');
-  await closeDialog.getByRole('button', { name: "Don't save", exact: true }).click();
+  await closeDialog.getByRole('button', { name: 'Discard', exact: true }).click();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();
   await page.reload();
   await page.getByRole('region', { name: 'Welcome to OpenPE', exact: true }).waitFor();

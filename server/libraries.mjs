@@ -23,7 +23,7 @@ async function readOnlineStatusPage(adapter, message, signal) {
   const read = (offset, scanLimit) => adapter.request({ ...message, offset, scanLimit, signal });
   const first = await read(offset, statusBatchSize);
   const cursor = first.nextOffset;
-  if (cursor === null || cursor - offset === statusBatchSize) return first;
+  if (cursor === null || cursor - offset >= statusBatchSize) return first;
   const second = await read(cursor, statusBatchSize - (cursor - offset));
   const seen = new Set(first.entries.map((entry) => entry.id));
   return {
@@ -208,9 +208,7 @@ export function createLibraryService({
       if (isOnlineLibrary(message.source))
         return online[message.source].request({ ...message, signal });
       return workerRequest({ action: 'search', kind: message.kind }).then(({ libraries }) => ({
-        categories: [...libraries]
-          .sort((a, b) => a.localeCompare(b))
-          .map((name) => ({ id: name, name, children: [] })),
+        categories: libraries.map((name) => ({ id: name, name, children: [] })),
       }));
     }
     if (message.category && !isOnlineLibrary(message.library))

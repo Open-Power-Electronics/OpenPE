@@ -83,6 +83,48 @@ export function isLibraryAssetUnavailable(
   );
 }
 
+export function libraryPackageQuery(query: string) {
+  const value = query.trim();
+  const explicit = /^package:(.*)$/i.exec(value)?.[1].trim();
+  return explicit ?? (libraryPackageCodeKind(value) ? value : undefined);
+}
+
+const chipPackageSizes = new Set([
+  '01005',
+  '0201',
+  '0402',
+  '0603',
+  '0805',
+  '1008',
+  '1206',
+  '1210',
+  '1812',
+  '2010',
+  '2220',
+  '2512',
+]);
+
+const namedPackageCode =
+  /^(?:SOT|TSOT|SOD|TO|SOIC|SOP|SSOP|TSSOP|MSOP|QSOP|DIP|QFN|DFN|QFP|TQFP|LQFP|BGA|LGA|SMD)(?:[- ]?\d{1,4}){1,3}[A-Z]?$/i;
+
+export function libraryPackageCodeKind(value: string) {
+  if (chipPackageSizes.has(value)) return 'chip';
+  if (namedPackageCode.test(value)) return 'named';
+}
+
+export function matchesLibraryPackage(value: string | undefined, query: string) {
+  if (chipPackageSizes.has(query)) return value?.match(/\d+/)?.[0] === query;
+  const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const term = normalize(query);
+  return term !== '' && normalize(value ?? '').includes(term);
+}
+
+export function matchesNativeFootprintPackage(id: string | undefined, query: string) {
+  if (!chipPackageSizes.has(query)) return matchesLibraryPackage(id, query);
+  const name = id?.split(':').at(-1);
+  return name?.match(/(?:^|[_-])(\d{4,6})(?=$|[_-])/)?.[1] === query;
+}
+
 /** Rank the complete catalog before pagination; never change the stored catalog order. */
 export function searchLibrary(entries: LibraryEntry[], query: string, library = '') {
   const phrase = query.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -99,7 +141,7 @@ export function searchLibrary(entries: LibraryEntry[], query: string, library = 
     if (library && entry.library !== library) continue;
     const id = entry.id.toLowerCase();
     const name = entry.name.toLowerCase();
-    const keywords = entry.keywords.toLowerCase();
+    const keywords = `${entry.keywords} ${entry.package ?? ''} ${entry.footprint ?? ''}`.toLowerCase();
     const description = entry.description.toLowerCase();
     const libraryName = entry.library.toLowerCase();
     const searchable = `${id} ${name} ${description} ${keywords}`;

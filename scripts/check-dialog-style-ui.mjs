@@ -9,6 +9,7 @@ const bundle = await build({
     contents: `import React,{useState}from'react';import{createRoot}from'react-dom/client';
     import Chooser from './components/LibraryChooser';import Drawing from './components/ComponentDrawingEditor';
     import Dialog from './components/Dialog';
+    import Confirmation from './components/ConfirmationDialog';
     import FootprintModels from './components/FootprintModels';
     import Settings from './components/SettingsDialog';
     import SpiceChooser from './plugins/spice-simulation/renderer/SpiceModelChooser';
@@ -21,13 +22,16 @@ const bundle = await build({
     window.theme=value=>{document.documentElement.dataset.theme=value;for(const[key,color]of Object.entries(appearanceVariables(defaultAppearance,value)))document.documentElement.style.setProperty(key,color)};
     function App(){const[mode,setMode]=useState('chooser');window.show=setMode;
       if(['generic','compact','wide'].includes(mode))return <Dialog title="Generic" compact={mode==='compact'} wide={mode==='wide'} onClose={()=>{}}>Content</Dialog>;
+      if(mode==='confirm')return <Confirmation documentTitle="Fixture" busy={false} error="" onCancel={()=>{}}
+        onConfirm={async(saveFirst)=>{window.closeChoice=saveFirst?'save':'discard';}}/>;
       if(mode==='spice') return <SpiceChooser component="U1 · LM25017" initialSearch="LM25017" onClose={()=>{}} onBrowse={()=>{}} onChoose={()=>{}} modelIssue={()=>''}/>;
       if(mode==='settings') return <Settings appearance={appearance} agents={[]} detecting={false} error="" onClose={()=>{}} onDetect={async()=>{}}/>;
       if(mode==='models') return <FootprintModels footprint={footprint} active onChange={()=>true}/>;
       if(mode==='drawing') return <Drawing project={core.getSnapshot().project} schematic={core.getSnapshot().project.schematic}
         capabilityHost={host} revision="0" onClose={()=>{}}/>
       return <Chooser key={mode} onClose={()=>{}} onChoose={()=>{}} kind={mode==='chooser'?'symbols':'footprints'}
-        label={mode==='assignment'?'Choose component model':undefined} actionLabel={mode==='assignment'?'Use model':undefined}/>;
+        label={mode==='assignment'?'Choose component model':mode==='placement'?'Footprint placement':undefined}
+        actionLabel={mode==='placement'?'Place':undefined} requireModel={mode==='assignment'}/>;
     }
     createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: process.cwd(),
@@ -84,7 +88,8 @@ try {
         ['spice', 'Choose SPICE model', 'Download'],
         ['chooser', 'Components', 'Place'],
         ['footprint', 'Footprints', 'Assign'],
-        ['assignment', 'Choose component model', 'Use model'],
+        ['placement', 'Footprint placement', 'Place'],
+        ['assignment', 'Choose component model', 'Update'],
         ['drawing', 'Draw component', 'Apply'],
         ['settings', 'Settings', 'Done'],
         ['models', 'Component models', 'Done'],
@@ -179,6 +184,43 @@ try {
       }
     }
   }
+  await page.setViewportSize({ width: 1120, height: 760 });
+  await page.evaluate(() => {
+    window.show('settings');
+    document.documentElement.dataset.textSize = 'extra-large';
+  });
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await settings.waitFor();
+  const grip = await settings.locator('.dialog-resize-edge[data-direction="e"]').boundingBox();
+  const x = grip.x + grip.width / 2;
+  const y = grip.y + grip.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 600, y, { steps: 5 });
+  await page.mouse.up();
+  const compactSettings = await settings.evaluate((dialog) => {
+    const pane = dialog.querySelector('.settings-pane:not([hidden])');
+    const row = pane.querySelector('.appearance-row');
+    return {
+      width: dialog.getBoundingClientRect().width,
+      columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
+      overflow: pane.scrollWidth - pane.clientWidth,
+      iconDisplay: getComputedStyle(dialog.querySelector('.settings-sidebar button svg')).display,
+    };
+  });
+  assert.ok(compactSettings.width < 440);
+  assert.equal(compactSettings.columns, 1);
+  assert.ok(compactSettings.overflow <= 1);
+  assert.equal(compactSettings.iconDisplay, 'none');
+  await page.evaluate(() => window.show('confirm'));
+  const confirmation = page.getByRole('dialog', { name: 'Save changes?', exact: true });
+  await confirmation.waitFor();
+  assert.deepEqual(
+    await confirmation.locator('.dialog-footer button').allTextContents(),
+    ['Cancel', 'Discard', 'Save'],
+  );
+  await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.closeChoice), 'discard');
   assert.deepEqual(errors, []);
   console.log('PASS: shared dialog footer labels, control height, spacing and right alignment.');
 } finally {

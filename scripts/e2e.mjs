@@ -125,7 +125,7 @@ async function closeCurrentProject(page) {
     .then((label) => /Unsaved changes/.test(label ?? ''));
   await fileMenuAction(page, 'Close project');
   const dialog = page.getByRole('dialog', { name: 'Save changes?', exact: true });
-  if (unsaved) await dialog.getByRole('button', { name: "Don't save", exact: true }).click();
+  if (unsaved) await dialog.getByRole('button', { name: 'Discard', exact: true }).click();
   await page.waitForFunction(
     ({ selector, expected }) => document.querySelectorAll(selector).length === expected,
     { selector: projectButtonSelector, expected: count - 1 },

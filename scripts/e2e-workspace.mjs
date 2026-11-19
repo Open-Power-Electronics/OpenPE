@@ -396,7 +396,7 @@ try {
   const confirmation = page.getByRole('dialog', { name: 'Save changes?', exact: true });
   await confirmation.getByRole('button', { name: 'Save', exact: true }).click();
   await confirmation.getByRole('alert').filter({ hasText: 'Fix the source errors' }).waitFor();
-  await confirmation.getByRole('button', { name: "Don't save", exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
   await confirmation.getByText('Project B', { exact: true }).waitFor();
   await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(
@@ -415,7 +415,7 @@ try {
     .getByRole('button', { name: /^Project A,/ })
     .click({ button: 'right' });
   await fileMenu.getByRole('menuitem', { name: 'Close project', exact: true }).click();
-  await confirmation.getByRole('button', { name: "Don't save", exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
   await projectFolders().nth(1).waitFor({ state: 'detached' });
   assert.equal(await projectFolders().count(), 1);
   assert.equal(
@@ -447,9 +447,9 @@ try {
   const beforeClear = await recoveryObserver.armClearValidationFailure();
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
   await confirmation.getByText('Project B', { exact: true }).waitFor();
-  await confirmation.getByRole('button', { name: "Don't save", exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
   await confirmation.getByText('Project B', { exact: true }).waitFor({ state: 'detached' });
-  await confirmation.getByRole('button', { name: "Don't save", exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
   await confirmation
     .getByRole('alert')
     .filter({ hasText: 'Test recovery cleanup failure' })
@@ -473,7 +473,7 @@ try {
     'Native failure must not retry via HTTP.',
   );
   const exited = app.waitForEvent('close');
-  await confirmation.getByRole('button', { name: "Don't save", exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Discard', exact: true }).click();
   await exited;
   closedNormally = true;
   const recovered = await recoveryObserver.evidence();
@@ -493,7 +493,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: independent projects, native destinations, Source drafts, history, detached Agent streams, recovery, multi-project close cancellation and Don't save quit with cleanup retry.",
+    "PASS: independent projects, native destinations, Source drafts, history, detached Agent streams, recovery, multi-project close cancellation and discard on quit with cleanup retry.",
   );
 } catch (error) {
   const page = app.windows()[0];

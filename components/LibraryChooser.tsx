@@ -30,6 +30,7 @@ import {
   isLibraryAssetUnavailable,
   isLibraryPriceSource,
   isOnlineLibrary,
+  libraryPackageQuery,
   libraryPriceSources,
   onlineFootprintLibrary,
   propertyValue,
@@ -852,8 +853,10 @@ export default function LibraryChooser({
       : failedPreviewEntry;
   const failedCategories = categoryStatus.source === librarySource && Boolean(categoryStatus.error);
   const retryingCategories = categoryReload?.source === librarySource;
+  const packageSearch = online && libraryPackageQuery(submittedQuery) !== undefined;
   const needsSymbolPage =
     kind === 'symbols' &&
+    !packageSearch &&
     entries.length < symbolResultLimit &&
     !resultsError &&
     nextOffset !== null &&
@@ -868,7 +871,8 @@ export default function LibraryChooser({
     (online || kind === 'symbols') &&
     (nextOffset !== null || visibleCount < entries.length) &&
     !resultsError;
-  const chooseLabel = actionLabel ?? (kind === 'symbols' ? 'Place' : 'Assign');
+  const chooseLabel =
+    actionLabel ?? (requireModel ? 'Update' : kind === 'symbols' ? 'Place' : 'Assign');
   const loadingPreview = !!selected && !detail && !error;
   const retryDisabled = confirming || resultsLoading || retryingCategories || loadingPreview;
   function blockComposingActivation(event: KeyboardEvent<HTMLButtonElement>) {
@@ -908,7 +912,7 @@ export default function LibraryChooser({
     if (resultsLoading || resultsError || (nextOffset === null && visibleCount === entries.length))
       return;
     if (kind === 'symbols') setSymbolResultLimit(symbolResultLimit + symbolBatchSize);
-    else if (nextOffset !== null) {
+    if (nextOffset !== null && (kind === 'footprints' || packageSearch)) {
       setBusy(true);
       setOffset(nextOffset);
     }
@@ -1126,9 +1130,17 @@ export default function LibraryChooser({
         const data = value as Detail;
         if (control.signal.aborted) return;
         setDetail(data);
-        if (initialModelPath && 'models' in data) {
-          const key = modelReferenceKey(initialModelPath);
-          const index = data.models.findIndex(({ path }) => modelReferenceKey(path) === key);
+        if ('models' in data) {
+          const query = submittedQuery.trim().toLowerCase();
+          const matchedModel = data.models.findIndex(({ path }) => {
+            const file = path.split(/[\\/]/).at(-1)?.toLowerCase() ?? '';
+            return query && (query === file || query === file.replace(/\.(?:step|stp|wrl)$/i, ''));
+          });
+          const assignedModel = initialModelPath ? modelReferenceKey(initialModelPath) : undefined;
+          const index =
+            matchedModel >= 0
+              ? matchedModel
+              : data.models.findIndex(({ path }) => modelReferenceKey(path) === assignedModel);
           if (index >= 0) setModel(index);
         }
         const { id, footprintPreview } = data;
@@ -1144,7 +1156,16 @@ export default function LibraryChooser({
         }
       });
     return () => control.abort();
-  }, [kind, selected, capabilityHost, initialModelPath, previewRetry, projectSource, requireModel]);
+  }, [
+    kind,
+    selected,
+    capabilityHost,
+    initialModelPath,
+    previewRetry,
+    projectSource,
+    requireModel,
+    submittedQuery,
+  ]);
   const footprintDetail = detail && 'models' in detail ? detail : null;
   const projectLibraryId = footprintDetail?.projectAssets ? footprintDetail.id : undefined;
   const loadProjectModel = useCallback(
@@ -1312,7 +1333,7 @@ export default function LibraryChooser({
               aria-label={
                 requireModel ? 'Search models' : kind === 'symbols' ? 'Search components' : 'Search footprints'
               }
-              placeholder="Search by model, keyword or part number…"
+              placeholder="Search model, keyword, part number or package…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onCompositionStart={() => {

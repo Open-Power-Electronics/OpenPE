@@ -286,7 +286,7 @@ try {
   const source = chooser.getByRole('combobox', { name: 'Model source', exact: true });
   const sourceOptions = page.getByRole('listbox', { name: 'Model source', exact: true });
   const download = chooser.getByRole('button', { name: 'Download', exact: true });
-  const useTi = chooser.getByRole('button', { name: 'Use model', exact: true });
+  const useTi = chooser.getByRole('button', { name: 'Apply', exact: true });
   await search.waitFor();
   const chooserBounds = await chooser.boundingBox();
   assert.equal(await chooser.locator('.dialog-footer button').count(), 1);

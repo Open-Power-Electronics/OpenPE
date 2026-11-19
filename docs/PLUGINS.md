@@ -137,8 +137,9 @@ Enable/disable acts immediately; Uninstall requires confirmation. Keep confirmed
 rows and empty states during refresh/mutations, with per-provider loading and
 actionable errors. Catalog warnings use Refresh's accessible description.
 
-Use the Blocks icon after Open project in the rail. The Plugins sidebar is
-228 px wide and narrows to 200 px in compact windows. Show counts beside
+Use the Blocks icon after Open project in the rail. The Plugins sidebar takes 19% of the page within 148–228 px.
+The catalog uses two columns and switches to one when its content is narrower
+than 552 px. Show counts beside
 category names. Preserve projects, drafts, conversations and the Home brief
 through navigation. Keep provider choice in the category list.
 

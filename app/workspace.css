@@ -2,17 +2,26 @@
    Reference: Open Design studio and its neutral product tokens. */
 :root {
   --workspace-header-height: max(44px, calc(var(--font-control) * 1.2 + 23px));
+  --workbench-gutter: var(--space-3);
+  --editor-drawing-min-width: 160px;
   --editor-sidebar-default-width: 280px;
+  --editor-sidebar-max-width: 480px;
+  --editor-dock-available-width: max(
+    0px,
+    calc(100% - var(--editor-drawing-min-width) - var(--workbench-gutter))
+  );
+  --editor-dock-header-height: 36px;
   --editor-footer-height: max(35px, calc(var(--font-control) * 1.4 + 15px));
   --editor-footer-control-height: max(26px, calc(var(--font-caption) * 1.35 + 8px));
-  --status-control-inset: 4px;
-  --properties-inset: 8px 12px;
-  --properties-row-gap: 4px;
-  --properties-column-gap: 8px;
-  --properties-label-gap: 4px;
+  --status-control-inset: var(--space-1);
+  --properties-inset: var(--space-2) var(--space-3);
+  --properties-row-gap: var(--space-1);
+  --properties-column-gap: var(--space-2);
+  --properties-label-gap: var(--space-1);
   --properties-value-width: 64%;
+  --properties-columns: minmax(0, 1fr) minmax(0, var(--properties-value-width));
   --properties-action-width: max(52px, calc(var(--font-small) * 4));
-  --properties-group-gap: 8px;
+  --properties-group-gap: var(--space-2);
   --joined-tab-radius: 8px;
   --joined-tab-flare-width: 18px;
   --joined-tab-flare-height: 10px;
@@ -325,8 +334,8 @@ button:disabled {
 
 .app-header {
   height: 52px;
-  padding: 0 12px 0 0;
-  gap: 12px;
+  padding: 0 var(--workbench-gutter) 0 0;
+  gap: var(--space-3);
   border-bottom: 0;
   background: var(--panel);
 }
@@ -488,7 +497,7 @@ button:disabled {
 }
 
 .workspace-divider {
-  flex: 0 0 8px;
+  flex: 0 0 calc(var(--workbench-gutter) - var(--space-1));
   cursor: var(--cursor-resize-horizontal);
   touch-action: none;
   user-select: none;
@@ -508,9 +517,9 @@ body[data-workspace-resizing='true'] * {
 
 .chat-header {
   min-height: var(--workspace-header-height);
-  padding: 6px 12px;
+  padding: 6px var(--workbench-gutter);
   border-bottom: 1px solid var(--line-soft);
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 :is(.chat-conversation-search-trigger, .chat-quote-selection):is(:hover, :focus-visible),
@@ -660,7 +669,7 @@ body[data-workspace-resizing='true'] * {
   min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 4px 12px 12px;
+  padding: 0 var(--space-1) var(--workbench-gutter) var(--workbench-gutter);
   scrollbar-gutter: stable;
 }
 
@@ -689,7 +698,7 @@ body[data-workspace-resizing='true'] * {
 }
 
 .chat-panel .composer {
-  padding: 10px 12px 8px;
+  padding: 10px var(--workbench-gutter) var(--space-2);
 }
 
 .chat-panel .composer textarea {
@@ -2570,7 +2579,7 @@ body[data-workspace-resizing='true'] * {
 }
 
 .editor {
-  margin: 0 12px 12px 0;
+  margin: 0 var(--workbench-gutter) var(--workbench-gutter) 0;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   background: var(--surface);
@@ -3072,7 +3081,7 @@ body[data-workspace-resizing='true'] * {
   gap: 2px;
   background: var(--surface);
   border-bottom: 1px solid var(--line-soft);
-  min-height: 36px;
+  min-height: var(--editor-dock-header-height);
   flex-shrink: 0;
   flex-wrap: wrap;
   row-gap: 4px;
@@ -3169,9 +3178,9 @@ body[data-workspace-resizing='true'] * {
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  min-height: 36px;
-  padding: 2px 12px;
+  gap: var(--space-2);
+  min-height: var(--editor-dock-header-height);
+  padding: 2px var(--space-3);
   border-top: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   background: var(--panel);
@@ -3193,7 +3202,7 @@ body[data-workspace-resizing='true'] * {
   flex: 0 0 auto;
   flex-direction: column;
   min-width: 0;
-  min-height: 36px;
+  min-height: var(--editor-dock-header-height);
   overflow: hidden;
 }
 
@@ -3227,8 +3236,8 @@ body[data-workspace-resizing='true'] * {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  min-height: 34px;
-  padding: 2px 12px;
+  min-height: calc(var(--editor-dock-header-height) - 2px);
+  padding: 2px var(--space-3);
   border: 0;
   background: transparent;
   color: inherit;
@@ -3448,7 +3457,7 @@ body[data-workspace-resizing='true'] * {
 }
 .model-exploded-fields :is(.layout-field, .layout-property-select) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 64%);
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
 }
@@ -4292,9 +4301,9 @@ body[data-workspace-resizing='true'] * {
 .inspector-resize-gutter {
   position: relative;
   inset: auto;
-  flex: 0 0 12px;
+  flex: 0 0 var(--workbench-gutter);
   align-self: stretch;
-  width: 12px;
+  width: var(--workbench-gutter);
   z-index: 25;
   border-radius: 0;
   cursor: var(--cursor-resize-horizontal);
@@ -4516,12 +4525,12 @@ body[data-workspace-resizing='true'] * {
 .source-editor-toolbar {
   flex: 0 0 auto;
   min-height: 40px;
-  padding: 4px 12px;
+  padding: var(--space-1) var(--space-3);
   border-bottom: 1px solid var(--line-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   background: var(--surface);
 }
 
@@ -4552,8 +4561,8 @@ body[data-workspace-resizing='true'] * {
 .source-editor-content {
   position: relative;
   --source-sidebar-width: min(
-    var(--source-files-width, clamp(144px, 22%, 224px)),
-    max(0px, calc(100% - 160px))
+    var(--source-files-width, clamp(144px, 24%, 224px)),
+    max(0px, calc(100% - var(--editor-drawing-min-width)))
   );
   display: flex;
   flex: 1;
@@ -4565,7 +4574,7 @@ body[data-workspace-resizing='true'] * {
   flex: 0 0 var(--source-sidebar-width);
   min-width: 0;
   overflow: auto;
-  padding: 8px 6px;
+  padding: var(--space-2) 6px;
   border-right: 1px solid var(--line-soft);
   background: var(--panel);
 }
@@ -4835,7 +4844,7 @@ body[data-workspace-resizing='true'] * {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  margin: 0 12px 12px 0;
+  margin: 0 var(--workbench-gutter) var(--workbench-gutter) 0;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   background: var(--surface);
@@ -4845,9 +4854,9 @@ body[data-workspace-resizing='true'] * {
 .plugins-sidebar {
   display: flex;
   flex-direction: column;
-  flex: 0 0 228px;
+  flex: 0 0 clamp(148px, 19%, 228px);
   min-width: 0;
-  padding: 16px 12px;
+  padding: var(--space-4) clamp(var(--space-2), 1vw, var(--space-3));
   overflow-y: auto;
   background: var(--panel);
   border-right: 1px solid var(--line-soft);
@@ -4934,13 +4943,14 @@ body[data-workspace-resizing='true'] * {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  padding: 28px clamp(20px, 3vw, 44px);
+  padding: var(--space-6) clamp(var(--space-3), 3vw, var(--space-8));
+  container: plugins-catalog / inline-size;
 }
 .plugins-page-header {
   justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
-  margin-bottom: 28px;
+  margin-bottom: var(--space-6);
 }
 .plugins-page-header h1 {
   color: var(--text-strong);
@@ -4961,7 +4971,7 @@ body[data-workspace-resizing='true'] * {
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  width: clamp(160px, 18vw, 280px);
+  width: min(100%, clamp(160px, 32cqi, 280px));
   padding: 6px 12px;
   border: 1px solid var(--field-border);
   border-radius: var(--radius);
@@ -4979,7 +4989,7 @@ body[data-workspace-resizing='true'] * {
   font-size: var(--font-control);
 }
 .plugin-category {
-  margin-bottom: 32px;
+  margin-bottom: var(--space-8);
 }
 .plugin-category h2 {
   font-size: var(--font-heading);
@@ -5000,7 +5010,7 @@ body[data-workspace-resizing='true'] * {
 .plugins-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 .plugin-card {
   display: flex;
@@ -5194,30 +5204,15 @@ body[data-workspace-resizing='true'] * {
 .plugin-actions {
   flex-wrap: wrap;
 }
-@media (max-width: 1200px) {
-  .plugins-sidebar {
-    flex-basis: 200px;
-  }
-  .plugins-grid {
-    column-gap: 8px;
-  }
-  .plugins-main {
-    padding-inline: 20px;
-  }
-}
-@media (max-width: 800px) {
-  .plugins-sidebar {
-    flex-basis: 160px;
-    padding-inline: 8px;
-  }
+@container plugins-catalog (width < 552px) {
   .plugins-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 .surface-dialog {
   width: var(--dialog-width);
-  max-width: calc(100vw - 48px);
-  max-height: calc(100dvh - var(--desktop-titlebar-height, 0px) - 48px);
+  max-width: calc(100vw - var(--space-12));
+  max-height: calc(100dvh - var(--desktop-titlebar-height, 0px) - var(--space-12));
   margin: auto;
   padding: 0;
   overflow: hidden;
@@ -5368,7 +5363,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .dialog-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
   padding: 10px var(--dialog-inset);
   background: var(--panel);
@@ -5445,7 +5440,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 6px var(--dialog-inset);
   border-top: 1px solid var(--line-soft);
   background: var(--panel);
@@ -5455,7 +5450,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .dialog-footer-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: flex-end;
   min-width: 0;
@@ -5517,6 +5512,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .select-popup.rail-menu .select-option {
   border-radius: var(--radius);
 }
+.settings-dialog {
+  container: settings-dialog / inline-size;
+}
 .settings-dialog > .dialog-content {
   flex: 1;
   display: flex;
@@ -5530,8 +5528,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   min-height: 0;
 }
 .settings-sidebar {
-  flex: 0 0 176px;
-  padding: var(--joined-tab-flare-width) 0 var(--joined-tab-flare-width) 8px;
+  flex: 0 0 clamp(100px, 24%, 176px);
+  padding: var(--joined-tab-flare-width) 0 var(--joined-tab-flare-width) var(--space-2);
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--panel);
@@ -5540,11 +5538,12 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .settings-sidebar button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   width: 100%;
   min-height: 38px;
-  margin-bottom: 4px;
-  padding: 8px 12px;
+  margin-bottom: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
   border-radius: var(--joined-tab-radius) 0 0 var(--joined-tab-radius);
   font-size: var(--font-control);
   text-align: left;
@@ -5583,7 +5582,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .settings-pane {
   flex: 1;
   min-width: 0;
-  padding: 20px 24px;
+  padding: var(--space-4) clamp(var(--space-2), 3cqi, var(--space-6));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -5599,24 +5598,31 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--line-soft);
 }
 .settings-section-header .settings-section-heading {
   margin-bottom: 0;
 }
-@media (max-width: 760px) {
-  .settings-sidebar {
-    flex-basis: 150px;
-  }
-  .settings-pane {
-    padding: 20px 16px;
-  }
-  .settings-dialog .appearance-row,
-  .settings-dialog .appearance-mode-row {
+@container settings-dialog (width < 680px) {
+  .settings-layout .appearance-row {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  .appearance-row > :is(.appearance-number, .appearance-color, .appearance-range, .appearance-toggle) {
+    justify-self: start;
+    max-width: 100%;
+  }
+}
+@container settings-dialog (width < 440px) {
+  .settings-sidebar button {
+    padding-inline: var(--space-1);
+  }
+  .settings-sidebar button svg {
+    display: none;
   }
 }
 .appearance-settings h3,
@@ -5752,7 +5758,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 
 .appearance-modes {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .appearance-mode,
@@ -6034,9 +6041,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
-  margin-bottom: 10px;
 }
 
 .library-search {
@@ -6662,12 +6668,13 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 .home-surface {
+  --home-inset: clamp(var(--space-4), 3vw, var(--space-8));
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  margin: 0 12px 12px 0;
-  padding: clamp(24px, 5vh, 48px) 32px 40px;
+  margin: 0 var(--workbench-gutter) var(--workbench-gutter) 0;
+  padding: clamp(var(--space-6), 5vh, var(--space-12)) var(--home-inset) 40px;
   overflow: auto;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
@@ -6690,7 +6697,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .home-hero-backdrop {
   position: absolute;
   z-index: -1;
-  inset: 0 -32px;
+  inset: 0 calc(-1 * var(--home-inset));
   overflow: hidden;
   pointer-events: none;
   user-select: none;
@@ -6991,15 +6998,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 @media (max-width: 1250px) {
-  .home-hero-backdrop {
-    inset-inline: -24px;
-  }
-
-  .home-surface {
-    padding-right: 24px;
-    padding-left: 24px;
-  }
-
   .status-bar {
     gap: 10px;
   }
@@ -7064,8 +7062,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin: 0 0 10px;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  margin: 0;
 }
 .library-result-status {
   position: absolute;
@@ -7086,41 +7085,49 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   justify-content: flex-end;
   gap: 8px;
 }
-.library-chooser > .dialog-content {
+:is(.library-chooser, .component-model-dialog) {
+  container: asset-dialog / inline-size;
+}
+:is(.library-chooser, .component-model-dialog) > .dialog-content {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-.library-chooser .library-browser {
-  flex: 1;
-  min-height: 0;
-  height: auto;
+  gap: var(--space-2);
+  scrollbar-gutter: auto;
 }
 .library-source-filters {
   display: grid;
   grid-template-columns: minmax(96px, 28%) repeat(2, minmax(0, 1fr));
   flex: 1;
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .library-source-filters > .select-trigger {
   min-width: 0;
   width: 100%;
 }
-.library-browser {
+:is(.library-browser, .assignment-browser) {
   display: grid;
-  grid-template-columns: minmax(200px, 0.85fr) minmax(260px, 1.15fr);
+  grid-template-rows: minmax(0, 1fr);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
   overflow: hidden;
-  min-height: 260px;
-  height: min(480px, 52vh);
+}
+.library-browser {
+  flex: 1 0 180px;
+  grid-template-columns: minmax(0, 44fr) minmax(0, 56fr);
+}
+.assignment-dialog .assignment-browser {
+  grid-template-columns: minmax(0, 40fr) minmax(0, 60fr);
+}
+.component-model-dialog .assignment-browser {
+  flex: 1 0 248px;
 }
 .library-results {
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   border-right: 1px solid var(--line-soft);
-  padding: 6px;
+  padding: var(--space-2);
   background: var(--panel);
   scrollbar-gutter: stable;
 }
@@ -7128,7 +7135,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   min-height: 34px;
   width: 100%;
   text-align: left;
@@ -7294,7 +7301,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .library-detail-attributes {
   display: grid;
   grid-template-columns: minmax(80px, 0.4fr) minmax(0, 1fr);
-  gap: 7px 12px;
+  gap: var(--space-2) var(--space-3);
   margin: 0;
   font-size: var(--font-small);
 }
@@ -7311,14 +7318,14 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .library-detail-sections {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 .library-info-section {
   min-width: 0;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: var(--space-3);
 }
 .library-info-wide {
   grid-column: 1 / -1;
@@ -7518,8 +7525,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   font-size: var(--font-caption);
 }
 .library-detail {
-  padding: 12px;
+  padding: var(--space-3);
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   font-size: var(--font-small);
   line-height: 1.5;
@@ -7538,7 +7546,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   margin-top: 4px;
 }
 .symbol-detail-preview {
-  height: 200px;
+  height: clamp(160px, min(26cqi, 30dvh), 260px);
 }
 .library-preview-pane {
   width: 100%;
@@ -7549,39 +7557,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   height: 100%;
   margin: 0;
   background: var(--canvas);
-}
-@media (max-width: 600px) {
-  .library-source-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .library-source-filters > .select-trigger:first-child {
-    grid-column: 1 / -1;
-  }
-  .library-chooser .library-filter {
-    flex-wrap: wrap;
-  }
-  .library-chooser .library-source-filters {
-    flex-basis: 100%;
-  }
-  .library-chooser .library-browser {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(90px, 0.4fr) minmax(180px, 1fr);
-    min-height: 300px;
-    height: min(560px, 60vh);
-  }
-  .library-chooser .library-results {
-    border-right: 0;
-    border-bottom: 1px solid var(--line-soft);
-  }
-  .library-chooser .preview-tabs {
-    --joined-tab-flare-width: 8px;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .library-chooser .preview-tabs > button {
-    padding-inline: 8px;
-    overflow-wrap: normal;
-  }
 }
 .library-planar-preview,
 .model-preview {
@@ -7656,7 +7631,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 9px 10px;
+  padding: var(--space-2);
 }
 .footprint-chooser .library-results small {
   max-width: 100%;
@@ -7669,24 +7644,13 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .library-detail-meta {
   color: var(--muted);
 }
-.assignment-dialog .assignment-browser {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.9fr) minmax(280px, 1.1fr);
-  height: min(500px, 57vh);
-  min-height: 280px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.assignment-dialog .library-results {
-  padding: 12px;
-}
 .assignment-dialog .assignment-detail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
-  padding: 16px;
+  min-height: 0;
+  padding: var(--space-3);
   overflow: auto;
 }
 .assignment-detail .library-detail-title {
@@ -7704,6 +7668,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   overflow-wrap: anywhere;
 }
 .assignment-detail .preview-tabs,
+.assignment-detail > .library-detail-sections,
+.assignment-detail > .library-pricing,
 .assignment-detail > p,
 .assignment-detail > small {
   margin: 0;
@@ -7713,7 +7679,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 .assignment-preview-stage {
   flex: 0 0 auto;
-  height: clamp(220px, 30vh, 300px);
+  height: clamp(180px, min(40cqi, 36dvh), 320px);
 }
 .assignment-preview-stage :is(.library-planar-preview, .model-preview),
 .assignment-preview-stage .component-model-preview-empty {
@@ -7721,18 +7687,36 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   height: 100%;
   min-height: 0;
 }
-@media (max-width: 680px) {
-  .assignment-dialog .assignment-browser {
-    grid-template-columns: 1fr;
-    height: auto;
+@container asset-dialog (width < 620px) {
+  .library-source-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .assignment-dialog :is(.library-results, .component-model-settings) {
-    max-height: 30vh;
+  .library-source-filters > .select-trigger:first-child {
+    grid-column: 1 / -1;
+  }
+  .library-chooser .library-browser:not(.library-browser-empty),
+  .component-model-dialog .assignment-browser {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+  .library-browser:not(.library-browser-empty) .library-results,
+  .component-model-dialog .component-model-settings {
+    max-height: clamp(104px, 24dvh, 192px);
     border-right: 0;
     border-bottom: 1px solid var(--line-soft);
   }
-  .assignment-preview-stage {
-    height: 240px;
+  .library-chooser .library-detail,
+  .assignment-dialog .component-model-preview {
+    overflow: visible;
+  }
+  .library-chooser .preview-tabs {
+    --joined-tab-flare-width: var(--space-2);
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+  .library-chooser .preview-tabs > button {
+    padding-inline: var(--space-2);
   }
 }
 .preview-tabs {
@@ -7788,7 +7772,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: grid;
   min-width: 0;
   gap: var(--properties-label-gap);
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   font-size: var(--font-small);
 }
@@ -7817,8 +7801,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: none;
 }
 .property-field {
-  --property-action-width: 30px;
-  --property-column-gap: 8px;
+  --property-action-width: var(--control-height);
+  --property-column-gap: var(--properties-column-gap);
   display: grid;
   grid-template-columns:
     clamp(76px, calc(var(--font-small) * 6), 28%) minmax(0, 1fr)
@@ -8091,7 +8075,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 .property-file-models {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   align-items: center;
   gap: var(--properties-label-gap);
   margin: var(--properties-row-gap) 0 0;
@@ -8187,7 +8171,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   padding-block: 2px;
 }
 .property-simulation-parameter {
-  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--properties-value-width));
+  grid-template-columns: var(--properties-columns);
   gap: var(--properties-label-gap);
   align-items: center;
   min-height: var(--control-height);
@@ -8236,17 +8220,6 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   margin-bottom: 8px;
   font-size: var(--font-small);
 }
-@media (max-height: 760px) {
-  .library-browser {
-    min-height: 230px;
-    height: 36vh;
-  }
-  .symbol-detail-preview,
-  .library-planar-preview,
-  .model-preview {
-    height: 180px;
-  }
-}
 /* Transient setup and measured solver waveforms share application colour tokens. */
 .schematic-surface:not([hidden]) {
   flex-direction: row;
@@ -8266,9 +8239,9 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  width: var(--editor-sidebar-default-width, 280px);
-  min-width: min(280px, calc(100% - 172px));
-  max-width: min(480px, calc(100% - 172px));
+  width: var(--editor-sidebar-default-width);
+  min-width: min(var(--editor-sidebar-default-width), var(--editor-dock-available-width));
+  max-width: min(var(--editor-sidebar-max-width), var(--editor-dock-available-width));
   min-height: 0;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
@@ -8972,10 +8945,10 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 }
 
 .surface-dialog.parts-panel {
-  --parts-columns: calc(3.7 * var(--font-control)) minmax(0, 0.8fr) minmax(0, 1.5fr);
+  --parts-columns: clamp(44px, 16%, 80px) minmax(0, 45fr) minmax(0, 55fr);
 }
 .parts-panel .dialog-content {
-  padding: 0 12px 12px;
+  padding: 0 var(--dialog-inset) var(--dialog-inset);
   min-width: 0;
   max-height: none;
   overflow-x: hidden;
@@ -8991,7 +8964,7 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
 .parts-panel-row,
 .parts-panel-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: minmax(0, 1fr) var(--control-height);
   align-items: center;
   min-width: 0;
   gap: 2px;
@@ -9031,8 +9004,8 @@ body:has(.desktop-titlebar) .surface-dialog::backdrop {
   grid-template-columns: var(--parts-columns);
   align-items: baseline;
   min-width: 0;
-  gap: 8px;
-  padding: 5px 6px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   text-align: left;
 }
 .parts-panel-row button {

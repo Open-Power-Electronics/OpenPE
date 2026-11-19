@@ -283,7 +283,7 @@ try {
   await expectProjects(12);
   await projects().first().click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Close project', exact: true }).click();
-  await button("Don't save").click();
+  await button('Discard').click();
   await expectProjects(11);
   await button('Home').click();
   await button(firstExampleButton).click();

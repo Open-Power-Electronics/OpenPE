@@ -33,7 +33,7 @@ const bundle = await build({
       };
       window.showModelChooser = () => {
         window.modelChosen = false;
-        root.render(<LibraryChooser kind="footprints" initialPreview="3d" requireModel actionLabel="Use model" onClose={()=>{}} onChoose={()=>{window.modelChosen=true;}}/>);
+        root.render(<LibraryChooser kind="footprints" initialPreview="3d" requireModel onClose={()=>{}} onChoose={()=>{window.modelChosen=true;}}/>);
       };
       root.render(<LibraryChooser kind="footprints" onClose={()=>{}} onChoose={detail=>window.chosen=detail.id}/>);
     `,
@@ -386,7 +386,7 @@ try {
   await page.evaluate(() => window.showModelChooser());
   await page.getByText('This footprint has no 3D model.', { exact: true }).waitFor();
   assert.equal(
-    await page.getByRole('button', { name: 'Use model', exact: true }).isDisabled(),
+    await page.getByRole('button', { name: 'Update', exact: true }).isDisabled(),
     true,
   );
   assert.equal(

@@ -86,7 +86,7 @@ export default function AgentAnnotationDialog({
               }
             }}
           >
-            {editing ? 'Update annotation' : 'Add to message'}
+            {editing ? 'Update' : 'Add'}
           </button>
         </>
       }

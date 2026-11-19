@@ -569,6 +569,41 @@ function isLibraryPriceSource(value) {
 function isLibraryAssetUnavailable(error) {
   return error instanceof Error && "code" in error && error.code === "OPENPE_LIBRARY_ASSET_UNAVAILABLE";
 }
+function libraryPackageQuery(query) {
+  const value = query.trim();
+  const explicit = /^package:(.*)$/i.exec(value)?.[1].trim();
+  return explicit ?? (libraryPackageCodeKind(value) ? value : void 0);
+}
+var chipPackageSizes = /* @__PURE__ */ new Set([
+  "01005",
+  "0201",
+  "0402",
+  "0603",
+  "0805",
+  "1008",
+  "1206",
+  "1210",
+  "1812",
+  "2010",
+  "2220",
+  "2512"
+]);
+var namedPackageCode = /^(?:SOT|TSOT|SOD|TO|SOIC|SOP|SSOP|TSSOP|MSOP|QSOP|DIP|QFN|DFN|QFP|TQFP|LQFP|BGA|LGA|SMD)(?:[- ]?\d{1,4}){1,3}[A-Z]?$/i;
+function libraryPackageCodeKind(value) {
+  if (chipPackageSizes.has(value)) return "chip";
+  if (namedPackageCode.test(value)) return "named";
+}
+function matchesLibraryPackage(value, query) {
+  if (chipPackageSizes.has(query)) return value?.match(/\d+/)?.[0] === query;
+  const normalize = (text) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const term = normalize(query);
+  return term !== "" && normalize(value ?? "").includes(term);
+}
+function matchesNativeFootprintPackage(id, query) {
+  if (!chipPackageSizes.has(query)) return matchesLibraryPackage(id, query);
+  const name = id?.split(":").at(-1);
+  return name?.match(/(?:^|[_-])(\d{4,6})(?=$|[_-])/)?.[1] === query;
+}
 function searchLibrary(entries, query, library = "") {
   const phrase = query.trim().toLowerCase().replace(/\s+/g, " ");
   if (!phrase)
@@ -580,7 +615,7 @@ function searchLibrary(entries, query, library = "") {
     if (library && entry.library !== library) continue;
     const id = entry.id.toLowerCase();
     const name = entry.name.toLowerCase();
-    const keywords = entry.keywords.toLowerCase();
+    const keywords = `${entry.keywords} ${entry.package ?? ""} ${entry.footprint ?? ""}`.toLowerCase();
     const description = entry.description.toLowerCase();
     const libraryName = entry.library.toLowerCase();
     const searchable = `${id} ${name} ${description} ${keywords}`;
@@ -828,8 +863,12 @@ export {
   isLibraryAssetUnavailable,
   isLibraryPriceSource,
   isOnlineLibrary,
+  libraryPackageCodeKind,
+  libraryPackageQuery,
   libraryPriceSources,
   librarySources,
+  matchesLibraryPackage,
+  matchesNativeFootprintPackage,
   modelReferenceKey,
   num,
   onlineFootprintLibrary,

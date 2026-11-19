@@ -211,12 +211,49 @@ try {
     'Both choosers align the header, filters, results, details, preview, cards and footer.',
   );
   assert.equal(await modelChooser.locator('.dialog-footer button').count(), 1);
-  assert.equal(await modelChooser.locator('.dialog-footer .primary').textContent(), 'Use model');
+  assert.equal(await modelChooser.locator('.dialog-footer .primary').textContent(), 'Update');
   await modelChooser.getByRole('button', { name: 'Footprint', exact: true }).click();
   await modelChooser.locator('.footprint-preview').waitFor();
   await modelChooser.getByRole('button', { name: '3D model', exact: true }).click();
   await modelChooser.getByRole('button', { name: 'Fit model preview', exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/assignment-preview-dialog.png' });
+  const corner = await modelChooser
+    .locator('.dialog-resize-edge[data-direction="se"]')
+    .boundingBox();
+  const cornerX = corner.x + corner.width / 2;
+  const cornerY = corner.y + corner.height / 2;
+  await page.mouse.move(cornerX, cornerY);
+  await page.mouse.down();
+  await page.mouse.move(cornerX - 470, cornerY - 360, { steps: 5 });
+  await page.mouse.up();
+  const stacked = await modelChooser.locator('.assignment-browser').evaluate((browser) => {
+    const results = browser.querySelector('.library-results');
+    const details = browser.querySelector('.assignment-detail');
+    return {
+      columns: getComputedStyle(browser).gridTemplateColumns.split(' ').length,
+      stacked: results.getBoundingClientRect().bottom <= details.getBoundingClientRect().top,
+    };
+  });
+  assert.deepEqual(stacked, { columns: 1, stacked: true });
+  await modelChooser.getByRole('button', { name: 'Fit model preview', exact: true }).click();
+  const compactPreview = modelChooser.locator('.assignment-preview-stage');
+  await compactPreview.evaluate((preview) => preview.scrollIntoView({ block: 'center' }));
+  const compactBody = modelChooser.locator('.dialog-content');
+  assert.ok(
+    await compactBody.evaluate((body) => body.scrollTop > 0 && body.scrollWidth <= body.clientWidth),
+  );
+  const bodyBounds = await compactBody.boundingBox();
+  const previewBounds = await compactPreview.boundingBox();
+  assert.ok(
+    previewBounds.y >= bodyBounds.y - 1 &&
+      previewBounds.y + previewBounds.height <= bodyBounds.y + bodyBounds.height + 1,
+    `The preview fits in the scrolled dialog body. ${JSON.stringify({ bodyBounds, previewBounds })}`,
+  );
+  const compactAction = await modelChooser
+    .getByRole('button', { name: 'Update', exact: true })
+    .boundingBox();
+  assert.ok(compactAction.y >= bodyBounds.y + bodyBounds.height);
+  await page.screenshot({ path: 'test-results/assignment-preview-compact.png' });
   await modelChooser.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await manage().press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Component models', exact: true });
@@ -281,10 +318,10 @@ try {
   await footprintDialog
     .getByRole('button', { name: 'Fit model preview', exact: true })
     .waitFor({ timeout: 60000 });
-  await footprintDialog.getByRole('button', { name: 'Use model', exact: true }).click();
+  await footprintDialog.getByRole('button', { name: 'Update', exact: true }).click();
   await modelChooser.getByText('Temporary assignment failure', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.nativePCB()), before);
-  await modelChooser.getByRole('button', { name: 'Use model', exact: true }).click();
+  await modelChooser.getByRole('button', { name: 'Update', exact: true }).click();
   await page.waitForFunction(() => window.historyDepth() === 1);
   assert.equal(
     libraryImports.at(-1).index,
@@ -332,6 +369,55 @@ try {
   );
   await mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/assignment-preview-main.png' });
+  await page.getByRole('button', { name: 'Browse footprints', exact: true }).click();
+  const wurth = 'Inductor_SMD_Wurth:L_Wurth_WE-DD-7345straight';
+  await footprintDialog.getByRole('combobox', { name: 'Library source', exact: true }).click();
+  const sources = page.getByRole('listbox', { name: 'Library source', exact: true });
+  const kicad = sources.getByRole('option', { name: 'KiCad', exact: true, selected: true });
+  await kicad.waitFor();
+  assert.deepEqual(await sources.getByRole('option').allTextContents(), ['KiCad', 'NextPCB', 'JLCPCB']);
+  await kicad.click();
+  await footprintDialog.getByRole('textbox', { name: 'Search footprints', exact: true }).fill(wurth);
+  await footprintDialog.getByRole('button', { name: 'Search', exact: true }).click();
+  await footprintDialog.locator('.library-detail-id').filter({ hasText: wurth }).waitFor();
+  await footprintDialog.locator('.footprint-preview').waitFor();
+  const wurthPreview = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/library-model' && url.searchParams.get('id') === wurth;
+  });
+  await footprintDialog.getByRole('button', { name: '3D model', exact: true }).click();
+  const { meshes: wurthMeshes } = await (await wurthPreview).json();
+  assert.equal(
+    new Set(
+      wurthMeshes
+        .flatMap((mesh) => [mesh.color, ...mesh.brep_faces.map((face) => face.color)])
+        .filter(Boolean)
+        .map((color) => JSON.stringify(color)),
+    ).size,
+    4,
+  );
+  await footprintDialog.getByRole('button', { name: 'Fit model preview', exact: true }).waitFor();
+  await footprintDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+
+  await browse().click();
+  const modelSearch = modelChooser.getByRole('textbox', { name: 'Search models', exact: true });
+  await modelSearch.fill('T_EFD25_SMD.step');
+  await modelChooser.getByRole('button', { name: 'Search', exact: true }).click();
+  await modelChooser
+    .locator('.library-detail-id')
+    .filter({ hasText: 'EMC_Demo:Wurth_750311591_EFD25' })
+    .waitFor();
+  await modelChooser.getByRole('button', { name: 'Fit model preview', exact: true }).waitFor();
+
+  const modelFile = 'Jack_4mm_RA_green.step';
+  await modelSearch.fill(modelFile);
+  await modelChooser.getByRole('button', { name: 'Search', exact: true }).click();
+  const exampleModelSelect = modelChooser.getByRole('combobox', { name: '3D model', exact: true });
+  await exampleModelSelect.getByText(modelFile, { exact: true }).waitFor();
+  await modelChooser.getByRole('button', { name: 'Fit model preview', exact: true }).waitFor();
+  await modelChooser.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.nativePCB()), before);
+
   offlineCatalog = true;
   const importsBefore = libraryImports.length;
   for (const id of ['NextPCB:123_fixture', 'JLCPCB:C7593']) {
@@ -344,7 +430,7 @@ try {
     await footprintDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
     await browse().click();
     assert.equal(await modelChooser.locator('.library-detail-id').textContent(), id);
-    await modelChooser.getByRole('button', { name: 'Use model', exact: true }).click();
+    await modelChooser.getByRole('button', { name: 'Update', exact: true }).click();
     await modelChooser.waitFor({ state: 'hidden' });
   }
   assert.deepEqual(offlineCatalogRequests, []);

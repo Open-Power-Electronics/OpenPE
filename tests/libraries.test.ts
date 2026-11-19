@@ -102,6 +102,9 @@ test('library worker ranks saved symbol and footprint catalogs before bounded pa
   entries[0].footprint = modelFootprint.id;
   entries[1].footprint = plainFootprint.id;
   entries[2].footprint = 'Fixture:Missing';
+  entries[3].footprint = 'Resistor_SMD:R_0603_1608Metric';
+  entries[4].footprint = 'Resistor_SMD:R_0201_0603Metric';
+  entries[5].footprint = 'Package_TO_SOT_SMD:SOT-23-5';
   await writeFile(
     path.join(root, 'with-model.kicad_mod'),
     '(footprint "WithModel" (version 20260206) (model "${KICAD10_3DMODEL_DIR}/Fixture.3dshapes/WithModel.step"))',
@@ -154,6 +157,14 @@ test('library worker ranks saved symbol and footprint catalogs before bounded pa
         offset: 100,
       });
       assert.deepEqual(returned, second, 'Changing filters or queries cannot reuse stale pages.');
+    }
+    for (const query of ['Fixture:WithModel', 'withmodel', 'LM358 WithModel', 'package:With-Model']) {
+      const found = await service.request({ action: 'search', kind: 'symbols', query });
+      assert.deepEqual(found.entries.map(({ id }: LibraryEntry) => id), [entries[0].id], query);
+    }
+    for (const [query, index] of [['0603', 3], ['sot23', 5]] as const) {
+      const found = await service.request({ action: 'search', kind: 'symbols', query });
+      assert.deepEqual(found.entries.map(({ id }: LibraryEntry) => id), [entries[index].id], query);
     }
     const verified = await service.request({
       action: 'search',
@@ -847,7 +858,13 @@ test('library category discovery separates local namespaces and the authenticate
     );
     assert.deepEqual(
       await service.request({ action: 'categories', kind: 'footprints', source: 'KiCad' }),
-      { categories: [{ id: 'Package_SO', name: 'Package_SO', children: [] }] },
+      {
+        categories: ['EMC_Demo', 'Inductor_SMD_Wurth', 'Package_SO'].map((id) => ({
+          id,
+          name: id,
+          children: [],
+        })),
+      },
     );
     assert.equal(remoteBodies.length, 0, 'KiCad categories never query the remote provider.');
     await assert.rejects(
